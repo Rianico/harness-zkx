@@ -1,326 +1,107 @@
 ---
-name: e2e-testing
-description: Playwright E2E testing patterns, Page Object Model, configuration, CI/CD integration, artifact management, and flaky test strategies.
+name: e2e-workflow
+description: Language-agnostic End-to-End Testing methodology. Enforces Page Object Model (POM), stable locator strategies, auto-waiting, artifact capture, and flaky test quarantine.
 origin: ECC
 ---
 
-# E2E Testing Patterns
+# End-to-End (E2E) Testing Workflow
 
-Comprehensive Playwright patterns for building stable, fast, and maintainable E2E test suites.
+This skill defines the behavioral methodology and architecture for writing stable, maintainable End-to-End (E2E) tests. It focuses on the *what* and *when* of browser testing. 
 
-## Test File Organization
+For the *how* (syntax, frameworks, configurations), this skill relies on the chosen automation tool for the project (e.g., `agent-browser`, `playwright`).
 
-```
-tests/
-├── e2e/
-│   ├── auth/
-│   │   ├── login.spec.ts
-│   │   ├── logout.spec.ts
-│   │   └── register.spec.ts
-│   ├── features/
-│   │   ├── browse.spec.ts
-│   │   ├── search.spec.ts
-│   │   └── create.spec.ts
-│   └── api/
-│       └── endpoints.spec.ts
-├── fixtures/
-│   ├── auth.ts
-│   └── data.ts
-└── playwright.config.ts
-```
+## Core Testing Philosophy
 
-## Page Object Model (POM)
+E2E tests are expensive to write, slow to run, and prone to flakiness. They must be treated as the last line of defense for critical user journeys.
 
-```typescript
-import { Page, Locator } from '@playwright/test'
+1. **Test Journeys, Not Details:** E2E tests should verify complete user flows (e.g., "User can sign up, log in, and create a project"). Do not use E2E to test granular UI states or complex business logic algorithms (use unit/integration tests for those).
+2. **Fail Fast, Fail Loud:** Every key interaction must have a corresponding assertion. If a step fails, the test must halt immediately and capture the exact state (screenshots, DOM snapshots).
+3. **Zero Flakiness Tolerance:** A flaky test is worse than no test. If a test fails 1 out of 10 times in CI, it must be quarantined immediately until the root cause (usually a race condition) is fixed.
 
-export class ItemsPage {
-  readonly page: Page
-  readonly searchInput: Locator
-  readonly itemCards: Locator
-  readonly createButton: Locator
+## Architectural Requirements
 
-  constructor(page: Page) {
-    this.page = page
-    this.searchInput = page.locator('[data-testid="search-input"]')
-    this.itemCards = page.locator('[data-testid="item-card"]')
-    this.createButton = page.locator('[data-testid="create-btn"]')
-  }
+### 1. The Page Object Model (POM)
+You must strictly separate test logic from page interaction logic. Tests should never contain raw CSS selectors or API URLs.
 
-  async goto() {
-    await this.page.goto('/items')
-    await this.page.waitForLoadState('networkidle')
-  }
+*   **Pages:** Create a class/object for each logical page or major component.
+*   **Locators:** Define all element selectors as properties of the page object.
+*   **Actions:** Define user interactions (e.g., `login(user, pass)`, `search(query)`) as methods on the page object.
 
-  async search(query: string) {
-    await this.searchInput.fill(query)
-    await this.page.waitForResponse(resp => resp.url().includes('/api/search'))
-    await this.page.waitForLoadState('networkidle')
-  }
+### 2. Resilient Locator Strategy
+Never use brittle selectors that are subject to styling changes.
+*   **BEST:** User-facing text (`text="Submit"`), accessible roles (`role="button" name="Submit"`), or explicit test IDs (`data-testid="submit-btn"`).
+*   **POOR:** CSS classes (`.btn-primary`), long XPath chains, DOM hierarchy paths (`div > ul > li:nth-child(3)`).
 
-  async getItemCount() {
-    return await this.itemCards.count()
-  }
-}
-```
+### 3. Asynchronous Stability (Auto-Waiting)
+The web is asynchronous. Your tests must account for network latency, animations, and rendering cycles.
+*   **NEVER** use arbitrary timeouts (e.g., `sleep(5000)`).
+*   **ALWAYS** wait for specific state changes:
+    *   Wait for an element to become visible/hidden.
+    *   Wait for a specific API response to complete.
+    *   Wait for the network state to reach 'idle'.
 
-## Test Structure
+## Execution State Machine
 
-```typescript
-import { test, expect } from '@playwright/test'
-import { ItemsPage } from '../../pages/ItemsPage'
+When operating as the `e2e-runner` agent, you must progress through these states in order. 
 
-test.describe('Item Search', () => {
-  let itemsPage: ItemsPage
+### State 1: PLAN (Identify the Journey)
+1. Read the user's request and identify the *critical user journey*.
+2. Define the start state, the sequence of actions, and the expected end state.
+3. Identify the necessary Page Objects.
 
-  test.beforeEach(async ({ page }) => {
-    itemsPage = new ItemsPage(page)
-    await itemsPage.goto()
-  })
+### State 2: SCAFFOLD (Build the POM)
+1. Create or update the relevant Page Object files.
+2. Define resilient locators for all required elements.
+3. Define the interaction methods (e.g., `fillForm()`, `submit()`).
 
-  test('should search by keyword', async ({ page }) => {
-    await itemsPage.search('test')
+### State 3: WRITE (Create the Test)
+1. Write the test specification file.
+2. Import the Page Objects.
+3. Write the test sequence using the Page Object methods.
+4. Add assertions at key validation points.
 
-    const count = await itemsPage.getItemCount()
-    expect(count).toBeGreaterThan(0)
+### State 4: EXECUTE & CAPTURE (Run the Test)
+1. Run the test using the project's specific automation CLI.
+2. If the test fails:
+    *   Analyze the captured artifacts (screenshots, traces, error logs).
+    *   Identify if the failure is a genuine bug or a flaky test implementation (e.g., a race condition).
+    *   Return to State 2 or 3 to fix the implementation.
+3. If the test passes, run it repeatedly (e.g., 3-5 times) locally to ensure stability.
 
-    await expect(itemsPage.itemCards.first()).toContainText(/test/i)
-    await page.screenshot({ path: 'artifacts/search-results.png' })
-  })
+### State 5: QUARANTINE (Handle Flakiness)
+If a test cannot be immediately stabilized, it must be marked as skipped or "fixme" in the test suite so it does not block the CI pipeline, with a clear comment explaining the flakiness.
 
-  test('should handle no results', async ({ page }) => {
-    await itemsPage.search('xyznonexistent123')
+## Tooling Fallback Hierarchy
 
-    await expect(page.locator('[data-testid="no-results"]')).toBeVisible()
-    expect(await itemsPage.getItemCount()).toBe(0)
-  })
-})
-```
+The `e2e-runner` must detect the correct execution tool based on the project environment:
 
-## Playwright Configuration
+### Primary: Agent Browser (`agent-browser`)
+Use `agent-browser` when semantic, AI-optimized execution is possible. It handles auto-waiting and semantic selection dynamically.
 
-```typescript
-import { defineConfig, devices } from '@playwright/test'
-
-export default defineConfig({
-  testDir: './tests/e2e',
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: [
-    ['html', { outputFolder: 'playwright-report' }],
-    ['junit', { outputFile: 'playwright-results.xml' }],
-    ['json', { outputFile: 'playwright-results.json' }]
-  ],
-  use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-    actionTimeout: 10000,
-    navigationTimeout: 30000,
-  },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
-    { name: 'mobile-chrome', use: { ...devices['Pixel 5'] } },
-  ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
-})
-```
-
-## Flaky Test Patterns
-
-### Quarantine
-
-```typescript
-test('flaky: complex search', async ({ page }) => {
-  test.fixme(true, 'Flaky - Issue #123')
-  // test code...
-})
-
-test('conditional skip', async ({ page }) => {
-  test.skip(process.env.CI, 'Flaky in CI - Issue #123')
-  // test code...
-})
-```
-
-### Identify Flakiness
-
+**Core Workflow:**
 ```bash
-npx playwright test tests/search.spec.ts --repeat-each=10
-npx playwright test tests/search.spec.ts --retries=3
+# Setup
+npm install -g agent-browser && agent-browser install
+
+# Execution Loop
+agent-browser open https://example.com
+agent-browser snapshot -i          # Get elements with refs [ref=e1]
+agent-browser click @e1            # Click by ref
+agent-browser fill @e2 "text"      # Fill input by ref
+agent-browser wait visible @e5     # Explicitly wait for element state
+agent-browser screenshot result.png
 ```
 
-### Common Causes & Fixes
+### Fallback: Playwright (`npx playwright`)
+When `agent-browser` is not applicable or you are generating persistent test files for a CI pipeline, use Playwright.
 
-**Race conditions:**
-```typescript
-// Bad: assumes element is ready
-await page.click('[data-testid="button"]')
-
-// Good: auto-wait locator
-await page.locator('[data-testid="button"]').click()
-```
-
-**Network timing:**
-```typescript
-// Bad: arbitrary timeout
-await page.waitForTimeout(5000)
-
-// Good: wait for specific condition
-await page.waitForResponse(resp => resp.url().includes('/api/data'))
-```
-
-**Animation timing:**
-```typescript
-// Bad: click during animation
-await page.click('[data-testid="menu-item"]')
-
-// Good: wait for stability
-await page.locator('[data-testid="menu-item"]').waitFor({ state: 'visible' })
-await page.waitForLoadState('networkidle')
-await page.locator('[data-testid="menu-item"]').click()
-```
-
-## Artifact Management
-
-### Screenshots
-
-```typescript
-await page.screenshot({ path: 'artifacts/after-login.png' })
-await page.screenshot({ path: 'artifacts/full-page.png', fullPage: true })
-await page.locator('[data-testid="chart"]').screenshot({ path: 'artifacts/chart.png' })
-```
-
-### Traces
-
-```typescript
-await browser.startTracing(page, {
-  path: 'artifacts/trace.json',
-  screenshots: true,
-  snapshots: true,
-})
-// ... test actions ...
-await browser.stopTracing()
-```
-
-### Video
-
-```typescript
-// In playwright.config.ts
-use: {
-  video: 'retain-on-failure',
-  videosPath: 'artifacts/videos/'
-}
-```
-
-## CI/CD Integration
-
-```yaml
-# .github/workflows/e2e.yml
-name: E2E Tests
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npx playwright install --with-deps
-      - run: npx playwright test
-        env:
-          BASE_URL: ${{ vars.STAGING_URL }}
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 30
-```
-
-## Test Report Template
-
-```markdown
-# E2E Test Report
-
-**Date:** YYYY-MM-DD HH:MM
-**Duration:** Xm Ys
-**Status:** PASSING / FAILING
-
-## Summary
-- Total: X | Passed: Y (Z%) | Failed: A | Flaky: B | Skipped: C
-
-## Failed Tests
-
-### test-name
-**File:** `tests/e2e/feature.spec.ts:45`
-**Error:** Expected element to be visible
-**Screenshot:** artifacts/failed.png
-**Recommended Fix:** [description]
-
-## Artifacts
-- HTML Report: playwright-report/index.html
-- Screenshots: artifacts/*.png
-- Videos: artifacts/videos/*.webm
-- Traces: artifacts/*.zip
-```
-
-## Wallet / Web3 Testing
-
-```typescript
-test('wallet connection', async ({ page, context }) => {
-  // Mock wallet provider
-  await context.addInitScript(() => {
-    window.ethereum = {
-      isMetaMask: true,
-      request: async ({ method }) => {
-        if (method === 'eth_requestAccounts')
-          return ['0x1234567890123456789012345678901234567890']
-        if (method === 'eth_chainId') return '0x1'
-      }
-    }
-  })
-
-  await page.goto('/')
-  await page.locator('[data-testid="connect-wallet"]').click()
-  await expect(page.locator('[data-testid="wallet-address"]')).toContainText('0x1234')
-})
-```
-
-## Financial / Critical Flow Testing
-
-```typescript
-test('trade execution', async ({ page }) => {
-  // Skip on production — real money
-  test.skip(process.env.NODE_ENV === 'production', 'Skip on production')
-
-  await page.goto('/markets/test-market')
-  await page.locator('[data-testid="position-yes"]').click()
-  await page.locator('[data-testid="trade-amount"]').fill('1.0')
-
-  // Verify preview
-  const preview = page.locator('[data-testid="trade-preview"]')
-  await expect(preview).toContainText('1.0')
-
-  // Confirm and wait for blockchain
-  await page.locator('[data-testid="confirm-trade"]').click()
-  await page.waitForResponse(
-    resp => resp.url().includes('/api/trade') && resp.status() === 200,
-    { timeout: 30000 }
-  )
-
-  await expect(page.locator('[data-testid="trade-success"]')).toBeVisible()
-})
+**Core Workflow:**
+```bash
+npx playwright test                        # Run all E2E tests
+npx playwright test tests/auth.spec.ts     # Run specific file
+npx playwright test --headed               # Run with UI visible
+npx playwright test --debug                # Debug with inspector
+npx playwright test --trace on             # Run with trace capture
+npx playwright test --repeat-each=5        # Check for flakiness
+npx playwright show-report                 # View HTML report
 ```
