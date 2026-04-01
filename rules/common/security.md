@@ -3,7 +3,7 @@
 ## Mandatory Security Checks
 
 Before ANY commit:
-- [ ] No hardcoded secrets (API keys, passwords, tokens)
+- [ ] **No hardcoded secrets (API keys, passwords, tokens)**
 - [ ] All user inputs validated
 - [ ] SQL injection prevention (parameterized queries)
 - [ ] XSS prevention (sanitized HTML)

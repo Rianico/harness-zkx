@@ -9,12 +9,12 @@ Located in `~/.claude/agents/`:
 | planner | Implementation planning | Complex features, refactoring |
 | architect | System design | Architectural decisions |
 | tdd-guide | Test-driven development | New features, bug fixes |
-| code-reviewer | Code review | After writing code |
+| e2e-runner | E2E testing | Critical user flows |
 | security-reviewer | Security analysis | Before commits |
 | build-error-resolver | Fix build errors | When build fails |
-| e2e-runner | E2E testing | Critical user flows |
 | refactor-cleaner | Dead code cleanup | Code maintenance |
 | doc-updater | Documentation | Updating docs |
+| code-reviewer | Code review | After writing code |
 | rust-reviewer | Rust code review | Rust projects |
 
 ## Immediate Agent Usage
