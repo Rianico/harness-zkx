@@ -1,22 +1,5 @@
 # Agent Orchestration
 
-## Available Agents
-
-Located in `~/.claude/agents/`:
-
-| Agent | Purpose | When to Use |
-|-------|---------|-------------|
-| planner | Implementation planning | Complex features, refactoring |
-| architect | System design | Architectural decisions |
-| tdd-guide | Test-driven development | New features, bug fixes |
-| e2e-runner | E2E testing | Critical user flows |
-| security-reviewer | Security analysis | Before commits |
-| build-error-resolver | Fix build errors | When build fails |
-| refactor-cleaner | Dead code cleanup | Code maintenance |
-| doc-updater | Documentation | Updating docs |
-| code-reviewer | Code review | After writing code |
-| rust-reviewer | Rust code review | Rust projects |
-
 ## Immediate Agent Usage
 
 No user prompt needed:

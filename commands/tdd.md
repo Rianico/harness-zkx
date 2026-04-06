@@ -1,45 +1,26 @@
 ---
-description: Universal TDD entrypoint. Routes your request to the `tdd-guide` agent and automatically loads the correct language testing skill based on the project context.
+description: Universal TDD entrypoint. Routes your request to the `tdd-guide` agent and automatically applies language-specific rules.
 ---
 
-# Universal TDD Command (`/tdd`)
+# Command: /tdd
 
-This command invokes the **tdd-guide** agent to enforce a rigorous Test-Driven Development (TDD) methodology across any supported language.
+**Status:** JIT Workflow Command
 
-## What This Command Does
+Executes the Red-Green-Refactor Test-Driven Development loop for any supported language by delegating to the `tdd-guide` agent.
 
-It acts as the smart routing layer for TDD:
-1. **Invokes the `tdd-guide` Agent**: The strict execution engine that manages the Red-Green-Refactor state machine.
-2. **Injects Methodology**: Automatically ensures the agent follows the language-agnostic `tdd-workflow` skill.
-3. **Injects Syntax**: Instructs the agent to dynamically load the framework-specific testing skill for your current language (e.g., `python-testing`, `golang-testing`, `rust-testing`).
+**How it works:**
+The generic `tdd-guide` agent detects the language, loads the appropriate domain rules, **invokes the mandatory `tdd-workflow` skill**, retrieves testing expertise, and enforces the TDD loop.
 
-## When to Use
+**Execution Instruction:**
+To execute this workflow, you MUST invoke the Agent tool. Do not attempt to write the tests or execute the loop yourself in this primary context.
 
-Use `/tdd` for almost all coding tasks where reliability is paramount:
-- Implementing new features.
-- Fixing bugs (you must write a failing test that reproduces the bug first).
-- Refactoring complex logic safely.
+Use the Agent tool with these parameters:
+- `subagent_type`: "tdd-guide"
+- `description`: "Execute TDD loop"
+- `prompt`: "[Include user requirements, target features, arguments like language/work_type, an instruction to invoke the mandatory `tdd-workflow` skill, and an instruction to check the rules/ directory]"
 
-## Example Usage
-
-You do not need to specify the language. The command relies on the agent to detect the context or you can pass it explicitly.
-
+**Usage:**
+```bash
+/tdd "Add an auth middleware"
+/tdd work_type="bugfix" language="python" "Fix the login route"
 ```
-User: /tdd I need a function to calculate market liquidity score
-
-Agent (tdd-guide):
-[STATE: RED]
-I'll scaffold the interface and write a failing test. Let me check the testing framework for this project...
-...
-```
-
-```
-User: /tdd Create an endpoint for user registration.
-```
-
-## How It Replaces Legacy Commands
-
-This command supersedes language-specific commands (like `/go-test` or `/python-test`). By centralizing the logic, the TDD methodology remains perfectly consistent across languages, while only the syntax changes.
-
-**Note for Agents:**
-When triggered via this command, the `tdd-guide` agent MUST proactively use the `Skill` tool to read the relevant language testing skill if it is unsure of the project's testing framework or mocking idioms.

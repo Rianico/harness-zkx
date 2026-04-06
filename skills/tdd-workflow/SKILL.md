@@ -8,7 +8,7 @@ origin: ECC
 
 This skill defines the pure, language-agnostic behavioral methodology for Test-Driven Development (TDD). It dictates the *what* and *when* of testing. 
 
-For the *how* (syntax, frameworks, mocks), this skill must be combined with a language-specific testing skill (e.g., `python-testing`, `go-testing`, `typescript-testing`).
+For the *how* (syntax, frameworks, mocks), this skill must be combined with a language-specific rules.
 
 ## The Core Philosophy: Tests BEFORE Code
 
