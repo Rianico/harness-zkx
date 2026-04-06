@@ -1,231 +1,31 @@
 ---
-description: Sequential and tmux/worktree orchestration guidance for multi-agent workflows.
+description: Sequential multi-agent orchestration for complex workflows. Routes to `orchestrate-workflow` skill.
 ---
 
-# Orchestrate Command
+# Command: /orchestrate
 
-Sequential agent workflow for complex tasks.
+**Status:** JIT Workflow Command
 
-## Usage
+Executes a sequential pipeline of native Claude Code sub-agents (e.g., Planner -> TDD -> Reviewer) to complete complex tasks.
 
-`/orchestrate [workflow-type] [task-description]`
+**How it works:**
+The primary LLM acts as the Orchestrator. It invokes the `orchestrate-workflow` skill to learn the correct pipeline sequence, then sequentially dispatches native sub-agents, passing state between them.
 
-## Workflow Types
+**Execution Instruction:**
+To execute this workflow, you MUST act as the Orchestrator. Do not attempt to write code or execute the steps yourself.
 
-### feature
-Full feature implementation workflow:
-```
-planner -> tdd-guide -> code-reviewer -> security-reviewer
-```
+1. First, invoke the `Skill` tool with `skill="orchestrate-workflow"` and the appropriate pipeline argument (feature, bugfix, or docs).
+2. Execute the steps defined by the skill in strict sequence using the `Agent` tool.
 
-### bugfix
-Bug investigation and fix workflow:
-```
-planner -> tdd-guide -> code-reviewer
-```
+**Mandatory Agent Invocation Schema:**
+Whenever you call an agent in the sequence, you MUST use exactly this format:
+- `subagent_type`: "[target agent, e.g., planner]"
+- `description`: "[a short description up to 10 words]"
+- `prompt`: "[task summarization, critical checks, user requirements, output from the previous agent in the pipeline, and an explicit instruction for the agent to use its Universal Discovery Phase to find root config files]"
 
-### refactor
-Safe refactoring workflow:
-```
-architect -> code-reviewer -> tdd-guide
-```
-
-### security
-Security-focused review:
-```
-security-reviewer -> code-reviewer -> architect
-```
-
-## Execution Pattern
-
-For each agent in the workflow:
-
-1. **Invoke agent** with context from previous agent
-2. **Collect output** as structured handoff document
-3. **Pass to next agent** in chain
-4. **Aggregate results** into final report
-
-## Handoff Document Format
-
-Between agents, create handoff document:
-
-```markdown
-## HANDOFF: [previous-agent] -> [next-agent]
-
-### Context
-[Summary of what was done]
-
-### Findings
-[Key discoveries or decisions]
-
-### Files Modified
-[List of files touched]
-
-### Open Questions
-[Unresolved items for next agent]
-
-### Recommendations
-[Suggested next steps]
-```
-
-## Example: Feature Workflow
-
-```
-/orchestrate feature "Add user authentication"
-```
-
-Executes:
-
-1. **Planner Agent**
-   - Analyzes requirements
-   - Creates implementation plan
-   - Identifies dependencies
-   - Output: `HANDOFF: planner -> tdd-guide`
-
-2. **TDD Guide Agent**
-   - Reads planner handoff
-   - Writes tests first
-   - Implements to pass tests
-   - Output: `HANDOFF: tdd-guide -> code-reviewer`
-
-3. **Code Reviewer Agent**
-   - Reviews implementation
-   - Checks for issues
-   - Suggests improvements
-   - Output: `HANDOFF: code-reviewer -> security-reviewer`
-
-4. **Security Reviewer Agent**
-   - Security audit
-   - Vulnerability check
-   - Final approval
-   - Output: Final Report
-
-## Final Report Format
-
-```
-ORCHESTRATION REPORT
-====================
-Workflow: feature
-Task: Add user authentication
-Agents: planner -> tdd-guide -> code-reviewer -> security-reviewer
-
-SUMMARY
--------
-[One paragraph summary]
-
-AGENT OUTPUTS
--------------
-Planner: [summary]
-TDD Guide: [summary]
-Code Reviewer: [summary]
-Security Reviewer: [summary]
-
-FILES CHANGED
--------------
-[List all files modified]
-
-TEST RESULTS
-------------
-[Test pass/fail summary]
-
-SECURITY STATUS
----------------
-[Security findings]
-
-RECOMMENDATION
---------------
-[SHIP / NEEDS WORK / BLOCKED]
-```
-
-## Parallel Execution
-
-For independent checks, run agents in parallel:
-
-```markdown
-### Parallel Phase
-Run simultaneously:
-- code-reviewer (quality)
-- security-reviewer (security)
-- architect (design)
-
-### Merge Results
-Combine outputs into single report
-```
-
-For external tmux-pane workers with separate git worktrees, use `node scripts/orchestrate-worktrees.js plan.json --execute`. The built-in orchestration pattern stays in-process; the helper is for long-running or cross-harness sessions.
-
-When workers need to see dirty or untracked local files from the main checkout, add `seedPaths` to the plan file. ECC overlays only those selected paths into each worker worktree after `git worktree add`, which keeps the branch isolated while still exposing in-flight local scripts, plans, or docs.
-
-```json
-{
-  "sessionName": "workflow-e2e",
-  "seedPaths": [
-    "scripts/orchestrate-worktrees.js",
-    "scripts/lib/tmux-worktree-orchestrator.js",
-    ".claude/plan/workflow-e2e-test.json"
-  ],
-  "workers": [
-    { "name": "docs", "task": "Update orchestration docs." }
-  ]
-}
-```
-
-To export a control-plane snapshot for a live tmux/worktree session, run:
-
+**Usage:**
 ```bash
-node scripts/orchestration-status.js .claude/plan/workflow-visual-proof.json
+/orchestrate feature "Add OAuth2 login"
+/orchestrate bugfix "Fix the null pointer exception in the auth middleware"
+/orchestrate docs "Update the README with the new API endpoints"
 ```
-
-The snapshot includes session activity, tmux pane metadata, worker states, objectives, seeded overlays, and recent handoff summaries in JSON form.
-
-## Operator Command-Center Handoff
-
-When the workflow spans multiple sessions, worktrees, or tmux panes, append a control-plane block to the final handoff:
-
-```markdown
-CONTROL PLANE
--------------
-Sessions:
-- active session ID or alias
-- branch + worktree path for each active worker
-- tmux pane or detached session name when applicable
-
-Diffs:
-- git status summary
-- git diff --stat for touched files
-- merge/conflict risk notes
-
-Approvals:
-- pending user approvals
-- blocked steps awaiting confirmation
-
-Telemetry:
-- last activity timestamp or idle signal
-- estimated token or cost drift
-- policy events raised by hooks or reviewers
-```
-
-This keeps planner, implementer, reviewer, and loop workers legible from the operator surface.
-
-## Arguments
-
-$ARGUMENTS:
-- `feature <description>` - Full feature workflow
-- `bugfix <description>` - Bug fix workflow
-- `refactor <description>` - Refactoring workflow
-- `security <description>` - Security review workflow
-- `custom <agents> <description>` - Custom agent sequence
-
-## Custom Workflow Example
-
-```
-/orchestrate custom "architect,tdd-guide,code-reviewer" "Redesign caching layer"
-```
-
-## Tips
-
-1. **Start with planner** for complex features
-2. **Always include code-reviewer** before merge
-3. **Use security-reviewer** for auth/payment/PII
-4. **Keep handoffs concise** - focus on what next agent needs
-5. **Run verification** between agents if needed
