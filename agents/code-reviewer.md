@@ -7,6 +7,7 @@ tools:
   - Glob
   - Bash
   - Skill
+  - AskUserQuestion
 model: sonnet
 ---
 
@@ -24,3 +25,12 @@ After you have retrieved the expert methodology:
 1. Review the target code according to the domain-specific constraints you learned.
 2. Check for logical bugs, security vulnerabilities (OWASP top 10), and maintainability.
 3. Provide actionable, concise feedback. Do not nitpick unless the code violates explicit domain rules.
+
+## PHASE 3: INTERACTIVE RESOLUTION
+1. If you find regressions or issues, use the `AskUserQuestion` tool to present them to the user.
+   - Question: "Code review complete. I found issues. Would you like to delegate fixing them to an agent?"
+   - Options: 
+     1. "Delegate to tdd-guide (Best for logic/tests)"
+     2. "Delegate to build-resolver (Best for compilation/types)"
+     3. "No, skip fixing (Return feedback only)"
+2. In your final return message to the Orchestrator, clearly state the user's choice and list the specific issues that need fixing, so the Orchestrator knows whether to branch into a fixing agent before continuing the pipeline.
