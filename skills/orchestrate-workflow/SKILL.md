@@ -1,6 +1,6 @@
 ---
 name: orchestrate-workflow
-description: Defines the standard multi-agent execution pipelines (Feature, Bugfix, Docs, Comprehensive). Use this skill to orchestrate multiple native sub-agents in a sequence. Includes `--heavy` variants using Opus agents.
+description: Defines the standard multi-agent execution pipelines (Feature, Bugfix, Docs). Use this skill to orchestrate multiple native sub-agents in a sequence.
 argument-hint: "[feature|bugfix|docs]"
 ---
 
@@ -16,9 +16,11 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
 ## Standard Pipelines
 
 ### 1. Feature Pipeline (`args="feature"`)
-- Step 1: `planner`
-- Step 2: `tdd-guide`
-- Step 3: `code-reviewer`
+- Step 1: `architect`
+- Step 2: `planner`
+- Step 3: `tdd-guide`
+- Step 4: `code-reviewer` (If issues are found, follow its delegation request to run a fixing agent)
+- Step 5: `general-purpose` agent to run the `/simplify` skill on the changed files
 
 ### 2. Bugfix Pipeline (`args="bugfix"`)
 - Step 1: `tdd-guide` (Repro)

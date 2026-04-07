@@ -1,6 +1,6 @@
 ---
 description: Sequential multi-agent orchestration for complex workflows. Routes to `orchestrate-workflow` skill.
-argument-hint: "[feature|comprehensive|bugfix|docs] [--heavy] <task_description>"
+argument-hint: "[feature|bugfix|docs] [--heavy] <task_description>"
 ---
 
 # Command: /orchestrate
