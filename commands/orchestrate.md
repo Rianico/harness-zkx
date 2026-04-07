@@ -1,5 +1,6 @@
 ---
 description: Sequential multi-agent orchestration for complex workflows. Routes to `orchestrate-workflow` skill.
+argument-hint: "[feature|comprehensive|bugfix|docs] [--heavy] <task_description>"
 ---
 
 # Command: /orchestrate
@@ -9,23 +10,17 @@ description: Sequential multi-agent orchestration for complex workflows. Routes 
 Executes a sequential pipeline of native Claude Code sub-agents (e.g., Planner -> TDD -> Reviewer) to complete complex tasks.
 
 **How it works:**
-The primary LLM acts as the Orchestrator. It invokes the `orchestrate-workflow` skill to learn the correct pipeline sequence, then sequentially dispatches native sub-agents, passing state between them.
+The primary LLM acts as the Explorer and Orchestrator. It first discovers the project domain, then invokes the `orchestrate-workflow` skill to learn the pipeline sequence, and sequentially dispatches native sub-agents while explicitly passing the discovered state.
 
 **Execution Instruction:**
-To execute this workflow, you MUST act as the Orchestrator. Do not attempt to write code or execute the steps yourself.
+To execute this workflow, you MUST act as the Orchestrator. 
 
-1. First, invoke the `Skill` tool with `skill="orchestrate-workflow"` and the appropriate pipeline argument (feature, bugfix, or docs).
-2. Execute the steps defined by the skill in strict sequence using the `Agent` tool.
+1. **Explore:** Analyze the directory structure (`ls -la` or `Glob`) and find the root configuration file (e.g., `Cargo.toml`, `pyproject.toml`, or `README.md`). Determine the domain.
+2. **Retrieve Pipeline:** Invoke the `Skill` tool with `skill="orchestrate-workflow"` and the appropriate pipeline argument.
+3. **Dispatch:** Execute the steps defined by the skill.
 
 **Mandatory Agent Invocation Schema:**
-Whenever you call an agent in the sequence, you MUST use exactly this format:
+Whenever you call an agent, you MUST prepend the `[DOMAIN CONTEXT]` to the prompt so the sub-agent inherits your discovery:
 - `subagent_type`: "[target agent, e.g., planner]"
-- `description`: "[a short description up to 10 words]"
-- `prompt`: "[task summarization, critical checks, user requirements, output from the previous agent in the pipeline, and an explicit instruction for the agent to use its Universal Discovery Phase to find root config files]"
-
-**Usage:**
-```bash
-/orchestrate feature "Add OAuth2 login"
-/orchestrate bugfix "Fix the null pointer exception in the auth middleware"
-/orchestrate docs "Update the README with the new API endpoints"
-```
+- `description`: "[a short description]"
+- `prompt`: "**[DOMAIN CONTEXT]**\nLanguage/Domain: [e.g., Rust]\nRoot File: [e.g., Cargo.toml]\n\n**[TASK]**\n[task summarization, user requirements, output from the previous agent in the pipeline]"

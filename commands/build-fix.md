@@ -1,5 +1,6 @@
 ---
 description: Build and Fix
+argument-hint: "<optional_error_context>"
 ---
 
 # Command: /build-fix
@@ -8,18 +9,11 @@ description: Build and Fix
 
 Resolves build and compilation errors incrementally across any supported language by delegating to the `build-resolver` agent.
 
-**How it works:**
-The generic `build-resolver` agent detects the language from the error or project root, loads the appropriate domain rules (e.g., `rules/rust.md`), retrieves the deep expert methodology (e.g., `rust-build-expert`), and incrementally fixes the errors.
-
 **Execution Instruction:**
-To execute this workflow, you MUST invoke the Agent tool. Do not attempt to resolve the build yourself in this primary context.
+To execute this workflow, you MUST act as the Orchestrator. 
 
-Use the Agent tool with these parameters:
+1. **Explore:** Find the root configuration file (e.g., `Cargo.toml`, `pyproject.toml`) to determine the domain.
+2. **Dispatch:** Invoke the Agent tool with these parameters:
 - `subagent_type`: "build-resolver"
 - `description`: "Resolve build errors"
-- `prompt`: "[Include the specific error output, target files, user constraints, and an explicit instruction for the agent to check the rules/ directory for domain constraints]"
-
-**Usage:**
-```bash
-/build-fix
-```
+- `prompt`: "**[DOMAIN CONTEXT]**\nLanguage/Domain: [e.g., Rust]\nRoot File: [e.g., Cargo.toml]\n\n**[TASK]**\n[Include the specific error output, target files, and user constraints]"
