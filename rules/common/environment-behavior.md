@@ -21,7 +21,7 @@ When beginning project exploration, MUST start by forcing the use of:
 
 ## 4. Artifact Storage Convention
 All high-level ECC workflows (Planning, TDD, Architecture, Code Review) that generate markdown reports, specifications, or tracking states MUST store their artifacts in a centralized, standardized directory structure.
-- **Base Directory Pattern:** `.claude/ecc/{workflow_kind}/{date}/{time}_{short_topic}/`
+- **Base Directory Pattern:** `.claude/ecc/{date}/{time}_{short_topic}/{workflow_kind}/`
   - `workflow_kind`: e.g., `plan`, `tdd`, `architect`, `review`.
   - `date`: `YYYYMMDD` format.
   - `time`: `HHMMSS` format.

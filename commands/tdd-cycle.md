@@ -1,6 +1,11 @@
 ---
 description: "Execute a comprehensive TDD workflow with strict red-green-refactor discipline"
 argument-hint: "<feature or module to implement> [--incremental|--suite] [--coverage 80]"
+allowed-tools:
+  - Skill
+  - Agent
+  - AskUserQuestion
+  - Bash
 ---
 
 # Command: /tdd-cycle
@@ -13,4 +18,4 @@ Executes the robust, artifact-driven Red-Green-Refactor Test-Driven Development 
 To execute this workflow, you MUST act as the Orchestrator.
 
 1. **Retrieve Pipeline:** Invoke the `Skill` tool with `skill="tdd-cycle-workflow"`.
-2. **Dispatch:** Execute the phases and steps defined by the skill.
+2. **Dispatch:** Execute the phases and steps defined by the skill exactly. You are forbidden from entering "Hero Mode" (do not write code or fix tests yourself). Follow the strict pointer-passing architecture as instructed by the skill.

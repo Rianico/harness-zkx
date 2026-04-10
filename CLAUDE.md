@@ -16,19 +16,32 @@ The harness is designed to achieve maximum context efficiency and DRY (Don't Rep
 * **The Rule Router:** Claude Code's native `paths` matcher automatically injects a lightweight rule (e.g., `rules/rust.md`) into the generic agent's context based on the files it touches.
 * **The Expert Skill:** The injected rule acts as a traffic cop. It provides the "80% baseline" (formatting, linting) and instructs the agent to invoke the `Skill` tool (e.g., `rust-expert`) to dynamically fetch the "20% deep methodology" only when needed.
 
-## 3. State-Passing & Command Orchestration
-Generic agents executing workflows should not waste tokens doing their own domain discovery where they are invoked before any files are read, meaning no Domain Rules are injected.
+## 3. State-Passing & The Orchestrator Pattern
+Generic agents executing workflows should not waste tokens doing their own domain discovery where they are invoked before any files are read, meaning no Domain Rules are injected. To protect the Orchestrator's context window and prevent it from trying to write code itself ("Hero Mode"), you MUST follow these critical patterns:
 
-* **ECC Pattern:** The Primary LLM acts as the "Orchestrator". It determines the domain context once, and passes it to the sub-agent in the `prompt` parameter (e.g., "This is a Rust project. Read Cargo.toml").
-The sub-agent wakes up, immediately reads the root file specified by the Orchestrator, triggering Rule Injection, and starts work. No redundant exploration loops.
-* **Command Orchestration (Meta-Commands):** When orchestrating complex, multi-step DAGs (like `/orchestrate`), DO NOT string bare agents together. Instead, orchestrate the **Commands** themselves (via `Skill` tool loading) and pass state sequentially. This ensures that the workflow inherits all the interactive UI guardrails defined in each Command.
+* **The API Schema Pattern (Job Requisitions):** When authoring complex workflow skills (like `/tdd`), DO NOT write prose instructions like "Step 1: Write a failing test". This triggers the main agent to attempt the work itself. Instead, format the skill as a strict State Machine providing exact JSON payload templates for the `Agent` tool alongside transition rules. Coercing the instructions into an API schema fences the LLM into a pure routing/dispatch persona.
+
+  **Example: Coercing LLM via API Schema**
+  ```json
+  ## PHASE 1: RED (Write Failing Tests)
+  **Action:** Call `Agent` tool
+  **Payload Template:**
+  {
+    "subagent_type": "code-reviewer",
+    "description": "Write failing tests for [Feature]",
+    "prompt": "You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. Return ONLY the absolute path to your summary report."
+  }
+  ```
+
+* **Pointer-Based State Passing:** The Orchestrator must NEVER read the code, diffs, or implementation files between execution phases. When Sub-Agent A finishes, it must return an absolute file path (a pointer). The Orchestrator extracts this pointer and injects it directly into the prompt payload for Sub-Agent B. This keeps the Orchestrator's context perfectly flat and focused on the "big picture".
+* **Command Orchestration (Meta-Commands):** When orchestrating complex, multi-step DAGs, DO NOT string bare agents together. Instead, orchestrate the **Commands** themselves (via `Skill` tool loading) and pass state sequentially. This ensures that the workflow inherits all the interactive UI guardrails defined in each Command.
 
 ## 4. Standard Artifact Storage Convention
 Workflows that generate files, reports, plans, or tracking states must not clutter the project root.
 
 * **Anti-Pattern:** Dumping `.plan.md` or `.tdd-state.json` into the root directory. Hardcoding output paths directly into agents.
 * **ECC Pattern:** All high-level workflows MUST adhere to the centralized Artifact Storage Convention defined in the Domain Rules (`rules/common/environment-behavior.md`).
-  * **Pattern:** `.claude/ecc/{workflow_kind}/{date}/{time}_{short_topic}/` (e.g., `.claude/ecc/plan/20260409/120123_auth_migration/plan_v1.md`).
+  * **Pattern:** `.claude/ecc/{date}/{time}_{short_topic}/{workflow_kind}/` (e.g., `.claude/ecc/20260409/120123_auth_migration/plan/plan_v1.md`).
   * **Execution:** Agents or Skills should be instructed to read the Domain Rules for this path structure, construct the dynamic `base_dir`, and use `mkdir -p` via the Bash tool before writing files.
 
 ## 5. Parallel Agent Execution

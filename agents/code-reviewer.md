@@ -7,6 +7,7 @@ tools:
   - Glob
   - Bash
   - Skill
+  - Write
 model: sonnet
 ---
 

@@ -4,29 +4,53 @@ argument-hint: "<task_description>"
 allowed-tools:
   - Agent
   - AskUserQuestion
+  - Bash
 ---
 
 # Command: /architect
 
 **Status:** JIT Workflow Command
 
-Invokes the `architect` agent to design new systems, refactor large components, or perform structural reviews of your codebase.
+You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined below, evaluate their transition rules, and pass file pointers between them.
 
-**Execution Instruction:**
-To execute this workflow, you MUST act as the Orchestrator and follow these steps sequentially:
+## CRITICAL BEHAVIORAL RULES FOR ORCHESTRATOR
+1. **No Hero Mode:** You are strictly forbidden from using `Edit`, `Write`, or `Bash` tools to write code or design the architecture yourself.
+2. **Pointer Passing:** You MUST pass file paths (pointers) returned by one phase directly into the payload of the next phase. DO NOT use `Read` to read the artifacts yourself.
+3. **Strict Order:** Execute phases in exact order. Stop at all Checkpoints.
+4. **Halt on Failure:** If an agent reports an unexpected error, stop and ask the user. Do not silently fix it.
+5. **Never enter plan mode autonomously:** Do NOT use `EnterPlanMode`. This file IS your strict execution plan.
 
-1. **Dispatch:** Invoke the Agent tool with these parameters:
-- `subagent_type`: "architect"
-- `description`: "Perform architectural design"
-- `prompt`: "**\[DOMAIN CONTEXT\]**\n  Language/Domain: \[e.g., Rust\]\n  Root File: \[e.g., Cargo.toml\]\n**\[Comprehensive Analysis\]**\n  [Already known information and analysis]\n\n**[TASK]**\n[Include the user's architectural request, constraints, and explicit instructions for the agent to load the `architecture-expert` skill.]"
+---
 
-2. **Interactive Approval:** Once the `architect` agent returns its architectural proposal (either as text or a saved file), you MUST present the proposal to the user and prompt them using the `AskUserQuestion` tool with the following schema:
+## PHASE 0: INITIALIZATION
+**Action:** Prepare the workspace.
+1. Extract the architectural request from `$ARGUMENTS`.
+2. Generate a `short_topic` (lowercase, snake_case).
+3. Use the `Bash` tool to run: `mkdir -p .claude/ecc/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]/architect`
+4. Store the resulting path as your `[base_dir]` for this session.
 
-**AskUserQuestion Tool Input:**
+**Transition:** Once the directory is created, IMMEDIATELY proceed to Phase 1.
+
+---
+
+## PHASE 1: ARCHITECTURE DESIGN AND ANALYSIS
+**Action:** Call `Agent` tool
+**Payload Template:**
+```json
+{
+  "subagent_type": "architect",
+  "description": "Perform architectural design and analysis",
+  "prompt": "You are the Architect agent. Analyze the requirements and design the architecture for: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[Comprehensive Analysis]**\n[Already known information and analysis]\n\n**[TASK]**\nInclude the user's architectural request, constraints, and explicitly load the `architecture-expert` skill if needed. Write your complete analysis, architectural proposal, diagrams, and trade-offs to a single markdown document. You MUST use the Write tool to save it to [base_dir]/01-architecture-proposal.md. Return ONLY the absolute file path to the document."
+}
+```
+
+**Transition Rules (Post-Execution):**
+1. Wait for Phase 1 to complete and extract the file pointer (`[proposal_pointer]`).
+2. **CHECKPOINT 1:** You MUST stop and use `AskUserQuestion`. Use the strict schema:
 ```json
 {
   "questions": [{
-    "question": "Review the generated architectural design. How would you like to proceed?",
+    "question": "Architectural design is ready. Please review the proposal at [proposal_pointer].",
     "header": "Architecture Review",
     "multiSelect": false,
     "options": [
@@ -39,8 +63,8 @@ To execute this workflow, you MUST act as the Orchestrator and follow these step
 ```
 
 3. **Handle User Response:**
-- If **Approve Design**: Acknowledge the approval and proceed with the next steps.
-- If **Modify Design**: Ask the user what they want to change via standard chat. Once they reply, invoke a **NEW** `architect` agent (do NOT resume the old one). Pass the context of the previous architecture design, comprehensive information and analysis, as well as the user's feedback in the `prompt`.
+- If **Approve Design**: Output a final summary with the `[proposal_pointer]` and terminate the workflow.
+- If **Modify Design**: Ask the user what they want to change via standard chat. Once they reply, invoke a **NEW** `architect` agent (do NOT resume the old one) using the payload from Phase 1, but explicitly pass `[proposal_pointer]` and the user's feedback in the prompt so the new agent can iterate on it and overwrite or save to `[base_dir]/02-architecture-proposal-revised.md` (return the new pointer). Then return to CHECKPOINT 1.
 - If **Reject & Exit**: Acknowledge the rejection and exit the workflow.
 
 **Usage:**
