@@ -1,61 +1,82 @@
-# CLAUDE.md
+## 1. The Separation of Concerns Philosophy
+The core of ECC architecture is the separation of orchestration, capabilities, and methodologies to maintain context window efficiency and high reusability. When designing new features, strictly adhere to this separation boundary:
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+*   **Commands define the WHAT and the UI.** The Orchestrator lives here. It handles human interaction (`AskUserQuestion`), launches sub-agents (`Agent`), passes state between them, and manages the overall Directed Acyclic Graph (DAG) of the workflow.
+*   **Agents define the WHO and the TOOLS.** Agents are lean execution engines (e.g., Code Reviewer, TDD Orchestrator). They define system prompts, persona, and strict tool boundaries. *Agents should generally NOT contain long workflow instructions.*
+*   **Skills define the HOW.** Skills hold the deep, domain-specific methodology (e.g., how to do Red-Green-Refactor, how to write a secure Next.js API route). They are loaded Just-In-Time (JIT) only when needed, keeping the Agent's baseline context pristine.
 
-## Project Overview
+**When to embed logic directly in an Agent:**
+Only embed workflow logic directly into an Agent's system prompt if the workflow is **Atomic** (does one specific thing without loops), **Universal** (does not change based on language/framework), and **Short** (< 300 words). Example: The `planner` agent.
 
-This is a **Claude Code plugin** - a collection of production-ready agents, skills, hooks, commands, rules, and MCP configurations. The project provides battle-tested workflows for software development using Claude Code.
+## 2. The Hybrid JIT Architecture (Routing)
+The harness is designed to achieve maximum context efficiency and DRY (Don't Repeat Yourself) principles.
 
-## Running Tests
+* **Anti-Pattern:** Creating specialized commands (`/rust-build`) that spawn specialized agents (`rust-build-resolver`) with massive, bloated system prompts containing an entire language's methodology.
+* **ECC Pattern:** A universal command (`/build-fix`) invokes a universal agent (`build-resolver`). 
+* **The Rule Router:** Claude Code's native `paths` matcher automatically injects a lightweight rule (e.g., `rules/rust.md`) into the generic agent's context based on the files it touches.
+* **The Expert Skill:** The injected rule acts as a traffic cop. It provides the "80% baseline" (formatting, linting) and instructs the agent to invoke the `Skill` tool (e.g., `rust-expert`) to dynamically fetch the "20% deep methodology" only when needed.
 
-```bash
-# Run all tests
-node tests/run-all.js
+## 3. State-Passing & Command Orchestration
+Generic agents executing workflows should not waste tokens doing their own domain discovery where they are invoked before any files are read, meaning no Domain Rules are injected.
 
-# Run individual test files
-node tests/lib/utils.test.js
-node tests/lib/package-manager.test.js
-node tests/hooks/hooks.test.js
-```
+* **ECC Pattern:** The Primary LLM acts as the "Orchestrator". It determines the domain context once, and passes it to the sub-agent in the `prompt` parameter (e.g., "This is a Rust project. Read Cargo.toml").
+The sub-agent wakes up, immediately reads the root file specified by the Orchestrator, triggering Rule Injection, and starts work. No redundant exploration loops.
+* **Command Orchestration (Meta-Commands):** When orchestrating complex, multi-step DAGs (like `/orchestrate`), DO NOT string bare agents together. Instead, orchestrate the **Commands** themselves (via `Skill` tool loading) and pass state sequentially. This ensures that the workflow inherits all the interactive UI guardrails defined in each Command.
 
-## Architecture
+## 4. Standard Artifact Storage Convention
+Workflows that generate files, reports, plans, or tracking states must not clutter the project root.
 
-The project is organized into several core components:
+* **Anti-Pattern:** Dumping `.plan.md` or `.tdd-state.json` into the root directory. Hardcoding output paths directly into agents.
+* **ECC Pattern:** All high-level workflows MUST adhere to the centralized Artifact Storage Convention defined in the Domain Rules (`rules/common/environment-behavior.md`).
+  * **Pattern:** `.claude/ecc/{workflow_kind}/{date}/{time}_{short_topic}/` (e.g., `.claude/ecc/plan/20260409/120123_auth_migration/plan_v1.md`).
+  * **Execution:** Agents or Skills should be instructed to read the Domain Rules for this path structure, construct the dynamic `base_dir`, and use `mkdir -p` via the Bash tool before writing files.
 
-- **agents/** - Specialized subagents for delegation (planner, code-reviewer, tdd-guide, etc.)
-- **skills/** - Workflow definitions and domain knowledge (coding standards, patterns, testing)
-- **commands/** - Slash commands invoked by users (/tdd, /plan, /e2e, etc.)
-- **hooks/** - Trigger-based automations (session persistence, pre/post-tool hooks)
-- **rules/** - Always-follow guidelines (security, coding style, testing requirements)
-- **mcp-configs/** - MCP server configurations for external integrations
-- **scripts/** - Cross-platform Node.js utilities for hooks and setup
-- **tests/** - Test suite for scripts and utilities
+## 5. Parallel Agent Execution
+To maximize context efficiency and reduce latency, you MUST leverage parallel execution when orchestrating multiple independent or read-only tasks.
 
-## Key Commands
+* **Anti-Pattern:** Running a security review agent, waiting for it to finish, and then running a performance review agent.
+* **ECC Pattern:** Launching multiple sub-agents concurrently in a single tool call payload when their tasks do not depend on each other's outputs.
 
-- `/tdd` - Test-driven development workflow
-- `/plan` - Implementation planning
-- `/e2e` - Generate and run E2E tests
-- `/code-review` - Quality review
-- `/build-fix` - Fix build errors
-- `/learn` - Extract patterns from sessions
-- `/skill-create` - Generate skills from git history
+## 6. Native Agent Orchestration Constraints
+Shell-wrapper scripts executing sub-processes for multi-model collaboration are brittle, but Native Agents have strict constraints that must be respected.
 
-## Development Notes
+* **Anti-Pattern:** Using bash to run python scripts to pipe outputs between Codex and Gemini.
+* **CRITICAL ARCHITECTURE CONSTRAINT (No Agent-ception):** Sub-agents DO NOT have access to the `Agent` tool. A sub-agent cannot launch a new sub-agent. All orchestration MUST be done by the primary orchestrator (the main conversation context).
+* **CRITICAL ARCHITECTURE CONSTRAINT (No Sub-Agent UI):** Sub-agents DO NOT have access to the `AskUserQuestion` tool. All interactive prompts must be handled in the main conversation agent. If a sub-agent needs human approval, it must return a structured response to the primary agent, which then invokes `AskUserQuestion`.
+* **CRITICAL ARCHITECTURE CONSTRAINT (Stateless Iteration):** When iterating on a sub-agent's artifact (e.g., a user rejects a plan and provides feedback), DO NOT use the `to:` routing / `SendMessage` to resume the old sub-agent. Resumed agents accumulate context bloat and act statefully. Instead, spawn a **NEW** agent and explicitly pass the file path of the previous artifact alongside the user's feedback in the prompt.
 
-- Package manager detection: npm, pnpm, yarn, bun (configurable via `CLAUDE_PACKAGE_MANAGER` env var or project config)
-- Cross-platform: Windows, macOS, Linux support via Node.js scripts
-- Agent format: Markdown with YAML frontmatter (name, description, tools, model)
-- Skill format: Markdown with clear sections for when to use, how it works, examples
-- Skill placement: Curated in skills/; generated/imported under ~/.claude/skills/. See docs/SKILL-PLACEMENT-POLICY.md
-- Hook format: JSON with matcher conditions and command/notification hooks
+## 6. Interactive Workflows (AskUserQuestion)
+Destructive or highly divergent commands should not guess the user's intent.
 
-## Contributing
+* **Anti-Pattern:** Generating 5 files or writing a massive plan to disk, then asking "Is this okay?" via standard chat. Or using invalid JSON schemas for the tool.
+* **ECC Pattern:** Heavy workflows (`/plan`, `/architect`, `/code-review`) MUST use the `AskUserQuestion` tool. The agent executes the read-only analysis phase, builds a structured menu, and blocks execution until the user clicks a button. (Remember: This must be done by the main agent, as sub-agents lack this tool).
+* **Tool Schema Requirement:** You MUST use the correct JSON schema. The tool accepts an object with a `questions` array. Each question object contains `question`, `header`, `multiSelect`, and an `options` array (which contains `label` and `description` objects). Do NOT pass the question fields straight to the root of the tool parameters.
+  ```json
+  {
+    "questions": [{
+      "question": "Clear question text?",
+      "header": "Short Label",
+      "multiSelect": false,
+      "options": [
+        { "label": "Option 1", "description": "What happens if selected" },
+        { "label": "Option 2", "description": "What happens if selected" }
+      ]
+    }]
+  }
+  ```
 
-Follow the formats in CONTRIBUTING.md:
-- Agents: Markdown with frontmatter (name, description, tools, model)
-- Skills: Clear sections (When to Use, How It Works, Examples)
-- Commands: Markdown with description frontmatter
-- Hooks: JSON with matcher and hooks array
+## 7. Required Frontmatter (Argument Hints & Allowed Tools)
+To ensure a seamless user experience and strict system bounds, underlying skills, commands, and agents have explicit YAML frontmatter requirements.
 
-File naming: lowercase with hyphens (e.g., `python-reviewer.md`, `tdd-workflow.md`)
+* **Anti-Pattern:** Creating commands or skills without explicit argument hints, forcing the user (or the LLM) to guess what arguments are accepted, or omitting tool scoping for commands/agents, risking unauthorized execution.
+* **ECC Pattern (Agents):**
+  * ALWAYS include `tools:`. Agents MUST explicitly define their tool scope as a YAML array. If omitted, they default to full tool access, which is a security and alignment risk. Remember: Agents NEVER have access to `AskUserQuestion` or `Agent`.
+* **ECC Pattern (Commands):** 
+  * ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
+  * ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from "going rogue" outside their intended workflow.
+* **ECC Pattern (Skills):**
+  * ALWAYS include `argument-hint:`. Use array syntax to denote accepted arguments. This explicitly informs the agent exactly how to invoke the skill for targeted retrieval.
+
+## Trade-Offs to Consider
+* **Latency vs Context Bloat:** The Hybrid JIT Architecture adds a ~3 second penalty to complex tasks because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request.
+* **Agent Hero-Mode:** Generic agents are heavily prone to ignoring delegation instructions. Commands that wrap generic agents MUST use an explicit "Execution Instruction" schema that provides the exact JSON mapping for the `Agent` tool parameters to force the LLM into orchestration mode.
