@@ -166,25 +166,41 @@ Task:
     Write your findings as a structured markdown document.
 ```
 
-After both complete, consolidate into `.full-review/01-quality-architecture.md`:
+### Step 1C: Consolidate Findings
 
-```markdown
-# Phase 1: Code Quality & Architecture Review
+Run a general-purpose agent to consolidate the results:
 
-## Code Quality Findings
-
-[Summary from 1A, organized by severity]
-
-## Architecture Findings
-
-[Summary from 1B, organized by severity]
-
-## Critical Issues for Phase 2 Context
-
-[List any findings that should inform security or performance review]
+```
+Task:
+  subagent_type: "general-purpose"
+  description: "Consolidate Phase 1 findings into .full-review/01-quality-architecture.md"
+  prompt: |
+    Consolidate the findings from Step 1A and Step 1B into a single markdown document.
+    
+    Here are the Code Quality findings (1A):
+    [Insert results from Step 1A]
+    
+    Here are the Architecture findings (1B):
+    [Insert results from Step 1B]
+    
+    Create a consolidated report and write it to `.full-review/01-quality-architecture.md` using the Write tool, with the following structure:
+    
+    # Phase 1: Code Quality & Architecture Review
+    
+    ## Code Quality Findings
+    
+    [Summary from 1A, organized by severity]
+    
+    ## Architecture Findings
+    
+    [Summary from 1B, organized by severity]
+    
+    ## Critical Issues for Phase 2 Context
+    
+    [List any findings that should inform security or performance review]
 ```
 
-Update `state.json`: set `current_step` to 2, `current_phase` to 2, add steps 1A and 1B to `completed_steps`.
+Update `state.json`: set `current_step` to 2, `current_phase` to 2, add steps 1A, 1B, and 1C to `completed_steps`.
 
 ---
 
@@ -261,22 +277,38 @@ Task:
     Write your findings as a structured markdown document.
 ```
 
-After both complete, consolidate into `.full-review/02-security-performance.md`:
+### Step 2C: Consolidate Findings
 
-```markdown
-# Phase 2: Security & Performance Review
+Run a general-purpose agent to consolidate the results:
 
-## Security Findings
-
-[Summary from 2A, organized by severity]
-
-## Performance Findings
-
-[Summary from 2B, organized by severity]
-
-## Critical Issues for Phase 3 Context
-
-[List findings that affect testing or documentation requirements]
+```
+Task:
+  subagent_type: "general-purpose"
+  description: "Consolidate Phase 2 findings into .full-review/02-security-performance.md"
+  prompt: |
+    Consolidate the findings from Step 2A and Step 2B into a single markdown document.
+    
+    Here are the Security findings (2A):
+    [Insert results from Step 2A]
+    
+    Here are the Performance findings (2B):
+    [Insert results from Step 2B]
+    
+    Create a consolidated report and write it to `.full-review/02-security-performance.md` using the Write tool, with the following structure:
+    
+    # Phase 2: Security & Performance Review
+    
+    ## Security Findings
+    
+    [Summary from 2A, organized by severity]
+    
+    ## Performance Findings
+    
+    [Summary from 2B, organized by severity]
+    
+    ## Critical Issues for Phase 3 Context
+    
+    [List findings that affect testing or documentation requirements]
 ```
 
 Update `state.json`: set `current_step` to "checkpoint-1", add steps 2A and 2B to `completed_steps`.
@@ -382,18 +414,34 @@ Task:
     Write your findings as a structured markdown document.
 ```
 
-After both complete, consolidate into `.full-review/03-testing-documentation.md`:
+### Step 3C: Consolidate Findings
 
-```markdown
-# Phase 3: Testing & Documentation Review
+Run a general-purpose agent to consolidate the results:
 
-## Test Coverage Findings
-
-[Summary from 3A, organized by severity]
-
-## Documentation Findings
-
-[Summary from 3B, organized by severity]
+```
+Task:
+  subagent_type: "general-purpose"
+  description: "Consolidate Phase 3 findings into .full-review/03-testing-documentation.md"
+  prompt: |
+    Consolidate the findings from Step 3A and Step 3B into a single markdown document.
+    
+    Here are the Test Coverage findings (3A):
+    [Insert results from Step 3A]
+    
+    Here are the Documentation findings (3B):
+    [Insert results from Step 3B]
+    
+    Create a consolidated report and write it to `.full-review/03-testing-documentation.md` using the Write tool, with the following structure:
+    
+    # Phase 3: Testing & Documentation Review
+    
+    ## Test Coverage Findings
+    
+    [Summary from 3A, organized by severity]
+    
+    ## Documentation Findings
+    
+    [Summary from 3B, organized by severity]
 ```
 
 Update `state.json`: set `current_step` to 4, `current_phase` to 4, add steps 3A and 3B to `completed_steps`.
@@ -470,18 +518,34 @@ Task:
     Write your findings as a structured markdown document.
 ```
 
-After both complete, consolidate into `.full-review/04-best-practices.md`:
+### Step 4C: Consolidate Findings
 
-```markdown
-# Phase 4: Best Practices & Standards
+Run a general-purpose agent to consolidate the results:
 
-## Framework & Language Findings
-
-[Summary from 4A, organized by severity]
-
-## CI/CD & DevOps Findings
-
-[Summary from 4B, organized by severity]
+```
+Task:
+  subagent_type: "general-purpose"
+  description: "Consolidate Phase 4 findings into .full-review/04-best-practices.md"
+  prompt: |
+    Consolidate the findings from Step 4A and Step 4B into a single markdown document.
+    
+    Here are the Framework & Language findings (4A):
+    [Insert results from Step 4A]
+    
+    Here are the CI/CD & DevOps findings (4B):
+    [Insert results from Step 4B]
+    
+    Create a consolidated report and write it to `.full-review/04-best-practices.md` using the Write tool, with the following structure:
+    
+    # Phase 4: Best Practices & Standards
+    
+    ## Framework & Language Findings
+    
+    [Summary from 4A, organized by severity]
+    
+    ## CI/CD & DevOps Findings
+    
+    [Summary from 4B, organized by severity]
 ```
 
 Update `state.json`: set `current_step` to 5, `current_phase` to 5, add steps 4A and 4B to `completed_steps`.

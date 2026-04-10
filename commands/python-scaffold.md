@@ -298,7 +298,7 @@ dev:
 	uv run uvicorn src.project_name.main:app --reload
 
 test:
-	uv run pytest -v
+	uv run pytest -q
 
 lint:
 	uv run ruff check .
