@@ -9,6 +9,7 @@ tools:
   - Skill
   - Write
 model: sonnet
+color: orange
 ---
 
 # Code Reviewer Agent

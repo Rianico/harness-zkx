@@ -29,7 +29,7 @@ Generic agents executing workflows should not waste tokens doing their own domai
   {
     "subagent_type": "code-reviewer",
     "description": "Write failing tests for [Feature]",
-    "prompt": "You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. Return ONLY the absolute path to your summary report."
+    "prompt": "You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. Return a brief summary (up to 100 words) right before the absolute file path to your summary report."
   }
   ```
 

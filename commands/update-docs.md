@@ -42,7 +42,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "doc-updater",
   "description": "Update documentation",
-  "prompt": "**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[TASK]**\nUpdate documentation or generate codemaps based on the following target: [$ARGUMENTS]. You MUST use the Write tool to save a summary of the documentation changes to [base_dir]/01-doc-updates-summary.md. Return ONLY the absolute file path to the document."
+  "prompt": "**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[TASK]**\nUpdate documentation or generate codemaps based on the following target: [$ARGUMENTS]. You MUST use the Write tool to save a summary of the documentation changes to [base_dir]/01-doc-updates-summary.md. Return a brief summary (up to 100 words) right before the absolute file path to the document."
 }
 ```
 

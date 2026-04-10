@@ -35,7 +35,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "architect",
   "description": "Analyze requirements and design test architecture",
-  "prompt": "You are the Phase 1 agent. Analyze requirements and design test architecture for: [Feature]. Write your complete analysis, test scenarios, and architecture to a single markdown document. You MUST use the Write tool to save it to [base_dir]/01-spec-and-arch.md. Return ONLY the absolute file path to the document."
+  "prompt": "You are the Phase 1 agent. Analyze requirements and design test architecture for: [Feature]. Write your complete analysis, test scenarios, and architecture to a single markdown document. You MUST use the Write tool to save it to [base_dir]/01-spec-and-arch.md. Return a brief summary (up to 100 words) right before the absolute file path to the document."
 }
 ```
 
@@ -66,7 +66,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "developer",
   "description": "Write failing tests for [Feature]",
-  "prompt": "You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. DO NOT implement production code. Use the project's testing framework. Run the tests via Bash to verify they fail for the right reasons (missing implementation). Save a summary report of the failing tests to [base_dir]/02-failing-tests.md. Return ONLY the absolute path to your summary report."
+  "prompt": "You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. DO NOT implement production code. Use the project's testing framework. Run the tests via Bash to verify they fail for the right reasons (missing implementation). Save a summary report of the failing tests to [base_dir]/02-failing-tests.md. Return a brief summary (up to 100 words) right before the absolute file path to your summary report."
 }
 ```
 
@@ -98,7 +98,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "developer",
   "description": "Implement minimal code to make tests pass",
-  "prompt": "You are the GREEN phase agent. Read the specifications at [spec_pointer] and the failing test summary at [red_pointer]. Implement MINIMAL production code to make the tests pass. Do not add extra features. Run the tests via Bash to verify they are all green. Save a summary report of the implementation to [base_dir]/03-green-implementation.md. Return ONLY the absolute path to your summary report."
+  "prompt": "You are the GREEN phase agent. Read the specifications at [spec_pointer] and the failing test summary at [red_pointer]. Implement MINIMAL production code to make the tests pass. Do not add extra features. Run the tests via Bash to verify they are all green. Save a summary report of the implementation to [base_dir]/03-green-implementation.md. Return a brief summary (up to 100 words) right before the absolute file path to your summary report."
 }
 ```
 
@@ -130,7 +130,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "developer",
   "description": "Refactor implementation and tests",
-  "prompt": "You are the REFACTOR phase agent. Read the implementation summary at [green_pointer]. Refactor the production code and the test code to improve quality, remove duplication, and apply SOLID principles. You MUST run the tests via Bash after each change to ensure they remain green. Save a summary report of your refactoring to [base_dir]/04-refactor-summary.md. Return ONLY the absolute path to your summary report."
+  "prompt": "You are the REFACTOR phase agent. Read the implementation summary at [green_pointer]. Refactor the production code and the test code to improve quality, remove duplication, and apply SOLID principles. You MUST run the tests via Bash after each change to ensure they remain green. Save a summary report of your refactoring to [base_dir]/04-refactor-summary.md. Return a brief summary (up to 100 words) right before the absolute file path to your summary report."
 }
 ```
 
@@ -161,7 +161,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "e2e-runner",
   "description": "Write and implement integration/edge-case tests",
-  "prompt": "You are the Integration phase agent. Read the refactored summary at [refactor_pointer]. Write integration tests, performance tests, and edge case tests for the feature. Implement any necessary integration code. Ensure all tests pass. Save a summary report to [base_dir]/05-integration-tests.md. Return ONLY the absolute path to your summary report."
+  "prompt": "You are the Integration phase agent. Read the refactored summary at [refactor_pointer]. Write integration tests, performance tests, and edge case tests for the feature. Implement any necessary integration code. Ensure all tests pass. Save a summary report to [base_dir]/05-integration-tests.md. Return a brief summary (up to 100 words) right before the absolute file path to your summary report."
 }
 ```
 
@@ -178,7 +178,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "code-reviewer",
   "description": "Final TDD cycle review",
-  "prompt": "You are the Final Review agent. Perform a comprehensive review of the newly implemented feature. Verify TDD process adherence, code quality, and test coverage. Save your final review report to [base_dir]/06-final-review.md. Return ONLY the absolute path to your summary report."
+  "prompt": "You are the Final Review agent. Perform a comprehensive review of the newly implemented feature. Verify TDD process adherence, code quality, and test coverage. Save your final review report to [base_dir]/06-final-review.md. Return a brief summary (up to 100 words) right before the absolute file path to your summary report."
 }
 ```
 

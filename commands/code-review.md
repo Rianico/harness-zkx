@@ -42,7 +42,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "code-reviewer",
   "description": "Conduct code review",
-  "prompt": "You are the Code Reviewer agent. Conduct a review focusing on: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[PREVIOUS STATE POINTER]**\n[Include previous architecture/plan/implementation pointer if available]\n\n**[TASK]**\nReview the implementation for quality, security, and maintainability. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return ONLY the absolute file path to the document."
+  "prompt": "You are the Code Reviewer agent. Conduct a review focusing on: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[PREVIOUS STATE POINTER]**\n[Include previous architecture/plan/implementation pointer if available]\n\n**[TASK]**\nReview the implementation for quality, security, and maintainability. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return a brief summary (up to 100 words) right before the absolute file path to the document."
 }
 ```
 

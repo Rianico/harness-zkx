@@ -8,6 +8,7 @@ tools:
   - Bash
   - Write
 model: sonnet
+color: purple
 ---
 
 # Planner Agent

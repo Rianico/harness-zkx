@@ -10,6 +10,7 @@ tools:
   - Glob
   - Skill
 model: sonnet
+color: cyan
 ---
 
 # Developer Agent
@@ -31,4 +32,4 @@ After you have retrieved the expert methodology:
 
 ## PHASE 3: REPORT DELIVERY
 1. You MUST use the `Write` tool to save your work artifact (e.g., `02-failing-tests.md`, `03-green-implementation.md`) to the `[base_dir]` provided by the Orchestrator.
-2. Return ONLY the absolute file path to the document in your final message. Do not ask for user approval—the Orchestrator handles all UI interaction.
+2. Return a brief summary (up to 100 words) right before the absolute file path to the document in your final message. Do not ask for user approval—the Orchestrator handles all UI interaction.

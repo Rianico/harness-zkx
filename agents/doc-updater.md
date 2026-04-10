@@ -10,6 +10,7 @@ tools:
   - Glob
   - Skill
 model: sonnet
+color: blue
 ---
 
 # Documentation Updater Agent
@@ -31,4 +32,4 @@ After you have retrieved the expert methodology:
 ## PHASE 3: REPORT DELIVERY
 1. Format a summary of your documentation changes.
 2. You MUST use the `Write` tool to save your summary artifact (e.g., `01-doc-updates-summary.md`) to the `[base_dir]` provided by the Orchestrator.
-3. Return ONLY the absolute file path to the summary document in your final message. Do not ask for user approval—the Orchestrator handles all UI interaction.
+3. Return a brief summary (up to 100 words) right before the absolute file path to the summary document in your final message. Do not ask for user approval—the Orchestrator handles all UI interaction.

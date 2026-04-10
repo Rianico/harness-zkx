@@ -42,7 +42,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "planner",
   "description": "Generate implementation plan",
-  "prompt": "You are the Planner agent. Generate a step-by-step implementation plan for: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[PREVIOUS STATE / COMPREHENSIVE ANALYSIS]**\n[Include previous architecture/plan pointer if available, and any known analysis]\n\n**[TASK]**\nCreate a comprehensive implementation plan detailing the phases, tasks, files to create/modify, and risks. You MUST use the Write tool to save it to [base_dir]/01-implementation-plan.md. Return ONLY the absolute file path to the document."
+  "prompt": "You are the Planner agent. Generate a step-by-step implementation plan for: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[PREVIOUS STATE / COMPREHENSIVE ANALYSIS]**\n[Include previous architecture/plan pointer if available, and any known analysis]\n\n**[TASK]**\nCreate a comprehensive implementation plan detailing the phases, tasks, files to create/modify, and risks. You MUST use the Write tool to save it to [base_dir]/01-implementation-plan.md. Return a brief summary (up to 100 words) right before the absolute file path to the document."
 }
 ```
 
