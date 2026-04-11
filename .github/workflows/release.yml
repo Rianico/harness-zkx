@@ -44,7 +44,7 @@ jobs:
         run: |
           TAG_VERSION="${TAG_NAME#v}"
           cat > release_body.md <<EOF
-          ## ECC ${TAG_VERSION}
+          ## LSZ ${TAG_VERSION}
 
           ### What This Release Focuses On
           - Harness reliability and hook stability across Claude Code, Cursor, OpenCode, and Codex

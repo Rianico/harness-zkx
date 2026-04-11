@@ -13,7 +13,6 @@ from scripts.utils import extract_yaml
 
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
-
 def generate_spec(
     skill_path: Path,
     model: str = "haiku",

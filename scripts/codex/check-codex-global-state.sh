@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ECC Codex global regression sanity check.
-# Validates that global ~/.codex state matches expected ECC integration.
+# LSZ Codex global regression sanity check.
+# Validates that global ~/.codex state matches expected LSZ integration.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -12,7 +12,7 @@ CONFIG_FILE="$CODEX_HOME/config.toml"
 AGENTS_FILE="$CODEX_HOME/AGENTS.md"
 PROMPTS_DIR="$CODEX_HOME/prompts"
 SKILLS_DIR="$CODEX_HOME/skills"
-HOOKS_DIR_EXPECT="${ECC_GLOBAL_HOOKS_DIR:-$CODEX_HOME/git-hooks}"
+HOOKS_DIR_EXPECT="${LSZ_GLOBAL_HOOKS_DIR:-$CODEX_HOME/git-hooks}"
 
 failures=0
 warnings=0
@@ -65,7 +65,7 @@ check_config_absent() {
   fi
 }
 
-printf 'ECC GLOBAL SANITY CHECK\n'
+printf 'LSZ GLOBAL SANITY CHECK\n'
 printf 'Repo: %s\n' "$REPO_ROOT"
 printf 'Codex home: %s\n\n' "$CODEX_HOME"
 
@@ -73,16 +73,16 @@ require_file "$CONFIG_FILE" "Global config.toml"
 require_file "$AGENTS_FILE" "Global AGENTS.md"
 
 if [[ -f "$AGENTS_FILE" ]]; then
-  if rg -n '^# Everything Claude Code \(ECC\) — Agent Instructions' "$AGENTS_FILE" >/dev/null 2>&1; then
-    ok "AGENTS contains ECC root instructions"
+  if rg -n '^# Everything Claude Code \(LSZ\) — Agent Instructions' "$AGENTS_FILE" >/dev/null 2>&1; then
+    ok "AGENTS contains LSZ root instructions"
   else
-    fail "AGENTS missing ECC root instructions"
+    fail "AGENTS missing LSZ root instructions"
   fi
 
-  if rg -n '^# Codex Supplement \(From ECC \.codex/AGENTS\.md\)' "$AGENTS_FILE" >/dev/null 2>&1; then
-    ok "AGENTS contains ECC Codex supplement"
+  if rg -n '^# Codex Supplement \(From LSZ \.codex/AGENTS\.md\)' "$AGENTS_FILE" >/dev/null 2>&1; then
+    ok "AGENTS contains LSZ Codex supplement"
   else
-    fail "AGENTS missing ECC Codex supplement"
+    fail "AGENTS missing LSZ Codex supplement"
   fi
 fi
 
@@ -144,7 +144,7 @@ if [[ -d "$SKILLS_DIR" ]]; then
   done
 
   if [[ "$missing_skills" -eq 0 ]]; then
-    ok "All 16 ECC Codex skills are present"
+    ok "All 16 LSZ Codex skills are present"
   else
     fail "$missing_skills required skills are missing"
   fi
@@ -152,23 +152,23 @@ else
   fail "Skills directory missing ($SKILLS_DIR)"
 fi
 
-if [[ -f "$PROMPTS_DIR/ecc-prompts-manifest.txt" ]]; then
+if [[ -f "$PROMPTS_DIR/lsz-prompts-manifest.txt" ]]; then
   ok "Command prompts manifest exists"
 else
   fail "Command prompts manifest missing"
 fi
 
-if [[ -f "$PROMPTS_DIR/ecc-extension-prompts-manifest.txt" ]]; then
+if [[ -f "$PROMPTS_DIR/lsz-extension-prompts-manifest.txt" ]]; then
   ok "Extension prompts manifest exists"
 else
   fail "Extension prompts manifest missing"
 fi
 
-command_prompts_count="$(find "$PROMPTS_DIR" -maxdepth 1 -type f -name 'ecc-*.md' 2>/dev/null | wc -l | tr -d ' ')"
+command_prompts_count="$(find "$PROMPTS_DIR" -maxdepth 1 -type f -name 'lsz-*.md' 2>/dev/null | wc -l | tr -d ' ')"
 if [[ "$command_prompts_count" -ge 43 ]]; then
-  ok "ECC prompts count is $command_prompts_count (expected >= 43)"
+  ok "LSZ prompts count is $command_prompts_count (expected >= 43)"
 else
-  fail "ECC prompts count is $command_prompts_count (expected >= 43)"
+  fail "LSZ prompts count is $command_prompts_count (expected >= 43)"
 fi
 
 hooks_path="$(git config --global --get core.hooksPath || true)"
@@ -194,28 +194,28 @@ else
   fail "Global pre-push hook missing or not executable"
 fi
 
-if command -v ecc-sync-codex >/dev/null 2>&1; then
-  ok "ecc-sync-codex command is in PATH"
+if command -v lsz-sync-codex >/dev/null 2>&1; then
+  ok "lsz-sync-codex command is in PATH"
 else
-  warn "ecc-sync-codex is not in PATH"
+  warn "lsz-sync-codex is not in PATH"
 fi
 
-if command -v ecc-install-git-hooks >/dev/null 2>&1; then
-  ok "ecc-install-git-hooks command is in PATH"
+if command -v lsz-install-git-hooks >/dev/null 2>&1; then
+  ok "lsz-install-git-hooks command is in PATH"
 else
-  warn "ecc-install-git-hooks is not in PATH"
+  warn "lsz-install-git-hooks is not in PATH"
 fi
 
-if command -v ecc-check-codex >/dev/null 2>&1; then
-  ok "ecc-check-codex command is in PATH"
+if command -v lsz-check-codex >/dev/null 2>&1; then
+  ok "lsz-check-codex command is in PATH"
 else
-  warn "ecc-check-codex is not in PATH (this is expected before alias setup)"
+  warn "lsz-check-codex is not in PATH (this is expected before alias setup)"
 fi
 
 printf '\nSummary: checks=%d, warnings=%d, failures=%d\n' "$checks" "$warnings" "$failures"
 if [[ "$failures" -eq 0 ]]; then
-  printf 'ECC GLOBAL SANITY: PASS\n'
+  printf 'LSZ GLOBAL SANITY: PASS\n'
 else
-  printf 'ECC GLOBAL SANITY: FAIL\n'
+  printf 'LSZ GLOBAL SANITY: FAIL\n'
   exit 1
 fi

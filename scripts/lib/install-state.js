@@ -101,8 +101,8 @@ function createFallbackValidator() {
       ['schemaVersion', 'installedAt', 'lastValidatedAt', 'target', 'request', 'resolution', 'source', 'operations']
     );
 
-    if (state.schemaVersion !== 'ecc.install.v1') {
-      pushError('/schemaVersion', 'must equal ecc.install.v1');
+    if (state.schemaVersion !== 'lsz.install.v1') {
+      pushError('/schemaVersion', 'must equal lsz.install.v1');
     }
 
     if (!isNonEmptyString(state.installedAt)) {
@@ -243,7 +243,7 @@ function assertValidInstallState(state, label) {
 function createInstallState(options) {
   const installedAt = options.installedAt || new Date().toISOString();
   const state = {
-    schemaVersion: 'ecc.install.v1',
+    schemaVersion: 'lsz.install.v1',
     installedAt,
     target: {
       id: options.adapter.id,

@@ -1,5 +1,5 @@
 ## 1. The Separation of Concerns Philosophy
-The core of ECC architecture is the separation of orchestration, capabilities, and methodologies to maintain context window efficiency and high reusability. When designing new features, strictly adhere to this separation boundary:
+The core of LSZ architecture is the separation of orchestration, capabilities, and methodologies to maintain context window efficiency and high reusability. When designing new features, strictly adhere to this separation boundary:
 
 *   **Commands define the WHAT and the UI.** The Orchestrator lives here. It handles human interaction (`AskUserQuestion`), launches sub-agents (`Agent`), passes state between them, and manages the overall Directed Acyclic Graph (DAG) of the workflow.
 *   **Agents define the WHO and the TOOLS.** Agents are lean execution engines (e.g., Code Reviewer, TDD Orchestrator). They define system prompts, persona, and strict tool boundaries. *Agents should generally NOT contain long workflow instructions.*
@@ -12,7 +12,7 @@ Only embed workflow logic directly into an Agent's system prompt if the workflow
 The harness is designed to achieve maximum context efficiency and DRY (Don't Repeat Yourself) principles.
 
 * **Anti-Pattern:** Creating specialized commands (`/rust-build`) that spawn specialized agents (`rust-build-resolver`) with massive, bloated system prompts containing an entire language's methodology.
-* **ECC Pattern:** A universal command (`/build-fix`) invokes a universal agent (`build-resolver`). 
+* **LSZ Pattern:** A universal command (`/build-fix`) invokes a universal agent (`build-resolver`). 
 * **The Rule Router:** Claude Code's native `paths` matcher automatically injects a lightweight rule (e.g., `rules/rust.md`) into the generic agent's context based on the files it touches.
 * **The Expert Skill:** The injected rule acts as a traffic cop. It provides the "80% baseline" (formatting, linting) and instructs the agent to invoke the `Skill` tool (e.g., `rust-expert`) to dynamically fetch the "20% deep methodology" only when needed.
 
@@ -29,7 +29,7 @@ Generic agents executing workflows should not waste tokens doing their own domai
   {
     "subagent_type": "code-reviewer",
     "description": "Write failing tests for [Feature]",
-    "prompt": "You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. Return a brief summary (up to 100 words) right before the absolute file path to your summary report."
+    "prompt": "You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. Return a summary right before the absolute file path to your summary report. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
   }
   ```
 
@@ -39,16 +39,17 @@ Generic agents executing workflows should not waste tokens doing their own domai
 ## 4. Standard Artifact Storage Convention
 Workflows that generate files, reports, plans, or tracking states must not clutter the project root.
 
-* **Anti-Pattern:** Dumping `.plan.md` or `.tdd-state.json` into the root directory. Hardcoding output paths directly into agents.
-* **ECC Pattern:** All high-level workflows MUST adhere to the centralized Artifact Storage Convention defined in the Domain Rules (`rules/common/environment-behavior.md`).
-  * **Pattern:** `.claude/ecc/{date}/{time}_{short_topic}/{workflow_kind}/` (e.g., `.claude/ecc/20260409/120123_auth_migration/plan/plan_v1.md`).
-  * **Execution:** Agents or Skills should be instructed to read the Domain Rules for this path structure, construct the dynamic `base_dir`, and use `mkdir -p` via the Bash tool before writing files.
+* **Anti-Pattern:** Dumping `.plan.md` or `.tdd-state.json` into the root directory. Hardcoding output paths directly into agents. Minting a fresh timestamped root for each downstream phase in the same topic.
+* **LSZ Pattern:** All high-level workflows MUST adhere to the centralized Artifact Storage Convention defined in the Domain Rules (`rules/common/environment-behavior.md`).
+  * **Base Topic Pattern:** `.lsz/{date}/{topic_creation_time}_{short_topic}/`
+  * **Workflow Artifact Pattern:** `.lsz/{date}/{topic_creation_time}_{short_topic}/{workflow_kind}/` (e.g., `.lsz/20260409/120123_auth_migration/plan/plan_v1.md`).
+  * **Execution:** The topic root is created once at workflow initialization. Downstream commands and skills MUST reuse that same topic root and create only their workflow-specific subdirectory instead of generating a new timestamp.
 
 ## 5. Parallel Agent Execution
 To maximize context efficiency and reduce latency, you MUST leverage parallel execution when orchestrating multiple independent or read-only tasks.
 
 * **Anti-Pattern:** Running a security review agent, waiting for it to finish, and then running a performance review agent.
-* **ECC Pattern:** Launching multiple sub-agents concurrently in a single tool call payload when their tasks do not depend on each other's outputs.
+* **LSZ Pattern:** Launching multiple sub-agents concurrently in a single tool call payload when their tasks do not depend on each other's outputs.
 
 ## 6. Native Agent Orchestration Constraints
 Shell-wrapper scripts executing sub-processes for multi-model collaboration are brittle, but Native Agents have strict constraints that must be respected.
@@ -58,11 +59,11 @@ Shell-wrapper scripts executing sub-processes for multi-model collaboration are 
 * **CRITICAL ARCHITECTURE CONSTRAINT (No Sub-Agent UI):** Sub-agents DO NOT have access to the `AskUserQuestion` tool. All interactive prompts must be handled in the main conversation agent. If a sub-agent needs human approval, it must return a structured response to the primary agent, which then invokes `AskUserQuestion`.
 * **CRITICAL ARCHITECTURE CONSTRAINT (Stateless Iteration):** When iterating on a sub-agent's artifact (e.g., a user rejects a plan and provides feedback), DO NOT use the `to:` routing / `SendMessage` to resume the old sub-agent. Resumed agents accumulate context bloat and act statefully. Instead, spawn a **NEW** agent and explicitly pass the file path of the previous artifact alongside the user's feedback in the prompt.
 
-## 6. Interactive Workflows (AskUserQuestion)
+## 7. Interactive Workflows (AskUserQuestion)
 Destructive or highly divergent commands should not guess the user's intent.
 
 * **Anti-Pattern:** Generating 5 files or writing a massive plan to disk, then asking "Is this okay?" via standard chat. Or using invalid JSON schemas for the tool.
-* **ECC Pattern:** Heavy workflows (`/plan`, `/architect`, `/code-review`) MUST use the `AskUserQuestion` tool. The agent executes the read-only analysis phase, builds a structured menu, and blocks execution until the user clicks a button. (Remember: This must be done by the main agent, as sub-agents lack this tool).
+* **LSZ Pattern:** Heavy workflows (`/plan`, `/architect`, `/code-review`) MUST use the `AskUserQuestion` tool. The agent executes the read-only analysis phase, builds a structured menu, and blocks execution until the user clicks a button. (Remember: This must be done by the main agent, as sub-agents lack this tool).
 * **Tool Schema Requirement:** You MUST use the correct JSON schema. The tool accepts an object with a `questions` array. Each question object contains `question`, `header`, `multiSelect`, and an `options` array (which contains `label` and `description` objects). Do NOT pass the question fields straight to the root of the tool parameters.
   ```json
   {
@@ -78,18 +79,20 @@ Destructive or highly divergent commands should not guess the user's intent.
   }
   ```
 
-## 7. Required Frontmatter (Argument Hints & Allowed Tools)
+## 8. Required Frontmatter (Argument Hints & Allowed Tools)
 To ensure a seamless user experience and strict system bounds, underlying skills, commands, and agents have explicit YAML frontmatter requirements.
 
 * **Anti-Pattern:** Creating commands or skills without explicit argument hints, forcing the user (or the LLM) to guess what arguments are accepted, or omitting tool scoping for commands/agents, risking unauthorized execution.
-* **ECC Pattern (Agents):**
+* **LSZ Pattern (Agents):**
   * ALWAYS include `tools:`. Agents MUST explicitly define their tool scope as a YAML array. If omitted, they default to full tool access, which is a security and alignment risk. Remember: Agents NEVER have access to `AskUserQuestion` or `Agent`.
-* **ECC Pattern (Commands):** 
+  * If an agent has deterministic skill invocation, define a `skills:` header as a YAML array so those skills can be preloaded up front. Prefer this over runtime `Skill` calls when the required skills are known in advance, because it reduces round-trip overhead and keeps execution more predictable.
+* **LSZ Pattern (Commands):** 
   * ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
   * ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from "going rogue" outside their intended workflow.
-* **ECC Pattern (Skills):**
+* **LSZ Pattern (Skills):**
   * ALWAYS include `argument-hint:`. Use array syntax to denote accepted arguments. This explicitly informs the agent exactly how to invoke the skill for targeted retrieval.
 
 ## Trade-Offs to Consider
 * **Latency vs Context Bloat:** The Hybrid JIT Architecture adds a ~3 second penalty to complex tasks because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request.
 * **Agent Hero-Mode:** Generic agents are heavily prone to ignoring delegation instructions. Commands that wrap generic agents MUST use an explicit "Execution Instruction" schema that provides the exact JSON mapping for the `Agent` tool parameters to force the LLM into orchestration mode.
+* **Tooling Preference:** When using shell-based search, prefer `rg` for content search and `fd` for file discovery over `grep`, `find`, and agent built-in search tools. Reserve `ls` and `tree` for structural inspection.

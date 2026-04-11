@@ -10,7 +10,7 @@ module.exports = createInstallTargetAdapter({
   target: 'cursor',
   kind: 'project',
   rootSegments: ['.cursor'],
-  installStatePathSegments: ['ecc-install-state.json'],
+  installStatePathSegments: ['lsz-install-state.json'],
   nativeRootRelativePath: '.cursor',
   planOperations(input, adapter) {
     const modules = Array.isArray(input.modules)

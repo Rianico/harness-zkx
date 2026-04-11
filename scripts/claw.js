@@ -58,7 +58,7 @@ function normalizeSkillList(raw) {
   return String(raw).split(',').map(s => s.trim()).filter(Boolean);
 }
 
-function loadECCContext(skillList) {
+function loadLSZContext(skillList) {
   const requested = normalizeSkillList(skillList !== undefined ? skillList : process.env.CLAW_SKILLS || '');
   if (requested.length === 0) return '';
 
@@ -291,7 +291,7 @@ function main() {
     skills: normalizeSkillList(process.env.CLAW_SKILLS || ''),
   };
 
-  let eccContext = loadECCContext(state.skills);
+  let lszContext = loadLSZContext(state.skills);
 
   const loadedCount = state.skills.filter(skillExists).length;
 
@@ -360,7 +360,7 @@ function main() {
         if (!state.skills.includes(skill)) {
           state.skills.push(skill);
         }
-        eccContext = loadECCContext(state.skills);
+        lszContext = loadLSZContext(state.skills);
         console.log(`Loaded skill: ${skill}`);
         return prompt();
       }
@@ -429,7 +429,7 @@ function main() {
       // Regular message
       const history = loadHistory(state.sessionPath);
       appendTurn(state.sessionPath, 'User', line);
-      const response = askClaude(eccContext, history, line, state.model);
+      const response = askClaude(lszContext, history, line, state.model);
       console.log(`\n${response}\n`);
       appendTurn(state.sessionPath, 'Assistant', response);
       prompt();
@@ -445,7 +445,7 @@ module.exports = {
   listSessions,
   loadHistory,
   appendTurn,
-  loadECCContext,
+  loadLSZContext,
   buildPrompt,
   askClaude,
   isValidSessionName,

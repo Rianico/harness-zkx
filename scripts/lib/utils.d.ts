@@ -18,7 +18,7 @@ export function getHomeDir(): string;
 /** Get the Claude config directory (~/.claude) */
 export function getClaudeDir(): string;
 
-/** Get the canonical ECC sessions directory (~/.claude/session-data) */
+/** Get the canonical LSZ sessions directory (~/.claude/session-data) */
 export function getSessionsDir(): string;
 
 /** Get the legacy Claude-managed sessions directory (~/.claude/sessions) */

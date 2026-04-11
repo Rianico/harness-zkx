@@ -24,7 +24,6 @@ rules/
 - **common/** contains universal principles — no language-specific code examples.
 - **Language directories** extend the common rules with framework-specific patterns, tools, and code examples.
 
-
 ## Rules vs Skills
 
 - **Rules** define standards, conventions, and checklists that apply broadly (e.g., "80% test coverage", "no hardcoded secrets").

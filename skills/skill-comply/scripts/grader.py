@@ -7,14 +7,12 @@ from dataclasses import dataclass
 from scripts.classifier import classify_events
 from scripts.parser import ComplianceSpec, ObservationEvent, Step
 
-
 @dataclass(frozen=True)
 class StepResult:
     step_id: str
     detected: bool
     evidence: tuple[ObservationEvent, ...]
     failure_reason: str | None
-
 
 @dataclass(frozen=True)
 class ComplianceResult:
@@ -23,7 +21,6 @@ class ComplianceResult:
     compliance_rate: float
     recommend_hook_promotion: bool
     classification: dict[str, list[int]]
-
 
 def _check_temporal_order(
     step: Step,
@@ -57,7 +54,6 @@ def _check_temporal_order(
                 )
 
     return None
-
 
 def grade(
     spec: ComplianceSpec,

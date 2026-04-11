@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Refactored ECC installer runtime.
+ * Refactored LSZ installer runtime.
  *
  * Keeps the legacy language-based install entrypoint intact while moving
  * target-specific mutation logic into testable Node code.
@@ -36,7 +36,7 @@ Options:
   --with <component>  Include a user-facing install component
   --without <component>
                       Exclude a user-facing install component
-  --config <path>     Load install intent from ecc-install.json
+  --config <path>     Load install intent from lsz-install.json
   --dry-run    Show the install plan without copying files
   --json       Emit machine-readable plan/result JSON
   --help       Show this help text

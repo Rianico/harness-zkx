@@ -41,7 +41,7 @@ Return:
 2. Category scores and concrete findings
 3. Failed checks with exact file paths
 4. Top 3 actions from the deterministic output (`top_actions`)
-5. Suggested ECC skills to apply next
+5. Suggested LSZ skills to apply next
 
 ## Checklist
 

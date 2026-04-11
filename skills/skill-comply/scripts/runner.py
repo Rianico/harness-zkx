@@ -16,13 +16,11 @@ from scripts.scenario_generator import Scenario
 SANDBOX_BASE = Path("/tmp/skill-comply-sandbox")
 ALLOWED_MODELS = frozenset({"haiku", "sonnet", "opus"})
 
-
 @dataclass(frozen=True)
 class ScenarioRun:
     scenario: Scenario
     observations: tuple[ObservationEvent, ...]
     sandbox_dir: Path
-
 
 def run_scenario(
     scenario: Scenario,
@@ -66,7 +64,6 @@ def run_scenario(
         sandbox_dir=sandbox_dir,
     )
 
-
 def _safe_sandbox_dir(scenario_id: str) -> Path:
     """Sanitize scenario ID and ensure path stays within sandbox base."""
     safe_id = re.sub(r"[^a-zA-Z0-9\-_]", "_", scenario_id)
@@ -74,7 +71,6 @@ def _safe_sandbox_dir(scenario_id: str) -> Path:
     # Validate path stays within sandbox base (raises ValueError on traversal)
     path.resolve().relative_to(SANDBOX_BASE.resolve())
     return path
-
 
 def _setup_sandbox(sandbox_dir: Path, scenario: Scenario) -> None:
     """Create sandbox directory and run setup commands."""
@@ -87,7 +83,6 @@ def _setup_sandbox(sandbox_dir: Path, scenario: Scenario) -> None:
     for cmd in scenario.setup_commands:
         parts = shlex.split(cmd)
         subprocess.run(parts, cwd=sandbox_dir, capture_output=True)
-
 
 def _parse_stream_json(stdout: str) -> list[ObservationEvent]:
     """Parse claude -p stream-json output into ObservationEvents.

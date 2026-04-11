@@ -9,7 +9,7 @@ const { applyMigrations, getAppliedMigrations } = require('./migrations');
 const { createQueryApi } = require('./queries');
 const { assertValidEntity, validateEntity } = require('./schema');
 
-const DEFAULT_STATE_STORE_RELATIVE_PATH = path.join('.claude', 'ecc', 'state.db');
+const DEFAULT_STATE_STORE_RELATIVE_PATH = path.join('.claude', 'lsz', 'state.db');
 
 function resolveStateStorePath(options = {}) {
   if (options.dbPath) {

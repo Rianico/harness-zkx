@@ -8,7 +8,6 @@ from pathlib import Path
 
 import yaml
 
-
 @dataclass(frozen=True)
 class ObservationEvent:
     timestamp: str
@@ -18,13 +17,11 @@ class ObservationEvent:
     input: str
     output: str
 
-
 @dataclass(frozen=True)
 class Detector:
     description: str
     after_step: str | None = None
     before_step: str | None = None
-
 
 @dataclass(frozen=True)
 class Step:
@@ -32,7 +29,6 @@ class Step:
     description: str
     required: bool
     detector: Detector
-
 
 @dataclass(frozen=True)
 class ComplianceSpec:
@@ -42,7 +38,6 @@ class ComplianceSpec:
     version: str
     steps: tuple[Step, ...]
     threshold_promote_to_hook: float
-
 
 def parse_trace(path: Path) -> list[ObservationEvent]:
     """Parse a JSONL observation trace file into sorted events."""
@@ -72,7 +67,6 @@ def parse_trace(path: Path) -> list[ObservationEvent]:
             raise ValueError(f"Missing required field {e} at line {i}") from e
 
     return sorted(events, key=lambda e: e.timestamp)
-
 
 def parse_spec(path: Path) -> ComplianceSpec:
     """Parse a YAML compliance spec file."""

@@ -18,7 +18,6 @@ from scripts.spec_generator import generate_spec
 
 logger = logging.getLogger(__name__)
 
-
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -121,7 +120,6 @@ def main() -> None:
             "Recommendation: Some steps have low compliance. "
             "Consider promoting them to hooks. See the report for details."
         )
-
 
 if __name__ == "__main__":
     main()

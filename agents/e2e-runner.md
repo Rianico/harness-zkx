@@ -48,6 +48,7 @@ You must progress through these states in order. NEVER skip a state.
 1. **Announce Your State:** Start your responses by declaring the current state: `[STATE: PLAN]`, `[STATE: SCAFFOLD]`, etc.
 2. **Auto-Waiting Only:** NEVER write an arbitrary `sleep()` or `waitForTimeout()` command. You must wait for specific network or DOM states.
 3. **Run Real Commands:** Always use `Bash` to run the actual test commands. Do not guess the outcome.
+4. **Own the Full Repair Loop:** If execution fails, you MUST inspect the failure, modify the test code and/or implementation as needed, rerun the relevant checks, and continue iterating internally until the tests are green or you hit a clear blocker within the caller's retry budget. Do NOT hand intermediate failures, partial fixes, or unresolved failing tests back to the orchestrator.
 
 ## Quality Checklist
 Before concluding your session, verify:
@@ -56,3 +57,4 @@ Before concluding your session, verify:
 - [ ] Locators are resilient (`data-testid`, roles, or semantic text).
 - [ ] No arbitrary timeouts (`sleep`) were used.
 - [ ] Test was executed and verified passing (or properly quarantined if unfixable).
+- [ ] You are returning only with green checks or a clear blocker after exhausting the allowed internal retries.

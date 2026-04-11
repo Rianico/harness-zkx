@@ -9,7 +9,6 @@ from scripts.grader import ComplianceResult
 from scripts.parser import ComplianceSpec, ObservationEvent
 from scripts.scenario_generator import Scenario
 
-
 def generate_report(
     skill_path: Path,
     spec: ComplianceSpec,
@@ -137,12 +136,10 @@ def generate_report(
 
     return "\n".join(lines)
 
-
 def _overall_compliance(results: list[tuple[str, ComplianceResult, list[ObservationEvent]]]) -> float:
     if not results:
         return 0.0
     return sum(r.compliance_rate for _, r, _obs in results) / len(results)
-
 
 def _step_compliance_rate(
     step_id: str,
@@ -153,7 +150,6 @@ def _step_compliance_rate(
         for s in r.steps if s.step_id == step_id and s.detected
     )
     return detected / len(results) if results else 0.0
-
 
 def _steps_to_promote(
     spec: ComplianceSpec,

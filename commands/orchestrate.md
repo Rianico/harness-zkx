@@ -14,7 +14,7 @@ allowed-tools:
 
 **Status:** JIT Workflow Command
 
-Executes a sequential pipeline of ECC Commands (e.g., /architect -> /plan -> /tdd) to complete complex tasks, inheriting all interactive approvals and guardrails.
+Executes a sequential pipeline of LSZ Commands (e.g., /architect -> /plan -> /tdd) to complete complex tasks, inheriting all interactive approvals and guardrails.
 
 **How it works:**
 The primary LLM acts as the Explorer and Orchestrator. It invokes the `orchestrate-workflow` skill to learn the pipeline sequence, and then sequentially loads and executes the required Commands (via the `Skill` tool), passing the approved file pointer state from one command to the next.

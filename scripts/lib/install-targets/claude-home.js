@@ -5,6 +5,6 @@ module.exports = createInstallTargetAdapter({
   target: 'claude',
   kind: 'home',
   rootSegments: ['.claude'],
-  installStatePathSegments: ['ecc', 'install-state.json'],
+  installStatePathSegments: ['lsz', 'install-state.json'],
   nativeRootRelativePath: '.claude-plugin',
 });

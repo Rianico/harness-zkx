@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 def extract_yaml(text: str) -> str:
     """Extract YAML from LLM output, stripping markdown fences if present."""
     lines = text.strip().splitlines()

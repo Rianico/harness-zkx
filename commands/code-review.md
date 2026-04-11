@@ -11,7 +11,7 @@ allowed-tools:
 
 **Status:** JIT Workflow Command
 
-Executes a universal code review workflow by delegating to the `code-reviewer` agent, followed by interactive resolution.
+Executes a universal code review workflow by delegating to the `code-reviewer` agent, followed by interactive resolution. This command is the broad review gate for maintainability, security, and overall readiness after implementation workflows such as `/tdd`.
 
 You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined below, evaluate their transition rules, and pass file pointers between them.
 
@@ -28,8 +28,9 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 **Action:** Prepare the workspace.
 1. Extract the code review focus from `$ARGUMENTS`.
 2. Generate a `short_topic` (lowercase, snake_case).
-3. Use the `Bash` tool to run: `mkdir -p .claude/ecc/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]/review`
-4. Store the resulting path as your `[base_dir]` for this session.
+3. If `[topic_root]` was provided by an upstream orchestrator, reuse it. Otherwise create it once for this topic as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`.
+4. Use the `Bash` tool to run: `mkdir -p [topic_root]/review`
+5. Store `[base_dir] = [topic_root]/review` for this session.
 
 **Transition:** Once the directory is created, IMMEDIATELY proceed to Phase 1.
 
@@ -42,7 +43,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "code-reviewer",
   "description": "Conduct code review",
-  "prompt": "You are the Code Reviewer agent. Conduct a review focusing on: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[PREVIOUS STATE POINTER]**\n[Include previous architecture/plan/implementation pointer if available]\n\n**[TASK]**\nReview the implementation for quality, security, and maintainability. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return a brief summary (up to 100 words) right before the absolute file path to the document."
+  "prompt": "You are the Code Reviewer agent. Conduct a broad repository-level review focusing on: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[PREVIOUS STATE POINTER]**\n[Include previous architecture/plan/implementation pointer if available]\n\n**[TASK]**\nReview the implementation for maintainability, security, integration quality, and overall readiness beyond the internal TDD-loop verification. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
 }
 ```
 

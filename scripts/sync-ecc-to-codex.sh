@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Sync Everything Claude Code (ECC) assets into a local Codex CLI setup.
+# Sync Everything Claude Code (LSZ) assets into a local Codex CLI setup.
 # - Backs up ~/.codex config and AGENTS.md
-# - Merges ECC AGENTS.md into existing AGENTS.md (marker-based, preserves user content)
+# - Merges LSZ AGENTS.md into existing AGENTS.md (marker-based, preserves user content)
 # - Syncs Codex-ready skills from .agents/skills
 # - Generates prompt files from commands/*.md
 # - Generates Codex QA wrappers and optional language rule-pack prompts
 # - Installs global git safety hooks (pre-commit and pre-push)
 # - Runs a post-sync global regression sanity check
-# - Merges ECC MCP servers into config.toml (add-only via Node TOML parser)
+# - Merges LSZ MCP servers into config.toml (add-only via Node TOML parser)
 
 MODE="apply"
 UPDATE_MCP=""
@@ -37,9 +37,9 @@ SANITY_CHECKER="$REPO_ROOT/scripts/codex/check-codex-global-state.sh"
 CURSOR_RULES_DIR="$REPO_ROOT/.cursor/rules"
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP_DIR="$CODEX_HOME/backups/ecc-$STAMP"
+BACKUP_DIR="$CODEX_HOME/backups/lsz-$STAMP"
 
-log() { printf '[ecc-sync] %s\n' "$*"; }
+log() { printf '[lsz-sync] %s\n' "$*"; }
 
 run_or_echo() {
   if [[ "$MODE" == "dry-run" ]]; then
@@ -117,9 +117,9 @@ generate_prompt_file() {
   local out="$2"
   local cmd_name="$3"
   {
-    printf '# ECC Command Prompt: /%s\n\n' "$cmd_name"
+    printf '# LSZ Command Prompt: /%s\n\n' "$cmd_name"
     printf 'Source: %s\n\n' "$src"
-    printf 'Use this prompt to run the ECC `%s` workflow.\n\n' "$cmd_name"
+    printf 'Use this prompt to run the LSZ `%s` workflow.\n\n' "$cmd_name"
     awk '
       NR == 1 && $0 == "---" { fm = 1; next }
       fm == 1 && $0 == "---" { fm = 0; next }
@@ -131,15 +131,15 @@ generate_prompt_file() {
 
 MCP_MERGE_SCRIPT="$REPO_ROOT/scripts/codex/merge-mcp-config.js"
 
-require_path "$REPO_ROOT/AGENTS.md" "ECC AGENTS.md"
-require_path "$AGENTS_CODEX_SUPP_SRC" "ECC Codex AGENTS supplement"
-require_path "$SKILLS_SRC" "ECC skills directory"
-require_path "$PROMPTS_SRC" "ECC commands directory"
-require_path "$HOOKS_INSTALLER" "ECC global git hooks installer"
-require_path "$SANITY_CHECKER" "ECC global sanity checker"
-require_path "$CURSOR_RULES_DIR" "ECC Cursor rules directory"
+require_path "$REPO_ROOT/AGENTS.md" "LSZ AGENTS.md"
+require_path "$AGENTS_CODEX_SUPP_SRC" "LSZ Codex AGENTS supplement"
+require_path "$SKILLS_SRC" "LSZ skills directory"
+require_path "$PROMPTS_SRC" "LSZ commands directory"
+require_path "$HOOKS_INSTALLER" "LSZ global git hooks installer"
+require_path "$SANITY_CHECKER" "LSZ global sanity checker"
+require_path "$CURSOR_RULES_DIR" "LSZ Cursor rules directory"
 require_path "$CONFIG_FILE" "Codex config.toml"
-require_path "$MCP_MERGE_SCRIPT" "ECC MCP merge script"
+require_path "$MCP_MERGE_SCRIPT" "LSZ MCP merge script"
 
 if ! command -v node >/dev/null 2>&1; then
   log "ERROR: node is required for MCP config merging but was not found"
@@ -157,53 +157,53 @@ if [[ -f "$AGENTS_FILE" ]]; then
   run_or_echo cp "$AGENTS_FILE" "$BACKUP_DIR/AGENTS.md"
 fi
 
-ECC_BEGIN_MARKER="<!-- BEGIN ECC -->"
-ECC_END_MARKER="<!-- END ECC -->"
+LSZ_BEGIN_MARKER="<!-- BEGIN LSZ -->"
+LSZ_END_MARKER="<!-- END LSZ -->"
 
-compose_ecc_block() {
-  printf '%s\n' "$ECC_BEGIN_MARKER"
+compose_lsz_block() {
+  printf '%s\n' "$LSZ_BEGIN_MARKER"
   cat "$AGENTS_ROOT_SRC"
   printf '\n\n---\n\n'
-  printf '# Codex Supplement (From ECC .codex/AGENTS.md)\n\n'
+  printf '# Codex Supplement (From LSZ .codex/AGENTS.md)\n\n'
   cat "$AGENTS_CODEX_SUPP_SRC"
-  printf '\n%s\n' "$ECC_END_MARKER"
+  printf '\n%s\n' "$LSZ_END_MARKER"
 }
 
-log "Merging ECC AGENTS into $AGENTS_FILE (preserving user content)"
+log "Merging LSZ AGENTS into $AGENTS_FILE (preserving user content)"
 if [[ "$MODE" == "dry-run" ]]; then
-  printf '[dry-run] merge ECC block into %s from %s + %s\n' "$AGENTS_FILE" "$AGENTS_ROOT_SRC" "$AGENTS_CODEX_SUPP_SRC"
+  printf '[dry-run] merge LSZ block into %s from %s + %s\n' "$AGENTS_FILE" "$AGENTS_ROOT_SRC" "$AGENTS_CODEX_SUPP_SRC"
 else
-  replace_ecc_section() {
-    # Replace the ECC block between markers in $AGENTS_FILE with fresh content.
+  replace_lsz_section() {
+    # Replace the LSZ block between markers in $AGENTS_FILE with fresh content.
     # Uses awk to correctly handle all positions including line 1.
     local tmp
     tmp="$(mktemp)"
-    local ecc_tmp
-    ecc_tmp="$(mktemp)"
-    compose_ecc_block > "$ecc_tmp"
-    awk -v begin="$ECC_BEGIN_MARKER" -v end="$ECC_END_MARKER" -v ecc="$ecc_tmp" '
+    local lsz_tmp
+    lsz_tmp="$(mktemp)"
+    compose_lsz_block > "$lsz_tmp"
+    awk -v begin="$LSZ_BEGIN_MARKER" -v end="$LSZ_END_MARKER" -v lsz="$lsz_tmp" '
       { gsub(/\r$/, "") }
-      $0 == begin { skip = 1; while ((getline line < ecc) > 0) print line; close(ecc); next }
+      $0 == begin { skip = 1; while ((getline line < lsz) > 0) print line; close(lsz); next }
       $0 == end   { skip = 0; next }
       !skip        { print }
     ' "$AGENTS_FILE" > "$tmp"
     # Write through the path (preserves symlinks) instead of mv
     cat "$tmp" > "$AGENTS_FILE"
-    rm -f "$tmp" "$ecc_tmp"
+    rm -f "$tmp" "$lsz_tmp"
   }
 
   if [[ ! -f "$AGENTS_FILE" ]]; then
     # No existing file — create fresh with markers
-    compose_ecc_block > "$AGENTS_FILE"
-  elif awk -v b="$ECC_BEGIN_MARKER" -v e="$ECC_END_MARKER" '
+    compose_lsz_block > "$AGENTS_FILE"
+  elif awk -v b="$LSZ_BEGIN_MARKER" -v e="$LSZ_END_MARKER" '
         { gsub(/\r$/, "") }
         $0 == b { bc++; if (!fb) fb = NR }
         $0 == e { ec++; if (!fe) fe = NR }
         END { exit !(bc == 1 && ec == 1 && fb < fe) }
       ' "$AGENTS_FILE"; then
-    # Exactly one BEGIN/END pair in correct order — replace only the ECC section
-    replace_ecc_section
-  elif awk -v b="$ECC_BEGIN_MARKER" -v e="$ECC_END_MARKER" '
+    # Exactly one BEGIN/END pair in correct order — replace only the LSZ section
+    replace_lsz_section
+  elif awk -v b="$LSZ_BEGIN_MARKER" -v e="$LSZ_END_MARKER" '
         { gsub(/\r$/, "") }
         $0 == b { bc++ } $0 == e { ec++ }
         END { exit !((bc + ec) > 0) }
@@ -211,9 +211,9 @@ else
     # Markers present but not exactly one valid BEGIN/END pair (missing END,
     # duplicates, or out-of-order). Strip all marker lines, then append a
     # fresh marked block. This preserves user content outside markers.
-    log "WARNING: ECC markers found but not a clean pair — stripping markers and re-appending"
+    log "WARNING: LSZ markers found but not a clean pair — stripping markers and re-appending"
     _fix_tmp="$(mktemp)"
-    awk -v b="$ECC_BEGIN_MARKER" -v e="$ECC_END_MARKER" '
+    awk -v b="$LSZ_BEGIN_MARKER" -v e="$LSZ_END_MARKER" '
       { gsub(/\r$/, "") }
       $0 == b { skip = 1; next }
       $0 == e { skip = 0; next }
@@ -221,21 +221,21 @@ else
     ' "$AGENTS_FILE" > "$_fix_tmp"
     cat "$_fix_tmp" > "$AGENTS_FILE"
     rm -f "$_fix_tmp"
-    { printf '\n\n'; compose_ecc_block; } >> "$AGENTS_FILE"
+    { printf '\n\n'; compose_lsz_block; } >> "$AGENTS_FILE"
   else
-    # Existing file without markers — append ECC block, preserving existing content.
-    # Legacy ECC-only files will have duplicate content after this first run, but
+    # Existing file without markers — append LSZ block, preserving existing content.
+    # Legacy LSZ-only files will have duplicate content after this first run, but
     # subsequent runs use marker-based replacement so only the marked section updates.
     # A timestamped backup was already saved above for recovery if needed.
-    log "No ECC markers found — appending managed block (backup saved)"
+    log "No LSZ markers found — appending managed block (backup saved)"
     {
       printf '\n\n'
-      compose_ecc_block
+      compose_lsz_block
     } >> "$AGENTS_FILE"
   fi
 fi
 
-log "Syncing ECC Codex skills"
+log "Syncing LSZ Codex skills"
 run_or_echo mkdir -p "$SKILLS_DEST"
 skills_count=0
 for skill_dir in "$SKILLS_SRC"/*; do
@@ -247,9 +247,9 @@ for skill_dir in "$SKILLS_SRC"/*; do
   skills_count=$((skills_count + 1))
 done
 
-log "Generating prompt files from ECC commands"
+log "Generating prompt files from LSZ commands"
 run_or_echo mkdir -p "$PROMPTS_DEST"
-manifest="$PROMPTS_DEST/ecc-prompts-manifest.txt"
+manifest="$PROMPTS_DEST/lsz-prompts-manifest.txt"
 if [[ "$MODE" == "dry-run" ]]; then
   printf '[dry-run] > %s\n' "$manifest"
 else
@@ -259,12 +259,12 @@ fi
 prompt_count=0
 while IFS= read -r -d '' command_file; do
   name="$(basename "$command_file" .md)"
-  out="$PROMPTS_DEST/ecc-$name.md"
+  out="$PROMPTS_DEST/lsz-$name.md"
   if [[ "$MODE" == "dry-run" ]]; then
     printf '[dry-run] generate %s from %s\n' "$out" "$command_file"
   else
     generate_prompt_file "$command_file" "$out" "$name"
-    printf 'ecc-%s.md\n' "$name" >> "$manifest"
+    printf 'lsz-%s.md\n' "$name" >> "$manifest"
   fi
   prompt_count=$((prompt_count + 1))
 done < <(find "$PROMPTS_SRC" -maxdepth 1 -type f -name '*.md' -print0 | sort -z)
@@ -274,7 +274,7 @@ if [[ "$MODE" == "apply" ]]; then
 fi
 
 log "Generating Codex tool prompts + optional rule-pack prompts"
-extension_manifest="$PROMPTS_DEST/ecc-extension-prompts-manifest.txt"
+extension_manifest="$PROMPTS_DEST/lsz-extension-prompts-manifest.txt"
 if [[ "$MODE" == "dry-run" ]]; then
   printf '[dry-run] > %s\n' "$extension_manifest"
 else
@@ -295,8 +295,8 @@ write_extension_prompt() {
   extension_count=$((extension_count + 1))
 }
 
-write_extension_prompt "ecc-tool-run-tests.md" <<EOF
-# ECC Tool Prompt: run-tests
+write_extension_prompt "lsz-tool-run-tests.md" <<EOF
+# LSZ Tool Prompt: run-tests
 
 Run the repository test suite with package-manager autodetection and concise reporting.
 
@@ -319,8 +319,8 @@ Suggested next step:
 \`\`\`
 EOF
 
-write_extension_prompt "ecc-tool-check-coverage.md" <<EOF
-# ECC Tool Prompt: check-coverage
+write_extension_prompt "lsz-tool-check-coverage.md" <<EOF
+# LSZ Tool Prompt: check-coverage
 
 Analyze coverage and compare it to an 80% threshold (or a threshold I specify).
 
@@ -343,8 +343,8 @@ Recommended focus:
 \`\`\`
 EOF
 
-write_extension_prompt "ecc-tool-security-audit.md" <<EOF
-# ECC Tool Prompt: security-audit
+write_extension_prompt "lsz-tool-security-audit.md" <<EOF
+# LSZ Tool Prompt: security-audit
 
 Run a practical security audit: dependency vulnerabilities + secret scan + high-risk code patterns.
 
@@ -369,10 +369,10 @@ Remediation plan:
 \`\`\`
 EOF
 
-write_extension_prompt "ecc-rules-pack-common.md" <<EOF
-# ECC Rule Pack: common (optional)
+write_extension_prompt "lsz-rules-pack-common.md" <<EOF
+# LSZ Rule Pack: common (optional)
 
-Apply ECC common engineering rules for this session. Use these files as the source of truth:
+Apply LSZ common engineering rules for this session. Use these files as the source of truth:
 
 - \`$CURSOR_RULES_DIR/common-agents.md\`
 - \`$CURSOR_RULES_DIR/common-coding-style.md\`
@@ -387,13 +387,13 @@ Apply ECC common engineering rules for this session. Use these files as the sour
 Treat these as strict defaults for planning, implementation, review, and verification in this repo.
 EOF
 
-write_extension_prompt "ecc-rules-pack-typescript.md" <<EOF
-# ECC Rule Pack: typescript (optional)
+write_extension_prompt "lsz-rules-pack-typescript.md" <<EOF
+# LSZ Rule Pack: typescript (optional)
 
-Apply ECC common rules plus TypeScript-specific rules for this session.
+Apply LSZ common rules plus TypeScript-specific rules for this session.
 
 ## Common
-Use \`$PROMPTS_DEST/ecc-rules-pack-common.md\`.
+Use \`$PROMPTS_DEST/lsz-rules-pack-common.md\`.
 
 ## TypeScript Extensions
 - \`$CURSOR_RULES_DIR/typescript-coding-style.md\`
@@ -405,13 +405,13 @@ Use \`$PROMPTS_DEST/ecc-rules-pack-common.md\`.
 Language-specific guidance overrides common rules when they conflict.
 EOF
 
-write_extension_prompt "ecc-rules-pack-python.md" <<EOF
-# ECC Rule Pack: python (optional)
+write_extension_prompt "lsz-rules-pack-python.md" <<EOF
+# LSZ Rule Pack: python (optional)
 
-Apply ECC common rules plus Python-specific rules for this session.
+Apply LSZ common rules plus Python-specific rules for this session.
 
 ## Common
-Use \`$PROMPTS_DEST/ecc-rules-pack-common.md\`.
+Use \`$PROMPTS_DEST/lsz-rules-pack-common.md\`.
 
 ## Python Extensions
 - \`$CURSOR_RULES_DIR/python-coding-style.md\`
@@ -423,13 +423,13 @@ Use \`$PROMPTS_DEST/ecc-rules-pack-common.md\`.
 Language-specific guidance overrides common rules when they conflict.
 EOF
 
-write_extension_prompt "ecc-rules-pack-golang.md" <<EOF
-# ECC Rule Pack: golang (optional)
+write_extension_prompt "lsz-rules-pack-golang.md" <<EOF
+# LSZ Rule Pack: golang (optional)
 
-Apply ECC common rules plus Go-specific rules for this session.
+Apply LSZ common rules plus Go-specific rules for this session.
 
 ## Common
-Use \`$PROMPTS_DEST/ecc-rules-pack-common.md\`.
+Use \`$PROMPTS_DEST/lsz-rules-pack-common.md\`.
 
 ## Go Extensions
 - \`$CURSOR_RULES_DIR/golang-coding-style.md\`
@@ -441,13 +441,13 @@ Use \`$PROMPTS_DEST/ecc-rules-pack-common.md\`.
 Language-specific guidance overrides common rules when they conflict.
 EOF
 
-write_extension_prompt "ecc-rules-pack-swift.md" <<EOF
-# ECC Rule Pack: swift (optional)
+write_extension_prompt "lsz-rules-pack-swift.md" <<EOF
+# LSZ Rule Pack: swift (optional)
 
-Apply ECC common rules plus Swift-specific rules for this session.
+Apply LSZ common rules plus Swift-specific rules for this session.
 
 ## Common
-Use \`$PROMPTS_DEST/ecc-rules-pack-common.md\`.
+Use \`$PROMPTS_DEST/lsz-rules-pack-common.md\`.
 
 ## Swift Extensions
 - \`$CURSOR_RULES_DIR/swift-coding-style.md\`
@@ -463,7 +463,7 @@ if [[ "$MODE" == "apply" ]]; then
   sort -u "$extension_manifest" -o "$extension_manifest"
 fi
 
-log "Merging ECC MCP servers into $CONFIG_FILE (add-only, preserving user config)"
+log "Merging LSZ MCP servers into $CONFIG_FILE (add-only, preserving user config)"
 if [[ "$MODE" == "dry-run" ]]; then
   node "$MCP_MERGE_SCRIPT" "$CONFIG_FILE" --dry-run $UPDATE_MCP
 else

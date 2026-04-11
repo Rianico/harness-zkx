@@ -2,13 +2,13 @@
 'use strict';
 
 /**
- * Merge ECC-recommended MCP servers into a Codex config.toml.
+ * Merge LSZ-recommended MCP servers into a Codex config.toml.
  *
  * Strategy: ADD-ONLY by default.
  *   - Parse the TOML to detect which mcp_servers.* sections exist.
  *   - Append raw TOML text for any missing servers (preserves existing file byte-for-byte).
- *   - Log warnings when an existing server's config differs from the ECC recommendation.
- *   - With --update-mcp, also replace existing ECC-managed servers.
+ *   - Log warnings when an existing server's config differs from the LSZ recommendation.
+ *   - With --update-mcp, also replace existing LSZ-managed servers.
  *
  * Uses the repo's package-manager abstraction (scripts/lib/package-manager.js)
  * so MCP launcher commands respect the user's configured package manager.
@@ -24,8 +24,8 @@ let TOML;
 try {
   TOML = require('@iarna/toml');
 } catch {
-  console.error('[ecc-mcp] Missing dependency: @iarna/toml');
-  console.error('[ecc-mcp] Run: npm install   (from the ECC repo root)');
+  console.error('[lsz-mcp] Missing dependency: @iarna/toml');
+  console.error('[lsz-mcp] Run: npm install   (from the LSZ repo root)');
   process.exit(1);
 }
 
@@ -61,7 +61,7 @@ const PM_EXEC = resolvedExecCmd; // e.g. "pnpm dlx", "npx", "bunx", "yarn dlx"
 const PM_EXEC_PARTS = PM_EXEC.split(/\s+/); // ["pnpm", "dlx"] or ["npx"] or ["bunx"]
 
 // ---------------------------------------------------------------------------
-// ECC-recommended MCP servers
+// LSZ-recommended MCP servers
 // ---------------------------------------------------------------------------
 
 // GitHub bootstrap uses bash for token forwarding — this is intentionally
@@ -83,7 +83,7 @@ function dlxServer(name, pkg, extraFields, extraToml) {
 }
 
 /** Each entry: key = section name under mcp_servers, value = { toml, fields } */
-const ECC_SERVERS = {
+const LSZ_SERVERS = {
   supabase: dlxServer('supabase', '@supabase/mcp-server-supabase@latest', { startup_timeout_sec: 20.0, tool_timeout_sec: 120.0 }, 'startup_timeout_sec = 20.0\ntool_timeout_sec = 120.0'),
   playwright: dlxServer('playwright', '@playwright/mcp@latest'),
   'context7-mcp': dlxServer('context7-mcp', '@upstash/context7-mcp'),
@@ -100,10 +100,10 @@ const ECC_SERVERS = {
 };
 
 // Append --features arg for supabase after dlxServer builds the base
-ECC_SERVERS.supabase.fields.args.push('--features=account,docs,database,debugging,development,functions,storage,branching');
-ECC_SERVERS.supabase.toml = ECC_SERVERS.supabase.toml.replace(/^(args = \[.*)\]$/m, '$1, "--features=account,docs,database,debugging,development,functions,storage,branching"]');
+LSZ_SERVERS.supabase.fields.args.push('--features=account,docs,database,debugging,development,functions,storage,branching');
+LSZ_SERVERS.supabase.toml = LSZ_SERVERS.supabase.toml.replace(/^(args = \[.*)\]$/m, '$1, "--features=account,docs,database,debugging,development,functions,storage,branching"]');
 
-// Legacy section names that should be treated as an existing ECC server.
+// Legacy section names that should be treated as an existing LSZ server.
 // e.g. old configs shipped [mcp_servers.context7] instead of [mcp_servers.context7-mcp].
 const LEGACY_ALIASES = {
   'context7-mcp': ['context7']
@@ -114,11 +114,11 @@ const LEGACY_ALIASES = {
 // ---------------------------------------------------------------------------
 
 function log(msg) {
-  console.log(`[ecc-mcp] ${msg}`);
+  console.log(`[lsz-mcp] ${msg}`);
 }
 
 function warn(msg) {
-  console.warn(`[ecc-mcp] WARNING: ${msg}`);
+  console.warn(`[lsz-mcp] WARNING: ${msg}`);
 }
 
 /** Shallow-compare two objects (one level deep, arrays by JSON). */
@@ -214,7 +214,7 @@ function main() {
   }
 
   if (!fs.existsSync(configPath)) {
-    console.error(`[ecc-mcp] Config file not found: ${configPath}`);
+    console.error(`[lsz-mcp] Config file not found: ${configPath}`);
     process.exit(1);
   }
 
@@ -225,7 +225,7 @@ function main() {
   try {
     parsed = TOML.parse(raw);
   } catch (err) {
-    console.error(`[ecc-mcp] Failed to parse ${configPath}: ${err.message}`);
+    console.error(`[lsz-mcp] Failed to parse ${configPath}: ${err.message}`);
     process.exit(1);
   }
 
@@ -233,7 +233,7 @@ function main() {
   const toAppend = [];
   const toRemoveLog = [];
 
-  for (const [name, spec] of Object.entries(ECC_SERVERS)) {
+  for (const [name, spec] of Object.entries(LSZ_SERVERS)) {
     const entry = existing[name];
     const aliases = LEGACY_ALIASES[name] || [];
     const legacyName = aliases.find(a => existing[a] && typeof existing[a].command === 'string');
@@ -260,7 +260,7 @@ function main() {
         if (legacyName && !hasCanonical) {
           warn(`mcp_servers.${legacyName} is a legacy name for ${name} (run with --update-mcp to migrate)`);
         } else if (configDiffers(finalEntry, spec.fields)) {
-          warn(`mcp_servers.${name} differs from ECC recommendation (run with --update-mcp to refresh)`);
+          warn(`mcp_servers.${name} differs from LSZ recommendation (run with --update-mcp to refresh)`);
         } else {
           log(`  [ok] mcp_servers.${name}`);
         }
@@ -272,7 +272,7 @@ function main() {
   }
 
   if (toAppend.length === 0) {
-    log('All ECC MCP servers already present. Nothing to do.');
+    log('All LSZ MCP servers already present. Nothing to do.');
     return;
   }
 

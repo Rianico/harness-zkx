@@ -56,14 +56,12 @@ LOGGER = logging.getLogger(__name__)
 # Parse arguments
 RETRYABLE_ERRORS = (ConnectionError, TimeoutError)
 
-
 def default_output_dir() -> Path:
     """Return a private per-user state directory for listener artifacts."""
     xdg_state_home = os.environ.get("XDG_STATE_HOME")
     if xdg_state_home:
         return Path(xdg_state_home) / "videodb"
     return Path.home() / ".local" / "state" / "videodb"
-
 
 def ensure_private_dir(path: Path) -> Path:
     """Create the listener state directory with private permissions."""
@@ -73,7 +71,6 @@ def ensure_private_dir(path: Path) -> Path:
     except OSError:
         pass
     return path
-
 
 def parse_args() -> tuple[bool, Path]:
     clear = False
@@ -104,11 +101,9 @@ PID_FILE = OUTPUT_DIR / "videodb_ws_pid"
 # Track if this is the first connection (for clearing events)
 _first_connection = True
 
-
 def log(msg: str):
     """Log with timestamp."""
     LOGGER.info("%s", msg)
-
 
 def append_event(event: dict):
     """Append event to JSONL file with timestamps."""
@@ -118,12 +113,10 @@ def append_event(event: dict):
     with EVENTS_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(event) + "\n")
 
-
 def write_pid():
     """Write PID file for easy process management."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     PID_FILE.write_text(str(os.getpid()))
-
 
 def cleanup_pid():
     """Remove PID file on exit."""
@@ -131,7 +124,6 @@ def cleanup_pid():
         PID_FILE.unlink(missing_ok=True)
     except OSError as exc:
         LOGGER.debug("Failed to remove PID file %s: %s", PID_FILE, exc)
-
 
 def is_fatal_error(exc: Exception) -> bool:
     """Return True when retrying would hide a permanent configuration error."""
@@ -142,7 +134,6 @@ def is_fatal_error(exc: Exception) -> bool:
         return True
     message = str(exc).lower()
     return "401" in message or "403" in message or "auth" in message
-
 
 async def listen_with_retry():
     """Main listen loop with auto-reconnect and exponential backoff."""
@@ -228,7 +219,6 @@ async def listen_with_retry():
             if text:
                 print(f"[{channel}] {text[:80]}", flush=True)
 
-
 async def main_async():
     """Async main with signal handling."""
     loop = asyncio.get_running_loop()
@@ -269,14 +259,12 @@ async def main_async():
     
     log("Shutdown complete")
 
-
 def main():
     write_pid()
     try:
         asyncio.run(main_async())
     finally:
         cleanup_pid()
-
 
 if __name__ == "__main__":
     main()

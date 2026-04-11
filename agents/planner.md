@@ -28,7 +28,7 @@ Once you understand the context:
 
 ## PHASE 3: PLAN DELIVERY
 1. Write the finalized plan using the `Write` tool. You MUST format the file path according to the Artifact Storage Convention defined in the Domain Rules.
-   - Example path: `.claude/ecc/plan/20260409/120123_auth_migration/plan_v1.md`
+   - Example path: `.lsz/20260409/120123_auth_migration/plan/plan_v1.md`
    - If revising an existing plan, increment the version (`v2`, `v3`).
    - Use the `Bash` tool with `mkdir -p` to ensure the parent directories exist before writing the file.
 2. Return a structured summary response to the Orchestrator (Primary Agent) containing the exact file path of the saved plan and a high-level summary. Do not ask for user approval yourself—the Orchestrator will handle all human interaction and approval flows.

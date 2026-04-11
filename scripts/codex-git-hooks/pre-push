@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ECC Codex Git Hook: pre-push
+# LSZ Codex Git Hook: pre-push
 # Runs a lightweight verification flow before pushes.
 
-if [[ "${ECC_SKIP_GIT_HOOKS:-0}" == "1" || "${ECC_SKIP_PREPUSH:-0}" == "1" ]]; then
+if [[ "${LSZ_SKIP_GIT_HOOKS:-0}" == "1" || "${LSZ_SKIP_PREPUSH:-0}" == "1" ]]; then
   exit 0
 fi
 
-if [[ -f ".ecc-hooks-disable" || -f ".git/ecc-hooks-disable" ]]; then
+if [[ -f ".lsz-hooks-disable" || -f ".git/lsz-hooks-disable" ]]; then
   exit 0
 fi
 
@@ -19,11 +19,11 @@ fi
 ran_any_check=0
 
 log() {
-  printf '[ECC pre-push] %s\n' "$*"
+  printf '[LSZ pre-push] %s\n' "$*"
 }
 
 fail() {
-  printf '[ECC pre-push] FAILED: %s\n' "$*" >&2
+  printf '[LSZ pre-push] FAILED: %s\n' "$*" >&2
   exit 1
 }
 
@@ -72,9 +72,9 @@ if [[ -f "package.json" ]]; then
     fi
   done
 
-  if [[ "${ECC_PREPUSH_AUDIT:-0}" == "1" ]]; then
+  if [[ "${LSZ_PREPUSH_AUDIT:-0}" == "1" ]]; then
     ran_any_check=1
-    log "Running dependency audit (ECC_PREPUSH_AUDIT=1)"
+    log "Running dependency audit (LSZ_PREPUSH_AUDIT=1)"
     case "$pm" in
       pnpm) pnpm audit --prod || fail "pnpm audit failed" ;;
       bun) bun audit || fail "bun audit failed" ;;

@@ -7,7 +7,7 @@ function showHelp(exitCode = 0) {
   console.log(`
 Usage: node scripts/repair.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json]
 
-Rebuild ECC-managed files recorded in install-state for the current context.
+Rebuild LSZ-managed files recorded in install-state for the current context.
 `);
   process.exit(exitCode);
 }
@@ -43,7 +43,7 @@ function parseArgs(argv) {
 
 function printHuman(result) {
   if (result.results.length === 0) {
-    console.log('No ECC install-state files found for the current home/project context.');
+    console.log('No LSZ install-state files found for the current home/project context.');
     return;
   }
 

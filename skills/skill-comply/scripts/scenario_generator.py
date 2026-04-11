@@ -12,7 +12,6 @@ from scripts.utils import extract_yaml
 
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
-
 @dataclass(frozen=True)
 class Scenario:
     id: str
@@ -21,7 +20,6 @@ class Scenario:
     description: str
     prompt: str
     setup_commands: tuple[str, ...]
-
 
 def generate_scenarios(
     skill_path: Path,

@@ -28,8 +28,9 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 **Action:** Prepare the workspace.
 1. Extract the documentation target from `$ARGUMENTS`.
 2. Generate a `short_topic` (lowercase, snake_case).
-3. Use the `Bash` tool to run: `mkdir -p .claude/ecc/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]/docs`
-4. Store the resulting path as your `[base_dir]` for this session.
+3. If `[topic_root]` was provided by an upstream orchestrator, reuse it. Otherwise create it once for this topic as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`.
+4. Use the `Bash` tool to run: `mkdir -p [topic_root]/docs`
+5. Store `[base_dir] = [topic_root]/docs` for this session.
 
 **Transition:** Once the directory is created, IMMEDIATELY proceed to Phase 1.
 
@@ -42,7 +43,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "doc-updater",
   "description": "Update documentation",
-  "prompt": "**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[TASK]**\nUpdate documentation or generate codemaps based on the following target: [$ARGUMENTS]. You MUST use the Write tool to save a summary of the documentation changes to [base_dir]/01-doc-updates-summary.md. Return a brief summary (up to 100 words) right before the absolute file path to the document."
+  "prompt": "**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[TASK]**\nUpdate documentation or generate codemaps based on the following target: [$ARGUMENTS]. You MUST use the Write tool to save a summary of the documentation changes to [base_dir]/01-doc-updates-summary.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
 }
 ```
 

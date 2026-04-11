@@ -10,21 +10,17 @@ from scripts.parser import parse_spec, parse_trace
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
-
 @pytest.fixture
 def tdd_spec():
     return parse_spec(FIXTURES / "tdd_spec.yaml")
-
 
 @pytest.fixture
 def compliant_trace():
     return parse_trace(FIXTURES / "compliant_trace.jsonl")
 
-
 @pytest.fixture
 def noncompliant_trace():
     return parse_trace(FIXTURES / "noncompliant_trace.jsonl")
-
 
 def _mock_compliant_classification(spec, trace, model="haiku"):  # noqa: ARG001
     """Simulate LLM correctly classifying a compliant trace."""
@@ -36,7 +32,6 @@ def _mock_compliant_classification(spec, trace, model="haiku"):  # noqa: ARG001
         "refactor": [4],
     }
 
-
 def _mock_noncompliant_classification(spec, trace, model="haiku"):
     """Simulate LLM classifying a noncompliant trace (impl before test)."""
     return {
@@ -45,10 +40,8 @@ def _mock_noncompliant_classification(spec, trace, model="haiku"):
         "run_test_green": [2],  # only a passing test run
     }
 
-
 def _mock_empty_classification(spec, trace, model="haiku"):
     return {}
-
 
 class TestGradeCompliant:
     @patch("scripts.grader.classify_events", side_effect=_mock_compliant_classification)
@@ -86,7 +79,6 @@ class TestGradeCompliant:
             if step.detected:
                 assert len(step.evidence) > 0
 
-
 class TestGradeNoncompliant:
     @patch("scripts.grader.classify_events", side_effect=_mock_noncompliant_classification)
     def test_low_compliance(self, mock_cls, tdd_spec, noncompliant_trace) -> None:
@@ -117,7 +109,6 @@ class TestGradeNoncompliant:
         failed_steps = [s for s in result.steps if not s.detected and s.step_id != "refactor"]
         for step in failed_steps:
             assert step.failure_reason is not None
-
 
 class TestGradeEdgeCases:
     @patch("scripts.grader.classify_events", side_effect=_mock_empty_classification)

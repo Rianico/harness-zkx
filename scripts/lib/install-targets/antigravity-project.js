@@ -11,7 +11,7 @@ module.exports = createInstallTargetAdapter({
   target: 'antigravity',
   kind: 'project',
   rootSegments: ['.agent'],
-  installStatePathSegments: ['ecc-install-state.json'],
+  installStatePathSegments: ['lsz-install-state.json'],
   planOperations(input, adapter) {
     const modules = Array.isArray(input.modules)
       ? input.modules

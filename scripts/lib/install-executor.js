@@ -13,8 +13,8 @@ const { getInstallTargetAdapter } = require('./install-targets/registry');
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const EXCLUDED_GENERATED_SOURCE_SUFFIXES = [
-  '/ecc-install-state.json',
-  '/ecc/install-state.json',
+  '/lsz-install-state.json',
+  '/lsz/install-state.json',
 ];
 
 function getSourceRoot() {

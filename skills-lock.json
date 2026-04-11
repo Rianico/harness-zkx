@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "brainstorming": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "963807d5bb323fbfad4dd5110b920c5bc45859e5eab06f2574e709c593a884c8"
+    },
+    "kaizen:why": {
+      "source": "neolabhq/context-engineering-kit",
+      "sourceType": "github",
+      "computedHash": "1a4b45a0016a1aaf4842f6e996fe08ce2b4b62b454db0d0414035782d8185c0a"
+    }
+  }
+}

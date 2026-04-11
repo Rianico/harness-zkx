@@ -13,7 +13,6 @@ from scripts.parser import ComplianceSpec, ObservationEvent
 
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
-
 def classify_events(
     spec: ComplianceSpec,
     trace: list[ObservationEvent],
@@ -57,7 +56,6 @@ def classify_events(
         )
 
     return _parse_classification(result.stdout)
-
 
 def _parse_classification(text: str) -> dict[str, list[int]]:
     """Parse LLM classification output into {step_id: [event_indices]}."""

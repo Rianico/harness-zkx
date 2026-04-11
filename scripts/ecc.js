@@ -7,7 +7,7 @@ const { listAvailableLanguages } = require('./lib/install-executor');
 const COMMANDS = {
   install: {
     script: 'install-apply.js',
-    description: 'Install ECC content into a supported target',
+    description: 'Install LSZ content into a supported target',
   },
   plan: {
     script: 'install-plan.js',
@@ -23,27 +23,27 @@ const COMMANDS = {
   },
   doctor: {
     script: 'doctor.js',
-    description: 'Diagnose missing or drifted ECC-managed files',
+    description: 'Diagnose missing or drifted LSZ-managed files',
   },
   repair: {
     script: 'repair.js',
-    description: 'Restore drifted or missing ECC-managed files',
+    description: 'Restore drifted or missing LSZ-managed files',
   },
   status: {
     script: 'status.js',
-    description: 'Query the ECC SQLite state store status summary',
+    description: 'Query the LSZ SQLite state store status summary',
   },
   sessions: {
     script: 'sessions-cli.js',
-    description: 'List or inspect ECC sessions from the SQLite state store',
+    description: 'List or inspect LSZ sessions from the SQLite state store',
   },
   'session-inspect': {
     script: 'session-inspect.js',
-    description: 'Emit canonical ECC session snapshots from dmux or Claude history targets',
+    description: 'Emit canonical LSZ session snapshots from dmux or Claude history targets',
   },
   uninstall: {
     script: 'uninstall.js',
-    description: 'Remove ECC-managed files recorded in install-state',
+    description: 'Remove LSZ-managed files recorded in install-state',
   },
 };
 
@@ -61,32 +61,32 @@ const PRIMARY_COMMANDS = [
 
 function showHelp(exitCode = 0) {
   console.log(`
-ECC selective-install CLI
+LSZ selective-install CLI
 
 Usage:
-  ecc <command> [args...]
-  ecc [install args...]
+  lsz <command> [args...]
+  lsz [install args...]
 
 Commands:
 ${PRIMARY_COMMANDS.map(command => `  ${command.padEnd(15)} ${COMMANDS[command].description}`).join('\n')}
 
 Compatibility:
-  ecc-install        Legacy install entrypoint retained for existing flows
-  ecc [args...]      Without a command, args are routed to "install"
-  ecc help <command> Show help for a specific command
+  lsz-install        Legacy install entrypoint retained for existing flows
+  lsz [args...]      Without a command, args are routed to "install"
+  lsz help <command> Show help for a specific command
 
 Examples:
-  ecc typescript
-  ecc install --profile developer --target claude
-  ecc plan --profile core --target cursor
-  ecc list-installed --json
-  ecc doctor --target cursor
-  ecc repair --dry-run
-  ecc status --json
-  ecc sessions
-  ecc sessions session-active --json
-  ecc session-inspect claude:latest
-  ecc uninstall --target antigravity --dry-run
+  lsz typescript
+  lsz install --profile developer --target claude
+  lsz plan --profile core --target cursor
+  lsz list-installed --json
+  lsz doctor --target cursor
+  lsz repair --dry-run
+  lsz status --json
+  lsz sessions
+  lsz sessions session-active --json
+  lsz session-inspect claude:latest
+  lsz uninstall --target antigravity --dry-run
 `);
 
   process.exit(exitCode);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Executes a hook script only when enabled by ECC hook profile flags.
+ * Executes a hook script only when enabled by LSZ hook profile flags.
  *
  * Usage:
  *   node run-with-flags.js <hookId> <scriptRelativePath> [profilesCsv]
@@ -152,8 +152,8 @@ async function main() {
     encoding: 'utf8',
     env: {
       ...process.env,
-      ECC_HOOK_INPUT_TRUNCATED: truncated ? '1' : '0',
-      ECC_HOOK_INPUT_MAX_BYTES: String(MAX_STDIN)
+      LSZ_HOOK_INPUT_TRUNCATED: truncated ? '1' : '0',
+      LSZ_HOOK_INPUT_MAX_BYTES: String(MAX_STDIN)
     },
     cwd: process.cwd(),
     timeout: 30000
