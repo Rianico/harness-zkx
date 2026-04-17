@@ -1,11 +1,9 @@
 ---
 description: Sequential multi-command orchestration for complex workflows. Routes to `orchestrate-workflow` skill.
-argument-hint: "[feature|bugfix|docs] <task_description>"
+argument-hint: "[feature|refactor|bugfix|docs] <task_description>"
 allowed-tools:
   - Skill
   - Agent
-  - AskUserQuestion
-  - SendMessage
   - Read
   - Bash
 ---

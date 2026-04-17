@@ -1,7 +1,7 @@
 ---
 name: orchestrate-workflow
-description: Defines the standard execution pipelines (Feature, Bugfix, Docs). Use this skill to orchestrate multiple LSZ Commands in a sequential workflow.
-argument-hint: "[feature|bugfix|docs]"
+description: Defines the standard execution pipelines (Feature, Refactor, Bugfix, Docs). Use this skill to orchestrate multiple LSZ Commands in a sequential workflow.
+argument-hint: "[feature|refactor|bugfix|docs]"
 ---
 
 # Orchestration Workflow Skill
