@@ -27,7 +27,7 @@ Once you understand the context:
 3. Keep the plan actionable and broken down into verifiable milestones.
 
 ## PHASE 3: PLAN DELIVERY
-1. Write the finalized plan using the `Write` tool. You MUST format the file path according to the Artifact Storage Convention defined in the Domain Rules.
+1. Write the finalized plan. You MUST format the file path according to the Artifact Storage Convention defined in the Domain Rules.
    - Example path: `.lsz/20260409/120123_auth_migration/plan/plan_v1.md`
    - If revising an existing plan, increment the version (`v2`, `v3`).
    - Use the `Bash` tool with `mkdir -p` to ensure the parent directories exist before writing the file.

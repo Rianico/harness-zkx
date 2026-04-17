@@ -5,6 +5,7 @@ allowed-tools:
   - Agent
   - AskUserQuestion
   - Bash
+  - Write
 ---
 
 # Command: /plan
@@ -16,7 +17,7 @@ Invokes the `planner` agent to create a comprehensive implementation plan before
 You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined below, evaluate their transition rules, and pass file pointers between them.
 
 ## CRITICAL BEHAVIORAL RULES FOR ORCHESTRATOR
-1. **No Hero Mode:** You are strictly forbidden from using `Edit`, `Write`, or `Bash` tools to write code or write the plan yourself.
+1. **No Hero Mode:** You are strictly forbidden from using `Edit`, `Write`, or `Bash` tools to write code.
 2. **Pointer Passing:** You MUST pass file paths (pointers) returned by one phase directly into the payload of the next phase. DO NOT use `Read` to read the artifacts yourself.
 3. **Strict Order:** Execute phases in exact order. Stop at all Checkpoints.
 4. **Halt on Failure:** If an agent reports an unexpected error, stop and ask the user. Do not silently fix it.
