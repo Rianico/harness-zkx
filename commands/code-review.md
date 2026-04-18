@@ -11,7 +11,7 @@ allowed-tools:
 
 **Status:** JIT Workflow Command
 
-Executes a universal code review workflow by delegating to the `code-reviewer` agent, followed by interactive resolution. This command is the broad review gate for maintainability, security, and overall readiness after implementation workflows such as `/tdd`.
+Executes a universal code review workflow by delegating to the `code-reviewer` agent, followed by interactive resolution. This command is the repository-level review gate for security, maintainability, cross-cutting correctness gaps, and overall readiness after implementation workflows such as `/tdd`.
 
 You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined below, evaluate their transition rules, and pass file pointers between them.
 
@@ -43,7 +43,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 {
   "subagent_type": "code-reviewer",
   "description": "Conduct code review",
-  "prompt": "You are the Code Reviewer agent. Conduct a broad repository-level review focusing on: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[PREVIOUS STATE POINTER]**\n[Include previous architecture/plan/implementation pointer if available]\n\n**[TASK]**\nReview the implementation for maintainability, security, integration quality, and overall readiness beyond the internal TDD-loop verification. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
+  "prompt": "You are the Code Reviewer agent. Conduct a repository-level review focusing on: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[APPROVED UPSTREAM POINTERS]**\n[Include only the relevant approved implementation or verification pointers if available]\n\n**[TASK]**\nReview the implementation at the repository level for security, maintainability, cross-cutting correctness gaps not already covered by the TDD workflow, and overall readiness. Do NOT restate RED/GREEN/refactor progress, recreate implementation summaries, or rerun the internal TDD verification loop. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
 }
 ```
 
@@ -67,5 +67,5 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 
 3. **Handle User Response:**
 - If **Approve & Continue**: Output a final summary with the `[review_pointer]` and terminate the workflow.
-- If **Delegate Fixes**: Launch the `tdd-cycle` skill (or appropriate agent) with the `[review_pointer]` to implement the fixes.
+- If **Delegate Fixes**: Delegate implementation of the findings to the appropriate implementation workflow using the `[review_pointer]`, without treating `/code-review` itself as an internal TDD verification pass.
 - If **Manual Fix**: Wait for the user to make changes, then they can re-run the review.

@@ -34,14 +34,14 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 
 ---
 
-## PHASE 1: ARCHITECTURE DESIGN AND ANALYSIS
+## PHASE 1: ARCHITECTURE DECISION RECORD
 **Action:** Call `Agent` tool
 **Payload Template:**
 ```json
 {
   "subagent_type": "architect",
-  "description": "Perform architectural design and analysis",
-  "prompt": "You are the Architect agent. Analyze the requirements and design the architecture for: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[Comprehensive Analysis]**\n[Already known information and analysis]\n\n**[TASK]**\nInclude the user's architectural request and constraints. Write your complete analysis, architectural proposal, diagrams, and trade-offs to a single markdown document. You MUST use the Write tool to save it to [base_dir]/01-architecture-proposal.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
+  "description": "Produce architecture decision record",
+  "prompt": "You are the Architect agent. Design the architecture for: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[KNOWN CONTEXT]**\n[Already known information and constraints]\n\n**[TASK]**\nProduce a focused architecture decision record only. The artifact MUST define: problem framing, design decisions, system boundaries, invariants, interfaces between major components, key trade-offs, risks, and explicitly rejected alternatives. Keep it decision-oriented. Do NOT produce a task breakdown, implementation sequence, test matrix, fixture plan, or file-by-file execution checklist unless the user explicitly asked for those. Write the artifact to [base_dir]/01-architecture-decision-record.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
 }
 ```
 
