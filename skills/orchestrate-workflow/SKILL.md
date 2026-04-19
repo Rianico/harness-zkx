@@ -29,7 +29,7 @@ To execute a step, load the corresponding Skill (e.g., `skill="architect"`) and 
 - **Tavity only when insufficient:** Use `websearch-tavity` skill for broader web research.
 - Prefer adopting or porting a proven approach over writing net-new code.
 
-### 1. Feature Pipeline (`args="feature"`)
+### 1. Feature Pipeline (`args="feature|refactor"`)
 - **Step 1:** `/architect` (Load skill: `architect`) - *Create `[topic_root]` once for the topic and pass it into downstream commands after approval. This phase defines the architecture decision record only.*
 - **Step 2:** `/plan` (Load skill: `plan`) - *Pass the approved architecture pointer and the existing `[topic_root]` into the planner. This phase converts the ADR into an execution plan only.*
 - **Step 3:** `/tdd` (Load skill: `tdd-cycle`) - *Pass the approved execution plan pointer and the existing `[topic_root]` into the TDD orchestrator. This phase should focus on tests, implementation, and implementation-level verification only.*

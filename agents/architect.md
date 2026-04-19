@@ -9,6 +9,7 @@ tools:
   - Skill
   - Write
 model: sonnet
+skills: architecture-decision-records
 color: purple
 ---
 
