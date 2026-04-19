@@ -8,6 +8,7 @@ tools:
   - Bash
   - Grep
   - Glob
+  - SendMessage
 skills:
   - doc-workflow
 model: sonnet

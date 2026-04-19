@@ -36,15 +36,25 @@ Use action skills for narrow, simple workflows and direct task execution.
 **When to embed logic directly in an Agent:**
 Only embed workflow logic directly into an Agent's system prompt if the workflow is **Atomic** (does one specific thing without loops), **Universal** (does not change based on language/framework), and **Short** (< 300 words). Example: The `planner` agent.
 
-## 3. The Hybrid JIT Architecture (Routing)
-The harness is designed to achieve maximum context efficiency and DRY (Don't Repeat Yourself) principles.
+## 3.1 Expert Role Placement Policy
+When you want the model to "play" a specialist role (for example, architect expert, TDD expert, refactoring expert, API reviewer), place that role according to scope rather than stuffing it into one layer.
 
-* **Anti-Pattern:** Creating specialized commands or agents with massive, bloated system prompts containing an entire language's or workflow's methodology.
-* **LSZ Pattern:** Keep agents generic and bounded. Load deep methodology from skills only when needed.
-* **The Rule Router:** Claude Code's native `paths` matcher automatically injects a lightweight rule (e.g., `rules/rust.md`) into the active context based on the files it touches.
-* **The Expert Skill:** The injected rule acts as a traffic cop. It provides the "80% baseline" (formatting, linting, conventions) and instructs the agent or higher-level skill to invoke the relevant expert skill (e.g., `rust-expert`) to dynamically fetch the "20% deep methodology" only when needed.
+* **Agents own the stable baseline identity.** Put short, durable role framing here when it should apply in nearly every use of that agent. This is the default "who" for the agent, not a workflow-specific script.
+* **Skills own deep reusable methodology.** Put expert checklists, heuristics, trade-off frameworks, and discipline-specific guidance here when they should be reusable across workflows. This is the main place for expert-role prompting.
+* **Commands and orchestration skills own workflow-specific overlays.** If the same agent should behave differently in different workflows, inject that role framing in the command or workflow prompt. Use this for phase-local emphasis, suppressions, or artifact-specific instructions.
+* **Rules own lightweight cross-cutting constraints.** Put conventions, tool preferences, artifact locations, and global guardrails here. Do NOT use rules as the primary home for expert personas or deep methodology.
 
-## 4. State-Passing & The Orchestrator Pattern
+**Default decision rule:**
+- If the behavior should apply almost everywhere for that agent -> put it in the agent.
+- If the behavior is deep and reusable across multiple workflows -> put it in a skill.
+- If the behavior is specific to one workflow, phase, or artifact contract -> put it in the command or orchestration skill.
+- If the behavior is a broad repository-wide constraint -> put it in rules.
+
+**Examples**
+- `architect` agent: keep a short baseline architecture persona in the agent; load ADR methodology or other deep architecture methods via skills; inject workflow-specific ADR output constraints in `/architect`.
+- `developer` agent in TDD: keep the agent generic; load a future `tdd-expert` skill for Beck-style methodology; inject scope boundaries like "implementation-level verification only" in the TDD workflow prompt.
+- `code-reviewer` agent: keep the agent generally reusable; inject "do not replay TDD verification" only in the `/code-review` command.
+
 Generic agents executing workflows should not waste tokens doing their own domain discovery where they are invoked before any files are read, meaning no Domain Rules are injected. To protect the orchestrator's context window and prevent it from trying to write code itself ("Hero Mode"), you MUST follow these critical patterns for complex orchestration:
 
 * **The API Schema Pattern (Job Requisitions):** When authoring orchestration skills or complex workflow skills that dispatch agents, DO NOT rely only on prose instructions like "Step 1: Write a failing test". Prefer a strict State Machine providing exact Agent tool dispatch templates alongside transition rules. A YAML-like text block is the default format because it is more stable under iterative editing than embedded JSON while still fencing the LLM into a pure routing/dispatch persona.
