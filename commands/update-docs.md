@@ -39,12 +39,16 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 ## PHASE 1: UPDATE DOCUMENTATION
 **Action:** Call `Agent` tool
 **Payload Template:**
-```json
-{
-  "subagent_type": "doc-updater",
-  "description": "Update documentation",
-  "prompt": "**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[TASK]**\nUpdate documentation or generate codemaps based on the following target: [$ARGUMENTS]. You MUST use the Write tool to save a summary of the documentation changes to [base_dir]/01-doc-updates-summary.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
-}
+```text
+Agent tool (doc-updater):
+  description: "Update documentation"
+  prompt: |
+    **[DOMAIN CONTEXT]**
+    Language/Domain: [Identify based on project]
+    Root File: [Identify based on project]
+
+    **[TASK]**
+    Update documentation or generate codemaps based on the following target: [$ARGUMENTS]. You MUST use the Write tool to save a summary of the documentation changes to [base_dir]/01-doc-updates-summary.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow.
 ```
 
 **Transition Rules (Post-Execution):**

@@ -36,12 +36,11 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 ## PHASE 1: TEST SPECIFICATION
 **Action:** Call `Agent` tool
 **Payload Template:**
-```json
-{
-  "subagent_type": "architect",
-  "description": "Derive executable test specification from approved design",
-  "prompt": "You are the Phase 1 agent. Consume the approved feature design and implementation plan for: [Feature], and derive an executable test specification for the TDD workflow. Focus on test scenarios, test boundaries, required fixtures, execution strategy, and any implementation constraints the RED+GREEN phase must honor. Only fill gaps in upstream artifacts when necessary to design the tests; do not perform a second broad feature-architecture pass. Also create or update the compact lineage artifact at [lineage_pointer] with: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases. You MUST use the Write tool to save the main artifact to [base_dir]/01-test-spec.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
-}
+```text
+Agent tool (architect):
+  description: "Derive executable test specification from approved design"
+  prompt: |
+    You are the Phase 1 agent. Consume the approved feature design and implementation plan for: [Feature], and derive an executable test specification for the TDD workflow. Focus on test scenarios, test boundaries, required fixtures, execution strategy, and any implementation constraints the RED+GREEN phase must honor. Only fill gaps in upstream artifacts when necessary to design the tests; do not perform a second broad feature-architecture pass. Also create or update the compact lineage artifact at [lineage_pointer] with: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases. You MUST use the Write tool to save the main artifact to [base_dir]/01-test-spec.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow.
 ```
 
 **Transition Rules (Post-Execution):**
@@ -53,12 +52,11 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 ## PHASE 2: COMBINED RED + GREEN
 **Action:** Call `Agent` tool
 **Payload Template:**
-```json
-{
-  "subagent_type": "developer",
-  "description": "Write failing tests and implement minimal passing code",
-  "prompt": "You are the combined RED+GREEN phase agent. Read the specifications at [spec_pointer]. Work in two internal sub-phases with a hard cap of 5 internal turns total. First perform RED: write FAILING unit tests for the feature, do NOT implement production code yet, and run the tests via Bash to verify they fail for the right reasons. Save a concise RED summary artifact to [base_dir]/02-failing-tests.md. Then perform GREEN: implement the MINIMAL production code needed to make those tests pass, do not add extra features, and run the tests via Bash to verify they are green. Save a concise GREEN summary artifact to [base_dir]/03-green-implementation.md. Also create or update the compact lineage artifact at [lineage_pointer] with separate entries for RED and GREEN, each containing: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases. Return a summary right before the absolute file path to your final artifact pointer block. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow. In your final message, include both absolute file paths: [red_pointer] and [green_pointer]. If you cannot satisfy RED or GREEN within 5 internal turns, report a clear failure instead of guessing."
-}
+```text
+Agent tool (developer):
+  description: "Write failing tests and implement minimal passing code"
+  prompt: |
+    You are the combined RED+GREEN phase agent. Read the specifications at [spec_pointer]. Work in two internal sub-phases with a hard cap of 5 internal turns total. First perform RED: write FAILING unit tests for the feature, do NOT implement production code yet, and run the tests via Bash to verify they fail for the right reasons. Save a concise RED summary artifact to [base_dir]/02-failing-tests.md. Then perform GREEN: implement the MINIMAL production code needed to make those tests pass, do not add extra features, and run the tests via Bash to verify they are green. Save a concise GREEN summary artifact to [base_dir]/03-green-implementation.md. Also create or update the compact lineage artifact at [lineage_pointer] with separate entries for RED and GREEN, each containing: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases. Return a summary right before the absolute file path to your final artifact pointer block. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow. In your final message, include both absolute file paths: [red_pointer] and [green_pointer]. If you cannot satisfy RED or GREEN within 5 internal turns, report a clear failure instead of guessing.
 ```
 
 **Transition Rules (Post-Execution):**
@@ -71,12 +69,11 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 ## PHASE 3: REFACTOR + EXTENDED VERIFICATION
 **Action:** Call `Agent` tool
 **Payload Template:**
-```json
-{
-  "subagent_type": "developer",
-  "description": "Refactor code and complete extended verification",
-  "prompt": "You are the REFACTOR + EXTENDED VERIFICATION phase agent. Read the implementation summary at [green_pointer]. Iterate internally until the invariant is satisfied or a clear failure is reached, with a hard cap of 5 internal turns. Refactor the production code and test code to improve quality, remove duplication, and simplify structure while keeping behavior intact. Then perform the implementation-level verification needed for this change: add or update integration tests, edge-case tests, or other non-unit checks when required by the approved spec and execution plan, run the relevant checks, inspect failures, repair code or tests, and rerun until the implemented scope is verified or a clear blocker remains. This phase owns implementation validation only; do not perform a broad repository-level review. Save the summary report to [base_dir]/04-refactor-and-verification.md. Also create or update the compact lineage artifact at [lineage_pointer] with: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases. Return a summary right before the absolute file path to your summary report. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow. If you cannot satisfy the invariant within 5 internal turns, report a clear failure instead of guessing."
-}
+```text
+Agent tool (developer):
+  description: "Refactor code and complete extended verification"
+  prompt: |
+    You are the REFACTOR + EXTENDED VERIFICATION phase agent. Read the implementation summary at [green_pointer]. Iterate internally until the invariant is satisfied or a clear failure is reached, with a hard cap of 5 internal turns. Refactor the production code and test code to improve quality, remove duplication, and simplify structure while keeping behavior intact. Then perform the implementation-level verification needed for this change: add or update integration tests, edge-case tests, or other non-unit checks when required by the approved spec and execution plan, run the relevant checks, inspect failures, repair code or tests, and rerun until the implemented scope is verified or a clear blocker remains. This phase owns implementation validation only; do not perform a broad repository-level review. Save the summary report to [base_dir]/04-refactor-and-verification.md. Also create or update the compact lineage artifact at [lineage_pointer] with: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases. Return a summary right before the absolute file path to your summary report. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow. If you cannot satisfy the invariant within 5 internal turns, report a clear failure instead of guessing.
 ```
 
 **Transition Rules (Post-Execution):**

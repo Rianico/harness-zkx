@@ -25,12 +25,16 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 ## PHASE 1: RESOLVE BUILD ERRORS
 **Action:** Call `Agent` tool
 **Payload Template:**
-```json
-{
-  "subagent_type": "build-resolver",
-  "description": "Resolve build errors",
-  "prompt": "**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[TASK]**\nResolve the following build errors: [$ARGUMENTS]. Implement the fixes using your tools and ensure the build succeeds. Return a summary of the fixes applied."
-}
+```text
+Agent tool (build-resolver):
+  description: "Resolve build errors"
+  prompt: |
+    **[DOMAIN CONTEXT]**
+    Language/Domain: [Identify based on project]
+    Root File: [Identify based on project]
+
+    **[TASK]**
+    Resolve the following build errors: [$ARGUMENTS]. Implement the fixes using your tools and ensure the build succeeds. Return a summary of the fixes applied.
 ```
 
 **Transition Rules (Post-Execution):**

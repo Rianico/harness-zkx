@@ -40,12 +40,21 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 ## PHASE 1: GENERATE EXECUTION PLAN
 **Action:** Call `Agent` tool
 **Payload Template:**
-```json
-{
-  "subagent_type": "planner",
-  "description": "Generate execution plan",
-  "prompt": "You are the Planner agent. Generate an execution plan for: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[APPROVED UPSTREAM STATE]**\n[Include previous architecture pointer if available, plus any known constraints]\n\n**[TASK]**\nConvert the approved architecture and user requirements into an execution plan only. The artifact MUST define: ordered implementation steps, files or modules expected to change, dependency sequencing, checkpoints, major risks, and explicit out-of-scope items. Keep it execution-oriented. Do NOT re-argue architecture choices, generate a broad architecture analysis, or produce a detailed test matrix or fixture specification unless the user explicitly asked for that. Write the artifact to [base_dir]/01-execution-plan.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
-}
+```text
+Agent tool (planner):
+  description: "Generate execution plan"
+  prompt: |
+    You are the Planner agent. Generate an execution plan for: [$ARGUMENTS].
+
+    **[DOMAIN CONTEXT]**
+    Language/Domain: [Identify based on project]
+    Root File: [Identify based on project]
+
+    **[APPROVED UPSTREAM STATE]**
+    [Include previous architecture pointer if available, plus any known constraints]
+
+    **[TASK]**
+    Convert the approved architecture and user requirements into an execution plan only. The artifact MUST define: ordered implementation steps, files or modules expected to change, dependency sequencing, checkpoints, major risks, and explicit out-of-scope items. Keep it execution-oriented. Do NOT re-argue architecture choices, generate a broad architecture analysis, or produce a detailed test matrix or fixture specification unless the user explicitly asked for that. Write the artifact to [base_dir]/01-execution-plan.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow.
 ```
 
 **Transition Rules (Post-Execution):**

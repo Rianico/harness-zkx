@@ -39,12 +39,21 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 ## PHASE 1: CODE REVIEW
 **Action:** Call `Agent` tool
 **Payload Template:**
-```json
-{
-  "subagent_type": "code-reviewer",
-  "description": "Conduct code review",
-  "prompt": "You are the Code Reviewer agent. Conduct a repository-level review focusing on: [$ARGUMENTS].\n\n**[DOMAIN CONTEXT]**\nLanguage/Domain: [Identify based on project]\nRoot File: [Identify based on project]\n\n**[APPROVED UPSTREAM POINTERS]**\n[Include only the relevant approved implementation or verification pointers if available]\n\n**[TASK]**\nReview the implementation at the repository level for security, maintainability, cross-cutting correctness gaps not already covered by the TDD workflow, and overall readiness. Do NOT restate RED/GREEN/refactor progress, recreate implementation summaries, or rerun the internal TDD verification loop. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow."
-}
+```text
+Agent tool (code-reviewer):
+  description: "Conduct code review"
+  prompt: |
+    You are the Code Reviewer agent. Conduct a repository-level review focusing on: [$ARGUMENTS].
+
+    **[DOMAIN CONTEXT]**
+    Language/Domain: [Identify based on project]
+    Root File: [Identify based on project]
+
+    **[APPROVED UPSTREAM POINTERS]**
+    [Include only the relevant approved implementation or verification pointers if available]
+
+    **[TASK]**
+    Review the implementation at the repository level for security, maintainability, cross-cutting correctness gaps not already covered by the TDD workflow, and overall readiness. Do NOT restate RED/GREEN/refactor progress, recreate implementation summaries, or rerun the internal TDD verification loop. You MUST use the Write tool to save your comprehensive review report to [base_dir]/01-code-review-report.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow.
 ```
 
 **Transition Rules (Post-Execution):**
