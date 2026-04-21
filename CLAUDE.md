@@ -83,6 +83,18 @@ Generic agents executing workflows should not waste tokens doing their own domai
 * **Pointer-Based State Passing:** This pattern is mainly for complex orchestration. When multiple phases or agents must exchange rich outputs, the orchestrator should pass absolute file paths or equivalent pointers between phases instead of re-reading large artifacts into its own context.
 * **Skill-Oriented Orchestration:** When orchestrating complex, multi-step DAGs, prefer orchestrating skills rather than stringing bare agents together. Invoke agents directly only when a skill's execution contract explicitly calls for it.
 
+## 4. Hook Design Philosophy
+Reusable hook capabilities MUST follow a consistent family-based design so they stay editable, installable, and understandable.
+
+* **Family layout is the module boundary.** Each hook capability lives under `hooks/<family>/`. Canonical source files, runtime scripts, family-specific installer logic, and any family-local prompt/spec files stay inside that directory.
+* **The root installer is the management surface.** `install-hooks.py` is the stable user-facing entrypoint. Family-specific install logic belongs in `hooks/<family>/install.py`, while the root installer dispatches to one family or `all`.
+* **Source and runtime are intentionally separate.** Installers copy runtime hook scripts into the target `.claude/hooks/` directory and register those copied paths in the target `settings.json`. Do not point settings directly at source files in this repository.
+* **Settings mutation must be surgical and idempotent.** A hook family manages only its own entries. Install adds the exact missing entry. Uninstall removes only the exact matching entry and should delete copied runtime scripts only when their corresponding entry was actually removed.
+* **Runtime logic belongs in hook scripts, not installers.** Installers manage copying and settings mutation. Approve/block behavior, payload parsing, side effects, and soft-fail runtime handling belong in the installed hook scripts.
+* **Personal hooks should fail soft by default.** Missing env vars, missing files, parse issues, and local command failures should degrade safely unless the hook's explicit purpose is to block the current action.
+* **Docs are organized at two levels.** `hooks/README.md` is the top-level index for layout, conventions, and installer usage across families. Family-specific prompt/spec files may live inside `hooks/<family>/` when they help reproduce or extend the pattern.
+* **Every hook family should document the same essentials.** Document purpose, file layout, install/uninstall commands, runtime behavior, configuration inputs, and a minimal example.
+
 ## 5. Standard Artifact Storage Convention
 Workflows that generate files, reports, plans, or tracking states must not clutter the project root.
 
