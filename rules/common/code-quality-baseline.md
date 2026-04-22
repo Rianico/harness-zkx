@@ -15,6 +15,9 @@
 ## 3. Testing Requirements
 - **Coverage:** Minimum 80% coverage required across Unit, Integration, and E2E tests.
 - **Test-Driven Development:** MANDATORY workflow (RED -> GREEN -> IMPROVE).
+- **Bug Fixes:** Reproduce the issue with a failing test first when practical.
+- **Refactors:** Verify behavior before and after the change.
+- **Verification:** Define a concrete verification step for each meaningful implementation step.
 - **Troubleshooting:** Check test isolation and mocks before blaming tests. Fix the implementation unless the tests are explicitly wrong.
 
 ## 4. Pre-Completion Checklist

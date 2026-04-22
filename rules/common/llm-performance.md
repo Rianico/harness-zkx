@@ -29,6 +29,15 @@ Illegitimate reasons include:
 
 
 ## Claude Token Efficient
+
+### From Andrej Karpathy
+- Default to autonomous execution on reversible implementation details.
+- Only stop to ask when ambiguity is material and likely to produce the wrong outcome.
+- Prefer the smallest change that fully satisfies the request.
+- Do not improve adjacent code, formatting, or comments unless required by the task.
+- Every changed line should have a direct justification in the request or in required verification.
+- Remove only the unused code your change creates.
+
 By default, below is a failure if you:
 - Opens every response with "Sure!", "Great question!", "Absolutely!"
 - Ends with "I hope this helps! Let me know if you need anything!"

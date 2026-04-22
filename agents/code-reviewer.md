@@ -8,7 +8,7 @@ tools:
   - Bash
   - Skill
   - Write
-model: sonnet
+model: opus
 color: orange
 ---
 
