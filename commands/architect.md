@@ -34,40 +34,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 
 ---
 
-## PHASE 1: SELECT ARCHITECTURE LENS
-**Action:** Use `AskUserQuestion` when the task is ambiguous, high-impact, or could reasonably be framed through more than one architecture lens. Otherwise default to `balanced` and proceed directly to Phase 2.
-
-**Recommended Lens Mapping:**
-- `balanced` - mixed or unclear cases
-- `uncle-bob` - dependency boundaries, clean architecture, layering, testability
-- `fowler` - refactoring pressure, enterprise patterns, evolutionary design
-- `evans` - domain modeling, bounded contexts, aggregate discipline
-- `shaw-garlan` - architectural styles, components, connectors
-- `kruchten` - stakeholder communication, multi-view architecture description
-- `newman` - microservices, service boundaries, distributed systems operability
-
-**CHECKPOINT 1 (Conditional):** When the choice materially affects the output, use the strict schema:
-```json
-{
-  "questions": [{
-    "question": "Which architecture lens should guide this design?",
-    "header": "Arch Lens",
-    "multiSelect": false,
-    "options": [
-      { "label": "Balanced (Recommended)", "description": "Use a mixed architecture lens with explicit trade-offs." },
-      { "label": "Uncle Bob", "description": "Emphasize clean architecture, dependency direction, and boundary purity." },
-      { "label": "Fowler", "description": "Emphasize refactoring, enterprise patterns, and evolutionary design." },
-      { "label": "DDD / Evans", "description": "Emphasize bounded contexts, domain language, and aggregate discipline." }
-    ]
-  }]
-}
-```
-
-**Transition:** If no question is needed, set `[architecture_lens] = balanced`. If the user answers, map their selection to `[architecture_lens]` and proceed immediately to Phase 2.
-
----
-
-## PHASE 2: ARCHITECTURE DECISION RECORD
+## PHASE 1: ARCHITECTURE DECISION RECORD
 **Action:** Call `Agent` tool
 **Payload Template:**
 ```text
@@ -77,8 +44,17 @@ Agent tool (architect):
   prompt: |
     You are the Architect agent. Design the architecture for: [$ARGUMENTS].
 
-    Use the `architecture-decision-records` skill as the methodology for structuring the decision record: capture context, decision, rejected alternatives, consequences, and risks, while adapting that structure to this workflow's artifact contract.
-    Use the `architecture-expert` skill with the `[architecture_lens]` selected in Phase 1 as the reasoning lens for this architecture work.
+    Use the `architecture-decision-records` skill to generate the architecture decision record.
+    After exploring the project and task context, choose the most appropriate `architecture-expert` lens yourself for this request. Default to `balanced` when no stronger lens clearly fits. Briefly state which lens you selected and why, then use that lens consistently for the rest of this architecture work.
+
+    **Recommended Lens Mapping:**
+    - `balanced` - mixed or unclear cases
+    - `uncle-bob` - dependency boundaries, clean architecture, layering, testability
+    - `fowler` - refactoring pressure, enterprise patterns, evolutionary design
+    - `evans` - domain modeling, bounded contexts, aggregate discipline
+    - `shaw-garlan` - architectural styles, components, connectors
+    - `kruchten` - stakeholder communication, multi-view architecture description
+    - `newman` - microservices, service boundaries, distributed systems operability
 
     **[DOMAIN CONTEXT]**
     Language/Domain: [Identify based on project]
@@ -86,9 +62,6 @@ Agent tool (architect):
 
     **[KNOWN CONTEXT]**
     [Already known information and constraints]
-
-    **[ARCHITECTURE LENS]**
-    [architecture_lens]
 
     **[TASK]**
     Produce a focused architecture decision record only. The artifact MUST define: problem framing, design decisions, system boundaries, invariants, interfaces between major components, key trade-offs, risks, and explicitly rejected alternatives. Keep it decision-oriented. Do NOT produce a task breakdown, implementation sequence, test matrix, fixture plan, or file-by-file execution checklist unless the user explicitly asked for those. Write the artifact to [base_dir]/01-architecture-decision-record.md. Return a summary right before the absolute file path to the document. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow.
