@@ -1,5 +1,5 @@
 ---
-description: Sequential multi-command orchestration for complex workflows. Routes to `orchestrate-workflow` skill.
+description: Run multi-step LSZ software workflows across architecture, planning, TDD, build repair, docs, and code review. Use for feature work, refactors, bug fixes, and documentation changes that need sequential command orchestration with approvals and pointer-based handoff.
 argument-hint: "[feature|refactor|bugfix|docs] <task_description>"
 allowed-tools:
   - Skill

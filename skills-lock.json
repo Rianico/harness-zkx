@@ -10,6 +10,16 @@
       "source": "neolabhq/context-engineering-kit",
       "sourceType": "github",
       "computedHash": "1a4b45a0016a1aaf4842f6e996fe08ce2b4b62b454db0d0414035782d8185c0a"
+    },
+    "tavily-search": {
+      "source": "tavily-ai/skills",
+      "sourceType": "github",
+      "computedHash": "bda6e90a41addbe0f8750a38aebdf59c5bdc8514d23aaf2015ffe45de6958b74"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "computedHash": "0a413bf988d06481f69bb81df2070741c3ba12dd9f1be2706d57f259c905992d"
     }
   }
 }
