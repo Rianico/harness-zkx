@@ -2,6 +2,7 @@
 name: LSP 3.17 Implementation Guide
 description: Essential guide for implementing LSP 3.17 diagnostic features. Use when building LSP clients/servers, handling diagnostics, managing versions, or working with progress tokens. Covers request vs notification patterns, workspace vs textDocument diagnostics, stale resultId detection, and fire-and-forget streaming.
 argument-hint: [implementation-area]
+user-invocable: false
 ---
 
 # LSP 3.17 Implementation Guide
