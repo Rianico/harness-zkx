@@ -1,0 +1,56 @@
+#### Call Hierarchy Outgoing Calls ()
+
+
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#call-hierarchy-outgoing-calls-leftwards_arrow_with_hook
+
+
+> _Since version 3.16.0_
+
+
+The request is sent from the client to the server to resolve outgoing calls for a given call hierarchy item. The request doesn’t define its own client and server capabilities. It is only issued if a server registers for the [`textDocument/prepareCallHierarchy` request](#textDocument_prepareCallHierarchy).
+
+
+_Request_ :
+
+
+  * method: `callHierarchy/outgoingCalls`
+  * params: `CallHierarchyOutgoingCallsParams` defined as follows:
+
+
+[](#callHierarchyOutgoingCallsParams)
+
+
+    export interface CallHierarchyOutgoingCallsParams extends
+    	WorkDoneProgressParams, PartialResultParams {
+    	item: CallHierarchyItem;
+    }
+    
+
+
+_Response_ :
+
+
+  * result: `CallHierarchyOutgoingCall[] | null` defined as follows:
+
+
+[](#callHierarchyOutgoingCall)
+
+
+    export interface CallHierarchyOutgoingCall {
+    
+    	/**
+    	 * The item that is called.
+    	 */
+    	to: CallHierarchyItem;
+    
+    	/**
+    	 * The range at which this item is called. This is the range relative to
+    	 * the caller, e.g the item passed to `callHierarchy/outgoingCalls` request.
+    	 */
+    	fromRanges: Range[];
+    }
+    
+
+
+  * partial result: `CallHierarchyOutgoingCall[]`
+  * error: code and message set in case an exception happens during the ‘callHierarchy/outgoingCalls’ request

@@ -555,9 +555,7 @@ Before considering LSP diagnostic implementation complete:
 
 ## Reference Files
 
-The `reference/` subdirectory contains LSP specification excerpts relevant to this guide:
-
-- **`reference/3.17.md`** - LSP 3.17 pull diagnostics spec (textDocument/diagnostic, workspace/diagnostic, version tracking)
+The `reference/` subdirectory contains LSP specification excerpts relevant to this guide, you can begin with `reference/INDEX.md`.
 
 ---
 

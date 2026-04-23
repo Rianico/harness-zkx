@@ -1,0 +1,74 @@
+#### Unregister Capability ()
+
+
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#unregister-capability-arrow_right_hook
+
+
+The `client/unregisterCapability` request is sent from the server to the client to unregister a previously registered capability.
+
+
+_Request_ :
+
+
+  * method: ‘client/unregisterCapability’
+  * params: `UnregistrationParams`
+
+
+Where `UnregistrationParams` are defined as follows:
+
+
+[](#unregistration)
+
+
+    /**
+     * General parameters to unregister a capability.
+     */
+    export interface Unregistration {
+    	/**
+    	 * The id used to unregister the request or notification. Usually an id
+    	 * provided during the register request.
+    	 */
+    	id: string;
+    
+    	/**
+    	 * The method / capability to unregister for.
+    	 */
+    	method: string;
+    }
+    
+
+
+[](#unregistrationParams)
+
+
+    export interface UnregistrationParams {
+    	// This should correctly be named `unregistrations`. However changing this
+    	// is a breaking change and needs to wait until we deliver a 4.x version
+    	// of the specification.
+    	unregisterations: Unregistration[];
+    }
+    
+
+
+An example JSON-RPC message to unregister the above registered `textDocument/willSaveWaitUntil` feature looks like this:
+
+
+    {
+    	"method": "client/unregisterCapability",
+    	"params": {
+    		"unregisterations": [
+    			{
+    				"id": "79eee87c-c409-4664-8102-e03263673f6f",
+    				"method": "textDocument/willSaveWaitUntil"
+    			}
+    		]
+    	}
+    }
+    
+
+
+_Response_ :
+
+
+  * result: void.
+  * error: code and message set in case an exception happens during the request.

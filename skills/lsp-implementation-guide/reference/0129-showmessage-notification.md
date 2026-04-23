@@ -1,0 +1,63 @@
+#### ShowMessage Notification ()
+
+
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#showmessage-notification-arrow_left
+
+
+The show message notification is sent from a server to a client to ask the client to display a particular message in the user interface.
+
+
+_Notification_ :
+
+
+  * method: ‘window/showMessage’
+  * params: `ShowMessageParams` defined as follows:
+
+
+    interface ShowMessageParams {
+    	/**
+    	 * The message type. See {@link MessageType}.
+    	 */
+    	type: MessageType;
+    
+    	/**
+    	 * The actual message.
+    	 */
+    	message: string;
+    }
+    
+
+
+Where the type is defined as follows:
+
+
+[](#messageType)
+
+
+    export namespace MessageType {
+    	/**
+    	 * An error message.
+    	 */
+    	export const Error = 1;
+    	/**
+    	 * A warning message.
+    	 */
+    	export const Warning = 2;
+    	/**
+    	 * An information message.
+    	 */
+    	export const Info = 3;
+    	/**
+    	 * A log message.
+    	 */
+    	export const Log = 4;
+    	/**
+    	 * A debug message.
+    	 *
+    	 * @since 3.18.0
+    	 * @proposed
+    	 */
+    	export const Debug = 5;
+    }
+    
+    export type MessageType = 1 | 2 | 3 | 4 | 5;
