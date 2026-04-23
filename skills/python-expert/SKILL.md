@@ -15,7 +15,7 @@ You have invoked the Python Expert Skill. This consolidates the most critical, o
 - **Data Validation:** Use `pydantic` V2 for all data validation. Avoid hand-rolled validation logic.
 
 ## 2. Testing & Verification
-- **Framework:** Always default to `pytest`. Do not use `unittest`.
+- **Framework:** Always default to `pytest`. Do not use `unittest`. When running through `uv`, prefer `uv run pytest -q` rather than `uv run pytest -v` unless verbose output is explicitly needed.
 - **Fixtures:** Use `pytest` fixtures for setup/teardown. Avoid class-based `setUp`/`tearDown`.
 - **Async Testing:** Use `pytest-asyncio` for testing async functions.
 - **Mocks:** Keep `unittest.mock` to a minimum. Prefer testing against local containerized dependencies (e.g., test databases) or using responses/VCR for HTTP.

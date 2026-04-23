@@ -21,6 +21,6 @@ If your task requires complex decision making, you MUST pause and invoke the `Sk
 
 - **Web Frameworks:** If working with Django or FastAPI, invoke `Skill(skill="python-expert", args="frameworks")`.
 - **Machine Learning:** If working with PyTorch, invoke `Skill(skill="python-expert", args="pytorch")`.
-- **Testing:** If writing comprehensive tests, default to `pytest` and invoke `Skill(skill="python-expert", args="testing")`.
+- **Testing:** If writing comprehensive tests, default to `pytest` and invoke `Skill(skill="python-expert", args="testing")`. When running pytest through `uv`, prefer `uv run pytest -q` rather than `uv run pytest -v` unless verbose output is explicitly needed.
 
 **CRITICAL INSTRUCTION:** Do not try to guess complex architectural patterns or deep framework mechanics. If the user asks for a complex Django security implementation, retrieve the skill first.

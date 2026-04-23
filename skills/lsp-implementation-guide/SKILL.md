@@ -9,6 +9,12 @@ user-invocable: false
 
 This skill captures key implementation patterns and common pitfalls for LSP 3.17 diagnostic features. Use it when implementing diagnostic handling, version tracking, or progress streaming.
 
+## 0. Context Discovery Checklist
+- Run `eza -T -L 2` at the relevant repo root to map the TOC and find client/server entrypoints, protocol layers, transport, state/cache, and tests.
+- Use `rg` on protocol nouns, method names, capability names, tokens, and nearby terms to trace the existing request/response path.
+- Expand from the first good hit into adjacent registration, state ownership, serialization, progress, and test files before editing.
+- Search both protocol nouns and implementation verbs. Useful anchors: `textDocument/diagnostic`, `workspace/diagnostic`, `publishDiagnostics`, `resultId`, `previousResultId`, `partialResultToken`, `workDoneToken`, `capabilities`, `initialize`.
+
 ## Core Concepts
 
 ### Request vs Notification vs Response

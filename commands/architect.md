@@ -17,7 +17,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 1. **No Hero Mode:** You are strictly forbidden from using `Edit`, `Write`, or `Bash` tools to design the architecture yourself.
 2. **Pointer Passing:** You MUST pass file paths returned by one phase directly into the payload of the next phase. DO NOT use `Read` to read the artifacts yourself.
 3. **ADR Is Canonical:** The canonical architecture artifact MUST be an ADR managed through the `architecture-decision-records` skill and `adr` CLI workflow, not a freeform workflow-local markdown document.
-4. **Symlink for Workflow Handoff:** The workflow-local handoff artifact in `.lsz/.../architect/` MUST be a symlink that points to the canonical ADR file. Always replace any existing symlink at that path.
+4. **Symlink for Workflow Handoff:** The workflow-local handoff artifact in `.lsz/.../architect/` MUST be a symlink that points to the canonical ADR file. Always replace any existing symlink at that path. The symlink target MUST use the canonical ADR's absolute path, not a relative path.
 5. **Strict Order:** Execute phases in exact order. Stop at all checkpoints.
 6. **Halt on Failure:** If an agent reports an unexpected error, stop and ask the user. Do not silently fix it.
 7. **Never enter plan mode autonomously:** Do NOT use `EnterPlanMode`. This file IS your strict execution plan.
@@ -71,7 +71,7 @@ Agent tool (architect):
 
     Follow the `architecture-decision-records` skill as the ADR authority. Before creating a new ADR, do the lightweight repository scan described by that skill so you can determine whether this architecture should be a new ADR, a superseding ADR, or a related ADR with links.
 
-    After the ADR is created or updated through the ADR workflow, replace any existing symlink at [adr_link_pointer] so it points to the current canonical ADR file.
+    After the ADR is created or updated through the ADR workflow, replace any existing symlink at [adr_link_pointer] so it points to the current canonical ADR file using the canonical ADR's absolute path. Do not construct a relative symlink target.
 
     Return:
     1. A concise summary
