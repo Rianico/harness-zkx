@@ -7,7 +7,7 @@ tools:
   - Glob
   - Bash
   - Write
-model: sonnet
+model: opus
 color: purple
 ---
 
