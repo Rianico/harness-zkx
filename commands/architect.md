@@ -48,7 +48,7 @@ Agent tool (architect):
   prompt: |
     You are the Architect agent. Design the architecture for: [$ARGUMENTS].
 
-    The architect agent already has `architecture-decision-records` and `architecture-expert` available. Treat `architecture-decision-records` as the ADR authority and use `architecture-expert` to choose the most appropriate lens for this request.
+    Treat `architecture-decision-records` as the ADR authority and use `architecture-expert` to choose the most appropriate lens for this request.
 
     **Recommended Lens Mapping:**
     - `balanced` - mixed or unclear cases
