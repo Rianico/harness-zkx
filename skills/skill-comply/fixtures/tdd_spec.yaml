@@ -1,4 +1,4 @@
-id: tdd-cycle-workflow
+id: tdd-cycle
 name: TDD Workflow Compliance
 source_rule: rules/common/testing.md
 version: "2.0"

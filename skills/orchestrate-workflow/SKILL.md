@@ -32,11 +32,11 @@ To execute a step, load the corresponding Skill (e.g., `skill="architect"`) and 
 ### 1. Feature Pipeline (`args="feature|refactor"`)
 - **Step 1:** `/architect` (Load skill: `architect`) - *Create `[topic_root]` once for the topic and pass it into downstream commands after approval. This phase defines the architecture decision record only.*
 - **Step 2:** `/plan` (Load skill: `plan`) - *Pass the approved architecture pointer and the existing `[topic_root]` into the planner. This phase converts the ADR into an execution plan only.*
-- **Step 3:** `/tdd` (Load skill: `tdd-cycle`) - *Pass the approved execution plan pointer and the existing `[topic_root]` into the TDD orchestrator. This phase should focus on tests, implementation, and implementation-level verification only.*
+- **Step 3:** Load skill: `tdd-cycle` - *Pass the approved execution plan pointer and the existing `[topic_root]` into the TDD orchestrator. This phase should focus on tests, implementation, and implementation-level verification only.*
 - **Step 4:** `/code-review` (Load skill: `code-review`) - *Pass the existing `[topic_root]`; this is the repository-level review gate for security, maintainability, broader correctness gaps, and overall readiness after implementation.*
 
 ### 2. Bugfix Pipeline (`args="bugfix"`)
-- **Step 1:** `/tdd` (Load skill: `tdd-cycle`) - *Create `[topic_root]` once for the topic, then use incremental mode to write a failing test for the bug and fix it.*
+- **Step 1:** Load skill: `tdd-cycle` - *Create `[topic_root]` once for the topic, then use incremental mode to write a failing test for the bug and fix it.*
 - **Step 2:** `/build-fix` (Load skill: `build-fix`) - *Execute ONLY IF the bug involves compilation/build failures that TDD couldn't resolve.*
 - **Step 3:** `/code-review` (Load skill: `code-review`) - *Pass the existing `[topic_root]`.*
 

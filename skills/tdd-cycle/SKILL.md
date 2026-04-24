@@ -1,6 +1,6 @@
 ---
-name: tdd-cycle-workflow
-description: Execute a compact TDD workflow with strict RED, GREEN, and refactor discipline.
+name: tdd-cycle
+description: Execute a compact TDD workflow with strict RED, GREEN, and REFACTOR discipline. Use for test-first implementation, bug fixes, regression tests, failing-test-first development, minimal passing changes, refactoring under green tests, and implementation-level verification.
 argument-hint: "<feature or module to implement> [--incremental|--suite] [--coverage 80]"
 ---
 

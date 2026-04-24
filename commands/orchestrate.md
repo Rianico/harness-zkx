@@ -12,7 +12,7 @@ allowed-tools:
 
 **Status:** JIT Workflow Command
 
-Executes a sequential pipeline of LSZ Commands (e.g., /architect -> /plan -> /tdd) to complete complex tasks, inheriting all interactive approvals and guardrails while preserving strict phase boundaries.
+Executes a sequential pipeline of LSZ commands and skills (e.g., /architect -> /plan -> tdd-cycle) to complete complex tasks, inheriting all interactive approvals and guardrails while preserving strict phase boundaries.
 
 **How it works:**
 The primary LLM acts as the Explorer and Orchestrator. It invokes the `orchestrate-workflow` skill to learn the pipeline sequence, and then sequentially loads and executes the required Commands (via the `Skill` tool), passing the approved file pointer state from one command to the next.
@@ -22,7 +22,7 @@ To execute this workflow, you MUST act as the Orchestrator.
 
 1. **Retrieve Pipeline:** Invoke the `Skill` tool with `skill="orchestrate-workflow"` and the appropriate pipeline argument (e.g., `feature`).
 2. **Execute Pipeline:** Execute the steps defined by the skill.
-   - For each step, you MUST load the specified Command via the `Skill` tool.
+   - For each step, you MUST load the specified command or skill via the `Skill` tool.
    - You MUST follow the "Execution Instruction" of that loaded Command exactly (including launching its specific sub-agent, following the phases, and handling its `AskUserQuestion` interactive approval loop).
    - Only proceed to the next step in the pipeline AFTER the user has approved the current step's output (e.g., approving the plan).
 
@@ -35,7 +35,7 @@ Use this structure:
 **Phase Ownership Contract:**
 - `/architect` owns decisions: problem framing, boundaries, invariants, interfaces, trade-offs, risks, and rejected alternatives.
 - `/plan` owns execution: ordered steps, dependency sequencing, touched modules, checkpoints, risks, and explicit out-of-scope items.
-- `/tdd` owns implementation validation: tests, implementation progress, and implementation-level verification needed to complete the change.
+- `tdd-cycle` owns implementation validation: tests, implementation progress, and implementation-level verification needed to complete the change.
 - `/code-review` owns repository-level review: security, maintainability, correctness gaps not covered by TDD, and overall readiness.
 
 Do not ask downstream phases to recreate upstream artifacts in different prose forms.

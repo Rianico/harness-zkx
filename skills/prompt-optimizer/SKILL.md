@@ -117,11 +117,11 @@ Map intent + scope + tech stack (from Phase 0) to specific LSZ components.
 
 | Intent | Commands | Skills | Agents |
 |--------|----------|--------|--------|
-| New Feature | /plan, /orchestrate tdd-cycle, /code-review, /verify | tdd-cycle-workflow, verification-loop | planner, tdd-orchestrator, code-reviewer |
-| Bug Fix | /orchestrate tdd-cycle, /build-fix, /verify | tdd-cycle-workflow | tdd-orchestrator, build-error-resolver |
+| New Feature | /plan, /orchestrate tdd-cycle, /code-review, /verify | tdd-cycle, verification-loop | planner, tdd-orchestrator, code-reviewer |
+| Bug Fix | /orchestrate tdd-cycle, /build-fix, /verify | tdd-cycle | tdd-orchestrator, build-error-resolver |
 | Refactor | /refactor-clean, /code-review, /verify | verification-loop | refactor-cleaner, code-reviewer |
 | Research | /plan | search-first, iterative-retrieval | — |
-| Testing | /orchestrate tdd-cycle, /e2e, /test-coverage | tdd-cycle-workflow, e2e-testing | tdd-orchestrator, e2e-runner |
+| Testing | /orchestrate tdd-cycle, /e2e, /test-coverage | tdd-cycle, e2e-testing | tdd-orchestrator, e2e-runner |
 | Review | /code-review | security-review | code-reviewer, security-reviewer |
 | Documentation | /update-docs, /update-codemaps | — | doc-updater |
 | Infrastructure | /plan, /verify | docker-patterns, deployment-patterns, database-migrations | architect |
@@ -216,7 +216,7 @@ If Phase 0 auto-detected the answer, state it instead of asking.
 | Type | Component | Purpose |
 |------|-----------|---------|
 | Command | /plan | Plan architecture before coding |
-| Skill | tdd-cycle-workflow | TDD methodology guidance |
+| Skill | tdd-cycle | TDD methodology guidance |
 | Agent | code-reviewer | Post-implementation review |
 | Model | Sonnet 4.6 | Recommended for this scope |
 
