@@ -33,9 +33,14 @@ Use this structure:
 - `prompt`: "**[DOMAIN CONTEXT]**\nLanguage/Domain: [e.g., Rust]\nRoot File: [e.g., Cargo.toml]\n\n**[APPROVED UPSTREAM POINTERS]**\n[Include only the absolute file path pointers the next phase is expected to consume, such as architecture ADR or execution plan]\n\n**[TASK]**\n[task summarization and user requirements]"
 
 **Phase Ownership Contract:**
+- `brainstorming` owns requirement discovery: source-of-truth design capture, examples, negative requirements, acceptance criteria, assumptions, and open questions.
 - `/architect` owns decisions: problem framing, boundaries, invariants, interfaces, trade-offs, risks, and rejected alternatives.
 - `/plan` owns execution: ordered steps, dependency sequencing, touched modules, checkpoints, risks, and explicit out-of-scope items.
+- `/eval define` owns acceptance checks: converting the approved source of truth into reviewed capability, contract, negative, and regression evals.
 - `tdd-cycle` owns implementation validation: tests, implementation progress, and implementation-level verification needed to complete the change.
-- `/code-review` owns repository-level review: security, maintainability, correctness gaps not covered by TDD, and overall readiness.
+- `/eval check` owns spec-compliance verification: checking the implementation against the approved eval definition and producing pass/fail logs.
+- `/code-review` owns repository-level review: security, maintainability, correctness gaps not covered by TDD/evals, and overall readiness.
+
+The orchestrator owns transitions between phases. If `/eval check` is not READY, return to `tdd-cycle` remediation with pointers to the source of truth, eval definition, eval log, and implementation artifacts. Do not proceed to `/code-review` until required evals pass or the workflow explicitly stops as blocked.
 
 Do not ask downstream phases to recreate upstream artifacts in different prose forms.
