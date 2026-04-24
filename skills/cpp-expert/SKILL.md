@@ -1,6 +1,6 @@
 ---
 name: cpp-expert
-description: Deep expertise in modern C++ (C++11/14/17/20), CMake build systems, memory safety, and testing. Invoke this skill when instructed by the C++ rules.
+description: Modern C++ domain expertise for C++11/14/17/20/23 code, CMake build and linker errors, memory safety, RAII, smart pointers, templates, const correctness, GoogleTest, Catch2, GoogleMock, performance-sensitive review, and idiomatic refactoring. Use for C++ implementation, debugging, testing, build resolution, and code review tasks.
 argument-hint: "[build|review|testing]"
 ---
 
@@ -29,4 +29,4 @@ You have invoked the C++ Expert Skill. This skill contains actionable checklists
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "build", "review", "testing"), apply the relevant checklist above.
-2. If the task is architectural, use the `Read` tool to fetch the relevant reference document from `skills/cpp-expert/references/`.
+2. For deeper coding standards or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/cpp-expert/references/`.

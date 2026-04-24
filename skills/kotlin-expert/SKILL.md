@@ -1,6 +1,6 @@
 ---
 name: kotlin-expert
-description: Deep expertise in Kotlin, Coroutines, Android, and Ktor. Invoke this skill when instructed by the JVM rules for Kotlin codebases.
+description: Kotlin domain expertise for Android, Ktor, Exposed, Coroutines, Flow, structured concurrency, Gradle builds, Kotest, MockK, null-safety, extension functions, and idiomatic Kotlin design. Use for Kotlin implementation, debugging, testing, build resolution, coroutine design, Android/Ktor architecture, and refactoring tasks.
 argument-hint: "[frameworks|coroutines|testing|build]"
 ---
 
@@ -9,6 +9,11 @@ argument-hint: "[frameworks|coroutines|testing|build]"
 You have invoked the Kotlin Expert Skill. This skill contains actionable checklists and constraints for Kotlin software engineering tasks.
 
 ## Quick Actions & Checklists
+
+### Idiomatic Kotlin Design
+- **Null Safety:** Model absence with nullable types or sealed results instead of sentinel values.
+- **Extensions:** Use extension functions for local readability, not to hide large behavior.
+> **Need Deep Knowledge?** Read `skills/kotlin-expert/references/kotlin-patterns.md`.
 
 ### Kotlin Coroutines & Flow
 - **Scope:** Never use `GlobalScope`. Use structured concurrency (e.g., `viewModelScope`, `lifecycleScope`, `coroutineScope`).
@@ -28,4 +33,4 @@ You have invoked the Kotlin Expert Skill. This skill contains actionable checkli
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "frameworks", "coroutines", "testing"), apply the relevant checklist above.
-2. If the task requires deep architectural knowledge, use the `Read` tool to fetch the relevant reference document from `skills/kotlin-expert/references/`.
+2. For deeper Kotlin patterns, coroutine, framework, database, or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/kotlin-expert/references/`.

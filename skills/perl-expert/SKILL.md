@@ -1,6 +1,6 @@
 ---
 name: perl-expert
-description: Deep expertise in Perl 5.36+ patterns, security, testing, and modern idioms. Invoke this skill when instructed by the Perl rules.
+description: Perl 5.36+ domain expertise for CPAN modules, modern signatures, Object::Pad, Moo/Moose, taint mode, input validation, safe command execution, Test2, Test::More, prove, security review, and legacy modernization. Use for Perl implementation, debugging, testing, security hardening, and refactoring tasks.
 argument-hint: "[patterns|security|testing]"
 ---
 
@@ -30,4 +30,4 @@ You have invoked the Perl Expert Skill. This skill contains actionable checklist
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "patterns", "security", "testing"), apply the relevant checklist above.
-2. If the task is architectural or requires deep security knowledge, use the `Read` tool to fetch the relevant reference document from `skills/perl-expert/references/`.
+2. For deeper Perl patterns, security, or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/perl-expert/references/`.

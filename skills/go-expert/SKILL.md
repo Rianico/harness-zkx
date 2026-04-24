@@ -1,6 +1,6 @@
 ---
 name: go-expert
-description: Deep expertise in Go (Golang) patterns, idiomatic code, concurrency, testing, and build resolution. Invoke this skill when instructed by the Go rules.
+description: Go/Golang domain expertise for modules, idiomatic package design, interfaces, explicit error handling, goroutines, channels, context cancellation, concurrency leaks, table-driven tests, gomock, build failures, and code review. Use for Go implementation, debugging, testing, build resolution, concurrency design, and refactoring tasks.
 argument-hint: "[build|review|testing]"
 ---
 
@@ -30,4 +30,4 @@ You have invoked the Go Expert Skill. This skill contains actionable checklists 
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "build", "review", "testing"), apply the relevant checklist above.
-2. If the task is architectural, use the `Read` tool to fetch the relevant reference document from `skills/go-expert/references/`.
+2. For deeper idiomatic Go patterns or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/go-expert/references/`.

@@ -1,6 +1,6 @@
 ---
 name: java-expert
-description: Deep expertise in Java, Spring Boot, architecture, and testing. Invoke this skill when instructed by the JVM rules for Java codebases.
+description: Java and Spring Boot domain expertise for layered services, Spring MVC, Spring Security, Bean Validation, JPA repositories, Maven/Gradle builds, JUnit 5, Mockito, integration testing, architecture review, and production hardening. Use for Java implementation, debugging, testing, build resolution, security, and Spring architecture tasks.
 argument-hint: "[frameworks|security|testing|build]"
 ---
 
@@ -9,6 +9,11 @@ argument-hint: "[frameworks|security|testing|build]"
 You have invoked the Java Expert Skill. This skill contains actionable checklists and constraints for Java and Spring Boot software engineering tasks.
 
 ## Quick Actions & Checklists
+
+### Java Coding Standards
+- **Modern Java:** Prefer clear domain types, immutable values where practical, and explicit null handling.
+- **Collections & Streams:** Use streams when they improve readability; keep imperative loops when they are clearer.
+> **Need Deep Knowledge?** Read `skills/java-expert/references/java-coding-standards.md`.
 
 ### Spring Boot Architecture
 - **Layers:** Use `@RestController`, `@Service`, and `@Repository`. Keep controllers thin.
@@ -28,4 +33,4 @@ You have invoked the Java Expert Skill. This skill contains actionable checklist
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "frameworks", "security", "testing"), apply the relevant checklist above.
-2. If the task requires deep architectural knowledge, use the `Read` tool to fetch the relevant reference document from `skills/java-expert/references/`.
+2. For deeper Java standards, Spring architecture, security, testing, or verification guidance, use the `Read` tool to fetch the relevant reference document from `skills/java-expert/references/`.

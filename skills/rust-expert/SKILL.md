@@ -1,6 +1,6 @@
 ---
 name: rust-expert
-description: Deep expertise in Rust patterns, testing, ownership, and build resolution. Invoke this skill when instructed by the Rust rules.
+description: Rust domain expertise for Cargo builds, borrow checker errors, lifetimes, ownership, traits, generics, Result/error handling, async/concurrency, message passing, testing, mocks through traits, and idiomatic review. Use for Rust implementation, debugging, testing, build resolution, performance-sensitive refactoring, and ownership design tasks.
 argument-hint: "[build|review|testing]"
 ---
 
@@ -30,4 +30,4 @@ You have invoked the Rust Expert Skill. This skill contains actionable checklist
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "build", "testing", "review"), apply the relevant checklist above.
-2. If the task is architectural or requires deep pattern knowledge, use the `Read` tool to fetch the relevant reference document from `skills/rust-expert/references/`.
+2. For deeper Rust patterns or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/rust-expert/references/`.

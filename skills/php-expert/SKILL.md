@@ -1,6 +1,6 @@
 ---
 name: php-expert
-description: Deep expertise in PHP, Laravel patterns, Eloquent ORM, security, and Pest/PHPUnit testing. Invoke this skill when instructed by the PHP rules.
+description: PHP and Laravel domain expertise for Laravel architecture, controllers, actions, services, Eloquent ORM, eager loading, Form Requests, Auth, Policies, mass assignment, Pest, PHPUnit, factories, and security. Use for PHP/Laravel implementation, debugging, testing, authorization, database, and refactoring tasks.
 argument-hint: "[patterns|security|testing]"
 ---
 
@@ -31,4 +31,4 @@ You have invoked the PHP/Laravel Expert Skill. This skill contains actionable ch
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "patterns", "security", "testing"), apply the relevant checklist above.
-2. If the task is architectural or complex, use the `Read` tool to fetch the relevant reference document from `skills/php-expert/references/`.
+2. For deeper Laravel patterns, security, TDD, or verification guidance, use the `Read` tool to fetch the relevant reference document from `skills/php-expert/references/`.

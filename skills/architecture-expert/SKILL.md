@@ -1,6 +1,6 @@
 ---
 name: architecture-expert
-description: Deep architecture methodology for software and system design. Use whenever architectural trade-offs, system boundaries, clean architecture, domain modeling, architectural styles, view-based design, or microservice decomposition are central to the task. Supports lenses such as balanced, uncle-bob, fowler, evans, shaw-garlan, kruchten, and newman.
+description: Architecture domain expertise for software and system design, architectural trade-offs, system boundaries, module boundaries, clean architecture, domain modeling, bounded contexts, architectural styles, 4+1 views, microservice decomposition, ADR reasoning, and architecture review. Use for design critique, refactoring strategy, service boundaries, and architectural decision support with lenses such as balanced, uncle-bob, fowler, evans, shaw-garlan, kruchten, and newman.
 argument-hint: "[balanced|uncle-bob|fowler|evans|shaw-garlan|kruchten|newman]"
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: python-expert
-description: Expert in the modern Python ecosystem (uv, ruff, pydantic, FastAPI) and advanced paradigms. Use PROACTIVELY for Python development, async concurrency optimization, testing strategies, and architectural decisions.
+description: Python domain expertise for Python 3.12+, uv, ruff, pydantic, FastAPI, Django, pytest, pytest-asyncio, async I/O, contextvars, PyTorch, data science workflows, testing strategy, and architecture review. Use for Python implementation, debugging, testing, concurrency fixes, framework work, and refactoring tasks.
 argument-hint: "[async|fastapi|testing|django|pytorch]"
 ---
 
@@ -33,5 +33,4 @@ You have invoked the Python Expert Skill. This consolidates the most critical, o
 ## Instructions for the Agent
 1. Apply the checklists above based on the context of the user's codebase (e.g., if you see FastAPI, apply the Async & Concurrency rules).
 2. Write code assuming modern tooling is in place (`uv` for package management, `ruff` for formatting/linting).
-3. If the task is simple, execute the implementation immediately.
-4. For highly complex architectural setups, use the `Read` tool to fetch any extended reference documents in `skills/python-expert/references/` if they exist.
+3. For highly complex architectural setups, use the `Read` tool to fetch any extended reference documents in `skills/python-expert/references/` if they exist.

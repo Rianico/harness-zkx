@@ -1,6 +1,6 @@
 ---
 name: swift-expert
-description: Deep expertise in Swift 6, SwiftUI, Swift Concurrency (Actors, async/await), and protocol-oriented testing. Invoke this skill when instructed by the Swift rules.
+description: Swift domain expertise for Swift 6, SwiftUI, async/await, actors, Sendable, strict concurrency warnings, protocol-oriented design, XCTest, iOS, macOS, state management, and dependency injection. Use for Swift implementation, debugging, testing, concurrency fixes, SwiftUI architecture, and refactoring tasks.
 argument-hint: "[concurrency|swiftui|testing]"
 ---
 
