@@ -96,13 +96,17 @@ Reusable hook capabilities MUST follow a consistent family-based design so they 
 * **Every hook family should document the same essentials.** Document purpose, file layout, install/uninstall commands, runtime behavior, configuration inputs, and a minimal example.
 
 ## 5. Standard Artifact Storage Convention
-Workflows that generate files, reports, plans, or tracking states must not clutter the project root.
+Workflows that generate files, reports, plans, evals, reviews, or tracking states must not clutter the project root and must remain independently invokable.
 
-* **Anti-Pattern:** Dumping `.plan.md` or `.tdd-state.json` into the root directory. Hardcoding output paths directly into agents. Minting a fresh timestamped root for each downstream phase in the same topic.
-* **LSZ Pattern:** All high-level workflows MUST adhere to the centralized Artifact Storage Convention defined in the Domain Rules (`rules/common/environment-behavior.md`).
+* **Anti-Pattern:** Dumping `.plan.md` or `.tdd-state.json` into the root directory. Hardcoding output paths directly into agents. Requiring a standalone workflow skill to know orchestration-specific root-selection logic. Minting a fresh timestamped root for each downstream phase in the same topic.
+* **LSZ Pattern:** All artifact-generating workflows MUST use a default-plus-override storage contract.
+  * **Standalone Default:** When invoked directly without an explicit artifact override, the workflow owns its default path: `.lsz/{date}/{topic_creation_time}_{short_topic}/{workflow_kind}/`.
+  * **Caller Override:** A caller may override storage by passing an explicit `topic_root=<path>` or `artifact_dir=<path>` argument. `artifact_dir` is the exact output directory. `topic_root` is a shared topic directory; the callee writes under `{topic_root}/{workflow_kind}/`.
+  * **Override Precedence:** `artifact_dir` wins over `topic_root`; `topic_root` wins over the standalone default.
+  * **Orchestration Boundary:** Orchestration skills may create one shared `topic_root` for a multi-phase mission and pass it downstream, but downstream workflow skills must treat that as a caller override, not embed orchestration-only assumptions into their standalone path logic.
   * **Base Topic Pattern:** `.lsz/{date}/{topic_creation_time}_{short_topic}/`
   * **Workflow Artifact Pattern:** `.lsz/{date}/{topic_creation_time}_{short_topic}/{workflow_kind}/` (e.g., `.lsz/20260409/120123_auth_migration/plan/plan_v1.md`).
-  * **Execution:** The topic root is created once at workflow initialization. Downstream skills, commands, and agents MUST reuse that same topic root and create only their workflow-specific subdirectory instead of generating a new timestamp.
+  * **Execution:** Create the selected artifact directory with `mkdir -p` before writing artifacts. Downstream phases in an orchestrated workflow MUST reuse the caller-provided topic root or artifact directory instead of generating unrelated roots.
 
 ## 6. Parallel Agent Execution
 To maximize context efficiency and reduce latency, you MUST leverage parallel execution when orchestrating multiple independent or read-only tasks.

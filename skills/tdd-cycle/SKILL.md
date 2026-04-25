@@ -1,7 +1,7 @@
 ---
 name: tdd-cycle
 description: Execute a compact TDD workflow with strict RED, GREEN, and REFACTOR discipline. Use for test-first implementation, bug fixes, regression tests, failing-test-first development, minimal passing changes, refactoring under green tests, and implementation-level verification.
-argument-hint: "<feature or module to implement> [--incremental|--suite] [--coverage 80]"
+argument-hint: "<feature or module to implement> [--incremental|--suite] [--coverage 80] [topic_root=<path>|artifact_dir=<path>]"
 ---
 
 # TDD Cycle Orchestration Skill
@@ -25,10 +25,11 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 **Action:** Prepare the workspace.
 1. Extract the feature request from `$ARGUMENTS`.
 2. Generate a `short_topic` (lowercase, snake_case).
-3. If `[topic_root]` was provided by an upstream orchestrator, reuse it. Otherwise create it once for this topic as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`.
-4. Use the `Bash` tool to run: `mkdir -p [topic_root]/tdd`
-5. Store `[base_dir] = [topic_root]/tdd` for this session.
-6. Reserve `[lineage_pointer]` as `[base_dir]/00-workflow-lineage.md`.
+3. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
+4. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/tdd` as `[base_dir]`.
+5. Otherwise create a standalone topic root once as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`, then use `[topic_root]/tdd` as `[base_dir]`.
+6. Use the `Bash` tool to run: `mkdir -p [base_dir]`.
+7. Reserve `[lineage_pointer]` as `[base_dir]/00-workflow-lineage.md`.
 
 **Transition:** Once the directory is created, IMMEDIATELY proceed to Phase 1.
 

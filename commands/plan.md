@@ -1,6 +1,6 @@
 ---
 description: Interactive planner. Assesses risks and creates step-by-step implementation plans using AskUserQuestion for approval.
-argument-hint: "<task_description>"
+argument-hint: "<task_description> [topic_root=<path>|artifact_dir=<path>]"
 allowed-tools:
   - Agent
   - AskUserQuestion
@@ -29,9 +29,10 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 **Action:** Prepare the workspace.
 1. Extract the planning request from `$ARGUMENTS`.
 2. Generate a `short_topic` (lowercase, snake_case).
-3. If `[topic_root]` was provided by an upstream orchestrator, reuse it. Otherwise create it once for this topic as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`.
-4. Use the `Bash` tool to run: `mkdir -p [topic_root]/plan`
-5. Store `[base_dir] = [topic_root]/plan` for this session.
+3. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
+4. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/plan` as `[base_dir]`.
+5. Otherwise create a standalone topic root once as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`, then use `[topic_root]/plan` as `[base_dir]`.
+6. Use the `Bash` tool to run: `mkdir -p [base_dir]`.
 
 **Transition:** Once the directory is created, IMMEDIATELY proceed to Phase 1.
 

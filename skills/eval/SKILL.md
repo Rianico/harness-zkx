@@ -1,8 +1,11 @@
 ---
 name: eval
 description: Eval-driven development workflow for Claude Code. Use this for eval define, eval check, eval report, eval list, and eval clean; for creating acceptance eval definitions from specs, plans, ADRs, issues, or requirements; for running capability, contract, negative, and regression evals; for pass/fail gates, pass@k metrics, model graders, and compact subagent-run eval reports. Always use this when the user asks about evals, EDD, acceptance criteria gates, or validating implementation against approved requirements.
-argument-hint: "[define|check|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>]"
-tools: Agent, AskUserQuestion, Bash
+argument-hint: "[define|check|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>|artifact_dir=<path>]"
+tools:
+  - Agent
+  - AskUserQuestion
+  - Bash
 ---
 
 # Eval Skill
@@ -11,20 +14,21 @@ Run eval-driven development workflows while keeping substantive eval work out of
 
 ## Command modes
 
-- `define <feature-name> [source-of-truth] [topic_root=<path>]`: create or revise an eval definition before implementation.
-- `check <feature-name> [topic_root=<path>]`: run the approved eval definition against the current implementation.
-- `report <feature-name> [topic_root=<path>]`: produce a comprehensive eval report from definition and logs.
-- `list [topic_root=<path>]`: summarize available eval definitions and status.
-- `clean [topic_root=<path>]`: remove old eval run logs while keeping the last 10 runs per feature.
+- `define <feature-name> [source-of-truth] [topic_root=<path>|artifact_dir=<path>]`: create or revise an eval definition before implementation.
+- `check <feature-name> [topic_root=<path>|artifact_dir=<path>]`: run the approved eval definition against the current implementation.
+- `report <feature-name> [topic_root=<path>|artifact_dir=<path>]`: produce a comprehensive eval report from definition and logs.
+- `list [topic_root=<path>|artifact_dir=<path>]`: summarize available eval definitions and status.
+- `clean [topic_root=<path>|artifact_dir=<path>]`: remove old eval run logs while keeping the last 10 runs per feature.
 
 ## Artifact root selection
 
 Use one eval artifact directory for the whole workflow:
 
-1. If orchestration provides `[topic_root]` or an argument like `topic_root=<path>`, use `[topic_root]/eval/`.
-2. Otherwise capture a standalone topic root once as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_eval/`, store it as `[topic_root]`, then use `[topic_root]/eval/`.
-3. Create the selected eval directory with `Bash`: `mkdir -p [eval_dir]`.
-4. Pass `[eval_dir]` to every eval subagent. Downstream eval phases for the same topic reuse the same directory instead of minting a new timestamp.
+1. If `artifact_dir=<path>` is provided, use it exactly as `[eval_dir]`.
+2. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/eval/` as `[eval_dir]`.
+3. Otherwise capture a standalone topic root once as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]/`, then use `[topic_root]/eval/` as `[eval_dir]`.
+4. Create the selected eval directory with `Bash`: `mkdir -p [eval_dir]`.
+5. Pass `[eval_dir]` to every eval subagent. Downstream eval phases for the same topic reuse the same directory instead of minting a new timestamp.
 
 Recommended files:
 

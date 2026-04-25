@@ -1,6 +1,6 @@
 ---
 description: Interactive architectural design and review. Produces ADR-backed architecture outputs using the architecture-decision-records and architecture-expert skills.
-argument-hint: "<task_description>"
+argument-hint: "<task_description> [topic_root=<path>|artifact_dir=<path>]"
 allowed-tools:
   - Agent
   - AskUserQuestion
@@ -28,12 +28,13 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 **Action:** Prepare the workspace.
 1. Extract the architectural request from `$ARGUMENTS`.
 2. Generate a `short_topic` (lowercase, snake_case).
-3. If `[topic_root]` was provided by an upstream orchestrator, reuse it. Otherwise create it once for this topic as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`.
-4. Use the `Bash` tool to run: `mkdir -p [topic_root]/architect`
-5. Store `[base_dir] = [topic_root]/architect` for this session.
-6. Reserve `[adr_link_pointer] = [base_dir]/adr.md` as the workflow-local symlink path.
-7. Set `[domain_context]` to the best concise description you can infer from the repository and request. Set `[root_file]` to the most relevant root configuration or entry file you can infer. If either cannot be inferred confidently, say `unknown` instead of leaving placeholders.
-8. Set `[known_context]` to any explicit constraints from the user's request. If there are none, use `None provided`.
+3. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
+4. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/architect` as `[base_dir]`.
+5. Otherwise create a standalone topic root once as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`, then use `[topic_root]/architect` as `[base_dir]`.
+6. Use the `Bash` tool to run: `mkdir -p [base_dir]`.
+7. Reserve `[adr_link_pointer] = [base_dir]/adr.md` as the workflow-local symlink path.
+8. Set `[domain_context]` to the best concise description you can infer from the repository and request. Set `[root_file]` to the most relevant root configuration or entry file you can infer. If either cannot be inferred confidently, say `unknown` instead of leaving placeholders.
+9. Set `[known_context]` to any explicit constraints from the user's request. If there are none, use `None provided`.
 
 **Transition:** Once the directory is created, IMMEDIATELY proceed to Phase 1.
 
