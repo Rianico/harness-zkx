@@ -25,7 +25,7 @@ Add future hook families as their own subdirectories under `hooks/`.
 - Group each hook family in its own subdirectory.
 - Keep family-specific install logic in `hooks/<family>/install.py`.
 - Use the root `install-hooks.py` as the user-facing installer entrypoint.
-- Installers should update a target Claude Code `settings.json` and copy any runtime hook scripts into the target `.claude/hooks/` directory.
+- Installers should update a target Claude Code `settings.json` and copy any runtime hook scripts or assets into a family-specific target `.claude/hooks/<family>/` directory.
 - Keep source scripts in `hooks/<family>/` as the canonical editable versions.
 - When the command is complex, use a script rather than inline code in `settings.json`.
 

@@ -8,7 +8,7 @@ Implement a reusable Claude Code notification hook feature in this repository in
 Goal:
 - Create a hook family under `hooks/notify/`.
 - The feature must install a Claude Code `Notification` hook into a target `settings.json`.
-- The installed runtime script must live in the target `.claude/hooks/notify_user.py`.
+- The installed runtime script must live in the target `.claude/hooks/notify/notify_user.py`.
 - The source-of-truth editable files must live in this repo under `hooks/notify/`.
 
 Requirements:
@@ -25,8 +25,8 @@ Behavior:
 - Install a hook entry under `hooks.Notification` in the target settings file.
 - Use matcher `"*"`.
 - The installed command must be:
-  - `uv run "<absolute path to target .claude/hooks/notify_user.py>"`
-- The installer must copy the runtime hook script into the target `.claude/hooks/` directory.
+  - `uv run "<absolute path to target .claude/hooks/notify/notify_user.py>"`
+- The installer must copy the runtime hook script into the target `.claude/hooks/notify/` directory.
 - The installer must support:
   - `install <settings.json>`
   - `uninstall <settings.json>`
@@ -57,7 +57,7 @@ Runtime notification script requirements:
 README requirements:
 - `hooks/README.md` should act as the index for hook families.
 - Mention that each hook family should live in its own subdirectory.
-- Mention that installers update a target `settings.json` and copy runtime scripts into target `.claude/hooks/`.
+- Mention that installers update a target `settings.json` and copy runtime scripts into family-specific target `.claude/hooks/<family>/` directories.
 - Document how to use:
   - `uv run hooks/notify/install.py --help`
   - `uv run hooks/notify/install.py install <settings.json>`
@@ -75,7 +75,7 @@ Verification:
 - After editing, run:
   - `uv run hooks/notify/install.py --help`
 - Verify the help text is correct.
-- If the target project `.claude/settings.json` exists, install into it and verify the `Notification` hook entry points to `.claude/hooks/notify_user.py`.
+- If the target project `.claude/settings.json` exists, install into it and verify the `Notification` hook entry points to `.claude/hooks/notify/notify_user.py`.
 
 Deliverable:
 - Make the code changes directly.

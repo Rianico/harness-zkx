@@ -6,8 +6,12 @@ from pathlib import Path
 
 
 TARGET_HOOK_RELATIVE_PATHS = {
-    'Stop': Path('hooks/ensure_todo_stop.py'),
-    'PostToolUse': Path('hooks/ensure_todo_post_tool_use.py'),
+    'Stop': Path('hooks/ensure_todo/ensure_todo_stop.py'),
+    'PostToolUse': Path('hooks/ensure_todo/ensure_todo_post_tool_use.py'),
+}
+LEGACY_TARGET_HOOK_RELATIVE_PATHS = {
+    'Stop': (Path('hooks/ensure_todo_stop.py'),),
+    'PostToolUse': (Path('hooks/ensure_todo_post_tool_use.py'),),
 }
 SOURCE_HOOK_NAMES = {
     'Stop': 'ensure_todo_stop.py',
@@ -31,6 +35,10 @@ def save_settings(path: Path, data: dict) -> None:
 
 def target_hook_path(settings_path: Path, event_name: str) -> Path:
     return (settings_path.parent / TARGET_HOOK_RELATIVE_PATHS[event_name]).resolve()
+
+
+def legacy_target_hook_paths(settings_path: Path, event_name: str) -> tuple[Path, ...]:
+    return tuple((settings_path.parent / relative_path).resolve() for relative_path in LEGACY_TARGET_HOOK_RELATIVE_PATHS[event_name])
 
 
 def install_hook_script(settings_path: Path, event_name: str) -> Path:
@@ -96,13 +104,22 @@ def install_family(settings_path: Path) -> int:
         target_hook = install_hook_script(settings_path, event_name)
         hook_entry = build_hook_entry(target_hook, event_name)
         changed = ensure_hook(data, event_name, hook_entry)
-        changes.append((event_name, changed, target_hook))
+        removed_legacy_paths = []
+        for legacy_path in legacy_target_hook_paths(settings_path, event_name):
+            legacy_changed = remove_hook(data, event_name, build_hook_entry(legacy_path, event_name))
+            changed = changed or legacy_changed
+            if legacy_changed and legacy_path.exists():
+                legacy_path.unlink()
+                removed_legacy_paths.append(legacy_path)
+        changes.append((event_name, changed, target_hook, removed_legacy_paths))
 
     save_settings(settings_path, data)
     print(f'Updated {settings_path}')
-    for event_name, changed, target_hook in changes:
+    for event_name, changed, target_hook, removed_legacy_paths in changes:
         status = 'Installed' if changed else 'Already installed'
         print(f'{status} {event_name} hook at {target_hook}')
+        for legacy_path in removed_legacy_paths:
+            print(f'Removed legacy hook script at {legacy_path}')
     return 0
 
 
@@ -113,20 +130,30 @@ def uninstall_family(settings_path: Path) -> int:
     for event_name in TARGET_HOOK_RELATIVE_PATHS:
         target_hook = target_hook_path(settings_path, event_name)
         hook_entry = build_hook_entry(target_hook, event_name)
-        changed = remove_hook(data, event_name, hook_entry)
+        current_changed = remove_hook(data, event_name, hook_entry)
+        changed = current_changed
         removed_script = False
-        if changed and target_hook.exists():
+        if current_changed and target_hook.exists():
             target_hook.unlink()
             removed_script = True
-        changes.append((event_name, changed, target_hook, removed_script))
+        removed_legacy_paths = []
+        for legacy_path in legacy_target_hook_paths(settings_path, event_name):
+            legacy_changed = remove_hook(data, event_name, build_hook_entry(legacy_path, event_name))
+            changed = changed or legacy_changed
+            if legacy_changed and legacy_path.exists():
+                legacy_path.unlink()
+                removed_legacy_paths.append(legacy_path)
+        changes.append((event_name, changed, target_hook, removed_script, removed_legacy_paths))
 
     save_settings(settings_path, data)
     print(f'Updated {settings_path}')
-    for event_name, changed, target_hook, removed_script in changes:
+    for event_name, changed, target_hook, removed_script, removed_legacy_paths in changes:
         status = 'Removed' if changed else 'No changes needed for'
         print(f'{status} {event_name} hook entry at {target_hook}')
         if removed_script:
             print(f'Removed hook script at {target_hook}')
+        for legacy_path in removed_legacy_paths:
+            print(f'Removed legacy hook script at {legacy_path}')
     return 0
 
 

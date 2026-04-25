@@ -20,7 +20,7 @@ Requirements:
 - Use Python and run installed scripts with `uv run`.
 - Prefer scripts over inline code in `settings.json`.
 - Keep source-of-truth files under `hooks/ensure_todo/`.
-- Copy runtime scripts into target `.claude/hooks/` during installation.
+- Copy runtime scripts into target `.claude/hooks/ensure_todo/` during installation.
 
 Installer behavior:
 - Root CLI must support:
@@ -34,10 +34,10 @@ Installer behavior:
 Settings behavior:
 - Install a `Stop` hook with:
   - `matcher: "*"`
-  - command: `uv run "<absolute target path>/.claude/hooks/ensure_todo_stop.py"`
+  - command: `uv run "<absolute target path>/.claude/hooks/ensure_todo/ensure_todo_stop.py"`
 - Install a `PostToolUse` hook with:
   - `matcher: "Edit|Write|MultiEdit"`
-  - command: `uv run "<absolute target path>/.claude/hooks/ensure_todo_post_tool_use.py"`
+  - command: `uv run "<absolute target path>/.claude/hooks/ensure_todo/ensure_todo_post_tool_use.py"`
 
 Stop hook behavior:
 - Read JSON payload from stdin.

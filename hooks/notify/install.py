@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 
-TARGET_HOOK_RELATIVE_PATH = Path('hooks/notify_user.py')
+TARGET_HOOK_RELATIVE_PATH = Path('hooks/notify/notify_user.py')
+LEGACY_TARGET_HOOK_RELATIVE_PATHS = (Path('hooks/notify_user.py'),)
 SOURCE_HOOK_NAME = 'notify_user.py'
 
 
@@ -31,6 +32,10 @@ def save_settings(path: Path, data: dict) -> None:
 
 def target_hook_path(settings_path: Path) -> Path:
     return (settings_path.parent / TARGET_HOOK_RELATIVE_PATH).resolve()
+
+
+def legacy_target_hook_paths(settings_path: Path) -> tuple[Path, ...]:
+    return tuple((settings_path.parent / relative_path).resolve() for relative_path in LEGACY_TARGET_HOOK_RELATIVE_PATHS)
 
 
 def install_hook_script(settings_path: Path) -> Path:
@@ -93,10 +98,19 @@ def install_family(settings_path: Path) -> int:
     hook_entry = build_hook_entry(target_hook)
     data = load_settings(settings_path)
     changed = ensure_notification_hook(data, hook_entry)
+    removed_legacy_paths = []
+    for legacy_path in legacy_target_hook_paths(settings_path):
+        legacy_changed = remove_notification_hook(data, build_hook_entry(legacy_path))
+        changed = changed or legacy_changed
+        if legacy_changed and legacy_path.exists():
+            legacy_path.unlink()
+            removed_legacy_paths.append(legacy_path)
     save_settings(settings_path, data)
 
     print(f'Updated {settings_path}' if changed else f'No changes needed for {settings_path}')
     print(f'Installed hook script at {target_hook}')
+    for legacy_path in removed_legacy_paths:
+        print(f'Removed legacy hook script at {legacy_path}')
     return 0
 
 
@@ -104,16 +118,26 @@ def uninstall_family(settings_path: Path) -> int:
     target_hook = target_hook_path(settings_path)
     hook_entry = build_hook_entry(target_hook)
     data = load_settings(settings_path)
-    changed = remove_notification_hook(data, hook_entry)
+    current_changed = remove_notification_hook(data, hook_entry)
+    changed = current_changed
+    removed_legacy_paths = []
+    for legacy_path in legacy_target_hook_paths(settings_path):
+        legacy_changed = remove_notification_hook(data, build_hook_entry(legacy_path))
+        changed = changed or legacy_changed
+        if legacy_changed and legacy_path.exists():
+            legacy_path.unlink()
+            removed_legacy_paths.append(legacy_path)
     save_settings(settings_path, data)
 
     removed_script = False
-    if changed and target_hook.exists():
+    if current_changed and target_hook.exists():
         target_hook.unlink()
         removed_script = True
 
     print(f'Updated {settings_path}' if changed else f'No changes needed for {settings_path}')
     print(f'Removed hook script at {target_hook}' if removed_script else f'No hook script found at {target_hook}')
+    for legacy_path in removed_legacy_paths:
+        print(f'Removed legacy hook script at {legacy_path}')
     return 0
 
 
