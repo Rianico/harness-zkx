@@ -2,7 +2,7 @@
 The core of LSZ architecture is a skills-first design that keeps reusable workflow logic in one place, preserves context efficiency, and avoids duplicating methodology across commands, agents, and rules.
 
 *   **Skills are the primary product surface.** Skills may define the workflow contract, user interaction model, and methodology. A skill can own both the WHAT and the HOW when that produces a cleaner, more reusable abstraction.
-*   **Commands are classic convenience entrypoints.** Commands are optional, thin wrappers around skills, best suited for simple or high-frequency tasks (for example, `/plan`). Commands should stay lightweight unless there is a strong ergonomic reason to do otherwise.
+*   **Commands are exceptional convenience entrypoints.** Prefer invoking skills directly rather than creating thin command wrappers. Add a command only when there is a strong CLI ergonomics reason, such as a high-frequency shortcut, special argument autocomplete, or compatibility with existing user muscle memory. Commands should not exist solely to forward to a skill.
 *   **Agents define the WHO and the TOOLS.** Agents are lean execution engines. They define persona, tool boundaries, and focused execution roles. *Agents should generally NOT contain long workflow instructions unless the workflow is atomic, universal, and short.*
 
 ## 2. Skill Taxonomy
@@ -30,7 +30,7 @@ Use domain knowledge skills for guides, patterns, expert methodology, and reusab
 ### 2.4 Action Skills
 Use action skills for narrow, simple workflows and direct task execution.
 - They are the best fit for small, low-ambiguity tasks.
-- They can be exposed via commands for convenience.
+- They should usually be invoked directly as skills rather than exposed through command wrappers.
 - They should remain simple and compact.
 
 **When to embed logic directly in an Agent:**
@@ -133,9 +133,10 @@ To ensure a seamless user experience and strict system bounds, skills, commands,
   * ALWAYS include `tools:`. Agents MUST explicitly define their tool scope as a YAML array. If omitted, they default to full tool access, which is a security and alignment risk.
   * If an agent has deterministic skill invocation, define a `skills:` header as a YAML array so those skills can be preloaded up front. Prefer this over runtime `Skill` calls when the required skills are known in advance, because it reduces round-trip overhead and keeps execution more predictable.
 * **LSZ Pattern (Commands):**
-  * ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
-  * ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from going rogue outside their intended workflow.
-  * Commands should usually be thin wrappers or aliases for skills, especially for simple action-style tasks.
+  * Avoid creating commands that only forward to a skill. Prefer direct skill invocation as the default product surface.
+  * Add a command only when it provides clear CLI ergonomics beyond retrieval, such as high-frequency shorthand, compatibility with existing workflows, argument autocomplete, or a genuinely command-specific interaction shell.
+  * When a command is justified, ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
+  * When a command is justified, ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from going rogue outside their intended workflow.
 * **LSZ Pattern (Skills):**
   * ALWAYS include `argument-hint:` when the skill accepts arguments.
   * Skills are the canonical place for reusable workflow contracts and methodology.
@@ -177,5 +178,5 @@ description: "Architecture decision record generation for system design, refacto
 ## Trade-Offs to Consider
 * **Latency vs Context Bloat:** The Hybrid JIT Architecture adds a small runtime penalty to complex tasks because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request.
 * **Agent Hero-Mode:** Generic agents are heavily prone to ignoring delegation instructions. Orchestration skills and complex workflow skills that dispatch agents SHOULD use explicit execution schemas with stable Agent dispatch templates to force the LLM into orchestration mode.
-* **Command vs Skill Ergonomics:** Commands improve discoverability and user ergonomics for simple tasks, but duplicating workflow logic in both commands and skills creates drift. Prefer skills as the source of truth.
+* **Command vs Skill Ergonomics:** Skills are the default product surface, including for simple action workflows. Commands are reserved for cases where CLI ergonomics materially improve use; thin forwarding wrappers create drift and should be avoided.
 * **Tooling Preference:** When using shell-based search, prefer `rg` for content search and `fd` for file discovery over `grep`, `find`, and agent built-in search tools. Reserve `ls` and `tree` for structural inspection.
