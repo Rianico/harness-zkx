@@ -47,11 +47,11 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 Agent tool (architect):
   description: "Produce architecture ADR"
   prompt: |
-    You are the Architect agent. Design the architecture for: [$ARGUMENTS].
+    You are the Architect agent. Design or review the architecture for: [$ARGUMENTS].
 
-    Treat `architecture-decision-records` as the ADR authority and use `architecture-expert` to choose the most appropriate lens for this request.
+    Ask an architecture expert to choose the most appropriate lens for this request, but first do the lightweight repository scan required by the ADR workflow so the expert design/review has current project context. Use that expert guidance to design or review the architecture before recording the decision. Record the resulting design using the ADR workflow. If either expert design/review or ADR recording is not applicable, skip only that part and state why in the skill audit.
 
-    **Recommended Lens Mapping:**
+    **Recommended Architecture Lens Mapping:**
     - `balanced` - mixed or unclear cases
     - `uncle-bob` - dependency boundaries, clean architecture, layering, testability
     - `fowler` - refactoring pressure, enterprise patterns, evolutionary design
@@ -68,16 +68,17 @@ Agent tool (architect):
     [known_context]
 
     **[TASK]**
-    Produce a focused architecture ADR only. The ADR content MUST define: problem framing, design decisions, system boundaries, invariants, interfaces between major components, key trade-offs, risks, and tersely captured rejected alternatives, while remaining compatible with the ADR skill's Nygard-core guidance and repository ADR template if customized.
+    Produce a focused architecture design or review judgment first, then capture it as an ADR. The ADR content MUST define: problem framing, design decisions, system boundaries, invariants, interfaces between major components, key trade-offs, risks, and tersely captured rejected alternatives, while remaining compatible with Nygard-core ADR guidance and the repository ADR template if customized.
 
-    Follow the `architecture-decision-records` skill as the ADR authority. Before creating a new ADR, do the lightweight repository scan described by that skill so you can determine whether this architecture should be a new ADR, a superseding ADR, or a related ADR with links.
+    Do the lightweight repository scan required by the ADR workflow before expert design/review so you can understand current architecture, discover existing ADRs, and determine whether this architecture should be a new ADR, a superseding ADR, or a related ADR with links.
 
     After the ADR is created or updated through the ADR workflow, replace any existing symlink at [adr_link_pointer] so it points to the current canonical ADR file using the canonical ADR's absolute path. Do not construct a relative symlink target.
 
     Return:
     1. A concise summary
-    2. The absolute path to the canonical ADR file as `[adr_pointer]`
-    3. The absolute path to the symlink as `[adr_link_pointer]`
+    2. `Skill audit:` followed by the expert design/review and ADR recording steps used or skipped, with a concise reason for any skip
+    3. The absolute path to the canonical ADR file as `[adr_pointer]`
+    4. The absolute path to the symlink as `[adr_link_pointer]`
 
     Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions future iterations must follow.
 ```
