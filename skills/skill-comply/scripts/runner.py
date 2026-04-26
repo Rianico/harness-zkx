@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -81,8 +80,7 @@ def _setup_sandbox(sandbox_dir: Path, scenario: Scenario) -> None:
     subprocess.run(["git", "init"], cwd=sandbox_dir, capture_output=True)
 
     for cmd in scenario.setup_commands:
-        parts = shlex.split(cmd)
-        subprocess.run(parts, cwd=sandbox_dir, capture_output=True)
+        subprocess.run(cmd, cwd=sandbox_dir, shell=True, capture_output=True)
 
 def _parse_stream_json(stdout: str) -> list[ObservationEvent]:
     """Parse claude -p stream-json output into ObservationEvents.
