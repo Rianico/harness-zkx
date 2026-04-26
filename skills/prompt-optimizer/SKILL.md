@@ -117,11 +117,11 @@ Map intent + scope + tech stack (from Phase 0) to specific LSZ components.
 
 | Intent | Commands | Skills | Agents |
 |--------|----------|--------|--------|
-| New Feature | /plan, /orchestrate tdd-cycle, /code-review, /verify | tdd-cycle, verification-loop | planner, tdd-orchestrator, code-reviewer |
-| Bug Fix | /orchestrate tdd-cycle, /build-fix, /verify | tdd-cycle | tdd-orchestrator, build-error-resolver |
+| New Feature | /plan, /code-review, /verify | orchestrate, tdd-cycle, verification-loop | planner, tdd-orchestrator, code-reviewer |
+| Bug Fix | /build-fix, /verify | orchestrate, tdd-cycle | tdd-orchestrator, build-error-resolver |
 | Refactor | /refactor-clean, /code-review, /verify | verification-loop | refactor-cleaner, code-reviewer |
 | Research | /plan | search-first, iterative-retrieval | — |
-| Testing | /orchestrate tdd-cycle, /e2e, /test-coverage | tdd-cycle, e2e-testing | tdd-orchestrator, e2e-runner |
+| Testing | /e2e, /test-coverage | orchestrate, tdd-cycle, e2e-testing | tdd-orchestrator, e2e-runner |
 | Review | /code-review | security-review | code-reviewer, security-reviewer |
 | Documentation | /update-docs, /update-codemaps | — | doc-updater |
 | Infrastructure | /plan, /verify | docker-patterns, deployment-patterns, database-migrations | architect |
@@ -172,7 +172,7 @@ Determine where this prompt sits in the development lifecycle:
 Research → Plan → Implement (TDD) → Review → Verify → Commit
 ```
 
-For MEDIUM+ tasks, always start with /plan. For EPIC tasks, use blueprint skill.
+For MEDIUM+ tasks, use the `orchestrate` skill when the work needs the full phased plan/TDD/review sequence. For EPIC tasks, use blueprint skill.
 
 **Model recommendation** (include in output):
 
@@ -240,11 +240,11 @@ A compact version for experienced LSZ users. Vary by intent type:
 
 | Intent | Quick Pattern |
 |--------|--------------|
-| New Feature | `/plan [feature]. /orchestrate tdd-cycle to implement. /code-review. /verify.` |
-| Bug Fix | `/orchestrate tdd-cycle — write failing test for [bug]. Fix to green. /verify.` |
+| New Feature | `Use orchestrate skill for [feature].` |
+| Bug Fix | `Use orchestrate skill with bugfix args — write failing test for [bug]. Fix to green. /verify.` |
 | Refactor | `/refactor-clean [scope]. /code-review. /verify.` |
 | Research | `Use search-first skill for [topic]. /plan based on findings.` |
-| Testing | `/orchestrate tdd-cycle [module]. /e2e for critical flows. /test-coverage.` |
+| Testing | `Use orchestrate skill with feature or bugfix args for [module]. /e2e for critical flows. /test-coverage.` |
 | Review | `/code-review. Then use security-reviewer agent.` |
 | Docs | `/update-docs. /update-codemaps.` |
 | EPIC | `Use blueprint skill for "[objective]". Execute phases with /verify gates.` |
@@ -292,7 +292,7 @@ A compact version for experienced LSZ users. Vary by intent type:
 
 工作流：
 1. /plan 先规划组件结构和认证流程，参考现有页面的模式
-2. /orchestrate tdd-cycle 测试先行：编写登录表单的单元测试和认证流程的集成测试
+2. Use orchestrate skill with feature args for test-first implementation: write login form unit tests and authentication flow integration tests
 3. 实现登录页面和认证逻辑
 4. /code-review 审查实现
 5. /verify 验证所有测试通过且页面正常渲染
@@ -340,7 +340,7 @@ Requirements:
 
 Workflow:
 1. /plan the endpoint structure, middleware chain, and validation logic
-2. /orchestrate tdd-cycle — write table-driven tests for success, validation failure, auth failure, not-found
+2. Use orchestrate skill with feature args to write table-driven tests for success, validation failure, auth failure, not-found
 3. Implement following existing handler patterns
 4. /go-review
 5. /verify — run full test suite, confirm no regressions

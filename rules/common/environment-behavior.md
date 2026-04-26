@@ -9,7 +9,7 @@
 - When exploring a project, ALWAYS respect `.gitignore`. Prefer `rg` and `fd` because they naturally align better with fast code search. Manually exclude common ignored directories (like `.venv`, `.git`, `node_modules`, `target`, etc.) when needed. Do not explore or search directories/files listed in `.gitignore` unless explicitly requested by the user.
 
 ## 2. Conditional Project Exploration
-When executing high-level workflows or commands (such as `/orchestrate`, `/plan`, `/code-review`, `/tdd`, etc.), you should assess your current knowledge of the project.
+When executing high-level workflows or commands (such as the `orchestrate` skill, `/plan`, `/code-review`, `/tdd`, etc.), you should assess your current knowledge of the project.
 
 **Exploration Protocol:**
 If exploration is required under the conditions above, you MUST begin with:

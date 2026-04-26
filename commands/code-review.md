@@ -24,7 +24,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 
 ## ORCHESTRATED FINAL REVIEW MODE
 
-If `$ARGUMENTS` includes `orchestrated_final_review=true`, this command is running as the final review phase of `/orchestrate`.
+If `$ARGUMENTS` includes `orchestrated_final_review=true`, this command is running as the final review phase of the `orchestrate` skill.
 
 In this mode:
 1. The review agent MUST classify findings by severity: `blocking`, `high`, `medium`, `low`, or `minor`, and MUST mark each finding as either safe to auto-remediate or requiring user approval because it is security-critical, destructive, risky, or product/architecture decision-requiring.
@@ -100,7 +100,7 @@ Agent tool (code-reviewer):
 Agent tool (developer):
   description: "Fix review findings"
   prompt: |
-    You are the remediation agent for the final `/orchestrate` code review.
+    You are the remediation agent for the final `orchestrate` skill code review.
 
     **[REVIEW POINTER]**
     [review_pointer]

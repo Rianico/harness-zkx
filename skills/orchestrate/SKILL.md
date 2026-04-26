@@ -1,10 +1,10 @@
 ---
-name: orchestrate-workflow
-description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the command sequence across architect, plan, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, and pointer-based state passing.
+name: orchestrate
+description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the skill sequence across brainstorming, architect, plan, eval, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, remediation loops, final review behavior, and pointer-based state passing.
 argument-hint: "[feature|refactor|bugfix|docs]"
 ---
 
-# Orchestration Workflow Skill
+# Orchestration
 
 You have invoked the Orchestration Workflow Skill. This skill defines the strict sequence of LSZ skills you must execute to complete complex software engineering tasks.
 
@@ -17,6 +17,32 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
 6. **Strict Phase Ownership:** Preserve distinct responsibilities across phases. Architect defines decisions and boundaries. Plan defines execution order and scope. TDD defines tests and implementation validation. Code review defines repository-level review and readiness.
 7. **No Redundant Re-encoding:** Do not ask a downstream phase to recreate an upstream artifact as a rewritten checklist, summary, or review unless that transformation is the explicit purpose of the phase.
 8. **Topic-Root Source of Truth Exception:** `design.md` may live directly at `[topic_root]/design.md` because it is the mission-level source of truth, not a workflow-specific artifact directory. Workflow phase artifacts still belong under `[topic_root]/{workflow_kind}/` unless `artifact_dir=<path>` overrides them.
+9. **Domain Context Injection:** When a phase skill's execution instructions require launching an agent or passing state, prepend concise domain context to the task prompt, then pass only approved upstream pointers relevant to that phase.
+10. **Eval Gate Remediation:** If `eval check` is not READY, return to `tdd-cycle` remediation with pointers to the source of truth, eval definition, eval log, and implementation artifacts. Do not proceed to `code-review` until required evals pass or the workflow explicitly stops as blocked.
+11. **Final Review Remediation:** When `code-review` is the final phase, invoke it with `orchestrated_final_review=true`. Safe `medium`, `low`, or `minor` findings should be delegated for remediation without asking the user first. Ask for approval only when findings are `blocking`, `high`, security-critical, destructive, risky to fix, or require a product or architecture decision.
+
+Use this prompt shape when injecting domain context:
+
+```text
+**[DOMAIN CONTEXT]**
+Language/Domain: [e.g., Rust]
+Root File: [e.g., Cargo.toml]
+
+**[APPROVED UPSTREAM POINTERS]**
+[Include only absolute file path pointers the next phase is expected to consume]
+
+**[TASK]**
+[Task summary and user requirements]
+```
+
+## Phase Ownership Contract
+- `brainstorming` owns requirement discovery: source-of-truth design capture, examples, negative requirements, acceptance criteria, assumptions, and open questions.
+- `architect` owns decisions: problem framing, boundaries, invariants, interfaces, trade-offs, risks, and rejected alternatives.
+- `plan` owns execution: ordered steps, dependency sequencing, touched modules, checkpoints, risks, and explicit out-of-scope items.
+- `eval define` owns acceptance checks: converting the approved source of truth into reviewed capability, contract, negative, and regression evals.
+- `tdd-cycle` owns implementation validation: tests, implementation progress, and implementation-level verification needed to complete the change.
+- `eval check` owns spec-compliance verification: checking the implementation against the approved eval definition and producing pass/fail logs.
+- `code-review` owns repository-level review: security, maintainability, correctness gaps not covered by TDD/evals, and overall readiness.
 
 ## Standard Pipelines
 
