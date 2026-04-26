@@ -1,6 +1,6 @@
 ---
 name: architecture-expert
-description: Architecture domain expertise for software and system design, architectural trade-offs, system boundaries, module boundaries, clean architecture, domain modeling, bounded contexts, architectural styles, 4+1 views, microservice decomposition, ADR reasoning, and architecture review. Use for design critique, refactoring strategy, service boundaries, and architectural decision support with lenses such as balanced, uncle-bob, fowler, evans, shaw-garlan, kruchten, and newman.
+description: Architecture domain expertise for software and system design, architectural trade-offs, system boundaries, module boundaries, clean architecture, domain modeling, bounded contexts, architectural styles, 4+1 views, microservice decomposition, blueprint reasoning, technical standards, ADR reasoning, and architecture review. Use for design critique, refactoring strategy, service boundaries, reusable project paradigms, and architectural decision support with lenses such as balanced, uncle-bob, fowler, evans, shaw-garlan, kruchten, and newman.
 argument-hint: "[balanced|uncle-bob|fowler|evans|shaw-garlan|kruchten|newman]"
 ---
 
@@ -130,6 +130,16 @@ Ask:
 - What data ownership boundary exists?
 - What happens under timeout, retry, duplication, and partial failure?
 - What operational overhead does this split introduce?
+
+## Architecture Artifact Methodology
+
+When an architecture workflow maintains durable artifacts, distinguish their responsibilities:
+
+- **Blueprint**: the current architectural model. Use it for components, boundaries, interfaces, data/control flow, runtime and deployment shape, major invariants, risks, and expert design detail that would make an ADR too large.
+- **Technical standards**: reusable engineering paradigms. Use them for naming style, layering rules, dependency direction, database foreign key policy, deletion policy, API contracts, testing obligations, migration constraints, and other rules expected to guide future work.
+- **ADR**: the decision log. Use it for the concise historical record of why a meaningful architectural decision was made, what alternatives were rejected, and what consequences follow.
+
+Update blueprint or technical standards only when the current task establishes, changes, or clarifies a reusable architectural paradigm. Do not promote local implementation details, one-off product requirements, or trivial naming choices into durable standards.
 
 ## Output Shaping Guidance
 
