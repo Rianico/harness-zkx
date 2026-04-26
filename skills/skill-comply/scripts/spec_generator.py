@@ -43,7 +43,7 @@ def generate_spec(
             ["claude", "-p", prompt, "--model", model, "--output-format", "text"],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,
         )
 
         if result.returncode != 0:
