@@ -4,6 +4,7 @@ argument-hint: "[feature|refactor|bugfix|docs] <task_description>"
 allowed-tools:
   - Skill
   - Agent
+  - AskUserQuestion
   - Read
   - Bash
 ---
@@ -40,6 +41,9 @@ Use this structure:
 - `tdd-cycle` owns implementation validation: tests, implementation progress, and implementation-level verification needed to complete the change.
 - `eval check` owns spec-compliance verification: checking the implementation against the approved eval definition and producing pass/fail logs.
 - `code-review` owns repository-level review: security, maintainability, correctness gaps not covered by TDD/evals, and overall readiness.
+
+**Final Review Remediation Policy:**
+When `code-review` is the final phase of an `/orchestrate` pipeline, invoke it with `orchestrated_final_review=true`. In that mode, safe `medium`, `low`, or `minor` findings should be delegated to an implementation subagent for remediation without asking the user first. Ask for user approval only when findings are `blocking`, `high`, security-critical, destructive or risky to fix, or require a product/architecture decision.
 
 The orchestrator owns transitions between phases. If `eval check` is not READY, return to `tdd-cycle` remediation with pointers to the source of truth, eval definition, eval log, and implementation artifacts. Do not proceed to `code-review` until required evals pass or the workflow explicitly stops as blocked.
 
