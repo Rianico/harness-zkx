@@ -4,7 +4,6 @@ description: Eval-driven development workflow for Claude Code. Use this for eval
 argument-hint: "[define|check|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>|artifact_dir=<path>]"
 tools:
   - Agent
-  - AskUserQuestion
   - Bash
 ---
 
@@ -75,22 +74,18 @@ Agent tool (general-purpose):
 
 ## Define approval checkpoint
 
-After `define` returns an eval definition pointer, stop and ask for approval with `AskUserQuestion`:
+After `define` returns an eval definition pointer, stop and present options for approval:
 
-```json
-{
-  "questions": [{
-    "question": "Eval definition is ready. Please review the file at [eval_definition_pointer].",
-    "header": "Eval",
-    "multiSelect": false,
-    "options": [
-      { "label": "Approve", "description": "Accept this eval definition as the gate for implementation." },
-      { "label": "Revise", "description": "Provide changes or missing criteria for a new subagent revision pass." },
-      { "label": "Reject", "description": "Stop without using this eval definition." }
-    ]
-  }]
-}
-```
+---
+**Eval Definition Ready**
+
+Please review the file at `[eval_definition_pointer]`.
+
+Options:
+1. **Approve** — Accept this eval definition as the gate for implementation.
+2. **Revise** — Provide changes or missing criteria for a new subagent revision pass.
+3. **Reject** — Stop without using this eval definition.
+---
 
 If approved, return the eval definition pointer and `[eval_dir]`, then terminate. If revision is requested, ask for the requested changes, then launch a new subagent with the prior definition pointer, `[eval_dir]`, and the user's feedback. Do not resume the old subagent.
 

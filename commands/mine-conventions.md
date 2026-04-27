@@ -16,7 +16,7 @@ To execute this workflow, you MUST invoke the Agent tool.
 Use the Agent tool with these parameters:
 - `subagent_type`: "convention-miner"
 - `description`: "Mine conventions from git"
-- `prompt`: "[Include user constraints. Explicitly instruct the agent to run its git analysis and use `AskUserQuestion` to get user approval on which patterns to formalize into rules.]"
+- `prompt`: "[Include user constraints. Explicitly instruct the agent to run its git analysis and present options to the user for selecting which patterns to formalize into rules.]"
 
 **Usage:**
 ```bash

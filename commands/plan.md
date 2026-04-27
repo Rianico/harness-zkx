@@ -1,9 +1,8 @@
 ---
-description: Interactive planner. Assesses risks and creates step-by-step implementation plans using AskUserQuestion for approval.
+description: Interactive planner. Assesses risks and creates step-by-step implementation plans with user approval at checkpoints.
 argument-hint: "<task_description> [topic_root=<path>|artifact_dir=<path>]"
 allowed-tools:
   - Agent
-  - AskUserQuestion
   - Bash
   - Write
 ---
@@ -60,23 +59,20 @@ Agent tool (planner):
 
 **Transition Rules (Post-Execution):**
 1. Wait for Phase 1 to complete and extract the file pointer (`[plan_pointer]`).
-2. **CHECKPOINT 1:** You MUST stop and use `AskUserQuestion`. Use the strict schema:
-```json
-{
-  "questions": [{
-    "question": "Implementation plan is ready. Please review the plan at [plan_pointer].",
-    "header": "Plan Approval",
-    "multiSelect": false,
-    "options": [
-      { "label": "Approve Plan", "description": "Proceed with the generated plan." },
-      { "label": "Modify Plan", "description": "Provide feedback to adjust the execution steps, sequencing, or scope boundaries." },
-      { "label": "Reject & Exit", "description": "Discard the plan and exit." }
-    ]
-  }]
-}
-```
+2. **CHECKPOINT 1:** You MUST stop and present options to the user. Wait for their response before continuing:
+
+---
+**Plan Approval**
+
+Implementation plan is ready. Please review the plan at `[plan_pointer]`.
+
+Options:
+1. **Approve Plan** — Proceed with the generated plan.
+2. **Modify Plan** — Provide feedback to adjust the execution steps, sequencing, or scope boundaries.
+3. **Reject & Exit** — Discard the plan and exit.
+---
 
 3. **Handle User Response:**
 - If **Approve Plan**: Output a final summary with the `[plan_pointer]` and terminate the workflow.
-- If **Modify Plan**: Ask the user what they want to change via standard chat. Once they reply, invoke a **NEW** `planner` agent (do NOT resume the old one) using the payload from Phase 1, but explicitly pass `[plan_pointer]` and the user's feedback in the prompt so the new agent can iterate on it and overwrite or save to `[base_dir]/02-execution-plan-revised.md` (return the new pointer). Then return to CHECKPOINT 1.
+- If **Modify Plan**: Ask the user what they want to change. Once they reply, invoke a **NEW** `planner` agent (do NOT resume the old one) using the payload from Phase 1, but explicitly pass `[plan_pointer]` and the user's feedback in the prompt so the new agent can iterate on it and overwrite or save to `[base_dir]/02-execution-plan-revised.md` (return the new pointer). Then return to CHECKPOINT 1.
 - If **Reject & Exit**: Acknowledge the rejection and exit the workflow.

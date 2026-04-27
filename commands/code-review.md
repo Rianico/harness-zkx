@@ -3,7 +3,6 @@ description: Code Review Command. Assesses code quality, security, and maintaina
 argument-hint: "<optional_focus_area> [topic_root=<path>|artifact_dir=<path>]"
 allowed-tools:
   - Agent
-  - AskUserQuestion
   - Bash
 ---
 
@@ -70,21 +69,18 @@ Agent tool (code-reviewer):
 **Transition Rules (Post-Execution):**
 1. Wait for Phase 1 to complete and extract the file pointer (`[review_pointer]`).
 2. If `$ARGUMENTS` includes `orchestrated_final_review=true` and Phase 1 is running in initial review mode, derive the transition from the returned routing block. If `route: no_findings`, output a final summary with `[review_pointer]` and terminate the workflow. If `route: auto_remediate` and `blocking=0`, `high=0`, `requires_user_approval=false`, and every finding is safe, local, non-destructive `medium`, `low`, or `minor`, skip CHECKPOINT 1 and proceed directly to Phase 2. Otherwise proceed to CHECKPOINT 1. If Phase 1 is running in post-remediation verification mode, do not auto-remediate again: terminate on `route: no_findings`; otherwise summarize the residual findings and ask the user whether to stop or approve one additional remediation pass. After one user-approved additional pass, stop with residual findings.
-3. **CHECKPOINT 1:** You MUST stop and use `AskUserQuestion` unless the orchestrated final review rule above explicitly skips this checkpoint. Use the strict schema:
-```json
-{
-  "questions": [{
-    "question": "Code review complete. Please review the report at [review_pointer]. How would you like to handle the findings?",
-    "header": "Review Resolution",
-    "multiSelect": false,
-    "options": [
-      { "label": "Approve & Continue", "description": "No blocking issues, proceed with the workflow." },
-      { "label": "Delegate Fixes", "description": "Automatically fix the identified issues." },
-      { "label": "Manual Fix", "description": "I will fix these manually." }
-    ]
-  }]
-}
-```
+3. **CHECKPOINT 1:** You MUST stop and present options to the user unless the orchestrated final review rule above explicitly skips this checkpoint. Wait for their response before continuing:
+
+---
+**Review Resolution**
+
+Code review complete. Please review the report at `[review_pointer]`.
+
+Options:
+1. **Approve & Continue** — No blocking issues, proceed with the workflow.
+2. **Delegate Fixes** — Automatically fix the identified issues.
+3. **Manual Fix** — I will fix these manually.
+---
 
 4. **Handle User Response:**
 - If **Approve & Continue**: Output a final summary with the `[review_pointer]` and terminate the workflow.

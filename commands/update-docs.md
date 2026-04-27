@@ -3,7 +3,6 @@ description: Interactive workflow to sync project docs or generate architecture 
 argument-hint: "[codemaps|project-docs|all] [topic_root=<path>|artifact_dir=<path>]"
 allowed-tools:
   - Agent
-  - AskUserQuestion
   - Bash
 ---
 
@@ -54,20 +53,17 @@ Agent tool (doc-updater):
 
 **Transition Rules (Post-Execution):**
 1. Wait for Phase 1 to complete and extract the file pointer (`[docs_pointer]`).
-2. **CHECKPOINT 1:** You MUST stop and use `AskUserQuestion`. Use the strict schema:
-```json
-{
-  "questions": [{
-    "question": "Documentation updates are ready. Please review the summary at [docs_pointer]. How would you like to proceed?",
-    "header": "Docs Review",
-    "multiSelect": false,
-    "options": [
-      { "label": "Approve", "description": "Proceed with the updates." },
-      { "label": "Request Changes", "description": "Provide feedback to adjust the documentation." }
-    ]
-  }]
-}
-```
+2. **CHECKPOINT 1:** You MUST stop and present options to the user. Wait for their response before continuing:
+
+---
+**Docs Review**
+
+Documentation updates are ready. Please review the summary at `[docs_pointer]`.
+
+Options:
+1. **Approve** — Proceed with the updates.
+2. **Request Changes** — Provide feedback to adjust the documentation.
+---
 
 3. **Handle User Response:**
 - If **Approve**: Output a final summary with the `[docs_pointer]` and terminate the workflow.

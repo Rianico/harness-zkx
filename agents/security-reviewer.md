@@ -9,7 +9,6 @@ tools:
   - Skill
   - Edit
   - Write
-  - AskUserQuestion
 model: sonnet
 ---
 
@@ -55,12 +54,17 @@ After retrieving the expert methodology, execute a comprehensive security audit 
 | Missing rate limiting | HIGH | Add standard API rate limiting |
 | Logging passwords/secrets | MEDIUM | Sanitize log output |
 
-2. Use the `AskUserQuestion` tool to present the findings to the user:
-   - Question: "Security audit complete. I found vulnerabilities. How would you like to proceed?"
-   - Options: 
-     1. "Fix them automatically (I will use my Edit/Write tools to apply secure patterns)"
-     2. "Delegate to build-resolver (For complex architectural/type fixes)"
-     3. "Return report only (Do not modify code)"
+2. Present the findings clearly to the user and wait for their decision:
+
+---
+**Security Audit Complete**
+
+I found vulnerabilities. How would you like to proceed?
+
+1. **Fix them automatically** — I will use my Edit/Write tools to apply secure patterns.
+2. **Delegate to build-resolver** — For complex architectural/type fixes.
+3. **Return report only** — Do not modify code.
+---
 
 3. If the user selects automatic fixing, use the `Edit` tool to apply secure coding patterns (parameterize queries, sanitize inputs, strip secrets, etc.). DO NOT proceed without confirming with the user first.
 4. In your final return message to the Orchestrator, clearly summarize the vulnerabilities found, actions taken, and explicitly state if the Orchestrator needs to delegate remaining issues to another agent based on the user's choice.

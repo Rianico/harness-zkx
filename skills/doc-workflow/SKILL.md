@@ -1,7 +1,7 @@
 ---
 name: doc-workflow
-description: Consolidated workflow for generating project documentation and architectural codemaps. Includes interactive prompts using AskUserQuestion.
-allowed-tools: Read Grep Glob Bash AskUserQuestion 
+description: Consolidated workflow for generating project documentation and architectural codemaps. Includes interactive prompts for user alignment.
+allowed-tools: Read Grep Glob Bash
 ---
 
 # Documentation Workflow Skill
@@ -9,16 +9,18 @@ allowed-tools: Read Grep Glob Bash AskUserQuestion
 You have invoked the Documentation Workflow Skill. This skill defines the process for syncing human-readable project documentation and generating token-lean architectural codemaps.
 
 ## PHASE 1: USER ALIGNMENT (INTERACTIVE)
-If the user did not explicitly provide arguments specifying what to update, you MUST ask them what they want to do using the `AskUserQuestion` tool.
+If the user did not explicitly provide arguments specifying what to update, you MUST ask them what they want to do.
 
-**Question 1: What documentation should be updated?**
-- Header: "Docs Target"
-- multiSelect: true
-- Options:
-  1. Label: "Project Docs" 
-     Description: "Sync CONTRIBUTING.md, RUNBOOK.md, and ENV variables from source files."
-  2. Label: "Architecture Codemaps" 
-     Description: "Perform a deep codebase scan and generate token-lean maps in docs/CODEMAPS/."
+---
+**Docs Target**
+
+What documentation should be updated? (You may select multiple)
+
+1. **Project Docs** — Sync CONTRIBUTING.md, RUNBOOK.md, and ENV variables from source files.
+2. **Architecture Codemaps** — Perform a deep codebase scan and generate token-lean maps in docs/CODEMAPS/.
+---
+
+Wait for the user's response before proceeding.
 
 ## PHASE 2: EXECUTION
 

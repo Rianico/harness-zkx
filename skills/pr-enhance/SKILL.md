@@ -47,11 +47,16 @@ graph LR
 ```
 
 ### 3. Ask for Approval
-Use the `AskUserQuestion` tool to present the drafted PR description to the user.
-- Question: "Here is the draft for your PR. Would you like me to open it on GitHub?"
-- Options:
-  1. "Yes, create the PR"
-  2. "No, I will modify it manually"
+Present the drafted PR description to the user and wait for their decision:
+
+---
+**PR Draft Ready**
+
+Here is the draft for your PR. Would you like me to open it on GitHub?
+
+1. **Yes, create the PR**
+2. **No, I will modify it manually**
+---
 
 ### 4. Create the PR (If Approved)
 If the user approves, save the description to a temporary file `.pr_body.md` and use the `Bash` tool to execute:

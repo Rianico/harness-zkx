@@ -7,7 +7,6 @@ tools:
   - Write
   - Grep
   - Glob
-  - AskUserQuestion
 model: sonnet
 ---
 
@@ -28,23 +27,29 @@ Identify recurring patterns across these categories:
 - **Testing:** (e.g., uses Vitest, places tests in `__tests__/`).
 
 ## PHASE 3: INTERACTIVE SELECTION
-You MUST NOT generate skills without user approval. Use the `AskUserQuestion` tool to present the detected patterns.
+You MUST NOT generate skills without user approval. Present the detected patterns clearly and wait for user selection.
 
-**Question 1 Schema:**
-- Header: "Select Patterns"
-- multiSelect: true
-- Question: "Which of these detected patterns should be formalized into skills?"
-- Options: [Dynamically generate up to 4 options based on your findings. Example:]
-  - Label: "Commit Conventions" (Description: "Enforce feat/fix/chore prefixes based on history.")
-  - Label: "Component Workflow" (Description: "Enforce creating tests alongside React components.")
+---
+**Select Patterns**
 
-**Question 2 Schema:**
-- Header: "Action"
-- multiSelect: false
-- Question: "How would you like to save these?"
-- Options:
-  - Label: "Generate rules/ markdown files" (Description: "Save them directly to the skills/ directory.")
-  - Label: "Print to console" (Description: "Show me the markdown first, don't save.")
+Which of these detected patterns should be formalized into skills? (You may select multiple)
+
+[Dynamically list up to 4 options based on your findings. Example:]
+1. **Commit Conventions** — Enforce feat/fix/chore prefixes based on history.
+2. **Component Workflow** — Enforce creating tests alongside React components.
+3. **[Pattern 3]** — [Description]
+4. **[Pattern 4]** — [Description]
+---
+
+After the user selects patterns, ask how they want to save them:
+
+---
+**Save Action**
+
+How would you like to save these?
+1. **Generate rules/ markdown files** — Save them directly to the skills/ directory.
+2. **Print to console** — Show me the markdown first, don't save.
+---
 
 ## PHASE 4: EXECUTION
-Based on the user's selection from the `AskUserQuestion` tool, generate the requested skills using the `Write` tool or print them to the console.
+Based on the user's selections, generate the requested skills using the `Write` tool or print them to the console.

@@ -3,7 +3,6 @@ description: Interactive architectural design and review. Produces traced archit
 argument-hint: "<task_description> [topic_root=<path>|artifact_dir=<path>]"
 allowed-tools:
   - Agent
-  - AskUserQuestion
   - Bash
 ---
 
@@ -98,21 +97,23 @@ Agent tool (architect):
 
 **Transition Rules (Post-Execution):**
 1. Wait for Phase 1 to complete and extract all pointers: `[adr_pointer]`, `[adr_link_pointer]`, `[blueprint_pointer]`, `[blueprint_link_pointer]`, `[technical_standards_pointer]`, and `[technical_standards_link_pointer]`. `[adr_pointer]` and `[adr_link_pointer]` may be `none` only when no ADR exists and no new ADR is warranted.
-2. **CHECKPOINT 1:** You MUST stop and use `AskUserQuestion`. Use the strict schema:
-```json
-{
-  "questions": [{
-    "question": "Architecture artifacts are ready. Please review the canonical ADR at [adr_pointer], blueprint at [blueprint_pointer], and technical standards at [technical_standards_pointer]. Workflow-local symlinks are available at [adr_link_pointer], [blueprint_link_pointer], and [technical_standards_link_pointer].",
-    "header": "Architecture Review",
-    "multiSelect": false,
-    "options": [
-      { "label": "Approve Design", "description": "Proceed with this architecture." },
-      { "label": "Modify Design", "description": "Provide feedback to adjust components, patterns, relationships, or trade-offs." },
-      { "label": "Reject & Exit", "description": "Discard the design and exit." }
-    ]
-  }]
-}
-```
+2. **CHECKPOINT 1:** You MUST stop and present options to the user. Wait for their response before continuing:
+
+---
+**Architecture Review**
+
+Architecture artifacts are ready. Please review:
+- Canonical ADR: `[adr_pointer]`
+- Blueprint: `[blueprint_pointer]`
+- Technical standards: `[technical_standards_pointer]`
+
+Workflow-local symlinks are available at `[adr_link_pointer]`, `[blueprint_link_pointer]`, and `[technical_standards_link_pointer]`.
+
+Options:
+1. **Approve Design** — Proceed with this architecture.
+2. **Modify Design** — Provide feedback to adjust components, patterns, relationships, or trade-offs.
+3. **Reject & Exit** — Discard the design and exit.
+---
 
 3. **Handle User Response:**
 - If **Approve Design**: Output a final summary with `[adr_pointer]`, `[blueprint_pointer]`, `[technical_standards_pointer]`, and their workflow-local symlinks, then terminate the workflow.
