@@ -11,13 +11,66 @@
 
 import re
 import shutil
+import time
 from abc import ABC, abstractmethod
+from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin
+from urllib.robotparser import RobotFileParser
 
 import html2text
 import requests
 from bs4 import BeautifulSoup, Tag
+
+
+# Default User-Agent pool for rotation
+DEFAULT_USER_AGENT_POOL: list[dict[str, str]] = [
+    {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+    },
+]
+
+# Retryable HTTP status codes
+RETRYABLE_STATUS_CODES: set[int] = {408, 429, 500, 502, 503, 504}
+
+# Maximum Retry-After delay in seconds
+MAX_RETRY_AFTER: float = 60.0
+
+# Default headers when no user-agent pool is provided
+_DEFAULT_HEADERS: dict[str, str] = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+}
 
 
 class DocumentationScraper(ABC):
@@ -40,22 +93,40 @@ class DocumentationScraper(ABC):
         output_dir: Path,
         force: bool = False,
         cache_base: Path | None = None,
+        *,
+        delay: float = 1.0,
+        max_retries: int = 3,
+        user_agent_pool: list[dict[str, str]] | None = None,
+        respect_robots_txt: bool = True,
+        timeout: float = 30.0,
     ):
         self.base_url = base_url
         self.output_dir = output_dir
         self.force = force
+        self.timeout = timeout
+        self.delay = delay
+        self.max_retries = max_retries
+        self.respect_robots_txt = respect_robots_txt
 
         # Unified cache directory: .cache/<scraper-name>/
         self.cache_base = cache_base or (output_dir.parent / ".cache")
         self.cache_dir = self.cache_base / self.name
 
+        # User-Agent rotation
+        self.user_agent_pool = user_agent_pool if user_agent_pool else []
+        self._ua_index = 0
+
+        # Rate limiting state
+        self._last_request_time: float = 0.0
+
+        # Robots.txt state
+        self._robots_parser: RobotFileParser | None = None
+        self._robots_fetched: bool = False
+        self._crawl_delay: float | None = None
+
         # HTTP session with headers
         self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-            }
-        )
+        self._set_default_headers()
 
         # html2text configuration
         self.h2t = html2text.HTML2Text()
@@ -66,6 +137,187 @@ class DocumentationScraper(ABC):
         self.h2t.skip_internal_links = False
         self.h2t.unicode_snob = True
         self.h2t.decode_errors = "ignore"
+
+    def _set_default_headers(self) -> None:
+        """Set default headers for the session."""
+        headers = self.user_agent_pool[0] if self.user_agent_pool else _DEFAULT_HEADERS
+        self.session.headers.update(headers)
+
+    def _get_next_user_agent(self) -> dict[str, str]:
+        """Get next User-Agent from rotation pool."""
+        if not self.user_agent_pool:
+            return _DEFAULT_HEADERS.copy()
+        headers = self.user_agent_pool[self._ua_index]
+        self._ua_index = (self._ua_index + 1) % len(self.user_agent_pool)
+        return headers
+
+    def _rotate_user_agent(self) -> None:
+        """Rotate to the next User-Agent in the pool."""
+        headers = self._get_next_user_agent()
+        self.session.headers.update(headers)
+
+    def _wait_for_rate_limit(self) -> None:
+        """Apply rate limiting delay between requests."""
+        if self.delay <= 0:
+            return
+
+        # Determine effective delay (considering crawl-delay from robots.txt)
+        effective_delay = self.delay
+        if self._crawl_delay is not None:
+            effective_delay = max(self.delay, self._crawl_delay)
+
+        elapsed = time.time() - self._last_request_time
+        if elapsed < effective_delay:
+            wait_time = effective_delay - elapsed
+            time.sleep(wait_time)
+
+    def _check_robots_txt(self, url: str) -> bool:
+        """Check if URL is allowed by robots.txt.
+
+        Returns True if allowed, raises PermissionError if disallowed.
+        """
+        if not self.respect_robots_txt:
+            return True
+
+        # Initialize robots.txt parser if not already done
+        if not self._robots_fetched:
+            self._fetch_robots_txt()
+
+        if self._robots_parser is None:
+            # No robots.txt available, allow by default (fail-open)
+            return True
+
+        # Check if URL is allowed
+        if not self._robots_parser.can_fetch(self.session.headers.get("User-Agent", "*"), url):
+            raise PermissionError(f"URL blocked by robots.txt: {url}")
+
+        return True
+
+    def _fetch_robots_txt(self) -> None:
+        """Fetch and parse robots.txt."""
+        self._robots_fetched = True
+
+        robots_url = urljoin(self.base_url, "/robots.txt")
+
+        try:
+            response = self.session.get(robots_url, timeout=self.timeout)
+            if response.status_code == 404:
+                # No robots.txt, allow all (fail-open)
+                return
+
+            response.raise_for_status()
+
+            # Parse robots.txt
+            self._robots_parser = RobotFileParser()
+            self._robots_parser.set_url(robots_url)
+            self._robots_parser.parse(response.text.splitlines())
+
+            # Extract crawl-delay if specified
+            # Note: RobotFileParser doesn't expose crawl-delay directly,
+            # so we parse it manually
+            for line in response.text.splitlines():
+                line = line.strip().lower()
+                if line.startswith("crawl-delay:"):
+                    try:
+                        delay_str = line.split(":", 1)[1].strip()
+                        self._crawl_delay = float(delay_str)
+                    except (ValueError, IndexError):
+                        pass
+                    break
+
+        except requests.exceptions.RequestException as e:
+            # Network error fetching robots.txt - allow all (fail-open)
+            print(f"Warning: Failed to fetch robots.txt: {e}")
+        except Exception as e:
+            # Any other error - allow all (fail-open)
+            print(f"Warning: Error parsing robots.txt: {e}")
+
+    def _is_retryable_error(self, status_code: int) -> bool:
+        """Check if HTTP status code should trigger retry."""
+        return status_code in RETRYABLE_STATUS_CODES
+
+    def _get_retry_delay(self, exception: Exception, attempt: int) -> float:
+        """Calculate delay before next retry.
+
+        Considers exponential backoff and Retry-After header.
+        """
+        # Check for Retry-After header
+        if isinstance(exception, requests.exceptions.HTTPError):
+            response = exception.response
+            if response is not None:
+                retry_after = response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        # Try parsing as integer seconds
+                        delay = float(retry_after)
+                        return min(delay, MAX_RETRY_AFTER)
+                    except ValueError:
+                        # Try parsing as HTTP date
+                        try:
+                            dt = parsedate_to_datetime(retry_after)
+                            delay = (dt.timestamp() - time.time())
+                            if delay > 0:
+                                return min(delay, MAX_RETRY_AFTER)
+                        except (ValueError, TypeError):
+                            pass
+
+        # Exponential backoff: 1s, 2s, 4s, ...
+        # attempt is 0-indexed, so first retry (attempt=0) gets 1s
+        base_delay = 1.0 * (2 ** attempt)
+        return min(base_delay, MAX_RETRY_AFTER)
+
+    def _rate_limited_get(self, url: str, **kwargs: Any) -> requests.Response | None:
+        """Make GET request with rate limiting and retry logic.
+
+        Returns Response object or None on non-retryable error.
+        """
+        # Apply rate limiting
+        self._wait_for_rate_limit()
+
+        # Check robots.txt
+        self._check_robots_txt(url)
+
+        # Rotate User-Agent
+        self._rotate_user_agent()
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.session.get(url, timeout=self.timeout, **kwargs)
+                response.raise_for_status()
+                self._last_request_time = time.time()
+                return response
+
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                if attempt < self.max_retries:
+                    delay = self._get_retry_delay(e, attempt)
+                    time.sleep(delay)
+                    continue
+                return None
+
+            except requests.exceptions.HTTPError as e:
+                response = e.response
+                if response is None:
+                    return None
+
+                status_code = response.status_code
+
+                # Non-retryable 4xx errors
+                if status_code in (400, 401, 403, 404):
+                    return None
+
+                # Retryable errors
+                if self._is_retryable_error(status_code) and attempt < self.max_retries:
+                    delay = self._get_retry_delay(e, attempt)
+                    time.sleep(delay)
+                    continue
+
+                return None
+
+            except Exception:
+                # Generic exception - don't retry
+                return None
+
+        return None
 
     def fetch_page(self, url: str, cache_file: str = "page.html") -> BeautifulSoup | None:
         """Fetch and parse a webpage with caching.
@@ -81,10 +333,11 @@ class DocumentationScraper(ABC):
 
         # Use cache if available and not forcing refresh
         if cache_path.exists() and not self.force:
-            print(f"⚡ Using cached response: {cache_path.relative_to(self.cache_base.parent)}")
+            print(f"Using cached response: {cache_path.relative_to(self.cache_base.parent)}")
             print(f"   (Use --force to re-fetch, or delete .cache/ directory)")
             try:
                 content = cache_path.read_text(encoding="utf-8")
+                self._last_request_time = time.time()
                 return BeautifulSoup(content, "html.parser")
             except Exception as e:
                 print(f"Warning: Failed to read cache: {e}")
@@ -92,14 +345,16 @@ class DocumentationScraper(ABC):
 
         # Force mode: clear cache
         if self.force and self.cache_dir.exists():
-            print(f"🗑️  Clearing cache: {self.cache_dir}")
+            print(f"Clearing cache: {self.cache_dir}")
             shutil.rmtree(self.cache_dir)
 
-        # Fetch from network
+        # Fetch from network with retry logic
         try:
             print(f"Fetching: {url}")
-            response = self.session.get(url, timeout=30)
-            response.raise_for_status()
+            response = self._rate_limited_get(url)
+
+            if response is None:
+                return None
 
             # Save to cache
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -107,6 +362,10 @@ class DocumentationScraper(ABC):
             print(f"   Cached to: {cache_path.relative_to(self.cache_base.parent)}")
 
             return BeautifulSoup(response.content, "html.parser")
+
+        except PermissionError:
+            # robots.txt blocked - re-raise to caller
+            raise
         except Exception as e:
             print(f"Error fetching {url}: {e}")
             return None

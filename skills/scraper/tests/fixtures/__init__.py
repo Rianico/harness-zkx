@@ -1,0 +1,51 @@
+"""Fixtures package for scraper tests."""
+
+from .mock_responses import (
+    MockResponse,
+    SUCCESS_RESPONSE,
+    NOT_FOUND_RESPONSE,
+    RATE_LIMIT_RESPONSE,
+    RATE_LIMIT_NO_HEADER,
+    SERVER_ERROR_RESPONSE,
+    SERVICE_UNAVAILABLE,
+    TIMEOUT_ERROR,
+    CONNECTION_ERROR,
+)
+from .robots_txt import (
+    ALLOW_ALL_ROBOTS,
+    BLOCK_ALL_ROBOTS,
+    CRAWL_DELAY_ROBOTS,
+    SPECIFIC_UA_ROBOTS,
+    NO_ROBOTS_FILE,
+)
+from .user_agents import USER_AGENT_POOL
+from .urls import (
+    TEST_BASE_URL,
+    TEST_PAGE_URL,
+    TEST_ROBOTS_URL,
+    ALLOWED_PATH,
+    BLOCKED_PATH,
+)
+
+__all__ = [
+    "MockResponse",
+    "SUCCESS_RESPONSE",
+    "NOT_FOUND_RESPONSE",
+    "RATE_LIMIT_RESPONSE",
+    "RATE_LIMIT_NO_HEADER",
+    "SERVER_ERROR_RESPONSE",
+    "SERVICE_UNAVAILABLE",
+    "TIMEOUT_ERROR",
+    "CONNECTION_ERROR",
+    "ALLOW_ALL_ROBOTS",
+    "BLOCK_ALL_ROBOTS",
+    "CRAWL_DELAY_ROBOTS",
+    "SPECIFIC_UA_ROBOTS",
+    "NO_ROBOTS_FILE",
+    "USER_AGENT_POOL",
+    "TEST_BASE_URL",
+    "TEST_PAGE_URL",
+    "TEST_ROBOTS_URL",
+    "ALLOWED_PATH",
+    "BLOCKED_PATH",
+]
