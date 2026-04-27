@@ -28,9 +28,6 @@ Position in a text document expressed as zero-based line and zero-based characte
 When describing positions the protocol needs to specify how offsets (specifically character offsets) should be interpreted. The corresponding `PositionEncodingKind` is negotiated between the client and the server during initialization.
 
 
-[](#positionEncodingKind)
-
-
     /**
      * A type indicating how positions are encoded,
      * specifically what column offsets mean.

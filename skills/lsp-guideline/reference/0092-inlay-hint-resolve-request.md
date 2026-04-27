@@ -1,7 +1,7 @@
-#### Inlay Hint Resolve Request ()
+#### Inlay Hint Resolve Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inlay-hint-resolve-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inlay-hint-resolve-request
 
 
 > _Since version 3.17.0_

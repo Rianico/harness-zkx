@@ -1,7 +1,7 @@
-#### Workspace Symbols Request ()
+#### Workspace Symbols Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace-symbols-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace-symbols-request
 
 
 The workspace symbol request is sent from the client to the server to list project-wide symbols matching the query string. Since 3.17.0 servers can also provide a handler for `workspaceSymbol/resolve` requests. This allows servers to return workspace symbols without a range for a `workspace/symbol` request. Clients then need to resolve the range when necessary using the `workspaceSymbol/resolve` request. Servers can only use this new model if clients advertise support for it via the `workspace.symbol.resolveSupport` capability.
@@ -76,9 +76,6 @@ _Server Capability_ :
   * property type: `boolean | WorkspaceSymbolOptions` where `WorkspaceSymbolOptions` is defined as follows:
 
 
-[](#workspaceSymbolOptions)
-
-
     export interface WorkspaceSymbolOptions extends WorkDoneProgressOptions {
     	/**
     	 * The server provides support to resolve additional
@@ -94,9 +91,6 @@ _Server Capability_ :
 _Registration Options_ : `WorkspaceSymbolRegistrationOptions` defined as follows:
 
 
-[](#workspaceSymbolRegistrationOptions)
-
-
     export interface WorkspaceSymbolRegistrationOptions
     	extends WorkspaceSymbolOptions {
     }
@@ -108,9 +102,6 @@ _Request_ :
 
   * method: ‘workspace/symbol’
   * params: `WorkspaceSymbolParams` defined as follows:
-
-
-[](#workspaceSymbolParams)
 
 
     /**
@@ -131,9 +122,6 @@ _Response_ :
 
 
   * result: `SymbolInformation[]` | `WorkspaceSymbol[]` | `null`. See above for the definition of `SymbolInformation`. It is recommended that you use the new `WorkspaceSymbol`. However whether the workspace symbol can return a location without a range depends on the client capability `workspace.symbol.resolveSupport`. `WorkspaceSymbol`which is defined as follows:
-
-
-[](#workspaceSymbol)
 
 
     /**

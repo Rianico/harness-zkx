@@ -1,7 +1,7 @@
-#### Signature Help Request ()
+#### Signature Help Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#signature-help-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#signature-help-request
 
 
 The signature help request is sent from the client to the server to request signature information at a given cursor position.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.signatureHelp`
   * property type: `SignatureHelpClientCapabilities` defined as follows:
-
-
-[](#signatureHelpClientCapabilities)
 
 
     export interface SignatureHelpClientCapabilities {
@@ -76,9 +73,6 @@ _Server Capability_ :
   * property type: `SignatureHelpOptions` defined as follows:
 
 
-[](#signatureHelpOptions)
-
-
     export interface SignatureHelpOptions extends WorkDoneProgressOptions {
     	/**
     	 * The characters that trigger signature help
@@ -103,9 +97,6 @@ _Server Capability_ :
 _Registration Options_ : `SignatureHelpRegistrationOptions` defined as follows:
 
 
-[](#signatureHelpRegistrationOptions)
-
-
     export interface SignatureHelpRegistrationOptions
     	extends TextDocumentRegistrationOptions, SignatureHelpOptions {
     }
@@ -117,9 +108,6 @@ _Request_ :
 
   * method: `textDocument/signatureHelp`
   * params: `SignatureHelpParams` defined as follows:
-
-
-[](#signatureHelpParams)
 
 
     export interface SignatureHelpParams extends TextDocumentPositionParams,
@@ -134,9 +122,6 @@ _Request_ :
     	context?: SignatureHelpContext;
     }
     
-
-
-[](#signatureHelpTriggerKind)
 
 
     /**
@@ -161,9 +146,6 @@ _Request_ :
     }
     export type SignatureHelpTriggerKind = 1 | 2 | 3;
     
-
-
-[](#signatureHelpContext)
 
 
     /**
@@ -212,9 +194,6 @@ _Response_ :
   * result: `SignatureHelp` | `null` defined as follows:
 
 
-[](#signatureHelp)
-
-
     /**
      * Signature help represents the signature of something
      * callable. There can be multiple signature but only one
@@ -254,9 +233,6 @@ _Response_ :
     
 
 
-[](#signatureInformation)
-
-
     /**
      * Represents the signature of something callable. A signature
      * can have a label, like a function-name, a doc-comment, and
@@ -290,9 +266,6 @@ _Response_ :
     	activeParameter?: uinteger;
     }
     
-
-
-[](#parameterInformation)
 
 
     /**

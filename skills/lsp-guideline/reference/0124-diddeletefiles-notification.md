@@ -1,7 +1,7 @@
-#### DidDeleteFiles Notification ()
+#### DidDeleteFiles Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#diddeletefiles-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#diddeletefiles-notification
 
 
 The did delete files notification is sent from the client to the server when files were deleted from within the client.

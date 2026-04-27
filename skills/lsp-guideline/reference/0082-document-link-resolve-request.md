@@ -1,7 +1,7 @@
-#### Document Link Resolve Request ()
+#### Document Link Resolve Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-link-resolve-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-link-resolve-request
 
 
 The document link resolve request is sent from the client to the server to resolve the target of a given document link.

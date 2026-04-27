@@ -1,7 +1,7 @@
-#### Code Lens Refresh Request ()
+#### Code Lens Refresh Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-lens-refresh-request-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-lens-refresh-request
 
 
 > _Since version 3.16.0_
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `workspace.codeLens`
   * property type: `CodeLensWorkspaceClientCapabilities` defined as follows:
-
-
-[](#codeLensWorkspaceClientCapabilities)
 
 
     export interface CodeLensWorkspaceClientCapabilities {

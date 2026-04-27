@@ -1,7 +1,7 @@
-#### WillRenameFiles Request ()
+#### WillRenameFiles Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willrenamefiles-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willrenamefiles-request
 
 
 The will rename files request is sent from the client to the server before files are actually renamed as long as the rename is triggered from within the client either by a user action or by applying a workspace edit. The request can return a WorkspaceEdit which will be applied to workspace before the files are renamed. Please note that clients might drop results if computing the edit took too long or if a server constantly fails on this request. This is done to keep renames fast and reliable.
@@ -37,9 +37,6 @@ _Registration Options_ : none
   * params: `RenameFilesParams` defined as follows:
 
 
-[](#renameFilesParams)
-
-
     /**
      * The parameters sent in notifications/requests for user-initiated renames
      * of files.
@@ -55,9 +52,6 @@ _Registration Options_ : none
     	files: FileRename[];
     }
     
-
-
-[](#fileRename)
 
 
     /**

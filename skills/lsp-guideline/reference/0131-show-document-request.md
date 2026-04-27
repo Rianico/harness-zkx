@@ -1,7 +1,7 @@
-#### Show Document Request ()
+#### Show Document Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#show-document-request-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#show-document-request
 
 
 > New in version 3.16.0
@@ -37,9 +37,6 @@ _Request_ :
 
   * method: ‘window/showDocument’
   * params: `ShowDocumentParams` defined as follows:
-
-
-[](#showDocumentParams)
 
 
     /**
@@ -83,9 +80,6 @@ _Response_ :
 
 
   * result: `ShowDocumentResult` defined as follows:
-
-
-[](#showDocumentResult)
 
 
     /**

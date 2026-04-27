@@ -1,7 +1,7 @@
-#### Cancellation Support ()
+#### Cancellation Support
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancellation-support-arrow_right-arrow_left
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancellation-support-arrow_right
 
 
 The base protocol offers support for request cancellation. To cancel a request, a notification message with the following properties is sent:

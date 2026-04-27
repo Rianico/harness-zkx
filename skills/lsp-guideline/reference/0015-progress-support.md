@@ -1,7 +1,7 @@
-#### Progress Support ()
+#### Progress Support
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#progress-support-arrow_right-arrow_left
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#progress-support-arrow_right
 
 
 > _Since version 3.15.0_

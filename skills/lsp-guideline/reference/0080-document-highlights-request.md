@@ -1,7 +1,7 @@
-#### Document Highlights Request ()
+#### Document Highlights Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-highlights-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-highlights-request
 
 
 The document highlight request is sent from the client to the server to resolve document highlights for a given text document position. For programming languages this usually highlights all references to the symbol scoped to this file. However, we kept ‘textDocument/documentHighlight’ and ‘textDocument/references’ separate requests since the first one is allowed to be more fuzzy. Symbol matches usually have a `DocumentHighlightKind` of `Read` or `Write` whereas fuzzy or textual matches use `Text` as the kind.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.documentHighlight`
   * property type: `DocumentHighlightClientCapabilities` defined as follows:
-
-
-[](#documentHighlightClientCapabilities)
 
 
     export interface DocumentHighlightClientCapabilities {
@@ -33,18 +30,12 @@ _Server Capability_ :
   * property type: `boolean | DocumentHighlightOptions` where `DocumentHighlightOptions` is defined as follows:
 
 
-[](#documentHighlightOptions)
-
-
     export interface DocumentHighlightOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `DocumentHighlightRegistrationOptions` defined as follows:
-
-
-[](#documentHighlightRegistrationOptions)
 
 
     export interface DocumentHighlightRegistrationOptions extends
@@ -60,9 +51,6 @@ _Request_ :
   * params: `DocumentHighlightParams` defined as follows:
 
 
-[](#documentHighlightParams)
-
-
     export interface DocumentHighlightParams extends TextDocumentPositionParams,
     	WorkDoneProgressParams, PartialResultParams {
     }
@@ -73,9 +61,6 @@ _Response_ :
 
 
   * result: `DocumentHighlight[]` | `null` defined as follows:
-
-
-[](#documentHighlight)
 
 
     /**
@@ -96,9 +81,6 @@ _Response_ :
     	kind?: DocumentHighlightKind;
     }
     
-
-
-[](#documentHighlightKind)
 
 
     /**

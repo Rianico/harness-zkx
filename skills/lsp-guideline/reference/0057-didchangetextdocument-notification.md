@@ -1,7 +1,7 @@
-#### DidChangeTextDocument Notification ()
+#### DidChangeTextDocument Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangetextdocument-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangetextdocument-notification
 
 
 The document change notification is sent from the client to the server to signal changes to a text document. Before a client can change a text document it must claim ownership of its content using the `textDocument/didOpen` notification. In 2.0 the shape of the params has changed to include proper version numbers.
@@ -29,9 +29,6 @@ _Server Capability_ : See general synchronization [server capabilities](#textDoc
 _Registration Options_ : `TextDocumentChangeRegistrationOptions` defined as follows:
 
 
-[](#textDocumentChangeRegistrationOptions)
-
-
     /**
      * Describe options to be used when registering for text document change events.
      */
@@ -51,9 +48,6 @@ _Notification_ :
 
   * method: `textDocument/didChange`  
   * params: `DidChangeTextDocumentParams` defined as follows:
-
-
-[](#didChangeTextDocumentParams)
 
 
     interface DidChangeTextDocumentParams {
@@ -82,9 +76,6 @@ _Notification_ :
     	contentChanges: TextDocumentContentChangeEvent[];
     }
     
-
-
-[](#textDocumentContentChangeEvent)
 
 
     /**

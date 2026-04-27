@@ -1,7 +1,7 @@
-#### Inline Value Request ()
+#### Inline Value Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inline-value-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inline-value-request
 
 
 > _Since version 3.17.0_
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.inlineValue`
   * property type: `InlineValueClientCapabilities` defined as follows:
-
-
-[](#inlineValueClientCapabilities)
 
 
     /**
@@ -42,9 +39,6 @@ _Server Capability_ :
   * property type: `InlineValueOptions` defined as follows:
 
 
-[](#inlineValueOptions)
-
-
     /**
      * Inline value options used during static registration.
      *
@@ -56,9 +50,6 @@ _Server Capability_ :
 
 
 _Registration Options_ : `InlineValueRegistrationOptions` defined as follows:
-
-
-[](#inlineValueRegistrationOptions)
 
 
     /**
@@ -77,9 +68,6 @@ _Request_ :
 
   * method: `textDocument/inlineValue`
   * params: `InlineValueParams` defined as follows:
-
-
-[](#inlineValueParams)
 
 
     /**
@@ -107,9 +95,6 @@ _Request_ :
     
 
 
-[](#inlineValueContext)
-
-
     /**
      * @since 3.17.0
      */
@@ -135,9 +120,6 @@ _Response_ :
   * result: `InlineValue[]` | `null` defined as follows:
 
 
-[](#inlineValueText)
-
-
     /**
      * Provide inline value as text.
      *
@@ -155,9 +137,6 @@ _Response_ :
     	text: string;
     }
     
-
-
-[](#inlineValueVariableLookup)
 
 
     /**
@@ -191,9 +170,6 @@ _Response_ :
     
 
 
-[](#inlineValueEvaluatableExpression)
-
-
     /**
      * Provide an inline value through an expression evaluation.
      *
@@ -218,9 +194,6 @@ _Response_ :
     	expression?: string;
     }
     
-
-
-[](#inlineValue)
 
 
     /**

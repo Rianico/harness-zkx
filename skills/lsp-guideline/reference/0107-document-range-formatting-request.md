@@ -1,7 +1,7 @@
-#### Document Range Formatting Request ()
+#### Document Range Formatting Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-range-formatting-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-range-formatting-request
 
 
 The document range formatting request is sent from the client to the server to format a given range in a document.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.rangeFormatting`
   * property type: `DocumentRangeFormattingClientCapabilities` defined as follows:
-
-
-[](#documentRangeFormattingClientCapabilities)
 
 
     export interface DocumentRangeFormattingClientCapabilities {
@@ -33,9 +30,6 @@ _Server Capability_ :
   * property type: `boolean | DocumentRangeFormattingOptions` where `DocumentRangeFormattingOptions` is defined as follows:
 
 
-[](#documentRangeFormattingOptions)
-
-
     export interface DocumentRangeFormattingOptions extends
     	WorkDoneProgressOptions {
     }
@@ -43,9 +37,6 @@ _Server Capability_ :
 
 
 _Registration Options_ : `DocumentFormattingRegistrationOptions` defined as follows:
-
-
-[](#documentRangeFormattingRegistrationOptions)
 
 
     export interface DocumentRangeFormattingRegistrationOptions extends
@@ -59,9 +50,6 @@ _Request_ :
 
   * method: `textDocument/rangeFormatting`,
   * params: `DocumentRangeFormattingParams` defined as follows:
-
-
-[](#documentRangeFormattingParams)
 
 
     interface DocumentRangeFormattingParams extends WorkDoneProgressParams {

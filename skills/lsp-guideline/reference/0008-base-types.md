@@ -7,9 +7,6 @@
 The protocol uses the following definitions for integers, unsigned integers, decimal numbers, objects and arrays:
 
 
-[](#integer)
-
-
     /**
      * Defines an integer number in the range of -2^31 to 2^31 - 1.
      */
@@ -17,17 +14,11 @@ The protocol uses the following definitions for integers, unsigned integers, dec
     
 
 
-[](#uinteger)
-
-
     /**
      * Defines an unsigned integer number in the range of 0 to 2^31 - 1.
      */
     export type uinteger = number;
     
-
-
-[](#decimal)
 
 
     /**
@@ -41,9 +32,6 @@ The protocol uses the following definitions for integers, unsigned integers, dec
     
 
 
-[](#lspAny)
-
-
     /**
      * The LSP any type
      *
@@ -54,9 +42,6 @@ The protocol uses the following definitions for integers, unsigned integers, dec
     
 
 
-[](#lspObject)
-
-
     /**
      * LSP object definition.
      *
@@ -64,9 +49,6 @@ The protocol uses the following definitions for integers, unsigned integers, dec
      */
     export type LSPObject = { [key: string]: LSPAny };
     
-
-
-[](#lspArray)
 
 
     /**

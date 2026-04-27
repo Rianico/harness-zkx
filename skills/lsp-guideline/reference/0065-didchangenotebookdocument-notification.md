@@ -1,7 +1,7 @@
-#### DidChangeNotebookDocument Notification ()
+#### DidChangeNotebookDocument Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangenotebookdocument-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangenotebookdocument-notification
 
 
 The change notification is sent from the client to the server when a notebook document changes. It is only sent by a client if the server requested the synchronization mode `notebook` in its `notebookDocumentSync` capability.
@@ -12,9 +12,6 @@ _Notification_ :
 
   * method: `notebookDocument/didChange`
   * params: `DidChangeNotebookDocumentParams` defined as follows:
-
-
-[](#didChangeNotebookDocumentParams)
 
 
     /**
@@ -48,9 +45,6 @@ _Notification_ :
     
 
 
-[](#versionedNotebookDocumentIdentifier)
-
-
     /**
      * A versioned notebook document identifier.
      *
@@ -69,9 +63,6 @@ _Notification_ :
     	uri: URI;
     }
     
-
-
-[](#notebookDocumentChangeEvent)
 
 
     /**
@@ -126,9 +117,6 @@ _Notification_ :
     	};
     }
     
-
-
-[](#notebookCellArrayChange)
 
 
     /**

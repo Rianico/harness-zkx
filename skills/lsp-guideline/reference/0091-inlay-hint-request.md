@@ -1,7 +1,7 @@
-#### Inlay Hint Request ()
+#### Inlay Hint Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inlay-hint-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inlay-hint-request
 
 
 > _Since version 3.17.0_
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.inlayHint`
   * property type: `InlayHintClientCapabilities` defined as follows:
-
-
-[](#inlayHintClientCapabilities)
 
 
     /**
@@ -54,9 +51,6 @@ _Server Capability_ :
   * property type: `InlayHintOptions` defined as follows:
 
 
-[](#inlayHintOptions)
-
-
     /**
      * Inlay hint options used during static registration.
      *
@@ -75,9 +69,6 @@ _Server Capability_ :
 _Registration Options_ : `InlayHintRegistrationOptions` defined as follows:
 
 
-[](#inlayHintRegistrationOptions)
-
-
     /**
      * Inlay hint options used during static or dynamic registration.
      *
@@ -94,9 +85,6 @@ _Request_ :
 
   * method: `textDocument/inlayHint`
   * params: `InlayHintParams` defined as follows:
-
-
-[](#inlayHintParams)
 
 
     /**
@@ -122,9 +110,6 @@ _Response_ :
 
 
   * result: `InlayHint[]` | `null` defined as follows:
-
-
-[](#inlayHint)
 
 
     /**
@@ -204,9 +189,6 @@ _Response_ :
     
 
 
-[](#inlayHintLabelPart)
-
-
     /**
      * An inlay hint label part allows for interactive and composite labels
      * of inlay hints.
@@ -251,9 +233,6 @@ _Response_ :
     	command?: Command;
     }
     
-
-
-[](#inlayHintKind)
 
 
     /**

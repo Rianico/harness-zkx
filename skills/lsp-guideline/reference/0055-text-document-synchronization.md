@@ -24,9 +24,6 @@ Controls whether text document synchronization supports dynamic registration.
   * property type: `TextDocumentSyncKind | TextDocumentSyncOptions`. The below definition of the `TextDocumentSyncOptions` only covers the properties specific to the open, change and close notifications. A complete definition covering all properties can be found [here](#textDocument_didClose):
 
 
-[](#textDocumentSyncKind)
-
-
     /**
      * Defines how the host (editor) should sync document changes to the language
      * server.
@@ -53,9 +50,6 @@ Controls whether text document synchronization supports dynamic registration.
     
     export type TextDocumentSyncKind = 0 | 1 | 2;
     
-
-
-[](#textDocumentSyncOptions)
 
 
     export interface TextDocumentSyncOptions {

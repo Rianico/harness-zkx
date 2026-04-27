@@ -27,9 +27,6 @@ A Response Message sent as a result of a request. If a request doesn’t provide
     
 
 
-[](#responseError)
-
-
     interface ResponseError {
     	/**
     	 * A number indicating the error type that occurred.
@@ -48,9 +45,6 @@ A Response Message sent as a result of a request. If a request doesn’t provide
     	data?: LSPAny;
     }
     
-
-
-[](#errorCodes)
 
 
     export namespace ErrorCodes {

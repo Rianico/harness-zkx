@@ -14,9 +14,6 @@ Notebooks are becoming more and more popular. Adding support for them to the lan
 The two concepts are defined as follows:
 
 
-[](#notebookDocument)
-
-
     /**
      * A notebook document.
      *
@@ -52,9 +49,6 @@ The two concepts are defined as follows:
     	cells: NotebookCell[];
     }
     
-
-
-[](#notebookCell)
 
 
     /**
@@ -93,9 +87,6 @@ The two concepts are defined as follows:
     
 
 
-[](#notebookCellKind)
-
-
     /**
      * A notebook cell kind.
      *
@@ -114,9 +105,6 @@ The two concepts are defined as follows:
     	export const Code: 2 = 2;
     }
     
-
-
-[](#executionSummary)
 
 
     export interface ExecutionSummary {
@@ -140,9 +128,6 @@ Next we describe how notebooks, notebook cells and the content of a notebook cel
 
 
 Syncing the text content of a cell is relatively easy since clients should model them as text documents. However since the URI of a notebook cell’s text document should be opaque, servers can not know its scheme nor its path. However what is know is the notebook document itself. We therefore introduce a special filter for notebook cell documents:
-
-
-[](#notebookCellTextDocumentFilter)
 
 
     /**
@@ -169,9 +154,6 @@ Syncing the text content of a cell is relatively easy since clients should model
     	language?: string;
     }
     
-
-
-[](#notebookDocumentFilter)
 
 
     /**
@@ -292,9 +274,6 @@ The following client capabilities are defined for notebook documents:
   * property type: `NotebookDocumentSyncClientCapabilities` defined as follows
 
 
-[](#notebookDocumentSyncClientCapabilities)
-
-
     /**
      * Notebook specific client capabilities.
      *
@@ -326,9 +305,6 @@ The following server capabilities are defined for notebook documents:
 
   * property name (optional): `notebookDocumentSync`
   * property type: `NotebookDocumentSyncOptions | NotebookDocumentSyncRegistrationOptions` where `NotebookDocumentOptions` is defined as follows:
-
-
-[](#notebookDocumentSyncOptions)
 
 
     /**
@@ -386,9 +362,6 @@ The following server capabilities are defined for notebook documents:
 
 
 _Registration Options_ : `notebookDocumentSyncRegistrationOptions` defined as follows:
-
-
-[](#notebookDocumentSyncRegistrationOptions)
 
 
     /**

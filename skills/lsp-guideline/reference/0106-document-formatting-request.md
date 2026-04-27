@@ -1,7 +1,7 @@
-#### Document Formatting Request  ()
+#### Document Formatting Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-formatting-request--leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-formatting-request
 
 
 The document formatting request is sent from the client to the server to format a whole document.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.formatting`
   * property type: `DocumentFormattingClientCapabilities` defined as follows:
-
-
-[](#documentFormattingClientCapabilities)
 
 
     export interface DocumentFormattingClientCapabilities {
@@ -33,18 +30,12 @@ _Server Capability_ :
   * property type: `boolean | DocumentFormattingOptions` where `DocumentFormattingOptions` is defined as follows:
 
 
-[](#documentFormattingOptions)
-
-
     export interface DocumentFormattingOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `DocumentFormattingRegistrationOptions` defined as follows:
-
-
-[](#documentFormattingRegistrationOptions)
 
 
     export interface DocumentFormattingRegistrationOptions extends
@@ -60,9 +51,6 @@ _Request_ :
   * params: `DocumentFormattingParams` defined as follows
 
 
-[](#documentFormattingParams)
-
-
     interface DocumentFormattingParams extends WorkDoneProgressParams {
     	/**
     	 * The document to format.
@@ -75,9 +63,6 @@ _Request_ :
     	options: FormattingOptions;
     }
     
-
-
-[](#formattingOptions)
 
 
     /**

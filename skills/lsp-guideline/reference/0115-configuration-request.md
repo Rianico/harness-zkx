@@ -1,7 +1,7 @@
-#### Configuration Request ()
+#### Configuration Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#configuration-request-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#configuration-request
 
 
 > _Since version 3.6.0_
@@ -34,16 +34,10 @@ _Request_ :
   * params: `ConfigurationParams` defined as follows
 
 
-[](#configurationParams)
-
-
     export interface ConfigurationParams {
     	items: ConfigurationItem[];
     }
     
-
-
-[](#configurationItem)
 
 
     export interface ConfigurationItem {

@@ -1,7 +1,7 @@
-#### ShowMessage Request ()
+#### ShowMessage Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#showmessage-request-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#showmessage-request
 
 
 The show message request is sent from a server to a client to ask the client to display a particular message in the user interface. In addition to the show message notification the request allows to pass actions and to wait for an answer from the client.
@@ -40,9 +40,6 @@ _Request_ :
   * params: `ShowMessageRequestParams` defined as follows:
 
 
-[](#showMessageRequestParams)
-
-
     interface ShowMessageRequestParams {
     	/**
     	 * The message type. See {@link MessageType}
@@ -63,9 +60,6 @@ _Request_ :
 
 
 Where the `MessageActionItem` is defined as follows:
-
-
-[](#messageActionItem)
 
 
     interface MessageActionItem {

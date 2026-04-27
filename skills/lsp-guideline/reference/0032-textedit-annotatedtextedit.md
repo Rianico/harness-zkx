@@ -29,9 +29,6 @@ A textual edit applicable to a text document.
 Since 3.16.0 there is also the concept of an annotated text edit which supports to add an annotation to a text edit. The annotation can add information describing the change to the text edit.
 
 
-[](#changeAnnotation)
-
-
     /**
      * Additional information that describes document changes.
      *
@@ -62,9 +59,6 @@ Since 3.16.0 there is also the concept of an annotated text edit which supports 
 Usually clients provide options to group the changes along the annotations they are associated with. To support this in the protocol an edit or resource operation refers to a change annotation using an identifier and not the change annotation literal directly. This allows servers to use the identical annotation across multiple edits or resource operations which then allows clients to group the operations under that change annotation. The actual change annotations together with their identifiers are managed by the workspace edit via the new property `changeAnnotations`.
 
 
-[](#changeAnnotationIdentifier)
-
-
     /**
      * An identifier referring to a change annotation managed by a workspace
      * edit.
@@ -73,9 +67,6 @@ Usually clients provide options to group the changes along the annotations they 
      */
     export type ChangeAnnotationIdentifier = string;
     
-
-
-[](#annotatedTextEdit)
 
 
     /**

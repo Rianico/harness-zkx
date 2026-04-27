@@ -1,7 +1,7 @@
-#### Document Symbols Request ()
+#### Document Symbols Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-symbols-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-symbols-request
 
 
 The document symbol request is sent from the client to the server. The returned result is either
@@ -19,9 +19,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.documentSymbol`
   * property type: `DocumentSymbolClientCapabilities` defined as follows:
-
-
-[](#documentSymbolClientCapabilities)
 
 
     export interface DocumentSymbolClientCapabilities {
@@ -85,9 +82,6 @@ _Server Capability_ :
   * property type: `boolean | DocumentSymbolOptions` where `DocumentSymbolOptions` is defined as follows:
 
 
-[](#documentSymbolOptions)
-
-
     export interface DocumentSymbolOptions extends WorkDoneProgressOptions {
     	/**
     	 * A human-readable string that is shown when multiple outlines trees
@@ -103,9 +97,6 @@ _Server Capability_ :
 _Registration Options_ : `DocumentSymbolRegistrationOptions` defined as follows:
 
 
-[](#documentSymbolRegistrationOptions)
-
-
     export interface DocumentSymbolRegistrationOptions extends
     	TextDocumentRegistrationOptions, DocumentSymbolOptions {
     }
@@ -117,9 +108,6 @@ _Request_ :
 
   * method: `textDocument/documentSymbol`
   * params: `DocumentSymbolParams` defined as follows:
-
-
-[](#documentSymbolParams)
 
 
     export interface DocumentSymbolParams extends WorkDoneProgressParams,
@@ -136,9 +124,6 @@ _Response_ :
 
 
   * result: `DocumentSymbol[]` | `SymbolInformation[]` | `null` defined as follows:
-
-
-[](#symbolKind)
 
 
     /**
@@ -177,9 +162,6 @@ _Response_ :
     
 
 
-[](#symbolTag)
-
-
     /**
      * Symbol tags are extra annotations that tweak the rendering of a symbol.
      *
@@ -195,9 +177,6 @@ _Response_ :
     
     export type SymbolTag = 1;
     
-
-
-[](#documentSymbol)
 
 
     /**
@@ -259,9 +238,6 @@ _Response_ :
     	children?: DocumentSymbol[];
     }
     
-
-
-[](#symbolInformation)
 
 
     /**

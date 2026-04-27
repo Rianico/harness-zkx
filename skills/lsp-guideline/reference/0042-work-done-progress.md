@@ -153,9 +153,6 @@ Consider a client sending a `textDocument/reference` request to a server and the
 The corresponding type definition for the parameter property looks like this:
 
 
-[](#workDoneProgressParams)
-
-
     export interface WorkDoneProgressParams {
     	/**
     	 * An optional token that a server can use to report work done progress.
@@ -199,9 +196,6 @@ To avoid that clients set up a progress monitor user interface before sending a 
 
 
 The corresponding type definition for the server capability looks like this:
-
-
-[](#workDoneProgressOptions)
 
 
     export interface WorkDoneProgressOptions {

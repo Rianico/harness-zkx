@@ -1,7 +1,7 @@
-#### PublishDiagnostics Notification ()
+#### PublishDiagnostics Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#publishdiagnostics-notification-arrow_left
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#publishdiagnostics-notification
 
 
 Diagnostics notifications are sent from the server to the client to signal results of validation runs.
@@ -25,9 +25,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.publishDiagnostics`
   * property type: `PublishDiagnosticsClientCapabilities` defined as follows:
-
-
-[](#publishDiagnosticsClientCapabilities)
 
 
     export interface PublishDiagnosticsClientCapabilities {
@@ -81,9 +78,6 @@ _Notification_ :
 
   * method: `textDocument/publishDiagnostics`
   * params: `PublishDiagnosticsParams` defined as follows:
-
-
-[](#publishDiagnosticsParams)
 
 
     interface PublishDiagnosticsParams {

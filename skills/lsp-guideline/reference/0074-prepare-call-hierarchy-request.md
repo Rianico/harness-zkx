@@ -1,7 +1,7 @@
-#### Prepare Call Hierarchy Request ()
+#### Prepare Call Hierarchy Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#prepare-call-hierarchy-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#prepare-call-hierarchy-request
 
 
 > _Since version 3.16.0_
@@ -19,9 +19,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.callHierarchy`
   * property type: `CallHierarchyClientCapabilities` defined as follows:
-
-
-[](#callHierarchyClientCapabilities)
 
 
     interface CallHierarchyClientCapabilities {
@@ -43,18 +40,12 @@ _Server Capability_ :
   * property type: `boolean | CallHierarchyOptions | CallHierarchyRegistrationOptions` where `CallHierarchyOptions` is defined as follows:
 
 
-[](#callHierarchyOptions)
-
-
     export interface CallHierarchyOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `CallHierarchyRegistrationOptions` defined as follows:
-
-
-[](#callHierarchyRegistrationOptions)
 
 
     export interface CallHierarchyRegistrationOptions extends
@@ -71,9 +62,6 @@ _Request_ :
   * params: `CallHierarchyPrepareParams` defined as follows:
 
 
-[](#callHierarchyPrepareParams)
-
-
     export interface CallHierarchyPrepareParams extends TextDocumentPositionParams,
     	WorkDoneProgressParams {
     }
@@ -84,9 +72,6 @@ _Response_ :
 
 
   * result: `CallHierarchyItem[] | null` defined as follows:
-
-
-[](#callHierarchyItem)
 
 
     export interface CallHierarchyItem {

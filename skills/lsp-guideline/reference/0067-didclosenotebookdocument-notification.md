@@ -1,7 +1,7 @@
-#### DidCloseNotebookDocument Notification ()
+#### DidCloseNotebookDocument Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didclosenotebookdocument-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didclosenotebookdocument-notification
 
 
 The close notification is sent from the client to the server when a notebook document is closed. It is only sent by a client if the server requested the synchronization mode `notebook` in its `notebookDocumentSync` capability.
@@ -10,14 +10,8 @@ The close notification is sent from the client to the server when a notebook doc
 _Notification_ :
 
 
-[](#notebookDocument_didClose)
-
-
   * method: `notebookDocument/didClose`
   * params: `DidCloseNotebookDocumentParams` defined as follows:
-
-
-[](#didCloseNotebookDocumentParams)
 
 
     /**
@@ -39,9 +33,6 @@ _Notification_ :
     	cellTextDocuments: TextDocumentIdentifier[];
     }
     
-
-
-[](#notebookDocumentIdentifier)
 
 
     /**

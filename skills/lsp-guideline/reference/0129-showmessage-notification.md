@@ -1,7 +1,7 @@
-#### ShowMessage Notification ()
+#### ShowMessage Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#showmessage-notification-arrow_left
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#showmessage-notification
 
 
 The show message notification is sent from a server to a client to ask the client to display a particular message in the user interface.
@@ -29,9 +29,6 @@ _Notification_ :
 
 
 Where the type is defined as follows:
-
-
-[](#messageType)
 
 
     export namespace MessageType {

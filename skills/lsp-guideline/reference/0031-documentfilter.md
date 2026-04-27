@@ -49,7 +49,4 @@ Please note that for a document filter to be valid at least one of the propertie
 A document selector is the combination of one or more document filters.
 
 
-[](#documentSelector)
-
-
     export type DocumentSelector = DocumentFilter[];

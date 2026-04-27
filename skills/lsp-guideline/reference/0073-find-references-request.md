@@ -1,7 +1,7 @@
-#### Find References Request ()
+#### Find References Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#find-references-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#find-references-request
 
 
 The references request is sent from the client to the server to resolve project-wide references for the symbol denoted by the given text document position.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.references`
   * property type: `ReferenceClientCapabilities` defined as follows:
-
-
-[](#referenceClientCapabilities)
 
 
     export interface ReferenceClientCapabilities {
@@ -33,18 +30,12 @@ _Server Capability_ :
   * property type: `boolean | ReferenceOptions` where `ReferenceOptions` is defined as follows:
 
 
-[](#referenceOptions)
-
-
     export interface ReferenceOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `ReferenceRegistrationOptions` defined as follows:
-
-
-[](#referenceRegistrationOptions)
 
 
     export interface ReferenceRegistrationOptions extends
@@ -60,17 +51,11 @@ _Request_ :
   * params: `ReferenceParams` defined as follows:
 
 
-[](#referenceParams)
-
-
     export interface ReferenceParams extends TextDocumentPositionParams,
     	WorkDoneProgressParams, PartialResultParams {
     	context: ReferenceContext;
     }
     
-
-
-[](#referenceContext)
 
 
     export interface ReferenceContext {

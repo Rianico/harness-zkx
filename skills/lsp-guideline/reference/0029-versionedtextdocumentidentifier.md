@@ -22,9 +22,6 @@ An identifier to denote a specific version of a text document. This information 
 An identifier which optionally denotes a specific version of a text document. This information usually flows from the server to the client.
 
 
-[](#optionalVersionedTextDocumentIdentifier)
-
-
     interface OptionalVersionedTextDocumentIdentifier extends TextDocumentIdentifier {
     	/**
     	 * The version number of this document. If an optional versioned text document

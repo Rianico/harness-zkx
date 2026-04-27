@@ -1,4 +1,4 @@
-#### Type Hierarchy Subtypes()
+#### Type Hierarchy Subtypes
 
 
 **Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#type-hierarchy-subtypesleftwards_arrow_with_hook
@@ -15,9 +15,6 @@ _Request_ :
 
   * method: ‘typeHierarchy/subtypes’
   * params: `TypeHierarchySubtypesParams` defined as follows:
-
-
-[](#typeHierarchySubtypesParams)
 
 
     export interface TypeHierarchySubtypesParams extends

@@ -17,9 +17,6 @@ _Client Capability_ :
   * property type: `DiagnosticClientCapabilities` defined as follows:
 
 
-[](#diagnosticClientCapabilities)
-
-
     /**
      * Client capabilities specific to diagnostic pull requests.
      *
@@ -73,9 +70,6 @@ _Server Capability_ :
   * property type: `DiagnosticOptions` defined as follows:
 
 
-[](#diagnosticOptions)
-
-
     /**
      * Diagnostic options.
      *
@@ -107,9 +101,6 @@ _Server Capability_ :
 _Registration Options_ : `DiagnosticRegistrationOptions` options defined as follows:
 
 
-[](#diagnosticRegistrationOptions)
-
-
     /**
      * Diagnostic registration options.
      *
@@ -122,7 +113,7 @@ _Registration Options_ : `DiagnosticRegistrationOptions` options defined as foll
     
 
 
-##### [Document Diagnostics(![:leftwards_arrow_with_hook:](https://github.githubassets.com/images/icons/emoji/unicode/21a9.png))](#textDocument_diagnostic)
+##### [Document Diagnostics()](#textDocument_diagnostic)
 
 
 The text document diagnostic request is sent from the client to the server to ask the server to compute the diagnostics for a given document. As with other pull requests the server is asked to compute the diagnostics for the currently synced version of the document.
@@ -133,9 +124,6 @@ _Request_ :
 
   * method: `textDocument/diagnostic`.
   * params: `DocumentDiagnosticParams` defined as follows:
-
-
-[](#documentDiagnosticParams)
 
 
     /**
@@ -169,9 +157,6 @@ _Response_ :
   * result: `DocumentDiagnosticReport` defined as follows:
 
 
-[](#documentDiagnosticReport)
-
-
     /**
      * The result of a document diagnostic pull request. A report can
      * either be a full report containing all diagnostics for the
@@ -184,9 +169,6 @@ _Response_ :
     export type DocumentDiagnosticReport = RelatedFullDocumentDiagnosticReport
     	| RelatedUnchangedDocumentDiagnosticReport;
     
-
-
-[](#documentDiagnosticReportKind)
 
 
     /**
@@ -210,9 +192,6 @@ _Response_ :
     
     export type DocumentDiagnosticReportKind = 'full' | 'unchanged';
     
-
-
-[](#fullDocumentDiagnosticReport)
 
 
     /**
@@ -241,9 +220,6 @@ _Response_ :
     
 
 
-[](#unchangedDocumentDiagnosticReport)
-
-
     /**
      * A diagnostic report indicating that the last returned
      * report is still accurate.
@@ -268,9 +244,6 @@ _Response_ :
     
 
 
-[](#relatedFullDocumentDiagnosticReport)
-
-
     /**
      * A full diagnostic report with a set of related documents.
      *
@@ -293,9 +266,6 @@ _Response_ :
     	};
     }
     
-
-
-[](#relatedUnchangedDocumentDiagnosticReport)
 
 
     /**
@@ -325,9 +295,6 @@ _Response_ :
   * partial result: The first literal send need to be a `DocumentDiagnosticReport` followed by n `DocumentDiagnosticReportPartialResult` literals defined as follows:
 
 
-[](#documentDiagnosticReportPartialResult)
-
-
     /**
      * A partial result for a document diagnostic report.
      *
@@ -345,9 +312,6 @@ _Response_ :
   * error: code and message set in case an exception happens during the diagnostic request. A server is also allowed to return an error with code `ServerCancelled` indicating that the server can’t compute the result right now. A server can return a `DiagnosticServerCancellationData` data to indicate whether the client should re-trigger the request. If no data is provided it defaults to `{ retriggerRequest: true }`:
 
 
-[](#diagnosticServerCancellationData)
-
-
     /**
      * Cancellation data returned from a diagnostic request.
      *
@@ -359,7 +323,7 @@ _Response_ :
     
 
 
-##### [Workspace Diagnostics(![:leftwards_arrow_with_hook:](https://github.githubassets.com/images/icons/emoji/unicode/21a9.png))](#workspace_diagnostic)
+##### [Workspace Diagnostics()](#workspace_diagnostic)
 
 
 The workspace diagnostic request is sent from the client to the server to ask the server to compute workspace wide diagnostics which previously were pushed from the server to the client. In contrast to the document diagnostic request the workspace request can be long running and is not bound to a specific workspace or document state. If the client supports streaming for the workspace diagnostic pull it is legal to provide a document diagnostic report multiple times for the same document URI. The last one reported will win over previous reports.
@@ -377,9 +341,6 @@ _Request_ :
 
   * method: `workspace/diagnostic`.
   * params: `WorkspaceDiagnosticParams` defined as follows:
-
-
-[](#workspaceDiagnosticParams)
 
 
     /**
@@ -401,9 +362,6 @@ _Request_ :
     	previousResultIds: PreviousResultId[];
     }
     
-
-
-[](#previousResultId)
 
 
     /**
@@ -432,9 +390,6 @@ _Response_ :
   * result: `WorkspaceDiagnosticReport` defined as follows:
 
 
-[](#workspaceDiagnosticReport)
-
-
     /**
      * A workspace diagnostic report.
      *
@@ -444,9 +399,6 @@ _Response_ :
     	items: WorkspaceDocumentDiagnosticReport[];
     }
     
-
-
-[](#workspaceFullDocumentDiagnosticReport)
 
 
     /**
@@ -471,9 +423,6 @@ _Response_ :
     
 
 
-[](#workspaceUnchangedDocumentDiagnosticReport)
-
-
     /**
      * An unchanged document diagnostic report for a workspace diagnostic result.
      *
@@ -496,9 +445,6 @@ _Response_ :
     
 
 
-[](#workspaceDocumentDiagnosticReport)
-
-
     /**
      * A workspace diagnostic document report.
      *
@@ -511,9 +457,6 @@ _Response_ :
 
 
   * partial result: The first literal send need to be a `WorkspaceDiagnosticReport` followed by n `WorkspaceDiagnosticReportPartialResult` literals defined as follows:
-
-
-[](#workspaceDiagnosticReportPartialResult)
 
 
     /**
@@ -530,7 +473,7 @@ _Response_ :
   * error: code and message set in case an exception happens during the diagnostic request. A server is also allowed to return and error with code `ServerCancelled` indicating that the server can’t compute the result right now. A server can return a `DiagnosticServerCancellationData` data to indicate whether the client should re-trigger the request. If no data is provided it defaults to `{ retriggerRequest: true }`:
 
 
-##### [Diagnostics Refresh(![:arrow_right_hook:](https://github.githubassets.com/images/icons/emoji/unicode/21aa.png))](#diagnostic_refresh)
+##### [Diagnostics Refresh()](#diagnostic_refresh)
 
 
 The `workspace/diagnostic/refresh` request is sent from the server to the client. Servers can use it to ask clients to refresh all needed document and workspace diagnostics. This is useful if a server detects a project wide configuration change which requires a re-calculation of all diagnostics.
@@ -541,9 +484,6 @@ _Client Capability_ :
 
   * property name (optional): `workspace.diagnostics`
   * property type: `DiagnosticWorkspaceClientCapabilities` defined as follows:
-
-
-[](#diagnosticWorkspaceClientCapabilities)
 
 
     /**

@@ -1,7 +1,7 @@
-#### Prepare Rename Request ()
+#### Prepare Rename Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#prepare-rename-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#prepare-rename-request
 
 
 > _Since version 3.12.0_
@@ -15,9 +15,6 @@ _Request_ :
 
   * method: `textDocument/prepareRename`
   * params: `PrepareRenameParams` defined as follows:
-
-
-[](#prepareRenameParams)
 
 
     export interface PrepareRenameParams extends TextDocumentPositionParams, WorkDoneProgressParams {

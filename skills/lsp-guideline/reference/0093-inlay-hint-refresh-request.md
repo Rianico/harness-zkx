@@ -1,7 +1,7 @@
-#### Inlay Hint Refresh Request  ()
+#### Inlay Hint Refresh Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inlay-hint-refresh-request--arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inlay-hint-refresh-request
 
 
 > _Since version 3.17.0_
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `workspace.inlayHint`
   * property type: `InlayHintWorkspaceClientCapabilities` defined as follows:
-
-
-[](#inlayHintWorkspaceClientCapabilities)
 
 
     /**

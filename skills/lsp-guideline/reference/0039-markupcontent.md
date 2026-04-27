@@ -29,9 +29,6 @@ A `MarkupContent` literal represents a string value which content can be represe
     
 
 
-[](#markupContentDefinition)
-
-
     /**
      * A `MarkupContent` literal represents a string value which content is
      * interpreted base on its kind flag. Currently the protocol supports
@@ -73,9 +70,6 @@ A `MarkupContent` literal represents a string value which content can be represe
 
 
 In addition clients should signal the markdown parser they are using via the client capability `general.markdown` introduced in version 3.16.0 defined as follows:
-
-
-[](#markdownClientCapabilities)
 
 
     /**

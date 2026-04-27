@@ -1,7 +1,7 @@
-#### Goto Type Definition Request ()
+#### Goto Type Definition Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-type-definition-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-type-definition-request
 
 
 > _Since version 3.6.0_
@@ -18,9 +18,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.typeDefinition`
   * property type: `TypeDefinitionClientCapabilities` defined as follows:
-
-
-[](#typeDefinitionClientCapabilities)
 
 
     export interface TypeDefinitionClientCapabilities {
@@ -48,18 +45,12 @@ _Server Capability_ :
   * property type: `boolean | TypeDefinitionOptions | TypeDefinitionRegistrationOptions` where `TypeDefinitionOptions` is defined as follows:
 
 
-[](#typeDefinitionOptions)
-
-
     export interface TypeDefinitionOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `TypeDefinitionRegistrationOptions` defined as follows:
-
-
-[](#typeDefinitionRegistrationOptions)
 
 
     export interface TypeDefinitionRegistrationOptions extends
@@ -74,9 +65,6 @@ _Request_ :
 
   * method: `textDocument/typeDefinition`
   * params: `TypeDefinitionParams` defined as follows:
-
-
-[](#typeDefinitionParams)
 
 
     export interface TypeDefinitionParams extends TextDocumentPositionParams,

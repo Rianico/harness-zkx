@@ -1,4 +1,4 @@
-#### Linked Editing Range()
+#### Linked Editing Range
 
 
 **Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#linked-editing-rangeleftwards_arrow_with_hook
@@ -15,9 +15,6 @@ _Client Capabilities_ :
 
   * property name (optional): `textDocument.linkedEditingRange`
   * property type: `LinkedEditingRangeClientCapabilities` defined as follows:
-
-
-[](#linkedEditingRangeClientCapabilities)
 
 
     export interface LinkedEditingRangeClientCapabilities {
@@ -39,18 +36,12 @@ _Server Capability_ :
   * property type: `boolean` | `LinkedEditingRangeOptions` | `LinkedEditingRangeRegistrationOptions` defined as follows:
 
 
-[](#linkedEditingRangeOptions)
-
-
     export interface LinkedEditingRangeOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `LinkedEditingRangeRegistrationOptions` defined as follows:
-
-
-[](#linkedEditingRangeRegistrationOptions)
 
 
     export interface LinkedEditingRangeRegistrationOptions extends
@@ -67,9 +58,6 @@ _Request_ :
   * params: `LinkedEditingRangeParams` defined as follows:
 
 
-[](#linkedEditingRangeParams)
-
-
     export interface LinkedEditingRangeParams extends TextDocumentPositionParams,
     	WorkDoneProgressParams {
     }
@@ -80,9 +68,6 @@ _Response_ :
 
 
   * result: `LinkedEditingRanges` | `null` defined as follows:
-
-
-[](#linkedEditingRanges)
 
 
     export interface LinkedEditingRanges {

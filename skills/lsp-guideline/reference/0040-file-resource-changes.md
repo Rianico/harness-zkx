@@ -10,9 +10,6 @@
 File resource changes allow servers to create, rename and delete files and folders via the client. Note that the names talk about files but the operations are supposed to work on files and folders. This is in line with other naming in the Language Server Protocol (see file watchers which can watch files and folders). The corresponding change literals look as follows:
 
 
-[](#createFileOptions)
-
-
     /**
      * Options to create a file.
      */
@@ -28,9 +25,6 @@ File resource changes allow servers to create, rename and delete files and folde
     	ignoreIfExists?: boolean;
     }
     
-
-
-[](#createFile)
 
 
     /**
@@ -62,9 +56,6 @@ File resource changes allow servers to create, rename and delete files and folde
     
 
 
-[](#renameFileOptions)
-
-
     /**
      * Rename file options
      */
@@ -80,9 +71,6 @@ File resource changes allow servers to create, rename and delete files and folde
     	ignoreIfExists?: boolean;
     }
     
-
-
-[](#renameFile)
 
 
     /**
@@ -119,9 +107,6 @@ File resource changes allow servers to create, rename and delete files and folde
     
 
 
-[](#deleteFileOptions)
-
-
     /**
      * Delete file options
      */
@@ -137,9 +122,6 @@ File resource changes allow servers to create, rename and delete files and folde
     	ignoreIfNotExists?: boolean;
     }
     
-
-
-[](#deleteFile)
 
 
     /**

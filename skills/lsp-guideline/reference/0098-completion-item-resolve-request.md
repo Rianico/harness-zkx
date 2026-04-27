@@ -1,7 +1,7 @@
-#### Completion Item Resolve Request ()
+#### Completion Item Resolve Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completion-item-resolve-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completion-item-resolve-request
 
 
 The request is sent from the client to the server to resolve additional information for a given completion item.

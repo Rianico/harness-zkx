@@ -1,7 +1,7 @@
-#### Folding Range Request ()
+#### Folding Range Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#folding-range-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#folding-range-request
 
 
 > _Since version 3.10.0_
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.foldingRange`
   * property type: `FoldingRangeClientCapabilities` defined as follows:
-
-
-[](#foldingRangeClientCapabilities)
 
 
     export interface FoldingRangeClientCapabilities {
@@ -82,18 +79,12 @@ _Server Capability_ :
   * property type: `boolean | FoldingRangeOptions | FoldingRangeRegistrationOptions` where `FoldingRangeOptions` is defined as follows:
 
 
-[](#foldingRangeOptions)
-
-
     export interface FoldingRangeOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `FoldingRangeRegistrationOptions` defined as follows:
-
-
-[](#foldingRangeRegistrationOptions)
 
 
     export interface FoldingRangeRegistrationOptions extends
@@ -110,9 +101,6 @@ _Request_ :
   * params: `FoldingRangeParams` defined as follows
 
 
-[](#foldingRangeParams)
-
-
     export interface FoldingRangeParams extends WorkDoneProgressParams,
     	PartialResultParams {
     	/**
@@ -127,9 +115,6 @@ _Response_ :
 
 
   * result: `FoldingRange[] | null` defined as follows:
-
-
-[](#foldingRangeKind)
 
 
     /**
@@ -157,9 +142,6 @@ _Response_ :
      */
     export type FoldingRangeKind = string;
     
-
-
-[](#foldingRange)
 
 
     /**

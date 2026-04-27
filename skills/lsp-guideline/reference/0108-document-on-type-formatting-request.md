@@ -1,7 +1,7 @@
-#### Document on Type Formatting Request ()
+#### Document on Type Formatting Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-on-type-formatting-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-on-type-formatting-request
 
 
 The document on type formatting request is sent from the client to the server to format parts of the document during typing.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.onTypeFormatting`
   * property type: `DocumentOnTypeFormattingClientCapabilities` defined as follows:
-
-
-[](#documentOnTypeFormattingClientCapabilities)
 
 
     export interface DocumentOnTypeFormattingClientCapabilities {
@@ -31,9 +28,6 @@ _Server Capability_ :
 
   * property name (optional): `documentOnTypeFormattingProvider`
   * property type: `DocumentOnTypeFormattingOptions` defined as follows:
-
-
-[](#documentOnTypeFormattingOptions)
 
 
     export interface DocumentOnTypeFormattingOptions {
@@ -53,9 +47,6 @@ _Server Capability_ :
 _Registration Options_ : `DocumentOnTypeFormattingRegistrationOptions` defined as follows:
 
 
-[](#documentOnTypeFormattingRegistrationOptions)
-
-
     export interface DocumentOnTypeFormattingRegistrationOptions extends
     	TextDocumentRegistrationOptions, DocumentOnTypeFormattingOptions {
     }
@@ -67,9 +58,6 @@ _Request_ :
 
   * method: `textDocument/onTypeFormatting`
   * params: `DocumentOnTypeFormattingParams` defined as follows:
-
-
-[](#documentOnTypeFormattingParams)
 
 
     interface DocumentOnTypeFormattingParams {

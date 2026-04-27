@@ -1,4 +1,4 @@
-#### Type Hierarchy Supertypes()
+#### Type Hierarchy Supertypes
 
 
 **Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#type-hierarchy-supertypesleftwards_arrow_with_hook
@@ -15,9 +15,6 @@ _Request_ :
 
   * method: ‘typeHierarchy/supertypes’
   * params: `TypeHierarchySupertypesParams` defined as follows:
-
-
-[](#typeHierarchySupertypesParams)
 
 
     export interface TypeHierarchySupertypesParams extends

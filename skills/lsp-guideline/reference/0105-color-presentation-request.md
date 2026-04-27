@@ -1,7 +1,7 @@
-#### Color Presentation Request ()
+#### Color Presentation Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#color-presentation-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#color-presentation-request
 
 
 > _Since version 3.6.0_
@@ -22,9 +22,6 @@ _Request_ :
 
   * method: `textDocument/colorPresentation`
   * params: `ColorPresentationParams` defined as follows
-
-
-[](#colorPresentationParams)
 
 
     interface ColorPresentationParams extends WorkDoneProgressParams,
@@ -51,9 +48,6 @@ _Response_ :
 
 
   * result: `ColorPresentation[]` defined as follows:
-
-
-[](#colorPresentation)
 
 
     interface ColorPresentation {

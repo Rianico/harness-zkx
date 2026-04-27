@@ -1,7 +1,7 @@
-#### Document Color Request ()
+#### Document Color Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-color-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-color-request
 
 
 > _Since version 3.6.0_
@@ -24,9 +24,6 @@ _Client Capability_ :
   * property type: `DocumentColorClientCapabilities` defined as follows:
 
 
-[](#documentColorClientCapabilities)
-
-
     export interface DocumentColorClientCapabilities {
     	/**
     	 * Whether document color supports dynamic registration.
@@ -43,18 +40,12 @@ _Server Capability_ :
   * property type: `boolean | DocumentColorOptions | DocumentColorRegistrationOptions` where `DocumentColorOptions` is defined as follows:
 
 
-[](#documentColorOptions)
-
-
     export interface DocumentColorOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `DocumentColorRegistrationOptions` defined as follows:
-
-
-[](#documentColorRegistrationOptions)
 
 
     export interface DocumentColorRegistrationOptions extends
@@ -69,9 +60,6 @@ _Request_ :
 
   * method: `textDocument/documentColor`
   * params: `DocumentColorParams` defined as follows
-
-
-[](#documentColorParams)
 
 
     interface DocumentColorParams extends WorkDoneProgressParams,
@@ -90,9 +78,6 @@ _Response_ :
   * result: `ColorInformation[]` defined as follows:
 
 
-[](#colorInformation)
-
-
     interface ColorInformation {
     	/**
     	 * The range in the document where this color appears.
@@ -105,9 +90,6 @@ _Response_ :
     	color: Color;
     }
     
-
-
-[](#color)
 
 
     /**

@@ -1,7 +1,7 @@
-#### DidChangeWatchedFiles Notification ()
+#### DidChangeWatchedFiles Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangewatchedfiles-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangewatchedfiles-notification
 
 
 The watched files notification is sent from the client to the server when the client detects changes to files and folders watched by the language client (note although the name suggest that only file events are sent it is about file system events which include folders as well). It is recommended that servers register for these file system events using the registration mechanism. In former implementations clients pushed file events without the server actively asking for it.
@@ -21,9 +21,6 @@ _Client Capability_ :
 
   * property path (optional): `workspace.didChangeWatchedFiles`
   * property type: `DidChangeWatchedFilesClientCapabilities` defined as follows:
-
-
-[](#didChangeWatchedFilesClientCapabilities)
 
 
     export interface DidChangeWatchedFilesClientCapabilities {
@@ -48,9 +45,6 @@ _Client Capability_ :
 _Registration Options_ : `DidChangeWatchedFilesRegistrationOptions` defined as follows:
 
 
-[](#didChangeWatchedFilesRegistrationOptions)
-
-
     /**
      * Describe options to be used when registering for file system change events.
      */
@@ -61,9 +55,6 @@ _Registration Options_ : `DidChangeWatchedFilesRegistrationOptions` defined as f
     	watchers: FileSystemWatcher[];
     }
     
-
-
-[](#pattern)
 
 
     /**
@@ -84,9 +75,6 @@ _Registration Options_ : `DidChangeWatchedFilesRegistrationOptions` defined as f
      */
     export type Pattern = string;
     
-
-
-[](#relativePattern)
 
 
     /**
@@ -111,9 +99,6 @@ _Registration Options_ : `DidChangeWatchedFilesRegistrationOptions` defined as f
     
 
 
-[](#globPattern)
-
-
     /**
      * The glob pattern. Either a string pattern or a relative pattern.
      *
@@ -121,9 +106,6 @@ _Registration Options_ : `DidChangeWatchedFilesRegistrationOptions` defined as f
      */
     export type GlobPattern = Pattern | RelativePattern;
     
-
-
-[](#fileSystemWatcher)
 
 
     export interface FileSystemWatcher {
@@ -143,9 +125,6 @@ _Registration Options_ : `DidChangeWatchedFilesRegistrationOptions` defined as f
     	kind?: WatchKind;
     }
     
-
-
-[](#watchKind)
 
 
     export namespace WatchKind {
@@ -175,9 +154,6 @@ _Notification_ :
   * params: `DidChangeWatchedFilesParams` defined as follows:
 
 
-[](#didChangeWatchedFilesParams)
-
-
     interface DidChangeWatchedFilesParams {
     	/**
     	 * The actual file events.
@@ -188,9 +164,6 @@ _Notification_ :
 
 
 Where FileEvents are described as follows:
-
-
-[](#fileEvent)
 
 
     /**
@@ -207,9 +180,6 @@ Where FileEvents are described as follows:
     	type: FileChangeType;
     }
     
-
-
-[](#fileChangeType)
 
 
     /**

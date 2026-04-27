@@ -1,7 +1,7 @@
-#### Prepare Type Hierarchy Request ()
+#### Prepare Type Hierarchy Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#prepare-type-hierarchy-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#prepare-type-hierarchy-request
 
 
 > _Since version 3.17.0_
@@ -19,9 +19,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.typeHierarchy`
   * property type: `TypeHierarchyClientCapabilities` defined as follows:
-
-
-[](#typeHierarchyClientCapabilities)
 
 
     type TypeHierarchyClientCapabilities = {
@@ -43,18 +40,12 @@ _Server Capability_ :
   * property type: `boolean | TypeHierarchyOptions | TypeHierarchyRegistrationOptions` where `TypeHierarchyOptions` is defined as follows:
 
 
-[](#typeHierarchyOptions)
-
-
     export interface TypeHierarchyOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `TypeHierarchyRegistrationOptions` defined as follows:
-
-
-[](#typeHierarchyRegistrationOptions)
 
 
     export interface TypeHierarchyRegistrationOptions extends
@@ -71,9 +62,6 @@ _Request_ :
   * params: `TypeHierarchyPrepareParams` defined as follows:
 
 
-[](#typeHierarchyPrepareParams)
-
-
     export interface TypeHierarchyPrepareParams extends TextDocumentPositionParams,
     	WorkDoneProgressParams {
     }
@@ -84,9 +72,6 @@ _Response_ :
 
 
   * result: `TypeHierarchyItem[] | null` defined as follows:
-
-
-[](#typeHierarchyItem)
 
 
     export interface TypeHierarchyItem {

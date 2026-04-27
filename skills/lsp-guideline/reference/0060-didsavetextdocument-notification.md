@@ -1,7 +1,7 @@
-#### DidSaveTextDocument Notification ()
+#### DidSaveTextDocument Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didsavetextdocument-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didsavetextdocument-notification
 
 
 The document save notification is sent from the client to the server when the document was saved in the client.
@@ -24,9 +24,6 @@ _Server Capability_ :
   * property type: `boolean | SaveOptions` where `SaveOptions` is defined as follows:
 
 
-[](#saveOptions)
-
-
     export interface SaveOptions {
     	/**
     	 * The client is supposed to include the content on save.
@@ -40,9 +37,6 @@ The capability indicates that the server is interested in `textDocument/didSave`
 
 
 _Registration Options_ : `TextDocumentSaveRegistrationOptions` defined as follows:
-
-
-[](#textDocumentSaveRegistrationOptions)
 
 
     export interface TextDocumentSaveRegistrationOptions
@@ -60,9 +54,6 @@ _Notification_ :
 
   * method: `textDocument/didSave`
   * params: `DidSaveTextDocumentParams` defined as follows:
-
-
-[](#didSaveTextDocumentParams)
 
 
     interface DidSaveTextDocumentParams {

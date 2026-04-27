@@ -1,7 +1,7 @@
-#### Code Action Request ()
+#### Code Action Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-action-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-action-request
 
 
 The code action request is sent from the client to the server to compute commands for a given text document and range. These commands are typically code fixes to either fix problems or to beautify/refactor code. The result of a `textDocument/codeAction` request is an array of `Command` literals which are typically presented in the user interface. To ensure that a server is useful in many clients the commands specified in a code actions should be handled by the server and not by the client (see `workspace/executeCommand` and `ServerCapabilities.executeCommandProvider`). If the client supports providing edits with a code action then that mode should be used.
@@ -28,9 +28,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.codeAction`
   * property type: `CodeActionClientCapabilities` defined as follows:
-
-
-[](#codeActionClientCapabilities)
 
 
     export interface CodeActionClientCapabilities {
@@ -120,9 +117,6 @@ _Server Capability_ :
   * property type: `boolean | CodeActionOptions` where `CodeActionOptions` is defined as follows:
 
 
-[](#codeActionOptions)
-
-
     export interface CodeActionOptions extends WorkDoneProgressOptions {
     	/**
     	 * CodeActionKinds that this server may return.
@@ -146,9 +140,6 @@ _Server Capability_ :
 _Registration Options_ : `CodeActionRegistrationOptions` defined as follows:
 
 
-[](#codeActionRegistrationOptions)
-
-
     export interface CodeActionRegistrationOptions extends
     	TextDocumentRegistrationOptions, CodeActionOptions {
     }
@@ -160,9 +151,6 @@ _Request_ :
 
   * method: `textDocument/codeAction`
   * params: `CodeActionParams` defined as follows:
-
-
-[](#codeActionParams)
 
 
     /**
@@ -186,9 +174,6 @@ _Request_ :
     	context: CodeActionContext;
     }
     
-
-
-[](#codeActionKind)
 
 
     /**
@@ -289,9 +274,6 @@ _Request_ :
     
 
 
-[](#codeActionContext)
-
-
     /**
      * Contains additional diagnostic information about the context in which
      * a code action is run.
@@ -325,9 +307,6 @@ _Request_ :
     
 
 
-[](#codeActionTriggerKind)
-
-
     /**
      * The reason why code actions were requested.
      *
@@ -356,9 +335,6 @@ _Response_ :
 
 
   * result: `(Command | CodeAction)[]` | `null` where `CodeAction` is defined as follows:
-
-
-[](#codeAction)
 
 
     /**

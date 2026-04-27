@@ -1,7 +1,7 @@
-#### Inline Value Refresh Request  ()
+#### Inline Value Refresh Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inline-value-refresh-request--arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#inline-value-refresh-request
 
 
 > _Since version 3.17.0_
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `workspace.inlineValue`
   * property type: `InlineValueWorkspaceClientCapabilities` defined as follows:
-
-
-[](#inlineValueWorkspaceClientCapabilities)
 
 
     /**

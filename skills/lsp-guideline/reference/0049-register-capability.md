@@ -1,7 +1,7 @@
-#### Register Capability ()
+#### Register Capability
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#register-capability-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#register-capability
 
 
 The `client/registerCapability` request is sent from the server to the client to register for a new capability on the client side. Not all clients need to support dynamic capability registration. A client opts in via the `dynamicRegistration` property on the specific client capabilities. A client can even provide dynamic registration for capability A but not for capability B (see `TextDocumentClientCapabilities` as an example).
@@ -18,9 +18,6 @@ _Request_ :
 
 
 Where `RegistrationParams` are defined as follows:
-
-
-[](#registration)
 
 
     /**
@@ -44,9 +41,6 @@ Where `RegistrationParams` are defined as follows:
     	registerOptions?: LSPAny;
     }
     
-
-
-[](#registrationParams)
 
 
     export interface RegistrationParams {
@@ -93,9 +87,6 @@ _Response_ :
 `StaticRegistrationOptions` can be used to register a feature in the initialize result with a given server control ID to be able to un-register the feature later on.
 
 
-[](#staticRegistrationOptions)
-
-
     /**
      * Static registration options to be returned in the initialize request.
      */
@@ -110,9 +101,6 @@ _Response_ :
 
 
 `TextDocumentRegistrationOptions` can be used to dynamically register for requests for a set of text documents.
-
-
-[](#textDocumentRegistrationOptions)
 
 
     /**

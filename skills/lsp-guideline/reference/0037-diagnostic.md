@@ -72,9 +72,6 @@ Represents a diagnostic, such as a compiler error or warning. Diagnostic objects
 The protocol currently supports the following diagnostic severities and tags:
 
 
-[](#diagnosticSeverity)
-
-
     export namespace DiagnosticSeverity {
     	/**
     	 * Reports an error.
@@ -96,9 +93,6 @@ The protocol currently supports the following diagnostic severities and tags:
     
     export type DiagnosticSeverity = 1 | 2 | 3 | 4;
     
-
-
-[](#diagnosticTag)
 
 
     /**
@@ -129,9 +123,6 @@ The protocol currently supports the following diagnostic severities and tags:
 `DiagnosticRelatedInformation` is defined as follows:
 
 
-[](#diagnosticRelatedInformation)
-
-
     /**
      * Represents a related message and source code location for a diagnostic.
      * This should be used to point to code locations that cause or are related to
@@ -152,9 +143,6 @@ The protocol currently supports the following diagnostic severities and tags:
 
 
 `CodeDescription` is defined as follows:
-
-
-[](#codeDescription)
 
 
     /**

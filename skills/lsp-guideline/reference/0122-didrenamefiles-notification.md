@@ -1,7 +1,7 @@
-#### DidRenameFiles Notification ()
+#### DidRenameFiles Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didrenamefiles-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didrenamefiles-notification
 
 
 The did rename files notification is sent from the client to the server when files were renamed from within the client.

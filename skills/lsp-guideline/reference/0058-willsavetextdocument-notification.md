@@ -1,7 +1,7 @@
-#### WillSaveTextDocument Notification ()
+#### WillSaveTextDocument Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willsavetextdocument-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willsavetextdocument-notification
 
 
 The document will save notification is sent from the client to the server before the document is actually saved. If a server has registered for open / close events clients should ensure that the document is open before a `willSave` notification is sent since clients can’t change the content of a file without ownership transferal.
@@ -37,9 +37,6 @@ _Registration Options_ : `TextDocumentRegistrationOptions`
   * params: `WillSaveTextDocumentParams` defined as follows:
 
 
-[](#willSaveTextDocumentParams)
-
-
     /**
      * The parameters send in a will save text document notification.
      */
@@ -55,9 +52,6 @@ _Registration Options_ : `TextDocumentRegistrationOptions`
     	reason: TextDocumentSaveReason;
     }
     
-
-
-[](#textDocumentSaveReason)
 
 
     /**

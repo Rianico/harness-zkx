@@ -1,7 +1,7 @@
-#### Monikers ()
+#### Monikers
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#monikers-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#monikers
 
 
 > _Since version 3.16.0_
@@ -18,9 +18,6 @@ _Client Capabilities_ :
 
   * property name (optional): `textDocument.moniker`
   * property type: `MonikerClientCapabilities` defined as follows:
-
-
-[](#monikerClientCapabilities)
 
 
     interface MonikerClientCapabilities {
@@ -42,18 +39,12 @@ _Server Capability_ :
   * property type: `boolean | MonikerOptions | MonikerRegistrationOptions` is defined as follows:
 
 
-[](#monikerOptions)
-
-
     export interface MonikerOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `MonikerRegistrationOptions` defined as follows:
-
-
-[](#monikerRegistrationOptions)
 
 
     export interface MonikerRegistrationOptions extends
@@ -67,9 +58,6 @@ _Request_ :
 
   * method: `textDocument/moniker`
   * params: `MonikerParams` defined as follows:
-
-
-[](#monikerParams)
 
 
     export interface MonikerParams extends TextDocumentPositionParams,
@@ -87,9 +75,6 @@ _Response_ :
 
 
 `Moniker` is defined as follows:
-
-
-[](#uniquenessLevel)
 
 
     /**
@@ -124,9 +109,6 @@ _Response_ :
     
 
 
-[](#monikerKind)
-
-
     /**
      * The moniker kind.
      */
@@ -148,9 +130,6 @@ _Response_ :
     	local = 'local'
     }
     
-
-
-[](#moniker)
 
 
     /**

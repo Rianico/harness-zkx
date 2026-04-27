@@ -1,7 +1,7 @@
-#### Code Action Resolve Request ()
+#### Code Action Resolve Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-action-resolve-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-action-resolve-request
 
 
 > _Since version 3.16.0_

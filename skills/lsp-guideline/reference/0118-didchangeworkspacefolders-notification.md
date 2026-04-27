@@ -1,7 +1,7 @@
-#### DidChangeWorkspaceFolders Notification ()
+#### DidChangeWorkspaceFolders Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangeworkspacefolders-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didchangeworkspacefolders-notification
 
 
 > _Since version 3.6.0_
@@ -24,9 +24,6 @@ _Notification_ :
   * params: `DidChangeWorkspaceFoldersParams` defined as follows:
 
 
-[](#didChangeWorkspaceFoldersParams)
-
-
     export interface DidChangeWorkspaceFoldersParams {
     	/**
     	 * The actual workspace folder change event.
@@ -34,9 +31,6 @@ _Notification_ :
     	event: WorkspaceFoldersChangeEvent;
     }
     
-
-
-[](#workspaceFoldersChangeEvent)
 
 
     /**

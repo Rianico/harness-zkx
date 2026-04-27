@@ -1,7 +1,7 @@
-#### Execute a command ()
+#### Execute a command
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#execute-a-command-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#execute-a-command
 
 
 The `workspace/executeCommand` request is sent from the client to the server to trigger command execution on the server. In most cases the server creates a `WorkspaceEdit` structure and applies the changes to the workspace using the request `workspace/applyEdit` which is sent from the server to the client.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property path (optional): `workspace.executeCommand`
   * property type: `ExecuteCommandClientCapabilities` defined as follows:
-
-
-[](#executeCommandClientCapabilities)
 
 
     export interface ExecuteCommandClientCapabilities {
@@ -33,9 +30,6 @@ _Server Capability_ :
   * property type: `ExecuteCommandOptions` defined as follows:
 
 
-[](#executeCommandOptions)
-
-
     export interface ExecuteCommandOptions extends WorkDoneProgressOptions {
     	/**
     	 * The commands to be executed on the server
@@ -46,9 +40,6 @@ _Server Capability_ :
 
 
 _Registration Options_ : `ExecuteCommandRegistrationOptions` defined as follows:
-
-
-[](#executeCommandRegistrationOptions)
 
 
     /**
@@ -65,9 +56,6 @@ _Request_ :
 
   * method: ‘workspace/executeCommand’
   * params: `ExecuteCommandParams` defined as follows:
-
-
-[](#executeCommandParams)
 
 
     export interface ExecuteCommandParams extends WorkDoneProgressParams {

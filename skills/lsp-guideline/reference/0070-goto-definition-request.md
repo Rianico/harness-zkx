@@ -1,7 +1,7 @@
-#### Goto Definition Request ()
+#### Goto Definition Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-definition-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-definition-request
 
 
 The go to definition request is sent from the client to the server to resolve the definition location of a symbol at a given text document position.
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.definition`
   * property type: `DefinitionClientCapabilities` defined as follows:
-
-
-[](#definitionClientCapabilities)
 
 
     export interface DefinitionClientCapabilities {
@@ -43,18 +40,12 @@ _Server Capability_ :
   * property type: `boolean | DefinitionOptions` where `DefinitionOptions` is defined as follows:
 
 
-[](#definitionOptions)
-
-
     export interface DefinitionOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `DefinitionRegistrationOptions` defined as follows:
-
-
-[](#definitionRegistrationOptions)
 
 
     export interface DefinitionRegistrationOptions extends
@@ -68,9 +59,6 @@ _Request_ :
 
   * method: `textDocument/definition`
   * params: `DefinitionParams` defined as follows:
-
-
-[](#definitionParams)
 
 
     export interface DefinitionParams extends TextDocumentPositionParams,

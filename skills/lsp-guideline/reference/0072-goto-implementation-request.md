@@ -1,7 +1,7 @@
-#### Goto Implementation Request ()
+#### Goto Implementation Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-implementation-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-implementation-request
 
 
 > _Since version 3.6.0_
@@ -18,9 +18,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.implementation`
   * property type: `ImplementationClientCapabilities` defined as follows:
-
-
-[](#implementationClientCapabilities)
 
 
     export interface ImplementationClientCapabilities {
@@ -48,18 +45,12 @@ _Server Capability_ :
   * property type: `boolean | ImplementationOptions | ImplementationRegistrationOptions` where `ImplementationOptions` is defined as follows:
 
 
-[](#implementationOptions)
-
-
     export interface ImplementationOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `ImplementationRegistrationOptions` defined as follows:
-
-
-[](#implementationRegistrationOptions)
 
 
     export interface ImplementationRegistrationOptions extends
@@ -74,9 +65,6 @@ _Request_ :
 
   * method: `textDocument/implementation`
   * params: `ImplementationParams` defined as follows:
-
-
-[](#implementationParams)
 
 
     export interface ImplementationParams extends TextDocumentPositionParams,

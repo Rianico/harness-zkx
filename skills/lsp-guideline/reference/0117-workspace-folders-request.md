@@ -1,7 +1,7 @@
-#### Workspace folders request ()
+#### Workspace folders request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace-folders-request-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace-folders-request
 
 
 > _Since version 3.6.0_
@@ -25,9 +25,6 @@ _Server Capability_ :
 
   * property path (optional): `workspace.workspaceFolders`
   * property type: `WorkspaceFoldersServerCapabilities` defined as follows:
-
-
-[](#workspaceFoldersServerCapabilities)
 
 
     export interface WorkspaceFoldersServerCapabilities {
@@ -61,9 +58,6 @@ _Response_ :
 
 
   * result: `WorkspaceFolder[] | null` defined as follows:
-
-
-[](#workspaceFolder)
 
 
     export interface WorkspaceFolder {

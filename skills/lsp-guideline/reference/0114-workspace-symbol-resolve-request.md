@@ -1,7 +1,7 @@
-#### Workspace Symbol Resolve Request ()
+#### Workspace Symbol Resolve Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace-symbol-resolve-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace-symbol-resolve-request
 
 
 The request is sent from the client to the server to resolve additional information for a given workspace symbol.

@@ -1,7 +1,7 @@
-#### Hover Request ()
+#### Hover Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#hover-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#hover-request
 
 
 The hover request is sent from the client to the server to request hover information at a given text document position.
@@ -15,9 +15,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.hover`
   * property type: `HoverClientCapabilities` defined as follows:
-
-
-[](#hoverClientCapabilities)
 
 
     export interface HoverClientCapabilities {
@@ -43,18 +40,12 @@ _Server Capability_ :
   * property type: `boolean | HoverOptions` where `HoverOptions` is defined as follows:
 
 
-[](#hoverOptions)
-
-
     export interface HoverOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `HoverRegistrationOptions` defined as follows:
-
-
-[](#hoverRegistrationOptions)
 
 
     export interface HoverRegistrationOptions
@@ -70,9 +61,6 @@ _Request_ :
   * params: `HoverParams` defined as follows:
 
 
-[](#hoverParams)
-
-
     export interface HoverParams extends TextDocumentPositionParams,
     	WorkDoneProgressParams {
     }
@@ -83,9 +71,6 @@ _Response_ :
 
 
   * result: `Hover` | `null` defined as follows:
-
-
-[](#hover)
 
 
     /**
@@ -107,9 +92,6 @@ _Response_ :
 
 
 Where `MarkedString` is defined as follows:
-
-
-[](#markedString)
 
 
     /**

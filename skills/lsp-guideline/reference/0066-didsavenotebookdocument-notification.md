@@ -1,7 +1,7 @@
-#### DidSaveNotebookDocument Notification ()
+#### DidSaveNotebookDocument Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didsavenotebookdocument-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didsavenotebookdocument-notification
 
 
 The save notification is sent from the client to the server when a notebook document is saved. It is only sent by a client if the server requested the synchronization mode `notebook` in its `notebookDocumentSync` capability.
@@ -10,14 +10,8 @@ The save notification is sent from the client to the server when a notebook docu
 _Notification_ :
 
 
-[](#notebookDocument_didSave)
-
-
   * method: `notebookDocument/didSave`
   * params: `DidSaveNotebookDocumentParams` defined as follows:
-
-
-[](#didSaveNotebookDocumentParams)
 
 
     /**

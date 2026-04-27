@@ -1,7 +1,7 @@
-#### Document Link Request ()
+#### Document Link Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-link-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#document-link-request
 
 
 The document links request is sent from the client to the server to request the location of links in a document.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.documentLink`
   * property type: `DocumentLinkClientCapabilities` defined as follows:
-
-
-[](#documentLinkClientCapabilities)
 
 
     export interface DocumentLinkClientCapabilities {
@@ -40,9 +37,6 @@ _Server Capability_ :
   * property type: `DocumentLinkOptions` defined as follows:
 
 
-[](#documentLinkOptions)
-
-
     export interface DocumentLinkOptions extends WorkDoneProgressOptions {
     	/**
     	 * Document links have a resolve provider as well.
@@ -53,9 +47,6 @@ _Server Capability_ :
 
 
 _Registration Options_ : `DocumentLinkRegistrationOptions` defined as follows:
-
-
-[](#documentLinkRegistrationOptions)
 
 
     export interface DocumentLinkRegistrationOptions extends
@@ -69,9 +60,6 @@ _Request_ :
 
   * method: `textDocument/documentLink`
   * params: `DocumentLinkParams` defined as follows:
-
-
-[](#documentLinkParams)
 
 
     interface DocumentLinkParams extends WorkDoneProgressParams,
@@ -88,9 +76,6 @@ _Response_ :
 
 
   * result: `DocumentLink[]` | `null`.
-
-
-[](#documentLink)
 
 
     /**

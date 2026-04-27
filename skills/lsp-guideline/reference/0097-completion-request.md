@@ -1,7 +1,7 @@
-#### Completion Request ()
+#### Completion Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completion-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completion-request
 
 
 The Completion request is sent from the client to the server to compute completion items at a given cursor position. Completion items are presented in the [IntelliSense](https://code.visualstudio.com/docs/editor/intellisense) user interface. If computing full completion items is expensive, servers can additionally provide a handler for the completion item resolve request (‘completionItem/resolve’). This request is sent when a completion item is selected in the user interface. A typical use case is for example: the `textDocument/completion` request doesn’t fill in the `documentation` property for returned completion items since it is expensive to compute. When the item is selected in the user interface then a ‘completionItem/resolve’ request is sent with the selected completion item as a parameter. The returned completion item should have the documentation property filled in. By default the request can only delay the computation of the `detail` and `documentation` properties. Since 3.16.0 the client can signal that it can resolve more properties lazily. This is done using the `completionItem#resolveSupport` client capability which lists all properties that can be filled in during a ‘completionItem/resolve’ request. All other properties (usually `sortText`, `filterText`, `insertText` and `textEdit`) must be provided in the `textDocument/completion` response and must not be changed during resolve.
@@ -27,9 +27,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.completion`
   * property type: `CompletionClientCapabilities` defined as follows:
-
-
-[](#completionClientCapabilities)
 
 
     export interface CompletionClientCapabilities {
@@ -189,9 +186,6 @@ _Server Capability_ :
   * property type: `CompletionOptions` defined as follows:
 
 
-[](#completionOptions)
-
-
     /**
      * Completion options.
      */
@@ -253,9 +247,6 @@ _Server Capability_ :
 _Registration Options_ : `CompletionRegistrationOptions` options defined as follows:
 
 
-[](#completionRegistrationOptions)
-
-
     export interface CompletionRegistrationOptions
     	extends TextDocumentRegistrationOptions, CompletionOptions {
     }
@@ -269,9 +260,6 @@ _Request_ :
   * params: `CompletionParams` defined as follows:
 
 
-[](#completionParams)
-
-
     export interface CompletionParams extends TextDocumentPositionParams,
     	WorkDoneProgressParams, PartialResultParams {
     	/**
@@ -282,9 +270,6 @@ _Request_ :
     	context?: CompletionContext;
     }
     
-
-
-[](#completionTriggerKind)
 
 
     /**
@@ -313,9 +298,6 @@ _Request_ :
     
 
 
-[](#completionContext)
-
-
     /**
      * Contains additional information about the context in which a completion
      * request is triggered.
@@ -340,9 +322,6 @@ _Response_ :
 
 
   * result: `CompletionItem[]` | `CompletionList` | `null`. If a `CompletionItem[]` is provided it is interpreted to be complete. So it is the same as `{ isIncomplete: false, items }`
-
-
-[](#completionList)
 
 
     /**
@@ -422,9 +401,6 @@ _Response_ :
     
 
 
-[](#insertTextFormat)
-
-
     /**
      * Defines whether the insert text in a completion item should be interpreted as
      * plain text or a snippet.
@@ -450,9 +426,6 @@ _Response_ :
     
 
 
-[](#completionItemTag)
-
-
     /**
      * Completion item tags are extra annotations that tweak the rendering of a
      * completion item.
@@ -468,9 +441,6 @@ _Response_ :
     
     export type CompletionItemTag = 1;
     
-
-
-[](#insertReplaceEdit)
 
 
     /**
@@ -495,9 +465,6 @@ _Response_ :
     	replace: Range;
     }
     
-
-
-[](#insertTextMode)
 
 
     /**
@@ -532,9 +499,6 @@ _Response_ :
     
 
 
-[](#completionItemLabelDetails)
-
-
     /**
      * Additional details for a completion item label.
      *
@@ -557,9 +521,6 @@ _Response_ :
     	description?: string;
     }
     
-
-
-[](#completionItem)
 
 
     export interface CompletionItem {
@@ -746,9 +707,6 @@ _Response_ :
     	data?: LSPAny;
     }
     
-
-
-[](#completionItemKind)
 
 
     /**

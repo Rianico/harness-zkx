@@ -1,7 +1,7 @@
-#### Code Lens Request ()
+#### Code Lens Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-lens-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-lens-request
 
 
 The code lens request is sent from the client to the server to compute code lenses for a given text document.
@@ -12,9 +12,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.codeLens`
   * property type: `CodeLensClientCapabilities` defined as follows:
-
-
-[](#codeLensClientCapabilities)
 
 
     export interface CodeLensClientCapabilities {
@@ -33,9 +30,6 @@ _Server Capability_ :
   * property type: `CodeLensOptions` defined as follows:
 
 
-[](#codeLensOptions)
-
-
     export interface CodeLensOptions extends WorkDoneProgressOptions {
     	/**
     	 * Code lens has a resolve provider as well.
@@ -46,9 +40,6 @@ _Server Capability_ :
 
 
 _Registration Options_ : `CodeLensRegistrationOptions` defined as follows:
-
-
-[](#codeLensRegistrationOptions)
 
 
     export interface CodeLensRegistrationOptions extends
@@ -64,9 +55,6 @@ _Request_ :
   * params: `CodeLensParams` defined as follows:
 
 
-[](#codeLensParams)
-
-
     interface CodeLensParams extends WorkDoneProgressParams, PartialResultParams {
     	/**
     	 * The document to request code lens for.
@@ -80,9 +68,6 @@ _Response_ :
 
 
   * result: `CodeLens[]` | `null` defined as follows:
-
-
-[](#codeLens)
 
 
     /**

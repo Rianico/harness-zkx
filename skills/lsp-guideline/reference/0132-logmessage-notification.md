@@ -1,7 +1,7 @@
-#### LogMessage Notification ()
+#### LogMessage Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#logmessage-notification-arrow_left
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#logmessage-notification
 
 
 The log message notification is sent from the server to the client to ask the client to log a particular message.
@@ -12,9 +12,6 @@ _Notification_ :
 
   * method: ‘window/logMessage’
   * params: `LogMessageParams` defined as follows:
-
-
-[](#logMessageParams)
 
 
     interface LogMessageParams {

@@ -1,7 +1,7 @@
-#### Goto Declaration Request ()
+#### Goto Declaration Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-declaration-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#goto-declaration-request
 
 
 > _Since version 3.14.0_
@@ -18,9 +18,6 @@ _Client Capability_ :
 
   * property name (optional): `textDocument.declaration`
   * property type: `DeclarationClientCapabilities` defined as follows:
-
-
-[](#declarationClientCapabilities)
 
 
     export interface DeclarationClientCapabilities {
@@ -46,18 +43,12 @@ _Server Capability_ :
   * property type: `boolean | DeclarationOptions | DeclarationRegistrationOptions` where `DeclarationOptions` is defined as follows:
 
 
-[](#declarationOptions)
-
-
     export interface DeclarationOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `DeclarationRegistrationOptions` defined as follows:
-
-
-[](#declarationRegistrationOptions)
 
 
     export interface DeclarationRegistrationOptions extends DeclarationOptions,
@@ -71,9 +62,6 @@ _Request_ :
 
   * method: `textDocument/declaration`
   * params: `DeclarationParams` defined as follows:
-
-
-[](#declarationParams)
 
 
     export interface DeclarationParams extends TextDocumentPositionParams,

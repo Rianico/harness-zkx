@@ -1,7 +1,7 @@
-#### WillCreateFiles Request ()
+#### WillCreateFiles Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willcreatefiles-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willcreatefiles-request
 
 
 The will create files request is sent from the client to the server before files are actually created as long as the creation is triggered from within the client either by a user action or by applying a workspace edit. The request can return a `WorkspaceEdit` which will be applied to workspace before the files are created. Hence the `WorkspaceEdit` can not manipulate the content of the files to be created. Please note that clients might drop results if computing the edit took too long or if a server constantly fails on this request. This is done to keep creates fast and reliable.
@@ -24,9 +24,6 @@ _Server Capability_ :
   * property type: `FileOperationRegistrationOptions` where `FileOperationRegistrationOptions` is defined as follows:
 
 
-[](#fileOperationRegistrationOptions)
-
-
     /**
      * The options to register for file operations.
      *
@@ -39,9 +36,6 @@ _Server Capability_ :
     	filters: FileOperationFilter[];
     }
     
-
-
-[](#fileOperationPatternKind)
 
 
     /**
@@ -66,9 +60,6 @@ _Server Capability_ :
     
 
 
-[](#fileOperationPatternOptions)
-
-
     /**
      * Matching options for the file operation pattern.
      *
@@ -82,9 +73,6 @@ _Server Capability_ :
     	ignoreCase?: boolean;
     }
     
-
-
-[](#fileOperationPattern)
 
 
     /**
@@ -124,9 +112,6 @@ _Server Capability_ :
     
 
 
-[](#fileOperationFilter)
-
-
     /**
      * A filter to describe in which file operation requests or notifications
      * the server is interested in.
@@ -161,9 +146,6 @@ _Registration Options_ : none
   * params: `CreateFilesParams` defined as follows:
 
 
-[](#createFilesParams)
-
-
     /**
      * The parameters sent in notifications/requests for user-initiated creation
      * of files.
@@ -178,9 +160,6 @@ _Registration Options_ : none
     	files: FileCreate[];
     }
     
-
-
-[](#fileCreate)
 
 
     /**

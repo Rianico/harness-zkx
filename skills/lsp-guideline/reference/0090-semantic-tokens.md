@@ -1,7 +1,7 @@
-#### Semantic Tokens ()
+#### Semantic Tokens
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#semantic-tokens-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#semantic-tokens
 
 
 > _Since version 3.16.0_
@@ -14,9 +14,6 @@ _General Concepts_
 
 
 Tokens are represented using one token type combined with n token modifiers. A token type is something like `class` or `function` and token modifiers are like `static` or `async`. The protocol defines a set of token types and modifiers but clients are allowed to extend these and announce the values they support in the corresponding client capability. The predefined values are:
-
-
-[](#semanticTokenTypes)
 
 
     export enum SemanticTokenTypes {
@@ -54,9 +51,6 @@ Tokens are represented using one token type combined with n token modifiers. A t
     
 
 
-[](#semanticTokenModifiers)
-
-
     export enum SemanticTokenModifiers {
     	declaration = 'declaration',
     	definition = 'definition',
@@ -75,9 +69,6 @@ Tokens are represented using one token type combined with n token modifiers. A t
 The protocol defines an additional token format capability to allow future extensions of the format. The only format that is currently specified is `relative` expressing that the tokens are described using relative positions (see Integer Encoding for Tokens below).
 
 
-[](#tokenFormat)
-
-
     export namespace TokenFormat {
     	export const Relative: 'relative' = 'relative';
     }
@@ -90,9 +81,6 @@ _Integer Encoding for Tokens_
 
 
 On the capability level types and modifiers are defined using strings. However the real encoding happens using numbers. The server therefore needs to let the client know which numbers it is using for which types and modifiers. They do so using a legend, which is defined as follows:
-
-
-[](#semanticTokensLegend)
 
 
     export interface SemanticTokensLegend {
@@ -210,9 +198,6 @@ The following client capabilities are defined for semantic token requests sent f
   * property type: `SemanticTokensClientCapabilities` defined as follows:
 
 
-[](#semanticTokensClientCapabilities)
-
-
     interface SemanticTokensClientCapabilities {
     	/**
     	 * Whether implementation supports dynamic registration. If this is set to
@@ -315,9 +300,6 @@ The following server capabilities are defined for semantic tokens:
   * property type: `SemanticTokensOptions | SemanticTokensRegistrationOptions` where `SemanticTokensOptions` is defined as follows:
 
 
-[](#semanticTokensOptions)
-
-
     export interface SemanticTokensOptions extends WorkDoneProgressOptions {
     	/**
     	 * The legend used by the server
@@ -347,9 +329,6 @@ The following server capabilities are defined for semantic tokens:
 _Registration Options_ : `SemanticTokensRegistrationOptions` defined as follows:
 
 
-[](#semanticTokensRegistrationOptions)
-
-
     export interface SemanticTokensRegistrationOptions extends
     	TextDocumentRegistrationOptions, SemanticTokensOptions,
     	StaticRegistrationOptions {
@@ -366,14 +345,8 @@ Since the registration option handles range, full and delta requests the method 
  _Request_ :
 
 
-[](#semanticTokens_fullRequest)
-
-
   * method: `textDocument/semanticTokens/full`
   * params: `SemanticTokensParams` defined as follows:
-
-
-[](#semanticTokensParams)
 
 
     export interface SemanticTokensParams extends WorkDoneProgressParams,
@@ -390,9 +363,6 @@ _Response_ :
 
 
   * result: `SemanticTokens | null` where `SemanticTokens` is defined as follows:
-
-
-[](#semanticTokens)
 
 
     export interface SemanticTokens {
@@ -415,9 +385,6 @@ _Response_ :
   * partial result: `SemanticTokensPartialResult` defines as follows:
 
 
-[](#semanticTokensPartialResult)
-
-
     export interface SemanticTokensPartialResult {
     	data: uinteger[];
     }
@@ -433,14 +400,8 @@ _Response_ :
  _Request_ :
 
 
-[](#semanticTokens_deltaRequest)
-
-
   * method: `textDocument/semanticTokens/full/delta`
   * params: `SemanticTokensDeltaParams` defined as follows:
-
-
-[](#semanticTokensDeltaParams)
 
 
     export interface SemanticTokensDeltaParams extends WorkDoneProgressParams,
@@ -465,9 +426,6 @@ _Response_ :
   * result: `SemanticTokens | SemanticTokensDelta | null` where `SemanticTokensDelta` is defined as follows:
 
 
-[](#semanticTokensDelta)
-
-
     export interface SemanticTokensDelta {
     	readonly resultId?: string;
     	/**
@@ -477,9 +435,6 @@ _Response_ :
     	edits: SemanticTokensEdit[];
     }
     
-
-
-[](#semanticTokensEdit)
 
 
     export interface SemanticTokensEdit {
@@ -502,9 +457,6 @@ _Response_ :
 
 
   * partial result: `SemanticTokensDeltaPartialResult` defines as follows:
-
-
-[](#semanticTokensDeltaPartialResult)
 
 
     export interface SemanticTokensDeltaPartialResult {
@@ -532,14 +484,8 @@ A server is allowed to compute the semantic tokens for a broader range than requ
 _Request_ :
 
 
-[](#semanticTokens_rangeRequest)
-
-
   * method: `textDocument/semanticTokens/range`
   * params: `SemanticTokensRangeParams` defined as follows:
-
-
-[](#semanticTokensRangeParams)
 
 
     export interface SemanticTokensRangeParams extends WorkDoneProgressParams,
@@ -578,9 +524,6 @@ _Client Capability_ :
   * property type: `SemanticTokensWorkspaceClientCapabilities` defined as follows:
 
 
-[](#semanticTokensWorkspaceClientCapabilities)
-
-
     export interface SemanticTokensWorkspaceClientCapabilities {
     	/**
     	 * Whether the client implementation supports a refresh request sent from
@@ -597,9 +540,6 @@ _Client Capability_ :
 
 
 _Request_ :
-
-
-[](#semanticTokens_refreshRequest)
 
 
   * method: `workspace/semanticTokens/refresh`

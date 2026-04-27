@@ -119,9 +119,6 @@ _Client Capability_ :
     
 
 
-[](#resourceOperationKind)
-
-
     /**
      * The kind of resource operations supported by the client.
      */
@@ -145,9 +142,6 @@ _Client Capability_ :
     	export const Delete: ResourceOperationKind = 'delete';
     }
     
-
-
-[](#failureHandlingKind)
 
 
     export type FailureHandlingKind = 'abort' | 'transactional' | 'undo'

@@ -1,7 +1,7 @@
-#### LogTrace Notification ()
+#### LogTrace Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#logtrace-notification-arrow_left
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#logtrace-notification
 
 
 A notification to log the trace of the server’s execution. The amount and content of these notifications depends on the current `trace` configuration. If `trace` is `'off'`, the server should not send any `logTrace` notification. If `trace` is `'messages'`, the server should not add the `'verbose'` field in the `LogTraceParams`.

@@ -1,7 +1,7 @@
-#### Selection Range Request ()
+#### Selection Range Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#selection-range-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#selection-range-request
 
 
 > _Since version 3.15.0_
@@ -23,9 +23,6 @@ _Client Capability_ :
   * property type: `SelectionRangeClientCapabilities` defined as follows:
 
 
-[](#selectionRangeClientCapabilities)
-
-
     export interface SelectionRangeClientCapabilities {
     	/**
     	 * Whether implementation supports dynamic registration for selection range
@@ -45,18 +42,12 @@ _Server Capability_ :
   * property type: `boolean | SelectionRangeOptions | SelectionRangeRegistrationOptions` where `SelectionRangeOptions` is defined as follows:
 
 
-[](#selectionRangeOptions)
-
-
     export interface SelectionRangeOptions extends WorkDoneProgressOptions {
     }
     
 
 
 _Registration Options_ : `SelectionRangeRegistrationOptions` defined as follows:
-
-
-[](#selectionRangeRegistrationOptions)
 
 
     export interface SelectionRangeRegistrationOptions extends
@@ -71,9 +62,6 @@ _Request_ :
 
   * method: `textDocument/selectionRange`
   * params: `SelectionRangeParams` defined as follows:
-
-
-[](#selectionRangeParams)
 
 
     export interface SelectionRangeParams extends WorkDoneProgressParams,
@@ -95,9 +83,6 @@ _Response_ :
 
 
   * result: `SelectionRange[] | null` defined as follows:
-
-
-[](#selectionRange)
 
 
     export interface SelectionRange {

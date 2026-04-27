@@ -1,7 +1,7 @@
-#### Applies a WorkspaceEdit ()
+#### Applies a WorkspaceEdit
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#applies-a-workspaceedit-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#applies-a-workspaceedit
 
 
 The `workspace/applyEdit` request is sent from the server to the client to modify resource on the client side.
@@ -24,9 +24,6 @@ _Request_ :
   * params: `ApplyWorkspaceEditParams` defined as follows:
 
 
-[](#applyWorkspaceEditParams)
-
-
     export interface ApplyWorkspaceEditParams {
     	/**
     	 * An optional label of the workspace edit. This label is
@@ -47,9 +44,6 @@ _Response_ :
 
 
   * result: `ApplyWorkspaceEditResult` defined as follows:
-
-
-[](#applyWorkspaceEditResult)
 
 
     export interface ApplyWorkspaceEditResult {

@@ -1,7 +1,7 @@
-#### WillDeleteFiles Request ()
+#### WillDeleteFiles Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willdeletefiles-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#willdeletefiles-request
 
 
 The will delete files request is sent from the client to the server before files are actually deleted as long as the deletion is triggered from within the client either by a user action or by applying a workspace edit. The request can return a WorkspaceEdit which will be applied to workspace before the files are deleted. Please note that clients might drop results if computing the edit took too long or if a server constantly fails on this request. This is done to keep deletes fast and reliable.
@@ -37,9 +37,6 @@ _Registration Options_ : none
   * params: `DeleteFilesParams` defined as follows:
 
 
-[](#deleteFilesParams)
-
-
     /**
      * The parameters sent in notifications/requests for user-initiated deletes
      * of files.
@@ -54,9 +51,6 @@ _Registration Options_ : none
     	files: FileDelete[];
     }
     
-
-
-[](#fileDelete)
 
 
     /**

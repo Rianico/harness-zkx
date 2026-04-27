@@ -13,9 +13,6 @@ Servers can participate in a document rename by subscribing for the [`workspace/
 The final structure of the `TextDocumentSyncClientCapabilities` and the `TextDocumentSyncOptions` server options look like this
 
 
-[](#textDocumentSyncClientCapabilities)
-
-
     export interface TextDocumentSyncClientCapabilities {
     	/**
     	 * Whether text document synchronization supports dynamic registration.
@@ -40,9 +37,6 @@ The final structure of the `TextDocumentSyncClientCapabilities` and the `TextDoc
     	didSave?: boolean;
     }
     
-
-
-[](#textDocumentSyncOptions)
 
 
     export interface TextDocumentSyncOptions {

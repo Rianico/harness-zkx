@@ -1,7 +1,7 @@
-#### Call Hierarchy Outgoing Calls ()
+#### Call Hierarchy Outgoing Calls
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#call-hierarchy-outgoing-calls-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#call-hierarchy-outgoing-calls
 
 
 > _Since version 3.16.0_
@@ -17,9 +17,6 @@ _Request_ :
   * params: `CallHierarchyOutgoingCallsParams` defined as follows:
 
 
-[](#callHierarchyOutgoingCallsParams)
-
-
     export interface CallHierarchyOutgoingCallsParams extends
     	WorkDoneProgressParams, PartialResultParams {
     	item: CallHierarchyItem;
@@ -31,9 +28,6 @@ _Response_ :
 
 
   * result: `CallHierarchyOutgoingCall[] | null` defined as follows:
-
-
-[](#callHierarchyOutgoingCall)
 
 
     export interface CallHierarchyOutgoingCall {

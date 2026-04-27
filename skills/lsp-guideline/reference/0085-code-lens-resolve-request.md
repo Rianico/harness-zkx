@@ -1,7 +1,7 @@
-#### Code Lens Resolve Request ()
+#### Code Lens Resolve Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-lens-resolve-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#code-lens-resolve-request
 
 
 The code lens resolve request is sent from the client to the server to resolve the command for a given code lens item.

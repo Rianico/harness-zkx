@@ -1,7 +1,7 @@
-#### DidOpenNotebookDocument Notification ()
+#### DidOpenNotebookDocument Notification
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didopennotebookdocument-notification-arrow_right
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didopennotebookdocument-notification
 
 
 The open notification is sent from the client to the server when a notebook document is opened. It is only sent by a client if the server requested the synchronization mode `notebook` in its `notebookDocumentSync` capability.
@@ -12,9 +12,6 @@ _Notification_ :
 
   * method: `notebookDocument/didOpen`
   * params: `DidOpenNotebookDocumentParams` defined as follows:
-
-
-[](#didOpenNotebookDocumentParams)
 
 
     /**

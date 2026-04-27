@@ -1,7 +1,7 @@
-#### Unregister Capability ()
+#### Unregister Capability
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#unregister-capability-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#unregister-capability
 
 
 The `client/unregisterCapability` request is sent from the server to the client to unregister a previously registered capability.
@@ -15,9 +15,6 @@ _Request_ :
 
 
 Where `UnregistrationParams` are defined as follows:
-
-
-[](#unregistration)
 
 
     /**
@@ -36,9 +33,6 @@ Where `UnregistrationParams` are defined as follows:
     	method: string;
     }
     
-
-
-[](#unregistrationParams)
 
 
     export interface UnregistrationParams {

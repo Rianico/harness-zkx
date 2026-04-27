@@ -1,7 +1,7 @@
-#### Create Work Done Progress ()
+#### Create Work Done Progress
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#create-work-done-progress-arrow_right_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#create-work-done-progress
 
 
 The `window/workDoneProgress/create` request is sent from the server to the client to ask the client to create a work done progress.

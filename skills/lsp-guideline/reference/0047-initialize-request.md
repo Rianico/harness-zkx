@@ -1,7 +1,7 @@
-#### Initialize Request ()
+#### Initialize Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialize-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialize-request
 
 
 The initialize request is sent as the first request from the client to the server. If the server receives a request or notification before the `initialize` request it should act as follows:
@@ -22,9 +22,6 @@ _Request_ :
 
   * method: ‘initialize’
   * params: `InitializeParams` defined as follows:
-
-
-[](#initializeParams)
 
 
     interface InitializeParams extends WorkDoneProgressParams {
@@ -117,9 +114,6 @@ Where `ClientCapabilities` and `TextDocumentClientCapabilities` are defined as f
 
 
 `TextDocumentClientCapabilities` define capabilities the editor / tool provides on text documents.
-
-
-[](#textDocumentClientCapabilities)
 
 
     /**
@@ -313,9 +307,6 @@ Where `ClientCapabilities` and `TextDocumentClientCapabilities` are defined as f
 `NotebookDocumentClientCapabilities` define capabilities the editor / tool provides on notebook documents.
 
 
-[](#notebookDocumentClientCapabilities)
-
-
     /**
      * Capabilities specific to the notebook document support.
      *
@@ -336,9 +327,6 @@ Where `ClientCapabilities` and `TextDocumentClientCapabilities` are defined as f
 
 
 Client capabilities got introduced with version 3.0 of the protocol. They therefore only describe capabilities that got introduced in 3.x or later. Capabilities that existed in the 2.x version of the protocol are still mandatory for clients. Clients cannot opt out of providing them. So even if a client omits the `ClientCapabilities.textDocument.synchronization` it is still required that the client provides text document synchronization (e.g. open, changed and close notifications).
-
-
-[](#clientCapabilities)
 
 
     interface ClientCapabilities {
@@ -598,9 +586,6 @@ _Response_ :
   * result: `InitializeResult` defined as follows:
 
 
-[](#initializeResult)
-
-
     interface InitializeResult {
     	/**
     	 * The capabilities the language server provides.
@@ -630,9 +615,6 @@ _Response_ :
   * error.code:
 
 
-[](#initializeErrorCodes)
-
-
     /**
      * Known error codes for an `InitializeErrorCodes`;
      */
@@ -655,9 +637,6 @@ _Response_ :
   * error.data:
 
 
-[](#initializeError)
-
-
     interface InitializeError {
     	/**
     	 * Indicates whether the client execute the following retry logic:
@@ -671,9 +650,6 @@ _Response_ :
 
 
 The server can signal the following capabilities:
-
-
-[](#serverCapabilities)
 
 
     interface ServerCapabilities {

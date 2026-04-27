@@ -1,7 +1,7 @@
-#### Rename Request ()
+#### Rename Request
 
 
-**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#rename-request-leftwards_arrow_with_hook
+**Source:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#rename-request
 
 
 The rename request is sent from the client to the server to ask the server to compute a workspace change so that the client can perform a workspace-wide rename of a symbol.
@@ -14,9 +14,6 @@ _Client Capability_ :
   * property type: `RenameClientCapabilities` defined as follows:
 
 
-[](#prepareSupportDefaultBehavior)
-
-
     export namespace PrepareSupportDefaultBehavior {
     	/**
     	 * The client's default behavior is to select the identifier
@@ -27,9 +24,6 @@ _Client Capability_ :
     
     export type PrepareSupportDefaultBehavior = 1;
     
-
-
-[](#renameClientCapabilities)
 
 
     export interface RenameClientCapabilities {
@@ -81,9 +75,6 @@ _Server Capability_ :
 `RenameOptions` may only be specified if the client states that it supports `prepareSupport` in its initial `initialize` request.
 
 
-[](#renameOptions)
-
-
     export interface RenameOptions extends WorkDoneProgressOptions {
     	/**
     	 * Renames should be checked and tested before being executed.
@@ -94,9 +85,6 @@ _Server Capability_ :
 
 
 _Registration Options_ : `RenameRegistrationOptions` defined as follows:
-
-
-[](#renameRegistrationOptions)
 
 
     export interface RenameRegistrationOptions extends
@@ -110,9 +98,6 @@ _Request_ :
 
   * method: `textDocument/rename`
   * params: `RenameParams` defined as follows
-
-
-[](#renameParams)
 
 
     interface RenameParams extends TextDocumentPositionParams,
