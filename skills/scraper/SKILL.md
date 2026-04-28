@@ -202,10 +202,23 @@ uv run scrape.py <type> --force --output-dir ./references/<name>-docs
 # Run quality checks from checklist above
 ```
 
+## LLM-Friendly Fetching (New)
+
+Modern websites increasingly support direct markdown delivery:
+
+1. **llms.txt** — Standard file at `/llms.txt` with curated page lists
+2. **Accept: text/markdown** — Content negotiation header (Cloudflare, static servers)
+3. **.md extension** — Some sites serve markdown at `page.html.md`
+
+**Token savings**: Up to 80% reduction when markdown is available directly.
+
+See `references/llms-txt-patterns.md` for implementation patterns.
+
 ## Reference Files
 
 Scraper-specific patterns and code examples:
 
+- `references/llms-txt-patterns.md` — llms.txt standard, Accept header, markdown fetching
 - `references/lsp-patterns.md` — Emoji anchor cleanup, link resolution for LSP spec
 - `references/cuda-patterns.md` — Multi-page discovery, cleanup pipeline for CUDA docs
 - `references/section-extraction.md` — Common patterns for splitting content

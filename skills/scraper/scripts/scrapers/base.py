@@ -319,6 +319,91 @@ class DocumentationScraper(ABC):
 
         return None
 
+    def check_llms_txt(self, base_url: str | None = None) -> str | None:
+        """Check if site has an llms.txt file.
+
+        Args:
+            base_url: Base URL to check (defaults to self.base_url)
+
+        Returns:
+            URL of llms.txt if found, None otherwise
+        """
+        check_url = base_url or self.base_url
+        llms_url = urljoin(check_url, "/llms.txt")
+
+        try:
+            response = self.session.head(llms_url, timeout=self.timeout)
+            if response.status_code == 200:
+                return llms_url
+        except requests.exceptions.RequestException:
+            pass
+
+        return None
+
+    def fetch_markdown_via_negotiation(self, url: str) -> tuple[str | None, str]:
+        """Fetch markdown via Accept: text/markdown header.
+
+        Args:
+            url: URL to fetch
+
+        Returns:
+            Tuple of (content, format) where format is "markdown" or "html"
+        """
+        # Save current Accept header
+        original_accept = self.session.headers.get("Accept", "")
+
+        try:
+            # Set Accept header to prefer markdown
+            self.session.headers["Accept"] = "text/markdown, text/html"
+
+            response = self._rate_limited_get(url)
+            if response is None:
+                return None, "html"
+
+            content_type = response.headers.get("content-type", "")
+            if "text/markdown" in content_type:
+                # Server returned markdown directly
+                token_count = response.headers.get("x-markdown-tokens", "unknown")
+                print(f"   Received markdown directly ({token_count} tokens)")
+                return response.text, "markdown"
+
+            # Server returned HTML
+            return response.text, "html"
+
+        finally:
+            # Restore original Accept header
+            if original_accept:
+                self.session.headers["Accept"] = original_accept
+            else:
+                self.session.headers.pop("Accept", None)
+
+    def fetch_markdown_extension(self, url: str) -> tuple[str | None, str]:
+        """Try fetching markdown at .md extension.
+
+        Args:
+            url: Original URL
+
+        Returns:
+            Tuple of (content, format) where format is "markdown" or "html"
+        """
+        # Build .md URL
+        if url.endswith("/"):
+            md_url = url + "index.md"
+        else:
+            md_url = url + ".md"
+
+        try:
+            response = self._rate_limited_get(md_url)
+            if response is not None and response.status_code == 200:
+                content_type = response.headers.get("content-type", "")
+                if "markdown" in content_type or "text/plain" in content_type:
+                    print(f"   Found markdown at .md extension")
+                    return response.text, "markdown"
+        except requests.exceptions.RequestException:
+            pass
+
+        return None, "html"
+
     def fetch_page(self, url: str, cache_file: str = "page.html") -> BeautifulSoup | None:
         """Fetch and parse a webpage with caching.
 
@@ -369,6 +454,68 @@ class DocumentationScraper(ABC):
         except Exception as e:
             print(f"Error fetching {url}: {e}")
             return None
+
+    def fetch_page_llm_friendly(
+        self, url: str, cache_file: str = "page"
+    ) -> tuple[str | None, str]:
+        """Fetch page content using LLM-friendly methods first.
+
+        Tries in order:
+        1. Accept: text/markdown header (content negotiation)
+        2. .md extension on URL
+        3. Falls back to HTML conversion
+
+        Args:
+            url: URL to fetch
+            cache_file: Base filename for cache storage (without extension)
+
+        Returns:
+            Tuple of (content, format) where format is "markdown" or "html"
+        """
+        cache_path_md = self.cache_dir / f"{cache_file}.md"
+        cache_path_html = self.cache_dir / f"{cache_file}.html"
+
+        # Check cache first
+        if cache_path_md.exists() and not self.force:
+            print(f"Using cached markdown: {cache_path_md.relative_to(self.cache_base.parent)}")
+            return cache_path_md.read_text(encoding="utf-8"), "markdown"
+
+        if cache_path_html.exists() and not self.force:
+            print(f"Using cached HTML: {cache_path_html.relative_to(self.cache_base.parent)}")
+            content = cache_path_html.read_text(encoding="utf-8")
+            # Convert cached HTML to markdown
+            soup = BeautifulSoup(content, "html.parser")
+            markdown = self.convert_to_markdown(soup, url)
+            return markdown, "html"
+
+        # Force mode: clear cache
+        if self.force and self.cache_dir.exists():
+            print(f"Clearing cache: {self.cache_dir}")
+            shutil.rmtree(self.cache_dir)
+
+        print(f"Fetching (LLM-friendly): {url}")
+
+        # Try markdown via content negotiation
+        content, fmt = self.fetch_markdown_via_negotiation(url)
+        if content and fmt == "markdown":
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path_md.write_text(content, encoding="utf-8")
+            return content, "markdown"
+
+        # Try .md extension
+        content, fmt = self.fetch_markdown_extension(url)
+        if content and fmt == "markdown":
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path_md.write_text(content, encoding="utf-8")
+            return content, "markdown"
+
+        # Fall back to HTML
+        soup = self.fetch_page(url, cache_file=f"{cache_file}.html")
+        if soup is None:
+            return None, "html"
+
+        markdown = self.convert_to_markdown(soup, url)
+        return markdown, "html"
 
     def sanitize_filename(self, name: str, section_num: str = "") -> str:
         """Convert title to safe filename."""
