@@ -248,17 +248,22 @@ class TestFetchPageLlmFriendly:
             ):
                 with patch.object(
                     scraper_with_mock_session,
-                    "fetch_page",
-                    return_value=BeautifulSoup(
-                        "<html><body><h1>Title</h1></body></html>", "html.parser"
-                    ),
+                    "fetch_via_jina_reader",
+                    return_value=(None, "html"),
                 ):
-                    content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
-                        TEST_PAGE_URL
-                    )
+                    with patch.object(
+                        scraper_with_mock_session,
+                        "fetch_page",
+                        return_value=BeautifulSoup(
+                            "<html><body><h1>Title</h1></body></html>", "html.parser"
+                        ),
+                    ):
+                        content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                            TEST_PAGE_URL
+                        )
 
-                    assert content is not None
-                    assert fmt == "html"
+                        assert content is not None
+                        assert fmt == "html"
 
     def test_returns_none_on_all_failures(self, scraper_with_mock_session) -> None:
         """Should return (None, 'html') when all methods fail."""
@@ -273,14 +278,19 @@ class TestFetchPageLlmFriendly:
                 return_value=(None, "html"),
             ):
                 with patch.object(
-                    scraper_with_mock_session, "fetch_page", return_value=None
+                    scraper_with_mock_session,
+                    "fetch_via_jina_reader",
+                    return_value=(None, "html"),
                 ):
-                    content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
-                        TEST_PAGE_URL
-                    )
+                    with patch.object(
+                        scraper_with_mock_session, "fetch_page", return_value=None
+                    ):
+                        content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                            TEST_PAGE_URL
+                        )
 
-                    assert content is None
-                    assert fmt == "html"
+                        assert content is None
+                        assert fmt == "html"
 
     def test_caches_markdown_response(self, scraper_with_mock_session) -> None:
         """Should cache markdown response to .md file."""
@@ -294,3 +304,109 @@ class TestFetchPageLlmFriendly:
             cache_file = scraper_with_mock_session.cache_dir / "page.md"
             assert cache_file.exists()
             assert cache_file.read_text() == "# New Content"
+
+    def test_uses_jina_reader_as_fallback(self, scraper_with_mock_session) -> None:
+        """Should use Jina Reader when negotiation and extension fail."""
+        with patch.object(
+            scraper_with_mock_session,
+            "fetch_markdown_via_negotiation",
+            return_value=(None, "html"),
+        ):
+            with patch.object(
+                scraper_with_mock_session,
+                "fetch_markdown_extension",
+                return_value=(None, "html"),
+            ):
+                with patch.object(
+                    scraper_with_mock_session,
+                    "fetch_via_jina_reader",
+                    return_value=("# Jina Content", "markdown"),
+                ):
+                    content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                        TEST_PAGE_URL, use_jina=True
+                    )
+
+                    assert content == "# Jina Content"
+                    assert fmt == "markdown"
+
+    def test_skips_jina_when_disabled(self, scraper_with_mock_session) -> None:
+        """Should skip Jina Reader when use_jina=False."""
+        from bs4 import BeautifulSoup
+
+        with patch.object(
+            scraper_with_mock_session,
+            "fetch_markdown_via_negotiation",
+            return_value=(None, "html"),
+        ):
+            with patch.object(
+                scraper_with_mock_session,
+                "fetch_markdown_extension",
+                return_value=(None, "html"),
+            ):
+                with patch.object(
+                    scraper_with_mock_session,
+                    "fetch_via_jina_reader",
+                ) as mock_jina:
+                    with patch.object(
+                        scraper_with_mock_session,
+                        "fetch_page",
+                        return_value=BeautifulSoup(
+                            "<html><body><h1>Title</h1></body></html>", "html.parser"
+                        ),
+                    ):
+                        scraper_with_mock_session.fetch_page_llm_friendly(
+                            TEST_PAGE_URL, use_jina=False
+                        )
+
+                        # Jina Reader should not be called
+                        mock_jina.assert_not_called()
+
+
+class TestFetchViaJinaReader:
+    """Tests for fetch_via_jina_reader method."""
+
+    def test_returns_markdown_on_success(self, scraper_with_mock_session) -> None:
+        """Should return markdown from Jina Reader."""
+        import requests
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "# Title\n\nContent from Jina"
+
+        with patch("requests.get", return_value=mock_response):
+            content, fmt = scraper_with_mock_session.fetch_via_jina_reader(
+                TEST_PAGE_URL
+            )
+
+            assert content == "# Title\n\nContent from Jina"
+            assert fmt == "markdown"
+
+    def test_returns_none_on_failure(self, scraper_with_mock_session) -> None:
+        """Should return (None, 'html') on failure."""
+        import requests
+
+        with patch("requests.get", side_effect=requests.exceptions.RequestException()):
+            content, fmt = scraper_with_mock_session.fetch_via_jina_reader(
+                TEST_PAGE_URL
+            )
+
+            assert content is None
+            assert fmt == "html"
+
+    def test_constructs_correct_jina_url(self, scraper_with_mock_session) -> None:
+        """Should construct correct r.jina.ai URL."""
+        import requests
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "content"
+
+        with patch("requests.get") as mock_get:
+            mock_get.return_value = mock_response
+
+            scraper_with_mock_session.fetch_via_jina_reader("https://example.com/page")
+
+            mock_get.assert_called_once_with(
+                "https://r.jina.ai/https://example.com/page",
+                timeout=scraper_with_mock_session.timeout,
+            )

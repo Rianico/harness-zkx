@@ -227,7 +227,166 @@ class LLMOptimizedScraper(BaseScraper):
 | .md extension | High | Easy | nbdev, some static sites |
 | HTML conversion | Baseline | Complex | Universal |
 
-## 6. Sources
+---
+
+## 6. URL Prefix Proxies
+
+### Jina Reader (Free, Most Popular)
+
+**URL Pattern**: `https://r.jina.ai/<original_url>`
+
+```bash
+# Get markdown for any page
+curl "https://r.jina.ai/https://example.com/docs"
+
+# Returns structured markdown with metadata:
+# Title: ...
+# URL Source: ...
+# Published Time: ...
+# Markdown Content:
+# ...
+```
+
+**Features**:
+- No API key required (free tier)
+- Clean markdown extraction
+- Removes navigation, ads, scripts
+- Includes metadata (title, URL, publish time)
+
+**Python Integration**:
+
+```python
+def fetch_via_jina_reader(url: str) -> str | None:
+    """Fetch markdown via Jina Reader proxy."""
+    jina_url = f"https://r.jina.ai/{url}"
+    try:
+        response = requests.get(jina_url, timeout=30)
+        if response.status_code == 200:
+            return response.text
+    except requests.RequestException:
+        pass
+    return None
+```
+
+### Textise
+
+**URL Pattern**: `https://www.textise.net/show?url=<original_url>`
+
+Returns text-only version of pages. Good for accessibility-focused extraction.
+
+---
+
+## 7. API Services
+
+### Firecrawl
+
+**Full-featured web scraping API with markdown output.**
+
+```python
+from firecrawl import FirecrawlApp
+
+app = FirecrawlApp(api_key="fc-YOUR_KEY")
+
+# Scrape single page to markdown
+result = app.scrape_url("https://example.com/docs")
+markdown = result["markdown"]
+
+# Crawl entire site
+result = app.crawl_url("https://example.com", limit=100)
+```
+
+**Features**:
+- JavaScript rendering (SPA support)
+- Search + scrape combined
+- Site mapping
+- Structured extraction with AI prompts
+
+### Apify Website-to-Markdown
+
+```python
+from apify_client import ApifyClient
+
+client = ApifyClient("YOUR_API_TOKEN")
+run = client.actor("pink_comic/website-content-to-markdown").call(
+    run_input={"url": "https://example.com"}
+)
+for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+    print(item["markdown"])
+```
+
+---
+
+## 8. Local Processing Libraries
+
+### html2text (Python) — Already in scraper
+
+```python
+import html2text
+
+h = html2text.HTML2Text()
+h.body_width = 0  # No line wrapping
+markdown = h.handle(html_content)
+```
+
+### kreuzberg html-to-markdown (Rust, multi-language)
+
+High-performance HTML to markdown conversion:
+- Rust, Python, Node.js, Ruby, PHP, Go, Java, C#
+- Faster than html2text
+- Better table/list handling
+
+```python
+from html_to_markdown import convert_to_markdown
+
+markdown = convert_to_markdown(html_content)
+```
+
+### Reader-LM (Small Language Model)
+
+Jina AI's Reader-LM models (0.5B and 1.5B parameters) trained specifically for HTML→markdown conversion:
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("jinaai/ReaderLM-v2")
+tokenizer = AutoTokenizer.from_pretrained("jinaai/ReaderLM-v2")
+
+# Convert HTML to markdown using LLM
+inputs = tokenizer(html_content, return_tensors="pt")
+outputs = model.generate(**inputs)
+markdown = tokenizer.decode(outputs[0])
+```
+
+**Best for**: Complex pages with tables, equations, nested lists.
+
+---
+
+## 9. Comparison Table
+
+| Method | Cost | JS Rendering | Speed | Best For |
+|--------|------|--------------|-------|----------|
+| Accept header | Free | No | Fastest | Cloudflare sites |
+| Jina Reader | Free | No | Fast | Quick testing, any site |
+| Firecrawl | Paid | Yes | Medium | SPAs, crawl jobs |
+| html2text | Free | No | Fast | Simple pages |
+| Reader-LM | Free | No | Slow | Complex content |
+
+---
+
+## 10. Implementation Priority
+
+When fetching a URL, try in order:
+
+1. **llms.txt** — Check for curated navigation
+2. **Accept: text/markdown** — Server-side conversion (Cloudflare)
+3. **Jina Reader** — Free proxy (`r.jina.ai/`)
+4. **.md extension** — Static sites, nbdev
+5. **Firecrawl API** — Complex SPAs (paid)
+6. **html2text** — Local fallback (always works)
+
+---
+
+## 11. Sources
 
 - [llms.txt Specification](https://llmstxt.org/)
 - [Cloudflare Markdown for Agents](https://blog.cloudflare.com/markdown-for-agents/)

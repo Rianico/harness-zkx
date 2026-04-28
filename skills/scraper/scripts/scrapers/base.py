@@ -404,6 +404,31 @@ class DocumentationScraper(ABC):
 
         return None, "html"
 
+    def fetch_via_jina_reader(self, url: str) -> tuple[str | None, str]:
+        """Fetch markdown via Jina Reader proxy (r.jina.ai).
+
+        Free service that converts any URL to clean markdown.
+        No API key required for basic usage.
+
+        Args:
+            url: Original URL to fetch
+
+        Returns:
+            Tuple of (content, format) where format is "markdown" or "html"
+        """
+        jina_url = f"https://r.jina.ai/{url}"
+
+        try:
+            # Use direct request to Jina (not rate-limited against target site)
+            response = requests.get(jina_url, timeout=self.timeout)
+            if response.status_code == 200:
+                print(f"   Fetched via Jina Reader proxy")
+                return response.text, "markdown"
+        except requests.exceptions.RequestException:
+            pass
+
+        return None, "html"
+
     def fetch_page(self, url: str, cache_file: str = "page.html") -> BeautifulSoup | None:
         """Fetch and parse a webpage with caching.
 
@@ -456,18 +481,20 @@ class DocumentationScraper(ABC):
             return None
 
     def fetch_page_llm_friendly(
-        self, url: str, cache_file: str = "page"
+        self, url: str, cache_file: str = "page", use_jina: bool = True
     ) -> tuple[str | None, str]:
         """Fetch page content using LLM-friendly methods first.
 
         Tries in order:
         1. Accept: text/markdown header (content negotiation)
         2. .md extension on URL
-        3. Falls back to HTML conversion
+        3. Jina Reader proxy (r.jina.ai) if use_jina=True
+        4. Falls back to HTML conversion
 
         Args:
             url: URL to fetch
             cache_file: Base filename for cache storage (without extension)
+            use_jina: Whether to use Jina Reader proxy as fallback (default: True)
 
         Returns:
             Tuple of (content, format) where format is "markdown" or "html"
@@ -508,6 +535,14 @@ class DocumentationScraper(ABC):
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cache_path_md.write_text(content, encoding="utf-8")
             return content, "markdown"
+
+        # Try Jina Reader proxy
+        if use_jina:
+            content, fmt = self.fetch_via_jina_reader(url)
+            if content and fmt == "markdown":
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
+                cache_path_md.write_text(content, encoding="utf-8")
+                return content, "markdown"
 
         # Fall back to HTML
         soup = self.fetch_page(url, cache_file=f"{cache_file}.html")
