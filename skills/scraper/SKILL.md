@@ -209,10 +209,27 @@ Modern websites increasingly support direct markdown delivery:
 1. **llms.txt** — Standard file at `/llms.txt` with curated page lists
 2. **Accept: text/markdown** — Content negotiation header (Cloudflare, static servers)
 3. **.md extension** — Some sites serve markdown at `page.html.md`
+4. **Jina Reader** — Free proxy at `r.jina.ai/<url>`
 
 **Token savings**: Up to 80% reduction when markdown is available directly.
 
-See `references/llms-txt-patterns.md` for implementation patterns.
+### Quick Comparison
+
+| Method | Cost | Best For |
+|--------|------|----------|
+| Jina Reader | Free | Quick lookups, development |
+| Tavily Extract | Metered | Batch (20 URLs), query-focused |
+| Accept header | Free | Cloudflare sites |
+| llms.txt | Free | Curated documentation |
+
+### When to Use What
+
+- **1-2 URLs, quick lookup**: `curl https://r.jina.ai/<url>` (free, no setup)
+- **5+ URLs batch**: `tvly extract url1 url2 ... --json` (parallel, faster)
+- **Need relevance filtering**: `tvly extract --query "topic"` (unique feature)
+- **Development iteration**: Use `fetch_page_llm_friendly()` with caching
+
+See `references/llms-txt-patterns.md` and `references/tavily-vs-ours-comparison.md` for details.
 
 ## Reference Files
 

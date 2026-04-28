@@ -386,7 +386,85 @@ When fetching a URL, try in order:
 
 ---
 
-## 11. Sources
+## 12. Tavily Extract Integration
+
+### What It Is
+
+Tavily Extract is a commercial API for extracting markdown from URLs with unique features like query-focused extraction and batch processing.
+
+### When to Use
+
+| Use Case | Best Tool |
+|----------|-----------|
+| 1-2 URLs, quick lookup | Jina Reader (free) |
+| 5+ URLs batch | Tavily (parallel) |
+| Relevance filtering | Tavily (--query) |
+| Budget constrained | Jina Reader |
+
+### CLI Usage
+
+```bash
+# Single URL
+tvly extract "https://example.com/docs" --json
+
+# Batch (up to 20 URLs)
+tvly extract "url1" "url2" "url3" --json
+
+# Query-focused extraction (unique feature)
+tvly extract "https://docs.example.com/api" \
+  --query "authentication JWT" \
+  --chunks-per-source 3 \
+  --json
+
+# JS-heavy pages
+tvly extract "https://spa.example.com" \
+  --extract-depth advanced \
+  --json
+```
+
+### Python Integration
+
+```python
+import subprocess
+import json
+
+def fetch_via_tavily(urls: list[str], query: str | None = None) -> list[dict]:
+    """Fetch URLs via Tavily Extract CLI.
+    
+    Args:
+        urls: List of URLs (max 20)
+        query: Optional query for relevance filtering
+    
+    Returns:
+        List of {url, title, content} dicts
+    """
+    cmd = ["tvly", "extract", *urls, "--json"]
+    if query:
+        cmd.extend(["--query", query, "--chunks-per-source", "3"])
+    
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    data = json.loads(result.stdout)
+    
+    return [
+        {"url": r["url"], "title": r["title"], "content": r["raw_content"]}
+        for r in data["results"]
+    ]
+```
+
+### Comparison with Jina Reader
+
+| Aspect | Tavily | Jina Reader |
+|--------|--------|-------------|
+| Cost | API credits | Free |
+| Batch | 20 parallel | Sequential |
+| Query focus | Yes | No |
+| Auth required | Yes | No |
+
+See `references/tavily-vs-ours-comparison.md` for full analysis.
+
+---
+
+## 13. Sources
 
 - [llms.txt Specification](https://llmstxt.org/)
 - [Cloudflare Markdown for Agents](https://blog.cloudflare.com/markdown-for-agents/)
