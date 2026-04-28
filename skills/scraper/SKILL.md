@@ -33,6 +33,52 @@ uv run scrape.py lsp --force
 | `runtime` | CUDA Runtime API | Multi-page API documentation |
 | `driver` | CUDA Driver API | Multi-page API documentation |
 
+## Best Practices
+
+The scraper implements production-ready web scraping best practices:
+
+### Rate Limiting
+
+- **Default delay**: 1.0 second between requests
+- **Configurable**: Pass `delay` parameter to constructor
+- **Purpose**: Avoid overwhelming target servers
+
+### Retry Logic
+
+- **Exponential backoff**: Automatically retries on transient failures
+- **Default**: 3 retries with exponential backoff
+- **Retry-After header**: Respects server-specified wait times for 429 responses
+
+### Robots.txt Compliance
+
+- **Enabled by default**: Checks robots.txt before scraping
+- **Respects Crawl-Delay**: Uses server-specified delay if present
+- **Honors disallow**: Skips URLs blocked by robots.txt
+- **Disable with**: `respect_robots_txt=False`
+
+### User-Agent Rotation
+
+- **Default pool**: Common browser user agents
+- **Rotation**: Random selection per request to avoid detection
+- **Custom pool**: Pass your own list via `user_agent_pool` parameter
+
+### Error Handling
+
+- **Specific exceptions**: `ScraperConnectionError`, `ScraperTimeoutError`, `ScraperHTTPError`
+- **Clear error messages**: Includes URL and context for debugging
+
+### Constructor Parameters
+
+```python
+BaseScraper(
+    delay=1.0,              # Seconds between requests
+    max_retries=3,          # Retry attempts for transient failures
+    respect_robots_txt=True,  # Check robots.txt compliance
+    timeout=30.0,           # Request timeout in seconds
+    user_agent_pool=None,   # Custom user agent list
+)
+```
+
 ## Caching
 
 - **Default**: Uses cached HTML (fast iteration on processing logic)
