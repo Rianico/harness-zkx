@@ -195,7 +195,7 @@ Store results in the skill directory (`results.json`):
       "principle": "Define explicit stop conditions for all iteration loops",
       "verdict": "New Section",
       "target": "rules/common/coding-style.md",
-      "evidence": ["iterative-retrieval", "continuous-agent-loop", "agent-harness-construction"],
+      "evidence": ["iterative-retrieval", "verification-loop", "ai-engineering-expert"],
       "status": "skipped"
     }
   }
