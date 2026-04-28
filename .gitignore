@@ -1,6 +1,13 @@
 # Claude Code runtime directories
 .agents/
-.claude/
+
+# Claude Code user-specific files (keep rules tracked)
+.claude/skills/
+.claude/hooks/
+.claude/commands/
+.claude/settings.json
+.claude/settings.local.json
+.claude/*.json
 
 # Environment files
 .env
