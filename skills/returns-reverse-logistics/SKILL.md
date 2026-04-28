@@ -1,13 +1,13 @@
 ---
 name: returns-reverse-logistics
 description: >
-  Codified expertise for returns authorization, receipt and inspection,
-  disposition decisions, refund processing, fraud detection, and warranty
-  claims management. Informed by returns operations managers with 15+ years
-  experience. Includes grading frameworks, disposition economics, fraud
-  pattern recognition, and vendor recovery processes. Use when handling
-  product returns, reverse logistics, refund decisions, return fraud
-  detection, or warranty claims.
+  Reverse logistics expertise for retail and e-commerce returns operations.
+  Covers returns authorization (RMA), receipt and inspection, condition grading
+  (A/B/C/D), disposition routing (restock, refurbish, liquidate, scrap, RTV),
+  refund processing, fraud detection (wardrobing, swap fraud, serial returners),
+  warranty claims, and vendor recovery. Use when processing product returns,
+  routing disposition decisions, detecting return fraud, managing warranty claims,
+  optimizing recovery value, grading returned inventory, or building returns SOPs.
 license: Apache-2.0
 version: 1.0.0
 homepage: https://github.com/affaan-m/everything-claude-code

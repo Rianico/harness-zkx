@@ -1,6 +1,6 @@
 ---
 name: article-writing
-description: Write articles, guides, blog posts, tutorials, newsletter issues, and other long-form content in a distinctive voice derived from supplied examples or brand guidance. Use when the user wants polished written content longer than a paragraph, especially when voice consistency, structure, and credibility matter.
+description: Long-form content writing for articles, blog posts, essays, guides, tutorials, newsletters, and launch posts with voice matching. Use when the user wants to write an article, draft a blog post, create a guide, write a tutorial, produce a newsletter issue, turn notes into polished content, or match a specific writing voice. TRIGGER on article drafting, blog writing, newsletter creation, long-form content, or voice-consistent writing requests.
 
 ---
 

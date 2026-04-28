@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Invoke the docs-lookup agent to fetch up-to-date library and framework docs instead of relying on training data. Activates for setup questions, API references, code examples, or when the user names a framework.
+description: "Fetch up-to-date library and framework documentation instead of relying on training data. Use when the user asks about React, Next.js, Prisma, Supabase, Tailwind, Express, Vue, Django, or any library. Triggers for documentation lookup, API reference, setup guide, code example, how to configure, library usage, framework docs."
 ---
 
 # Documentation Lookup

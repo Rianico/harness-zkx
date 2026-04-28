@@ -1,12 +1,13 @@
 ---
 name: logistics-exception-management
 description: >
-  Codified expertise for handling freight exceptions, shipment delays,
-  damages, losses, and carrier disputes. Informed by logistics professionals
-  with 15+ years operational experience. Includes escalation protocols,
-  carrier-specific behaviors, claims procedures, and judgment frameworks.
-  Use when handling shipping exceptions, freight claims, delivery issues,
-  or carrier disputes.
+  Freight exception handling expertise for LTL, FTL, parcel, intermodal, ocean,
+  and air shipments. Covers shipment delays, damages (visible, concealed,
+  temperature), losses, shortages, refused deliveries, carrier disputes, freight
+  claims filing (Carmack Amendment), detention disputes, and escalation protocols.
+  Use when handling shipping exceptions, filing freight claims, resolving delivery
+  issues, disputing carrier charges, managing lost or damaged shipments, tracking
+  missing freight, or building exception handling SOPs.
 license: Apache-2.0
 version: 1.0.0
 homepage: https://github.com/affaan-m/everything-claude-code

@@ -1,7 +1,6 @@
 ---
 name: verification-loop
-description: "A comprehensive verification system for Claude Code sessions."
-
+description: "Multi-phase verification workflow for build, type check, lint, test coverage, security scan, and diff review. Use when you need to verify code quality, run quality gates before PR, check test coverage, validate builds, or ensure code passes all checks. Triggers for verify, build check, test run, lint, security scan, coverage report."
 ---
 
 # Verification Loop Skill

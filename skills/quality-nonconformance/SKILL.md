@@ -1,13 +1,14 @@
 ---
 name: quality-nonconformance
 description: >
-  Codified expertise for quality control, non-conformance investigation, root
-  cause analysis, corrective action, and supplier quality management in
-  regulated manufacturing. Informed by quality engineers with 15+ years
-  experience across FDA, IATF 16949, and AS9100 environments. Includes NCR
-  lifecycle management, CAPA systems, SPC interpretation, and audit methodology.
-  Use when investigating non-conformances, performing root cause analysis,
-  managing CAPAs, interpreting SPC data, or handling supplier quality issues.
+  Quality management expertise for regulated manufacturing (FDA, IATF 16949,
+  AS9100, ISO 13485). Covers non-conformance investigation, root cause analysis
+  (5-Why, Ishikawa, FTA, 8D), CAPA systems, NCR lifecycle management, SPC
+  interpretation, incoming inspection (AQL sampling), supplier quality management,
+  and audit response. Use when investigating non-conformances, performing root
+  cause analysis, managing CAPAs, interpreting SPC control charts, handling
+  supplier quality issues, determining NCR disposition, or responding to audit
+  findings.
 license: Apache-2.0
 version: 1.0.0
 homepage: https://github.com/affaan-m/everything-claude-code

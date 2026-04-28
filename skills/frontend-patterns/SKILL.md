@@ -1,7 +1,6 @@
 ---
 name: frontend-patterns
-description: Frontend development patterns for React, Next.js, state management, performance optimization, and UI best practices.
-
+description: React component patterns, Next.js architecture, state management hooks, performance optimization, and UI accessibility patterns for modern frontend development. TRIGGER when: building React components, implementing custom hooks, managing state with useState/useReducer/Zustand/Context, optimizing render performance with memoization/virtualization/code splitting, handling forms with validation, implementing keyboard navigation, focus management, or responsive layouts. Covers composition, compound components, render props, error boundaries, and animation patterns.
 ---
 
 # Frontend Development Patterns

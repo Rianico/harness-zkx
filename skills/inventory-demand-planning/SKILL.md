@@ -1,13 +1,13 @@
 ---
 name: inventory-demand-planning
 description: >
-  Codified expertise for demand forecasting, safety stock optimization,
-  replenishment planning, and promotional lift estimation at multi-location
-  retailers. Informed by demand planners with 15+ years experience managing
-  hundreds of SKUs. Includes forecasting method selection, ABC/XYZ analysis,
-  seasonal transition management, and vendor negotiation frameworks.
-  Use when forecasting demand, setting safety stock, planning replenishment,
-  managing promotions, or optimizing inventory levels.
+  Demand planning expertise for retail and omnichannel inventory optimization.
+  Covers demand forecasting, safety stock calculation, replenishment planning,
+  promotional lift estimation, ABC/XYZ segmentation, seasonal transitions,
+  forecast accuracy metrics (MAPE, WMAPE, bias), and vendor negotiation.
+  Use when forecasting demand, calculating safety stock, planning replenishment,
+  managing promotional inventory, optimizing stock levels, resolving forecast
+  accuracy issues, or making buy decisions under supplier constraints.
 license: Apache-2.0
 version: 1.0.0
 homepage: https://github.com/affaan-m/everything-claude-code

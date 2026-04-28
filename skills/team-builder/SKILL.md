@@ -1,6 +1,6 @@
 ---
 name: team-builder
-description: Interactive agent picker for composing and dispatching parallel teams
+description: Build, compose, and dispatch parallel agent teams for multi-perspective tasks. Use for team composition, parallel agent dispatch, ad-hoc expert teams, multi-domain reviews, cross-functional analysis, and concurrent agent workflows. Supports browsing available agents, selecting by domain or name, spawning up to 5 agents in parallel, and synthesizing results.
 origin: community
 ---
 

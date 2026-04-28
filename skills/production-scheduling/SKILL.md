@@ -1,13 +1,13 @@
 ---
 name: production-scheduling
 description: >
-  Codified expertise for production scheduling, job sequencing, line balancing,
-  changeover optimization, and bottleneck resolution in discrete and batch
-  manufacturing. Informed by production schedulers with 15+ years experience.
-  Includes TOC/drum-buffer-rope, SMED, OEE analysis, disruption response
-  frameworks, and ERP/MES interaction patterns. Use when scheduling production,
-  resolving bottlenecks, optimizing changeovers, responding to disruptions,
-  or balancing manufacturing lines.
+  Production scheduling expertise for discrete and batch manufacturing environments.
+  Covers job sequencing, line balancing, changeover optimization, bottleneck
+  management, OEE analysis, disruption response, TOC/drum-buffer-rope, SMED
+  methodology, and ERP/MES integration. Use when scheduling production orders,
+  resolving bottlenecks, optimizing changeovers, responding to machine breakdowns
+  or material shortages, balancing manufacturing lines, managing capacity
+  constraints, or re-sequencing after disruptions.
 license: Apache-2.0
 version: 1.0.0
 homepage: https://github.com/affaan-m/everything-claude-code

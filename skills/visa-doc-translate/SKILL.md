@@ -1,9 +1,10 @@
 ---
 name: visa-doc-translate
-description: Translate visa application documents (images) to English and create a bilingual PDF with original and translation
+description: Translate visa application documents from images to English. Use for bank deposit certificates, employment certificates, retirement certificates, income certificates, property certificates, business licenses, ID cards, and passports. Creates bilingual PDFs with original image and English translation for visa applications to Australia, USA, Canada, UK, and other countries.
+argument-hint: "<image_file_path>"
 ---
 
-You are helping translate visa application documents for visa applications.
+Translates visa application documents from image files to English.
 
 ## Instructions
 

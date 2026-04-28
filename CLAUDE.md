@@ -142,42 +142,7 @@ To ensure a seamless user experience and strict system bounds, skills, commands,
   * When a command is justified, ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
   * When a command is justified, ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from going rogue outside their intended workflow.
 * **LSZ Pattern (Skills):**
-  * ALWAYS include `argument-hint:` when the skill accepts arguments.
-  * Skills are the canonical place for reusable workflow contracts and methodology.
-
-### 9.1 Skill Description Design
-Skill descriptions are not just summaries. They are the primary trigger surface for skill retrieval, so they must be written for recall first and elegance second.
-
-* **Lead with a one-line identity sentence.** Start the description with a crisp statement of what the skill is for before expanding into coverage.
-* **Optimize for trigger recall with explicit vocabulary.** Include the verbs, artifact names, domains, and topic words users are likely to say. Intentionally explicit, high-recall wording is preferable to elegant but under-triggering prose.
-* **Cluster vocabulary semantically — scale clusters to skill scope.** Group coverage by how users think: actions, deliverables, domains, components, topics, stacks, or workflows. A broad domain skill warrants many clusters; a narrow action skill may need only two or three high-yield ones. Match depth to scope — never pad a simple skill with clusters it does not own.
-* **Signal scope and depth explicitly — calibrate to skill type.** The model should know what kind of skill it is retrieving. Express this differently per type: complex workflows name phases, checkpoints, and handoffs; domain skills mention coverage breadth and reference depth; action skills name their narrow purpose and what they deliberately exclude. Never leave scope implicit.
-* **Mention key integrations when they materially affect execution.** If a skill depends on an MCP, bundled resource, or external capability that changes how the work should be routed, say so directly in the description.
-
-**Good example (broad domain skill):**
-```yaml
-description: "UI/UX design intelligence for web and mobile. Use this for designing, implementing, reviewing, fixing, and improving interfaces. Covers dashboards, landing pages, admin panels, forms, tables, charts, accessibility, typography, responsive layout, and animation. Integrates with shadcn/ui MCP for component search and examples."
-```
-
-**Good example (narrow workflow skill):**
-```yaml
-description: "Execute a compact TDD workflow for feature work and bug fixes. Use this when the task needs strict RED, GREEN, and REFACTOR discipline, failing tests first, minimal passing changes, and implementation-focused verification."
-```
-
-**Bad example (too elegant, weak trigger surface):**
-```yaml
-description: "Thoughtful guidance for building polished interfaces."
-```
-
-**Bad example (capability present, trigger language missing):**
-```yaml
-description: "Generates architecture documents with clear trade-off analysis."
-```
-
-The better version names when to use it and what users may ask for:
-```yaml
-description: "Architecture decision record generation for system design, refactoring, service boundaries, module boundaries, trade-off analysis, and architectural review. Use when the user asks to design, review, improve, or critique architecture."
-```
+  * See `.claude/rules/skill-authoring-standards.md` for comprehensive skill authoring standards including frontmatter, description design, structure, and quality guidelines.
 
 ## Trade-Offs to Consider
 * **Latency vs Context Bloat:** The Hybrid JIT Architecture adds a small runtime penalty to complex tasks because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request.

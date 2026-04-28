@@ -1,3 +1,8 @@
+---
+name: design-system
+description: Design system generation, visual audit, and AI slop detection for web interfaces. TRIGGER when: creating a new design system, auditing CSS/Tailwind/styled-components for visual consistency, reviewing color palettes/typography/spacing/border-radius/shadows/breakpoints, detecting AI-generated design patterns (gratuitous gradients, purple-to-blue defaults, glass morphism), scoring UI across dimensions (color consistency, typography hierarchy, spacing rhythm, accessibility, polish). Use when starting a new project, before a redesign, reviewing PRs that touch styling, or when the UI looks "off" but the cause is unclear.
+---
+
 # Design System — Generate & Audit Visual Systems
 
 ## When to Use
