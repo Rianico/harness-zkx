@@ -11,6 +11,12 @@
       "sourceType": "github",
       "computedHash": "1a4b45a0016a1aaf4842f6e996fe08ce2b4b62b454db0d0414035782d8185c0a"
     },
+    "tavily-extract": {
+      "source": "tavily-ai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/tavily-extract/SKILL.md",
+      "computedHash": "8d52d231d67d398637d06234e09e9207fb7caa692ff1c33c0df43493b7d4ca7e"
+    },
     "tavily-search": {
       "source": "tavily-ai/skills",
       "sourceType": "github",
