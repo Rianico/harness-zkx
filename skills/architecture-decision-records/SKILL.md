@@ -116,7 +116,23 @@ Use these heuristics when choosing between plain creation, supersession, and lin
 - **Clarifies** when the newer ADR explains or narrows the interpretation of an older ADR without replacing it.
 - **Related link** when there is architectural coupling but no lifecycle replacement.
 
-If the relationship is obvious from the repository scan, proceed with the right `adr` command. If it is materially ambiguous, surface the likely candidates and ask for confirmation.
+If the relationship is obvious from the repository scan, proceed with the right `adr` command. If it is materially ambiguous, surface the likely candidates and ask for confirmation using this dialog:
+
+```yaml
+Dialog:
+  header: "ADR Relationship"
+  question: "This new decision may relate to existing ADRs. What is the relationship?"
+  multipleChoice: false
+  options:
+    - label: "Supersede [ADR-X]"
+      description: "Replace an older ADR as the active decision"
+    - label: "Amend [ADR-X]"
+      description: "Extend or correct an earlier ADR"
+    - label: "Link to [ADR-X]"
+      description: "Related but not superseding or amending"
+    - label: "Standalone"
+      description: "No relationship to existing ADRs"
+```
 
 ## Create Workflow
 

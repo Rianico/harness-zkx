@@ -28,11 +28,25 @@ Both together give the best coverage. Configure in `~/.claude.json` or `~/.codex
 
 ### Step 1: Understand the Goal
 
-Ask 1-2 quick clarifying questions:
-- "What's your goal — learning, making a decision, or writing something?"
-- "Any specific angle or depth you want?"
+**Dialog Contract for research goal clarification:**
 
-If the user says "just research it" — skip ahead with reasonable defaults.
+```yaml
+Dialog:
+  header: "Research Goal"
+  question: "What's your goal for this research?"
+  multipleChoice: false
+  options:
+    - label: "Learning"
+      description: "Understand the topic deeply, explore broadly"
+    - label: "Decision making"
+      description: "Need evidence to inform a specific choice"
+    - label: "Writing"
+      description: "Gathering sources and citations for content"
+    - label: "Just research it"
+      description: "Skip questions and proceed with defaults"
+```
+
+If the user selects "Just research it" — skip ahead with reasonable defaults.
 
 ### Step 2: Plan the Research
 

@@ -55,12 +55,29 @@ Before asking any questions:
 
 Your goal here is **shared clarity**, not speed.
 
+**Dialog Contract (use AskUserQuestion tool):**
+
+```yaml
+Dialog:
+  header: "<investigation topic>"
+  question: "<single focused question?>"
+  multipleChoice: false
+  options:
+    - label: "<option A>"
+      description: "<implication of A>"
+    - label: "<option B>"
+      description: "<implication of B>"
+    - label: "Other"
+      description: "Provide custom input"
+```
+
 **Rules:**
 
-- Ask **one question per message**
-- Prefer **multiple-choice questions** when possible
-- Use open-ended questions only when necessary
-- If a topic needs depth, split it into multiple questions
+- One question per dialog
+- 2-4 options max (plus "Other" for custom input)
+- Set `multipleChoice: true` only when options are truly independent
+- Provide clear descriptions explaining tradeoffs
+- Use open-ended questions only when options cannot be anticipated
 
 Focus on understanding:
 
@@ -107,10 +124,21 @@ List all assumptions explicitly.
 #### Open Questions
 List unresolved questions, if any.
 
-Then ask:
+Then ask for confirmation:
 
-> “Does this accurately reflect your intent?  
-> Please confirm or correct anything before we move to design.”
+```yaml
+Dialog:
+  header: “Understanding Lock”
+  question: “Does this accurately reflect your intent? Please confirm or correct before we move to design.”
+  multipleChoice: false
+  options:
+    - label: “Confirmed”
+      description: “Proceed to design exploration”
+    - label: “Needs revision”
+      description: “Clarify or correct specific items”
+    - label: “Other”
+      description: “Provide detailed feedback”
+```
 
 **Do NOT proceed until explicit confirmation is given.**
 
@@ -129,6 +157,22 @@ Once understanding is confirmed:
   - maintenance
 - Avoid premature optimization (**YAGNI ruthlessly**)
 
+**Dialog Contract for approach selection:**
+
+```yaml
+Dialog:
+  header: "Design Approach"
+  question: "Which approach should we pursue?"
+  multipleChoice: false
+  options:
+    - label: "<Approach A> (Recommended)"
+      description: "<tradeoffs and implications>"
+    - label: "<Approach B>"
+      description: "<tradeoffs and implications>"
+    - label: "Hybrid/Other"
+      description: "Combine elements or propose alternative"
+```
+
 This is still **not** final design.
 
 ---
@@ -138,17 +182,29 @@ This is still **not** final design.
 When presenting the design:
 
 - Break it into sections of **200–300 words max**
-- After each section, ask:
+- After each section, ask for checkpoint confirmation:
 
-  > “Does this look right so far?”
+```yaml
+Dialog:
+  header: “Design Checkpoint”
+  question: “Does this section look right so far?”
+  multipleChoice: false
+  options:
+    - label: “Continue”
+      description: “Proceed to next section”
+    - label: “Revise”
+      description: “Something needs adjustment”
+    - label: “Other”
+      description: “Provide specific feedback”
+```
 
 Cover, as relevant:
 
-- Architecture  
-- Components  
-- Data flow  
-- Error handling  
-- Edge cases  
+- Architecture
+- Components
+- Data flow
+- Error handling
+- Edge cases
 - Testing strategy  
 
 ---
@@ -187,7 +243,19 @@ Persist the document according to the project’s standard workflow.
 
 Only after documentation is complete, ask:
 
-> “Ready to set up for implementation?”
+```yaml
+Dialog:
+  header: “Implementation Handoff”
+  question: “Ready to set up for implementation?”
+  multipleChoice: false
+  options:
+    - label: “Yes, proceed”
+      description: “Create implementation plan and begin”
+    - label: “Not yet”
+      description: “Need more design refinement or review”
+    - label: “Other”
+      description: “Provide specific requirements”
+```
 
 If yes:
 - Create an explicit implementation plan

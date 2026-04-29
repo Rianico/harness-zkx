@@ -83,10 +83,16 @@ Every error path needs:
 - Deep content in `references/` (one level deep)
 - Executable logic in `scripts/`
 
+**User Interaction**
+- Use Dialog Contract pattern for all user questions
+- One question per dialog, 2-4 options plus "Other"
+- Always include clear descriptions explaining tradeoffs
+
 **References:**
 - [skill-frontmatter.md](references/skill-frontmatter.md) — Full frontmatter spec
 - [skill-structure.md](references/skill-structure.md) — Directory layout, progressive disclosure
 - [skill-description-patterns.md](references/skill-description-patterns.md) — Writing triggerable descriptions
+- [dialog-contract.md](references/dialog-contract.md) — Standard pattern for user interactions
 
 ## Quick Reference: Testing Patterns
 

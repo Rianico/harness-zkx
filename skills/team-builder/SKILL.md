@@ -68,17 +68,27 @@ If no agent files are found after probing all locations, inform the user: "No ag
 
 ### Step 2: Present Domain Menu
 
-```
-Available agent domains:
-1. Engineering — Software Architect, Security Engineer
-2. Marketing — SEO Specialist
-3. Sales — Discovery Coach, Outbound Strategist
+**Dialog Contract for domain selection:**
 
-Pick domains or name specific agents (e.g., "1,3" or "security + seo"):
+```yaml
+Dialog:
+  header: "Agent Domains"
+  question: "Which domains or agents should work on this task?"
+  multipleChoice: true
+  options:
+    - label: "Engineering (N agents)"
+      description: "Software Architect, Security Engineer, ..."
+    - label: "Marketing (N agents)"
+      description: "SEO Specialist, ..."
+    - label: "Sales (N agents)"
+      description: "Discovery Coach, Outbound Strategist, ..."
+    - label: "Other"
+      description: "Name specific agents or provide custom selection"
 ```
 
 - Skip domains with zero agents (empty directories)
 - Show agent count per domain
+- Use `multipleChoice: true` when user can pick multiple domains
 
 ### Step 3: Handle Selection
 
@@ -87,12 +97,36 @@ Accept flexible input:
 - Names: "security + seo" fuzzy-matches against discovered agents
 - "all from engineering" selects every agent in that domain
 
-If more than 5 agents are selected, list them alphabetically and ask the user to narrow down: "You selected N agents (max 5). Pick which to keep, or say 'first 5' to use the first five alphabetically."
+If more than 5 agents are selected, use this dialog:
 
-Confirm selection:
+```yaml
+Dialog:
+  header: "Too Many Agents"
+  question: "You selected N agents (max 5). Which should we keep?"
+  multipleChoice: true
+  options:
+    - label: "First 5 alphabetically"
+      description: "Use the first five agents sorted by name"
+    - label: "Let me narrow down"
+      description: "Provide specific agent names to keep"
+    - label: "Other"
+      description: "Describe selection criteria"
 ```
-Selected: Security Engineer + SEO Specialist
-What should they work on? (describe the task):
+
+After selection, confirm with task prompt:
+
+```yaml
+Dialog:
+  header: "Team Ready"
+  question: "Selected: Agent A + Agent B. What should they work on?"
+  multipleChoice: false
+  options:
+    - label: "Describe task"
+      description: "Provide the task description for the team"
+    - label: "Change selection"
+      description: "Go back to select different agents"
+    - label: "Other"
+      description: "Provide custom instructions"
 ```
 
 ### Step 4: Spawn Agents in Parallel

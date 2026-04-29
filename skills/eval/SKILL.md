@@ -76,16 +76,21 @@ Agent tool (general-purpose):
 
 After `define` returns an eval definition pointer, stop and present options for approval:
 
----
-**Eval Definition Ready**
+**Dialog Contract for eval approval:**
 
-Please review the file at `[eval_definition_pointer]`.
-
-Options:
-1. **Approve** — Accept this eval definition as the gate for implementation.
-2. **Revise** — Provide changes or missing criteria for a new subagent revision pass.
-3. **Reject** — Stop without using this eval definition.
----
+```yaml
+Dialog:
+  header: "Eval Definition Ready"
+  question: "Please review the eval definition at [eval_definition_pointer]. Ready to proceed?"
+  multipleChoice: false
+  options:
+    - label: "Approve"
+      description: "Accept this eval definition as the gate for implementation"
+    - label: "Revise"
+      description: "Provide changes or missing criteria for a revision pass"
+    - label: "Reject"
+      description: "Stop without using this eval definition"
+```
 
 If approved, return the eval definition pointer and `[eval_dir]`, then terminate. If revision is requested, ask for the requested changes, then launch a new subagent with the prior definition pointer, `[eval_dir]`, and the user's feedback. Do not resume the old subagent.
 
