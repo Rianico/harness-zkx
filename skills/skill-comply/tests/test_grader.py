@@ -125,4 +125,4 @@ class TestGradeEdgeCases:
     @patch("scripts.grader.classify_events", side_effect=_mock_compliant_classification)
     def test_spec_id_in_result(self, mock_cls, tdd_spec, compliant_trace) -> None:
         result = grade(tdd_spec, compliant_trace)
-        assert result.spec_id == "tdd-workflow"
+        assert result.spec_id == "tdd-cycle"
