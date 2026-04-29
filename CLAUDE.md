@@ -142,7 +142,8 @@ To ensure a seamless user experience and strict system bounds, skills, commands,
   * When a command is justified, ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
   * When a command is justified, ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from going rogue outside their intended workflow.
 * **LSZ Pattern (Skills):**
-  * See `.claude/rules/skill-authoring-standards.md` for comprehensive skill authoring standards including frontmatter, description design, structure, and quality guidelines.
+  * Invoke the `ai-engineering-expert` skill for comprehensive methodology on designing skills, agents, workflows, and orchestration patterns.
+  * See `.claude/rules/skill-conventions.md` for mandatory guardrails only.
 
 ## Trade-Offs to Consider
 * **Latency vs Context Bloat:** The Hybrid JIT Architecture adds a small runtime penalty to complex tasks because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request.

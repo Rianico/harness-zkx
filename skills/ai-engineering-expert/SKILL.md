@@ -66,6 +66,28 @@ Every error path needs:
 
 [Full details: tool-design-contracts.md](references/tool-design-contracts.md)
 
+## Quick Reference: Skill Authoring
+
+**Required Frontmatter**
+- `name`: Display name (lowercase, hyphens, max 64 chars)
+- `description`: What + when, third-person, trigger vocabulary
+
+**Key Optional Fields**
+- `argument-hint`: Autocomplete hint like `[mode] <topic>`
+- `allowed-tools`: Tool allowlist without permission prompts
+- `model`: Override model (`opus`, `sonnet`, `haiku`, `inherit`)
+- `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)
+
+**Structure**
+- SKILL.md under 500 lines
+- Deep content in `references/` (one level deep)
+- Executable logic in `scripts/`
+
+**References:**
+- [skill-frontmatter.md](references/skill-frontmatter.md) — Full frontmatter spec
+- [skill-structure.md](references/skill-structure.md) — Directory layout, progressive disclosure
+- [skill-description-patterns.md](references/skill-description-patterns.md) — Writing triggerable descriptions
+
 ## Quick Reference: Testing Patterns
 
 **The Core Problem**
@@ -82,7 +104,7 @@ Write tests for bugs that were found, not for code that works. AI tends to make 
 
 [Full details: sandbox-testing-patterns.md](references/sandbox-testing-patterns.md)
 
-## Gotchas for Skill Authors
+## Gotchas
 
 - **Vague descriptions** — "Helps with documents" won't trigger. Use explicit trigger vocabulary.
 - **Wrong POV** — "I can help you..." fails discovery. Always third-person.
@@ -90,3 +112,24 @@ Write tests for bugs that were found, not for code that works. AI tends to make 
 - **Overloading SKILL.md** — Keep under 500 lines. Move depth to references/.
 - **Deep nesting** — References should be one level from SKILL.md. Nested references get partially read.
 - **No validation loops** — Skills that do destructive work without self-checking produce silent failures.
+
+## Skill Authoring Checklist
+
+Before publishing a skill:
+
+### Core Quality
+- [ ] Description is third-person, specific, includes trigger terms
+- [ ] Description includes both what AND when to use
+- [ ] Methodology skills: Description covers all three trigger patterns (direct domain, problem framing, decision language)
+- [ ] SKILL.md body under 500 lines / 5,000 tokens
+- [ ] Reference files are one level deep from SKILL.md
+- [ ] No time-sensitive information (or in "old patterns" section)
+- [ ] Consistent terminology throughout
+- [ ] Examples are concrete, not abstract
+
+### Structure
+- [ ] Frontmatter includes `name` and `description` (required)
+- [ ] `argument-hint` present if skill accepts arguments
+- [ ] Gotchas section for non-obvious environment facts
+- [ ] Templates/checklists for multi-step workflows
+- [ ] Validation loops for quality-critical tasks
