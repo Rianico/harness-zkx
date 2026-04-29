@@ -1,5 +1,5 @@
 ---
-name: orchestrate
+name: orchestrating
 description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the skill sequence across brainstorming, architect, plan, eval, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, remediation loops, final review behavior, and pointer-based state passing.
 argument-hint: "[feature|refactor|bugfix|docs]"
 ---
