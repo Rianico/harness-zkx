@@ -6,11 +6,11 @@ argument-hint: "[create|diff|list|clear] <name>"
 
 # Checkpoint Skill
 
-Manage workflow checkpoints for tracking progress through multi-phase work.
+Manage workflow checkpoints for tracking progress across tasks and sessions. Checkpoints are project-level artifacts shared across all work.
 
 ## Purpose
 
-Create named savepoints at key moments, then diff current state against them to understand what changed. Useful for refactors, feature development, and any work where you want to measure progress.
+Create named savepoints at key moments, then diff current state against them to understand what changed. Checkpoints persist across sessions and are shared across tasks, enabling long-running workflow tracking.
 
 ## Execution Contract
 
@@ -18,41 +18,77 @@ Create named savepoints at key moments, then diff current state against them to 
 /checkpoint create <name>  - Save current state as named checkpoint
 /checkpoint diff <name>    - Show changes since checkpoint
 /checkpoint list           - Show all checkpoints with status
-/checkpoint clear          - Remove old checkpoints (keeps last 5)
+/checkpoint clear          - Remove old checkpoints (keeps last 10)
 ```
+
+## Artifact Storage
+
+Checkpoints are stored in `.lsz/checkpoints/` at the project root:
+
+```
+.lsz/
+└── checkpoints/
+    ├── {name1}.json
+    ├── {name2}.json
+    └── registry.json       # Optional: metadata index
+```
+
+Each checkpoint is a standalone JSON file, enabling easy inspection, diffing, and cleanup.
 
 ## Workflow Phases
 
 ### Create Checkpoint
 
-1. Run `/verify quick` to ensure current state is clean
-2. Commit or stash any pending changes
-3. Log checkpoint to `.claude/checkpoints.log`:
+1. Ensure checkpoint directory exists:
    ```bash
-   echo "$(date +%Y-%m-%d-%H:%M) | $NAME | $(git rev-parse --short HEAD)" >> .claude/checkpoints.log
+   mkdir -p .lsz/checkpoints
    ```
-4. Report: name, timestamp, git SHA
+2. Capture current state:
+   ```bash
+   git rev-parse HEAD
+   git status --porcelain
+   git branch --show-current
+   ```
+3. Write checkpoint file to `.lsz/checkpoints/{name}.json`:
+   ```json
+   {
+     "name": "<name>",
+     "created_at": "<ISO8601 timestamp>",
+     "git_sha": "<full SHA>",
+     "git_sha_short": "<short SHA>",
+     "branch": "<current branch>",
+     "dirty": <true|false>,
+     "untracked": ["<file paths>"],
+     "modified": ["<file paths>"]
+   }
+   ```
+4. Report: name, timestamp, git SHA, dirty state
 
 ### Diff Checkpoint
 
-1. Read checkpoint entry from log
-2. Diff current HEAD against checkpoint SHA:
-   - Commits added since checkpoint
-   - Files changed with stats
-   - Any uncommitted changes
-3. Report in structured format
+1. Read checkpoint file from `.lsz/checkpoints/{name}.json`
+2. Compare current HEAD against checkpoint SHA:
+   ```bash
+   git log --oneline <checkpoint_sha>..HEAD
+   git diff --stat <checkpoint_sha> HEAD
+   git status --porcelain
+   ```
+3. Report structured diff (commits, files changed, uncommitted changes)
 
 ### List Checkpoints
 
-Show all checkpoints with:
-- Name
-- Timestamp
-- Git SHA
-- Status (current, behind X commits, ahead X commits)
+1. List all `*.json` files in `.lsz/checkpoints/`
+2. For each checkpoint, compute status:
+   - `current`: HEAD matches checkpoint SHA
+   - `behind X commits`: checkpoint SHA is ahead of HEAD
+   - `ahead X commits`: HEAD is ahead of checkpoint SHA
+3. Output formatted table
 
 ### Clear Checkpoints
 
-Remove old entries, keeping last 5.
+1. List all checkpoint files sorted by creation timestamp
+2. Keep last 10, delete older ones
+3. Report deleted checkpoints
 
 ## Output Formats
 
@@ -60,8 +96,10 @@ Remove old entries, keeping last 5.
 ```
 CHECKPOINT CREATED: <name>
 =================================
-Timestamp: YYYY-MM-DD-HH:MM
-Git SHA:  <sha>
+Timestamp: <ISO8601>
+Git SHA:   <sha>
+Branch:    <branch>
+State:     clean | dirty (X uncommitted)
 ```
 
 ### Diff Output
@@ -80,25 +118,27 @@ Changed files:
 Commit(s):
   <sha> <message>
 
-Untracked:
-  path/to/untracked/
+Uncommitted:
+  M path/to/modified
+  ?? path/to/untracked
 ```
 
 ### List Output
 ```
 CHECKPOINTS
-===========
-Name          | Timestamp        | SHA     | Status
---------------|------------------|---------|--------
-<name1>       | YYYY-MM-DD-HH:MM | <sha>   | behind (X commits)
-<name2>       | YYYY-MM-DD-HH:MM | <sha>   | current
+===================================
+Name          | Created           | SHA     | Status
+--------------|-------------------|---------|--------
+<name1>       | <ISO8601>         | <sha>   | behind (X commits)
+<name2>       | <ISO8601>         | <sha>   | current
 ```
 
 ## Gotchas
 
 - Checkpoints reference git SHAs; rebasing or force-pushing invalidates them
-- Checkpoint log is local-only (`.claude/checkpoints.log`)
-- Running `create` on dirty state will commit changes first
+- Checkpoint files are local-only (in `.lsz/checkpoints/`)
+- Creating a checkpoint on dirty state records dirty files but references HEAD SHA
+- Checkpoints persist across sessions - use meaningful names to avoid confusion
 
 ## Example Workflow
 
