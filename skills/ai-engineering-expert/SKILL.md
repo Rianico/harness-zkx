@@ -1,6 +1,6 @@
 ---
 name: ai-engineering-expert
-description: AI engineering expertise for designing skills, agents, workflows, evals, and regression tests in the LSZ architecture. TRIGGER when designing a skill, refining a workflow, building an agent, creating a command, structuring agent orchestration, defining tool boundaries, action spaces, observation formats, error recovery contracts, eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user asks 'should this be a skill or command', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code'.
+description: AI engineering expertise for designing skills, agents, workflows, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, workflow, agent, or command; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user asks 'should this be a skill or command', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'how do I redesign this agent', 'help me iterate on this skill'.
 ---
 
 # AI Engineering Expert
@@ -41,7 +41,7 @@ Skills that violate these constraints produce fragile agents that fail silently 
 - Fresh session after major phase transitions
 - Compact at milestones, not during debugging
 
-[Full details: architecture-and-process.md](references/architecture-and-process.md)
+[Full details: eval-first-development.md](references/eval-first-development.md)
 
 ## Quick Reference: Harness Design
 
@@ -64,7 +64,7 @@ Every error path needs:
 - Safe retry instruction
 - Explicit stop condition
 
-[Full details: harness-design.md](references/harness-design.md)
+[Full details: tool-design-contracts.md](references/tool-design-contracts.md)
 
 ## Quick Reference: Testing Patterns
 
@@ -80,7 +80,7 @@ When the same AI writes and reviews code, it carries the same assumptions into b
 **Test Strategy**
 Write tests for bugs that were found, not for code that works. AI tends to make the same category of mistakes repeatedly — once tested, that regression cannot happen again.
 
-[Full details: testing-patterns.md](references/testing-patterns.md)
+[Full details: sandbox-testing-patterns.md](references/sandbox-testing-patterns.md)
 
 ## Gotchas for Skill Authors
 
