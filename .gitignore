@@ -1,5 +1,7 @@
 # Claude Code runtime directories
 .agents/
+.claude/agents/
+.lsz/
 
 # Claude Code user-specific files (keep rules tracked)
 .claude/skills/
