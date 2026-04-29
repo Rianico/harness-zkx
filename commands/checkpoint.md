@@ -1,10 +1,10 @@
 # Checkpoint Command
 
-Create or verify a checkpoint in your workflow.
+Create or diff checkpoints in your workflow.
 
 ## Usage
 
-`/checkpoint [create|verify|list] [name]`
+`/checkpoint [create|diff|list] [name]`
 
 ## Create Checkpoint
 
@@ -20,12 +20,12 @@ echo "$(date +%Y-%m-%d-%H:%M) | $CHECKPOINT_NAME | $(git rev-parse --short HEAD)
 
 4. Report checkpoint created
 
-## Verify Checkpoint
+## Diff Checkpoint
 
-When verifying against a checkpoint:
+When diffing against a checkpoint:
 
 1. Read checkpoint from log
-2. Compare current state to checkpoint:
+2. Diff current state against checkpoint:
    - Files added since checkpoint
    - Files modified since checkpoint
    - Test pass rate now vs then
@@ -33,8 +33,8 @@ When verifying against a checkpoint:
 
 3. Report:
 ```
-CHECKPOINT COMPARISON: $NAME
-============================
+CHECKPOINT DIFF: $NAME
+======================
 Files changed: X
 Tests: +Y passed / -Z failed
 Coverage: +X% / -Y%
@@ -58,17 +58,17 @@ Typical checkpoint flow:
    |
 [Implement] --> /checkpoint create "core-done"
    |
-[Test] --> /checkpoint verify "core-done"
+[Test] --> /checkpoint diff "core-done"
    |
 [Refactor] --> /checkpoint create "refactor-done"
    |
-[PR] --> /checkpoint verify "feature-start"
+[PR] --> /checkpoint diff "feature-start"
 ```
 
 ## Arguments
 
 $ARGUMENTS:
 - `create <name>` - Create named checkpoint
-- `verify <name>` - Verify against named checkpoint
+- `diff <name>` - Diff current state against named checkpoint
 - `list` - Show all checkpoints
 - `clear` - Remove old checkpoints (keeps last 5)
