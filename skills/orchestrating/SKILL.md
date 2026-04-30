@@ -1,6 +1,6 @@
 ---
 name: orchestrating
-description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the skill sequence across brainstorming, architect, plan, eval, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, remediation loops, final review behavior, and pointer-based state passing.
+description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the skill sequence across brainstorming, architect, plan, eval-gate, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, remediation loops, final review behavior, and pointer-based state passing.
 argument-hint: "[feature|refactor|bugfix|docs]"
 ---
 
@@ -39,9 +39,9 @@ Root File: [e.g., Cargo.toml]
 - `brainstorming` owns requirement discovery: source-of-truth design capture, examples, negative requirements, acceptance criteria, assumptions, and open questions.
 - `architect` owns decisions: problem framing, boundaries, invariants, interfaces, trade-offs, risks, and rejected alternatives.
 - `plan` owns execution: ordered steps, dependency sequencing, touched modules, checkpoints, risks, and explicit out-of-scope items.
-- `eval define` owns acceptance checks: converting the approved source of truth into reviewed capability, contract, negative, and regression evals.
+- `eval-gate define` owns acceptance checks: converting the approved source of truth into reviewed capability, contract, negative, and regression evals.
 - `tdd-cycle` owns implementation validation: tests, implementation progress, and implementation-level verification needed to complete the change.
-- `eval check` owns spec-compliance verification: checking the implementation against the approved eval definition and producing pass/fail logs.
+- `eval-gate check` owns spec-compliance verification: checking the implementation against the approved eval definition and producing pass/fail logs.
 - `code-review` owns repository-level review: security, maintainability, correctness gaps not covered by TDD/evals, and overall readiness.
 
 ## Standard Pipelines
@@ -60,15 +60,15 @@ To execute a step, load the corresponding Skill (e.g., `skill="architect"`) and 
 - **Step 1:** `brainstorming` (Load skill: `brainstorming`) - *Create `[topic_root]` once for the topic. The phase MUST produce `[topic_root]/design.md` as the source of truth before implementation. The design must include understanding summary, assumptions, non-functional requirements, decision log, behavior specification, output examples or golden examples, negative requirements, acceptance criteria, and open questions.*
 - **Step 2:** `architect` (Load skill: `architect`) - *Pass the approved `design.md` pointer and `topic_root=[topic_root]` override. This phase records the architecture decision for feature/refactor work as an ADR. It must preserve the design contract and record trade-offs, boundaries, invariants, and rejected alternatives only.*
 - **Step 3:** `plan` (Load skill: `plan`) - *Pass the approved `design.md`, approved ADR pointer, and `topic_root=[topic_root]` override. This phase converts the design and ADR into an execution plan without weakening or reinterpreting acceptance criteria.*
-- **Step 4:** `eval define` (Load skill: `eval`) - *Pass the approved `design.md`, ADR, execution plan, and `topic_root=[topic_root]` override. The eval definition must be derived from `design.md`, include concrete capability checks, regression checks, negative requirements, and golden examples where present, then stop for explicit user review and approval before implementation begins.*
+- **Step 4:** `eval-gate define` (Load skill: `eval-gate`) - *Pass the approved `design.md`, ADR, execution plan, and `topic_root=[topic_root]` override. The eval definition must be derived from `design.md`, include concrete capability checks, regression checks, negative requirements, and golden examples where present, then stop for explicit user review and approval before implementation begins.*
 - **Step 5:** `tdd-cycle` (Load skill: `tdd-cycle`) - *Pass the approved execution plan, approved eval definition, approved `design.md`, and `topic_root=[topic_root]` override into the TDD orchestrator. This phase owns tests, implementation, and implementation-level verification only.*
-- **Step 6:** `eval check` (Load skill: `eval`) - *Run the approved eval definition against the implementation. If all required evals pass, continue to code review. If any eval fails, return to `tdd-cycle` with pointers to `design.md`, the eval definition, the eval failure log, and the current implementation summary. Retry remediation at most twice before stopping and surfacing the blocker.*
+- **Step 6:** `eval-gate check` (Load skill: `eval-gate`) - *Run the approved eval definition against the implementation. If all required evals pass, continue to code review. If any eval fails, return to `tdd-cycle` with pointers to `design.md`, the eval definition, the eval failure log, and the current implementation summary. Retry remediation at most twice before stopping and surfacing the blocker.*
 - **Step 7:** `code-review` (Load skill: `code-review`) - *Pass `topic_root=[topic_root]`, `orchestrated_final_review=true`, approved upstream artifact pointers, and eval pass log. This is the repository-level review gate for security, maintainability, broader correctness gaps, and overall readiness after implementation and eval verification. In this final orchestrated review, safe `medium`, `low`, or `minor` findings should be delegated for remediation without a user approval checkpoint; ask the user only for `blocking`, `high`, security-critical, destructive, risky, or decision-requiring findings.*
 
 ### 2. Bugfix Pipeline (`args="bugfix"`)
 - **Step 1:** `tdd-cycle` (Load skill: `tdd-cycle`) - *Create `[topic_root]` once for the topic, then pass `topic_root=[topic_root]` and use incremental mode to write a failing test for the bug and fix it.*
 - **Step 2:** `build-fix` (Load skill: `build-fix`) - *Execute ONLY IF the bug involves compilation/build failures that TDD couldn't resolve.*
-- **Step 3:** `eval check` (Load skill: `eval`) - *Execute if an eval already exists for the affected behavior or if the bugfix changes an externally visible contract. A failing eval returns to `tdd-cycle` remediation with the eval failure log. Do not create a new ADR for ordinary bugfixes.*
+- **Step 3:** `eval-gate check` (Load skill: `eval-gate`) - *Execute if an eval already exists for the affected behavior or if the bugfix changes an externally visible contract. A failing eval returns to `tdd-cycle` remediation with the eval failure log. Do not create a new ADR for ordinary bugfixes.*
 - **Step 4:** `architect` escalation (Load skill: `architect`) - *Execute ONLY IF the bugfix changes architecture, public contracts, data models, policy, or long-lived behavior. In that case, pass `topic_root=[topic_root]` to create the ADR under the shared topic root, then update the plan/eval pointers before continuing.*
 - **Step 5:** `code-review` (Load skill: `code-review`) - *Pass `topic_root=[topic_root]`, `orchestrated_final_review=true`, plus any test, build, eval, or ADR pointers created during the fix. In this final orchestrated review, safe `medium`, `low`, or `minor` findings should be delegated for remediation without a user approval checkpoint; ask the user only for `blocking`, `high`, security-critical, destructive, risky, or decision-requiring findings.*
 
