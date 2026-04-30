@@ -1,6 +1,6 @@
 ---
 name: ai-engineering-expert
-description: AI engineering expertise for designing skills, agents, workflows, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, workflow, agent, or command; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user asks 'should this be a skill or command', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'how do I redesign this agent', 'help me iterate on this skill'.
+description: AI engineering expertise for designing skills, agents, workflows, MCP servers, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, workflow, agent, command, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing stdio vs HTTP transport; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user asks 'should this be a skill or command', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'how do I redesign this agent', 'help me iterate on this skill'.
 ---
 
 # AI Engineering Expert
@@ -109,6 +109,22 @@ When the same AI writes and reviews code, it carries the same assumptions into b
 Write tests for bugs that were found, not for code that works. AI tends to make the same category of mistakes repeatedly — once tested, that regression cannot happen again.
 
 [Full details: sandbox-testing-patterns.md](references/sandbox-testing-patterns.md)
+
+## Quick Reference: MCP Server Patterns
+
+**Core Concepts**
+- **Tools**: Actions the model can invoke (e.g., search, run command)
+- **Resources**: Read-only data the model can fetch (e.g., file contents, API responses)
+- **Prompts**: Reusable, parameterized prompt templates
+- **Transport**: stdio (local clients) vs Streamable HTTP (remote/Cursor/cloud)
+
+**Best Practices**
+- Schema-first: Define input schemas for every tool
+- Structured errors: Return messages the model can interpret
+- Idempotency: Prefer idempotent tools for safe retries
+- SDK versioning: Pin version, check release notes on upgrade
+
+[Full details: mcp-server-patterns.md](references/mcp-server-patterns.md)
 
 ## Gotchas
 
