@@ -74,7 +74,7 @@ process_dir() {
       '{path:$path,mtime:$mtime,is_new:$is_new}' \
       > "$tmpdir/$i.json"
     i=$((i+1))
-  done < <(find "$dir" -name "*.md" -type f 2>/dev/null | sort)
+  done < <(fd -L -t f -e md . "$dir" 2>/dev/null | sort)
 }
 
 [[ -d "$GLOBAL_DIR" ]] && process_dir "$GLOBAL_DIR"
