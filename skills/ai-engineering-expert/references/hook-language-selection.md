@@ -205,3 +205,45 @@ fi >> "$CLAUDE_LOG_FILE"
 | Both frequency and complexity | Hybrid | Split the work |
 | Stateful across invocations | Python | Bash is stateless |
 | Needs external libs | Python | Dependency ecosystem |
+
+---
+
+## Performance Testing Requirements (MANDATORY)
+
+**Rule:** When making performance claims, benchmark with real tests first—never guess by theory.
+
+### Why This Matters
+
+A bash hook was assumed faster than Python for high-frequency events. Reality:
+- Bash: 183ms/call
+- Python: 61ms/call
+- **Python was 3x faster**
+
+Bash spawned 34 subprocesses (jq, sed, python helpers) per invocation, while Python ran in a single process.
+
+### Mandatory Steps
+
+1. **Measure wall-clock time** with realistic payloads, not synthetic benchmarks
+2. **Count subprocess spawns** — each fork/exec has overhead that compounds
+3. **Test in the actual execution context** — Claude Code spawns a new process for every hook call regardless of language
+4. **Document findings** with actual numbers
+
+### Benchmarking Template
+
+```bash
+# Test with realistic payload
+time for i in {1..100}; do
+  echo '{"tool":"Read","input":{"path":"/long/path/file.py"}}' | ./hook.sh pre
+done
+
+# Report: 100 calls in X seconds = Y ms/call
+# Subprocess count: N (use strace -f -e trace=clone,execve)
+```
+
+### Anti-Patterns
+
+| Assumption | Reality |
+|------------|---------|
+| "Bash startup is faster" | Claude Code spawns a new process anyway; startup is equal |
+| "jq is faster than Python JSON" | Maybe, but jq spawn + pipe overhead may negate it |
+| "Simple operations favor bash" | True only if zero subprocesses are spawned |
