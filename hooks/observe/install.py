@@ -9,6 +9,10 @@ import shutil
 import sys
 from pathlib import Path
 
+# Import shared tool checker
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tool_checker import run_tool_check
+
 
 TARGET_HOOK_RELATIVE_PATH = Path('hooks/observe/observe.py')
 SOURCE_HOOK_NAME = 'observe.py'
@@ -132,6 +136,11 @@ def install_family(settings_path: Path) -> int:
 
     Registers the observe.py script for both PreToolUse and PostToolUse events.
     """
+    # Check required tools
+    required = ['uv']
+    if not run_tool_check('observe', required):
+        return 1
+
     target_hook = install_hook_script(settings_path)
     data = load_settings(settings_path)
     changed = False

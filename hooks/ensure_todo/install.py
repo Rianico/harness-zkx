@@ -4,6 +4,10 @@ import shutil
 import sys
 from pathlib import Path
 
+# Import shared tool checker
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tool_checker import run_tool_check
+
 
 TARGET_HOOK_RELATIVE_PATHS = {
     'Stop': Path('hooks/ensure_todo/ensure_todo_stop.py'),
@@ -97,6 +101,11 @@ def remove_hook(data: dict, event_name: str, hook_entry: dict) -> bool:
 
 
 def install_family(settings_path: Path) -> int:
+    # Check required tools
+    required = ['uv']
+    if not run_tool_check('ensure_todo', required):
+        return 1
+
     data = load_settings(settings_path)
     changes = []
 

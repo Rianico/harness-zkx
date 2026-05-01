@@ -2,6 +2,18 @@
 
 This directory is the index for reusable Claude Code hook helpers.
 
+## Tool Check Phase
+
+Each hook family installer performs a pre-installation tool check to ensure
+required dependencies are available. Installation aborts if required tools
+are missing.
+
+| Family | Required | Optional |
+|--------|----------|----------|
+| notify | `uv` | `osascript` (macOS), `powershell` (Windows), `notify-send` (Linux) |
+| ensure_todo | `uv` | — |
+| observe | `uv` | — |
+
 ## Layout
 
 - `notify/`

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 import json
+import platform
 import shutil
 import sys
 from pathlib import Path
+
+# Import shared tool checker
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tool_checker import run_tool_check
 
 
 TARGET_HOOK_RELATIVE_PATH = Path('hooks/notify/notify_user.py')
@@ -94,6 +99,20 @@ def remove_notification_hook(data: dict, hook_entry: dict) -> bool:
 
 
 def install_family(settings_path: Path) -> int:
+    # Check required tools
+    required = ['uv']
+    # Platform-specific optional tools
+    system = platform.system()
+    if system == 'Darwin':
+        optional = ['osascript']  # macOS notifications
+    elif system == 'Windows':
+        optional = ['powershell']  # Windows toast notifications
+    else:
+        optional = ['notify-send']  # Linux desktop notifications
+
+    if not run_tool_check('notify', required, optional):
+        return 1
+
     target_hook = install_hook_script(settings_path)
     hook_entry = build_hook_entry(target_hook)
     data = load_settings(settings_path)
