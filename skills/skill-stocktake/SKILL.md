@@ -8,6 +8,12 @@ description: Use when auditing Claude skills and commands for quality. Supports 
 
 Slash command (`/skill-stocktake`) that audits all Claude skills and commands using a quality checklist + AI holistic judgment. Supports two modes: Quick Scan for recently changed skills, and Full Stocktake for a complete review.
 
+## Requirements
+
+- `fd` — file discovery (follows symlinks with `-L`)
+- `jq` — JSON processing
+- `awk` — frontmatter extraction
+
 ## Scope
 
 The command targets the following paths **relative to the directory where it is invoked**:
