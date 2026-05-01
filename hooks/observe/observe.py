@@ -6,15 +6,25 @@ Observation capture functionality for the hook.
 
 Captures tool events and writes them to project-scoped files.
 """
-
 from __future__ import annotations
 
 import json
+import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from hooks.observe import config, detect_project, secrets
+# Support both standalone script execution and module import
+# When run standalone, add script directory to path for local imports
+if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+try:
+    import config
+    import detect_project
+    import secrets
+except ImportError:
+    from hooks.observe import config, detect_project, secrets
 
 # Track observation count for daemon signaling
 _observation_count = 0

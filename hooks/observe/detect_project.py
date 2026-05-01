@@ -7,7 +7,6 @@ Project detection functionality for observation hook.
 Determines the project context for tool events by examining
 git remotes, environment variables, and directory paths.
 """
-
 from __future__ import annotations
 
 import hashlib
@@ -17,7 +16,11 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from hooks.observe.config import get_homunculus_dir
+# Support both standalone script execution and module import
+try:
+    import config
+except ImportError:
+    from hooks.observe import config
 
 
 def get_git_remote_url(git_dir: Path) -> str | None:
@@ -141,7 +144,7 @@ def get_project_name(cwd: str | Path | None = None) -> str:
 
 def get_projects_file() -> Path:
     """Get the path to projects.json."""
-    return get_homunculus_dir() / "projects.json"
+    return config.get_homunculus_dir() / "projects.json"
 
 
 def register_project(project_id: str, project_name: str, cwd: str) -> None:
@@ -196,9 +199,9 @@ def get_project_observations_dir(project_id: str) -> Path:
         Path to the project's observations directory.
     """
     if project_id == "global":
-        return get_homunculus_dir()
+        return config.get_homunculus_dir()
 
-    project_dir = get_homunculus_dir() / "projects" / project_id
+    project_dir = config.get_homunculus_dir() / "projects" / project_id
     return project_dir
 
 
@@ -213,7 +216,7 @@ def get_observations_file(project_id: str) -> Path:
         Path to observations.jsonl.
     """
     if project_id == "global":
-        return get_homunculus_dir() / "observations.jsonl"
+        return config.get_homunculus_dir() / "observations.jsonl"
 
     project_dir = get_project_observations_dir(project_id)
     return project_dir / "observations.jsonl"

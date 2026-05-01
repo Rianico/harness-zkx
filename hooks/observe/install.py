@@ -17,6 +17,14 @@ from tool_checker import run_tool_check
 TARGET_HOOK_RELATIVE_PATH = Path('hooks/observe/observe.py')
 SOURCE_HOOK_NAME = 'observe.py'
 
+# Additional modules required by observe.py
+REQUIRED_MODULES = [
+    '__init__.py',
+    'config.py',
+    'detect_project.py',
+    'secrets.py',
+]
+
 # Hook event types to register for
 HOOK_EVENTS = ('PreToolUse', 'PostToolUse')
 
@@ -46,10 +54,21 @@ def target_hook_path(settings_path: Path) -> Path:
 
 
 def install_hook_script(settings_path: Path) -> Path:
+    """Copy the main hook script and all required modules to the target directory."""
     target_hook = target_hook_path(settings_path)
     target_hook.parent.mkdir(parents=True, exist_ok=True)
-    source_hook = Path(__file__).resolve().with_name(SOURCE_HOOK_NAME)
+
+    source_dir = Path(__file__).resolve().parent
+    source_hook = source_dir / SOURCE_HOOK_NAME
     shutil.copy2(source_hook, target_hook)
+
+    # Copy required modules
+    for module_name in REQUIRED_MODULES:
+        source_module = source_dir / module_name
+        target_module = target_hook.parent / module_name
+        if source_module.exists():
+            shutil.copy2(source_module, target_module)
+
     return target_hook
 
 
@@ -162,7 +181,7 @@ def uninstall_family(settings_path: Path) -> int:
     """Uninstall the observe hook family.
 
     Removes observe.py registrations from PreToolUse and PostToolUse events
-    and deletes the copied script.
+    and deletes the copied scripts and modules.
     """
     target_hook = target_hook_path(settings_path)
     data = load_settings(settings_path)
@@ -175,13 +194,27 @@ def uninstall_family(settings_path: Path) -> int:
 
     save_settings(settings_path, data)
 
-    removed_script = False
-    if changed and target_hook.exists():
-        target_hook.unlink()
-        removed_script = True
+    removed_files = []
+    if changed:
+        # Remove main hook script
+        if target_hook.exists():
+            target_hook.unlink()
+            removed_files.append(str(target_hook))
+
+        # Remove copied modules
+        for module_name in REQUIRED_MODULES:
+            target_module = target_hook.parent / module_name
+            if target_module.exists():
+                target_module.unlink()
+                removed_files.append(str(target_module))
 
     print(f'Updated {settings_path}' if changed else f'No changes needed for {settings_path}')
-    print(f'Removed hook script at {target_hook}' if removed_script else f'No hook script found at {target_hook}')
+    if removed_files:
+        print('Removed files:')
+        for f in removed_files:
+            print(f'  {f}')
+    else:
+        print(f'No hook scripts found at {target_hook.parent}')
     return 0
 
 
