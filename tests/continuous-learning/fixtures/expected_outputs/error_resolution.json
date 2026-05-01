@@ -1,0 +1,21 @@
+{
+  "instincts_created": [
+    {
+      "id": "bash-notfound-retry",
+      "trigger": "when bash command fails with 'not found'",
+      "confidence": 0.6,
+      "domain": "debugging",
+      "action": "Modify the command (check path, add prefix, fix typo) and retry",
+      "evidence": [
+        {
+          "session_id": "resolution-1",
+          "description": "Bash failed with 'command not found', modified command succeeded"
+        }
+      ]
+    }
+  ],
+  "instincts_updated": [],
+  "promotions": [],
+  "processed_count": 4,
+  "cursor_position": 4
+}

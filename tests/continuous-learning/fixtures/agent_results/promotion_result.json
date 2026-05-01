@@ -1,0 +1,12 @@
+{
+  "instincts_created": [],
+  "instincts_updated": [],
+  "promotions": [
+    {
+      "id": "read-before-edit",
+      "reason": "Seen in 3 projects with average confidence 0.85"
+    }
+  ],
+  "processed_count": 100,
+  "cursor_position": 100
+}

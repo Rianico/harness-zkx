@@ -1,0 +1,21 @@
+{
+  "instincts_created": [
+    {
+      "id": "read-edit-bash-workflow",
+      "trigger": "when making code changes",
+      "confidence": 0.7,
+      "domain": "workflow",
+      "action": "Follow the Read-Edit-Bash pattern: read file first, make targeted edits, then run tests/verification",
+      "evidence": [
+        {
+          "session_id": "workflow-1",
+          "description": "Read-Edit-Bash sequence repeated 4 times"
+        }
+      ]
+    }
+  ],
+  "instincts_updated": [],
+  "promotions": [],
+  "processed_count": 24,
+  "cursor_position": 24
+}

@@ -9,7 +9,7 @@ tools:
   - Skill
   - Write
 model: opus
-color: orange
+color: green
 ---
 
 # Code Reviewer Agent

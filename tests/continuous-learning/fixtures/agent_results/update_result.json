@@ -1,0 +1,22 @@
+{
+  "instincts_created": [],
+  "instincts_updated": [
+    {
+      "id": "read-before-edit",
+      "new_confidence": 0.85,
+      "evidence_appended": [
+        {
+          "session_id": "session-update-001",
+          "description": "Read before Edit pattern observed again"
+        },
+        {
+          "session_id": "session-update-002",
+          "description": "Consistent pattern across multiple sessions"
+        }
+      ]
+    }
+  ],
+  "promotions": [],
+  "processed_count": 50,
+  "cursor_position": 50
+}

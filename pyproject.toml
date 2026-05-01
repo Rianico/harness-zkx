@@ -11,7 +11,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pydantic",
     "pytest>=9.0.2",
+    "pyyaml",
     "ruff",
 ]
 

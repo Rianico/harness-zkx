@@ -1,0 +1,21 @@
+{
+  "instincts_created": [
+    {
+      "id": "read-before-write",
+      "trigger": "when writing new files",
+      "confidence": 0.5,
+      "domain": "workflow",
+      "action": "Read existing files in the same directory to understand patterns before creating new files",
+      "evidence": [
+        {
+          "session_id": "session-new-001",
+          "description": "Write failed, then Read of similar files succeeded"
+        }
+      ]
+    }
+  ],
+  "instincts_updated": [],
+  "promotions": [],
+  "processed_count": 25,
+  "cursor_position": 25
+}

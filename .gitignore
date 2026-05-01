@@ -11,6 +11,9 @@
 .claude/settings.local.json
 .claude/*.json
 
+# extra repo
+everything-claude-code/
+
 # Environment files
 .env
 .env.local
