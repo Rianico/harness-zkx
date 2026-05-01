@@ -1,6 +1,6 @@
 ---
 name: ai-engineering-expert
-description: AI engineering expertise for designing skills, agents, workflows, MCP servers, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, workflow, agent, command, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing stdio vs HTTP transport; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user asks 'should this be a skill or command', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'how do I redesign this agent', 'help me iterate on this skill'.
+description: AI engineering expertise for designing skills, agents, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, workflow, agent, command, hook, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user asks 'should this be a skill or command', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'how do I redesign this agent', 'help me iterate on this skill', 'bash or python for this hook'.
 ---
 
 # AI Engineering Expert
@@ -72,6 +72,14 @@ Every error path needs:
 - `name`: Display name (lowercase, hyphens, max 64 chars)
 - `description`: What + when, third-person, trigger vocabulary
 
+**CRITICAL: Description Triggers Discovery**
+The `description` field is the **only way Claude discovers skills**. A skill that cannot be found cannot be used. Every time you add a new capability (hooks, MCP servers, testing patterns), you MUST update the description with:
+- The domain term in the expertise list
+- Trigger scenarios in the TRIGGER clause
+- Example user questions that should invoke the skill
+
+If it's not in the description, the skill will not trigger.
+
 **Key Optional Fields**
 - `argument-hint`: Autocomplete hint like `[mode] <topic>`
 - `allowed-tools`: Tool allowlist without permission prompts
@@ -126,6 +134,20 @@ Write tests for bugs that were found, not for code that works. AI tends to make 
 
 [Full details: mcp-server-patterns.md](references/mcp-server-patterns.md)
 
+## Quick Reference: Hook Development
+
+**Language Selection**
+- **Bash**: High-frequency hooks (>10/session), simple I/O, no dependencies
+- **Python**: Complex logic (>50 lines), external libs, stateful operations
+- **Hybrid**: Bash entrypoint + Python helper when both matter
+
+**Decision Drivers**
+- Frequency: Python startup ~50-100ms; Bash ~5-10ms
+- Complexity: Bash with `jq` matches Python for simple JSON transforms
+- Dependencies: Python ecosystem justifies overhead when needed
+
+[Full details: hook-language-selection.md](references/hook-language-selection.md)
+
 ## Gotchas
 
 - **Vague descriptions** — "Helps with documents" won't trigger. Use explicit trigger vocabulary.
@@ -142,6 +164,7 @@ Before publishing a skill:
 ### Core Quality
 - [ ] Description is third-person, specific, includes trigger terms
 - [ ] Description includes both what AND when to use
+- [ ] Description updated for any new capability added (hooks, MCP, testing patterns)
 - [ ] Methodology skills: Description covers all three trigger patterns (direct domain, problem framing, decision language)
 - [ ] SKILL.md body under 500 lines / 5,000 tokens
 - [ ] Reference files are one level deep from SKILL.md
