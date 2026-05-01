@@ -17,7 +17,8 @@ GLOBAL_DIR="${SKILL_STOCKTAKE_GLOBAL_DIR:-$HOME/.claude/skills}"
 CWD_SKILLS_DIR="${SKILL_STOCKTAKE_PROJECT_DIR:-${1:-$PWD/.claude/skills}}"
 # Path to JSONL file containing tool-use observations (optional; used for usage frequency counts).
 # Override via SKILL_STOCKTAKE_OBSERVATIONS env var if your setup uses a different path.
-OBSERVATIONS="${SKILL_STOCKTAKE_OBSERVATIONS:-$HOME/.claude/observations.jsonl}"
+# Default: continuous learning system's observation file.
+OBSERVATIONS="${SKILL_STOCKTAKE_OBSERVATIONS:-$HOME/.claude/lsz/homunculus/observations.jsonl}"
 
 # Validate CWD_SKILLS_DIR looks like a .claude/skills path (defense-in-depth).
 # Only warn when the path exists — a nonexistent path poses no traversal risk.
@@ -61,7 +62,7 @@ count_obs() {
     return
   fi
   jq -r --arg p "$file" --arg c "$cutoff" \
-    'select(.tool=="Read" and .path==$p and .timestamp>=$c) | 1' \
+    'select(.tool=="Read" and .input.file_path==$p and .timestamp>=$c) | 1' \
     "$OBSERVATIONS" 2>/dev/null | wc -l | tr -d ' '
 }
 
@@ -87,10 +88,10 @@ scan_dir_to_json() {
   obs_30d_counts=""
   if [[ -f "$OBSERVATIONS" ]]; then
     obs_7d_counts=$(jq -r --arg c "$c7" \
-      'select(.tool=="Read" and .timestamp>=$c) | .path' \
+      'select(.tool=="Read" and .timestamp>=$c) | .input.file_path' \
       "$OBSERVATIONS" 2>/dev/null | sort | uniq -c)
     obs_30d_counts=$(jq -r --arg c "$c30" \
-      'select(.tool=="Read" and .timestamp>=$c) | .path' \
+      'select(.tool=="Read" and .timestamp>=$c) | .input.file_path' \
       "$OBSERVATIONS" 2>/dev/null | sort | uniq -c)
   fi
 
