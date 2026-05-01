@@ -20,7 +20,6 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
-    "skills/scraper/tests",
 ]
 # skill-comply has its own pyproject.toml and needs to run from its directory
 pythonpath = ["."]
