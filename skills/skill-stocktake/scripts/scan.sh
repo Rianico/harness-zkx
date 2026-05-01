@@ -17,8 +17,8 @@ GLOBAL_DIR="${SKILL_STOCKTAKE_GLOBAL_DIR:-$HOME/.claude/skills}"
 CWD_SKILLS_DIR="${SKILL_STOCKTAKE_PROJECT_DIR:-${1:-$PWD/.claude/skills}}"
 # Path to JSONL file containing tool-use observations (optional; used for usage frequency counts).
 # Override via SKILL_STOCKTAKE_OBSERVATIONS env var if your setup uses a different path.
-# Default: continuous learning system's observation file.
-OBSERVATIONS="${SKILL_STOCKTAKE_OBSERVATIONS:-$HOME/.claude/lsz/homunculus/observations.jsonl}"
+# Default: continuous learning system's observation files (aggregated from all projects).
+OBSERVATIONS_DIR="${SKILL_STOCKTAKE_OBSERVATIONS_DIR:-$HOME/.claude/lsz/homunculus}"
 
 # Validate CWD_SKILLS_DIR looks like a .claude/skills path (defense-in-depth).
 # Only warn when the path exists — a nonexistent path poses no traversal risk.
@@ -54,16 +54,24 @@ date_ago() {
   date -u -d "${n} days ago" +%Y-%m-%dT%H:%M:%SZ
 }
 
-# Count observations matching a file path since a cutoff timestamp
-count_obs() {
-  local file="$1" cutoff="$2"
-  if [[ ! -f "$OBSERVATIONS" ]]; then
-    echo 0
-    return
+# Get all observation files (global + project-specific)
+get_observation_files() {
+  local dir="$1"
+  local files=()
+
+  # Global observations
+  if [[ -f "$dir/observations.jsonl" ]]; then
+    files+=("$dir/observations.jsonl")
   fi
-  jq -r --arg p "$file" --arg c "$cutoff" \
-    'select(.tool=="Read" and .input.file_path==$p and .timestamp>=$c) | 1' \
-    "$OBSERVATIONS" 2>/dev/null | wc -l | tr -d ' '
+
+  # Project-specific observations
+  if [[ -d "$dir/projects" ]]; then
+    while IFS= read -r f; do
+      files+=("$f")
+    done < <(fd -t f observations.jsonl "$dir/projects" 2>/dev/null)
+  fi
+
+  printf '%s\n' "${files[@]}"
 }
 
 # Scan a directory and produce a JSON array of skill objects
@@ -83,16 +91,22 @@ scan_dir_to_json() {
 
   # Pre-aggregate observation counts in two passes (one per window) instead of
   # calling jq per-file — reduces from O(n*m) to O(n+m) jq invocations.
-  local obs_7d_counts obs_30d_counts
+  # Aggregate from all observation files (global + project-specific).
+  local obs_7d_counts obs_30d_counts obs_files
   obs_7d_counts=""
   obs_30d_counts=""
-  if [[ -f "$OBSERVATIONS" ]]; then
-    obs_7d_counts=$(jq -r --arg c "$c7" \
-      'select(.tool=="Read" and .timestamp>=$c) | .input.file_path' \
-      "$OBSERVATIONS" 2>/dev/null | sort | uniq -c)
-    obs_30d_counts=$(jq -r --arg c "$c30" \
-      'select(.tool=="Read" and .timestamp>=$c) | .input.file_path' \
-      "$OBSERVATIONS" 2>/dev/null | sort | uniq -c)
+  obs_files=$(get_observation_files "$OBSERVATIONS_DIR")
+  if [[ -n "$obs_files" ]]; then
+    obs_7d_counts=$(echo "$obs_files" | while read -r obs_file; do
+      jq -r --arg c "$c7" \
+        'select(.tool=="Read" and .timestamp>=$c) | .input.file_path' \
+        "$obs_file" 2>/dev/null
+    done | sort | uniq -c)
+    obs_30d_counts=$(echo "$obs_files" | while read -r obs_file; do
+      jq -r --arg c "$c30" \
+        'select(.tool=="Read" and .timestamp>=$c) | .input.file_path' \
+        "$obs_file" 2>/dev/null
+    done | sort | uniq -c)
   fi
 
   local i=0
