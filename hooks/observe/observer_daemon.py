@@ -7,13 +7,13 @@ Observer daemon for continuous learning system.
 Sleeps until signaled or interval elapsed, processes observations,
 and spawns observer agent with structured payload.
 """
-
 from __future__ import annotations
 
 import json
 import os
 import signal
 import threading
+import traceback
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -21,6 +21,36 @@ from pathlib import Path
 from typing import Any
 
 from hooks.observe import config as config_module
+
+# Log file for daemon operations
+LOG_FILE = Path.home() / ".claude" / "hooks" / "observe" / "daemon.log"
+
+
+def log_info(message: str) -> None:
+    """Write info message to daemon log file with timestamp."""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] INFO: {message}\n")
+    except Exception:
+        pass
+
+
+def log_error(message: str) -> None:
+    """Write error message to daemon log file with timestamp."""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] ERROR: {message}\n")
+    except Exception:
+        pass
+
+
+def log_exception(context: str) -> None:
+    """Log exception with full traceback."""
+    log_error(f"{context}: {traceback.format_exc()}")
 
 # Global state for daemon
 _wake_callback: Callable[[], None] | None = None
@@ -50,21 +80,23 @@ def _install_signal_handlers() -> None:
     """Actually install the signal handlers."""
     def handle_sigusr1(_signum: int, _frame: Any) -> None:
         """Handle SIGUSR1 - wake up daemon."""
+        log_info("SIGUSR1 received - waking up")
         _wake_event.set()
         if _wake_callback:
             _wake_callback()
 
     def handle_sigterm(_signum: int, _frame: Any) -> None:
         """Handle SIGTERM - graceful shutdown."""
+        log_info("SIGTERM received - initiating shutdown")
         _wake_event.set()  # Also wake up to handle shutdown
         handle_shutdown_signal()
 
     try:
         signal.signal(signal.SIGUSR1, handle_sigusr1)
         signal.signal(signal.SIGTERM, handle_sigterm)
-    except (ValueError, OSError):
-        # Can't set signal handlers (not in main thread)
-        pass
+        log_info("Signal handlers installed for SIGUSR1 and SIGTERM")
+    except (ValueError, OSError) as e:
+        log_error(f"Failed to install signal handlers: {e}")
 
 
 # Try to install signal handlers when module is imported
@@ -297,12 +329,15 @@ def try_acquire_lock(homunculus_dir: Path) -> bool:
 
             # Check if process is still running
             if _is_process_running(existing_pid):
+                log_info(f"Lock held by running process PID {existing_pid}")
                 return False
             else:
                 # Stale PID file - clean it up
+                log_info(f"Cleaning stale PID file (was PID {existing_pid})")
                 pid_file.unlink()
         except (ValueError, OSError):
             # Malformed PID file - clean it up
+            log_info("Cleaning malformed PID file")
             pid_file.unlink()
 
     # Try to create lock file atomically
@@ -318,9 +353,11 @@ def try_acquire_lock(homunculus_dir: Path) -> bool:
 
         _lock_acquired = True
         _current_homunculus_dir = homunculus_dir
+        log_info(f"Lock acquired (PID {os.getpid()})")
         return True
     except FileExistsError:
         # Lock file already exists - another instance is starting
+        log_error("Lock file exists - another instance is starting")
         return False
 
 
@@ -352,6 +389,7 @@ def release_lock(homunculus_dir: Path) -> None:
 
     _lock_acquired = False
     _current_homunculus_dir = None
+    log_info("Lock released")
 
 
 def force_shutdown(timeout_seconds: int = 5) -> None:
@@ -409,6 +447,7 @@ def handle_shutdown_signal(sig: int = 0) -> None:
     _ = sig  # Mark as intentionally unused
     global _shutdown_requested, _lock_acquired, _current_homunculus_dir
 
+    log_info("Shutdown signal received")
     _shutdown_requested = True
 
     # Save shutdown state if any
@@ -417,8 +456,9 @@ def handle_shutdown_signal(sig: int = 0) -> None:
         try:
             with open(state_file, "w") as f:
                 json.dump(_shutdown_state, f)
-        except OSError:
-            pass
+            log_info(f"Shutdown state saved to {state_file}")
+        except OSError as e:
+            log_error(f"Failed to save shutdown state: {e}")
 
     # Release lock
     if _lock_acquired and _current_homunculus_dir:
@@ -647,25 +687,35 @@ def process_project(project_dir: Path) -> dict[str, Any]:
         Mock result from observer agent.
     """
     observations_file = project_dir / "observations.jsonl"
+    project_id = project_dir.name
 
     if not observations_file.exists():
+        log_info(f"No observations file for project {project_id}")
         return {"processed_count": 0, "cursor_position": 0}
 
-    # Count total lines
-    with open(observations_file) as f:
-        line_count = sum(1 for _ in f)
+    try:
+        # Count total lines
+        with open(observations_file) as f:
+            line_count = sum(1 for _ in f)
 
-    # Update cursor
-    update_cursor(project_dir, line_count)
+        log_info(f"Processing project {project_id}: {line_count} observations")
 
-    # Return mock result (placeholder for actual agent spawning)
-    return {
-        "instincts_created": [],
-        "instincts_updated": [],
-        "promotions": [],
-        "processed_count": line_count,
-        "cursor_position": line_count,
-    }
+        # Update cursor
+        update_cursor(project_dir, line_count)
+
+        result = {
+            "instincts_created": [],
+            "instincts_updated": [],
+            "promotions": [],
+            "processed_count": line_count,
+            "cursor_position": line_count,
+        }
+
+        log_info(f"Project {project_id} processed: {result}")
+        return result
+    except Exception as e:
+        log_exception(f"Error processing project {project_id}")
+        return {"processed_count": 0, "cursor_position": 0, "error": str(e)}
 
 
 def process_all_projects(
@@ -700,13 +750,18 @@ def start_processing_cycle(homunculus_dir: Path) -> None:
     """
     global _state_callback
 
+    log_info("Starting processing cycle")
     if _state_callback:
         _state_callback("idle")
 
     if _state_callback:
         _state_callback("processing")
 
-    process_all_projects(homunculus_dir)
+    try:
+        process_all_projects(homunculus_dir)
+        log_info("Processing cycle completed")
+    except Exception as e:
+        log_exception("Error in processing cycle")
 
     if _state_callback:
         _state_callback("idle")
@@ -727,37 +782,54 @@ def run_daemon(
     """
     global _wake_callback, _state_callback, _shutdown_requested
 
+    log_info(f"Daemon starting (PID {os.getpid()}, interval {_sleep_interval}s)")
+    log_info(f"Homunculus dir: {homunculus_dir}")
+
     if wake_callback:
         _wake_callback = wake_callback
 
     # Set up signal handlers
     setup_signal_handlers()
+    log_info("Signal handlers installed")
 
     # Ensure user config exists before starting
     config_module.ensure_user_config(homunculus_dir)
 
     # Try to acquire lock
     if not try_acquire_lock(homunculus_dir):
+        log_error("Failed to acquire lock - another instance is running")
         return
 
     try:
+        cycle_count = 0
         while not _shutdown_requested:
             # Sleep until signaled or interval elapsed
             if _state_callback:
                 _state_callback("idle")
 
+            log_info(f"Sleeping for {_sleep_interval}s...")
             interruptible_sleep(_sleep_interval)
 
             if _shutdown_requested:
+                log_info("Shutdown requested during sleep")
                 break
 
             # Process observations
+            cycle_count += 1
+            log_info(f"Wake event #{cycle_count}")
             if _state_callback:
                 _state_callback("processing")
 
-            process_all_projects(homunculus_dir)
+            try:
+                projects = get_projects_with_observations(homunculus_dir)
+                log_info(f"Found {len(projects)} projects with observations")
+                process_all_projects(homunculus_dir)
+                log_info(f"Processing cycle #{cycle_count} completed")
+            except Exception as e:
+                log_exception(f"Error in processing cycle #{cycle_count}")
 
     finally:
+        log_info(f"Daemon shutting down after {cycle_count} cycles")
         release_lock(homunculus_dir)
 
 

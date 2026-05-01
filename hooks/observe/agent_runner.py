@@ -8,14 +8,46 @@ This module provides:
 
 Phase 3 GREEN: Pattern detection implementation.
 """
-
 from __future__ import annotations
 
 import re
+import traceback
 from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+# Log file for agent runner operations
+LOG_FILE = Path.home() / ".claude" / "hooks" / "observe" / "daemon.log"
+
+
+def log_info(message: str) -> None:
+    """Write info message to daemon log file with timestamp."""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] INFO: {message}\n")
+    except Exception:
+        pass
+
+
+def log_error(message: str) -> None:
+    """Write error message to daemon log file with timestamp."""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] ERROR: {message}\n")
+    except Exception:
+        pass
+
+
+def log_exception(context: str) -> None:
+    """Log exception with full traceback."""
+    log_error(f"{context}: {traceback.format_exc()}")
 
 
 class Evidence(BaseModel):
@@ -110,6 +142,9 @@ class AgentRunner:
         """
         sessions = payload.get("sessions", [])
         initial_cursor = payload.get("cursor_position", 0)
+        project_id = payload.get("project_id", "unknown")
+
+        log_info(f"AgentRunner.run: project={project_id}, sessions={len(sessions)}, cursor={initial_cursor}")
 
         all_created: list[InstinctCreated] = []
         all_updated: list[InstinctUpdated] = []
@@ -125,13 +160,20 @@ class AgentRunner:
 
         total_events = sum(len(s.get("events", [])) for s in sessions)
 
-        return AgentResult(
+        result = AgentResult(
             instincts_created=all_created,
             instincts_updated=all_updated,
             promotions=[],
             processed_count=total_events,
             cursor_position=initial_cursor + total_events
         )
+
+        log_info(f"AgentRunner.run completed: created={len(all_created)}, updated={len(all_updated)}, events={total_events}")
+        if all_created:
+            for inst in all_created:
+                log_info(f"  Instinct created: {inst.id} (confidence={inst.confidence})")
+
+        return result
 
     def analyze_session(
         self, session_id: str, events: list[dict[str, Any]]
@@ -154,6 +196,8 @@ class AgentRunner:
         if not events:
             return None
 
+        log_info(f"Analyzing session {session_id}: {len(events)} events")
+
         instincts: list[InstinctCreated] = []
         updates: list[InstinctUpdated] = []
 
@@ -161,16 +205,19 @@ class AgentRunner:
         correction_instinct = self._detect_user_correction(session_id, events)
         if correction_instinct:
             instincts.append(correction_instinct)
+            log_info(f"  Detected user correction pattern: {correction_instinct.id}")
 
         # Pattern 2: Repeated Workflow
         workflow_instinct = self._detect_repeated_workflow(session_id, events)
         if workflow_instinct:
             instincts.append(workflow_instinct)
+            log_info(f"  Detected repeated workflow pattern: {workflow_instinct.id}")
 
         # Pattern 3: Error Resolution
         error_instinct = self._detect_error_resolution(session_id, events)
         if error_instinct:
             instincts.append(error_instinct)
+            log_info(f"  Detected error resolution pattern: {error_instinct.id}")
 
         if not instincts and not updates:
             return SessionAnalysis(

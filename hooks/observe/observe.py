@@ -10,9 +10,30 @@ from __future__ import annotations
 
 import json
 import sys
+import traceback
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+# Log file for debugging hook errors
+LOG_FILE = Path.home() / ".claude" / "hooks" / "observe" / "hook.log"
+
+
+def log_error(message: str) -> None:
+    """Write error message to log file with timestamp."""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except Exception:
+        pass  # Don't fail the hook if logging fails
+
+
+def log_exception(context: str) -> None:
+    """Log exception with full traceback."""
+    log_error(f"{context}: {traceback.format_exc()}")
+
 
 # Support both standalone script execution and module import
 # When run standalone, add script directory to path for local imports
@@ -185,25 +206,29 @@ def _write_observation(observation: dict) -> None:
     Args:
         observation: The observation to write.
     """
-    project_id = observation["project_id"]
+    try:
+        project_id = observation["project_id"]
 
-    # Get the observations file path
-    observations_file = detect_project.get_observations_file(project_id)
+        # Get the observations file path
+        observations_file = detect_project.get_observations_file(project_id)
 
-    # Ensure directory exists
-    observations_file.parent.mkdir(parents=True, exist_ok=True)
+        # Ensure directory exists
+        observations_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Register/update project in registry (not for global)
-    if project_id != "global":
-        detect_project.register_project(
-            project_id,
-            observation["project_name"],
-            observation.get("cwd", str(Path.cwd())),
-        )
+        # Register/update project in registry (not for global)
+        if project_id != "global":
+            detect_project.register_project(
+                project_id,
+                observation["project_name"],
+                observation.get("cwd", str(Path.cwd())),
+            )
 
-    # Append observation as JSON line
-    with open(observations_file, "a") as f:
-        f.write(json.dumps(observation) + "\n")
+        # Append observation as JSON line
+        with open(observations_file, "a") as f:
+            f.write(json.dumps(observation) + "\n")
+    except Exception as e:
+        log_exception("Failed to write observation")
+        raise
 
 
 def signal_daemon() -> None:
@@ -305,13 +330,19 @@ def main() -> int:
 
     try:
         event = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        log_error(f"Failed to parse JSON input: {e}")
         return 0
 
-    if phase == "pre":
-        handle_pre_tool_use(event)
-    else:
-        handle_post_tool_use(event)
+    try:
+        if phase == "pre":
+            handle_pre_tool_use(event)
+        else:
+            handle_post_tool_use(event)
+    except Exception as e:
+        log_exception(f"Error in {phase} handler")
+        # Return 0 to avoid blocking the tool use (soft fail)
+        return 0
 
     return 0
 

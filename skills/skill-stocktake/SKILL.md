@@ -12,6 +12,8 @@ Slash command (`/skill-stocktake`) that audits all Claude skills and commands us
 
 - Python 3.11+
 - `uv` — for running Python scripts
+- `fd` — for file discovery
+- `jq` — for JSON processing
 
 ## Scope
 
@@ -48,52 +50,39 @@ If the project has no `.claude/skills/` directory, only global skills and comman
 
 Re-evaluate only skills that have changed since the last run (5–10 min).
 
-1. Read `~/.claude/skills/skill-stocktake/results.json`
-2. Run: `bash ~/.claude/skills/skill-stocktake/scripts/quick-diff.sh \
-         ~/.claude/skills/skill-stocktake/results.json`
-   (Project dir is auto-detected from `$PWD/.claude/skills`; pass it explicitly only if needed)
-3. If output is `[]`: report "No changes since last run." and stop
-4. Re-evaluate only those changed files using the same Phase 2 criteria
-5. Carry forward unchanged skills from previous results
-6. Output only the diff
-7. Run: `bash ~/.claude/skills/skill-stocktake/scripts/save-results.sh \
-         ~/.claude/skills/skill-stocktake/results.json <<< "$EVAL_RESULTS"`
+1. Run: `uv run ~/.claude/skills/skill-stocktake/scripts/stocktake.py diff`
+2. If output shows no changes: report "No changes since last run." and stop
+3. Re-evaluate only those changed files using the same Phase 2 criteria
+4. Carry forward unchanged skills from previous results
+5. Output only the diff
+6. Save results: `uv run stocktake.py save --results PATH < eval.json`
 
 ## Full Stocktake Flow
 
 ### Phase 1 — Inventory
 
-Run: `uv run ~/.claude/skills/skill-stocktake/scripts/scan.py --output markdown`
+Run: `uv run ~/.claude/skills/skill-stocktake/scripts/stocktake.py scan`
 
 The script enumerates skill files, extracts frontmatter, aggregates observations,
-and outputs structured JSON or markdown table.
+and outputs structured JSON or rich terminal display.
 
 Options:
 - `--global-dir PATH` — Override global skills directory
 - `--project-dir PATH` — Override project skills directory
 - `--observations-dir PATH` — Override observations directory
-- `--output json|markdown` — Output format (default: json)
+- `--output json|rich|markdown` — Output format (default: rich)
 
-Present the scan summary and inventory table from the script output:
-
-```
-**Scanning:**
-  ✓ ~/.claude/skills/ (49 files)
-  ✓ /path/to/project/.claude/skills (3 files)
-
-| Skill | 7d | 30d | Description |
-|-------|-----|------|-------------|
-```
+Present the scan summary and inventory table from the script output.
 
 ### Phase 3 — Summary Table
 
-Run: `uv run ~/.claude/skills/skill-stocktake/scripts/summary.py --output markdown`
+Run: `uv run ~/.claude/skills/skill-stocktake/scripts/stocktake.py summary`
 
-Reads results.json and outputs formatted markdown summary table grouped by verdict.
+Reads results.json and outputs formatted summary table grouped by verdict.
 
 Options:
 - `--results PATH` — Path to results.json
-- `--output markdown|json` — Output format (default: markdown)
+- `--output rich|markdown|json` — Output format (default: rich)
 - `--group-by verdict|skill` — Grouping (default: verdict)
 
 ### Phase 2 — Quality Evaluation

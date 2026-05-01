@@ -161,8 +161,14 @@ def register_project(project_id: str, project_name: str, cwd: str) -> None:
     # Load existing projects
     projects = {}
     if projects_file.exists():
-        with open(projects_file) as f:
-            projects = json.load(f)
+        try:
+            with open(projects_file) as f:
+                content = f.read()
+                if content.strip():  # Only parse if file has content
+                    projects = json.loads(content)
+        except (json.JSONDecodeError, OSError):
+            # File is empty or corrupt - start fresh
+            projects = {}
 
     # Update or create project entry
     now = datetime.now(timezone.utc).isoformat()
