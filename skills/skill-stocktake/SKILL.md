@@ -10,9 +10,8 @@ Slash command (`/skill-stocktake`) that audits all Claude skills and commands us
 
 ## Requirements
 
-- `fd` — file discovery (follows symlinks with `-L`)
-- `jq` — JSON processing
-- `awk` — frontmatter extraction
+- Python 3.11+
+- `uv` — for running Python scripts
 
 ## Scope
 
@@ -64,20 +63,38 @@ Re-evaluate only skills that have changed since the last run (5–10 min).
 
 ### Phase 1 — Inventory
 
-Run: `bash ~/.claude/skills/skill-stocktake/scripts/scan.sh`
+Run: `uv run ~/.claude/skills/skill-stocktake/scripts/scan.py --output markdown`
 
-The script enumerates skill files, extracts frontmatter, and collects UTC mtimes.
-Project dir is auto-detected from `$PWD/.claude/skills`; pass it explicitly only if needed.
+The script enumerates skill files, extracts frontmatter, aggregates observations,
+and outputs structured JSON or markdown table.
+
+Options:
+- `--global-dir PATH` — Override global skills directory
+- `--project-dir PATH` — Override project skills directory
+- `--observations-dir PATH` — Override observations directory
+- `--output json|markdown` — Output format (default: json)
+
 Present the scan summary and inventory table from the script output:
 
 ```
-Scanning:
-  ✓ ~/.claude/skills/         (17 files)
-  ✗ {cwd}/.claude/skills/    (not found — global skills only)
+**Scanning:**
+  ✓ ~/.claude/skills/ (49 files)
+  ✓ /path/to/project/.claude/skills (3 files)
+
+| Skill | 7d | 30d | Description |
+|-------|-----|------|-------------|
 ```
 
-| Skill | 7d use | 30d use | Description |
-|-------|--------|---------|-------------|
+### Phase 3 — Summary Table
+
+Run: `uv run ~/.claude/skills/skill-stocktake/scripts/summary.py --output markdown`
+
+Reads results.json and outputs formatted markdown summary table grouped by verdict.
+
+Options:
+- `--results PATH` — Path to results.json
+- `--output markdown|json` — Output format (default: markdown)
+- `--group-by verdict|skill` — Grouping (default: verdict)
 
 ### Phase 2 — Quality Evaluation
 
