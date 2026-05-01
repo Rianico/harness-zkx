@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import sys
 import threading
 import traceback
 from collections import defaultdict
@@ -20,7 +21,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hooks.observe import config as config_module
+# Support both standalone script execution and module import
+if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+try:
+    import config as config_module
+except ImportError:
+    from hooks.observe import config as config_module
 
 # Log file for daemon operations
 LOG_FILE = Path.home() / ".claude" / "hooks" / "observe" / "daemon.log"
@@ -869,3 +877,29 @@ def reset_daemon_state() -> None:
     # Clear events
     _wake_event.clear()
     _interval_timer_stop.set()
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Observer daemon for continuous learning")
+    parser.add_argument("--interval", type=int, default=300, help="Sleep interval in seconds")
+    parser.add_argument("--once", action="store_true", help="Run one processing cycle then exit")
+    args = parser.parse_args()
+
+    homunculus_dir = config_module.get_homunculus_dir()
+
+    if args.interval != 300:
+        set_sleep_interval(args.interval)
+
+    if args.once:
+        # Single processing cycle
+        log_info("Running single processing cycle")
+        try_acquire_lock(homunculus_dir)
+        try:
+            process_all_projects(homunculus_dir)
+        finally:
+            release_lock(homunculus_dir)
+    else:
+        # Run daemon loop
+        run_daemon(homunculus_dir)
