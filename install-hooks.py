@@ -19,6 +19,7 @@ def load_module(module_name: str, relative_path: str):
 
 NOTIFY_INSTALL = load_module('notify_install', 'hooks/notify/install.py')
 ENSURE_TODO_INSTALL = load_module('ensure_todo_install', 'hooks/ensure_todo/install.py')
+OBSERVE_INSTALL = load_module('observe_install', 'hooks/observe/install.py')
 
 
 def show_help() -> None:
@@ -30,6 +31,7 @@ def show_help() -> None:
         'Sub-modules:\n'
         '  notify       Install or uninstall the notification hook family\n'
         '  ensure_todo  Install or uninstall the stop/post-tool-use todo hook family\n'
+        '  observe      Install or uninstall the continuous learning observation hook family\n'
         '  all          Install or uninstall all hook families\n'
     )
 
@@ -37,6 +39,7 @@ def show_help() -> None:
 FAMILY_HANDLERS = {
     'notify': (NOTIFY_INSTALL.install_family, NOTIFY_INSTALL.uninstall_family),
     'ensure_todo': (ENSURE_TODO_INSTALL.install_family, ENSURE_TODO_INSTALL.uninstall_family),
+    'observe': (OBSERVE_INSTALL.install_family, OBSERVE_INSTALL.uninstall_family),
 }
 
 
