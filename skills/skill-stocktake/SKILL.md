@@ -1,17 +1,50 @@
 ---
 name: skill-stocktake
-description: Use when auditing Claude skills and commands for quality. Supports Quick Scan (changed skills only) and Full Stocktake modes with sequential subagent batch evaluation.
-argument-hint: "[full|quick]"
+description: Use when auditing Claude skills and commands for quality. Supports Quick Scan (changed skills only), Full Stocktake, and Overview modes with sequential subagent batch evaluation.
+argument-hint: "[full|quick|overview]"
 
 ---
 # skill-stocktake
 
-Slash command (`/skill-stocktake`) that audits all Claude skills and commands using a quality checklist + AI holistic judgment. Supports two modes: Quick Scan for recently changed skills, and Full Stocktake for a complete review.
+Slash command (`/skill-stocktake`) that audits all Claude skills and commands using a quality checklist + AI holistic judgment. Supports three modes: Overview for quick stats, Quick Scan for recently changed skills, and Full Stocktake for a complete review.
 
 ## Requirements
 
 - Python 3.11+
 - `uv` — for running Python scripts
+
+## CLI Commands
+
+```bash
+uv run {skill}/scripts/stocktake.py <command> [options]
+
+Commands:
+  scan        Phase 1: Inventory all skills
+  diff        Quick Scan: Find changed skills since last run
+  overview    Quick overview with usage stats (today, 7d, 30d)
+  summary     Phase 3: Display results table
+  save        Merge evaluation results into results.json
+  merge-chunks Merge chunked evaluation results
+
+Global options:
+  --width N   Override terminal width for rich output
+  --output json|rich|markdown   Output format
+```
+
+## Overview Mode
+
+Quick snapshot of all skills with usage statistics:
+
+```bash
+uv run {skill}/scripts/stocktake.py overview [--width 120]
+```
+
+Displays a table with:
+- Skill name
+- Today's usage count
+- 7-day usage count
+- 30-day usage count
+- Description
 
 ## Scope
 

@@ -115,7 +115,7 @@ skills/
 Run the helper script:
 
 \`\`\`bash
-./scripts/helper.py --input data.json
+uv run ~/.claude/skills/my-skill/scripts/helper.py --input data.json
 \`\`\`
 ```
 
@@ -151,3 +151,41 @@ def process_file(path):
 def process_file(path):
     return open(path).read()  # Punt to LLM to handle errors
 ```
+
+### Script Invocation Conventions
+
+**Run scripts from any directory:**
+```bash
+uv run {skill}/scripts/xxx.py
+```
+
+**Do NOT use `cd` prefixes:**
+```bash
+# BAD
+cd ~/.claude/skills/my-skill && uv run scripts/helper.py
+
+# GOOD
+uv run ~/.claude/skills/my-skill/scripts/helper.py
+```
+
+**Rationale:**
+- Scripts should resolve paths internally (use `Path.home()`, absolute paths)
+- `cd` creates unnecessary state coupling
+- Direct invocation works from any working directory
+
+**Runtime artifacts location:**
+```
+~/.claude/lsz/{skill}/           # Results, temp files, cache
+~/.claude/lsz/{skill}/.tmp/      # Temporary chunk files
+```
+
+**Use inline script metadata for dependencies:**
+```python
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["rich>=13.0.0"]
+# ///
+```
+
+This allows `uv run` to auto-install dependencies without a separate `pyproject.toml`.

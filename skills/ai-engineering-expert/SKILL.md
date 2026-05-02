@@ -91,6 +91,12 @@ If it's not in the description, the skill will not trigger.
 - Deep content in `references/` (one level deep)
 - Executable logic in `scripts/`
 
+**Script Conventions**
+- Run scripts from any directory: `uv run {skill}/scripts/xxx.py`
+- Avoid `cd` prefixes — the script should handle paths internally
+- Use `~/.claude/lsz/{skill}/` for runtime artifacts (results, temp files)
+- Scripts are invoked via `uv run` with inline script metadata for dependencies
+
 **User Interaction**
 - Use Dialog Contract pattern for all user questions
 - One question per dialog, 2-4 options plus "Other"

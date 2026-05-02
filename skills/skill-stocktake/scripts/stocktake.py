@@ -8,6 +8,7 @@
 Usage:
     uv run stocktake.py scan [--output json|rich|markdown]
     uv run stocktake.py diff [--results PATH]
+    uv run stocktake.py overview [--width N]
     uv run stocktake.py summary [--results PATH] [--output rich|markdown|json]
     uv run stocktake.py save [--results PATH] < eval.json
     uv run stocktake.py merge-chunks [--results PATH] [--clean]
@@ -15,6 +16,7 @@ Usage:
 Commands:
     scan          Phase 1: Inventory all skills
     diff          Quick Scan: Find changed skills since last run
+    overview      Quick overview with usage stats (today, 7d, 30d) - rich output only
     summary       Phase 3: Display results table
     save          Merge evaluation results into results.json
     merge-chunks  Merge chunked evaluation files from .tmp/ directory
@@ -36,11 +38,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-# Defaults
-DEFAULT_GLOBAL_DIR = Path.home() / ".claude" / "skills"
-DEFAULT_OBSERVATIONS_DIR = Path.home() / ".claude" / "lsz" / "homunculus"
-DEFAULT_RESULTS = Path.home() / ".claude" / "lsz" / "skill-stocktake" / "results.json"
-DEFAULT_TMP_DIR = Path.home() / ".claude" / "lsz" / "skill-stocktake" / ".tmp"
+# Defaults - cache Path.home() to avoid repeated syscalls
+HOME = Path.home()
+DEFAULT_GLOBAL_DIR = HOME / ".claude" / "skills"
+DEFAULT_OBSERVATIONS_DIR = HOME / ".claude" / "lsz" / "homunculus"
+DEFAULT_RESULTS = HOME / ".claude" / "lsz" / "skill-stocktake" / "results.json"
+DEFAULT_TMP_DIR = HOME / ".claude" / "lsz" / "skill-stocktake" / ".tmp"
+HOME_STR = str(HOME)
 
 # Let Rich auto-detect terminal width
 console = Console()
@@ -54,6 +58,29 @@ class Verdict(StrEnum):
     UPDATE = "Update"
     MERGE = "Merge"
     RETIRE = "Retire"
+
+
+class OutputFormat(StrEnum):
+    """Output format options for CLI commands."""
+    JSON = "json"
+    RICH = "rich"
+    MARKDOWN = "markdown"
+
+
+class GroupBy(StrEnum):
+    """Grouping options for summary output."""
+    VERDICT = "verdict"
+    SKILL = "skill"
+
+
+# Verdict color mapping for rich output
+VERDICT_COLORS: dict[Verdict, str] = {
+    Verdict.KEEP: "green",
+    Verdict.IMPROVE: "yellow",
+    Verdict.UPDATE: "blue",
+    Verdict.MERGE: "magenta",
+    Verdict.RETIRE: "red",
+}
 
 
 # Shared utilities
@@ -96,6 +123,40 @@ def get_mtime_utc(path: Path) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def normalize_skills(skills: dict | list) -> list[dict]:
+    """Normalize skills to list format.
+
+    Handles both dict format (path -> skill_data) and list format.
+    Dict format is converted to list with path included in each item.
+    """
+    if isinstance(skills, list):
+        return skills
+    return [{"path": k, **v} for k, v in skills.items()]
+
+
+def get_skill_name(skill: dict) -> str:
+    """Extract skill name from skill record, falling back to path parent or stem.
+
+    For SKILL.md files, uses the parent directory name.
+    For other files, uses the file stem.
+    """
+    name = skill.get("name", "")
+    if name:
+        return name
+    path = skill.get("path", "")
+    if not path:
+        return ""
+    p = Path(path)
+    return p.parent.name if p.name == "SKILL.md" else p.stem
+
+
+def truncate_text(text: str, width: int, ellipsis: str = "…") -> str:
+    """Truncate text to width, adding ellipsis if truncated."""
+    if len(text) <= width:
+        return text
+    return text[: width - len(ellipsis)] + ellipsis
+
+
 def get_observation_files(observations_dir: Path) -> list[Path]:
     """Get all observation files (global + project-specific)."""
     files = []
@@ -117,17 +178,20 @@ def get_observation_files(observations_dir: Path) -> list[Path]:
 
 def count_read_observations(
     observations_files: list[Path],
-) -> tuple[dict[str, int], dict[str, int]]:
+) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
     """Count Read tool observations per file path in single pass.
 
-    Returns tuple of (counts_7d, counts_30d) for use in scan operations.
+    Returns tuple of (counts_1d, counts_7d, counts_30d) for use in scan operations.
     """
     now = datetime.now(UTC)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     cutoff_7d = now - timedelta(days=7)
     cutoff_30d = now - timedelta(days=30)
+    today_start_str = today_start.strftime("%Y-%m-%dT%H:%M:%SZ")
     cutoff_7d_str = cutoff_7d.strftime("%Y-%m-%dT%H:%M:%SZ")
     cutoff_30d_str = cutoff_30d.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    counts_1d: dict[str, int] = {}
     counts_7d: dict[str, int] = {}
     counts_30d: dict[str, int] = {}
 
@@ -151,7 +215,9 @@ def count_read_observations(
                     if not file_path:
                         continue
 
-                    # Single pass: check both windows
+                    # Single pass: check all windows
+                    if timestamp >= today_start_str:
+                        counts_1d[file_path] = counts_1d.get(file_path, 0) + 1
                     if timestamp >= cutoff_7d_str:
                         counts_7d[file_path] = counts_7d.get(file_path, 0) + 1
                     if timestamp >= cutoff_30d_str:
@@ -159,17 +225,14 @@ def count_read_observations(
         except OSError:
             continue
 
-    return counts_7d, counts_30d
+    return counts_1d, counts_7d, counts_30d
 
 
 def _format_path_with_tilde(path: Path | str) -> str:
     """Format path with tilde prefix if under home directory."""
-    path_obj = Path(path) if isinstance(path, str) else path
-    home = Path.home()
-    path_str = str(path_obj)
-    home_str = str(home)
-    if path_str.startswith(home_str):
-        return "~" + path_str[len(home_str):]
+    path_str = str(path) if isinstance(path, str) else str(path)
+    if path_str.startswith(HOME_STR):
+        return "~" + path_str[len(HOME_STR):]
     return path_str
 
 
@@ -186,6 +249,7 @@ def _walk_skills_dir(
 
 def scan_skills_dir(
     skills_dir: Path,
+    use_1d: dict[str, int],
     use_7d: dict[str, int],
     use_30d: dict[str, int],
 ) -> list[dict]:
@@ -204,14 +268,19 @@ def scan_skills_dir(
         frontmatter = extract_frontmatter(content)
         path_str = _format_path_with_tilde(md_file)
 
-        resolved_path = str(md_file.resolve()) if md_file.is_symlink() else str(md_file)
-        file_path_7d = use_7d.get(resolved_path, use_7d.get(str(md_file), 0))
-        file_path_30d = use_30d.get(resolved_path, use_30d.get(str(md_file), 0))
+        # Compute lookup key once: prefer resolved path for symlinks
+        key = str(md_file.resolve()) if md_file.is_symlink() else str(md_file)
+        # Fallback to direct path if key not found
+        alt_key = str(md_file) if key != str(md_file) else None
+        file_path_1d = use_1d.get(key, use_1d.get(alt_key, 0) if alt_key else 0)
+        file_path_7d = use_7d.get(key, use_7d.get(alt_key, 0) if alt_key else 0)
+        file_path_30d = use_30d.get(key, use_30d.get(alt_key, 0) if alt_key else 0)
 
         skills.append({
             "path": path_str,
             "name": frontmatter.get("name", ""),
             "description": frontmatter.get("description", ""),
+            "use_1d": file_path_1d,
             "use_7d": file_path_7d,
             "use_30d": file_path_30d,
             "mtime": get_mtime_utc(md_file),
@@ -233,13 +302,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if project_dir is None:
         project_dir = Path.cwd() / ".claude" / "skills"
 
-    # Get observation counts (single pass returns both windows)
+    # Get observation counts (single pass returns all windows)
     obs_files = get_observation_files(observations_dir)
-    use_7d, use_30d = count_read_observations(obs_files)
+    use_1d, use_7d, use_30d = count_read_observations(obs_files)
 
     # Scan directories
-    global_skills = scan_skills_dir(global_dir, use_7d, use_30d)
-    project_skills = scan_skills_dir(project_dir, use_7d, use_30d) if project_dir.exists() else []
+    global_skills = scan_skills_dir(global_dir, use_1d, use_7d, use_30d)
+    project_skills = scan_skills_dir(project_dir, use_1d, use_7d, use_30d) if project_dir.exists() else []
 
     all_skills = global_skills + project_skills
 
@@ -293,10 +362,8 @@ def format_scan_markdown(data: dict) -> str:
     lines.append("|-------|-----|------|-------------|")
 
     for skill in data["skills"]:
-        name = skill["name"] or Path(skill["path"]).stem
-        desc = skill["description"]
-        if len(desc) > 60:
-            desc = desc[:60] + "..."
+        name = get_skill_name(skill)
+        desc = truncate_text(skill["description"], 57, "...")
         desc = desc.replace("|", "\\|")
         lines.append(f"| {name} | {skill['use_7d']} | {skill['use_30d']} | {desc} |")
 
@@ -329,11 +396,8 @@ def render_scan_rich(data: dict, render_console: Console | None = None) -> None:
     table.add_column("Description", style="dim", width=desc_width)
 
     for skill in data["skills"]:
-        name = skill["name"] or Path(skill["path"]).stem
-        desc = skill["description"]
-        # Truncate long descriptions
-        if len(desc) > desc_width:
-            desc = desc[:desc_width-1] + "…"
+        name = get_skill_name(skill)
+        desc = truncate_text(skill["description"], desc_width)
         table.add_row(name, str(skill["use_7d"]), str(skill["use_30d"]), desc)
 
     con.print(table)
@@ -431,6 +495,72 @@ def render_diff_rich(changed: list[dict], evaluated_at: str) -> None:
     console.print(table)
 
 
+# Command: overview
+
+
+def cmd_overview(args: argparse.Namespace) -> int:
+    """Quick overview of skills with usage stats."""
+    global_dir = args.global_dir or DEFAULT_GLOBAL_DIR
+    observations_dir = args.observations_dir or DEFAULT_OBSERVATIONS_DIR
+    project_dir = args.project_dir or Path.cwd() / ".claude" / "skills"
+
+    # Get observation counts
+    obs_files = get_observation_files(observations_dir)
+    use_1d, use_7d, use_30d = count_read_observations(obs_files)
+
+    # Scan directories
+    global_skills = scan_skills_dir(global_dir, use_1d, use_7d, use_30d)
+    project_skills = scan_skills_dir(project_dir, use_1d, use_7d, use_30d) if project_dir.exists() else []
+
+    # Filter to only main SKILL.md files (not references)
+    all_skills = [s for s in global_skills + project_skills if s["path"].endswith("/SKILL.md")]
+    all_skills.sort(key=lambda s: s.get("name") or Path(s.get("path", "")).stem)
+
+    render_console = Console(width=args.width) if args.width else console
+    render_overview_rich(all_skills, render_console)
+
+    return 0
+
+
+def render_overview_rich(skills: list[dict], render_console: Console | None = None) -> None:
+    """Render overview table with usage stats."""
+    con = render_console or console
+    # Calculate description column width: total - (Skill:20 + 1d:4 + 7d:4 + 30d:5 + borders:8)
+    desc_width = max(40, con.width - 41)
+
+    # Summary counts
+    total = len(skills)
+    used_1d = sum(1 for s in skills if s.get("use_1d", 0) > 0)
+
+    summary_table = Table(show_header=False, box=ROUNDED)
+    summary_table.add_column("Metric", style="bold")
+    summary_table.add_column("Value", justify="right")
+    summary_table.add_row("Total skills", str(total))
+    summary_table.add_row("Used today", str(used_1d))
+    con.print(summary_table)
+
+    # Main table
+    table = Table(title=f"[bold]Skills Overview[/bold]", box=HORIZONTALS, show_lines=True)
+    table.add_column("Skill", style="cyan", no_wrap=True, width=20)
+    table.add_column("1d", justify="right", style="green", no_wrap=True, width=4)
+    table.add_column("7d", justify="right", style="green", no_wrap=True, width=4)
+    table.add_column("30d", justify="right", style="yellow", no_wrap=True, width=5)
+    table.add_column("Description", style="dim", width=desc_width)
+
+    for skill in skills:
+        name = get_skill_name(skill)
+        desc = truncate_text(skill.get("description", ""), desc_width)
+        table.add_row(
+            name,
+            str(skill.get("use_1d", 0)),
+            str(skill.get("use_7d", 0)),
+            str(skill.get("use_30d", 0)),
+            desc
+        )
+
+    con.print(table)
+
+
 # Command: summary
 
 
@@ -471,10 +601,7 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
     lines.append(f"**Status:** {status}")
     lines.append("")
 
-    skills = data.get("skills", [])
-    # Handle dict format for backwards compatibility
-    if isinstance(skills, dict):
-        skills = [{"path": k, **v} for k, v in skills.items()]
+    skills = normalize_skills(data.get("skills", []))
 
     if group_by == "verdict":
         by_verdict: dict[str, list[dict]] = defaultdict(list)
@@ -492,12 +619,10 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
             lines.append("| Skill | 7d | Reason |")
             lines.append("|-------|-----|--------|")
 
-            for skill in sorted(items, key=lambda x: x.get("name") or x.get("path", "")):
-                name = skill.get("name") or Path(skill.get("path", "")).stem
+            for skill in sorted(items, key=lambda x: get_skill_name(x)):
+                name = get_skill_name(skill)
                 use_7d = skill.get("use_7d", 0)
-                reason = skill.get("reason", "")
-                if len(reason) > 80:
-                    reason = reason[:77] + "..."
+                reason = truncate_text(skill.get("reason", ""), 77, "...")
                 reason = reason.replace("|", "\\|")
                 lines.append(f"| {name} | {use_7d} | {reason} |")
 
@@ -506,13 +631,11 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
         lines.append("| Skill | 7d | Verdict | Reason |")
         lines.append("|-------|-----|---------|--------|")
 
-        for skill in sorted(skills, key=lambda x: x.get("name") or x.get("path", "")):
-            name = skill.get("name") or Path(skill.get("path", "")).stem
+        for skill in sorted(skills, key=lambda x: get_skill_name(x)):
+            name = get_skill_name(skill)
             use_7d = skill.get("use_7d", 0)
             verdict = skill.get("verdict", "Unknown")
-            reason = skill.get("reason", "")
-            if len(reason) > 60:
-                reason = reason[:57] + "..."
+            reason = truncate_text(skill.get("reason", ""), 57, "...")
             reason = reason.replace("|", "\\|")
             lines.append(f"| {name} | {use_7d} | {verdict} | {reason} |")
 
@@ -534,10 +657,7 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
 
 def format_summary_json(data: dict) -> str:
     """Format results as compact JSON."""
-    skills = data.get("skills", [])
-    # Handle dict format for backwards compatibility
-    if isinstance(skills, dict):
-        skills = [{"path": k, **v} for k, v in skills.items()]
+    skills = normalize_skills(data.get("skills", []))
 
     summary = {
         "evaluated_at": data.get("evaluated_at"),
@@ -547,8 +667,8 @@ def format_summary_json(data: dict) -> str:
         "skills": [],
     }
 
-    for skill in sorted(skills, key=lambda x: x.get("name") or x.get("path", "")):
-        name = skill.get("name") or Path(skill.get("path", "")).stem
+    for skill in sorted(skills, key=lambda x: get_skill_name(x)):
+        name = get_skill_name(skill)
         summary["skills"].append({
             "name": name,
             "verdict": skill.get("verdict"),
@@ -579,10 +699,7 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
         title="[bold]Stocktake Results[/bold]",
     ))
 
-    skills = data.get("skills", [])
-    # Handle dict format for backwards compatibility
-    if isinstance(skills, dict):
-        skills = [{"path": k, **v} for k, v in skills.items()]
+    skills = normalize_skills(data.get("skills", []))
 
     # Summary counts
     counts: dict[str, int] = defaultdict(int)
@@ -593,16 +710,8 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
     summary_table.add_column("Verdict", style="bold", no_wrap=True)
     summary_table.add_column("Count", justify="right", no_wrap=True)
 
-    verdict_colors = {
-        Verdict.KEEP: "green",
-        Verdict.IMPROVE: "yellow",
-        Verdict.UPDATE: "blue",
-        Verdict.MERGE: "magenta",
-        Verdict.RETIRE: "red",
-    }
-
     for verdict in Verdict:
-        color = verdict_colors.get(verdict, "white")
+        color = VERDICT_COLORS.get(verdict, "white")
         count = counts.get(verdict.value, 0)
         summary_table.add_row(f"[{color}]{verdict.value}[/{color}]", str(count))
 
@@ -619,7 +728,7 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
                 continue
 
             items = by_verdict[verdict.value]
-            color = verdict_colors.get(verdict, "white")
+            color = VERDICT_COLORS.get(verdict, "white")
 
             table = Table(title=f"[bold {color}]{verdict.value}[/bold {color}] ({len(items)})", box=HORIZONTALS, show_lines=True)
             table.add_column("Skill", style="cyan", no_wrap=True, width=15)
@@ -627,8 +736,8 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
             table.add_column("30d", justify="right", style="yellow", no_wrap=True, width=5)
             table.add_column("Reason", style="dim", width=reason_width)
 
-            for skill in sorted(items, key=lambda x: x.get("name") or x.get("path", "")):
-                name = skill.get("name") or Path(skill.get("path", "")).stem
+            for skill in sorted(items, key=lambda x: get_skill_name(x)):
+                name = get_skill_name(skill)
                 use_7d = skill.get("use_7d", 0)
                 use_30d = skill.get("use_30d", 0)
                 reason = skill.get("reason", "")
@@ -643,8 +752,8 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
         table.add_column("Verdict", style="bold", no_wrap=True, width=9)
         table.add_column("Reason", style="dim", width=reason_width - 9)
 
-        for skill in sorted(skills, key=lambda x: x.get("name") or x.get("path", "")):
-            name = skill.get("name") or Path(skill.get("path", "")).stem
+        for skill in sorted(skills, key=lambda x: get_skill_name(x)):
+            name = get_skill_name(skill)
             use_7d = skill.get("use_7d", 0)
             use_30d = skill.get("use_30d", 0)
             verdict_str = skill.get("verdict", "Unknown")
@@ -653,7 +762,7 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
             # Look up verdict enum for color, fallback to string lookup for non-enum verdicts
             try:
                 verdict_enum = Verdict(verdict_str)
-                color = verdict_colors.get(verdict_enum, "white")
+                color = VERDICT_COLORS.get(verdict_enum, "white")
             except ValueError:
                 color = "white"
             table.add_row(name, str(use_7d), str(use_30d), f"[{color}]{verdict_str}[/{color}]", reason)
@@ -684,9 +793,7 @@ def cmd_save(args: argparse.Namespace) -> int:
         # Bootstrap new results file
         input_json["evaluated_at"] = evaluated_at
         # Normalize to array format
-        skills = input_json.get("skills", [])
-        if isinstance(skills, dict):
-            input_json["skills"] = [{"path": k, **v} for k, v in skills.items()]
+        input_json["skills"] = normalize_skills(input_json.get("skills", []))
         with open(results_path, "w") as f:
             json.dump(input_json, f, indent=2)
         console.print(f"[green]Created:[/green] {results_path}")
@@ -698,13 +805,8 @@ def cmd_save(args: argparse.Namespace) -> int:
 
     # Merge skills (new overrides old by path)
     if "skills" in input_json:
-        new_skills = input_json["skills"]
-        if isinstance(new_skills, dict):
-            new_skills = [{"path": k, **v} for k, v in new_skills.items()]
-
-        existing_skills = existing.get("skills", [])
-        if isinstance(existing_skills, dict):
-            existing_skills = [{"path": k, **v} for k, v in existing_skills.items()]
+        new_skills = normalize_skills(input_json["skills"])
+        existing_skills = normalize_skills(existing.get("skills", []))
 
         # Build lookup by path
         by_path = {s.get("path", ""): s for s in existing_skills}
@@ -781,15 +883,11 @@ def cmd_merge_chunks(args: argparse.Namespace) -> int:
             console.print(f"[yellow]Warning:[/yellow] Skipping {chunk_file}: {e}")
             continue
 
-        # Handle formats: direct array, or object with "skills" key (array or dict)
+        # Handle formats: direct array, or object with "skills" key
         if isinstance(chunk_data, list):
-            # Direct array format
             skills_list = chunk_data
         elif isinstance(chunk_data, dict):
-            skills_list = chunk_data.get("skills", [])
-            if isinstance(skills_list, dict):
-                # Old dict format: convert to array
-                skills_list = [{"path": k, **v} for k, v in skills_list.items()]
+            skills_list = normalize_skills(chunk_data.get("skills", []))
         else:
             console.print(f"[yellow]Warning:[/yellow] Unexpected format in {chunk_file}")
             continue
@@ -878,6 +976,13 @@ def main(argv: list[str] | None = None) -> int:
     diff_parser.add_argument("--project-dir", type=Path, help="Override project skills directory")
     diff_parser.add_argument("--output", choices=["json", "rich"], default="rich")
 
+    # overview command
+    overview_parser = subparsers.add_parser("overview", help="Quick overview with usage stats")
+    overview_parser.add_argument("--global-dir", type=Path, help="Override global skills dir")
+    overview_parser.add_argument("--project-dir", type=Path, help="Override project skills dir")
+    overview_parser.add_argument("--observations-dir", type=Path, help="Override observations directory")
+    overview_parser.add_argument("--width", type=int, help="Override terminal width for rich output")
+
     # summary command
     summary_parser = subparsers.add_parser("summary", help="Phase 3: Display results table")
     summary_parser.add_argument("--results", type=Path, help="Path to results.json")
@@ -907,6 +1012,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_scan(args)
     elif args.command == "diff":
         return cmd_diff(args)
+    elif args.command == "overview":
+        return cmd_overview(args)
     elif args.command == "summary":
         return cmd_summary(args)
     elif args.command == "save":
