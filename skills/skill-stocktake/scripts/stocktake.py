@@ -514,7 +514,8 @@ def cmd_overview(args: argparse.Namespace) -> int:
 
     # Filter to only main SKILL.md files (not references)
     all_skills = [s for s in global_skills + project_skills if s["path"].endswith("/SKILL.md")]
-    all_skills.sort(key=lambda s: s.get("name") or Path(s.get("path", "")).stem)
+    # Sort by 7d usage descending, then by name for ties
+    all_skills.sort(key=lambda s: (-s.get("use_7d", 0), s.get("name") or Path(s.get("path", "")).stem))
 
     render_console = Console(width=args.width) if args.width else console
     render_overview_rich(all_skills, render_console)
