@@ -25,11 +25,23 @@ Compare deltas  ←  Re-run evals  ←  Implementation complete
 
 | Mode | Purpose |
 |------|---------|
-| `define <feature> [source]` | Create acceptance criteria from source-of-truth |
+| `define <feature> [source] [track=heavy\|lightweight]` | Create acceptance criteria from source-of-truth |
 | `check <feature>` | Run criteria against current implementation |
 | `report <feature>` | Produce comprehensive report with metrics |
 | `list` | Show all eval definitions and statuses |
 | `clean` | Remove old logs, keep last 10 runs per feature |
+
+### Track Modes
+
+**Heavy track** (default): Expects design.md + ADR + plan. Full criteria: capability, contract, negative, regression.
+
+**Lightweight track**: Expects design.md only. Minimal criteria: capability + contract for single function/module.
+
+Track auto-detected from input files:
+- ADR present → heavy track
+- design.md only → lightweight track
+
+Override with explicit `track=heavy` or `track=lightweight` parameter.
 
 ## Four Eval Types
 
@@ -97,11 +109,14 @@ Agent tool (general-purpose):
 
     Invocation: eval-gate $ARGUMENTS
     Eval directory: [eval_dir]
+    Track: [heavy|lightweight] (auto-detected or explicit override)
 
     Execute entirely inside this subagent. Do not launch subagents.
 
     Modes:
-    - `define <feature> [source]`: Read source-of-truth, extract observable criteria, write definition. Do not implement.
+    - `define <feature> [source] [track=...]`: Read source-of-truth, extract observable criteria, write definition. Do not implement.
+      - Heavy track: design.md + ADR + plan → full criteria (capability, contract, negative, regression)
+      - Lightweight track: design.md only → minimal criteria (capability, contract for single function)
     - `check <feature>`: Verify each criterion, append results to log, return status.
     - `report <feature>`: Read definition and log, write report, return recommendation.
     - `list`: Summarize definitions and statuses.
@@ -112,11 +127,14 @@ Agent tool (general-purpose):
 
 ## Definition Template
 
+### Heavy Track (full criteria)
+
 ```markdown
 ## EVAL: feature-name
 Created: $(date)
 Source of truth: [pointer]
 Eval directory: [eval_dir]
+Track: heavy
 
 ### Capability Evals
 - [ ] [Observable behavior]
@@ -141,6 +159,30 @@ Eval directory: [eval_dir]
 - Contract: pass@1 = 1.00
 - Negative: pass@1 = 1.00
 - Regression: pass^3 = 1.00
+```
+
+### Lightweight Track (minimal criteria)
+
+```markdown
+## EVAL: feature-name
+Created: $(date)
+Source of truth: [pointer]
+Eval directory: [eval_dir]
+Track: lightweight
+
+### Capability Evals
+- [ ] [Observable behavior for single function/module]
+
+### Contract Evals
+- [ ] [Interface/shape for single function/module]
+
+### Grader Assignment
+- [ ] Capability: [code]
+- [ ] Contract: [code|rule]
+
+### Thresholds
+- Capability: pass@3 >= 0.90
+- Contract: pass@1 = 1.00
 ```
 
 ## Grader Types

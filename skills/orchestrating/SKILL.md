@@ -1,7 +1,7 @@
 ---
 name: orchestrating
-description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the skill sequence across brainstorming, architect, plan, eval-gate, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, remediation loops, final review behavior, and pointer-based state passing.
-argument-hint: "[feature|refactor|bugfix|docs]"
+description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the skill sequence across brainstorming, architect, plan, eval-gate, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, remediation loops, final review behavior, and pointer-based state passing. Supports lightweight (5-phase) and heavy (7-phase) pipelines with complexity-based routing.
+argument-hint: "[feature|refactor|bugfix|docs] [--lightweight|--heavy]"
 ---
 
 # Orchestration
@@ -35,6 +35,19 @@ Root File: [e.g., Cargo.toml]
 [Task summary and user requirements]
 ```
 
+## Pipeline Flags and Routing
+
+### Manual Override Flags
+- `--lightweight`: Force lightweight pipeline (5-phase, skips architect + plan)
+- `--heavy`: Force heavy pipeline (7-phase, full workflow)
+- Default: Auto-detect from brainstorming complexity classification
+
+### Routing Logic
+After brainstorming completes:
+1. Check for `--lightweight` or `--heavy` flag override
+2. Otherwise, read complexity from design.md frontmatter or brainstorming return value
+3. Route to 1a (heavy) or 1b (lightweight)
+
 ## Phase Ownership Contract
 - `brainstorming` owns requirement discovery: source-of-truth design capture, examples, negative requirements, acceptance criteria, assumptions, and open questions.
 - `architect` owns decisions: problem framing, boundaries, invariants, interfaces, trade-offs, risks, and rejected alternatives.
@@ -57,13 +70,30 @@ To execute a step, load the corresponding Skill (e.g., `skill="architect"`) and 
 - Prefer adopting or porting a proven approach over writing net-new code.
 
 ### 1. Feature Pipeline (`args="feature|refactor"`)
-- **Step 1:** `brainstorming` (Load skill: `brainstorming`) - *Create `[topic_root]` once for the topic. The phase MUST produce `[topic_root]/design.md` as the source of truth before implementation. The design must include understanding summary, assumptions, non-functional requirements, decision log, behavior specification, output examples or golden examples, negative requirements, acceptance criteria, and open questions.*
+
+**Step 1:** `brainstorming` (Load skill: `brainstorming`) - *Create `[topic_root]` once for the topic. The phase MUST produce `[topic_root]/design.md` with `complexity` field in frontmatter. The design must include understanding summary, assumptions, non-functional requirements, decision log, behavior specification, output examples or golden examples, negative requirements, acceptance criteria, and open questions. Brainstorming returns complexity classification in its handoff.*
+
+**Routing Decision:** Check `--lightweight` or `--heavy` override flags. If no override, use complexity from brainstorming return value or design.md frontmatter. Route to 1a (heavy) or 1b (lightweight).
+
+#### 1a. Heavy Track (complexity=heavy)
+
+**6 additional phases**: architect → plan → eval-gate define → tdd-cycle → eval-gate check → code-review
+
 - **Step 2:** `architect` (Load skill: `architect`) - *Pass the approved `design.md` pointer and `topic_root=[topic_root]` override. This phase records the architecture decision for feature/refactor work as an ADR. It must preserve the design contract and record trade-offs, boundaries, invariants, and rejected alternatives only.*
 - **Step 3:** `plan` (Load skill: `plan`) - *Pass the approved `design.md`, approved ADR pointer, and `topic_root=[topic_root]` override. This phase converts the design and ADR into an execution plan without weakening or reinterpreting acceptance criteria.*
-- **Step 4:** `eval-gate define` (Load skill: `eval-gate`) - *Pass the approved `design.md`, ADR, execution plan, and `topic_root=[topic_root]` override. The eval definition must be derived from `design.md`, include concrete capability checks, regression checks, negative requirements, and golden examples where present, then stop for explicit user review and approval before implementation begins.*
+- **Step 4:** `eval-gate define` (Load skill: `eval-gate`) - *Pass the approved `design.md`, ADR, execution plan, and `topic_root=[topic_root]` override with `track=heavy`. The eval definition must be derived from `design.md`, include concrete capability checks, regression checks, negative requirements, and golden examples where present, then stop for explicit user review and approval before implementation begins.*
 - **Step 5:** `tdd-cycle` (Load skill: `tdd-cycle`) - *Pass the approved execution plan, approved eval definition, approved `design.md`, and `topic_root=[topic_root]` override into the TDD orchestrator. This phase owns tests, implementation, and implementation-level verification only.*
 - **Step 6:** `eval-gate check` (Load skill: `eval-gate`) - *Run the approved eval definition against the implementation. If all required evals pass, continue to code review. If any eval fails, return to `tdd-cycle` with pointers to `design.md`, the eval definition, the eval failure log, and the current implementation summary. Retry remediation at most twice before stopping and surfacing the blocker.*
 - **Step 7:** `code-review` (Load skill: `code-review`) - *Pass `topic_root=[topic_root]`, `orchestrated_final_review=true`, approved upstream artifact pointers, and eval pass log. This is the repository-level review gate for security, maintainability, broader correctness gaps, and overall readiness after implementation and eval verification. In this final orchestrated review, safe `medium`, `low`, or `minor` findings should be delegated for remediation without a user approval checkpoint; ask the user only for `blocking`, `high`, security-critical, destructive, risky, or decision-requiring findings.*
+
+#### 1b. Lightweight Track (complexity=lightweight)
+
+**4 additional phases**: eval-gate define → tdd-cycle → eval-gate check → code-review
+
+- **Step 2:** `eval-gate define` (Load skill: `eval-gate`) - *Pass the approved `design.md` and `topic_root=[topic_root]` override with `track=lightweight`. No ADR or plan required. The eval definition contains minimal criteria: capability and contract checks for the single function/module. Stop for explicit user review and approval before implementation begins.*
+- **Step 3:** `tdd-cycle` (Load skill: `tdd-cycle`) - *Pass the approved eval definition, approved `design.md`, and `topic_root=[topic_root]` override. This phase owns tests, implementation, and implementation-level verification only.*
+- **Step 4:** `eval-gate check` (Load skill: `eval-gate`) - *Run the approved eval definition against the implementation. If all required evals pass, continue to code review. If any eval fails, return to `tdd-cycle` with pointers to `design.md`, the eval definition, the eval failure log, and the current implementation summary. Retry remediation at most twice before stopping and surfacing the blocker.*
+- **Step 5:** `code-review` (Load skill: `code-review`) - *Pass `topic_root=[topic_root]`, `orchestrated_final_review=true`, approved upstream artifact pointers, and eval pass log. This is the repository-level review gate for security, maintainability, broader correctness gaps, and overall readiness after implementation and eval verification. In this final orchestrated review, safe `medium`, `low`, or `minor` findings should be delegated for remediation without a user approval checkpoint; ask the user only for `blocking`, `high`, security-critical, destructive, risky, or decision-requiring findings.*
 
 ### 2. Bugfix Pipeline (`args="bugfix"`)
 - **Step 1:** `tdd-cycle` (Load skill: `tdd-cycle`) - *Create `[topic_root]` once for the topic, then pass `topic_root=[topic_root]` and use incremental mode to write a failing test for the bug and fix it.*

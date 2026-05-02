@@ -280,6 +280,56 @@ If any criterion is unmet:
 
 ---
 
+## 8️⃣ Complexity Classification (Mandatory Output)
+
+After the design is validated, you MUST classify the task complexity for orchestration routing.
+
+### Output Locations
+
+1. **Design.md frontmatter** - Add `complexity` field:
+   ```markdown
+   ---
+   complexity: lightweight | heavy
+   ---
+   ```
+
+2. **Return value** - Include classification in your handoff response:
+   ```
+   Design: [path]
+   Complexity: lightweight | heavy
+   Rationale: <brief reason>
+   ```
+
+### Classification Heuristics
+
+**Lightweight if ALL are true:**
+- Single module/function scope
+- No cross-module dependencies
+- No interface/contract changes (or trivial additions only)
+- Easy to verify with tests
+- No security/performance implications
+
+**Heavy if ANY is true:**
+- Multi-module impact
+- Interface/contract changes to existing APIs
+- Data model/schema changes
+- Security or performance implications
+- Hard-to-verify behavior (async, distributed, non-deterministic)
+
+### Complexity Transformation
+
+Complexity can change during brainstorming:
+- **Simple → Complex**: Discovery of hidden dependencies, security implications, or architectural impact
+- **Complex → Simple**: Discovery of elegant solution that reduces scope
+
+When complexity changes, re-evaluate and update classification before finalizing.
+
+### Default Behavior
+
+When uncertain, classify as **heavy**. The cost of extra architecture review is lower than the cost of skipping it when needed.
+
+---
+
 ## Key Principles (Non-Negotiable)
 
 - One question at a time  
