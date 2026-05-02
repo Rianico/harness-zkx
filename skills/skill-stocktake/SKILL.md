@@ -1,9 +1,9 @@
 ---
 name: skill-stocktake
 description: Use when auditing Claude skills and commands for quality. Supports Quick Scan (changed skills only) and Full Stocktake modes with sequential subagent batch evaluation.
+argument-hint: "[full|quick]"
 
 ---
-
 # skill-stocktake
 
 Slash command (`/skill-stocktake`) that audits all Claude skills and commands using a quality checklist + AI holistic judgment. Supports two modes: Quick Scan for recently changed skills, and Full Stocktake for a complete review.
@@ -12,8 +12,6 @@ Slash command (`/skill-stocktake`) that audits all Claude skills and commands us
 
 - Python 3.11+
 - `uv` — for running Python scripts
-- `fd` — for file discovery
-- `jq` — for JSON processing
 
 ## Scope
 
@@ -28,13 +26,6 @@ The command targets the following paths **relative to the directory where it is 
 
 ### Targeting a specific project
 
-To include project-level skills, run from that project's root directory:
-
-```bash
-cd ~/path/to/my-project
-/skill-stocktake
-```
-
 If the project has no `.claude/skills/` directory, only global skills and commands are evaluated.
 
 ## Modes
@@ -44,27 +35,26 @@ If the project has no `.claude/skills/` directory, only global skills and comman
 | Quick Scan | `results.json` exists (default) | 5–10 min |
 | Full Stocktake | `results.json` absent, or `/skill-stocktake full` | 20–30 min |
 
-**Results cache:** `~/.claude/skills/skill-stocktake/results.json`
+**Results cache:** `~/.claude/lsz/skill-stocktake/results.json`
 
 ## Quick Scan Flow
 
 Re-evaluate only skills that have changed since the last run (5–10 min).
 
-1. Run: `uv run ~/.claude/skills/skill-stocktake/scripts/stocktake.py diff`
+1. Run: `uv run {skill}/scripts/stocktake.py diff`
 2. If output shows no changes: report "No changes since last run." and stop
 3. Re-evaluate only those changed files using the same Phase 2 criteria
 4. Carry forward unchanged skills from previous results
 5. Output only the diff
-6. Save results: `uv run stocktake.py save --results PATH < eval.json`
+6. Save results: `uv run {skill}/scripts/stocktake.py save < eval.json`
 
 ## Full Stocktake Flow
 
 ### Phase 1 — Inventory
 
-Run: `uv run ~/.claude/skills/skill-stocktake/scripts/stocktake.py scan`
+Run: `uv run {skill}/scripts/stocktake.py scan`
 
-The script enumerates skill files, extracts frontmatter, aggregates observations,
-and outputs structured JSON or rich terminal display.
+The script enumerates skill files, extracts frontmatter, aggregates observations, and outputs structured JSON or rich terminal display.
 
 Options:
 - `--global-dir PATH` — Override global skills directory
@@ -74,20 +64,9 @@ Options:
 
 Present the scan summary and inventory table from the script output.
 
-### Phase 3 — Summary Table
-
-Run: `uv run ~/.claude/skills/skill-stocktake/scripts/stocktake.py summary`
-
-Reads results.json and outputs formatted summary table grouped by verdict.
-
-Options:
-- `--results PATH` — Path to results.json
-- `--output rich|markdown|json` — Output format (default: rich)
-- `--group-by verdict|skill` — Grouping (default: verdict)
-
 ### Phase 2 — Quality Evaluation
 
-Launch an Agent tool subagent (**general-purpose agent**) with the full inventory and checklist:
+Launch parallel Agent tool subagents (**general-purpose agent**) with chunked inventory and checklist:
 
 ```text
 Agent(
@@ -95,25 +74,42 @@ Agent(
   prompt="
 Evaluate the following skill inventory against the checklist.
 
-[INVENTORY]
+[INVENTORY JSON array]
 
 [CHECKLIST]
 
-Return JSON for each skill:
-{ \"verdict\": \"Keep\"|\"Improve\"|\"Update\"|\"Retire\"|\"Merge into [X]\", \"reason\": \"...\" }
+Return JSON array for each evaluated skill:
+[{ \"path\": \"...\", \"verdict\": \"Keep\", \"reason\": \"...\" }, ...]
 "
 )
 ```
 
-The subagent reads each skill, applies the checklist, and returns per-skill JSON:
+The subagent reads each skill, applies the checklist, and returns per-skill JSON array:
 
-`{ "verdict": "Keep"|"Improve"|"Update"|"Retire"|"Merge into [X]", "reason": "..." }`
+```json
+[
+  { "path": "~/.claude/skills/brainstorming/SKILL.md", "verdict": "Keep", "reason": "..." }
+]
+```
 
-**Chunk guidance:** Process ~20 skills per subagent invocation to keep context manageable. Save intermediate results to `results.json` (`status: "in_progress"`) after each chunk.
+**Chunk guidance:** Process ~15 skills per subagent invocation. Launch chunks in parallel.
+
+**Chunked file workflow:**
+1. Save scan inventory to temp: `uv run {skill}/scripts/stocktake.py scan --output json > ~/.claude/lsz/skill-stocktake/.tmp/inventory.json`
+2. Save each chunk's evaluation output to: `~/.claude/lsz/skill-stocktake/.tmp/chunk_{N}.json`
+3. After all chunks complete, merge with inventory:
+   ```
+   uv run {skill}/scripts/stocktake.py merge-chunks \
+     --inventory ~/.claude/lsz/skill-stocktake/.tmp/inventory.json \
+     --clean
+   ```
+4. The `--clean` flag removes `.tmp/` directory after merge
+
+**Usage data:** The inventory is an array of objects with `path`, `name`, `description`, `use_7d`, `use_30d`, `mtime`. The `merge-chunks` command merges evaluation results with inventory using `path` as the join key.
 
 After all skills are evaluated: set `status: "completed"`, proceed to Phase 3.
 
-**Resume detection:** If `status: "in_progress"` is found on startup, resume from the first unevaluated skill.
+**Resume detection:** If `status: "in_progress"` is found on startup, check for existing chunk files in `.tmp/` and resume incomplete chunks.
 
 Each skill is evaluated against this checklist:
 
@@ -157,8 +153,14 @@ Evaluation is **holistic AI judgment** — not a numeric rubric. Guiding dimensi
 
 ### Phase 3 — Summary Table
 
-| Skill | 7d use | Verdict | Reason |
-|-------|--------|---------|--------|
+Run: `uv run {skill}/scripts/stocktake.py summary`
+
+Reads results.json and outputs formatted summary table grouped by verdict.
+
+Options:
+- `--results PATH` — Path to results.json
+- `--output rich|markdown|json` — Output format (default: rich)
+- `--group-by verdict|skill` — Grouping (default: verdict)
 
 ### Phase 4 — Consolidation
 
@@ -174,7 +176,7 @@ Evaluation is **holistic AI judgment** — not a numeric rubric. Guiding dimensi
 
 ## Results File Schema
 
-`~/.claude/skills/skill-stocktake/results.json`:
+`~/.claude/lsz/skill-stocktake/results.json`:
 
 **`evaluated_at`**: Must be set to the actual UTC time of evaluation completion.
 Obtain via Bash: `date -u +%Y-%m-%dT%H:%M:%SZ`. Never use a date-only approximation like `T00:00:00Z`.
@@ -188,16 +190,22 @@ Obtain via Bash: `date -u +%Y-%m-%dT%H:%M:%SZ`. Never use a date-only approximat
     "evaluated": 80,
     "status": "completed"
   },
-  "skills": {
-    "skill-name": {
-      "path": "~/.claude/skills/skill-name/SKILL.md",
+  "skills": [
+    {
+      "path": "~/.claude/skills/brainstorming/SKILL.md",
+      "name": "brainstorming",
       "verdict": "Keep",
       "reason": "Concrete, actionable, unique value for X workflow",
+      "use_7d": 4,
+      "use_30d": 6,
       "mtime": "2026-01-15T08:30:00Z"
     }
-  }
+  ]
 }
 ```
+
+**Required fields per skill:** `path`, `verdict`, `reason`
+**Inherited from inventory:** `name`, `use_7d`, `use_30d`, `mtime`
 
 ## Notes
 

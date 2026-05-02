@@ -10,12 +10,14 @@ Usage:
     uv run stocktake.py diff [--results PATH]
     uv run stocktake.py summary [--results PATH] [--output rich|markdown|json]
     uv run stocktake.py save [--results PATH] < eval.json
+    uv run stocktake.py merge-chunks [--results PATH] [--clean]
 
 Commands:
-    scan     Phase 1: Inventory all skills
-    diff     Quick Scan: Find changed skills since last run
-    summary  Phase 3: Display results table
-    save     Merge evaluation results into results.json
+    scan          Phase 1: Inventory all skills
+    diff          Quick Scan: Find changed skills since last run
+    summary       Phase 3: Display results table
+    save          Merge evaluation results into results.json
+    merge-chunks  Merge chunked evaluation files from .tmp/ directory
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 
+from rich.box import HORIZONTALS, ROUNDED
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -36,9 +39,10 @@ from rich.table import Table
 # Defaults
 DEFAULT_GLOBAL_DIR = Path.home() / ".claude" / "skills"
 DEFAULT_OBSERVATIONS_DIR = Path.home() / ".claude" / "lsz" / "homunculus"
-DEFAULT_RESULTS = Path.home() / ".claude" / "skills" / "skill-stocktake" / "results.json"
+DEFAULT_RESULTS = Path.home() / ".claude" / "lsz" / "skill-stocktake" / "results.json"
+DEFAULT_TMP_DIR = Path.home() / ".claude" / "lsz" / "skill-stocktake" / ".tmp"
 
-
+# Let Rich auto-detect terminal width
 console = Console()
 
 
@@ -259,7 +263,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
     elif args.output == "markdown":
         print(format_scan_markdown(data))
     else:
-        render_scan_rich(data)
+        # Use width override if provided, otherwise let Rich auto-detect
+        render_console = Console(width=args.width) if args.width else console
+        render_scan_rich(data, render_console)
 
     return 0
 
@@ -297,35 +303,40 @@ def format_scan_markdown(data: dict) -> str:
     return "\n".join(lines)
 
 
-def render_scan_rich(data: dict) -> None:
+def render_scan_rich(data: dict, render_console: Console | None = None) -> None:
     """Render scan results with rich tables."""
+    con = render_console or console
+    # Calculate description column width: total - (Skill:15 + 7d:4 + 30d:5 + borders:8)
+    desc_width = max(40, con.width - 32)
+
     summary = data["scan_summary"]
 
     # Scan summary panel
     project_status = "green" if summary["project"]["found"] else "red"
     project_check = "✓" if summary["project"]["found"] else "✗"
-    console.print(Panel.fit(
+    con.print(Panel.fit(
         f"[green]✓[/green] ~/.claude/skills/ ({summary['global']['count']} files)\n"
         f"[{project_status}]{project_check}[/] "
         f"{summary['project']['path'] or 'project skills'} ({summary['project']['count']} files)",
         title="[bold]Scanning[/bold]",
     ))
 
-    # Skills table
-    table = Table(title=f"[bold]Inventory[/bold] ({len(data['skills'])} skills)")
-    table.add_column("Skill", style="cyan")
-    table.add_column("7d", justify="right", style="green")
-    table.add_column("30d", justify="right", style="yellow")
-    table.add_column("Description", style="dim")
+    # Skills table with HORIZONTALS style and row separators
+    table = Table(title=f"[bold]Inventory[/bold] ({len(data['skills'])} skills)", box=HORIZONTALS, show_lines=True)
+    table.add_column("Skill", style="cyan", no_wrap=True, width=15)
+    table.add_column("7d", justify="right", style="green", no_wrap=True, width=4)
+    table.add_column("30d", justify="right", style="yellow", no_wrap=True, width=5)
+    table.add_column("Description", style="dim", width=desc_width)
 
     for skill in data["skills"]:
         name = skill["name"] or Path(skill["path"]).stem
         desc = skill["description"]
-        if len(desc) > 50:
-            desc = desc[:50] + "..."
+        # Truncate long descriptions
+        if len(desc) > desc_width:
+            desc = desc[:desc_width-1] + "…"
         table.add_row(name, str(skill["use_7d"]), str(skill["use_30d"]), desc)
 
-    console.print(table)
+    con.print(table)
 
 
 # Command: diff
@@ -409,9 +420,9 @@ def render_diff_rich(changed: list[dict], evaluated_at: str) -> None:
     ))
 
     table = Table(title=f"[bold]Changed Skills[/bold] ({len(changed)})")
-    table.add_column("Skill", style="cyan")
-    table.add_column("Status", style="bold")
-    table.add_column("Modified", style="dim")
+    table.add_column("Skill", style="cyan", no_wrap=True)
+    table.add_column("Status", style="bold", no_wrap=True)
+    table.add_column("Modified", style="dim", no_wrap=True)
 
     for item in sorted(changed, key=lambda x: x["name"]):
         status = "[green]NEW[/green]" if item["is_new"] else "[yellow]MODIFIED[/yellow]"
@@ -439,7 +450,9 @@ def cmd_summary(args: argparse.Namespace) -> int:
     elif args.output == "markdown":
         print(format_summary_markdown(data, args.group_by))
     else:
-        render_summary_rich(data, args.group_by)
+        # Use width override if provided, otherwise let Rich auto-detect
+        render_console = Console(width=args.width) if args.width else console
+        render_summary_rich(data, args.group_by, render_console)
 
     return 0
 
@@ -458,13 +471,16 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
     lines.append(f"**Status:** {status}")
     lines.append("")
 
-    skills = data.get("skills", {})
+    skills = data.get("skills", [])
+    # Handle dict format for backwards compatibility
+    if isinstance(skills, dict):
+        skills = [{"path": k, **v} for k, v in skills.items()]
 
     if group_by == "verdict":
-        by_verdict: dict[str, list[tuple[str, dict]]] = defaultdict(list)
-        for name, info in skills.items():
-            verdict = info.get("verdict", "Unknown")
-            by_verdict[verdict].append((name, info))
+        by_verdict: dict[str, list[dict]] = defaultdict(list)
+        for skill in skills:
+            verdict = skill.get("verdict", "Unknown")
+            by_verdict[verdict].append(skill)
 
         for verdict in Verdict:
             if verdict.value not in by_verdict:
@@ -476,9 +492,10 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
             lines.append("| Skill | 7d | Reason |")
             lines.append("|-------|-----|--------|")
 
-            for name, info in sorted(items, key=lambda x: x[0]):
-                use_7d = info.get("use_7d", 0)
-                reason = info.get("reason", "")
+            for skill in sorted(items, key=lambda x: x.get("name") or x.get("path", "")):
+                name = skill.get("name") or Path(skill.get("path", "")).stem
+                use_7d = skill.get("use_7d", 0)
+                reason = skill.get("reason", "")
                 if len(reason) > 80:
                     reason = reason[:77] + "..."
                 reason = reason.replace("|", "\\|")
@@ -489,11 +506,11 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
         lines.append("| Skill | 7d | Verdict | Reason |")
         lines.append("|-------|-----|---------|--------|")
 
-        for name in sorted(skills.keys()):
-            info = skills[name]
-            use_7d = info.get("use_7d", 0)
-            verdict = info.get("verdict", "Unknown")
-            reason = info.get("reason", "")
+        for skill in sorted(skills, key=lambda x: x.get("name") or x.get("path", "")):
+            name = skill.get("name") or Path(skill.get("path", "")).stem
+            use_7d = skill.get("use_7d", 0)
+            verdict = skill.get("verdict", "Unknown")
+            reason = skill.get("reason", "")
             if len(reason) > 60:
                 reason = reason[:57] + "..."
             reason = reason.replace("|", "\\|")
@@ -506,8 +523,8 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
     lines.append("|---------|-------|")
 
     counts: dict[str, int] = defaultdict(int)
-    for info in skills.values():
-        counts[info.get("verdict", "Unknown")] += 1
+    for skill in skills:
+        counts[skill.get("verdict", "Unknown")] += 1
 
     for verdict in Verdict:
         lines.append(f"| {verdict.value} | {counts.get(verdict.value, 0)} |")
@@ -517,7 +534,10 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
 
 def format_summary_json(data: dict) -> str:
     """Format results as compact JSON."""
-    skills = data.get("skills", {})
+    skills = data.get("skills", [])
+    # Handle dict format for backwards compatibility
+    if isinstance(skills, dict):
+        skills = [{"path": k, **v} for k, v in skills.items()]
 
     summary = {
         "evaluated_at": data.get("evaluated_at"),
@@ -527,43 +547,51 @@ def format_summary_json(data: dict) -> str:
         "skills": [],
     }
 
-    for name, info in sorted(skills.items()):
+    for skill in sorted(skills, key=lambda x: x.get("name") or x.get("path", "")):
+        name = skill.get("name") or Path(skill.get("path", "")).stem
         summary["skills"].append({
             "name": name,
-            "verdict": info.get("verdict"),
-            "use_7d": info.get("use_7d", 0),
-            "reason": info.get("reason", "")[:100],
+            "verdict": skill.get("verdict"),
+            "use_7d": skill.get("use_7d", 0),
+            "reason": skill.get("reason", "")[:100],
         })
-        summary["by_verdict"][info.get("verdict", "Unknown")].append(name)
+        summary["by_verdict"][skill.get("verdict", "Unknown")].append(name)
 
     summary["by_verdict"] = dict(summary["by_verdict"])
     return json.dumps(summary, indent=2)
 
 
-def render_summary_rich(data: dict, group_by: str) -> None:
+def render_summary_rich(data: dict, group_by: str, render_console: Console | None = None) -> None:
     """Render results with rich tables."""
+    con = render_console or console
+    # Calculate reason column width: total - (Skill:15 + 7d:4 + 30d:5 + borders:8)
+    reason_width = max(40, con.width - 32)
+
     evaluated_at = data.get("evaluated_at", "unknown")
     mode = data.get("mode", "unknown")
     progress = data.get("batch_progress", {})
     status = progress.get("status", "unknown")
 
-    console.print(Panel.fit(
+    con.print(Panel.fit(
         f"Evaluated: [dim]{evaluated_at}[/dim]\n"
         f"Mode: [dim]{mode}[/dim]\n"
         f"Status: [dim]{status}[/dim]",
         title="[bold]Stocktake Results[/bold]",
     ))
 
-    skills = data.get("skills", {})
+    skills = data.get("skills", [])
+    # Handle dict format for backwards compatibility
+    if isinstance(skills, dict):
+        skills = [{"path": k, **v} for k, v in skills.items()]
 
     # Summary counts
     counts: dict[str, int] = defaultdict(int)
-    for info in skills.values():
-        counts[info.get("verdict", "Unknown")] += 1
+    for skill in skills:
+        counts[skill.get("verdict", "Unknown")] += 1
 
-    summary_table = Table(title="[bold]Summary[/bold]", show_header=False)
-    summary_table.add_column("Verdict", style="bold")
-    summary_table.add_column("Count", justify="right")
+    summary_table = Table(title="[bold]Summary[/bold]", show_header=False, box=ROUNDED)
+    summary_table.add_column("Verdict", style="bold", no_wrap=True)
+    summary_table.add_column("Count", justify="right", no_wrap=True)
 
     verdict_colors = {
         Verdict.KEEP: "green",
@@ -578,13 +606,13 @@ def render_summary_rich(data: dict, group_by: str) -> None:
         count = counts.get(verdict.value, 0)
         summary_table.add_row(f"[{color}]{verdict.value}[/{color}]", str(count))
 
-    console.print(summary_table)
+    con.print(summary_table)
 
     if group_by == "verdict":
-        by_verdict: dict[str, list[tuple[str, dict]]] = defaultdict(list)
-        for name, info in skills.items():
-            verdict = info.get("verdict", "Unknown")
-            by_verdict[verdict].append((name, info))
+        by_verdict: dict[str, list[dict]] = defaultdict(list)
+        for skill in skills:
+            verdict = skill.get("verdict", "Unknown")
+            by_verdict[verdict].append(skill)
 
         for verdict in Verdict:
             if verdict.value not in by_verdict:
@@ -593,33 +621,34 @@ def render_summary_rich(data: dict, group_by: str) -> None:
             items = by_verdict[verdict.value]
             color = verdict_colors.get(verdict, "white")
 
-            table = Table(title=f"[bold {color}]{verdict.value}[/bold {color}] ({len(items)})")
-            table.add_column("Skill", style="cyan")
-            table.add_column("7d", justify="right", style="green")
-            table.add_column("Reason", style="dim")
+            table = Table(title=f"[bold {color}]{verdict.value}[/bold {color}] ({len(items)})", box=HORIZONTALS, show_lines=True)
+            table.add_column("Skill", style="cyan", no_wrap=True, width=15)
+            table.add_column("7d", justify="right", style="green", no_wrap=True, width=4)
+            table.add_column("30d", justify="right", style="yellow", no_wrap=True, width=5)
+            table.add_column("Reason", style="dim", width=reason_width)
 
-            for name, info in sorted(items, key=lambda x: x[0]):
-                use_7d = info.get("use_7d", 0)
-                reason = info.get("reason", "")
-                if len(reason) > 60:
-                    reason = reason[:57] + "..."
-                table.add_row(name, str(use_7d), reason)
+            for skill in sorted(items, key=lambda x: x.get("name") or x.get("path", "")):
+                name = skill.get("name") or Path(skill.get("path", "")).stem
+                use_7d = skill.get("use_7d", 0)
+                use_30d = skill.get("use_30d", 0)
+                reason = skill.get("reason", "")
+                table.add_row(name, str(use_7d), str(use_30d), reason)
 
-            console.print(table)
+            con.print(table)
     else:
-        table = Table(title="[bold]All Skills[/bold]")
-        table.add_column("Skill", style="cyan")
-        table.add_column("7d", justify="right")
-        table.add_column("Verdict", style="bold")
-        table.add_column("Reason", style="dim")
+        table = Table(title="[bold]All Skills[/bold]", box=HORIZONTALS, show_lines=True)
+        table.add_column("Skill", style="cyan", no_wrap=True, width=15)
+        table.add_column("7d", justify="right", style="green", no_wrap=True, width=4)
+        table.add_column("30d", justify="right", style="yellow", no_wrap=True, width=5)
+        table.add_column("Verdict", style="bold", no_wrap=True, width=9)
+        table.add_column("Reason", style="dim", width=reason_width - 9)
 
-        for name in sorted(skills.keys()):
-            info = skills[name]
-            use_7d = info.get("use_7d", 0)
-            verdict_str = info.get("verdict", "Unknown")
-            reason = info.get("reason", "")
-            if len(reason) > 50:
-                reason = reason[:47] + "..."
+        for skill in sorted(skills, key=lambda x: x.get("name") or x.get("path", "")):
+            name = skill.get("name") or Path(skill.get("path", "")).stem
+            use_7d = skill.get("use_7d", 0)
+            use_30d = skill.get("use_30d", 0)
+            verdict_str = skill.get("verdict", "Unknown")
+            reason = skill.get("reason", "")
 
             # Look up verdict enum for color, fallback to string lookup for non-enum verdicts
             try:
@@ -627,9 +656,9 @@ def render_summary_rich(data: dict, group_by: str) -> None:
                 color = verdict_colors.get(verdict_enum, "white")
             except ValueError:
                 color = "white"
-            table.add_row(name, str(use_7d), f"[{color}]{verdict_str}[/{color}]", reason)
+            table.add_row(name, str(use_7d), str(use_30d), f"[{color}]{verdict_str}[/{color}]", reason)
 
-        console.print(table)
+        con.print(table)
 
 
 # Command: save
@@ -654,6 +683,10 @@ def cmd_save(args: argparse.Namespace) -> int:
     if not results_path.exists():
         # Bootstrap new results file
         input_json["evaluated_at"] = evaluated_at
+        # Normalize to array format
+        skills = input_json.get("skills", [])
+        if isinstance(skills, dict):
+            input_json["skills"] = [{"path": k, **v} for k, v in skills.items()]
         with open(results_path, "w") as f:
             json.dump(input_json, f, indent=2)
         console.print(f"[green]Created:[/green] {results_path}")
@@ -663,9 +696,24 @@ def cmd_save(args: argparse.Namespace) -> int:
     with open(results_path) as f:
         existing = json.load(f)
 
-    # Merge skills (new overrides old)
+    # Merge skills (new overrides old by path)
     if "skills" in input_json:
-        existing["skills"] = {**existing.get("skills", {}), **input_json["skills"]}
+        new_skills = input_json["skills"]
+        if isinstance(new_skills, dict):
+            new_skills = [{"path": k, **v} for k, v in new_skills.items()]
+
+        existing_skills = existing.get("skills", [])
+        if isinstance(existing_skills, dict):
+            existing_skills = [{"path": k, **v} for k, v in existing_skills.items()]
+
+        # Build lookup by path
+        by_path = {s.get("path", ""): s for s in existing_skills}
+        for skill in new_skills:
+            path = skill.get("path", "")
+            if path:
+                by_path[path] = skill
+
+        existing["skills"] = list(by_path.values())
 
     # Update metadata
     existing["evaluated_at"] = evaluated_at
@@ -678,6 +726,128 @@ def cmd_save(args: argparse.Namespace) -> int:
         json.dump(existing, f, indent=2)
 
     console.print(f"[green]Updated:[/green] {results_path}")
+    return 0
+
+
+# Command: merge-chunks
+
+
+def cmd_merge_chunks(args: argparse.Namespace) -> int:
+    """Merge chunked evaluation results with inventory into results.json."""
+    results_path = args.results or DEFAULT_RESULTS
+    tmp_dir = DEFAULT_TMP_DIR
+    inventory_path = args.inventory
+
+    if not tmp_dir.exists():
+        console.print(f"[red]Error:[/red] Temp directory not found: {tmp_dir}")
+        return 1
+
+    # Load inventory if provided (for use_7d, use_30d, mtime, name)
+    # Build lookup by path for merging
+    inventory_by_path: dict[str, dict] = {}
+    if inventory_path:
+        try:
+            with open(inventory_path) as f:
+                inv_data = json.load(f)
+            for skill in inv_data.get("skills", []):
+                path = skill.get("path", "")
+                if not path:
+                    continue
+                inventory_by_path[path] = {
+                    "name": skill.get("name", ""),
+                    "use_7d": skill.get("use_7d", 0),
+                    "use_30d": skill.get("use_30d", 0),
+                    "mtime": skill.get("mtime", ""),
+                }
+        except (OSError, json.JSONDecodeError) as e:
+            console.print(f"[yellow]Warning:[/yellow] Could not load inventory: {e}")
+
+    # Find all chunk files
+    chunk_files = sorted(tmp_dir.glob("chunk_*.json"))
+    if not chunk_files:
+        console.print(f"[yellow]No chunk files found in[/yellow] {tmp_dir}")
+        return 0
+
+    # Load all chunks - expect array format
+    all_skills: list[dict] = []
+    total_evaluated = 0
+    seen_paths: set[str] = set()
+
+    for chunk_file in chunk_files:
+        try:
+            with open(chunk_file) as f:
+                chunk_data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            console.print(f"[yellow]Warning:[/yellow] Skipping {chunk_file}: {e}")
+            continue
+
+        # Handle formats: direct array, or object with "skills" key (array or dict)
+        if isinstance(chunk_data, list):
+            # Direct array format
+            skills_list = chunk_data
+        elif isinstance(chunk_data, dict):
+            skills_list = chunk_data.get("skills", [])
+            if isinstance(skills_list, dict):
+                # Old dict format: convert to array
+                skills_list = [{"path": k, **v} for k, v in skills_list.items()]
+        else:
+            console.print(f"[yellow]Warning:[/yellow] Unexpected format in {chunk_file}")
+            continue
+
+        for eval_item in skills_list:
+            path = eval_item.get("path", "")
+            if not path or path in seen_paths:
+                continue
+            seen_paths.add(path)
+
+            # Merge inventory data with evaluation data
+            merged = {
+                "path": path,
+                "verdict": eval_item.get("verdict", "Unknown"),
+                "reason": eval_item.get("reason", ""),
+            }
+            # Add inventory fields if available
+            if path in inventory_by_path:
+                inv = inventory_by_path[path]
+                merged["name"] = inv.get("name", "")
+                merged["use_7d"] = inv.get("use_7d", 0)
+                merged["use_30d"] = inv.get("use_30d", 0)
+                merged["mtime"] = inv.get("mtime", "")
+            all_skills.append(merged)
+        total_evaluated += len(skills_list)
+
+    if not all_skills:
+        console.print("[red]Error:[/red] No skills found in chunk files")
+        return 1
+
+    # Build results
+    evaluated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    results = {
+        "evaluated_at": evaluated_at,
+        "mode": "full",
+        "batch_progress": {
+            "total": len(all_skills),
+            "evaluated": total_evaluated,
+            "status": "completed",
+        },
+        "skills": all_skills,
+    }
+
+    # Write results
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    console.print(f"[green]Merged[/green] {len(chunk_files)} chunks → {results_path}")
+    console.print(f"  Total skills: {len(all_skills)}")
+
+    # Clean up temp files if requested
+    if args.clean:
+        import shutil
+
+        shutil.rmtree(tmp_dir)
+        console.print(f"[dim]Cleaned up[/dim] {tmp_dir}")
+
     return 0
 
 
@@ -699,6 +869,7 @@ def main(argv: list[str] | None = None) -> int:
         "--observations-dir", type=Path, help="Override observations directory"
     )
     scan_parser.add_argument("--output", choices=["json", "rich", "markdown"], default="rich")
+    scan_parser.add_argument("--width", type=int, help="Override terminal width for rich output")
 
     # diff command
     diff_parser = subparsers.add_parser("diff", help="Quick Scan: Find changed skills")
@@ -712,10 +883,23 @@ def main(argv: list[str] | None = None) -> int:
     summary_parser.add_argument("--results", type=Path, help="Path to results.json")
     summary_parser.add_argument("--output", choices=["json", "rich", "markdown"], default="rich")
     summary_parser.add_argument("--group-by", choices=["verdict", "skill"], default="verdict")
+    summary_parser.add_argument("--width", type=int, help="Override terminal width for rich output")
 
     # save command
     save_parser = subparsers.add_parser("save", help="Merge evaluation results")
     save_parser.add_argument("--results", type=Path, help="Path to results.json")
+
+    # merge-chunks command
+    merge_parser = subparsers.add_parser(
+        "merge-chunks", help="Merge chunked evaluation results"
+    )
+    merge_parser.add_argument("--results", type=Path, help="Path to results.json")
+    merge_parser.add_argument(
+        "--inventory", type=Path, help="Path to inventory JSON from scan"
+    )
+    merge_parser.add_argument(
+        "--clean", action="store_true", help="Remove temp files after merge"
+    )
 
     args = parser.parse_args(argv)
 
@@ -727,6 +911,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_summary(args)
     elif args.command == "save":
         return cmd_save(args)
+    elif args.command == "merge-chunks":
+        return cmd_merge_chunks(args)
     else:
         parser.print_help()
         return 1
