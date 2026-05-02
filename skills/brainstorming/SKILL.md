@@ -222,11 +222,70 @@ This log should be preserved for documentation.
 
 ---
 
+### 8️⃣ Design Validation with Examples (Mandatory Before Documentation)
+
+Before finalizing any design, you MUST present **concrete, detailed examples** that illustrate how the design behaves in real scenarios.
+
+#### Required Example Types
+
+Present at least **2-3 examples** covering:
+
+1. **Happy Path Example** - The primary use case working as intended
+2. **Edge Case Example** - Boundary conditions or unusual inputs
+3. **Error Scenario Example** - How failures are handled
+
+#### Example Format
+
+Each example MUST include:
+
+```markdown
+**Example: <descriptive name>**
+
+**Scenario:** <what's happening>
+
+**Input:** <concrete data/command/action>
+
+**System Behavior:** <step-by-step what the design does>
+
+**Output/Result:** <what the user or system receives>
+
+**Design Decisions Demonstrated:** <which decisions this validates>
+```
+
+#### Confirmation Dialog
+
+After presenting examples, ask for explicit confirmation:
+
+```yaml
+Dialog:
+  header: "Example Validation"
+  question: "Do these examples accurately demonstrate the design behavior?"
+  multipleChoice: false
+  options:
+    - label: "Confirmed"
+      description: "Examples align with intent, proceed to documentation"
+    - label: "Needs adjustment"
+      description: "Examples don't match expected behavior"
+    - label: "Add more examples"
+      description: "Need additional scenarios covered"
+    - label: "Other"
+      description: "Provide specific feedback"
+```
+
+**Do NOT proceed to documentation until examples are confirmed.**
+
+If examples reveal design gaps:
+- Return to step 5 (Explore Design Approaches) or step 6 (Present the Design)
+- Update the design to address gaps
+- Re-present examples with fixes
+
+---
+
 ## After the Design
 
 ### 📄 Documentation
 
-Once the design is validated:
+Once the design AND examples are validated:
 
 - Write the final design to a durable, shared format (e.g. Markdown)
 - Include:
@@ -234,6 +293,7 @@ Once the design is validated:
   - Assumptions
   - Decision log
   - Final design
+  - Validated examples
 
 Persist the document according to the project’s standard workflow.
 
@@ -270,6 +330,7 @@ You may exit brainstorming mode **only when all of the following are true**:
 
 - Understanding Lock has been confirmed  
 - At least one design approach is explicitly accepted  
+- Design examples have been presented AND confirmed  
 - Major assumptions are documented  
 - Key risks are acknowledged  
 - Decision Log is complete  
@@ -280,7 +341,7 @@ If any criterion is unmet:
 
 ---
 
-## 8️⃣ Complexity Classification (Mandatory Output)
+## 9️⃣ Complexity Classification (Mandatory Output)
 
 After the design is validated, you MUST classify the task complexity for orchestration routing.
 
