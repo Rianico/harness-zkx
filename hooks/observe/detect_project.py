@@ -13,8 +13,12 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime, timezone
 from pathlib import Path
+
+# Add lib to path for tz import
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
+from tz import now_cst_iso
 
 # Support both standalone script execution and module import
 try:
@@ -171,7 +175,7 @@ def register_project(project_id: str, project_name: str, cwd: str) -> None:
             projects = {}
 
     # Update or create project entry
-    now = datetime.now(timezone.utc).isoformat()
+    now = now_cst_iso()
 
     if project_id in projects:
         # Update existing project

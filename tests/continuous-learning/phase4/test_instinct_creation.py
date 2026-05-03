@@ -14,10 +14,15 @@ Pass criteria:
 """
 
 import json
-from datetime import datetime, timezone
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
+from tz import TZ_CST
 import yaml
 
 from hooks.observe.agent_runner import AgentResult, InstinctCreated, Evidence
@@ -167,20 +172,26 @@ class TestInstinctCreation:
         )
         project_id = "a1b2c3d4e5f6"
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(TZ_CST)
         file_path = instinct_manager.create_instinct(instinct, project_id)
-        after = datetime.now(timezone.utc)
+        after = datetime.now(TZ_CST)
 
         content = file_path.read_text()
         parts = content.split("---")
         frontmatter = yaml.safe_load(parts[1])
 
-        created_at = datetime.fromisoformat(frontmatter["created_at"].replace("Z", "+00:00"))
-        updated_at = datetime.fromisoformat(frontmatter["updated_at"].replace("Z", "+00:00"))
+        created_at = datetime.fromisoformat(frontmatter["created_at"])
+        updated_at = datetime.fromisoformat(frontmatter["updated_at"])
 
-        assert before <= created_at <= after
-        assert before <= updated_at <= after
-        assert created_at == updated_at
+        # Compare timestamps without timezone info (both are in the same TZ)
+        before_naive = before.replace(tzinfo=None)
+        after_naive = after.replace(tzinfo=None)
+        created_at_naive = created_at.replace(tzinfo=None)
+        updated_at_naive = updated_at.replace(tzinfo=None)
+
+        assert before_naive <= created_at_naive <= after_naive
+        assert before_naive <= updated_at_naive <= after_naive
+        assert created_at_naive == updated_at_naive
 
     def test_evidence_count_in_frontmatter(
         self, instinct_manager: InstinctManager, project_instincts_dir: Path

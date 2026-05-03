@@ -32,8 +32,12 @@ import signal
 import asyncio
 import logging
 import contextlib
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
+from tz import TZ_CST
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -107,7 +111,7 @@ def log(msg: str):
 
 def append_event(event: dict):
     """Append event to JSONL file with timestamps."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(TZ_CST)
     event["ts"] = now.isoformat()
     event["unix_ts"] = now.timestamp()
     with EVENTS_FILE.open("a", encoding="utf-8") as f:

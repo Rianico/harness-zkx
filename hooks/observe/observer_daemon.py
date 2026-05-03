@@ -17,9 +17,13 @@ import threading
 import traceback
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+# Add lib to path for tz import
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
+from tz import now_cst_iso
 
 # Support both standalone script execution and module import
 if __name__ == '__main__':
@@ -38,7 +42,7 @@ def log_info(message: str) -> None:
     """Write info message to daemon log file with timestamp."""
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        timestamp = now_cst_iso()
         with open(LOG_FILE, "a") as f:
             f.write(f"[{timestamp}] INFO: {message}\n")
     except Exception:
@@ -49,7 +53,7 @@ def log_error(message: str) -> None:
     """Write error message to daemon log file with timestamp."""
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        timestamp = now_cst_iso()
         with open(LOG_FILE, "a") as f:
             f.write(f"[{timestamp}] ERROR: {message}\n")
     except Exception:
@@ -157,7 +161,7 @@ def update_cursor(project_dir: Path, line: int) -> None:
 
     data = {
         "line": line,
-        "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "updated_at": now_cst_iso(),
     }
 
     with open(cursor_file, "w") as f:

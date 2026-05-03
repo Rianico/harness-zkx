@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
+
+# Add lib to path for tz import
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
+from tz import TZ_CST
 
 from scripts.grader import ComplianceResult
 from scripts.parser import ComplianceSpec, ObservationEvent
@@ -23,7 +28,7 @@ def generate_report(
         results: List of (scenario_level_name, ComplianceResult, observations) tuples.
         scenarios: Original scenario definitions with prompts.
     """
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(TZ_CST).strftime("%Y-%m-%dT%H:%M:%S%z")
     overall = _overall_compliance(results)
     threshold = spec.threshold_promote_to_hook
 

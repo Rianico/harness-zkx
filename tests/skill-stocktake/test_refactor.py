@@ -6,11 +6,16 @@ They are designed to FAIL against the current implementation.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+import sys
+from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 
 import pytest
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
+from tz import TZ_CST
 
 
 # =============================================================================
@@ -22,7 +27,7 @@ import pytest
 def observations_file(tmp_path: Path) -> Path:
     """Create a temporary observations.jsonl with entries spanning 45 days."""
     obs_file = tmp_path / "observations.jsonl"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(TZ_CST)
 
     entries = []
     # 10 entries in last 7 days
@@ -30,7 +35,7 @@ def observations_file(tmp_path: Path) -> Path:
         ts = now - timedelta(days=i)
         entries.append({
             "tool": "Read",
-            "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "timestamp": ts.isoformat(),
             "input": {"file_path": f"/path/to/skill_{i % 3}.md"},
         })
 
@@ -74,16 +79,17 @@ class TestSinglePassObservationCounting:
     def test_count_read_observations_single_pass_returns_tuple(
         self, observations_file: Path
     ) -> None:
-        """Function should return tuple of (dict_7d, dict_30d)."""
+        """Function should return tuple of (dict_1d, dict_7d, dict_30d)."""
         from stocktake import count_read_observations
 
         result = count_read_observations([observations_file])
 
-        # After refactoring, this should return a tuple
+        # After refactoring, this should return a tuple of 3
         assert isinstance(result, tuple), (
             f"Expected tuple, got {type(result)}. "
-            "count_read_observations should return (counts_7d, counts_30d) in single pass."
+            "count_read_observations should return (counts_1d, counts_7d, counts_30d) in single pass."
         )
+        assert len(result) == 3
 
     def test_count_read_observations_7d_counts(
         self, observations_file: Path
@@ -94,7 +100,7 @@ class TestSinglePassObservationCounting:
         result = count_read_observations([observations_file])
 
         if isinstance(result, tuple):
-            counts_7d, counts_30d = result
+            counts_1d, counts_7d, counts_30d = result
         else:
             pytest.skip("Function not yet refactored to return tuple")
 
@@ -116,7 +122,7 @@ class TestSinglePassObservationCounting:
         result = count_read_observations([observations_file])
 
         if isinstance(result, tuple):
-            counts_7d, counts_30d = result
+            counts_1d, counts_7d, counts_30d = result
         else:
             pytest.skip("Function not yet refactored to return tuple")
 
@@ -156,7 +162,7 @@ class TestSinglePassObservationCounting:
             )
 
     def test_empty_observations_file(self, tmp_path: Path) -> None:
-        """Empty observation file returns two empty dicts."""
+        """Empty observation file returns three empty dicts."""
         from stocktake import count_read_observations
 
         empty_file = tmp_path / "empty.jsonl"
@@ -165,7 +171,8 @@ class TestSinglePassObservationCounting:
         result = count_read_observations([empty_file])
 
         if isinstance(result, tuple):
-            counts_7d, counts_30d = result
+            counts_1d, counts_7d, counts_30d = result
+            assert counts_1d == {}
             assert counts_7d == {}
             assert counts_30d == {}
 
@@ -174,19 +181,19 @@ class TestSinglePassObservationCounting:
         from stocktake import count_read_observations
 
         obs_file = tmp_path / "mixed.jsonl"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(TZ_CST)
 
         lines = [
             "this is not json",
             json.dumps({
                 "tool": "Read",
-                "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "timestamp": now.isoformat(),
                 "input": {"file_path": "/valid/path.md"},
             }),
             "{broken json",
             json.dumps({
                 "tool": "Read",
-                "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "timestamp": now.isoformat(),
                 "input": {"file_path": "/another/valid.md"},
             }),
         ]
@@ -195,7 +202,7 @@ class TestSinglePassObservationCounting:
         result = count_read_observations([obs_file])
 
         if isinstance(result, tuple):
-            counts_7d, counts_30d = result
+            counts_1d, counts_7d, counts_30d = result
             assert len(counts_7d) == 2
             assert "/valid/path.md" in counts_7d
             assert "/another/valid.md" in counts_7d
@@ -268,18 +275,21 @@ class TestFormatPathWithTilde:
 
     def test_format_path_with_tilde_home_path(self, monkeypatch) -> None:
         """Paths under home directory should use tilde prefix."""
+        import stocktake
         from stocktake import _format_path_with_tilde
 
-        monkeypatch.setattr(Path, "home", lambda: Path("/home/testuser"))
+        # Patch the module-level HOME_STR that the function uses
+        monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
         result = _format_path_with_tilde(Path("/home/testuser/.claude/skills/foo"))
         assert result == "~/.claude/skills/foo"
 
     def test_format_path_with_tilde_nested_file(self, monkeypatch) -> None:
         """Nested files under home should preserve full relative path."""
+        import stocktake
         from stocktake import _format_path_with_tilde
 
-        monkeypatch.setattr(Path, "home", lambda: Path("/home/testuser"))
+        monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
         result = _format_path_with_tilde(
             Path("/home/testuser/.claude/skills/foo/bar.md")
@@ -288,45 +298,50 @@ class TestFormatPathWithTilde:
 
     def test_format_path_with_tilde_non_home_path(self, monkeypatch) -> None:
         """Paths outside home directory should remain unchanged."""
+        import stocktake
         from stocktake import _format_path_with_tilde
 
-        monkeypatch.setattr(Path, "home", lambda: Path("/home/testuser"))
+        monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
         result = _format_path_with_tilde(Path("/other/path/file.md"))
         assert result == "/other/path/file.md"
 
     def test_format_path_with_tilde_relative_path(self, monkeypatch) -> None:
         """Relative paths should remain unchanged."""
+        import stocktake
         from stocktake import _format_path_with_tilde
 
-        monkeypatch.setattr(Path, "home", lambda: Path("/home/testuser"))
+        monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
         result = _format_path_with_tilde(Path("relative/path.md"))
         assert result == "relative/path.md"
 
     def test_format_path_with_tilde_returns_string(self, monkeypatch) -> None:
         """Function should return string, not Path object."""
+        import stocktake
         from stocktake import _format_path_with_tilde
 
-        monkeypatch.setattr(Path, "home", lambda: Path("/home/testuser"))
+        monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
         result = _format_path_with_tilde(Path("/home/testuser/test.md"))
         assert isinstance(result, str)
 
     def test_format_path_with_tilde_exact_home(self, monkeypatch) -> None:
         """Path exactly equal to home should return just tilde."""
+        import stocktake
         from stocktake import _format_path_with_tilde
 
-        monkeypatch.setattr(Path, "home", lambda: Path("/home/testuser"))
+        monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
         result = _format_path_with_tilde(Path("/home/testuser"))
         assert result == "~"
 
     def test_format_path_with_tilde_string_input(self, monkeypatch) -> None:
         """Function should handle string input as well as Path."""
+        import stocktake
         from stocktake import _format_path_with_tilde
 
-        monkeypatch.setattr(Path, "home", lambda: Path("/home/testuser"))
+        monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
         result = _format_path_with_tilde("/home/testuser/.claude/skills/test.md")
         assert result == "~/.claude/skills/test.md"

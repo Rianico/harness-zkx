@@ -29,9 +29,13 @@ import os
 import sys
 from collections import defaultdict
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
+from tz import local_tz, to_local_display
 
 from rich.box import HORIZONTALS, ROUNDED
 from rich.console import Console
@@ -119,7 +123,7 @@ def extract_frontmatter(content: str) -> dict[str, str]:
 def get_mtime_utc(path: Path) -> str:
     """Get file modification time as ISO 8601 UTC string."""
     mtime = path.stat().st_mtime
-    dt = datetime.fromtimestamp(mtime, tz=UTC)
+    dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -183,7 +187,7 @@ def count_read_observations(
 
     Returns tuple of (counts_1d, counts_7d, counts_30d) for use in scan operations.
     """
-    now = datetime.now(UTC)
+    now = datetime.now(local_tz())
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     cutoff_7d = now - timedelta(days=7)
     cutoff_30d = now - timedelta(days=30)
@@ -425,7 +429,12 @@ def cmd_diff(args: argparse.Namespace) -> int:
         console.print("[red]Error:[/red] No evaluated_at in results.json")
         return 1
 
-    known_paths = set(results.get("skills", {}).keys())
+    # Handle both list and dict formats for skills
+    skills_data = results.get("skills", [])
+    if isinstance(skills_data, list):
+        known_paths = {s.get("path", "") for s in skills_data}
+    else:
+        known_paths = set(skills_data.keys())
     changed = []
 
     # Check global skills
@@ -472,25 +481,25 @@ def render_diff_rich(changed: list[dict], evaluated_at: str) -> None:
     """Render diff results with rich."""
     if not changed:
         console.print(Panel.fit(
-            f"No changes since [dim]{evaluated_at}[/dim]",
-            title="[bold]Quick Scan[/bold]",
-            style="green",
+            f"No changes since {to_local_display(evaluated_at)}",
+            title="Quick Scan",
         ))
         return
 
     console.print(Panel.fit(
-        f"Last evaluated: [dim]{evaluated_at}[/dim]",
-        title="[bold]Quick Scan[/bold]",
+        f"Last evaluated: {to_local_display(evaluated_at)}",
+        title="Quick Scan",
     ))
 
-    table = Table(title=f"[bold]Changed Skills[/bold] ({len(changed)})")
-    table.add_column("Skill", style="cyan", no_wrap=True)
-    table.add_column("Status", style="bold", no_wrap=True)
-    table.add_column("Modified", style="dim", no_wrap=True)
+    table = Table(title=f"Changed Skills ({len(changed)})", box=HORIZONTALS, show_lines=True)
+    table.add_column("Skill", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Modified", no_wrap=True)
 
     for item in sorted(changed, key=lambda x: x["name"]):
-        status = "[green]NEW[/green]" if item["is_new"] else "[yellow]MODIFIED[/yellow]"
-        table.add_row(item["name"], status, item["mtime"])
+        status = "NEW" if item["is_new"] else "MODIFIED"
+        local_mtime = to_local_display(item["mtime"])
+        table.add_row(item["name"], status, local_mtime)
 
     console.print(table)
 
@@ -785,7 +794,7 @@ def cmd_save(args: argparse.Namespace) -> int:
         console.print(f"[red]Error:[/red] Invalid JSON from stdin: {e}")
         return 1
 
-    evaluated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    evaluated_at = datetime.now(local_tz()).strftime("%Y-%m-%dT%H:%M:%S%z")
 
     # Ensure parent directory exists
     results_path.parent.mkdir(parents=True, exist_ok=True)
@@ -920,7 +929,7 @@ def cmd_merge_chunks(args: argparse.Namespace) -> int:
         return 1
 
     # Build results
-    evaluated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    evaluated_at = datetime.now(local_tz()).strftime("%Y-%m-%dT%H:%M:%S%z")
 
     results = {
         "evaluated_at": evaluated_at,

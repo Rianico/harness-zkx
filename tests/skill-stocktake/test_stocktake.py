@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
+from tz import TZ_CST
 
 # Import from global skills directory
 import sys
@@ -219,8 +224,8 @@ class TestObservationCounting:
         obs_file = tmp_path / "observations.jsonl"
 
         # Create observations
-        now = datetime.now(UTC)
-        ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.now(TZ_CST)
+        ts = now.isoformat()
 
         lines = [
             json.dumps({"tool": "Read", "timestamp": ts, "input": {"file_path": "/a.md"}}),
@@ -243,11 +248,11 @@ class TestObservationCounting:
         from stocktake import count_read_observations
 
         obs_file = tmp_path / "observations.jsonl"
-        now = datetime.now(UTC)
+        now = datetime.now(TZ_CST)
 
         # Create timestamps for different windows
-        ts_1d = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        ts_7d = (now.replace(day=now.day - 5)).strftime("%Y-%m-%dT%H:%M:%SZ") if now.day > 5 else now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        ts_1d = now.isoformat()
+        ts_7d = (now.replace(day=now.day - 5)).isoformat() if now.day > 5 else now.isoformat()
 
         lines = [
             json.dumps({"tool": "Read", "timestamp": ts_1d, "input": {"file_path": "/recent.md"}}),

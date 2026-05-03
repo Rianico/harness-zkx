@@ -14,10 +14,15 @@ Pass criteria:
 """
 
 import json
-from datetime import datetime, timezone
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
+from tz import TZ_CST
 import yaml
 
 from hooks.observe.agent_runner import AgentResult, InstinctUpdated, Evidence
@@ -151,9 +156,9 @@ class TestInstinctUpdate:
             evidence_appended=[Evidence(session_id="s1", description="Test")]
         )
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(TZ_CST)
         file_path = instinct_manager.update_instinct(update, project_id)
-        after = datetime.now(timezone.utc)
+        after = datetime.now(TZ_CST)
 
         content = file_path.read_text()
         parts = content.split("---")
@@ -163,8 +168,14 @@ class TestInstinctUpdate:
         assert frontmatter["created_at"] == original_created_at
 
         # updated_at should be recent
-        updated_at = datetime.fromisoformat(frontmatter["updated_at"].replace("Z", "+00:00"))
-        assert before <= updated_at <= after
+        updated_at = datetime.fromisoformat(frontmatter["updated_at"])
+
+        # Compare timestamps without timezone info (both are in the same TZ)
+        before_naive = before.replace(tzinfo=None)
+        after_naive = after.replace(tzinfo=None)
+        updated_at_naive = updated_at.replace(tzinfo=None)
+
+        assert before_naive <= updated_at_naive <= after_naive
 
     def test_no_duplicate_evidence(
         self, instinct_manager: InstinctManager, project_with_existing_instinct: Path

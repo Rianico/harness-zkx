@@ -14,10 +14,15 @@ Pass criteria:
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 import yaml
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
+from tz import TZ_CST
 
 from hooks.observe.agent_runner import Promotion
 from hooks.observe.instinct_manager import InstinctManager
@@ -388,25 +393,29 @@ class TestPromoteCommandAudit:
         """
         Promotion should record when it occurred.
         """
-        from datetime import datetime, timezone
-
         promotion = Promotion(
             id="promotable-instinct",
             reason="Seen in 2 projects"
         )
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(TZ_CST)
         global_path = instinct_manager.promote_instinct(promotion)
-        after = datetime.now(timezone.utc)
+        after = datetime.now(TZ_CST)
 
         content = global_path.read_text()
         parts = content.split("---")
         frontmatter = yaml.safe_load(parts[1])
 
         promoted_at = datetime.fromisoformat(
-            frontmatter.get("promoted_at", "2026-01-01T00:00:00Z").replace("Z", "+00:00")
+            frontmatter.get("promoted_at", "2026-01-01T00:00:00+08:00")
         )
-        assert before <= promoted_at <= after
+
+        # Compare timestamps without timezone info (both are in the same TZ)
+        before_naive = before.replace(tzinfo=None)
+        after_naive = after.replace(tzinfo=None)
+        promoted_at_naive = promoted_at.replace(tzinfo=None)
+
+        assert before_naive <= promoted_at_naive <= after_naive
 
     def test_records_source_projects(
         self, instinct_manager: InstinctManager, eligible_instinct_in_two_projects: dict[str, Path]

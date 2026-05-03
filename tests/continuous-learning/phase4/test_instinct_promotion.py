@@ -14,10 +14,15 @@ Pass criteria:
 """
 
 import json
-from datetime import datetime, timezone
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
+
+# Add lib to path for tz import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
+from tz import TZ_CST
 import yaml
 
 from hooks.observe.agent_runner import AgentResult, Promotion, InstinctCreated, Evidence
@@ -333,18 +338,24 @@ class TestPromotionAudit:
             reason="Seen in 3 projects with average confidence 0.85"
         )
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(TZ_CST)
         global_path = instinct_manager.promote_instinct(promotion)
-        after = datetime.now(timezone.utc)
+        after = datetime.now(TZ_CST)
 
         content = global_path.read_text()
         parts = content.split("---")
         frontmatter = yaml.safe_load(parts[1])
 
         promoted_at = datetime.fromisoformat(
-            frontmatter.get("promoted_at", "2026-01-01T00:00:00Z").replace("Z", "+00:00")
+            frontmatter.get("promoted_at", "2026-01-01T00:00:00+08:00")
         )
-        assert before <= promoted_at <= after
+
+        # Compare timestamps without timezone info (both are in the same TZ)
+        before_naive = before.replace(tzinfo=None)
+        after_naive = after.replace(tzinfo=None)
+        promoted_at_naive = promoted_at.replace(tzinfo=None)
+
+        assert before_naive <= promoted_at_naive <= after_naive
 
     def test_records_source_projects(
         self, instinct_manager: InstinctManager, multi_project_setup: dict[str, Path]

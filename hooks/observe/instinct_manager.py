@@ -16,11 +16,15 @@ Phase 4 GREEN: Implementation for TDD.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# Add lib to path for tz import
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
+from tz import now_cst_compact
 
 from hooks.observe.agent_runner import AgentResult, InstinctCreated, InstinctUpdated, Promotion
 
@@ -80,7 +84,7 @@ class InstinctManager:
             return None
 
         # Build frontmatter
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        now = now_cst_compact()
         evidence_list = instinct.evidence or []
 
         frontmatter = {
@@ -152,7 +156,7 @@ class InstinctManager:
         body = "---".join(parts[2:])
 
         # Update frontmatter
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        now = now_cst_compact()
         frontmatter["confidence"] = min(update.new_confidence, 1.0)  # Cap at 1.0
         frontmatter["updated_at"] = now
 
@@ -253,7 +257,7 @@ class InstinctManager:
         body = "---".join(parts[2:])
 
         # Update frontmatter for global scope
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        now = now_cst_compact()
         frontmatter["scope"] = "global"
         frontmatter["project_id"] = "global"
         frontmatter["promoted_at"] = now

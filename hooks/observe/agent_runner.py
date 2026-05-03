@@ -13,11 +13,15 @@ from __future__ import annotations
 import re
 import traceback
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+# Add lib to path for tz import
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
+from tz import now_cst_iso
 
 # Log file for agent runner operations
 LOG_FILE = Path.home() / ".claude" / "hooks" / "observe" / "daemon.log"
@@ -27,7 +31,7 @@ def log_info(message: str) -> None:
     """Write info message to daemon log file with timestamp."""
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        timestamp = now_cst_iso()
         with open(LOG_FILE, "a") as f:
             f.write(f"[{timestamp}] INFO: {message}\n")
     except Exception:
@@ -38,7 +42,7 @@ def log_error(message: str) -> None:
     """Write error message to daemon log file with timestamp."""
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        timestamp = now_cst_iso()
         with open(LOG_FILE, "a") as f:
             f.write(f"[{timestamp}] ERROR: {message}\n")
     except Exception:

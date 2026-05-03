@@ -12,8 +12,12 @@ import json
 import sys
 import traceback
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
+
+# Add lib to path for tz import
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
+from tz import now_cst_iso
 
 # Log file for debugging hook errors
 LOG_FILE = Path.home() / ".claude" / "hooks" / "observe" / "hook.log"
@@ -23,7 +27,7 @@ def log_error(message: str) -> None:
     """Write error message to log file with timestamp."""
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        timestamp = now_cst_iso()
         with open(LOG_FILE, "a") as f:
             f.write(f"[{timestamp}] {message}\n")
     except Exception:
@@ -176,7 +180,7 @@ def _create_observation(
 
     # Create observation
     observation = {
-        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "timestamp": now_cst_iso(),
         "event": event_type,
         "tool": tool_event.get("tool_name", "Unknown"),
         "input": truncated_input,
