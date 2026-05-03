@@ -1,9 +1,13 @@
 """Tests for parser module — JSONL trace and YAML spec parsing."""
 
+import sys
 from pathlib import Path
 
 import pytest
 
+# Add skill-comply directory to path for scripts.* imports
+SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "skills" / "skill-comply"
+sys.path.insert(0, str(SKILL_DIR))
 from scripts.parser import (
     ComplianceSpec,
     Detector,
@@ -13,7 +17,8 @@ from scripts.parser import (
     parse_trace,
 )
 
-FIXTURES = Path(__file__).parent.parent / "fixtures"
+# Fixtures are in the skill directory
+FIXTURES = SKILL_DIR / "fixtures"
 
 class TestParseTrace:
     def test_parses_compliant_trace(self) -> None:
