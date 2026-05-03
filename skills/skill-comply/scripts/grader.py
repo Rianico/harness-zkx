@@ -59,12 +59,15 @@ def grade(
     spec: ComplianceSpec,
     trace: list[ObservationEvent],
     classifier_model: str = "haiku",
+    classifier_timeout: int = 120,
 ) -> ComplianceResult:
     """Grade a trace against a compliance spec using LLM classification."""
     sorted_trace = sorted(trace, key=lambda e: e.timestamp)
 
     # Step 1: LLM classifies all events in one batch call
-    classification = classify_events(spec, sorted_trace, model=classifier_model)
+    classification = classify_events(
+        spec, sorted_trace, model=classifier_model, timeout=classifier_timeout
+    )
 
     # Convert indices to events
     classified: dict[str, list[ObservationEvent]] = {

@@ -50,6 +50,18 @@ def main() -> None:
         default=None,
         help="Output report path (default: results/<skill-name>.md)",
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        help="Timeout in seconds for scenario execution (default: 600)",
+    )
+    parser.add_argument(
+        "--classifier-timeout",
+        type=int,
+        default=120,
+        help="Timeout in seconds for classifier LLM calls (default: 120)",
+    )
 
     args = parser.parse_args()
 
@@ -93,8 +105,13 @@ def main() -> None:
 
     for scenario in scenarios:
         logger.info("       Running %s...", scenario.level_name)
-        run = run_scenario(scenario, model=args.model)
-        result = grade(spec, list(run.observations))
+        run = run_scenario(scenario, model=args.model, timeout=args.timeout)
+        result = grade(
+            spec,
+            list(run.observations),
+            classifier_model=args.model,
+            classifier_timeout=args.classifier_timeout,
+        )
         graded_results.append((scenario.level_name, result, list(run.observations)))
         logger.info("       %s: %.0f%%", scenario.level_name, result.compliance_rate * 100)
 

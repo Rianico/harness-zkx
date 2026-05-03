@@ -25,7 +25,7 @@ def run_scenario(
     scenario: Scenario,
     model: str = "sonnet",
     max_turns: int = 30,
-    timeout: int = 300,
+    timeout: int = 600,
 ) -> ScenarioRun:
     """Execute a scenario and extract tool calls from stream-json output."""
     if model not in ALLOWED_MODELS:
@@ -51,8 +51,10 @@ def run_scenario(
     )
 
     if result.returncode != 0:
+        # Try to extract error from stderr or stdout (stream-json may put errors in stdout)
+        error_msg = result.stderr[:500] if result.stderr else result.stdout[:500]
         raise RuntimeError(
-            f"claude -p failed (rc={result.returncode}): {result.stderr[:500]}"
+            f"claude -p failed (rc={result.returncode}): {error_msg}"
         )
 
     observations = _parse_stream_json(result.stdout)
