@@ -18,7 +18,33 @@
 - **Measure wall-clock time** with realistic payloads, not synthetic benchmarks.
 - **Example lesson:** Bash was assumed faster than Python for hooks, but measured 3x slower (183ms vs 61ms) due to 34 subprocess spawns vs 0.
 
-## 4. Pre-Completion Checklist
+## 4. Engineering Principles
+
+### Trust But Verify
+After fixing issues, restart/refresh and re-verify. Caches can become stale - a fix that appears successful may not persist.
+- Server: Restart daemon after type changes
+- Build: Clean build after significant refactors
+- Tests: Clear test cache if results seem wrong
+
+### API Visibility Matches Usage
+Visibility modifiers should reflect actual usage patterns. Private functions/classes used across modules create warnings and confusion.
+- If it's used everywhere, make it public
+- If it's truly internal, enforce encapsulation
+
+### Scoped Over Global
+Fix issues at the most precise scope possible. Targeted fixes preserve overall safety; global suppressions hide real issues.
+1. Fix the actual issue (preferred)
+2. Suppress at line/block level
+3. Suppress at file level
+4. Suppress at project level (avoid)
+5. Disable rule globally (never)
+
+### Validate at Boundaries
+Dynamic data enters at boundaries; validate there, not everywhere. Once validated, internal code can trust types.
+- At API boundaries: validate once with Pydantic/schemas
+- Internal code: trust the type, avoid defensive checks everywhere
+
+## 5. Pre-Completion Checklist
 - [ ] Code is readable and well-named
 - [ ] Functions are small (<50 lines), Files focused (<800 lines), no deep nesting (>4 levels)
 - [ ] Proper error handling, validation, and no mutation
