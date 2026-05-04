@@ -30,7 +30,12 @@ You have invoked the Python Expert Skill. This consolidates the most critical, o
 - **Memory Management:** Remember to `optimizer.zero_grad()` before backprop. Use `torch.no_grad()` or `torch.inference_mode()` for evaluation to save memory.
 - **Reproducibility:** Always set random seeds across all libraries (`torch`, `numpy`, `random`) for reproducible experiments.
 
-## 5. Terminal Output (Rich)
+## 5. Type Checking & LSP
+- **Default LSP:** Use `basedpyright` as the primary type checker and LSP server. It is a stricter, more feature-rich fork of pyright with better type inference.
+- **Fallback:** Use `mypy` only when basedpyright is unavailable or explicitly required by project constraints.
+- **Configuration:** Configure type checking in `pyproject.toml` under `[tool.basedpyright]`.
+
+## 6. Terminal Output (Rich)
 - **Library:** Use `rich` for all terminal formatted output. Add `rich` to `dependencies` in script frontmatter.
 - **Box Style:** Prefer `HORIZONTALS` with `show_lines=True` for tables with row separators, no vertical column borders.
 - **Columns:** Default to `no_wrap=True` on all columns. Let Rich wrap content naturally in cells by omitting `no_wrap` on the content column.

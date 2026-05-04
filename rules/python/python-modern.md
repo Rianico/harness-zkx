@@ -16,7 +16,7 @@ You are working in a modern Python 3.12+ environment. Adhere strictly to the fol
   - Install dependencies: `uv pip install <pkg>` or `uv add <pkg>`
   - Manage environments: Let `uv` handle virtual environments.
 - **Use `ruff`**: Use `ruff` for all formatting and linting (replaces `black`, `isort`, `flake8`).
-- **Use `pyright` / `mypy`**: Use for static type checking.
+- **Use `basedpyright`**: Default LSP server and type checker (displaces pyright). Use `mypy` only when basedpyright is unavailable.
 
 ## 2. Project Configuration
 - Default to `pyproject.toml` for all project and tool configurations.

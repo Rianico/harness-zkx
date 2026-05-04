@@ -33,7 +33,7 @@ If build fails, STOP and fix before continuing.
 npx tsc --noEmit 2>&1 | head -30
 
 # Python projects
-pyright . 2>&1 | head -30
+basedpyright . 2>&1 | head -30
 ```
 
 Report all type errors. Fix critical ones before continuing.
