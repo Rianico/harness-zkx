@@ -1,10 +1,10 @@
 # Dialog Contract Pattern
 
-Standard YAML-like structure for user interactions via the `AskUserQuestion` tool.
+Structural specification for user interactions in coding agent workflows. Tool-agnostic — each agent maps to its native questioning tool.
 
 ## Purpose
 
-Ensure consistent, parseable, and tool-aligned user dialogs across all skills and workflows.
+Ensure consistent, structured user dialogs that work across different coding agents (Claude Code, OpenCode, etc.).
 
 ## Contract Structure
 
@@ -42,9 +42,11 @@ Dialog:
 5. **"Other" always included** — Users can provide custom input
 6. **Header is context** — Brief topic for quick recognition
 
-## Tool Mapping
+## Tool Mappings by Agent
 
-Maps directly to `AskUserQuestion` tool:
+Different coding agents map this contract to their native tools:
+
+### Claude Code → AskUserQuestion
 
 ```yaml
 Dialog:                           AskUserQuestion:
@@ -53,6 +55,20 @@ Dialog:                           AskUserQuestion:
   multipleChoice: false     →      questions[0].multiSelect
   options: [...]            →      questions[0].options
 ```
+
+### OpenCode → diag
+
+```yaml
+Dialog:                           diag tool:
+  header: "Topic"           →      title
+  question: "What?"         →      message
+  multipleChoice: false     →      (single select mode)
+  options: [...]            →      choices array
+```
+
+### Other Agents
+
+Map to the agent's native user-interaction tool. The structural contract remains the same.
 
 ## Examples
 
@@ -106,22 +122,6 @@ Dialog:
       description: "Provide detailed feedback"
 ```
 
-### Checkpoint
-
-```yaml
-Dialog:
-  header: "Design Checkpoint"
-  question: "Does this section look right so far?"
-  multipleChoice: false
-  options:
-    - label: "Continue"
-      description: "Proceed to next section"
-    - label: "Revise"
-      description: "Something needs adjustment"
-    - label: "Other"
-      description: "Provide specific feedback"
-```
-
 ## Anti-Patterns
 
 ❌ **Multiple questions in one dialog:**
@@ -159,10 +159,10 @@ Dialog:
 
 ## Integration
 
-Skills should define dialogs inline using the YAML format. The orchestrator or skill executor maps the Dialog contract to the appropriate tool call.
+Skills define dialogs using the structural YAML format. Each coding agent's runtime maps the Dialog contract to its native tool:
 
-When invoked via skill:
 1. Parse the `Dialog:` block
-2. Call `AskUserQuestion` with mapped fields
-3. Process user selection
-4. Continue workflow or spawn follow-up dialog
+2. Map to agent's native questioning tool
+3. Present options to user
+4. Process selection
+5. Continue workflow or spawn follow-up dialog

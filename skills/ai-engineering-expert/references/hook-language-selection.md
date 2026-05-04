@@ -247,3 +247,13 @@ done
 | "Bash startup is faster" | Claude Code spawns a new process anyway; startup is equal |
 | "jq is faster than Python JSON" | Maybe, but jq spawn + pipe overhead may negate it |
 | "Simple operations favor bash" | True only if zero subprocesses are spawned |
+
+---
+
+## Output Format Reference
+
+After choosing a language, see [hook-output-format.md](hook-output-format.md) for:
+- `systemMessage` vs `additionalContext` decision guide
+- JSON output construction with `jq`
+- Hook event names and special fields
+- Real example: LSP diagnostics hook
