@@ -16,10 +16,10 @@ When invoked via `/pr-enhance [base_branch]`:
 Use the `Bash` tool to run the python scripts to analyze the current git state:
 ```bash
 # Analyze changes
-python3 skills/pr-enhance/scripts/analyze-pr.py [base_branch] > pr_analysis.json
+python3 $SKILL_DIR/scripts/analyze-pr.py [base_branch] > pr_analysis.json
 
 # Generate Checklist
-cat pr_analysis.json | python3 skills/pr-enhance/scripts/generate-checklist.py > pr_checklist.md
+cat pr_analysis.json | python3 $SKILL_DIR/scripts/generate-checklist.py > pr_checklist.md
 ```
 
 ### 2. Generate the PR Description

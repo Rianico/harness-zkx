@@ -16,7 +16,7 @@ Slash command (`/skill-stocktake`) that audits all Claude skills and commands us
 ## CLI Commands
 
 ```bash
-uv run {skill}/scripts/stocktake.py <command> [options]
+uv run $SKILL_DIR/scripts/stocktake.py <command> [options]
 
 Commands:
   scan        Phase 1: Inventory all skills
@@ -36,7 +36,7 @@ Global options:
 Quick snapshot of all skills with usage statistics:
 
 ```bash
-uv run {skill}/scripts/stocktake.py overview [--width 120]
+uv run $SKILL_DIR/scripts/stocktake.py overview [--width 120]
 ```
 
 Displays a table with:
@@ -74,18 +74,18 @@ If the project has no `.claude/skills/` directory, only global skills and comman
 
 Re-evaluate only skills that have changed since the last run (5–10 min).
 
-1. Run: `uv run {skill}/scripts/stocktake.py diff`
+1. Run: `uv run $SKILL_DIR/scripts/stocktake.py diff`
 2. If output shows no changes: report "No changes since last run." and stop
 3. Re-evaluate only those changed files using the same Phase 2 criteria
 4. Carry forward unchanged skills from previous results
 5. Output only the diff
-6. Save results: `uv run {skill}/scripts/stocktake.py save < eval.json`
+6. Save results: `uv run $SKILL_DIR/scripts/stocktake.py save < eval.json`
 
 ## Full Stocktake Flow
 
 ### Phase 1 — Inventory
 
-Run: `uv run {skill}/scripts/stocktake.py scan`
+Run: `uv run $SKILL_DIR/scripts/stocktake.py scan`
 
 The script enumerates skill files, extracts frontmatter, aggregates observations, and outputs structured JSON or rich terminal display.
 
@@ -128,11 +128,11 @@ The subagent reads each skill, applies the checklist, and returns per-skill JSON
 **Chunk guidance:** Process ~15 skills per subagent invocation. Launch chunks in parallel.
 
 **Chunked file workflow:**
-1. Save scan inventory to temp: `uv run {skill}/scripts/stocktake.py scan --output json > ~/.claude/lsz/skill-stocktake/.tmp/inventory.json`
+1. Save scan inventory to temp: `uv run $SKILL_DIR/scripts/stocktake.py scan --output json > ~/.claude/lsz/skill-stocktake/.tmp/inventory.json`
 2. Save each chunk's evaluation output to: `~/.claude/lsz/skill-stocktake/.tmp/chunk_{N}.json`
 3. After all chunks complete, merge with inventory:
    ```
-   uv run {skill}/scripts/stocktake.py merge-chunks \
+   uv run $SKILL_DIR/scripts/stocktake.py merge-chunks \
      --inventory ~/.claude/lsz/skill-stocktake/.tmp/inventory.json \
      --clean
    ```
@@ -186,7 +186,7 @@ Evaluation is **holistic AI judgment** — not a numeric rubric. Guiding dimensi
 
 ### Phase 3 — Summary Table
 
-Run: `uv run {skill}/scripts/stocktake.py summary`
+Run: `uv run $SKILL_DIR/scripts/stocktake.py summary`
 
 Reads results.json and outputs formatted summary table grouped by verdict.
 

@@ -119,18 +119,18 @@ Use `ws_listener.py` to dump all WebSocket events to a JSONL file for later anal
 
 ```bash
 # Start with --clear to clear old events (recommended for new sessions)
-python scripts/ws_listener.py --clear &
+python $SKILL_DIR/scripts/ws_listener.py --clear &
 
 # Append to existing events (for reconnects)
-python scripts/ws_listener.py &
+python $SKILL_DIR/scripts/ws_listener.py &
 ```
 
 Or specify a custom output directory:
 
 ```bash
-python scripts/ws_listener.py --clear /path/to/output &
+python $SKILL_DIR/scripts/ws_listener.py --clear /path/to/output &
 # Or via environment variable:
-VIDEODB_EVENTS_DIR=/path/to/output python scripts/ws_listener.py --clear &
+VIDEODB_EVENTS_DIR=/path/to/output python $SKILL_DIR/scripts/ws_listener.py --clear &
 ```
 
 The script outputs `WS_ID=<connection_id>` on the first line, then listens indefinitely.

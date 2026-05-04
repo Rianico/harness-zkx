@@ -11,17 +11,16 @@ Converts technical documentation to LLM-friendly markdown with proper structure,
 ## Quick Start
 
 ```bash
-cd skills/scraper/scripts
-uv run scrape.py <doc_type> --output-dir <path>
+uv run $SKILL_DIR/scripts/scrape.py <doc_type> --output-dir <path>
 
 # Examples
-uv run scrape.py lsp --output-dir ../references/lsp-docs
-uv run scrape.py ptx --output-dir ../references/ptx-docs
-uv run scrape.py runtime --output-dir ../references/cuda-runtime-docs
-uv run scrape.py driver --output-dir ../references/cuda-driver-docs
+uv run $SKILL_DIR/scripts/scrape.py lsp --output-dir ./references/lsp-docs
+uv run $SKILL_DIR/scripts/scrape.py ptx --output-dir ./references/ptx-docs
+uv run $SKILL_DIR/scripts/scrape.py runtime --output-dir ./references/cuda-runtime-docs
+uv run $SKILL_DIR/scripts/scrape.py driver --output-dir ./references/cuda-driver-docs
 
 # Force re-fetch (ignore cache)
-uv run scrape.py lsp --force
+uv run $SKILL_DIR/scripts/scrape.py lsp --force
 ```
 
 ## Available Scrapers
@@ -156,7 +155,7 @@ Identify:
 Run with cache enabled for fast iteration:
 
 ```bash
-uv run scrape.py <type> --output-dir /tmp/test-scrape
+uv run $SKILL_DIR/scripts/scrape.py <type> --output-dir /tmp/test-scrape
 ```
 
 ### 3. Inspect Output
@@ -187,7 +186,7 @@ Common patterns to handle:
 ```bash
 # Edit scraper logic
 # Re-run (uses cache, so fast)
-uv run scrape.py <type> --output-dir /tmp/test-scrape
+uv run $SKILL_DIR/scripts/scrape.py <type> --output-dir /tmp/test-scrape
 
 # Compare outputs
 diff /tmp/test-scrape-prev /tmp/test-scrape
@@ -197,7 +196,7 @@ diff /tmp/test-scrape-prev /tmp/test-scrape
 
 ```bash
 # Force fresh fetch
-uv run scrape.py <type> --force --output-dir ./references/<name>-docs
+uv run $SKILL_DIR/scripts/scrape.py <type> --force --output-dir ./references/<name>-docs
 
 # Run quality checks from checklist above
 ```
