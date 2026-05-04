@@ -55,4 +55,3 @@ CUDA EGL Plane Descriptor cudaEglPlaneDesc
 !
 
 
-Copyright © 2025 NVIDIA Corporation

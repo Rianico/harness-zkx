@@ -62,4 +62,3 @@ Width of the row in elements
 !
 
 
-Copyright © 2025 NVIDIA Corporation

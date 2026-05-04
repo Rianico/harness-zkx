@@ -76,4 +76,3 @@ Width of the resource view
 !
 
 
-Copyright © 2025 NVIDIA Corporation

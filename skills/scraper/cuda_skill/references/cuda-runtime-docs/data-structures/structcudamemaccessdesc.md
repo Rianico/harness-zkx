@@ -27,4 +27,3 @@ Location on which the request is to change it's accessibility
 !
 
 
-Copyright © 2025 NVIDIA Corporation

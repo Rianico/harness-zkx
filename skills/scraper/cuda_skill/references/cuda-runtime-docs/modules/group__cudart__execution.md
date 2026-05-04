@@ -466,4 +466,3 @@ This device function ensures the programmatic launch completion edges / events a
 !
 
 
-Copyright © 2025 NVIDIA Corporation

@@ -230,4 +230,3 @@ cudaGraphicsD3D9RegisterResource, cudaGraphicsD3D10RegisterResource, cudaGraphic
 !
 
 
-Copyright © 2025 NVIDIA Corporation

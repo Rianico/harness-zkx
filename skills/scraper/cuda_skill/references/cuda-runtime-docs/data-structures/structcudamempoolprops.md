@@ -62,4 +62,3 @@ Windows-specific LPSECURITYATTRIBUTES required when cudaMemHandleTypeWin32 is sp
 !
 
 
-Copyright © 2025 NVIDIA Corporation

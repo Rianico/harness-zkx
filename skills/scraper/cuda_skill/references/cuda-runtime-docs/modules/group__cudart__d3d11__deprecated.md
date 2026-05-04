@@ -66,4 +66,3 @@ cudaD3D11GetDevice, cudaGraphicsD3D11RegisterResource, cudaDeviceReset
 !
 
 
-Copyright © 2025 NVIDIA Corporation

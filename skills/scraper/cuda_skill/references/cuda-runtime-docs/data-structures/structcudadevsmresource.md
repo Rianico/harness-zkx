@@ -41,4 +41,3 @@ The amount of streaming multiprocessors available in this resource.
 !
 
 
-Copyright © 2025 NVIDIA Corporation

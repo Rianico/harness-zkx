@@ -27,4 +27,3 @@ Argument to pass to the function
 !
 
 
-Copyright © 2025 NVIDIA Corporation

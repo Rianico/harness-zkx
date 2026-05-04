@@ -34,4 +34,3 @@ Array of external semaphore wait parameters.
 !
 
 
-Copyright © 2025 NVIDIA Corporation

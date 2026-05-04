@@ -187,4 +187,3 @@ cudaFuncGetAttributes cudaOccupancyMaxPotentialClusterSize (C++ API), cuOccupanc
 !
 
 
-Copyright © 2025 NVIDIA Corporation

@@ -48,4 +48,3 @@ The amount of SMs available in this resource.
 !
 
 
-Copyright © 2025 NVIDIA Corporation

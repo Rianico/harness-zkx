@@ -104,4 +104,3 @@ Enable seamless cube map filtering.
 !
 
 
-Copyright © 2025 NVIDIA Corporation

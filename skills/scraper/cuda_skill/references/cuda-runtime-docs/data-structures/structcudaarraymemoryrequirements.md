@@ -27,4 +27,3 @@ Total size of the array.
 !
 
 
-Copyright © 2025 NVIDIA Corporation

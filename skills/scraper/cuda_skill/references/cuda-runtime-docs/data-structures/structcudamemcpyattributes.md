@@ -41,4 +41,3 @@ Hint location for the source operand. Ignored when the pointers are not managed 
 !
 
 
-Copyright © 2025 NVIDIA Corporation

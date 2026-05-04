@@ -58,4 +58,3 @@ cudaDeviceSetSharedMemConfig, cudaDeviceGetSharedMemConfig, cudaDeviceSetCacheCo
 !
 
 
-Copyright © 2025 NVIDIA Corporation

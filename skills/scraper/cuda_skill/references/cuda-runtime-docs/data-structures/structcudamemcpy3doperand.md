@@ -48,4 +48,3 @@ Length of each row in elements.
 !
 
 
-Copyright © 2025 NVIDIA Corporation

@@ -225,4 +225,3 @@ cudaD3D9SetDirect3DDevice, cudaGraphicsUnregisterResource, cudaGraphicsMapResour
 !
 
 
-Copyright © 2025 NVIDIA Corporation

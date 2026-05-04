@@ -91,4 +91,3 @@ cudaCreateSurfaceObject, cuSurfObjectGetResourceDesc
 !
 
 
-Copyright © 2025 NVIDIA Corporation

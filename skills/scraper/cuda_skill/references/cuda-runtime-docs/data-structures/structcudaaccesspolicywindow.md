@@ -48,4 +48,3 @@ Size in bytes of the window policy. CUDA driver may restrict the maximum size an
 !
 
 
-Copyright © 2025 NVIDIA Corporation

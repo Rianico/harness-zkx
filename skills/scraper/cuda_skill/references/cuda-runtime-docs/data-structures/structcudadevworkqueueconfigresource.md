@@ -34,4 +34,3 @@ The expected maximum number of concurrent stream-ordered workloads
 !
 
 
-Copyright © 2025 NVIDIA Corporation

@@ -27,4 +27,3 @@ The ownership relationship of the child graph node.
 !
 
 
-Copyright © 2025 NVIDIA Corporation

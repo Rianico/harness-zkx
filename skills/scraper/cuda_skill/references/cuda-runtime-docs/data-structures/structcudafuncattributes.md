@@ -128,4 +128,3 @@ The size in bytes of statically-allocated shared memory per block required by th
 !
 
 
-Copyright © 2025 NVIDIA Corporation

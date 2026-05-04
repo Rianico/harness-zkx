@@ -27,4 +27,3 @@ Value of the attribute
 !
 
 
-Copyright © 2025 NVIDIA Corporation

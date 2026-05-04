@@ -255,4 +255,3 @@ cudaEventCreate ( C API), cudaEventCreateWithFlags, cudaEventRecord, cudaEventQu
 !
 
 
-Copyright © 2025 NVIDIA Corporation

@@ -50,4 +50,3 @@ The type of memory - cudaMemoryTypeUnregistered, cudaMemoryTypeHost, cudaMemoryT
 !
 
 
-Copyright © 2025 NVIDIA Corporation

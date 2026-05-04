@@ -64,4 +64,3 @@ cudaGetDeviceCount, cudaGetDevice, cudaSetDevice, cudaChooseDevice, cudaInitDevi
 !
 
 
-Copyright © 2025 NVIDIA Corporation

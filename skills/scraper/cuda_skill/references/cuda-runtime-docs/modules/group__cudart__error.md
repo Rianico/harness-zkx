@@ -94,4 +94,3 @@ cudaGetLastError, cudaGetErrorName, cudaGetErrorString, cudaError
 !
 
 
-Copyright © 2025 NVIDIA Corporation

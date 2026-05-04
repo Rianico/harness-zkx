@@ -41,4 +41,3 @@ Size of the buffer
 !
 
 
-Copyright © 2025 NVIDIA Corporation

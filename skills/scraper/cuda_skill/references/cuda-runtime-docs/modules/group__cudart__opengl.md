@@ -162,4 +162,3 @@ WGL_NV_gpu_affinity, cuWGLGetDevice
 !
 
 
-Copyright © 2025 NVIDIA Corporation

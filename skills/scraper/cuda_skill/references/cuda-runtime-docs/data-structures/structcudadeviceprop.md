@@ -664,4 +664,3 @@ Warp size in threads
 !
 
 
-Copyright © 2025 NVIDIA Corporation

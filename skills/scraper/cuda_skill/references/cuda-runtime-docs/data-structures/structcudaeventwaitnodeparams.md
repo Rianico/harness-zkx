@@ -20,4 +20,3 @@ The event to wait on from the node
 !
 
 
-Copyright © 2025 NVIDIA Corporation

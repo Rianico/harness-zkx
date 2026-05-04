@@ -48,4 +48,3 @@ in: location where the allocation should reside (specified in location). handleT
 !
 
 
-Copyright © 2025 NVIDIA Corporation
