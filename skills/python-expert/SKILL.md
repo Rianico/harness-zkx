@@ -1,6 +1,6 @@
 ---
 name: python-expert
-description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge.
+description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios including type boundary enforcement. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns.
 argument-hint: "[async|testing|django|pytorch|typing]"
 ---
 
@@ -129,6 +129,46 @@ if torch.cuda.is_available():
 ```
 
 ## Type Checking Scenarios
+
+**Type Boundary Enforcement:**
+External data (JSON, network, user input) enters as `object`, not `Any`. Validate at a single gateway with Pydantic.
+
+```python
+# BAD: Any scatters everywhere
+def get_data() -> Any:
+    return json.loads(...)
+
+result = get_data()
+name = result["name"]  # OK, but name is Any, propagates downstream
+
+# GOOD: object forces validation
+def get_data() -> object:
+    return json.loads(...)
+
+result = get_data()
+name = result["name"]  # ERROR: object not subscriptable
+
+# Must validate first:
+data = Model.model_validate(result)
+name = data.name  # Fully typed
+```
+
+**Why `object` over `Any` at boundaries:**
+- `object` is a type error waiting to happen — forces validation
+- `Any` silently propagates, infecting everything downstream
+- Single gateway pattern: only one module imports raw transport
+
+**Single Gateway Architecture:**
+```
+External World (JSON, network) → object
+         ↓
+VALIDATION BOUNDARY (TypedLSPTransport)
+  - model_validate() converts object → Pydantic Model
+         ↓
+InitializeResult, Hover, etc. (fully typed)
+         ↓
+INTERNAL CODE (no Any, no object)
+```
 
 **Complex Generic Constraints:**
 ```python

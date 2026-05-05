@@ -22,8 +22,8 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 - **File-level suppressions:** `# pyright: reportX=false` at file top, NEVER in pyrightconfig.json
 - **Container annotations:** Annotate before `.items()`, `.values()` for inference
 - **Runtime validation:** `Model.model_validate(response)` for JSON/dict
-- **Dynamic data:** `dict[str, Any]` with suppression, or Pydantic
-- **Acceptable warnings:** `reportUnusedCallResult`, `reportImplicitStringConcatenation`, `reportUnusedParameter` — style, not safety
+- **Type boundaries:** External data → `object` → Pydantic validation → typed models
+- **`object` over `Any`:** `object` forces validation; `Any` silently propagates
 
 ## Code Quality
 
