@@ -1,41 +1,165 @@
 ---
 name: python-expert
-description: Python domain expertise for Python 3.12+, uv, ruff, pydantic, FastAPI, Django, pytest, pytest-asyncio, async I/O, contextvars, PyTorch, data science workflows, testing strategy, and architecture review. Use for Python implementation, debugging, testing, concurrency fixes, framework work, and refactoring tasks.
-argument-hint: "[async|fastapi|testing|django|pytorch]"
+description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge.
+argument-hint: "[async|testing|django|pytorch|typing]"
 ---
 
 # Python Expert Skill
 
-You have invoked the Python Expert Skill. This consolidates the most critical, opinionated workflows for modern Python 3.12+ development, prioritizing high-performance and safety.
+Deep domain knowledge for complex Python scenarios. Invoke when baseline rules are insufficient.
 
-## 1. Async & Concurrency (FastAPI & I/O)
-- **Non-blocking:** Never put blocking I/O (like `requests` or synchronous DB calls) inside an `async def` function. It blocks the entire event loop. Use `httpx` for async HTTP, or run blocking code in a threadpool (`run_in_executor`).
-- **Context Variables:** Use `contextvars` instead of `threading.local()` for state management in async applications.
-- **FastAPI Injection:** Heavily utilize FastAPI's `Depends()` for dependency injection to keep route handlers clean and testable.
-- **Data Validation:** Use `pydantic` V2 for all data validation. Avoid hand-rolled validation logic.
+## Async & Concurrency
 
-## 2. Testing & Verification
-- **Framework:** Always default to `pytest`. Do not use `unittest`. When running through `uv`, prefer `uv run pytest -q` rather than `uv run pytest -v` unless verbose output is explicitly needed.
-- **Fixtures:** Use `pytest` fixtures for setup/teardown. Avoid class-based `setUp`/`tearDown`.
-- **Async Testing:** Use `pytest-asyncio` for testing async functions.
-- **Mocks:** Keep `unittest.mock` to a minimum. Prefer testing against local containerized dependencies (e.g., test databases) or using responses/VCR for HTTP.
+**Blocking the Event Loop:**
+Never put blocking I/O inside `async def`. It blocks the entire event loop.
+```python
+# BAD
+async def fetch():
+    response = requests.get(url)  # Blocks!
 
-## 3. Django Architecture
-- **Fat Models, Skinny Views:** Push business logic down to the model or service layer. Views should only handle HTTP routing and permissions.
-- **ORM Optimization:** Always audit querysets for N+1 issues. Proactively use `select_related()` for foreign keys and `prefetch_related()` for many-to-many/reverse relations.
-- **Serialization:** Use Django Rest Framework (DRF) serializers for all API I/O.
+# GOOD
+async def fetch():
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
 
-## 4. PyTorch & Data Science
-- **Device Agnosticism:** Write code that dynamically assigns devices (e.g., `device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')`).
-- **Memory Management:** Remember to `optimizer.zero_grad()` before backprop. Use `torch.no_grad()` or `torch.inference_mode()` for evaluation to save memory.
-- **Reproducibility:** Always set random seeds across all libraries (`torch`, `numpy`, `random`) for reproducible experiments.
+# GOOD (for legacy blocking code)
+async def fetch():
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, requests.get, url)
+```
 
-## 5. Type Checking & LSP
-- **Default LSP:** Use `basedpyright` as the primary type checker and LSP server. It is a stricter, more feature-rich fork of pyright with better type inference.
-- **Fallback:** Use `mypy` only when basedpyright is unavailable or explicitly required by project constraints.
-- **Configuration:** Configure type checking in `pyproject.toml` under `[tool.basedpyright]`.
+**Context Variables:**
+Use `contextvars` instead of `threading.local()` for async state:
+```python
+from contextvars import ContextVar
 
-## 6. Instructions for the Agent
-1. Apply the checklists above based on the context of the user's codebase (e.g., if you see FastAPI, apply the Async & Concurrency rules).
-2. Write code assuming modern tooling is in place (`uv` for package management, `ruff` for formatting/linting).
-3. For highly complex architectural setups, use the `Read` tool to fetch any extended reference documents in `skills/python-expert/references/` if they exist.
+request_id: ContextVar[str] = ContextVar('request_id')
+```
+
+**FastAPI Dependency Injection:**
+Use `Depends()` heavily for testability:
+```python
+async def get_user(token: str = Depends(oauth2_scheme)):
+    ...
+
+@app.get("/items")
+async def items(user: User = Depends(get_user)):
+    ...
+```
+
+## Testing Strategy
+
+**Pytest over unittest:**
+- Fixtures over `setUp`/`tearDown`
+- `pytest-asyncio` for async tests
+
+**Mock Philosophy:**
+Minimize `unittest.mock`. Prefer:
+- Containerized dependencies (test databases)
+- `responses` or VCR for HTTP
+- Real implementations when fast enough
+
+```python
+# Prefer real DB in container
+@pytest.fixture
+async def db():
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield test_session
+    await test_engine.dispose()
+
+# Over mocking
+@patch("module.get_user")  # Avoid when possible
+async def test_something(mock_get):
+    ...
+```
+
+## Django Architecture
+
+**Fat Models, Skinny Views:**
+Views handle HTTP routing and permissions. Business logic belongs in models or service layer.
+
+**N+1 Query Audit:**
+```python
+# BAD: N+1 queries
+for post in Post.objects.all():
+    print(post.author.name)  # Query per post
+
+# GOOD: Join
+for post in Post.objects.select_related('author'):
+    print(post.author.name)
+
+# GOOD: Many-to-many
+for post in Post.objects.prefetch_related('tags'):
+    print([t.name for t in post.tags])
+```
+
+**DRF Serialization:**
+Always use serializers for API I/O. Never return raw model dicts.
+
+## PyTorch Patterns
+
+**Device Agnosticism:**
+```python
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = model.to(device)
+```
+
+**Memory Management:**
+```python
+optimizer.zero_grad()  # Before backprop
+
+with torch.no_grad():  # Evaluation
+    outputs = model(inputs)
+
+with torch.inference_mode():  # Even faster, read-only
+    outputs = model(inputs)
+```
+
+**Reproducibility:**
+```python
+import random
+import numpy as np
+
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+```
+
+## Type Checking Scenarios
+
+**Complex Generic Constraints:**
+```python
+from typing import TypeVar, Generic
+
+T = TypeVar('T', bound='BaseModel')
+
+class Repository(Generic[T]):
+    def get(self, id: int) -> T:
+        ...
+```
+
+**Protocol for Duck Typing:**
+```python
+from typing import Protocol
+
+class Drawable(Protocol):
+    def draw(self) -> None: ...
+
+def render(obj: Drawable) -> None:
+    obj.draw()
+```
+
+**Overloads for Complex Signatures:**
+```python
+from typing import overload
+
+@overload
+def process(data: str) -> str: ...
+@overload
+def process(data: bytes) -> str: ...
+def process(data: str | bytes) -> str:
+    ...
+```

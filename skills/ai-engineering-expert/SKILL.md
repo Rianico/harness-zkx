@@ -1,6 +1,6 @@
 ---
 name: ai-engineering-expert
-description: AI engineering expertise for designing skills, agents, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, workflow, agent, command, hook, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; hook output format with systemMessage vs additionalContext; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user asks 'should this be a skill or command', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'how do I redesign this agent', 'help me iterate on this skill', 'bash or python for this hook', 'how do I output from a hook', 'systemMessage vs additionalContext'.
+description: AI engineering expertise for designing skills, agents, rules, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, rule, workflow, agent, command, hook, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; hook output format with systemMessage vs additionalContext; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user says 'add this to rules/skills', 'update this to xxx rule/skill', 'move this to rules', 'put this in the skill', 'should this be a rule or skill', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'bash or python for this hook', 'systemMessage vs additionalContext'.
 ---
 
 # AI Engineering Expert
@@ -96,6 +96,45 @@ Before publishing a skill:
 - **No validation loops** — Skills that do destructive work without self-checking produce silent failures.
 - **Orchestration logic in skills** — Skills should not contain workflow orchestration. Use orchestration skills or commands instead.
 - **Content duplication across skills** — Each piece of knowledge should live in one place. Reference other skills rather than copying.
+
+---
+
+## Rules Development
+
+### Quick Reference: Rules Design
+
+**Core Principle**
+Rules are always-on, skills are on-demand. Every token in a rule costs context every conversation.
+
+**Rules vs Skills Boundary**
+| Rules | Skills |
+|-------|--------|
+| Always loaded | Loaded on demand |
+| WHAT to use | HOW to implement |
+| Personal taste, defaults | Non-obvious patterns |
+| STATE, don't explain | Show examples |
+| One-liner preferences | Framework gotchas |
+
+**Rules Checklist**
+- [ ] Concise — one line per rule, no justification
+- [ ] Baseline only — LLM already knows, you're setting YOUR default
+- [ ] Stable — rarely changes, settled decisions
+- [ ] STATE — declare preferences, don't explain why
+
+**When to use rules:**
+- Tool/lib selection (`uv` over `pip`)
+- Style defaults (`pytest -q`)
+- Baseline patterns (type hints on all signatures)
+- Personal taste that should always apply
+
+**When to use skills:**
+- Non-obvious patterns (async event loop blocking)
+- Framework gotchas (Django N+1 queries)
+- Examples needed (PyTorch memory management)
+- Architectural decisions (fat models, skinny views)
+
+**Reference:**
+- [skill-authoring.md](references/skill-authoring.md) — Full "Rules vs Skills Boundary" section with design principles, anti-patterns, and layered examples
 
 ---
 

@@ -240,6 +240,235 @@ Use pdfplumber for text extraction. For scanned PDFs, use pdf2image with pytesse
 You can use pypdf, or pdfplumber, or PyMuPDF, or pdf2image...
 ```
 
+## Rules vs Skills Boundary
+
+Rules and skills serve fundamentally different purposes in the architecture. Understanding this boundary is critical for designing a maintainable, context-efficient system.
+
+### The Core Distinction
+
+| Dimension | Rules | Skills |
+|-----------|-------|--------|
+| **Loading** | Always-on | On-demand |
+| **Token cost** | Every conversation | Only when invoked |
+| **Purpose** | Defaults & consistency | Deep expertise |
+| **Content** | WHAT to use | HOW to implement |
+| **Knowledge type** | Personal taste, baseline | Non-obvious, experiential |
+
+### Rules Design Principles
+
+Rules are **always loaded** into context. Every token competes with conversation history and other context. This constraint shapes everything.
+
+**1. Conciseness is Mandatory**
+
+Rules must justify their token cost every conversation.
+
+```markdown
+# GOOD: One line, high value
+- **`pytest`**: Run with `uv run pytest -q`
+
+# BAD: Verbose explanation
+- **`pytest`**: You should use pytest for testing because it has great fixture support and a rich plugin ecosystem. Run it with `uv run pytest -q` to keep output quiet unless you need verbose mode...
+```
+
+**2. STATE, Don't EXPLAIN**
+
+Rules declare preferences. They don't justify them.
+
+```markdown
+# GOOD: Just the preference
+Use FastAPI for new APIs.
+
+# BAD: Explaining why
+Use FastAPI for new APIs because it provides automatic OpenAPI documentation, async support out of the box, and type safety through Pydantic integration...
+```
+
+The LLM already knows FastAPI's benefits. The rule sets YOUR default.
+
+**3. Baseline Knowledge Only**
+
+Rules capture what the LLM already knows but might forget or choose differently.
+
+| LLM Knows | Rule Purpose |
+|-----------|--------------|
+| "Use pytest" | "Use pytest, not unittest" (preference) |
+| "Type hints are good" | "Type hints on all signatures" (consistency) |
+| "PEP 8 exists" | "PEP 8, snake_case" (reminder) |
+
+Rules don't teach. They crystallize defaults.
+
+**4. Personal Style & Taste**
+
+Rules encode decisions you don't want to revisit.
+
+```markdown
+# Tool choices
+- `uv` over `pip`
+- `ruff` over `black`
+- `basedpyright` over `pyright`
+
+# Style choices
+- `pytest -q` by default
+- File-level suppressions, never global
+```
+
+These aren't "right answers" — they're YOUR answers. Rules eliminate trivial decisions.
+
+**5. Stability Over Recency**
+
+Rules should rarely change. They represent settled decisions.
+
+- "Use FastAPI" → stable preference
+- "Use FastAPI 0.115+ for new X feature" → too specific, belongs in skill
+
+### Skills Design Principles
+
+Skills are **loaded on-demand**. They can be longer, include examples, and explain reasoning.
+
+**1. Non-Obvious Knowledge**
+
+Skills contain what the LLM might NOT know or might get WRONG.
+
+```markdown
+# SKILL: python-expert
+
+## Async & Concurrency
+
+**Blocking the Event Loop:**
+Never put blocking I/O inside `async def`. It blocks the entire event loop.
+```python
+# BAD
+async def fetch():
+    response = requests.get(url)  # Blocks!
+```
+
+The LLM knows `requests` is blocking, but might not realize the severity in async context. This is experiential knowledge.
+
+**2. Patterns with Examples**
+
+Skills show HOW, not just WHAT.
+
+```markdown
+# SKILL: django-expert
+
+**N+1 Query Audit:**
+```python
+# BAD: N+1 queries
+for post in Post.objects.all():
+    print(post.author.name)  # Query per post
+
+# GOOD: Join
+for post in Post.objects.select_related('author'):
+    print(post.author.name)
+```
+```
+
+This requires code to understand. It's not a one-liner rule.
+
+**3. Framework/Domain Gotchas**
+
+Skills capture pitfalls and edge cases.
+
+```markdown
+# SKILL: pytorch-expert
+
+**Memory Management:**
+```python
+optimizer.zero_grad()  # Before backprop
+
+with torch.no_grad():  # Evaluation
+    outputs = model(inputs)
+```
+```
+
+The LLM might forget `zero_grad()` or use `no_grad()` incorrectly. This is about correctness, not preference.
+
+**4. Architectural Decisions**
+
+Skills explain trade-offs and constraints.
+
+```markdown
+# SKILL: django-expert
+
+**Fat Models, Skinny Views:**
+Views handle HTTP routing and permissions. Business logic belongs in models or service layer.
+```
+
+This is a design philosophy, not a syntax rule. It requires understanding WHY.
+
+### Boundary Identification Checklist
+
+Ask these questions to determine placement:
+
+| Question | Rule | Skill |
+|----------|------|-------|
+| Should this apply EVERY conversation? | ✓ | ✗ |
+| Is it a one-liner preference? | ✓ | ✗ |
+| Does the LLM already know this? | ✓ | ✗ |
+| Does it need code examples? | ✗ | ✓ |
+| Is it framework/domain-specific? | ✗ | ✓ |
+| Might the LLM get this WRONG? | ✗ | ✓ |
+| Does it explain WHY? | ✗ | ✓ |
+
+### The Routing Pattern
+
+Rules can delegate to skills for complex scenarios:
+
+```markdown
+## Expertise Routing
+
+For complex patterns and domain gotchas, invoke the expert skill:
+```
+Skill(skill="python-expert", args="[async|testing|django|pytorch]")
+```
+```
+
+This keeps rules lean while ensuring deep knowledge is available when needed.
+
+### Anti-Patterns
+
+**Bad Rules (verbose, explanation-heavy):**
+```markdown
+# BAD: Explaining WHY
+Use pytest because it has fixture support and a plugin ecosystem. Fixtures are better than setUp/tearDown because they provide better isolation and composability...
+
+# BAD: Domain-specific knowledge always loaded
+Django models should use select_related for foreign keys to avoid N+1 queries. This is critical for performance because...
+```
+
+**Bad Skills (obvious, preference-only):**
+```markdown
+# BAD: Just a preference
+Use pytest for testing.
+
+# BAD: Generic advice
+Write clean code and add comments.
+```
+
+### Layered Example: Python Testing
+
+**Rule (always-on, preference):**
+```markdown
+- **`pytest`**: Run with `uv run pytest -q` (quiet by default)
+- Default to pytest, not unittest
+```
+
+**Skill (on-demand, deep knowledge):**
+```markdown
+## Testing Strategy
+
+**Pytest over unittest:**
+- Fixtures over `setUp`/`tearDown`
+- `pytest-asyncio` for async tests
+
+**Mock Philosophy:**
+Minimize `unittest.mock`. Prefer:
+- Containerized dependencies (test databases)
+- `responses` or VCR for HTTP
+- Real implementations when fast enough
+```
+
+The rule sets the default. The skill guides complex scenarios.
+
 ## Subagent Delegation
 
 Skills at any taxonomy level (action, workflow, orchestration) may delegate to subagents. This is a **context management decision**, not a complexity threshold.

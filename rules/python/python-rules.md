@@ -8,19 +8,65 @@ paths:
 
 # Python Rules
 
-You are operating in a Python codebase. Before proceeding with your task, review and apply these rules.
+Baseline behavior, style preferences, and lib selection for everyday Python development.
 
-## Core Python Standards (80% Base)
-- **Formatting:** Enforce PEP 8. Use `snake_case` for variables/functions, `CamelCase` for classes.
-- **Typing:** Always use type hints (`def process(data: dict) -> str:`).
-- **Immutability:** Do not use mutable default arguments (`def func(x=[]):` -> BAD).
-- **Imports:** Group imports (Standard Library -> Third Party -> Local).
+## Core Standards
 
-## Expertise Routing (Use `Skill` tool)
-If your task requires complex decision making, you MUST pause and invoke the `Skill` tool for `python-expert` to retrieve the deep methodology:
+- **Formatting:** PEP 8, `snake_case` for variables/functions, `CamelCase` for classes
+- **Typing:** Type hints on all function signatures
+- **Immutability:** Never use mutable defaults (`def func(x=[]):` → BAD)
+- **Imports:** Standard Library → Third Party → Local
 
-- **Web Frameworks:** If working with Django or FastAPI, invoke `Skill(skill="python-expert", args="frameworks")`.
-- **Machine Learning:** If working with PyTorch, invoke `Skill(skill="python-expert", args="pytorch")`.
-- **Testing:** If writing comprehensive tests, default to `pytest` and invoke `Skill(skill="python-expert", args="testing")`. When running pytest through `uv`, prefer `uv run pytest -q` rather than `uv run pytest -v` unless verbose output is explicitly needed.
+## Type Safety
 
-**CRITICAL INSTRUCTION:** Do not try to guess complex architectural patterns or deep framework mechanics. If the user asks for a complex Django security implementation, retrieve the skill first.
+- **File-level suppressions:** `# pyright: reportX=false` at file top, NEVER in pyrightconfig.json
+- **Container annotations:** Annotate before `.items()`, `.values()` for inference
+- **Runtime validation:** `Model.model_validate(response)` for JSON/dict
+- **Dynamic data:** `dict[str, Any]` with suppression, or Pydantic
+- **Acceptable warnings:** `reportUnusedCallResult`, `reportImplicitStringConcatenation`, `reportUnusedParameter` — style, not safety
+
+## Code Quality
+
+- Add type hints for all signatures and complex variables
+- Prioritize readability and explicit error handling
+- Favor stdlib before adding dependencies
+- Profile (`py-spy`, `cProfile`) before optimizing
+
+## Performance & Concurrency
+
+- **I/O bound:** `asyncio` or async frameworks
+- **CPU bound:** `concurrent.futures` or `multiprocessing`
+- **Caching:** `functools.lru_cache` or `cache` for expensive deterministic functions
+
+## Web & API
+
+- **Framework:** FastAPI for new APIs
+- **Validation:** Pydantic V2
+- **Database:** SQLAlchemy 2.0 async, or modern async ORMs
+
+## Terminal Output
+
+- **Library:** `rich` for formatted output
+- **Tables:** `HORIZONTALS` with `show_lines=True` for data; `ROUNDED` for summaries
+- **Columns:** `no_wrap=True` on non-content columns
+- **Width:** Pass `width` parameter in subprocesses without terminal
+
+## Data & ML
+
+- **Data processing:** Polars (preferred) or Pandas 2.0+
+- **Deep learning:** PyTorch
+- **Classical ML:** scikit-learn
+
+## Expertise Routing
+
+For complex patterns and domain gotchas, invoke the expert skill:
+
+```
+Skill(skill="python-expert", args="[async|fastapi|testing|django|pytorch]")
+```
+
+**When to invoke:**
+- Complex async/concurrency patterns
+- Framework-specific architecture (Django, FastAPI)
+- Testing strategy beyond basics
+- PyTorch performance and memory patterns
