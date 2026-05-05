@@ -51,6 +51,7 @@ By default, below is a failure if you:
 
 So you should:
 - Think before acting. Read existing files before writing code.
+- **Identify root cause before designing solution.** Incorrect problem framing leads to correct solutions for the wrong problem. Verify assumptions with evidence (specs, tests, quick experiments) before committing to a design.
 - Be concise in output but thorough in reasoning.
 - Prefer editing over rewriting whole files.
 - Do not re-read files already read unless file may have changed.

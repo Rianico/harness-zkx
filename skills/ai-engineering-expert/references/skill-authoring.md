@@ -240,6 +240,53 @@ Use pdfplumber for text extraction. For scanned PDFs, use pdf2image with pytesse
 You can use pypdf, or pdfplumber, or PyMuPDF, or pdf2image...
 ```
 
+## Subagent Delegation
+
+Skills at any taxonomy level (action, workflow, orchestration) may delegate to subagents. This is a **context management decision**, not a complexity threshold.
+
+### Orchestrator Role
+
+The main agent always plays orchestrator. It routes, dispatches, and receives compact results. Skills own the execution pattern, including whether to delegate.
+
+| Layer | Role |
+|-------|------|
+| **Main agent** | Orchestrator — routes, dispatches, receives compact results |
+| **Skill** | Defines execution pattern including delegation |
+| **Subagent** | Does substantive work, returns compact summary |
+
+### When to Delegate
+
+Delegate when the task would bloat main context, regardless of perceived complexity:
+
+```markdown
+## Good: Even simple checks delegate
+Agent tool (general-purpose):
+  prompt: |
+    Read these 3 files and verify they follow the naming convention.
+    Return: PASS/FAIL plus file paths.
+```
+
+The skill decides based on **context hygiene**, not task difficulty. Reading multiple files, running tests, or generating artifacts are all delegation candidates.
+
+### Skill Dispatch Template
+
+Complex workflow skills MUST define their dispatch pattern internally:
+
+```markdown
+## Dispatch Template
+
+Agent tool (general-purpose):
+  description: "Run feature validation"
+  prompt: |
+    Mode: $MODE
+    Feature: $FEATURE
+    Source docs: $SOURCE_DOCS
+    
+    [execution instructions...]
+```
+
+The caller injects parameters (`$MODE`, `$FEATURE`), the skill owns the dispatch shape.
+
 ## Content Guidelines
 
 ### Assume Baseline Competence

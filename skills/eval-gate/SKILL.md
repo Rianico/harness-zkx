@@ -81,14 +81,6 @@ Test existing behavior remains intact. Prefer narrow deterministic checks over f
 2. `topic_root=<path>` → use `[topic_root]/eval/`
 3. Default → `.lsz/{date}/{timestamp}_{topic}/eval/`
 
-## Orchestration Contract
-
-1. **No Hero Mode**: Do not read implementation, run checks, or write artifacts in main context
-2. **Subagent Execution**: Dispatch one eval subagent per mode
-3. **Pointer Passing**: Pass artifact paths, not contents
-4. **No Agent-ception**: Subagent must not launch further agents
-5. **Compact Handoff**: ≤150 words plus paths
-
 ## Dispatch Template
 
 ```text
@@ -97,15 +89,17 @@ Agent tool (general-purpose):
   prompt: |
     You are the eval execution agent.
 
-    Invocation: eval-gate $ARGUMENTS
-    Eval directory: [eval_dir]
+    Mode: $MODE
+    Feature: $FEATURE
+    Source docs: $SOURCE_DOCS
+    Eval directory: $EVAL_DIR
 
     Execute entirely inside this subagent. Do not launch subagents.
 
     Modes:
-    - `define <feature> [source]`: Read source-of-truth docs, extract observable criteria, write definition. Derive evals from whatever sources are provided.
-    - `check <feature>`: Verify each criterion, append results to log, return status.
-    - `report <feature>`: Read definition and log, write report, return recommendation.
+    - `define`: Read source docs, extract observable criteria, write definition.
+    - `check`: Verify each criterion, append results to log, return status.
+    - `report`: Read definition and log, write report, return recommendation.
     - `list`: Summarize definitions and statuses.
     - `clean`: Remove old logs, keep last 10 runs.
 
