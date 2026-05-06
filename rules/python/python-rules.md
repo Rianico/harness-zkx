@@ -19,6 +19,9 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 
 ## Type Safety
 
+- **NO inline suppressions:** Never use `# pyright: ignore` or `# type: ignore` - fix underlying issues
+- **Unused parameters:** Use `_param` prefix convention, not suppressions
+- **Type mismatches:** Use Pydantic models with `model_dump(mode="json")`, not suppressions
 - **File-level suppressions:** `# pyright: reportX=false` at file top, NEVER in pyrightconfig.json
 - **Container annotations:** Annotate before `.items()`, `.values()` for inference
 - **Runtime validation:** `Model.model_validate(response)` for JSON/dict
@@ -62,7 +65,7 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 For complex patterns and domain gotchas, invoke the expert skill:
 
 ```
-Skill(skill="python-expert", args="[async|fastapi|testing|django|pytorch]")
+Skill(skill="python-expert", args="[async|fastapi|testing|django|pytorch|typing]")
 ```
 
 **When to invoke:**
@@ -70,3 +73,4 @@ Skill(skill="python-expert", args="[async|fastapi|testing|django|pytorch]")
 - Framework-specific architecture (Django, FastAPI)
 - Testing strategy beyond basics
 - PyTorch performance and memory patterns
+- Type boundaries, Any/object containment, IPC generic types
