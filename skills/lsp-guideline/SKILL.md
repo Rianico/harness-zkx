@@ -1,576 +1,261 @@
 ---
 name: lsp-guideline
-description: Essential guide for implementing LSP 3.17 diagnostic features. Use when building LSP clients/servers, handling diagnostics, managing versions, or working with progress tokens. Covers request vs notification patterns, workspace vs textDocument diagnostics, stale resultId detection, and fire-and-forget streaming.
+description: Essential guide for implementing LSP 3.17 diagnostic features and server lifecycle. Use when building LSP clients/servers, handling diagnostics, managing versions, working with progress tokens, or implementing daemon-style process management. Covers initialize → shutdown → exit sequence, request vs notification patterns, workspace vs textDocument diagnostics, stale resultId detection, and parent-child process lifecycle.
 argument-hint: [implementation-area]
 ---
 
 # LSP Guideline
 
-This skill captures key implementation patterns and common pitfalls for LSP 3.17 diagnostic features. Use it when implementing diagnostic handling, version tracking, or progress streaming.
+Key implementation patterns and pitfalls for LSP 3.17. Use when implementing diagnostic handling, version tracking, progress streaming, or server lifecycle management.
 
 ## 0. Context Discovery Checklist
-- Run `eza -T -L 2` at the relevant repo root to map the TOC and find client/server entrypoints, protocol layers, transport, state/cache, and tests.
-- Use `rg` on protocol nouns, method names, capability names, tokens, and nearby terms to trace the existing request/response path.
-- Expand from the first good hit into adjacent registration, state ownership, serialization, progress, and test files before editing.
-- Search both protocol nouns and implementation verbs. Useful anchors: `textDocument/diagnostic`, `workspace/diagnostic`, `publishDiagnostics`, `resultId`, `previousResultId`, `partialResultToken`, `workDoneToken`, `capabilities`, `initialize`.
+
+- `eza -T -L 2` at repo root to find client/server entrypoints, transport, state/cache, tests
+- `rg` on protocol nouns: `textDocument/diagnostic`, `workspace/diagnostic`, `publishDiagnostics`, `resultId`, `previousResultId`, `partialResultToken`, `workDoneToken`, `initialize`, `shutdown`, `exit`
+- Expand from first hit into adjacent registration, state ownership, serialization files
+
+---
+
+## Server Lifecycle (CRITICAL)
+
+### Initialization Sequence
+
+```
+1. Start transport (spawn subprocess, connect stdin/stdout)
+2. Send initialize request with client capabilities
+3. Receive InitializeResult with server capabilities
+4. Send initialized notification (fire-and-forget)
+5. Server ready for requests
+```
+
+### Shutdown Sequence
+
+```
+1. Send shutdown request (WAIT for response)
+2. Send exit notification (fire-and-forget)
+3. Stop transport (terminate subprocess)
+4. Reset state (_initialized=False, clear caches)
+```
+
+**CRITICAL**: `shutdown` → `exit` → `stop` must happen in this order. The `shutdown` request allows the server to clean up resources. The `exit` notification tells the server to terminate.
+
+### Common Mistake: Not Sending Shutdown Before Exit
+
+```python
+# WRONG: No shutdown request
+await transport.send_notification("exit")
+await transport.stop()
+
+# CORRECT: Graceful shutdown sequence
+await transport.send_request("shutdown")  # Wait for response
+await transport.send_notification("exit")  # Then exit
+await transport.stop()  # Then stop transport
+```
+
+### Initialization Timing: Lazy vs Eager
+
+| Strategy | When LSP Starts | Pros | Cons |
+|----------|----------------|------|------|
+| **Lazy** (on-demand) | First LSP request | Fast daemon startup, resource efficient | First request latency spike |
+| **Eager** (at startup) | With daemon start | Server ready immediately | Slower startup, wasted resources if unused |
+
+**Recommendation**: Lazy initialization for CLI tools; eager for IDE-like persistent clients.
+
+---
+
+## Process Lifecycle Management (Daemon/CLI Tools)
+
+When a CLI daemon manages LSP servers as child processes:
+
+### Parent-Child Lifecycle Rule
+
+**Daemon lifecycle MUST exceed LSP server lifecycle.** When daemon stops, LSP servers MUST shutdown first.
+
+### Anti-Pattern: Orphaned LSP Processes
+
+```python
+# WRONG: Stopping daemon without shutting down LSP servers
+async def run_daemon():
+    try:
+        await server.start()
+        await shutdown_event.wait()
+    finally:
+        await server.stop()  # LSP servers still running as orphans!
+```
+
+### Correct Pattern
+
+```python
+async def run_daemon():
+    handler = RequestHandler(...)
+    server = UNIXServer(socket_path, handler.handle)
+    try:
+        await server.start()
+        await shutdown_event.wait()
+    finally:
+        # 1. Shutdown LSP servers FIRST (while socket is active)
+        try:
+            await handler._registry.shutdown_all()
+        except Exception as e:
+            logger.exception(f"Error shutting down LSP servers: {e}")
+        # 2. Then stop socket
+        await server.stop()
+```
+
+### State Reset on Shutdown
+
+After shutdown, state must be reset for potential re-initialization:
+
+```python
+class WorkspaceManager:
+    async def shutdown(self) -> None:
+        if self._client and self._initialized:
+            await self._client.shutdown()
+            self._client = None
+            self._initialized = False  # CRITICAL: Reset for re-initialization
+
+class ServerRegistry:
+    async def shutdown_all(self) -> None:
+        for workspace in self._workspaces.values():
+            await workspace.shutdown()
+        self._workspaces.clear()  # CRITICAL: Clear for fresh start
+```
+
+---
 
 ## Core Concepts
 
 ### Request vs Notification vs Response
 
-| Type | Has ID | Sends Reply | Purpose | Example |
-|------|--------|-------------|---------|---------|
-| **Request** | Yes | Receives response | Invoke method, get result | `textDocument/diagnostic` |
-| **Notification** | No | No response | Fire event | `$/progress`, `textDocument/didChange` |
-| **Response** | Yes (matches request) | Is the reply | Return result/error | Response to `textDocument/diagnostic` |
+| Type | Has ID | Response | Example |
+|------|--------|----------|---------|
+| **Request** | Yes | Required | `textDocument/diagnostic`, `initialize`, `shutdown` |
+| **Notification** | No | None (fire-and-forget) | `$/progress`, `initialized`, `exit`, `didChange` |
+| **Response** | Matches request | Is the reply | Contains `result` or `error` |
 
-**Critical distinction:**
-- **Request**: Must have `id` field, receiver MUST send response back
-- **Notification**: MUST NOT have `id` field, no response expected (fire-and-forget)
-- **Response**: Has `id` matching the request, contains `result` or `error`
+### Two Token Types
 
-### Two Token Types for Progress
-
-| Token | Purpose | Used For |
-|-------|---------|----------|
-| `partialResultToken` | Streaming partial results via `$/progress` | `workspace/diagnostic`, `textDocument/diagnostic` |
-| `workDoneToken` | Progress lifecycle tracking (begin/report/end) | Any long-running operation |
-
-Both tokens are **ProgressToken** types (string or integer) and enable out-of-band progress reporting.
+| Token | Purpose | Streaming |
+|-------|---------|-----------|
+| `partialResultToken` | Partial results via `$/progress` | Multiple reports |
+| `workDoneToken` | Progress lifecycle | begin → report → end |
 
 ---
 
-## Diagnostic Requests: Workspace vs TextDocument
+## Diagnostic Requests: Key Distinctions
 
-### textDocument/diagnostic (Pull Model)
+### textDocument/diagnostic vs workspace/diagnostic
 
-**Request Parameters** (`DocumentDiagnosticParams`):
-```typescript
-{
-    textDocument: { uri: string },
-    previousResultId?: string,  // SINGULAR string for incremental updates
-    partialResultToken?: ProgressToken,
-    workDoneToken?: ProgressToken
-}
+| Aspect | textDocument/diagnostic | workspace/diagnostic |
+|--------|------------------------|---------------------|
+| **Scope** | Single document | Entire workspace |
+| **Pattern** | Request/Response | Fire-and-forget |
+| **Parameter** | `previousResultId` (string) | `previousResultIds` (array) |
+| **Results** | Response `items` array | Via `$/progress` notifications |
+
+### Common Mistake: Parameter Names
+
+```python
+# WRONG: Array for textDocument/diagnostic
+{"previousResultIds": [{"uri": uri, "value": "6"}]}
+
+# CORRECT: Singular string
+{"previousResultId": "6"}
 ```
 
-**Key characteristics:**
-- Standard request/response pattern with matching ID
-- Response includes `resultId` (server-provided version)
-- Uses `previousResultId` (singular) for incremental diagnostics
-- Response returns `items` array with diagnostics
-- Blocking call - await response before continuing
+### Common Mistake: Awaiting workspace/diagnostic
 
-**Example request:**
-```json
-{
-    "jsonrpc": "2.0",
-    "id": 5,
-    "method": "textDocument/diagnostic",
-    "params": {
-        "textDocument": { "uri": "file:///path/to/file.py" },
-        "previousResultId": "6"  // From previous response
-    }
-}
-```
+```python
+# WRONG: This never resolves
+result = await send_request("workspace/diagnostic", params)
 
-**Example response:**
-```json
-{
-    "jsonrpc": "2.0",
-    "id": 5,
-    "result": {
-        "kind": "full",
-        "resultId": "7",  // New diagnostic version
-        "items": [...]
-    }
-}
-```
-
-### workspace/diagnostic (Streaming Model)
-
-**Request Parameters** (`WorkspaceDiagnosticParams`):
-```typescript
-{
-    previousResultIds: [{ uri: string, value: string }],  // ARRAY of {uri, value}
-    partialResultToken?: ProgressToken,
-    workDoneToken?: ProgressToken
-}
-```
-
-**Key characteristics:**
-- Fire-and-forget pattern (request never resolves)
-- Server streams results via `$/progress` using `partialResultToken`
-- Uses `previousResultIds` (array) for multiple documents
-- Progress lifecycle: `begin` → `report` → `end` via `workDoneToken`
-- **No response awaited** - diagnostics arrive exclusively via notifications
-
-**Example request:**
-```json
-{
-    "jsonrpc": "2.0",
-    "id": 2,
-    "method": "workspace/diagnostic",
-    "params": {
-        "partialResultToken": "abc-123",
-        "workDoneToken": "xyz-789",
-        "previousResultIds": [
-            { "uri": "file:///path/to/file.py", "value": "6" }
-        ]
-    }
-}
-```
-
-**Server streams via $/progress:**
-```json
-// Progress begin
-{
-    "jsonrpc": "2.0",
-    "method": "$/progress",
-    "params": {
-        "token": "xyz-789",  // workDoneToken
-        "value": { "kind": "begin", "title": "Analyzing..." }
-    }
-}
-
-// Diagnostic report with items
-{
-    "jsonrpc": "2.0",
-    "method": "$/progress",
-    "params": {
-        "token": "abc-123",  // partialResultToken
-        "value": {
-            "items": [
-                {
-                    "uri": "file:///path/to/file.py",
-                    "version": 3,
-                    "kind": "full",
-                    "diagnostics": [...]
-                }
-            ]
-        }
-    }
-}
-
-// Progress end
-{
-    "jsonrpc": "2.0",
-    "method": "$/progress",
-    "params": {
-        "token": "xyz-789",
-        "value": { "kind": "end" }
-    }
-}
+# CORRECT: Fire-and-forget, results come via $/progress
+await send_message(LSPMessage(id=1, method="workspace/diagnostic", params=params))
+# Diagnostics arrive via $/progress notifications
 ```
 
 ---
 
-## Version Tracking: Critical Distinction
+## Version Tracking
 
-### Document Version (Client-Managed)
+### Two Separate Versions
 
-- **Purpose**: Track content edits for `textDocument/didChange`
-- **Who manages**: Client
-- **Lifecycle**: Starts at 1, increments on each change, never resets
-- **Used in**: `didChange.version`, `WorkspaceDiagnosticCache.version`
+| Version | Managed By | Purpose | Lifecycle |
+|---------|------------|---------|-----------|
+| **Document version** | Client | Track content edits | Increments on change, never resets |
+| **resultId** | Server | Track diagnostic state | Resets to 0 on file open |
 
-```python
-@dataclass
-class FileState:
-    document_version: int = 0  # Increment on didChange
-```
+**Key insight**: `resultId` is the server's internal diagnostic version as a string.
 
-### Diagnostic Version / resultId (Server-Managed)
-
-- **Purpose**: Track diagnostic computation state
-- **Who manages**: Server (internal integer, exposed as `resultId` string)
-- **Lifecycle**: Resets to 0 on file open, increments on each recomputation
-- **Relationship**: `resultId` = `diagnostic_version.toString()`
-
-**Key insight**: `resultId` in diagnostic responses is just the server's internal diagnostic version converted to a string.
-
-```typescript
-// Server-side (BasedPyright)
-const result: DocumentDiagnosticReport = {
-    kind: 'full',
-    resultId: sourceFile?.getDiagnosticVersion()?.toString(),  // Integer → String
-    items: [],
-};
-```
-
-**Version increment on recompute:**
-```typescript
-// packages/pyright-internal/src/analyzer/sourceFile.ts (L1129-1131)
-private _recomputeDiagnostics(configOptions: ConfigOptions) {
-    this._writableData.diagnosticVersion++;  // Incremented each time
-```
+### Stale resultId Detection
 
 ```python
-@dataclass
-class FileState:
-    last_result_id: Optional[str] = None  # Cached resultId from server
+def _result_id_greater(new_id: str, cached_id: str) -> bool:
+    if not new_id or not cached_id:
+        return bool(new_id)
+    try:
+        return int(new_id) > int(cached_id)  # Numeric comparison
+    except ValueError:
+        return new_id > cached_id  # Fallback lexicographic
 ```
 
 ### On Document Close
 
-When closing a document:
-- Reset `last_result_id` to `None` (diagnostic version no longer valid)
+- Reset `last_result_id = None` (diagnostic version invalid)
 - Keep `document_version` (content history preserved)
-- Set `is_open` to `False`
-
-```python
-async def close_text_document(self, uri: str) -> None:
-    if uri in self._file_states:
-        self._file_states[uri].last_result_id = None  # Reset diagnostic version
-        self._file_states[uri].is_open = False
-```
-
-### Unchanged Response Optimization
-
-When sending `textDocument/diagnostic` with `previousResultId`, the server can return `kind: 'unchanged'` if diagnostics haven't been recomputed:
-
-```json
-{
-    "jsonrpc": "2.0",
-    "id": 5,
-    "result": {
-        "kind": "unchanged",
-        "resultId": "7"
-    }
-}
-```
-
-```typescript
-// Server-side logic (packages/pyright-internal/src/languageServerBase.ts L1602-1607)
-if (diagnosticsVersion === previousResultId) {
-    result.kind = 'unchanged';
-    result.resultId = diagnosticsVersion.toString();
-    delete result.items;  // No need to send items
-}
-```
-
-This saves bandwidth when diagnostics are current.
+- Set `is_open = False`
 
 ---
 
-## CLI Version Management
-
-Your CLI tracks one version per file: **client document version**. The server maintains an internal diagnostic version that resets to 0 on file open.
-
-### Version Lifecycle
-
-| Event | Client Version | Server Diagnostic Version | Action |
-|-------|----------------|---------------------------|--------|
-| Open file | Set/continue version (e.g., 5) | Server resets to 0 | Send `didOpen` with version |
-| Change file | Increment (5 → 6) | Server recomputes | Send `didChange` with new version |
-| Close file | Keep version unchanged | Unchanged | Send `didClose` |
-| Reopen file | Continue/increment (6 → 7) | Server resets to 0 | Send `didOpen` with new version |
-
-### Implementation Pattern
-
-```python
-@dataclass
-class FileVersionTracker:
-    versions: dict[str, int] = field(default_factory=dict)
-    diagnostics: dict[str, list[dict]] = field(default_factory=dict)
-    
-    def next_version(self, uri: str) -> int:
-        """Get next version number for uri. Increments from last value."""
-        current = self.versions.get(uri, 0)
-        next_v = current + 1
-        self.versions[uri] = next_v
-        return next_v
-    
-    def on_file_open(self, uri: str, content: str) -> None:
-        version = self.next_version(uri)
-        self._send({
-            "method": "textDocument/didOpen",
-            "params": {
-                "textDocument": {"uri": uri, "version": version, "text": content}
-            }
-        })
-    
-    def on_file_change(self, uri: str, content: str) -> None:
-        version = self.next_version(uri)
-        self._send({
-            "method": "textDocument/didChange",
-            "params": {
-                "textDocument": {"uri": uri, "version": version},
-                "contentChanges": [{"text": content}]
-            }
-        })
-    
-    def on_file_close(self, uri: str) -> None:
-        # Version persists for next open
-        self._send({
-            "method": "textDocument/didClose",
-            "params": {"textDocument": {"uri": uri}}
-        })
-    
-    def on_diagnostics(self, params: dict) -> None:
-        uri = params["uri"]
-        version = params.get("version")
-        diagnostics = params.get("diagnostics", [])
-        
-        # Only store if version matches current
-        if version == self.versions.get(uri):
-            self.diagnostics[uri] = diagnostics
-```
-
-### Server Internal Behavior
-
-When a file is opened, the server resets its internal diagnostic version to 0:
-
-```typescript
-// BasedPyright: packages/pyright-internal/src/analyzer/program.ts (L447-453)
-sourceFileInfo.isOpenByClient = true;
-// Reset the diagnostic version so we force an update to the
-// diagnostics, which can change based on whether the file is open.
-sourceFileInfo.diagnosticsVersion = 0;
-```
-
----
-
-## Stale resultId Detection
-
-When a `textDocument/diagnostic` response arrives, the server may return the same `resultId` if the document hasn't changed. You MUST detect and skip stale results.
-
-### Numeric Comparison
-
-```python
-def _result_id_greater(new_id: str, cached_id: str) -> bool:
-    """Compare two resultIds. Returns True if new_id is newer than cached_id."""
-    if not new_id or not cached_id:
-        return bool(new_id)  # Treat empty as older
-    try:
-        return int(new_id) > int(cached_id)  # Numeric comparison
-    except ValueError:
-        return new_id > cached_id  # Fallback to lexicographic
-```
-
-### Update Logic
-
-```python
-def _process_diagnostic_response(self, result: dict, context_uri: str) -> None:
-    result_id = result.get("resultId")
-    state = self._file_states[context_uri]
-    cached_id = state.last_result_id
-
-    if cached_id is None or _result_id_greater(result_id, cached_id):
-        # New result - update cache
-        state.last_result_id = result_id
-        state.diagnostics = result.get("items", [])
-    else:
-        # Stale result - skip (document unchanged)
-        log_info(f"Skipping stale resultId '{result_id}' (cached: '{cached_id}')")
-```
-
----
-
-## Common Mistakes and Fixes
+## Common Mistakes
 
 ### Mistake 1: Adding Non-Existent `version` Parameter
 
-**Wrong:**
-```python
-params={
-    "partialResultToken": token,
-    "workDoneToken": work_done_token,
-    "version": version,  # ❌ This parameter doesn't exist!
-    "previousResultIds": [],
-}
-```
-
-**Correct:**
-```python
-params={
-    "partialResultToken": token,
-    "workDoneToken": work_done_token,
-    "previousResultIds": [],  # ✅ No version parameter
-}
-```
-
-The `workspace/diagnostic` request does NOT accept a `version` parameter. Version tracking is done via `previousResultIds` array.
+`workspace/diagnostic` does NOT accept `version`. Use `previousResultIds` array instead.
 
 ### Mistake 2: Regenerating Tokens Each Request
 
-**Wrong:**
-```python
-async def request_diagnostics(self) -> None:
-    # Generate NEW tokens every time ❌
-    token = str(uuid.uuid4())
-    work_done_token = str(uuid.uuid4())
-```
+Tokens must remain constant within a session. Generate once in `__init__`, reuse throughout.
 
-**Correct:**
-```python
-# In __init__:
-self._workspace_diagnostic_tokens: Optional[dict[str, str]] = None
+### Mistake 3: Not Auto-Opening Documents
 
-async def request_diagnostics(self) -> None:
-    # Initialize constant tokens ONCE
-    if self._workspace_diagnostic_tokens is None:
-        self._workspace_diagnostic_tokens = {
-            "partial_result_token": str(uuid.uuid4()),
-            "work_done_token": str(uuid.uuid4()),
-        }
+Before `didChange` or `textDocument/diagnostic`, ensure document is open via `didOpen`.
 
-    tokens = self._workspace_diagnostic_tokens  # Reuse same tokens
-```
+### Mistake 4: workspace/diagnostic Never Resolves
 
-Tokens must remain constant throughout the session for proper progress tracking.
-
-**Token reset behavior**: Tokens persist across server restarts and connection drops. When reconnecting, initialize new tokens; do not reuse stale tokens from a previous connection session.
-
-### Mistake 3: Confusing previousResultId vs previousResultIds
-
-| Request | Parameter Name | Type | Format |
-|---------|---------------|------|--------|
-| `textDocument/diagnostic` | `previousResultId` | Singular string | `"6"` |
-| `workspace/diagnostic` | `previousResultIds` | Array | `[{uri, value}]` |
-
-**Wrong:**
-```python
-# Using array format for textDocument/diagnostic ❌
-{"previousResultIds": [{"uri": uri, "value": "6"}]}
-```
-
-**Correct:**
-```python
-# Using singular string for textDocument/diagnostic ✅
-{"previousResultId": "6"}
-```
-
-### Mistake 4: Awaiting Response for workspace/diagnostic
-
-**Wrong:**
-```python
-# Registering workspace/diagnostic as pending request ❌
-result = await self.send_request("workspace/diagnostic", params)
-```
-
-**Correct:**
-```python
-# Fire-and-forget - don't register as pending request ✅
-request_id = self._next_request_id()
-msg = LSPMessage(id=request_id, method="workspace/diagnostic", params=params)
-await self._send_message(msg)
-# No await for response - diagnostics arrive via $/progress
-```
-
-The `workspace/diagnostic` request promise never resolves. Diagnostics arrive exclusively via `$/progress` notifications.
-
-### Mistake 5: Not Auto-Opening Documents
-
-Before sending `didChange` or `textDocument/diagnostic`, ensure the document is open:
-
-```python
-async def change_text_document(self, uri: str, text: str, open_text: Optional[str] = None) -> None:
-    # Open first if not already open
-    state = self._file_states.get(uri)
-    if not state or not state.is_open:
-        if open_text is not None:
-            await self.open_text_document(uri, open_text)
-        else:
-            self._file_states[uri] = FileState(document_version=1, is_open=True)
-
-    # Then send didChange
-    state.document_version += 1
-```
-
----
-
-## Diagnostic Caching Pattern
-
-Cache diagnostics in three places for query efficiency:
-
-1. **Global `_diagnostics` dict**: Quick lookup by URI
-2. **`FileState.diagnostics`**: Per-file state cache
-3. **`WorkspaceDiagnosticCache`**: Workspace-wide cache with version tracking
-
-```python
-@dataclass
-class WorkspaceDiagnosticCache:
-    version: Optional[int]  # Document version when computed
-    diagnostics: list[dict]  # Cached diagnostic items
-```
-
-**Update all three on every diagnostic arrival:**
-```python
-def _store_diagnostics(self, items: list[dict]) -> None:
-    for item in items:
-        uri = item.get("uri", "")
-        diagnostics = item.get("diagnostics", [])
-        version = item.get("version")
-
-        if uri and diagnostics is not None:
-            self._diagnostics[uri] = diagnostics
-            if uri in self._file_states:
-                self._file_states[uri].diagnostics = diagnostics
-            self._workspace_diagnostics[uri] = WorkspaceDiagnosticCache(
-                version=version, diagnostics=diagnostics
-            )
-```
-
-**Query helper:**
-```python
-def is_diagnostic_current(self, uri: str, client_version: int) -> bool:
-    """Check if cached diagnostics match current document version."""
-    cached = self._workspace_diagnostics.get(uri)
-    if cached is None:
-        return False
-    return cached.version == client_version
-```
-
----
-
-## Building previousResultIds Array
-
-For `workspace/diagnostic` requests, build the array from file states:
-
-```python
-def _build_previous_result_ids(self) -> list[dict[str, str]]:
-    """Build previousResultIds from FileState.last_result_id."""
-    result = []
-    for uri, state in self._file_states.items():
-        if state.last_result_id:
-            result.append({"uri": uri, "value": state.last_result_id})
-    return result
-```
-
-This extracts the cached `resultId` values from previous `textDocument/diagnostic` responses.
+Don't await it. Results arrive via `$/progress` notifications using `partialResultToken`.
 
 ---
 
 ## Implementation Checklist
 
-Before considering LSP diagnostic implementation complete:
+**Server Lifecycle:**
+- [ ] Shutdown sequence: `shutdown` request → `exit` notification → stop transport
+- [ ] State reset: `_initialized = False`, `_client = None` on shutdown
+- [ ] Workspace clearing: `_workspaces.clear()` in `shutdown_all()`
+- [ ] Parent-child lifecycle: LSP servers shutdown before daemon stops
 
-- [ ] **Token handling**: Constant tokens for workspace diagnostics (not regenerated)
-- [ ] **Version separation**: Document version (client) vs resultId (server) tracked separately
-- [ ] **Stale detection**: `_result_id_greater()` comparison before updating cache
-- [ ] **Fire-and-forget**: workspace/diagnostic not registered as pending request
-- [ ] **Auto-open**: Documents opened before didChange/textDocument/diagnostic
-- [ ] **Caching**: Three-way caching (global, per-file, workspace)
-- [ ] **Progress handling**: Both `partialResultToken` and `workDoneToken` tracked
-- [ ] **Parameter names**: `previousResultId` (singular) vs `previousResultIds` (array)
-- [ ] **No version parameter**: workspace/diagnostic doesn't accept version parameter
+**Diagnostics:**
+- [ ] Token handling: Constant tokens (not regenerated per request)
+- [ ] Version separation: Document version vs resultId tracked separately
+- [ ] Stale detection: `_result_id_greater()` before updating cache
+- [ ] Fire-and-forget: `workspace/diagnostic` not registered as pending
+- [ ] Auto-open: Documents opened before `didChange`/diagnostic requests
+- [ ] Parameter names: `previousResultId` (singular) vs `previousResultIds` (array)
 
 ---
 
 ## Reference Files
 
-The `reference/` subdirectory contains LSP specification excerpts relevant to this guide, you can begin with `reference/INDEX.md`.
+`reference/` contains LSP 3.17 spec excerpts. Start with `reference/INDEX.md`.
 
 ---
 
 ## When to Use This Skill
 
-Use this skill when:
 - Implementing LSP diagnostic features (pull model)
+- Managing server lifecycle (initialize, shutdown, exit)
+- Building daemon-style CLI tools that manage LSP servers
 - Debugging diagnostic versioning issues
 - Handling `$/progress` notifications
-- Confused about `previousResultId` vs `previousResultIds`
-- Building workspace diagnostics with streaming
-- Implementing stale result detection
-- Setting up token-based progress tracking
+- Implementing parent-child process lifecycle patterns
