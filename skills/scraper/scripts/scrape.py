@@ -5,6 +5,7 @@
 #   "beautifulsoup4",
 #   "html2text",
 #   "requests",
+#   "rich>=13.0.0",
 # ]
 # ///
 """
@@ -22,6 +23,7 @@ Available scrapers:
   ptx       NVIDIA PTX ISA documentation
   runtime   CUDA Runtime API documentation
   driver    CUDA Driver API documentation
+  rust      Rust crate documentation (uses cargo-docs-md)
 
 Usage:
   scrape.py <doc_type> [options]
@@ -31,7 +33,8 @@ Usage:
 Examples:
   scrape.py lsp                  # Use cache if available
   scrape.py lsp --force          # Re-fetch from network
-  scrape.py ptx --output-dir ./docs/ptx
+  scrape.py rust ratatui         # Scrape Rust crate
+  scrape.py rust https://github.com/ratatui/ratatui
 """
 
 import argparse
@@ -39,7 +42,7 @@ import sys
 from pathlib import Path
 
 # Import scrapers
-from scrapers import APIScraper, LSPScraper, PTXScraper
+from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper
 
 # Registry of available scrapers
 SCRAPERS = {
@@ -47,23 +50,32 @@ SCRAPERS = {
         "class": LSPScraper,
         "requires_api_type": False,
         "default_output": "references/lsp-3.17-docs",
+        "is_rust": False,
     },
     "ptx": {
         "class": PTXScraper,
         "requires_api_type": False,
         "default_output": "references/ptx-docs",
+        "is_rust": False,
     },
     "runtime": {
         "class": APIScraper,
         "requires_api_type": True,
         "api_type": "runtime",
         "default_output": "references/cuda-runtime-docs",
+        "is_rust": False,
     },
     "driver": {
         "class": APIScraper,
         "requires_api_type": True,
         "api_type": "driver",
         "default_output": "references/cuda-driver-docs",
+        "is_rust": False,
+    },
+    "rust": {
+        "class": RustScraper,
+        "default_output": "references/rust-docs",
+        "is_rust": True,
     },
 }
 
@@ -84,12 +96,15 @@ Examples:
   %(prog)s lsp --force                   Clear cache and re-fetch
   %(prog)s ptx --output-dir ./docs       Custom output location
   %(prog)s driver                        Scrape CUDA Driver API
+  %(prog)s rust ratatui                  Scrape Rust crate by name
+  %(prog)s rust https://github.com/ratatui/ratatui
+  %(prog)s rust ./my-local-crate
 
 Cache location: .cache/<scraper-name>/
 
 For detailed help on a specific scraper:
   %(prog)s lsp --help
-  %(prog)s driver --help
+  %(prog)s rust --help
 """,
     )
 
@@ -101,22 +116,72 @@ For detailed help on a specific scraper:
 
     # Create subparser for each scraper
     for name, config in SCRAPERS.items():
-        sub = subparsers.add_parser(
-            name,
-            help=f"Scrape {name.upper()} documentation",
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=config["class"].description,
-        )
-        sub.add_argument(
-            "--output-dir",
-            type=Path,
-            help=f"Output directory (default: {config['default_output']})",
-        )
-        sub.add_argument(
-            "--force",
-            action="store_true",
-            help="Clear cache and re-fetch from network",
-        )
+        if config["is_rust"]:
+            # Rust scraper has different arguments
+            sub = subparsers.add_parser(
+                name,
+                help="Scrape Rust crate documentation",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                description=config["class"].description,
+            )
+            sub.add_argument(
+                "target",
+                help="Crate name, GitHub URL, docs.rs URL, or local path",
+            )
+            sub.add_argument(
+                "--output-dir",
+                type=Path,
+                help=f"Output directory (default: {config['default_output']})",
+            )
+            sub.add_argument(
+                "--force",
+                action="store_true",
+                help="Re-clone repository and regenerate",
+            )
+            sub.add_argument(
+                "--primary-crate",
+                help="Primary crate name for workspaces",
+            )
+            sub.add_argument(
+                "--include-deps",
+                action="store_true",
+                help="Include dependency documentation (default: workspace only)",
+            )
+            sub.add_argument(
+                "--include-examples",
+                action="store_true",
+                help="Include example crates from workspace (default: library crates only)",
+            )
+            sub.add_argument(
+                "--full-method-docs",
+                action="store_true",
+                default=True,
+                help="Include full method documentation (default: True)",
+            )
+            sub.add_argument(
+                "--exclude-private",
+                action="store_true",
+                default=True,
+                help="Exclude private items (default: True)",
+            )
+        else:
+            # Standard web scrapers
+            sub = subparsers.add_parser(
+                name,
+                help=f"Scrape {name.upper()} documentation",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                description=config["class"].description,
+            )
+            sub.add_argument(
+                "--output-dir",
+                type=Path,
+                help=f"Output directory (default: {config['default_output']})",
+            )
+            sub.add_argument(
+                "--force",
+                action="store_true",
+                help="Clear cache and re-fetch from network",
+            )
 
     return parser
 
@@ -144,15 +209,25 @@ def main() -> None:
     output_dir = args.output_dir or Path(config["default_output"])
 
     # Create scraper instance
-    scraper_class = config["class"]
-    if config["requires_api_type"]:
-        scraper = scraper_class(
+    if config["is_rust"]:
+        scraper = config["class"](
+            target=args.target,
+            output_dir=output_dir,
+            force=args.force,
+            primary_crate=getattr(args, "primary_crate", None),
+            include_deps=getattr(args, "include_deps", False),
+            include_examples=getattr(args, "include_examples", False),
+            full_method_docs=getattr(args, "full_method_docs", True),
+            exclude_private=getattr(args, "exclude_private", True),
+        )
+    elif config.get("requires_api_type"):
+        scraper = config["class"](
             api_type=config["api_type"],
             output_dir=output_dir,
             force=args.force,
         )
     else:
-        scraper = scraper_class(output_dir=output_dir, force=args.force)
+        scraper = config["class"](output_dir=output_dir, force=args.force)
 
     # Run the scraper
     scraper.run()

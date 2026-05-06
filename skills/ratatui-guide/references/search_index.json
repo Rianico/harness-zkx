@@ -1,0 +1,2279 @@
+{
+  "items": [
+    {
+      "name": "AMBER",
+      "path": "ratatui_core::style::palette::tailwind::AMBER",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fffbeb\"></div><div style=\"background-color: #fef3c7\"></div><div style=\"background-color: #fde68a\"></div><div style=\"background-color: #fcd34d\"></div><div style=\"background-color: #fbbf24\"></div><div style=\"background-color: #f59e0b\"></div><div style=\"background-color: #d97706\"></div><div style=\"background-color: #b45309\"></div><div style=\"background-color: #92400e\"></div><div style=\"background-color: #78350f\"></div><div style=\"background-color: #451a03\"></div></div>"
+    },
+    {
+      "name": "AMBER",
+      "path": "ratatui_core::style::palette::material::AMBER",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "AccentedPalette",
+      "path": "ratatui_core::style::palette::material::AccentedPalette",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md",
+      "summary": "A palette of colors for use in Material design with accent colors"
+    },
+    {
+      "name": "Axis",
+      "path": "ratatui_widgets::chart::Axis",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/chart/index.md",
+      "summary": "An X or Y axis for the [`Chart`] widget"
+    },
+    {
+      "name": "BLACK",
+      "path": "ratatui_core::style::palette::tailwind::BLACK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #000000\"></div></div>"
+    },
+    {
+      "name": "BLACK",
+      "path": "ratatui_core::style::palette::material::BLACK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "BLUE",
+      "path": "ratatui_core::style::palette::tailwind::BLUE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #eff6ff\"></div><div style=\"background-color: #dbeafe\"></div><div style=\"background-color: #bfdbfe\"></div><div style=\"background-color: #93c5fd\"></div><div style=\"background-color: #60a5fa\"></div><div style=\"background-color: #3b82f6\"></div><div style=\"background-color: #2563eb\"></div><div style=\"background-color: #1d4ed8\"></div><div style=\"background-color: #1e40af\"></div><div style=\"background-color: #1e3a8a\"></div><div style=\"background-color: #172554\"></div></div>"
+    },
+    {
+      "name": "BLUE",
+      "path": "ratatui_core::style::palette::material::BLUE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "BLUE_GRAY",
+      "path": "ratatui_core::style::palette::material::BLUE_GRAY",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "BOTTOM_LEFT",
+      "path": "ratatui_core::symbols::line::BOTTOM_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::line::BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "BRAILLE",
+      "path": "ratatui_core::symbols::braille::BRAILLE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/braille/index.md"
+    },
+    {
+      "name": "BROWN",
+      "path": "ratatui_core::style::palette::material::BROWN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "Backend",
+      "path": "ratatui_core::backend::Backend",
+      "kind": "trait",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/backend/index.md",
+      "summary": "The `Backend` trait provides an abstraction over different terminal libraries. It defines the"
+    },
+    {
+      "name": "BarChart",
+      "path": "ratatui_widgets::barchart::BarChart",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/barchart/index.md",
+      "summary": "A chart showing values as [bars](Bar)."
+    },
+    {
+      "name": "Block",
+      "path": "ratatui_widgets::block::Block",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/block/index.md",
+      "summary": "A widget that renders borders, titles, and padding around other widgets."
+    },
+    {
+      "name": "BlockExt",
+      "path": "ratatui_widgets::block::BlockExt",
+      "kind": "trait",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/block/index.md",
+      "summary": "An extension trait for [`Block`] that provides some convenience methods."
+    },
+    {
+      "name": "BorderType",
+      "path": "ratatui_widgets::borders::BorderType",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/borders/index.md",
+      "summary": "The type of border of a [`Block`](crate::block::Block)."
+    },
+    {
+      "name": "Borders",
+      "path": "ratatui_widgets::borders::Borders",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/borders/index.md",
+      "summary": "Bitflags that can be composed to set the visible borders essentially on the block widget."
+    },
+    {
+      "name": "CROSS",
+      "path": "ratatui_core::symbols::line::CROSS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "CYAN",
+      "path": "ratatui_core::style::palette::tailwind::CYAN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #ecfeff\"></div><div style=\"background-color: #cffafe\"></div><div style=\"background-color: #a5f3fc\"></div><div style=\"background-color: #67e8f9\"></div><div style=\"background-color: #22d3ee\"></div><div style=\"background-color: #06b6d4\"></div><div style=\"background-color: #0891b2\"></div><div style=\"background-color: #0e7490\"></div><div style=\"background-color: #155e75\"></div><div style=\"background-color: #164e63\"></div><div style=\"background-color: #083344\"></div></div>"
+    },
+    {
+      "name": "CYAN",
+      "path": "ratatui_core::style::palette::material::CYAN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "CalendarEventStore",
+      "path": "ratatui_widgets::calendar::CalendarEventStore",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/calendar/index.md",
+      "summary": "A simple `DateStyler` based on a [`HashMap`]"
+    },
+    {
+      "name": "Canvas",
+      "path": "ratatui_widgets::canvas::Canvas",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/canvas/index.md",
+      "summary": "The Canvas widget provides a means to draw shapes (Lines, Rectangles, Circles, etc.) on a grid."
+    },
+    {
+      "name": "Chart",
+      "path": "ratatui_widgets::chart::Chart",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/chart/index.md",
+      "summary": "A widget to plot one or more [`Dataset`] in a cartesian coordinate system"
+    },
+    {
+      "name": "Clear",
+      "path": "ratatui_widgets::clear::Clear",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/clear/index.md",
+      "summary": "A widget to clear/reset a certain area to allow overdrawing (e.g. for popups)."
+    },
+    {
+      "name": "ClearType",
+      "path": "ratatui_core::backend::ClearType",
+      "kind": "enum",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/backend/index.md",
+      "summary": "Defines which region of the terminal's visible display area is cleared."
+    },
+    {
+      "name": "Context",
+      "path": "ratatui_widgets::canvas::Context",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/canvas/index.md",
+      "summary": "Holds the state of the [`Canvas`] when painting to it."
+    },
+    {
+      "name": "CrosstermBackend",
+      "path": "ratatui_crossterm::CrosstermBackend",
+      "kind": "struct",
+      "crate": "ratatui_crossterm",
+      "file": "ratatui_crossterm/index.md",
+      "summary": "A [`Backend`] implementation that uses [Crossterm] to render to the terminal."
+    },
+    {
+      "name": "DARK",
+      "path": "ratatui_core::symbols::shade::DARK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/shade/index.md"
+    },
+    {
+      "name": "DEEP_ORANGE",
+      "path": "ratatui_core::style::palette::material::DEEP_ORANGE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "DEEP_PURPLE",
+      "path": "ratatui_core::style::palette::material::DEEP_PURPLE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "DOT",
+      "path": "ratatui_core::symbols::marker::DOT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/marker/index.md"
+    },
+    {
+      "name": "DOUBLE",
+      "path": "ratatui_core::symbols::line::DOUBLE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE",
+      "path": "ratatui_core::symbols::border::DOUBLE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with a double line width"
+    },
+    {
+      "name": "DOUBLE_BOTTOM_LEFT",
+      "path": "ratatui_core::symbols::line::DOUBLE_BOTTOM_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::line::DOUBLE_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_CROSS",
+      "path": "ratatui_core::symbols::line::DOUBLE_CROSS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::DOUBLE_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_HORIZONTAL",
+      "path": "ratatui_core::symbols::scrollbar::DOUBLE_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/scrollbar/index.md"
+    },
+    {
+      "name": "DOUBLE_HORIZONTAL_DOWN",
+      "path": "ratatui_core::symbols::line::DOUBLE_HORIZONTAL_DOWN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_HORIZONTAL_UP",
+      "path": "ratatui_core::symbols::line::DOUBLE_HORIZONTAL_UP",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_TOP_LEFT",
+      "path": "ratatui_core::symbols::line::DOUBLE_TOP_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_TOP_RIGHT",
+      "path": "ratatui_core::symbols::line::DOUBLE_TOP_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_VERTICAL",
+      "path": "ratatui_core::symbols::line::DOUBLE_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_VERTICAL",
+      "path": "ratatui_core::symbols::scrollbar::DOUBLE_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/scrollbar/index.md"
+    },
+    {
+      "name": "DOUBLE_VERTICAL_LEFT",
+      "path": "ratatui_core::symbols::line::DOUBLE_VERTICAL_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "DOUBLE_VERTICAL_RIGHT",
+      "path": "ratatui_core::symbols::line::DOUBLE_VERTICAL_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "Dataset",
+      "path": "ratatui_widgets::chart::Dataset",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/chart/index.md",
+      "summary": "A group of data points"
+    },
+    {
+      "name": "DateStyler",
+      "path": "ratatui_widgets::calendar::DateStyler",
+      "kind": "trait",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/calendar/index.md",
+      "summary": "Provides a method for styling a given date. [Monthly] is generic on this trait, so any type"
+    },
+    {
+      "name": "DefaultTerminal",
+      "path": "ratatui::init::DefaultTerminal",
+      "kind": "type",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "A type alias for the default terminal type."
+    },
+    {
+      "name": "EMERALD",
+      "path": "ratatui_core::style::palette::tailwind::EMERALD",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f0fdfa\"></div><div style=\"background-color: #ccfbf1\"></div><div style=\"background-color: #99f6e4\"></div><div style=\"background-color: #5eead4\"></div><div style=\"background-color: #2dd4bf\"></div><div style=\"background-color: #14b8a6\"></div><div style=\"background-color: #0d9488\"></div><div style=\"background-color: #0f766e\"></div><div style=\"background-color: #115e59\"></div><div style=\"background-color: #134e4a\"></div><div style=\"background-color: #042f2e\"></div></div>"
+    },
+    {
+      "name": "EMPTY",
+      "path": "ratatui_core::symbols::shade::EMPTY",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/shade/index.md"
+    },
+    {
+      "name": "EMPTY",
+      "path": "ratatui_core::symbols::border::EMPTY",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Empty border set"
+    },
+    {
+      "name": "FIVE_EIGHTHS",
+      "path": "ratatui_core::symbols::bar::FIVE_EIGHTHS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "FIVE_EIGHTHS",
+      "path": "ratatui_core::symbols::block::FIVE_EIGHTHS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "FUCHSIA",
+      "path": "ratatui_core::style::palette::tailwind::FUCHSIA",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fdf4ff\"></div><div style=\"background-color: #fae8ff\"></div><div style=\"background-color: #f5d0fe\"></div><div style=\"background-color: #f0abfc\"></div><div style=\"background-color: #e879f9\"></div><div style=\"background-color: #d946ef\"></div><div style=\"background-color: #c026d3\"></div><div style=\"background-color: #a21caf\"></div><div style=\"background-color: #86198f\"></div><div style=\"background-color: #701a75\"></div><div style=\"background-color: #4a044e\"></div></div>"
+    },
+    {
+      "name": "FULL",
+      "path": "ratatui_core::symbols::block::FULL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "FULL",
+      "path": "ratatui_core::symbols::half_block::FULL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/half_block/index.md"
+    },
+    {
+      "name": "FULL",
+      "path": "ratatui_core::symbols::bar::FULL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "FULL",
+      "path": "ratatui_core::symbols::shade::FULL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/shade/index.md"
+    },
+    {
+      "name": "FULL",
+      "path": "ratatui_core::symbols::border::FULL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Solid border set"
+    },
+    {
+      "name": "Fill",
+      "path": "ratatui_widgets::fill::Fill",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/fill/index.md",
+      "summary": "A widget that fills its render area with a single repeated symbol and style."
+    },
+    {
+      "name": "FrameExt",
+      "path": "ratatui::widgets::FrameExt",
+      "kind": "trait",
+      "crate": "ratatui",
+      "file": "ratatui/widgets/index.md",
+      "summary": " Extension trait for [`Frame`] that provides methods to render [`WidgetRef`] and"
+    },
+    {
+      "name": "FromCrossterm",
+      "path": "ratatui_crossterm::FromCrossterm",
+      "kind": "trait",
+      "crate": "ratatui_crossterm",
+      "file": "ratatui_crossterm/index.md",
+      "summary": "A trait for converting a Crossterm type to a Ratatui type."
+    },
+    {
+      "name": "FromTermwiz",
+      "path": "ratatui_termwiz::FromTermwiz",
+      "kind": "trait",
+      "crate": "ratatui_termwiz",
+      "file": "ratatui_termwiz/index.md",
+      "summary": "A trait for converting types from Termwiz to Ratatui."
+    },
+    {
+      "name": "GRAY",
+      "path": "ratatui_core::style::palette::material::GRAY",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "GRAY",
+      "path": "ratatui_core::style::palette::tailwind::GRAY",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f9fafb\"></div><div style=\"background-color: #f3f4f6\"></div><div style=\"background-color: #e5e7eb\"></div><div style=\"background-color: #d1d5db\"></div><div style=\"background-color: #9ca3af\"></div><div style=\"background-color: #6b7280\"></div><div style=\"background-color: #4b5563\"></div><div style=\"background-color: #374151\"></div><div style=\"background-color: #1f2937\"></div><div style=\"background-color: #111827\"></div><div style=\"background-color: #030712\"></div></div>"
+    },
+    {
+      "name": "GREEN",
+      "path": "ratatui_core::style::palette::tailwind::GREEN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f0fdf4\"></div><div style=\"background-color: #dcfce7\"></div><div style=\"background-color: #bbf7d0\"></div><div style=\"background-color: #86efac\"></div><div style=\"background-color: #4ade80\"></div><div style=\"background-color: #22c55e\"></div><div style=\"background-color: #16a34a\"></div><div style=\"background-color: #15803d\"></div><div style=\"background-color: #166534\"></div><div style=\"background-color: #14532d\"></div><div style=\"background-color: #052e16\"></div></div>"
+    },
+    {
+      "name": "GREEN",
+      "path": "ratatui_core::style::palette::material::GREEN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "Gauge",
+      "path": "ratatui_widgets::gauge::Gauge",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/gauge/index.md",
+      "summary": "A widget to display a progress bar."
+    },
+    {
+      "name": "GraphType",
+      "path": "ratatui_widgets::chart::GraphType",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/chart/index.md",
+      "summary": "Used to determine which style of graphing to use"
+    },
+    {
+      "name": "HALF",
+      "path": "ratatui_core::symbols::bar::HALF",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "HALF",
+      "path": "ratatui_core::symbols::block::HALF",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "HEAVY_DOUBLE_DASHED",
+      "path": "ratatui_core::symbols::line::HEAVY_DOUBLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_DOUBLE_DASHED",
+      "path": "ratatui_core::symbols::border::HEAVY_DOUBLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with thick double-dashed border lines"
+    },
+    {
+      "name": "HEAVY_DOUBLE_DASH_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::HEAVY_DOUBLE_DASH_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_DOUBLE_DASH_VERTICAL",
+      "path": "ratatui_core::symbols::line::HEAVY_DOUBLE_DASH_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_QUADRUPLE_DASHED",
+      "path": "ratatui_core::symbols::border::HEAVY_QUADRUPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with thick quadruple-dashed border lines"
+    },
+    {
+      "name": "HEAVY_QUADRUPLE_DASHED",
+      "path": "ratatui_core::symbols::line::HEAVY_QUADRUPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_QUADRUPLE_DASH_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::HEAVY_QUADRUPLE_DASH_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_QUADRUPLE_DASH_VERTICAL",
+      "path": "ratatui_core::symbols::line::HEAVY_QUADRUPLE_DASH_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_TRIPLE_DASHED",
+      "path": "ratatui_core::symbols::line::HEAVY_TRIPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_TRIPLE_DASHED",
+      "path": "ratatui_core::symbols::border::HEAVY_TRIPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with thick triple-dashed border lines"
+    },
+    {
+      "name": "HEAVY_TRIPLE_DASH_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::HEAVY_TRIPLE_DASH_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HEAVY_TRIPLE_DASH_VERTICAL",
+      "path": "ratatui_core::symbols::line::HEAVY_TRIPLE_DASH_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HORIZONTAL",
+      "path": "ratatui_core::symbols::line::HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HORIZONTAL",
+      "path": "ratatui_core::symbols::scrollbar::HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/scrollbar/index.md"
+    },
+    {
+      "name": "HORIZONTAL_DOWN",
+      "path": "ratatui_core::symbols::line::HORIZONTAL_DOWN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "HORIZONTAL_UP",
+      "path": "ratatui_core::symbols::line::HORIZONTAL_UP",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "INDIGO",
+      "path": "ratatui_core::style::palette::material::INDIGO",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "INDIGO",
+      "path": "ratatui_core::style::palette::tailwind::INDIGO",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #eef2ff\"></div><div style=\"background-color: #e0e7ff\"></div><div style=\"background-color: #c7d2fe\"></div><div style=\"background-color: #a5b4fc\"></div><div style=\"background-color: #818cf8\"></div><div style=\"background-color: #6366f1\"></div><div style=\"background-color: #4f46e5\"></div><div style=\"background-color: #4338ca\"></div><div style=\"background-color: #3730a3\"></div><div style=\"background-color: #312e81\"></div><div style=\"background-color: #1e1b4b\"></div></div>"
+    },
+    {
+      "name": "IntoCrossterm",
+      "path": "ratatui_crossterm::IntoCrossterm",
+      "kind": "trait",
+      "crate": "ratatui_crossterm",
+      "file": "ratatui_crossterm/index.md",
+      "summary": "A trait for converting a Ratatui type to a Crossterm type."
+    },
+    {
+      "name": "IntoTermwiz",
+      "path": "ratatui_termwiz::IntoTermwiz",
+      "kind": "trait",
+      "crate": "ratatui_termwiz",
+      "file": "ratatui_termwiz/index.md",
+      "summary": "A trait for converting types from Ratatui to Termwiz."
+    },
+    {
+      "name": "LIGHT",
+      "path": "ratatui_core::symbols::shade::LIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/shade/index.md"
+    },
+    {
+      "name": "LIGHT_BLUE",
+      "path": "ratatui_core::style::palette::material::LIGHT_BLUE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "LIGHT_DOUBLE_DASHED",
+      "path": "ratatui_core::symbols::line::LIGHT_DOUBLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_DOUBLE_DASHED",
+      "path": "ratatui_core::symbols::border::LIGHT_DOUBLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with light double-dashed border lines"
+    },
+    {
+      "name": "LIGHT_DOUBLE_DASH_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::LIGHT_DOUBLE_DASH_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_DOUBLE_DASH_VERTICAL",
+      "path": "ratatui_core::symbols::line::LIGHT_DOUBLE_DASH_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_GREEN",
+      "path": "ratatui_core::style::palette::material::LIGHT_GREEN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "LIGHT_QUADRUPLE_DASHED",
+      "path": "ratatui_core::symbols::border::LIGHT_QUADRUPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with light quadruple-dashed border lines"
+    },
+    {
+      "name": "LIGHT_QUADRUPLE_DASHED",
+      "path": "ratatui_core::symbols::line::LIGHT_QUADRUPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_QUADRUPLE_DASH_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::LIGHT_QUADRUPLE_DASH_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_QUADRUPLE_DASH_VERTICAL",
+      "path": "ratatui_core::symbols::line::LIGHT_QUADRUPLE_DASH_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_TRIPLE_DASHED",
+      "path": "ratatui_core::symbols::border::LIGHT_TRIPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with light triple-dashed border lines"
+    },
+    {
+      "name": "LIGHT_TRIPLE_DASHED",
+      "path": "ratatui_core::symbols::line::LIGHT_TRIPLE_DASHED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_TRIPLE_DASH_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::LIGHT_TRIPLE_DASH_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIGHT_TRIPLE_DASH_VERTICAL",
+      "path": "ratatui_core::symbols::line::LIGHT_TRIPLE_DASH_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "LIME",
+      "path": "ratatui_core::style::palette::material::LIME",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "LIME",
+      "path": "ratatui_core::style::palette::tailwind::LIME",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f7fee7\"></div><div style=\"background-color: #ecfccb\"></div><div style=\"background-color: #d9f99d\"></div><div style=\"background-color: #bef264\"></div><div style=\"background-color: #a3e635\"></div><div style=\"background-color: #84cc16\"></div><div style=\"background-color: #65a30d\"></div><div style=\"background-color: #4d7c0f\"></div><div style=\"background-color: #3f6212\"></div><div style=\"background-color: #365314\"></div><div style=\"background-color: #1a2e05\"></div></div>"
+    },
+    {
+      "name": "LOWER",
+      "path": "ratatui_core::symbols::half_block::LOWER",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/half_block/index.md"
+    },
+    {
+      "name": "Label",
+      "path": "ratatui_widgets::canvas::Label",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/canvas/index.md",
+      "summary": "Label to draw some text on the canvas"
+    },
+    {
+      "name": "LegendPosition",
+      "path": "ratatui_widgets::chart::LegendPosition",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/chart/index.md",
+      "summary": "Allow users to specify the position of a legend in a [`Chart`]"
+    },
+    {
+      "name": "LineGauge",
+      "path": "ratatui_widgets::gauge::LineGauge",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/gauge/index.md",
+      "summary": "A compact widget to display a progress bar over a single thin line."
+    },
+    {
+      "name": "List",
+      "path": "ratatui_widgets::list::List",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/list/index.md",
+      "summary": "A widget to display several items among which one can be selected (optional)"
+    },
+    {
+      "name": "ListDirection",
+      "path": "ratatui_widgets::list::ListDirection",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/list/index.md",
+      "summary": "Defines the direction in which the list will be rendered."
+    },
+    {
+      "name": "MEDIUM",
+      "path": "ratatui_core::symbols::shade::MEDIUM",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/shade/index.md"
+    },
+    {
+      "name": "Marker",
+      "path": "ratatui_core::symbols::marker::Marker",
+      "kind": "enum",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/marker/index.md",
+      "summary": "Marker to use when plotting data points"
+    },
+    {
+      "name": "MascotEyeColor",
+      "path": "ratatui_widgets::mascot::MascotEyeColor",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/mascot/index.md",
+      "summary": "State for the mascot's eye"
+    },
+    {
+      "name": "MergeStrategy",
+      "path": "ratatui_core::symbols::merge::MergeStrategy",
+      "kind": "enum",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/merge/index.md",
+      "summary": "A strategy for merging two symbols into one."
+    },
+    {
+      "name": "Modifier",
+      "path": "ratatui_core::style::Modifier",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/index.md",
+      "summary": "Modifier changes the way a piece of text is displayed."
+    },
+    {
+      "name": "Monthly",
+      "path": "ratatui_widgets::calendar::Monthly",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/calendar/index.md",
+      "summary": "Display a month calendar for the month containing `display_date`"
+    },
+    {
+      "name": "NEUTRAL",
+      "path": "ratatui_core::style::palette::tailwind::NEUTRAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fafafa\"></div><div style=\"background-color: #f5f5f5\"></div><div style=\"background-color: #e5e5e5\"></div><div style=\"background-color: #d4d4d4\"></div><div style=\"background-color: #a3a3a3\"></div><div style=\"background-color: #737373\"></div><div style=\"background-color: #525252\"></div><div style=\"background-color: #404040\"></div><div style=\"background-color: #262626\"></div><div style=\"background-color: #171717\"></div><div style=\"background-color: #0a0a0a\"></div></div>"
+    },
+    {
+      "name": "NINE_LEVELS",
+      "path": "ratatui_core::symbols::block::NINE_LEVELS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "NINE_LEVELS",
+      "path": "ratatui_core::symbols::bar::NINE_LEVELS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "NORMAL",
+      "path": "ratatui_core::symbols::line::NORMAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "NonAccentedPalette",
+      "path": "ratatui_core::style::palette::material::NonAccentedPalette",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md",
+      "summary": "A palette of colors for use in Material design without accent colors"
+    },
+    {
+      "name": "OCTANTS",
+      "path": "ratatui_core::symbols::pixel::OCTANTS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/pixel/index.md"
+    },
+    {
+      "name": "ONE_EIGHTH",
+      "path": "ratatui_core::symbols::bar::ONE_EIGHTH",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "ONE_EIGHTH",
+      "path": "ratatui_core::symbols::block::ONE_EIGHTH",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "ONE_EIGHTH_BOTTOM_EIGHT",
+      "path": "ratatui_core::symbols::border::ONE_EIGHTH_BOTTOM_EIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "ONE_EIGHTH_LEFT_EIGHT",
+      "path": "ratatui_core::symbols::border::ONE_EIGHTH_LEFT_EIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "ONE_EIGHTH_RIGHT_EIGHT",
+      "path": "ratatui_core::symbols::border::ONE_EIGHTH_RIGHT_EIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "ONE_EIGHTH_TALL",
+      "path": "ratatui_core::symbols::border::ONE_EIGHTH_TALL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Tall border set based on McGugan box technique"
+    },
+    {
+      "name": "ONE_EIGHTH_TOP_EIGHT",
+      "path": "ratatui_core::symbols::border::ONE_EIGHTH_TOP_EIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "ONE_EIGHTH_WIDE",
+      "path": "ratatui_core::symbols::border::ONE_EIGHTH_WIDE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Wide border set based on McGugan box technique"
+    },
+    {
+      "name": "ONE_QUARTER",
+      "path": "ratatui_core::symbols::block::ONE_QUARTER",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "ONE_QUARTER",
+      "path": "ratatui_core::symbols::bar::ONE_QUARTER",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "ORANGE",
+      "path": "ratatui_core::style::palette::material::ORANGE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "ORANGE",
+      "path": "ratatui_core::style::palette::tailwind::ORANGE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fff7ed\"></div><div style=\"background-color: #ffedd5\"></div><div style=\"background-color: #fed7aa\"></div><div style=\"background-color: #fdba74\"></div><div style=\"background-color: #fb923c\"></div><div style=\"background-color: #f97316\"></div><div style=\"background-color: #ea580c\"></div><div style=\"background-color: #c2410c\"></div><div style=\"background-color: #9a3412\"></div><div style=\"background-color: #7c2d12\"></div><div style=\"background-color: #431407\"></div></div>"
+    },
+    {
+      "name": "PINK",
+      "path": "ratatui_core::style::palette::tailwind::PINK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fdf2f8\"></div><div style=\"background-color: #fce7f3\"></div><div style=\"background-color: #fbcfe8\"></div><div style=\"background-color: #f9a8d4\"></div><div style=\"background-color: #f472b6\"></div><div style=\"background-color: #ec4899\"></div><div style=\"background-color: #db2777\"></div><div style=\"background-color: #be185d\"></div><div style=\"background-color: #9d174d\"></div><div style=\"background-color: #831843\"></div><div style=\"background-color: #500724\"></div></div>"
+    },
+    {
+      "name": "PINK",
+      "path": "ratatui_core::style::palette::material::PINK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "PLAIN",
+      "path": "ratatui_core::symbols::border::PLAIN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with a single line width"
+    },
+    {
+      "name": "PROPORTIONAL_TALL",
+      "path": "ratatui_core::symbols::border::PROPORTIONAL_TALL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Tall proportional (visually equal width and height) border with using set of quadrants."
+    },
+    {
+      "name": "PROPORTIONAL_WIDE",
+      "path": "ratatui_core::symbols::border::PROPORTIONAL_WIDE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Wide proportional (visually equal width and height) border with using set of quadrants."
+    },
+    {
+      "name": "PURPLE",
+      "path": "ratatui_core::style::palette::tailwind::PURPLE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #faf5ff\"></div><div style=\"background-color: #f3e8ff\"></div><div style=\"background-color: #e9d5ff\"></div><div style=\"background-color: #d8b4fe\"></div><div style=\"background-color: #c084fc\"></div><div style=\"background-color: #a855f7\"></div><div style=\"background-color: #9333ea\"></div><div style=\"background-color: #7e22ce\"></div><div style=\"background-color: #6b21a8\"></div><div style=\"background-color: #581c87\"></div><div style=\"background-color: #3b0764\"></div></div>"
+    },
+    {
+      "name": "PURPLE",
+      "path": "ratatui_core::style::palette::material::PURPLE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "Painter",
+      "path": "ratatui_widgets::canvas::Painter",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/canvas/index.md",
+      "summary": "Painter is an abstraction over the [`Context`] that allows to draw shapes on the grid."
+    },
+    {
+      "name": "Palette",
+      "path": "ratatui_core::style::palette::tailwind::Palette",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md"
+    },
+    {
+      "name": "Paragraph",
+      "path": "ratatui_widgets::paragraph::Paragraph",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/paragraph/index.md",
+      "summary": "A widget to display some text."
+    },
+    {
+      "name": "QUADRANTS",
+      "path": "ratatui_core::symbols::pixel::QUADRANTS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/pixel/index.md"
+    },
+    {
+      "name": "QUADRANT_BLOCK",
+      "path": "ratatui_core::symbols::border::QUADRANT_BLOCK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_BOTTOM_HALF",
+      "path": "ratatui_core::symbols::border::QUADRANT_BOTTOM_HALF",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_BOTTOM_LEFT",
+      "path": "ratatui_core::symbols::border::QUADRANT_BOTTOM_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::border::QUADRANT_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_INSIDE",
+      "path": "ratatui_core::symbols::border::QUADRANT_INSIDE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Quadrant used for setting a border inside a block by one half cell \"pixel\"."
+    },
+    {
+      "name": "QUADRANT_LEFT_HALF",
+      "path": "ratatui_core::symbols::border::QUADRANT_LEFT_HALF",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_OUTSIDE",
+      "path": "ratatui_core::symbols::border::QUADRANT_OUTSIDE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Quadrant used for setting a border outside a block by one half cell \"pixel\"."
+    },
+    {
+      "name": "QUADRANT_RIGHT_HALF",
+      "path": "ratatui_core::symbols::border::QUADRANT_RIGHT_HALF",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_HALF",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_HALF",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_LEFT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_LEFT_BOTTOM_LEFT_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_LEFT_BOTTOM_LEFT_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_LEFT_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_LEFT_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_LEFT_TOP_RIGHT_BOTTOM_LEFT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_LEFT_TOP_RIGHT_BOTTOM_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_LEFT_TOP_RIGHT_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_LEFT_TOP_RIGHT_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_RIGHT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_RIGHT_BOTTOM_LEFT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_RIGHT_BOTTOM_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "QUADRANT_TOP_RIGHT_BOTTOM_LEFT_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::border::QUADRANT_TOP_RIGHT_BOTTOM_LEFT_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "RED",
+      "path": "ratatui_core::style::palette::tailwind::RED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fef2f2\"></div><div style=\"background-color: #fee2e2\"></div><div style=\"background-color: #fecaca\"></div><div style=\"background-color: #fca5a5\"></div><div style=\"background-color: #f87171\"></div><div style=\"background-color: #ef4444\"></div><div style=\"background-color: #dc2626\"></div><div style=\"background-color: #b91c1c\"></div><div style=\"background-color: #991b1b\"></div><div style=\"background-color: #7f1d1d\"></div><div style=\"background-color: #450a0a\"></div></div>"
+    },
+    {
+      "name": "RED",
+      "path": "ratatui_core::style::palette::material::RED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "ROSE",
+      "path": "ratatui_core::style::palette::tailwind::ROSE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fff1f2\"></div><div style=\"background-color: #ffe4e6\"></div><div style=\"background-color: #fecdd3\"></div><div style=\"background-color: #fda4af\"></div><div style=\"background-color: #fb7185\"></div><div style=\"background-color: #f43f5e\"></div><div style=\"background-color: #e11d48\"></div><div style=\"background-color: #be123c\"></div><div style=\"background-color: #9f1239\"></div><div style=\"background-color: #881337\"></div><div style=\"background-color: #4c0519\"></div></div>"
+    },
+    {
+      "name": "ROUNDED",
+      "path": "ratatui_core::symbols::line::ROUNDED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "ROUNDED",
+      "path": "ratatui_core::symbols::border::ROUNDED",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with a single line width and rounded corners"
+    },
+    {
+      "name": "ROUNDED_BOTTOM_LEFT",
+      "path": "ratatui_core::symbols::line::ROUNDED_BOTTOM_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "ROUNDED_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::line::ROUNDED_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "ROUNDED_TOP_LEFT",
+      "path": "ratatui_core::symbols::line::ROUNDED_TOP_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "ROUNDED_TOP_RIGHT",
+      "path": "ratatui_core::symbols::line::ROUNDED_TOP_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "RatatuiLogo",
+      "path": "ratatui_widgets::logo::RatatuiLogo",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/logo/index.md",
+      "summary": "A widget that renders the Ratatui logo"
+    },
+    {
+      "name": "RatatuiMascot",
+      "path": "ratatui_widgets::mascot::RatatuiMascot",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/mascot/index.md",
+      "summary": "A widget that renders the Ratatui mascot"
+    },
+    {
+      "name": "RenderDirection",
+      "path": "ratatui_widgets::sparkline::RenderDirection",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/sparkline/index.md",
+      "summary": "Defines the direction in which sparkline will be rendered."
+    },
+    {
+      "name": "SEVEN_EIGHTHS",
+      "path": "ratatui_core::symbols::bar::SEVEN_EIGHTHS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "SEVEN_EIGHTHS",
+      "path": "ratatui_core::symbols::block::SEVEN_EIGHTHS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "SEXTANTS",
+      "path": "ratatui_core::symbols::pixel::SEXTANTS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/pixel/index.md"
+    },
+    {
+      "name": "SKY",
+      "path": "ratatui_core::style::palette::tailwind::SKY",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f0f9ff\"></div><div style=\"background-color: #e0f2fe\"></div><div style=\"background-color: #bae6fd\"></div><div style=\"background-color: #7dd3fc\"></div><div style=\"background-color: #38bdf8\"></div><div style=\"background-color: #0ea5e9\"></div><div style=\"background-color: #0284c7\"></div><div style=\"background-color: #0369a1\"></div><div style=\"background-color: #075985\"></div><div style=\"background-color: #0c4a6e\"></div><div style=\"background-color: #082f49\"></div></div>"
+    },
+    {
+      "name": "SLATE",
+      "path": "ratatui_core::style::palette::tailwind::SLATE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f8fafc\"></div><div style=\"background-color: #f1f5f9\"></div><div style=\"background-color: #e2e8f0\"></div><div style=\"background-color: #cbd5e1\"></div><div style=\"background-color: #94a3b8\"></div><div style=\"background-color: #64748b\"></div><div style=\"background-color: #475569\"></div><div style=\"background-color: #334155\"></div><div style=\"background-color: #1e293b\"></div><div style=\"background-color: #0f172a\"></div><div style=\"background-color: #020617\"></div></div>"
+    },
+    {
+      "name": "STONE",
+      "path": "ratatui_core::style::palette::tailwind::STONE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fafaf9\"></div><div style=\"background-color: #f5f5f4\"></div><div style=\"background-color: #e7e5e4\"></div><div style=\"background-color: #d6d3d1\"></div><div style=\"background-color: #a8a29e\"></div><div style=\"background-color: #78716c\"></div><div style=\"background-color: #57534e\"></div><div style=\"background-color: #44403c\"></div><div style=\"background-color: #292524\"></div><div style=\"background-color: #1c1917\"></div><div style=\"background-color: #0c0a09\"></div></div>"
+    },
+    {
+      "name": "ScrollDirection",
+      "path": "ratatui_widgets::scrollbar::ScrollDirection",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/scrollbar/index.md",
+      "summary": "An enum representing a scrolling direction."
+    },
+    {
+      "name": "Scrollbar",
+      "path": "ratatui_widgets::scrollbar::Scrollbar",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/scrollbar/index.md",
+      "summary": "A widget to display a scrollbar"
+    },
+    {
+      "name": "ScrollbarOrientation",
+      "path": "ratatui_widgets::scrollbar::ScrollbarOrientation",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/scrollbar/index.md",
+      "summary": "This is the position of the scrollbar around a given area."
+    },
+    {
+      "name": "ScrollbarState",
+      "path": "ratatui_widgets::scrollbar::ScrollbarState",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/scrollbar/index.md",
+      "summary": "A struct representing the state of a Scrollbar widget."
+    },
+    {
+      "name": "Set",
+      "path": "ratatui_core::symbols::scrollbar::Set",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/scrollbar/index.md",
+      "summary": "Scrollbar Set"
+    },
+    {
+      "name": "Set",
+      "path": "ratatui_core::symbols::border::Set",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md"
+    },
+    {
+      "name": "Set",
+      "path": "ratatui_core::symbols::bar::Set",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "Set",
+      "path": "ratatui_core::symbols::block::Set",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "Set",
+      "path": "ratatui_core::symbols::line::Set",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "Shape",
+      "path": "ratatui_widgets::canvas::Shape",
+      "kind": "trait",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/canvas/index.md",
+      "summary": "Something that can be drawn on a [`Canvas`]."
+    },
+    {
+      "name": "Size",
+      "path": "ratatui_widgets::logo::Size",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/logo/index.md",
+      "summary": "The size of the logo"
+    },
+    {
+      "name": "Sparkline",
+      "path": "ratatui_widgets::sparkline::Sparkline",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/sparkline/index.md",
+      "summary": "Widget to render a sparkline over one or more lines."
+    },
+    {
+      "name": "SparklineBar",
+      "path": "ratatui_widgets::sparkline::SparklineBar",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/sparkline/index.md",
+      "summary": "An bar in a `Sparkline`."
+    },
+    {
+      "name": "Style",
+      "path": "ratatui_core::style::Style",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/index.md",
+      "summary": "Style lets you control the main characteristics of the displayed elements."
+    },
+    {
+      "name": "TEAL",
+      "path": "ratatui_core::style::palette::tailwind::TEAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f5fdf4\"></div><div style=\"background-color: #e7f9e7\"></div><div style=\"background-color: #c6f6d5\"></div><div style=\"background-color: #9ae6b4\"></div><div style=\"background-color: #68d391\"></div><div style=\"background-color: #48bb78\"></div><div style=\"background-color: #38a169\"></div><div style=\"background-color: #2f855a\"></div><div style=\"background-color: #276749\"></div><div style=\"background-color: #22543d\"></div><div style=\"background-color: #0d3321\"></div></div>"
+    },
+    {
+      "name": "TEAL",
+      "path": "ratatui_core::style::palette::material::TEAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "THICK",
+      "path": "ratatui_core::symbols::border::THICK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/border/index.md",
+      "summary": "Border Set with a thick line width"
+    },
+    {
+      "name": "THICK",
+      "path": "ratatui_core::symbols::line::THICK",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_BOTTOM_LEFT",
+      "path": "ratatui_core::symbols::line::THICK_BOTTOM_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_BOTTOM_RIGHT",
+      "path": "ratatui_core::symbols::line::THICK_BOTTOM_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_CROSS",
+      "path": "ratatui_core::symbols::line::THICK_CROSS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_HORIZONTAL",
+      "path": "ratatui_core::symbols::line::THICK_HORIZONTAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_HORIZONTAL_DOWN",
+      "path": "ratatui_core::symbols::line::THICK_HORIZONTAL_DOWN",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_HORIZONTAL_UP",
+      "path": "ratatui_core::symbols::line::THICK_HORIZONTAL_UP",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_TOP_LEFT",
+      "path": "ratatui_core::symbols::line::THICK_TOP_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_TOP_RIGHT",
+      "path": "ratatui_core::symbols::line::THICK_TOP_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_VERTICAL",
+      "path": "ratatui_core::symbols::line::THICK_VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_VERTICAL_LEFT",
+      "path": "ratatui_core::symbols::line::THICK_VERTICAL_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THICK_VERTICAL_RIGHT",
+      "path": "ratatui_core::symbols::line::THICK_VERTICAL_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "THREE_EIGHTHS",
+      "path": "ratatui_core::symbols::block::THREE_EIGHTHS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "THREE_EIGHTHS",
+      "path": "ratatui_core::symbols::bar::THREE_EIGHTHS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "THREE_LEVELS",
+      "path": "ratatui_core::symbols::block::THREE_LEVELS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "THREE_LEVELS",
+      "path": "ratatui_core::symbols::bar::THREE_LEVELS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "THREE_QUARTERS",
+      "path": "ratatui_core::symbols::bar::THREE_QUARTERS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/bar/index.md"
+    },
+    {
+      "name": "THREE_QUARTERS",
+      "path": "ratatui_core::symbols::block::THREE_QUARTERS",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/block/index.md"
+    },
+    {
+      "name": "TOP_LEFT",
+      "path": "ratatui_core::symbols::line::TOP_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "TOP_RIGHT",
+      "path": "ratatui_core::symbols::line::TOP_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "Table",
+      "path": "ratatui_widgets::table::Table",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/table/index.md",
+      "summary": "A widget to display data in formatted columns."
+    },
+    {
+      "name": "Tabs",
+      "path": "ratatui_widgets::tabs::Tabs",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/tabs/index.md",
+      "summary": "A widget that displays a horizontal set of Tabs with a single tab selected."
+    },
+    {
+      "name": "Terminal",
+      "path": "ratatui_core::terminal::Terminal",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/terminal/index.md",
+      "summary": "An interface to interact and draw [`Frame`]s on the user's terminal."
+    },
+    {
+      "name": "TerminalOptions",
+      "path": "ratatui_core::terminal::TerminalOptions",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/terminal/index.md",
+      "summary": "Options to pass to [`Terminal::with_options`]"
+    },
+    {
+      "name": "TermwizBackend",
+      "path": "ratatui_termwiz::TermwizBackend",
+      "kind": "struct",
+      "crate": "ratatui_termwiz",
+      "file": "ratatui_termwiz/index.md",
+      "summary": "A [`Backend`] implementation that uses [Termwiz] to render to the terminal."
+    },
+    {
+      "name": "TitlePosition",
+      "path": "ratatui_widgets::block::TitlePosition",
+      "kind": "enum",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/block/index.md",
+      "summary": "Defines the position of the title."
+    },
+    {
+      "name": "UPPER",
+      "path": "ratatui_core::symbols::half_block::UPPER",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/half_block/index.md"
+    },
+    {
+      "name": "VERTICAL",
+      "path": "ratatui_core::symbols::line::VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "VERTICAL",
+      "path": "ratatui_core::symbols::scrollbar::VERTICAL",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/scrollbar/index.md"
+    },
+    {
+      "name": "VERTICAL_LEFT",
+      "path": "ratatui_core::symbols::line::VERTICAL_LEFT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "VERTICAL_RIGHT",
+      "path": "ratatui_core::symbols::line::VERTICAL_RIGHT",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/line/index.md"
+    },
+    {
+      "name": "VIOLET",
+      "path": "ratatui_core::style::palette::tailwind::VIOLET",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #f5f3ff\"></div><div style=\"background-color: #ede9fe\"></div><div style=\"background-color: #ddd6fe\"></div><div style=\"background-color: #c4b5fd\"></div><div style=\"background-color: #a78bfa\"></div><div style=\"background-color: #8b5cf6\"></div><div style=\"background-color: #7c3aed\"></div><div style=\"background-color: #6d28d9\"></div><div style=\"background-color: #5b21b6\"></div><div style=\"background-color: #4c1d95\"></div><div style=\"background-color: #2e1065\"></div></div>"
+    },
+    {
+      "name": "WHITE",
+      "path": "ratatui_core::style::palette::tailwind::WHITE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:22rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #ffffff\"></div></div>"
+    },
+    {
+      "name": "WHITE",
+      "path": "ratatui_core::style::palette::material::WHITE",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "WindowSize",
+      "path": "ratatui_core::backend::WindowSize",
+      "kind": "struct",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/backend/index.md",
+      "summary": "The window size in characters (columns / rows) as well as pixels."
+    },
+    {
+      "name": "Wrap",
+      "path": "ratatui_widgets::paragraph::Wrap",
+      "kind": "struct",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/paragraph/index.md",
+      "summary": "Describes how to wrap text across lines."
+    },
+    {
+      "name": "YELLOW",
+      "path": "ratatui_core::style::palette::material::YELLOW",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/material/index.md"
+    },
+    {
+      "name": "YELLOW",
+      "path": "ratatui_core::style::palette::tailwind::YELLOW",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fefce8\"></div><div style=\"background-color: #fef9c3\"></div><div style=\"background-color: #fef08a\"></div><div style=\"background-color: #fde047\"></div><div style=\"background-color: #facc15\"></div><div style=\"background-color: #eab308\"></div><div style=\"background-color: #ca8a04\"></div><div style=\"background-color: #a16207\"></div><div style=\"background-color: #854d0e\"></div><div style=\"background-color: #713f12\"></div><div style=\"background-color: #422006\"></div></div>"
+    },
+    {
+      "name": "ZINC",
+      "path": "ratatui_core::style::palette::tailwind::ZINC",
+      "kind": "const",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/tailwind/index.md",
+      "summary": "<style>.palette div{width:2rem;height:2rem}</style><div class=\"palette\" style=\"display:flex;flex-direction:row\"><div style=\"background-color: #fafafa\"></div><div style=\"background-color: #f5f5f5\"></div><div style=\"background-color: #e5e5e5\"></div><div style=\"background-color: #d4d4d4\"></div><div style=\"background-color: #a1a1aa\"></div><div style=\"background-color: #71717a\"></div><div style=\"background-color: #52525b\"></div><div style=\"background-color: #404040\"></div><div style=\"background-color: #262626\"></div><div style=\"background-color: #171717\"></div><div style=\"background-color: #09090b\"></div></div>"
+    },
+    {
+      "name": "assert_buffer_eq",
+      "path": "ratatui_core::assert_buffer_eq",
+      "kind": "macro",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "Assert that two buffers are equal by comparing their areas and content."
+    },
+    {
+      "name": "backend",
+      "path": "ratatui::backend",
+      "kind": "mod",
+      "crate": "ratatui",
+      "file": "ratatui/index.md",
+      "summary": "Re-exports for the backend implementations."
+    },
+    {
+      "name": "backend",
+      "path": "ratatui_core::backend",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "This module provides the backend implementations for different terminal libraries."
+    },
+    {
+      "name": "bar",
+      "path": "ratatui_core::symbols::bar",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "barchart",
+      "path": "ratatui_widgets::barchart",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`BarChart`] widget and its related types (e.g. [`Bar`], [`BarGroup`])."
+    },
+    {
+      "name": "block",
+      "path": "ratatui_core::symbols::block",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "block",
+      "path": "ratatui_widgets::block",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "Elements related to the `Block` base widget."
+    },
+    {
+      "name": "border",
+      "path": "ratatui_core::symbols::border",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "border",
+      "path": "ratatui_widgets::border",
+      "kind": "macro",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "Macro that constructs and returns a combination of the [`Borders`] object from TOP, BOTTOM, LEFT"
+    },
+    {
+      "name": "borders",
+      "path": "ratatui_widgets::borders",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "Border related types ([`Borders`], [`BorderType`]) and a macro to create borders ([`border`])."
+    },
+    {
+      "name": "braille",
+      "path": "ratatui_core::symbols::braille",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md",
+      "summary": "Braille symbols."
+    },
+    {
+      "name": "buffer",
+      "path": "ratatui_core::buffer",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "A module for the [`Buffer`] and [`Cell`] types."
+    },
+    {
+      "name": "calendar",
+      "path": "ratatui_widgets::calendar",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "A simple calendar widget. `(feature: widget-calendar)`"
+    },
+    {
+      "name": "canvas",
+      "path": "ratatui_widgets::canvas",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "A [`Canvas`] and a collection of [`Shape`]s."
+    },
+    {
+      "name": "chart",
+      "path": "ratatui_widgets::chart",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Chart`] widget is used to plot one or more [`Dataset`] in a cartesian coordinate system."
+    },
+    {
+      "name": "clear",
+      "path": "ratatui_widgets::clear",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Clear`] widget allows you to clear a certain area to allow overdrawing (e.g. for popups)."
+    },
+    {
+      "name": "constraint",
+      "path": "ratatui_macros::constraint",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "Creates a single constraint."
+    },
+    {
+      "name": "constraints",
+      "path": "ratatui_macros::constraints",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "Creates an array of constraints."
+    },
+    {
+      "name": "fill",
+      "path": "ratatui_widgets::fill",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Fill`] widget paints every cell in its area with a single symbol and style."
+    },
+    {
+      "name": "gauge",
+      "path": "ratatui_widgets::gauge",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Gauge`] widget is used to display a horizontal progress bar."
+    },
+    {
+      "name": "half_block",
+      "path": "ratatui_core::symbols::half_block",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "horizontal",
+      "path": "ratatui_macros::horizontal",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "Creates a horizontal layout with specified constraints."
+    },
+    {
+      "name": "init",
+      "path": "ratatui::init",
+      "kind": "mod",
+      "crate": "ratatui",
+      "file": "ratatui/index.md",
+      "summary": "Terminal initialization and restoration functions."
+    },
+    {
+      "name": "init",
+      "path": "ratatui::init::init",
+      "kind": "fn",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "Initialize a terminal with reasonable defaults for most applications."
+    },
+    {
+      "name": "init_with_options",
+      "path": "ratatui::init::init_with_options",
+      "kind": "fn",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "Initialize a terminal with the given options and reasonable defaults."
+    },
+    {
+      "name": "layout",
+      "path": "ratatui_core::layout",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "Layout and positioning in terminal user interfaces."
+    },
+    {
+      "name": "line",
+      "path": "ratatui_core::symbols::line",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "line",
+      "path": "ratatui_macros::line",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "A macro for creating a [`Line`] using vec! syntax."
+    },
+    {
+      "name": "list",
+      "path": "ratatui_widgets::list",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`List`] widget is used to display a list of items and allows selecting one or multiple"
+    },
+    {
+      "name": "logo",
+      "path": "ratatui_widgets::logo",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`RatatuiLogo`] widget renders the Ratatui logo."
+    },
+    {
+      "name": "marker",
+      "path": "ratatui_core::symbols::marker",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "mascot",
+      "path": "ratatui_widgets::mascot",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "A Ratatui mascot widget"
+    },
+    {
+      "name": "material",
+      "path": "ratatui_core::style::palette::material",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/index.md",
+      "summary": "Material design color palettes."
+    },
+    {
+      "name": "merge",
+      "path": "ratatui_core::symbols::merge",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md",
+      "summary": "This module provides strategies for merging symbols in a layout."
+    },
+    {
+      "name": "palette",
+      "path": "ratatui_core::style::palette",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/index.md",
+      "summary": "A module for defining color palettes."
+    },
+    {
+      "name": "paragraph",
+      "path": "ratatui_widgets::paragraph",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Paragraph`] widget and related types allows displaying a block of text with optional"
+    },
+    {
+      "name": "pixel",
+      "path": "ratatui_core::symbols::pixel",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md",
+      "summary": "Pseudo-pixel symbols: quadrant, sextant and octant characters."
+    },
+    {
+      "name": "prelude",
+      "path": "ratatui::prelude",
+      "kind": "mod",
+      "crate": "ratatui",
+      "file": "ratatui/index.md",
+      "summary": "A prelude for conveniently writing applications using this library."
+    },
+    {
+      "name": "restore",
+      "path": "ratatui::init::restore",
+      "kind": "fn",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "Restores the terminal to its original state."
+    },
+    {
+      "name": "row",
+      "path": "ratatui_macros::row",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "A macro for creating a [`Row`] using vec! syntax."
+    },
+    {
+      "name": "run",
+      "path": "ratatui::init::run",
+      "kind": "fn",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "Run a closure with a terminal initialized with reasonable defaults for most applications."
+    },
+    {
+      "name": "scrollbar",
+      "path": "ratatui_core::symbols::scrollbar",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "scrollbar",
+      "path": "ratatui_widgets::scrollbar",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Scrollbar`] widget is used to display a scrollbar alongside other widgets."
+    },
+    {
+      "name": "shade",
+      "path": "ratatui_core::symbols::shade",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/symbols/index.md"
+    },
+    {
+      "name": "span",
+      "path": "ratatui_macros::span",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "A macro for creating a [`Span`] using formatting syntax."
+    },
+    {
+      "name": "sparkline",
+      "path": "ratatui_widgets::sparkline",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Sparkline`] widget is used to display a sparkline over one or more lines."
+    },
+    {
+      "name": "style",
+      "path": "ratatui_core::style",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "`style` contains the primitives used to control how your user interface will look."
+    },
+    {
+      "name": "symbols",
+      "path": "ratatui_core::symbols",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "Symbols and markers for drawing various widgets."
+    },
+    {
+      "name": "table",
+      "path": "ratatui_widgets::table",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Table`] widget is used to display multiple rows and columns in a grid and allows selecting"
+    },
+    {
+      "name": "tabs",
+      "path": "ratatui_widgets::tabs",
+      "kind": "mod",
+      "crate": "ratatui_widgets",
+      "file": "ratatui_widgets/index.md",
+      "summary": "The [`Tabs`] widget displays a horizontal set of tabs with a single tab selected."
+    },
+    {
+      "name": "tailwind",
+      "path": "ratatui_core::style::palette::tailwind",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/style/palette/index.md",
+      "summary": "Represents the Tailwind CSS [default color palette][palette]."
+    },
+    {
+      "name": "terminal",
+      "path": "ratatui_core::terminal",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "Provides the [`Terminal`], [`Frame`], [`CompletedFrame`], and [`Viewport`] types."
+    },
+    {
+      "name": "text",
+      "path": "ratatui_core::text",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "Primitives for styled text."
+    },
+    {
+      "name": "text",
+      "path": "ratatui_macros::text",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "A macro for creating a [`Text`] using vec! syntax."
+    },
+    {
+      "name": "try_init",
+      "path": "ratatui::init::try_init",
+      "kind": "fn",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "Try to initialize a terminal using reasonable defaults for most applications."
+    },
+    {
+      "name": "try_init_with_options",
+      "path": "ratatui::init::try_init_with_options",
+      "kind": "fn",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "Try to initialize a terminal with the given options and reasonable defaults."
+    },
+    {
+      "name": "try_restore",
+      "path": "ratatui::init::try_restore",
+      "kind": "fn",
+      "crate": "ratatui",
+      "file": "ratatui/init/index.md",
+      "summary": "Restore the terminal to its original state."
+    },
+    {
+      "name": "vertical",
+      "path": "ratatui_macros::vertical",
+      "kind": "macro",
+      "crate": "ratatui_macros",
+      "file": "ratatui_macros/index.md",
+      "summary": "Creates a vertical layout with specified constraints."
+    },
+    {
+      "name": "widgets",
+      "path": "ratatui::widgets",
+      "kind": "mod",
+      "crate": "ratatui",
+      "file": "ratatui/index.md",
+      "summary": "Widgets are the building blocks of user interfaces in Ratatui."
+    },
+    {
+      "name": "widgets",
+      "path": "ratatui_core::widgets",
+      "kind": "mod",
+      "crate": "ratatui_core",
+      "file": "ratatui_core/index.md",
+      "summary": "The `widgets` module contains the `Widget` and `StatefulWidget` traits, which are used to"
+    }
+  ]
+}

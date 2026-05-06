@@ -1,7 +1,7 @@
 ---
 name: scraper
-description: "Documentation scraper for converting technical docs to LLM-friendly markdown. Use when scraping LSP specification, PTX ISA, CUDA Runtime/Driver API, or other technical documentation. Handles emoji anchor cleanup, internal link resolution, section splitting, and caching. Triggers on: scrape LSP, scrape PTX, scrape CUDA, documentation scraper, convert HTML to markdown, technical docs to markdown."
-argument-hint: "[lsp|ptx|runtime|driver] [--force] [--output-dir <path>]"
+description: "Documentation scraper for converting technical docs to LLM-friendly markdown. Use when scraping LSP specification, PTX ISA, CUDA Runtime/Driver API, Rust crate documentation, or other technical docs. For Rust projects (docs.rs, crates.io, GitHub repos), automatically uses cargo-docs-md for cleaner output. Handles emoji anchor cleanup, internal link resolution, section splitting, and caching. Triggers on: scrape LSP, scrape PTX, scrape CUDA, scrape Rust docs, docs.rs, rust documentation, convert HTML to markdown, technical docs to markdown."
+argument-hint: "[lsp|ptx|runtime|driver|rust <target>] [--force] [--output-dir <path>]"
 ---
 
 # Documentation Scraper Skill
@@ -19,6 +19,10 @@ uv run $SKILL_DIR/scripts/scrape.py ptx --output-dir ./references/ptx-docs
 uv run $SKILL_DIR/scripts/scrape.py runtime --output-dir ./references/cuda-runtime-docs
 uv run $SKILL_DIR/scripts/scrape.py driver --output-dir ./references/cuda-driver-docs
 
+# Rust crate documentation (uses cargo-docs-md)
+uv run $SKILL_DIR/scripts/scrape.py rust ratatui --output-dir ./references/ratatui-docs
+uv run $SKILL_DIR/scripts/scrape.py rust https://github.com/ratatui/ratatui
+
 # Force re-fetch (ignore cache)
 uv run $SKILL_DIR/scripts/scrape.py lsp --force
 ```
@@ -31,6 +35,61 @@ uv run $SKILL_DIR/scripts/scrape.py lsp --force
 | `ptx` | PTX ISA Documentation | Single-page ISA reference |
 | `runtime` | CUDA Runtime API | Multi-page API documentation |
 | `driver` | CUDA Driver API | Multi-page API documentation |
+| `rust` | Rust Crates | Uses cargo-docs-md for clean output |
+
+## Rust Documentation
+
+For Rust projects, the scraper uses `cargo-docs-md` which produces cleaner output than web scraping:
+
+### Prerequisites
+
+```bash
+# Install Rust nightly (required for JSON output)
+rustup toolchain install nightly
+
+# Install cargo-docs-md
+cargo install cargo-docs-md --locked
+```
+
+### Input Types
+
+```bash
+# By crate name (searches GitHub)
+uv run $SKILL_DIR/scripts/scrape.py rust ratatui
+
+# By GitHub URL
+uv run $SKILL_DIR/scripts/scrape.py rust https://github.com/ratatui/ratatui
+
+# By docs.rs URL
+uv run $SKILL_DIR/scripts/scrape.py rust https://docs.rs/ratatui
+
+# Local path
+uv run $SKILL_DIR/scripts/scrape.py rust ./my-local-crate
+```
+
+### Workspace Support
+
+For workspaces, the scraper filters to workspace crates only (not dependencies):
+
+```bash
+# Default: workspace crates only
+uv run $SKILL_DIR/scripts/scrape.py rust ratatui --output-dir ./docs
+# => 1.1M, 51 files (7 crates)
+
+# Include all dependencies
+uv run $SKILL_DIR/scripts/scrape.py rust ratatui --include-deps
+# => 30M, 1297 files (346 crates)
+```
+
+### Output Quality
+
+The `cargo-docs-md` output includes:
+- Nested directory structure mirroring module hierarchy
+- Quick Reference tables per module
+- Method signatures with deep-link anchors
+- Cross-crate links within workspace
+- SUMMARY.md for mdBook compatibility
+- search_index.json for search functionality
 
 ## Best Practices
 
@@ -201,6 +260,79 @@ uv run $SKILL_DIR/scripts/scrape.py <type> --force --output-dir ./references/<na
 # Run quality checks from checklist above
 ```
 
+## Iterative Cleanup Discovery
+
+Generated markdown often contains meaningless elements that bloat context. Use a systematic approach to discover and remove them.
+
+### Discovery Script Pattern
+
+After scraping, run detection scripts to find common artifacts:
+
+```bash
+# Count occurrences of potential meaningless elements
+rg -c '<span id="[^"]+"></span>' /path/to/output
+rg -c '<div id="[^"]+"></div>' /path/to/output
+rg -c '\[\]\(#' /path/to/output  # Empty anchor links
+rg -c '^\s*$' /path/to/output    # Blank lines (check for excess)
+
+# Sample specific patterns
+rg '<span id="[^"]+"></span>' /path/to/output -o | head -20
+```
+
+### Random Sampling for New Patterns
+
+After automated cleanup, randomly sample files to find additional artifacts:
+
+```bash
+# Sample 5 random markdown files
+fd -e md . /path/to/output | shuf -n 5 | xargs bat
+
+# Or sample specific directories
+fd -e md . /path/to/output/some_dir | shuf -n 3 | xargs less
+```
+
+Look for:
+- Empty HTML elements (`<span></span>`, `<div></div>`)
+- Duplicate content (navigation, footers)
+- Excessive whitespace (3+ consecutive blank lines)
+- Orphan anchors (links to removed sections)
+- Non-rendering markdown (HTML comments, hidden elements)
+
+### Update Cleanup Patterns
+
+When new meaningless elements are discovered:
+
+1. **Add pattern to scraper's `_cleanup_markdown()` method:**
+   ```python
+   patterns = [
+       (r'<span id="[^"]+"></span>\n?', ""),  # Empty anchor spans
+       (r'<div id="[^"]+"></div>\n?', ""),    # Empty divs
+       (r'\n{3,}', "\n\n"),                    # Excess blank lines
+   ]
+   ```
+
+2. **Re-run scraper and verify reduction:**
+   ```bash
+   # Before adding pattern
+   rg -c '<span id=' /path/to/output | awk -F: '{sum+=$2} END {print sum}'
+
+   # After adding pattern, re-scrape and check
+   uv run $SKILL_DIR/scripts/scrape.py rust <target> --output-dir /tmp/verify
+   rg -c '<span id=' /tmp/verify  # Should show 0 or significant reduction
+   ```
+
+3. **Document pattern in references/cleanup-patterns.md** for future reference
+
+### Common Meaningless Elements
+
+| Element | Pattern | Source |
+|---------|---------|--------|
+| Empty anchor spans | `<span id="..."></span>` | rustdoc (cargo-docs-md) |
+| Empty divs | `<div id="..."></div>` | Web scrapers |
+| Excess blank lines | `\n{3,}` | All scrapers |
+| Empty anchor links | `[](#...)` | Link conversion |
+| HTML comments | `<!-- ... -->` | Source HTML |
+
 ## LLM-Friendly Fetching (New)
 
 Modern websites increasingly support direct markdown delivery:
@@ -234,6 +366,7 @@ See `references/llms-txt-patterns.md` and `references/tavily-vs-ours-comparison.
 
 Scraper-specific patterns and code examples:
 
+- `references/rust-patterns.md` — Rust crate documentation via cargo-docs-md
 - `references/llms-txt-patterns.md` — llms.txt standard, Accept header, markdown fetching
 - `references/lsp-patterns.md` — Emoji anchor cleanup, link resolution for LSP spec
 - `references/cuda-patterns.md` — Multi-page discovery, cleanup pipeline for CUDA docs
