@@ -44,6 +44,14 @@ Dynamic data enters at boundaries; validate there, not everywhere. Once validate
 - At API boundaries: validate once with Pydantic/schemas
 - Internal code: trust the type, avoid defensive checks everywhere
 
+### Prefer Type-Safe Libraries
+Dynamic languages benefit from libraries that enforce type discipline. Prefer matured libs that reduce runtime uncertainty.
+- TypeScript over JavaScript for frontend code
+- Pydantic over `Any`/`object` for Python data models
+- Zod for runtime validation in JS/TS
+- serde with derived traits for Rust serialization
+- The goal: shift type errors from runtime to compile/validation time
+
 ## 5. Pre-Completion Checklist
 - [ ] Code is readable and well-named
 - [ ] Functions are small (<50 lines), Files focused (<800 lines), no deep nesting (>4 levels)
