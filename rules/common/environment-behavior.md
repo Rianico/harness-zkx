@@ -18,6 +18,7 @@ Use `llm-lsp-cli` for semantic code navigation when you need definitions, refere
 - **File structure:** `llm-lsp-cli lsp document-symbol <file> --depth 2` — all symbols in a file
 - **Workspace search:** `llm-lsp-cli lsp workspace-symbol "pattern"` — find symbols by name across workspace
 - **Diagnostics:** `llm-lsp-cli lsp diagnostics <file>` — type errors, warnings
+- **Workspace diagnostics:** `llm-lsp-cli lsp workspace-diagnostics` — all errors/warnings across workspace
 
 **Prerequisite:** Ensure daemon is running before LSP operations:
 ```bash
@@ -35,6 +36,7 @@ llm-lsp-cli daemon status || llm-lsp-cli daemon start
 | Get type signature/docs | `llm-lsp-cli lsp hover` |
 | Understand file structure | `llm-lsp-cli lsp document-symbol` |
 | Find symbol by name (workspace-wide) | `llm-lsp-cli lsp workspace-symbol` |
+| Check type errors/warnings | `llm-lsp-cli lsp diagnostics` / `workspace-diagnostics` |
 
 ### Reading Content
 - **Targeted reading:** Use the built-in `Read` tool — never `cat`/`bat` (they dump entire files and bloat context).
