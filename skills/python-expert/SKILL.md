@@ -1,6 +1,6 @@
 ---
 name: python-expert
-description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios including type boundary enforcement and suppression handling. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; implementing IPC or transport layers with generic types.
+description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios including type boundary enforcement and suppression handling. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; implementing IPC or transport layers with generic types; seeing reportUnknownVariableType diagnostics; deciding when to call model_dump(); premature serialization causing type loss; tracing types to source definitions.
 argument-hint: "[async|testing|django|pytorch|typing]"
 ---
 
@@ -12,6 +12,8 @@ Deep domain knowledge for complex Python scenarios. Invoke when baseline rules a
 
 **NO INLINE SUPPRESSIONS** - Fix the underlying issue instead of hiding with `# pyright: ignore`.
 
+**CRITICAL: Never assume a diagnostic is "legitimate"** — trace the calling chain, definitions, and specs to find the concrete type. Even LSP responses have concrete types from the spec.
+
 | Diagnostic | Fix |
 |------------|-----|
 | `reportUnusedParameter` | Use `_param` prefix |
@@ -19,6 +21,7 @@ Deep domain knowledge for complex Python scenarios. Invoke when baseline rules a
 | `reportReturnType` | Align signatures |
 | `reportAny` | Annotate containers |
 | `reportExplicitAny` | Use concrete type |
+| `reportUnknownVariableType` | Trace to source, find concrete type |
 
 ```python
 # Unused param: use _ prefix
@@ -28,6 +31,25 @@ async def handle(self, method: str, _params: dict) -> None:
 # Type mismatch: use Pydantic model
 params = TextDocumentIdentifier(uri=uri).model_dump(mode="json")
 result = await transport.send_request("textDocument/definition", params)
+```
+
+### Trace Types to Source
+
+When a diagnostic shows "unknown type", don't suppress — trace it:
+
+1. **Hover on the symbol** — see what type the checker infers
+2. **Find definition** — where does the value originate?
+3. **Check specs/schemas** — is there a known type in the spec?
+4. **Build a Pydantic model** — if response has a spec, create a model
+
+```python
+# WRONG: Assume it's dynamic, use object
+languages: object = config_data.get("languages", {})
+
+# RIGHT: Trace the type - config schema defines it
+# From config/schema.py: languages: dict[str, LanguageServerConfig]
+for lang_name, lang_conf in config_obj.languages.items():
+    root_markers: list[str] = lang_conf.root_markers  # Fully typed!
 ```
 
 **Reference:** [type-safety-patterns.md](references/type-safety-patterns.md) — Full details on containment patterns, IPC method registry, `@overload` patterns.
@@ -43,6 +65,43 @@ def get_data() -> Any: ...
 # GOOD: object forces validation
 def get_data() -> object: ...
 data = Model.model_validate(result)  # Now typed
+```
+
+### Keep Typed Models, Serialize at Boundaries
+
+**The #1 cause of typeless propagation: premature `model_dump()` calls.**
+
+```python
+# WRONG - throws away type information
+config_data: dict[str, object] = config_obj.model_dump(mode="json")
+languages: object = config_data.get("languages", {})  # Lost the type!
+if isinstance(languages, dict):
+    for lang_name, lang_conf in languages.items():
+        # lang_conf is object - must use isinstance everywhere
+
+# RIGHT - keep typed model, access directly
+for lang_name, lang_conf in config_obj.languages.items():
+    # lang_conf is LanguageServerConfig - fully typed!
+    root_markers: list[str] = lang_conf.root_markers
+```
+
+**When to call `model_dump()`:** Only at actual serialization boundaries (writing to file, sending over network, returning JSON response). Never "just in case" for internal processing.
+
+### object Annotation Overuse
+
+When you know the schema, use the concrete type:
+
+```python
+# WRONG - forces isinstance checks everywhere
+def process_config(config: dict[str, object]) -> None:
+    languages = config.get("languages", {})  # object
+    if isinstance(languages, dict):
+        ...
+
+# RIGHT - trust the validated type
+def process_config(config: ClientConfig) -> None:
+    for name, lang_conf in config.languages.items():
+        # lang_conf is LanguageServerConfig
 ```
 
 **Reference:** [type-safety-patterns.md](references/type-safety-patterns.md) — Single gateway architecture, designated Any zones.

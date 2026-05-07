@@ -52,6 +52,11 @@ Dynamic languages benefit from libraries that enforce type discipline. Prefer ma
 - serde with derived traits for Rust serialization
 - The goal: shift type errors from runtime to compile/validation time
 
+### Keep Typed Models, Serialize at Boundaries
+When using validation libraries (Pydantic, Zod, serde), keep typed models as long as possible. Only serialize (`model_dump()`, `toJSON()`) at actual output boundaries.
+- WRONG: `config_data = config_obj.model_dump(); languages = config_data.get("languages")` — loses type
+- RIGHT: `for lang_name, lang_conf in config_obj.languages.items():` — stays typed
+
 ## 5. Pre-Completion Checklist
 - [ ] Code is readable and well-named
 - [ ] Functions are small (<50 lines), Files focused (<800 lines), no deep nesting (>4 levels)

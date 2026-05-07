@@ -27,6 +27,8 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 - **Runtime validation:** `Model.model_validate(response)` for JSON/dict
 - **Type boundaries:** External data → `object` → Pydantic validation → typed models
 - **`object` over `Any`:** `object` forces validation; `Any` silently propagates
+- **Keep typed models:** Access `model.field` directly, don't call `model_dump()` early
+- **Trace types to source:** Never assume a diagnostic is "legitimate" — trace callings, definitions, and specs to find the concrete type
 
 ## Code Quality
 
