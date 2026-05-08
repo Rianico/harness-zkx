@@ -471,31 +471,73 @@ The rule sets the default. The skill guides complex scenarios.
 
 ## Subagent Delegation
 
-Skills at any taxonomy level (action, workflow, orchestration) may delegate to subagents. This is a **context management decision**, not a complexity threshold.
+**Core Philosophy: Subagent-First Execution**
+
+The orchestrator NEVER does implementation work directly. All code writing, file editing, test execution, doc updates, and review work happens in subagents. This is a fundamental architectural constraint, not a context optimization.
 
 ### Orchestrator Role
 
-The main agent always plays orchestrator. It routes, dispatches, and receives compact results. Skills own the execution pattern, including whether to delegate.
+| Orchestrator DOES | Orchestrator NEVER DOES |
+|-------------------|------------------------|
+| Route tasks to appropriate subagents | Write code directly |
+| Dispatch with structured prompts | Edit files directly |
+| Monitor for completion/failure | Run tests directly |
+| Receive and synthesize summaries | Read full artifact contents into context |
+| Handle user interaction and approvals | Execute shell commands for implementation |
+| Pass pointers between phases | Re-process subagent outputs |
 
-| Layer | Role |
-|-------|------|
-| **Main agent** | Orchestrator — routes, dispatches, receives compact results |
-| **Skill** | Defines execution pattern including delegation |
-| **Subagent** | Does substantive work, returns compact summary |
+### Pointer-Based State Passing
 
-### When to Delegate
-
-Delegate when the task would bloat main context, regardless of perceived complexity:
+Subagents exchange state through **file paths**, not content. The orchestrator passes pointers; subagents read/write artifacts at those paths.
 
 ```markdown
-## Good: Even simple checks delegate
-Agent tool (general-purpose):
+Agent tool (developer):
   prompt: |
-    Read these 3 files and verify they follow the naming convention.
-    Return: PASS/FAIL plus file paths.
+    Plan file: /path/to/.lsz/.../plan/plan_v1.md
+    
+    Implement the feature described in the plan.
+    
+    Return: Summary (≤100 words) + paths to modified files.
 ```
 
-The skill decides based on **context hygiene**, not task difficulty. Reading multiple files, running tests, or generating artifacts are all delegation candidates.
+### Subagent Summary Contract
+
+Every subagent MUST return a brief summary following BurntSushi's PR style:
+- Complete, coherent, reviewable unit
+- State approach and reasoning, not just "what was done"
+- Deliver a position that can be critiqued
+
+**Format:**
+
+```markdown
+## Summary
+<approach taken, reasoning behind key decisions, and outcome>
+
+## Artifacts
+- <path to primary output>
+
+## Trade-offs (optional)
+- <key trade-off or constraint for next phase>
+```
+
+### Skill Dispatch Template
+
+Skills at any taxonomy level may delegate to subagents. Complex workflow skills MUST define their dispatch pattern internally:
+
+```markdown
+Agent tool (<subagent_type>):
+  description: "<short task summary>"
+  prompt: |
+    Mode: $MODE
+    Feature: $FEATURE
+    Source docs: $SOURCE_DOCS
+    
+    [execution instructions...]
+    
+    Return: Summary (approach + reasoning) + artifact paths.
+```
+
+The caller injects parameters (`$MODE`, `$FEATURE`), the skill owns the dispatch shape.
 
 ### Skill Dispatch Template
 

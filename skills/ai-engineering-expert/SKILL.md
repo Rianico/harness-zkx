@@ -1,6 +1,6 @@
 ---
 name: ai-engineering-expert
-description: AI engineering expertise for designing skills, agents, rules, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, rule, workflow, agent, command, hook, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; hook output format with systemMessage vs additionalContext; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; reorganizing or consolidating skill/rule content to reduce redundancy and bloat; OR user says 'add this to rules/skills', 'update this to xxx rule/skill', 'move this to rules', 'put this in the skill', 'should this be a rule or skill', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'bash or python for this hook', 'systemMessage vs additionalContext', 'this skill is too bloated', 'consolidate these rules', 'organize this skill'.
+description: AI engineering expertise for designing skills, agents, rules, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, rule, workflow, agent, command, hook, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; hook output format with systemMessage vs additionalContext; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; reorganizing or consolidating skill/rule content to reduce redundancy and bloat; deciding when to delegate to subagents; designing subagent dispatch patterns; OR user says 'add this to rules/skills', 'update this to xxx rule/skill', 'move this to rules', 'put this in the skill', 'should this be a rule or skill', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'bash or python for this hook', 'systemMessage vs additionalContext', 'this skill is too bloated', 'consolidate these rules', 'organize this skill', 'should I delegate this task', 'when to use subagents'.
 ---
 
 # AI Engineering Expert
@@ -9,15 +9,155 @@ Core principles for building robust AI systems. Use this skill when designing or
 
 ## Core Mental Model
 
-AI system quality is constrained by five factors:
+AI system quality is constrained by six factors:
 
 1. **Action space quality** — Can the agent express the right operations?
 2. **Observation quality** — Does the agent see what it needs to decide?
 3. **Recovery quality** — Can the agent handle errors gracefully?
 4. **Context budget quality** — Is guidance loaded when needed, not before?
 5. **Artifact hygiene** — Are files organized, deduplicated, and free of bloat?
+6. **Subagent-first execution** — Is all implementation work delegated to subagents?
 
 Skills that violate these constraints produce fragile agents that fail silently, exhaust context on irrelevant details, or accumulate technical debt through disorganized artifacts.
+
+---
+
+## Subagent-First Execution
+
+### Core Principle
+
+**The orchestrator never does implementation work.** All code writing, file editing, test execution, doc updates, and review work happens in subagents. The main agent is a pure router: dispatch, monitor, receive results.
+
+This is not a context optimization—it is a fundamental architectural constraint that ensures:
+- Clean separation between orchestration logic and execution logic
+- Predictable context budgets (orchestrator sees summaries, not full artifacts)
+- Parallelizable work (multiple subagents can run concurrently)
+- Isolated failure domains (subagent errors don't corrupt orchestrator state)
+
+### The Orchestrator Role
+
+| Orchestrator DOES | Orchestrator NEVER DOES |
+|-------------------|------------------------|
+| Route tasks to appropriate subagents | Write code directly |
+| Dispatch with structured prompts | Edit files directly |
+| Monitor for completion/failure | Run tests directly |
+| Receive and synthesize summaries | Read full artifact contents into context |
+| Handle user interaction and approvals | Execute shell commands for implementation |
+| Pass pointers between phases | Re-process subagent outputs |
+
+### Dispatch Pattern
+
+Always use structured dispatch templates:
+
+```markdown
+Agent tool (<subagent_type>):
+  description: "<short task summary>"
+  prompt: |
+    <context and requirements>
+    
+    <execution instructions>
+    
+    Return: <expected output format>
+```
+
+### Pointer-Based State Passing
+
+Subagents exchange state through **file paths**, not content. The orchestrator passes pointers; subagents read/write artifacts at those paths.
+
+**Why pointers:**
+- Preserves orchestrator context budget
+- Enables phase-to-phase continuity without orchestrator re-reading
+- Supports large artifacts (plans, reports, code diffs)
+
+**Pattern:**
+
+```markdown
+Agent tool (developer):
+  prompt: |
+    Plan file: /path/to/.lsz/.../plan/plan_v1.md
+    
+    Implement the feature described in the plan.
+    
+    Return: Summary (≤100 words) + paths to modified files.
+```
+
+**Anti-patterns:**
+- Orchestrator reads plan, then passes plan content to subagent
+- Subagent returns full artifact content instead of path
+- Creating fresh topic roots for each phase instead of reusing one
+
+### Subagent Summary Contract
+
+Every subagent MUST return a brief, structured summary. The orchestrator's context depends on it.
+
+**Summary follows BurntSushi's PR style:**
+- Complete, coherent, reviewable unit
+- State approach and reasoning, not just "what was done"
+- Deliver a position that can be critiqued, not a progress report
+
+**Summary format:**
+
+```markdown
+## Summary
+<approach taken, reasoning behind key decisions, and outcome>
+
+## Artifacts
+- <path to primary output>
+- <path to secondary outputs if any>
+
+## Trade-offs (optional)
+- <key trade-off or constraint for next phase>
+```
+
+**Size constraints:**
+- Status-only reports: ≤100 words, bullet list
+- Decision/constraint reports: ≤150 words, star rules format
+- Never return full artifact contents in the summary
+
+**Example (good):**
+
+```markdown
+## Summary
+Added retry logic to the database connector with exponential backoff (max 3 retries, 2s base delay). Chose this over circuit breaker because the failure mode is transient connection drops, not sustained outages. Tests cover happy path and all retry scenarios.
+
+## Artifacts
+- src/db/connector.py
+- tests/test_db_connector.py
+```
+
+**Example (bad - just "what was done"):**
+
+```markdown
+## Summary
+Added retry logic to the database connector. Tests pass.
+
+## Artifacts
+- src/db/connector.py
+```
+
+The good example delivers a reviewable position: here's the approach, here's why, here's what's covered. The bad example is a status update that forces the reviewer to read the code to understand the reasoning.
+### When to Use Which Subagent
+
+| Task | Subagent Type |
+|------|---------------|
+| Write/modify code | `developer` |
+| Review code for quality | `code-reviewer` |
+| Security analysis | `security-reviewer` |
+| Database schema work | `database-reviewer` |
+| Research/explore codebase | `Explore` |
+| General multi-step tasks | `general-purpose` |
+| Architecture design | `architect` |
+
+### Anti-Patterns
+
+- **Hero mode orchestrator** — "Let me just write this quick fix directly"
+- **Context hoarding** — Reading full file contents instead of dispatching a subagent
+- **Sequential when parallel is possible** — Running review agents one after another instead of concurrently
+- **Orchestrator as reviewer** — Main agent reviewing code instead of dispatching `code-reviewer`
+
+### Reference
+
+[Full details: subagent-first-execution.md](references/subagent-first-execution.md)
 
 ---
 
@@ -93,6 +233,7 @@ Before publishing a skill:
 - **Vague descriptions** — "Helps with documents" won't trigger. Use explicit trigger vocabulary.
 - **Wrong POV** — "I can help you..." fails discovery. Always third-person.
 - **Missing problem framing** — Description covers "design architecture" but misses "this code is a mess".
+- **Hero mode orchestrator** — Orchestrator doing implementation directly instead of delegating to subagents. Always dispatch.
 - **Overloading SKILL.md** — Keep under 500 lines. Move depth to references/.
 - **Deep nesting** — References should be one level from SKILL.md. Nested references get partially read.
 - **No validation loops** — Skills that do destructive work without self-checking produce silent failures.
