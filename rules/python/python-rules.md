@@ -17,18 +17,17 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 - **Immutability:** Never use mutable defaults (`def func(x=[]):` → BAD)
 - **Imports:** Standard Library → Third Party → Local
 
-## Type Safety
+## Type Safety (First Principle)
 
-- **NO inline suppressions:** Never use `# pyright: ignore` or `# type: ignore` - fix underlying issues
-- **Unused parameters:** Use `_param` prefix convention, not suppressions
-- **Type mismatches:** Use Pydantic models with `model_dump(mode="json")`, not suppressions
-- **File-level suppressions:** `# pyright: reportX=false` at file top, NEVER in pyrightconfig.json
-- **Container annotations:** Annotate before `.items()`, `.values()` for inference
-- **Runtime validation:** `Model.model_validate(response)` for JSON/dict
-- **Type boundaries:** External data → `object` → Pydantic validation → typed models
+- **NO suppressions:** Never use `# pyright: ignore` or `# type: ignore` — fix underlying issues
+- **Unused parameters:** `_param` prefix convention
+- **File-level suppressions:** Only in designated zones (transport/IPC layers, external lib stubs), NEVER in pyrightconfig.json
+- **`getattr()` returns `Any`:** Avoid it; use explicit method dispatch instead
+- **Keep typed models:** Access `model.field` directly; call `model_dump()` only at output boundaries
 - **`object` over `Any`:** `object` forces validation; `Any` silently propagates
-- **Keep typed models:** Access `model.field` directly, don't call `model_dump()` early
-- **Trace types to source:** Never assume a diagnostic is "legitimate" — trace callings, definitions, and specs to find the concrete type
+- **Validate at boundaries:** External data → `object` → Pydantic → typed model; internal code trusts types
+- **Trace unknown types:** Never assume diagnostic is "legitimate" — find source, check spec, build model
+- **Verification:** Static (basedpyright), LSP (workspace diagnostics), Pattern (`rg "# pyright: "`)
 
 ## Code Quality
 

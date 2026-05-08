@@ -1,343 +1,160 @@
 # Type Safety Patterns
 
-Comprehensive guide for handling type diagnostics, containment patterns, and IPC generic types.
+Core patterns for maintaining type safety in Python codebases with Pydantic.
 
-## The #1 Cause of Typeless Propagation: Premature Serialization
+## Core Principles
 
-**Most type warnings in Pydantic codebases come from calling `model_dump()` too early.**
+1. **Fix, don't suppress** — Every diagnostic indicates a real issue
+2. **Keep typed models** — Access `model.field` directly; serialize only at output boundaries
+3. **Validate at boundaries** — External data → `object` → Pydantic → typed model
+4. **Trace to source** — Never assume "unknown"; find definition, check spec, build model
 
-### Anti-Pattern: Serialize First, Then Use
+## Common Anti-Patterns
 
-```python
-# WRONG - loses type information immediately
-config_obj = ConfigManager.load()
-config_data: dict[str, object] = config_obj.model_dump(mode="json") if config_obj else {}
-languages: object = config_data.get("languages", {})
-if isinstance(languages, dict):
-    for lang_name, lang_conf in languages.items():
-        if isinstance(lang_conf, dict):
-            root_markers = lang_conf.get("root_markers", [])  # object, needs isinstance
-```
+### Premature Serialization
 
-**Why this fails:** `model_dump()` returns `dict[str, object]` (Pydantic's safe default). Every value becomes `object`, requiring `isinstance` checks everywhere.
-
-### Pattern: Keep Typed Models, Serialize at Boundary
+**The #1 cause of typeless propagation.**
 
 ```python
-# RIGHT - keep the typed model as long as possible
-config_obj = ConfigManager.load()
-if config_obj:
-    for lang_name, lang_conf in config_obj.languages.items():
-        # lang_conf is LanguageServerConfig - fully typed!
-        root_markers: list[str] = lang_conf.root_markers  # No isinstance needed
-```
-
-**When to call `model_dump()`:**
-- Writing to file/DB
-- Sending over network
-- Returning JSON from API
-- **NOT** for internal processing "just in case"
-
-### Why object Overuse Is Dangerous
-
-```python
-# Forces defensive programming everywhere
-def process(data: dict[str, object]) -> None:
-    value = data.get("key")  # object
-    if isinstance(value, str):
-        # Can't trust the type checker anymore
-        ...
-
-# Trust the validated model
-def process(config: ClientConfig) -> None:
-    value: str = config.key  # Type checker enforces correctness
-```
-
-## Never Assume a Diagnostic Is "Legitimate"
-
-**Every diagnostic indicates a gap between your code and the type system.** The gap might be:
-1. Missing type annotation → Add it
-2. Premature serialization → Keep the model
-3. Unknown external data → Build a Pydantic model from the spec
-
-### Example: LSP Response Types
-
-LSP returns JSON, but the LSP 3.17 spec defines exact shapes:
-
-```python
-# WRONG: Assume it's dynamic
-response: object = await client.request("textDocument/hover", params)
-contents = response.get("contents")  # object, need isinstance
-
-# RIGHT: Build model from spec
-class Hover(BaseModel):
-    contents: MarkupContent | list[MarkedString] | str
-    range: Range | None = None
-
-response: Hover = Hover.model_validate(await client.request(...))
-value: str = response.contents.value  # Fully typed from spec
-```
-
-### Example: Config Schema
-
-If you define the config file, you know the types:
-
-```python
-# config/schema.py already defines:
-class LanguageServerConfig(BaseModel):
-    command: str
-    args: list[str] = []
-    root_markers: list[str] = []
-
-class ClientConfig(BaseModel):
-    languages: dict[str, LanguageServerConfig] = {}
-
-# WRONG: Act like types are unknown
-config_data: dict[str, object] = config_obj.model_dump()
+# WRONG - loses type information
+config_data: dict[str, object] = config_obj.model_dump(mode="json")
 languages: object = config_data.get("languages", {})
 
-# RIGHT: Use the schema you defined
+# RIGHT - keep typed model
 for name, lang in config_obj.languages.items():
-    cmd: str = lang.command  # From the schema you own
+    cmd: str = lang.command  # Fully typed!
 ```
 
-## Handling Type Diagnostics
+**When to call `model_dump()`:** Only at actual serialization boundaries (file, network, JSON response). Never "just in case" for internal processing.
 
-**NO INLINE SUPPRESSIONS** - Never use `# pyright: ignore` or `# type: ignore` to hide diagnostics.
-
-When a type diagnostic appears, fix the underlying issue:
-
-| Diagnostic | Root Cause | Fix |
-|------------|------------|-----|
-| `reportUnusedParameter` | Parameter in interface not used | Use `_param` prefix convention |
-| `reportArgumentType` | Type mismatch at call site | Use Pydantic models for params |
-| `reportReturnType` | Return type doesn't match signature | Align signatures or fix types |
-| `reportAny` | Implicit Any from untyped container | Annotate container before iteration |
-| `reportExplicitAny` | Explicit Any usage | Replace with concrete type or Protocol |
-
-### `_` Prefix Convention for Unused Parameters
-
-When implementing an interface where certain parameters aren't needed, use the `_` prefix convention:
+### `getattr()` Returns `Any`
 
 ```python
-# Correct - indicates intentionally unused
-async def _handle_notification(
-    self, method: str, _params: dict[str, object]
-) -> None:
-    pass  # params intentionally not processed
+# WRONG - infects downstream
+handler = getattr(self, f"handle_{method}")
+result = await handler(...)  # result is Any
 
-# Wrong - suppression hides the issue
-async def _handle_notification(
-    self, method: str, params: dict[str, object]  # pyright: ignore[reportUnusedParameter]
-) -> None:
-    pass
+# RIGHT - explicit dispatch
+if method == "create":
+    result = await self.handle_create(...)
+elif method == "delete":
+    result = await self.handle_delete(...)
+else:
+    raise ValueError(f"Unknown method: {method}")
 ```
 
-**Why this works:** Type checkers recognize `_name` as intentionally unused and don't report diagnostics.
+**Exception:** `getattr()` is acceptable in designated Any zones with proper containment.
 
-### Always Use Pydantic Models for Structured Params
-
-When passing structured data to typed interfaces, use Pydantic models instead of raw dicts:
+### `Any` vs `object` at Boundaries
 
 ```python
-# Correct - typed, validated, serializes to correct format
-from llm_lsp_cli.lsp.types import TextDocumentIdentifier, Position, TextDocumentPositionParams
+# WRONG - Any propagates silently
+def load_config() -> Any:
+    return json.loads(file.read_text())
+config = load_config()
+name = config["name"]  # OK, but name is Any
 
-params = TextDocumentPositionParams(
-    textDocument=TextDocumentIdentifier(uri=uri),
-    position=Position(line=line, character=character),
-).model_dump(mode="json", by_alias=True)  # LSP uses camelCase
-result = await transport.send_request("textDocument/definition", params)
-
-# Wrong - suppression hides type mismatch
-params = {
-    "textDocument": {"uri": uri},
-    "position": {"line": line, "character": character},
-}
-result = await transport.send_request(
-    "textDocument/definition",
-    params,  # pyright: ignore[reportArgumentType]
-)
-```
-
-**Key insight:** `dict[str, str]` is not `dict[str, object]`. Pydantic's `model_dump()` produces the correct type.
-
-## Type Boundary Enforcement
-
-External data (JSON, network, user input) enters as `object`, not `Any`. Validate at a single gateway with Pydantic.
-
-### Why `object` over `Any` at Boundaries
-
-- `object` is a type error waiting to happen - forces validation
-- `Any` silently propagates, infecting everything downstream
-- Single gateway pattern: only one module imports raw transport
-
-```python
-# BAD: Any scatters everywhere
-def get_data() -> Any:
-    return json.loads(...)
-
-result = get_data()
-name = result["name"]  # OK, but name is Any, propagates downstream
-
-# GOOD: object forces validation
-def get_data() -> object:
-    return json.loads(...)
-
-result = get_data()
-name = result["name"]  # ERROR: object not subscriptable
-
-# Must validate first:
-data = Model.model_validate(result)
+# RIGHT - object forces validation
+def load_config() -> object:
+    return json.loads(file.read_text())
+data = Config.model_validate(load_config())
 name = data.name  # Fully typed
 ```
 
-### Single Gateway Architecture
+## Type Boundary Architecture
 
 ```
-External World (JSON, network) → object
+External (JSON, network, files) → object
          ↓
-VALIDATION BOUNDARY (TypedLSPTransport)
-  - model_validate() converts object → Pydantic Model
+VALIDATION BOUNDARY (Pydantic)
          ↓
-InitializeResult, Hover, etc. (fully typed)
+Typed Models (no Any, no object)
          ↓
-INTERNAL CODE (no Any, no object)
+INTERNAL CODE
 ```
 
-### Designated Any Containment Zone
+### Designated Any Zones
 
-Low-level infrastructure (transport, IPC) may use `Any` and file-level suppressions. This is the **only** place they're allowed.
+Low-level infrastructure handling raw external data may use `Any` with file-level suppressions. These zones are isolated at the bottom of the architecture.
+
+**Examples of designated zones:**
+- Transport/protocol layers (raw JSON-RPC, HTTP clients)
+- IPC layers (inter-process communication)
+- Stub files for untyped third-party libraries
+
+**Characteristics of designated zones:**
+- Single responsibility: receive raw data, return typed data
+- File-level suppressions at top of file, never inline
+- Any/object never escape upward to business logic
+
+**NOT allowed:** Domain layer, application layer, business logic, project's own type definitions.
+
+## Diagnostic Quick Reference
+
+| Diagnostic | Fix |
+|------------|-----|
+| `reportUnusedParameter` | Use `_param` prefix |
+| `reportArgumentType` | Use Pydantic model, not raw dict |
+| `reportReturnType` | Align signature with actual return |
+| `reportAny` | Annotate container before iteration |
+| `reportExplicitAny` | Replace with concrete type |
+| `reportUnknownVariableType` | Trace to source, find concrete type |
+
+**NO INLINE SUPPRESSIONS** — Fix the underlying issue.
+
+### `_` Prefix for Unused Parameters
 
 ```python
-# transport.py - designated Any zone
-# File-level suppressions at TOP of file (not inline)
-
-# pyright: reportExplicitAny=false
-# pyright: reportAny=false
-
-def send_request(self, method: str, params: dict[str, object]) -> object:
-    # Raw JSON-RPC - returns object to force validation upstream
-    ...
+async def handle(self, method: str, _params: dict) -> None:
+    pass  # _params indicates intentionally unused
 ```
 
-**Key rule:** Any/object never escape the designated zone. All layers above receive concrete types.
+## IPC/Transport Patterns
 
-## IPC Generic Types with Method Registry
+### Method Registry with `@overload`
 
-For type-safe IPC/transport layers, use method registry with `@overload` decorators.
-
-### Method Registry Pattern
+For type-safe dispatch based on method names:
 
 ```python
-# ipc/method_registry.py
-from typing import Literal, TypeAlias
-from pydantic import BaseModel
-
-# Type alias for valid method names (enables IDE autocomplete)
-MethodName: TypeAlias = Literal[
-    "ping",
-    "shutdown",
-    "textDocument/definition",
-    "textDocument/hover",
-    # ... all supported methods
-]
-
-# Registry mapping method names to (ParamsType, ResultType)
-METHOD_TYPES: dict[MethodName, tuple[type[object], object]] = {
-    "ping": (EmptyParams, PingResult),
-    "shutdown": (EmptyParams, ShutdownResult),
-    "textDocument/definition": (TextDocumentPositionParams, list[Location]),
-    "textDocument/hover": (TextDocumentPositionParams, Hover | None),
-    # ... additional methods
+# Registry mapping method names to types
+MethodName = Literal["get", "set", "delete"]
+METHOD_TYPES: dict[MethodName, tuple[type[BaseModel], type[BaseModel]]] = {
+    "get": (GetParams, GetResult),
+    "set": (SetParams, SetResult),
+    "delete": (DeleteParams, DeleteResult),
 }
-```
 
-### @overload for Compile-Time Type Safety
-
-```python
-# ipc/unix_client.py
-from typing import overload
-
-class UNIXClient:
-    # @overload declarations for each method
+# Client with @overload for compile-time safety
+class Client:
     @overload
-    async def request(self, method: Literal["ping"], params: EmptyParams) -> PingResult: ...
+    async def request(self, method: Literal["get"], params: GetParams) -> GetResult: ...
 
     @overload
-    async def request(
-        self, method: Literal["textDocument/definition"],
-        params: TextDocumentPositionParams
-    ) -> list[Location]: ...
+    async def request(self, method: Literal["set"], params: SetParams) -> SetResult: ...
 
-    @overload
-    async def request(
-        self, method: Literal["textDocument/hover"],
-        params: TextDocumentPositionParams
-    ) -> Hover | None: ...
-
-    # Generic implementation
-    async def request(
-        self, method: MethodName, params: BaseModel
-    ) -> BaseModel | list[BaseModel] | None:
-        params_type, result_type = METHOD_TYPES[method]
-        # Runtime validation and return typed result
+    async def request(self, method: MethodName, params: BaseModel) -> BaseModel:
         ...
 ```
 
-**Why this pattern:**
-- Compile-time: Type checker knows exact return type for each method literal
-- Runtime: Registry provides validation and serialization
-- No `cast()` needed in calling code
+**Benefit:** Compile-time type safety; no `cast()` needed in calling code.
 
-### Propagation to Upper Layers
+## Verification
 
-**daemon_client.py mirrors the overloads:**
-```python
-class DaemonClient:
-    @overload
-    async def request(self, method: Literal["ping"], params: EmptyParams) -> PingResult: ...
+Three-layer check for type safety:
 
-    # Same overloads as UNIXClient...
-```
+1. **Static analysis** — `basedpyright` or `mypy`
+2. **LSP diagnostics** — workspace-wide errors from your IDE/LSP
+3. **Pattern check** — `rg "# pyright: " src/` should only match designated zone files
 
-**Upper layers use typed results directly:**
-```python
-# No cast() needed - result is typed
-result = await daemon_client.request("textDocument/definition", params)
-for loc in result:  # result is list[Location], not Any
-    print(f"{loc.uri}:{loc.range.start.line}")
-```
+**Designated zones check:** Search for suppressions; verify they only exist in infrastructure layers (transport, IPC, external stubs), not in business logic.
 
-## Type Safety Principles
+## Tracing Unknown Types
 
-1. **Fix, don't suppress** - Every diagnostic indicates a real issue
-2. **Use concrete types** - Replace `Any` with specific types or Protocols
-3. **Validate at boundaries** - Pydantic models validate external data
-4. **Type flows inward** - Inner layers receive validated models, never raw dicts
-5. **Keep typed models** - Access `model.field` directly, don't call `model_dump()` early
-6. **Trace to source** - Never assume unknown; find definition, check spec, build model
+When you see `reportUnknownVariableType`:
 
-## Using LSP Tools to Trace Types
+1. **Hover** — see what the type checker infers
+2. **Go to definition** — find where the value is created
+3. **Find callers** — trace back to source
+4. **Check spec/schema** — build Pydantic model from the spec
 
-When you see `reportUnknownVariableType`, use LSP tools to trace the source:
-
-```bash
-# 1. Hover to see current type (0-based indexing)
-llm-lsp-cli lsp hover src/file.py 25 10 -o json
-
-# 2. Find definition of the type
-llm-lsp-cli lsp definition src/file.py 25 10 -o json
-
-# 3. Find callers to trace where value originates (1-based indexing!)
-llm-lsp-cli lsp incoming-calls src/file.py 26 10 -o json
-
-# 4. Search for type definitions
-llm-lsp-cli lsp workspace-symbol "LanguageServerConfig" -o json
-```
-
-**Workflow for unknown types:**
-1. Hover → see what checker infers
-2. Definition → find where value is created
-3. Incoming calls → trace back to source
-4. Schema/Spec → build Pydantic model if needed
+**Key insight:** Never assume a diagnostic is "legitimate." Every unknown type has a concrete source — trace it, don't suppress it.

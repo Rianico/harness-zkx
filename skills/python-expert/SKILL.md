@@ -56,15 +56,22 @@ for lang_name, lang_conf in config_obj.languages.items():
 
 ## Type Boundaries
 
-External data enters as `object`, validated at single gateway:
+External data enters as `object`, validated once at the gateway, returned as typed:
 
 ```python
 # BAD: Any propagates silently
 def get_data() -> Any: ...
 
-# GOOD: object forces validation
+# BAD: object returned, caller must validate
 def get_data() -> object: ...
-data = Model.model_validate(result)  # Now typed
+data = Model.model_validate(result)  # Every caller must do this!
+
+# GOOD: validate at boundary, return typed
+def get_data() -> Model:
+    raw = fetch_external()  # object from external source
+    return Model.model_validate(raw)  # Validate once, return typed
+
+data = get_data()  # Already typed, no validation needed at call site
 ```
 
 ### Keep Typed Models, Serialize at Boundaries
