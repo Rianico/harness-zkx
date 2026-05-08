@@ -1,6 +1,6 @@
 ---
 name: ai-engineering-expert
-description: AI engineering expertise for designing skills, agents, rules, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, rule, workflow, agent, command, hook, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; hook output format with systemMessage vs additionalContext; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; OR user says 'add this to rules/skills', 'update this to xxx rule/skill', 'move this to rules', 'put this in the skill', 'should this be a rule or skill', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'bash or python for this hook', 'systemMessage vs additionalContext'.
+description: AI engineering expertise for designing skills, agents, rules, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, rule, workflow, agent, command, hook, or MCP server; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; hook output format with systemMessage vs additionalContext; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; reorganizing or consolidating skill/rule content to reduce redundancy and bloat; OR user says 'add this to rules/skills', 'update this to xxx rule/skill', 'move this to rules', 'put this in the skill', 'should this be a rule or skill', 'is this the right granularity', 'how should I structure this workflow', 'what's the right action space', 'how do I make this trigger reliably', 'which model tier for this task', 'how do I test AI-generated code', 'bash or python for this hook', 'systemMessage vs additionalContext', 'this skill is too bloated', 'consolidate these rules', 'organize this skill'.
 ---
 
 # AI Engineering Expert
@@ -9,14 +9,15 @@ Core principles for building robust AI systems. Use this skill when designing or
 
 ## Core Mental Model
 
-AI system quality is constrained by four factors:
+AI system quality is constrained by five factors:
 
 1. **Action space quality** — Can the agent express the right operations?
 2. **Observation quality** — Does the agent see what it needs to decide?
 3. **Recovery quality** — Can the agent handle errors gracefully?
 4. **Context budget quality** — Is guidance loaded when needed, not before?
+5. **Artifact hygiene** — Are files organized, deduplicated, and free of bloat?
 
-Skills that violate these constraints produce fragile agents that fail silently or exhaust context on irrelevant details.
+Skills that violate these constraints produce fragile agents that fail silently, exhaust context on irrelevant details, or accumulate technical debt through disorganized artifacts.
 
 ---
 
@@ -78,6 +79,7 @@ Before publishing a skill:
 - [ ] No time-sensitive information (or in "old patterns" section)
 - [ ] Consistent terminology throughout
 - [ ] Examples are concrete, not abstract
+- [ ] No redundant sections — each concept lives in one place
 
 **Structure**
 - [ ] Frontmatter includes `name` and `description` (both required)
@@ -96,6 +98,7 @@ Before publishing a skill:
 - **No validation loops** — Skills that do destructive work without self-checking produce silent failures.
 - **Orchestration logic in skills** — Skills should not contain workflow orchestration. Use orchestration skills or commands instead.
 - **Content duplication across skills** — Each piece of knowledge should live in one place. Reference other skills rather than copying.
+- **Updating without organizing** — Before adding content, audit existing structure. Consolidate redundant sections, remove obsolete material.
 
 ---
 
@@ -254,6 +257,41 @@ Write tests for bugs that were found, not for code that works. AI tends to make 
 
 ---
 
+## Artifact Hygiene
+
+### Quick Reference: Organization & Clarity
+
+**Core Principle**
+Every modification to skills, rules, workflows, agents, or hooks must preserve or improve organization. Additive changes without consolidation create bloat; scattered knowledge creates discovery failures.
+
+**Before Any Update**
+1. **Audit the target** — Read the file structure, understand existing organization
+2. **Identify redundancy** — Check if new content duplicates existing knowledge elsewhere
+3. **Find the right home** — Determine if content belongs in this file or should be a reference/linked elsewhere
+
+**During Updates**
+- **Consolidate, don't accumulate** — Merge related sections, remove superseded content
+- **One concept, one location** — Reference other files rather than copying
+- **Reorganize when needed** — If a file has grown unclear, restructure before adding
+
+**Red Flags**
+- File exceeds size limits (SKILL.md > 500 lines, reference files bloating)
+- Multiple sections explaining the same concept
+- Copy-pasted content across files
+- "Misc" or "Other" catch-all sections
+- Unclear section ordering or naming
+
+**Enforcement**
+- When adding new capability: update description, check for duplicates, consolidate if found
+- When refining existing content: remove obsolete parts, not just add new ones
+- When file feels disorganized: fix organization first, then add new content
+
+---
+
 ## Cross-Cutting Gotchas
 
 - **Windows-style paths** — Always use forward slashes (`skills/my-skill/` not `skills\my-skill\`). Cross-platform compatibility matters.
+- **Additive-only updates** — Adding without removing creates bloat. Every new section should prompt: "Is there old content this replaces?"
+- **Copy-paste across skills** — Duplicated methodology rots independently. Reference the canonical source instead.
+- **Catch-all sections** — "Miscellaneous", "Other Notes", "Tips" sections are organization debt. Every item should have a clear category.
+- **Size blindness** — Files grow silently. Check line counts periodically; split or consolidate when over limits.
