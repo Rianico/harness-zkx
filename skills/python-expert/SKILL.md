@@ -1,6 +1,6 @@
 ---
 name: python-expert
-description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios including type boundary enforcement and suppression handling. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; implementing IPC or transport layers with generic types; seeing reportUnknownVariableType diagnostics; deciding when to call model_dump(); premature serialization causing type loss; tracing types to source definitions.
+description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios including type boundary enforcement and suppression handling. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; implementing IPC or transport layers with generic types; seeing reportUnknownVariableType diagnostics; deciding when to call model_dump(); premature serialization causing type loss; tracing types to source definitions; serialization functions in application layer causing complex type narrowing.
 argument-hint: "[async|testing|django|pytorch|typing]"
 ---
 
@@ -93,6 +93,40 @@ for lang_name, lang_conf in config_obj.languages.items():
 ```
 
 **When to call `model_dump()`:** Only at actual serialization boundaries (writing to file, sending over network, returning JSON response). Never "just in case" for internal processing.
+
+### Serialization Belongs at Output Boundaries
+
+**CRITICAL INSIGHT:** When a type issue seems to require complex narrowing or suppressions, ask: *Why does this function exist? Is it in the right layer?*
+
+A serialization function in the application layer is often a **layering violation**. The fix is not better typing — it's moving the function to the correct boundary.
+
+```
+WRONG:                           CORRECT:
+LSP Client (typed)               LSP Client (typed)
+    ↓                                ↓
+Application Layer                 Application Layer (return typed)
+    ↓ serialize() ❌                    ↓
+IPC Layer                        IPC Layer (serialize + send) ✓
+    ↓ send                            ↓ send
+```
+
+**Designated serialization zones:** Transport layers, IPC handlers, API response builders — code that sits at the edge of the system. Application logic should return typed models and let the boundary serialize.
+
+```python
+# WRONG - application layer doing serialization
+async def handle_request():
+    result = await client.request_document_symbols()
+    return _to_json_serializable(result)  # Why does this exist here?
+
+# RIGHT - return typed, let boundary serialize
+async def handle_request():
+    result = await client.request_document_symbols()  # list[DocumentSymbol]
+    return result  # Pass typed model to IPC layer
+
+# In IPC layer (designated zone):
+def build_response(result: object) -> dict:
+    return {"result": _serialize_for_json(result)}  # Boundary handles this
+```
 
 ### object Annotation Overuse
 

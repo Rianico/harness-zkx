@@ -27,6 +27,7 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 - **`object` over `Any`:** `object` forces validation; `Any` silently propagates
 - **Validate at boundaries:** External data → `object` → Pydantic → typed model; internal code trusts types
 - **Trace unknown types:** Never assume diagnostic is "legitimate" — find source, check spec, build model
+- **Serialization layering:** If `model_dump()` or type narrowing is complex in application layer, move it to transport/IPC boundary
 - **Verification:** Static (basedpyright), LSP (workspace diagnostics), Pattern (`rg "# pyright: "`)
 
 ## Code Quality

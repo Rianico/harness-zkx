@@ -27,6 +27,53 @@ for name, lang in config_obj.languages.items():
 
 **When to call `model_dump()`:** Only at actual serialization boundaries (file, network, JSON response). Never "just in case" for internal processing.
 
+### Serialization in Wrong Layer
+
+**CRITICAL: When type narrowing seems complex, question the function's existence.**
+
+A serialization function in the application layer is often a **layering violation**. The fix is not better typing — it's moving the function to the correct boundary.
+
+```
+WRONG:                              CORRECT:
+┌─────────────────┐                ┌─────────────────┐
+│  LSP Client     │ typed          │  LSP Client     │ typed
+│  list[Model]    │                │  list[Model]    │
+└────────┬────────┘                └────────┬────────┘
+         ↓                                  ↓
+┌────────┴────────┐                ┌────────┴────────┐
+│  Application    │                │  Application    │
+│  serialize() ❌ │ loses types    │  return models  │ keeps types ✓
+└────────┬────────┘                └────────┬────────┘
+         ↓                                  ↓
+┌────────┴────────┐                ┌────────┴────────┐
+│  IPC Layer      │                │  IPC Layer      │
+│  json.dumps()   │                │  serialize() ✓  │ designated zone
+│  send()         │                │  send()         │
+└─────────────────┘                └─────────────────┘
+```
+
+**Symptom:** Complex `TypeGuard` or `isinstance` chains needed to narrow `list[object]` or `dict[object, object]`.
+
+**Diagnosis:** The function is trying to serialize typed models into untyped dicts one layer too early.
+
+**Fix:** Move `model_dump()` to the actual output boundary (transport, IPC, API response). Delete the premature serialization function.
+
+```python
+# WRONG - application layer serialization
+async def _send_lsp_request(..., lsp_params: dict[str, object]):
+    result = await client.request_document_symbols()  # list[DocumentSymbol]
+    return _to_json_serializable(result)  # Why serialize here?
+
+# RIGHT - return typed, serialize at boundary
+async def _send_lsp_request(..., lsp_params: DocumentSymbolParams):
+    result = await client.request_document_symbols()  # list[DocumentSymbol]
+    return {"symbols": result}  # Pass typed model
+
+# In IPC layer (designated zone with file-level suppressions):
+def build_response(result: object, request_id: int) -> JSONRPCResponse:
+    return JSONRPCResponse(result=_serialize_for_json(result), id=request_id)
+```
+
 ### `getattr()` Returns `Any`
 
 ```python

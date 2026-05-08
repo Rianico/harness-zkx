@@ -57,6 +57,13 @@ When using validation libraries (Pydantic, Zod, serde), keep typed models as lon
 - WRONG: `config_data = config_obj.model_dump(); languages = config_data.get("languages")` — loses type
 - RIGHT: `for lang_name, lang_conf in config_obj.languages.items():` — stays typed
 
+### Serialization/Deserialization at System Boundaries
+Serialize only at output boundaries (transport, IPC, API responses). Deserialize only at input boundaries. Application logic works with typed models throughout.
+- **Output boundary:** Transport layers, IPC handlers, network clients, file writers
+- **Input boundary:** API endpoints, message handlers, file parsers, config loaders
+- **Never in application layer:** If you see `model_dump()` or `toJSON()` in business logic, question whether it belongs there
+- **Layering check:** When type narrowing seems complex, ask: "Why does this serialization function exist here? Should it move to the boundary?"
+
 ## 5. Pre-Completion Checklist
 - [ ] Code is readable and well-named
 - [ ] Functions are small (<50 lines), Files focused (<800 lines), no deep nesting (>4 levels)
