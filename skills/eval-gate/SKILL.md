@@ -194,3 +194,14 @@ Report: [path]
 4. **Keep fast** — Evals should run repeatedly without cost anxiety
 5. **Gate on thresholds** — Ship only when all thresholds met
 6. **Mark human review** — Security signoff never fully automated
+
+## Grader Selection: Determinism vs Semantics
+
+| Check Type | Grader | Why |
+|------------|--------|-----|
+| Type errors, test pass/fail | Code/Script | Deterministic, repeatable |
+| Pattern matching (regex, grep) | Rule | Exact match, no variance |
+| Code style, behavior quality | Model | Requires semantic understanding |
+| Security, architecture decisions | Human | Judgment required |
+
+**Key principle:** Use scripts for deterministic checks (pass/fail is stable). Use LLM for semantic analysis where judgment is needed. Never rely on LLM output for binary gate decisions — model responses are not stable.
