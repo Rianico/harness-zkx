@@ -1,7 +1,7 @@
 ---
 name: python-expert
-description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, and complex type scenarios including type boundary enforcement and suppression handling. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; implementing IPC or transport layers with generic types; seeing reportUnknownVariableType diagnostics; deciding when to call model_dump(); premature serialization causing type loss; tracing types to source definitions; serialization functions in application layer causing complex type narrowing.
-argument-hint: "[async|testing|django|pytorch|typing]"
+description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, complex type scenarios including type boundary enforcement and suppression handling, and stub file (.pyi) authoring. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; implementing IPC or transport layers with generic types; seeing reportUnknownVariableType diagnostics; deciding when to call model_dump(); premature serialization causing type loss; tracing types to source definitions; serialization functions in application layer causing complex type narrowing; writing or maintaining stub files (.pyi); generating stubs with stubgen/stubtest; distributing type information for third-party libraries; handling Incomplete vs Any in stubs; creating overloaded function stubs; defining protocols in stubs.
+argument-hint: "[async|testing|django|pytorch|typing|stubs]"
 ---
 
 # Python Expert Skill
@@ -229,3 +229,38 @@ def process(data: str) -> str: ...
 def process(data: bytes) -> str: ...
 def process(data: str | bytes) -> str: ...
 ```
+
+## Stub Files (.pyi)
+
+Stub files provide type information without implementation. Use for third-party libraries, distributing types separately, or complex type logic.
+
+**Quick Reference:**
+
+| Task | Tool |
+|------|------|
+| Generate stubs | `stubgen -p package` or `pyright --createstub package` |
+| Validate stubs | `stubtest package` |
+| Lint stubs | `flake8-pyi` |
+
+**Key Patterns:**
+```python
+# Use ellipsis for bodies
+def foo(x: int) -> str: ...
+
+# Use Incomplete instead of Any for partial stubs
+from _typeshed import Incomplete
+def bar(x: Incomplete) -> list[Incomplete]: ...
+
+# All overloads need @overload (no implementation signature)
+@overload
+def open(name: str, mode: Literal["r"]) -> Reader: ...
+@overload
+def open(name: str, mode: Literal["w"]) -> Writer: ...
+
+# Stub-only protocols
+@type_check_only
+class Readable(Protocol):
+    def read(self) -> str: ...
+```
+
+**Reference:** [stub-files.md](references/stub-files.md) — Full guide on syntax, overloads, protocols, validation workflow.
