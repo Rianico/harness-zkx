@@ -47,18 +47,33 @@ This is not a context optimization—it is a fundamental architectural constrain
 
 ### Dispatch Pattern
 
-Always use structured dispatch templates:
+Always use structured dispatch templates. Every dispatch MUST specify the expected response format (default: `rules/templates/resp-format.md`) so the orchestrator can make routing decisions.
+
+**Standard dispatch template:**
 
 ```markdown
 Agent tool (<subagent_type>):
   description: "<short task summary>"
   prompt: |
     <context and requirements>
-    
+
     <execution instructions>
-    
-    Return: <expected output format>
+
+    Return format per rules/templates/resp-format.md:
+    ## Summary
+    ## Artifacts
+    ## Route (if applicable)
 ```
+
+**Why the response format matters:**
+- Orchestrator parses output to decide next action — needs structured fields, not prose
+- Route + Issues enable automated remediation loops without user intervention
+- Without explicit format, subagents return unstructured text that the orchestrator cannot reliably parse
+
+**When to customize the format:**
+- Add domain-specific fields (e.g., `## Test Results` for test runners)
+- Omit `## Route` when the subagent has no routing decision to make
+- Never remove `## Summary` or `## Artifacts` — these are always required
 
 ### Pointer-Based State Passing
 
@@ -86,56 +101,40 @@ Agent tool (developer):
 - Subagent returns full artifact content instead of path
 - Creating fresh topic roots for each phase instead of reusing one
 
-### Subagent Summary Contract
+### Subagent Response Contract
 
-Every subagent MUST return a brief, structured summary. The orchestrator's context depends on it.
+Every subagent and skill invocation MUST return structured output per `rules/templates/resp-format.md`. This section adds skill-to-skill routing semantics on top of that default.
 
-**Summary follows BurntSushi's PR style:**
-- Complete, coherent, reviewable unit
-- State approach and reasoning, not just "what was done"
-- Deliver a position that can be critiqued, not a progress report
+**Key addition: route-based handoff.**
 
-**Summary format:**
-
-```markdown
-## Summary
-<approach taken, reasoning behind key decisions, and outcome>
-
-## Artifacts
-- <path to primary output>
-- <path to secondary outputs if any>
-
-## Trade-offs (optional)
-- <key trade-off or constraint for next phase>
+When Skill A invokes Skill B:
+```
+Skill B → structured output (status + route + issues)
+     ↓
+Skill A → parses output, makes routing decision
+     ↓
+Next action (remediate, continue, block)
 ```
 
-**Size constraints:**
-- Status-only reports: ≤100 words, bullet list
-- Decision/constraint reports: ≤150 words, star rules format
-- Never return full artifact contents in the summary
+- **Skill B:** produce status, enumerate issues, recommend route. NOT assume what "remediate" means in caller's context.
+- **Skill A:** parse output, translate route into the right action for its workflow.
 
-**Example (good):**
+**Why this boundary matters:** Skills remain composable — eval-gate works with orchestrating, brainstorming, or standalone. No upstream coupling. Orchestrator retains control.
 
-```markdown
-## Summary
-Added retry logic to the database connector with exponential backoff (max 3 retries, 2s base delay). Chose this over circuit breaker because the failure mode is transient connection drops, not sustained outages. Tests cover happy path and all retry scenarios.
+**Example:**
+```text
+# eval-gate outputs:
+Route: remediate
+Issues: CAP-01: 3 warnings, NEG-01: suppressions in commands/lsp.py
 
-## Artifacts
-- src/db/connector.py
-- tests/test_db_connector.py
+# orchestrating decides: dispatch developer agent (not full tdd-cycle)
 ```
 
-**Example (bad - just "what was done"):**
+**Anti-patterns:**
+- Subagent returns prose without structure → orchestrator cannot reliably parse
+- Subagent assumes caller's workflow → eval-gate references tdd-cycle internals
+- Subagent returns full artifact content → wastes orchestrator context
 
-```markdown
-## Summary
-Added retry logic to the database connector. Tests pass.
-
-## Artifacts
-- src/db/connector.py
-```
-
-The good example delivers a reviewable position: here's the approach, here's why, here's what's covered. The bad example is a status update that forces the reviewer to read the code to understand the reasoning.
 ### When to Use Which Subagent
 
 | Task | Subagent Type |
@@ -151,9 +150,10 @@ The good example delivers a reviewable position: here's the approach, here's why
 ### Anti-Patterns
 
 - **Hero mode orchestrator** — "Let me just write this quick fix directly"
-- **Context hoarding** — Reading full file contents instead of dispatching a subagent
+- **Context hoarding** — Reading full artifact contents instead of dispatching a subagent
 - **Sequential when parallel is possible** — Running review agents one after another instead of concurrently
 - **Orchestrator as reviewer** — Main agent reviewing code instead of dispatching `code-reviewer`
+- **Unstructured subagent output** — Prose without Summary/Artifacts/Route fields
 
 ### Reference
 
