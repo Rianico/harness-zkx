@@ -177,13 +177,10 @@ Don't mix `Frame` cursor methods with direct backend cursor changes. Choose one 
 
 ## Reference Documentation
 
-Full API documentation generated from source:
+Full API documentation generated from source using compact output (flattened `module/index.md` → `module.md`, crate roots preserved as `index.md`):
 
-- `references/ratatui/` — Main crate with init, prelude, widgets
-- `references/ratatui_core/` — Core types: Buffer, Cell, Layout, Style, Terminal, Text
-- `references/ratatui_widgets/` — All built-in widgets
-- `references/ratatui_crossterm/` — Crossterm backend
-- `references/SUMMARY.md` — Full documentation index
+- `references/ratatui/` — Main crate with init, prelude, widgets; also contains all sub-crates
+- `references/ratatui/SUMMARY.md` — Full documentation index
 
 ## External Resources
 

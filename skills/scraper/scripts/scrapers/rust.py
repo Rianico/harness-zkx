@@ -10,6 +10,25 @@
 This scraper generates LLM-friendly markdown from Rust crate documentation
 by leveraging the cargo-docs-md tool, which converts rustdoc JSON to markdown.
 
+STABILITY NOTE:
+  The markdown output from cargo-docs-md is experimental. The tool's output
+  format, directory structure, and link conventions may change between versions.
+  The flattening and link-rewriting logic in this scraper is tightly coupled to
+  the output format of cargo-docs-md v0.2.x. If you upgrade cargo-docs-md,
+  re-run the verification pipeline (flatten -> rewrite -> verify) and check for
+  broken links before using the output in production.
+
+VERSION COMPATIBILITY (tested as of 2025-05):
+  Rust nightly toolchain: required (rustdoc JSON output is nightly-only)
+  cargo-docs-md:          v0.2.4
+  rustc:                  1.88.0+
+  rustdoc JSON format:    v29 (corresponds to nightly-2025-05+)
+
+  The rustdoc JSON format version is not stable across Rust releases. If the
+  nightly toolchain is updated and cargo-docs-md fails, pin the nightly
+  toolchain to a known-working date:
+    rustup toolchain install nightly-2025-05-01
+
 Prerequisites:
   - Rust nightly toolchain: rustup toolchain install nightly
   - cargo-docs-md: cargo install cargo-docs-md --locked
@@ -19,21 +38,203 @@ Workflow:
   2. Generate rustdoc JSON using nightly
   3. Convert to markdown using cargo-docs-md
   4. Filter to target crates only (optional, for workspaces)
+  5. Flatten module/index.md -> module.md (compact output)
+  6. Rewrite internal links for the flattened structure
+  7. Verify all internal links resolve
 """
 
+import os
 import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 console = Console()
 
-# URL patterns that indicate Rust projects
+# Markdown link pattern shared by _rewrite_links and _verify_links
+MD_LINK_PATTERN = re.compile(r'\]\(([^)]+\.md[^)]*)\)')
+
+
+def _get_crate_dirs(output_dir: Path) -> set[str]:
+    """Return names of top-level crate directories."""
+    return {item.name for item in output_dir.iterdir() if item.is_dir()}
+
+
+def _split_link(link: str) -> tuple[str, str] | None:
+    """Split a markdown link into (path, anchor). Returns None for external URLs."""
+    if link.startswith(('http://', 'https://')):
+        return None
+    if '#' in link:
+        path, anchor = link.split('#', 1)
+        return path, f'#{anchor}'
+    return link, ''
+
+
+@dataclass
+class LinkContext:
+    """Per-file context for link rewriting, computed once before processing links."""
+    md_file: Path
+    was_flattened: bool
+    is_crate_child: bool
+    crate_dirs: set[str]
+    file_set: set[Path]
+    dir_set: set[Path]
+
+    def path_exists(self, path: Path) -> bool:
+        return path.resolve() in self.file_set
+
+    def dir_exists(self, path: Path) -> bool:
+        return path.resolve() in self.dir_set
+
+    def try_rewrite(self, candidate: str, anchor: str) -> str | None:
+        """If candidate path resolves, return formatted markdown link; else None."""
+        if self.path_exists(self.md_file.parent / candidate):
+            return f']({candidate}{anchor})'
+        return None
+
+
+def _strip_leading_dotdot(path: str) -> str:
+    """Remove one leading ../ from a path."""
+    return path[3:] if path.startswith('../') else path
+
+
+def _fix_flatten_index(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
+    """Fix 1: Convert /index.md -> .md with depth adjustment."""
+    if '/index.md' not in link_path:
+        return None
+
+    new_path = link_path.replace('/index.md', '.md')
+    if ctx.was_flattened and new_path.startswith('../'):
+        new_path = _strip_leading_dotdot(new_path)
+        if not new_path.startswith(('./', '../')):
+            new_path = './' + new_path
+    elif ctx.is_crate_child and new_path.startswith('../'):
+        bare = _strip_leading_dotdot(new_path)
+        if bare.replace('.md', '') not in ctx.crate_dirs:
+            new_path = './' + bare
+
+    result = ctx.try_rewrite(new_path, anchor)
+    if result:
+        return result
+
+    # Submodule directory prefix (e.g., from symbols.md: bar.md -> ./symbols/bar.md)
+    module_name = ctx.md_file.stem
+    module_dir = ctx.md_file.parent / module_name
+    if ctx.dir_exists(module_dir):
+        candidate = f'./{module_name}/{new_path}' if not new_path.startswith('./') else f'./{module_name}/{new_path[2:]}'
+        result = ctx.try_rewrite(candidate, anchor)
+        if result:
+            return result
+
+    # Fallback: /index.md -> .md without depth change
+    alt_path = link_path.replace('/index.md', '.md')
+    return ctx.try_rewrite(alt_path, anchor)
+
+
+def _fix_reduce_depth(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
+    """Fix 2: Reduce ../ count for flattened/crate-child files."""
+    dotdot_count = link_path.count('../')
+    remainder = link_path.replace('../', '')
+
+    needs_reduction = (ctx.was_flattened and dotdot_count >= 1) or (ctx.is_crate_child and dotdot_count >= 2)
+    if not needs_reduction:
+        return None
+
+    reduced = '../' * (dotdot_count - 1) + remainder
+    if not reduced.startswith(('./', '../')):
+        reduced = './' + reduced
+    return ctx.try_rewrite(reduced, anchor)
+
+
+def _fix_parent_module(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
+    """Fix 3: ../index.md -> ../parentname.md when parent was flattened."""
+    if not link_path.endswith('index.md'):
+        return None
+
+    dotdot_count = link_path.count('../')
+    current = ctx.md_file.parent
+    for _ in range(dotdot_count):
+        current = current.parent
+
+    dir_name = current.name
+    if not dir_name or not ctx.path_exists(current.parent / f'{dir_name}.md'):
+        return None
+
+    if dotdot_count <= 1:
+        new_path = f'./{dir_name}.md'
+    else:
+        new_path = f'{"../" * max(0, dotdot_count - 1)}{dir_name}.md'
+    return ctx.try_rewrite(new_path, anchor)
+
+
+def _fix_subdir_lookup(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
+    """Fix 4: Bare filename.md or module/index.md -> ./module/filename.md."""
+    has_slash = '/' in link_path
+    is_module_index = link_path.count('/') == 1 and link_path.endswith('/index.md')
+    if has_slash and not is_module_index:
+        return None
+
+    module_name = ctx.md_file.stem
+    module_dir = ctx.md_file.parent / module_name
+    lookup_name = link_path.replace('/index.md', '.md') if '/index.md' in link_path else link_path
+    if ctx.dir_exists(module_dir) and ctx.path_exists(module_dir / lookup_name):
+        return f'](./{module_name}/{lookup_name}{anchor})'
+    return None
+
+
+def _fix_parent_index(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
+    """Fix 4c+4d: index.md or ../index.md -> ../parentname.md."""
+    if link_path not in ('index.md', '../index.md'):
+        return None
+    # index.md from flattened/crate-child already handled by self-reference check
+    if link_path == 'index.md' and (ctx.was_flattened or ctx.is_crate_child):
+        return None
+
+    parent_name = ctx.md_file.parent.name
+    parent_md = ctx.md_file.parent.parent / f'{parent_name}.md'
+    if ctx.path_exists(parent_md):
+        return f'](../{parent_name}.md{anchor})'
+    return None
+
+
+def _fix_sibling(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
+    """Fix 5+6: ../module.md or ../dir/file.md -> ./module.md or ./dir/file.md for crate children."""
+    if not ctx.is_crate_child or not link_path.startswith('../'):
+        return None
+
+    parts_after = _strip_leading_dotdot(link_path)
+
+    # Fix 5: ../module.md (sibling file)
+    if '/' not in parts_after:
+        bare_name = parts_after.replace('.md', '')
+        if bare_name not in ctx.crate_dirs and ctx.path_exists(ctx.md_file.parent / parts_after):
+            return f'](./{parts_after}{anchor})'
+        return None
+
+    # Fix 6: ../dir/file.md (sibling directory)
+    dir_name = parts_after.split('/')[0]
+    if dir_name not in ctx.crate_dirs:
+        return ctx.try_rewrite('./' + parts_after, anchor)
+    return None
+
+
+# Strategy execution order matters — each is tried in sequence until one matches
+_LINK_FIX_STRATEGIES = [
+    _fix_flatten_index,
+    _fix_reduce_depth,
+    _fix_parent_module,
+    _fix_subdir_lookup,
+    _fix_parent_index,
+    _fix_sibling,
+]
+
+
+
 RUST_URL_PATTERNS = [
     r"^https?://docs\.rs/[^/]+",  # docs.rs/crate_name
     r"^https?://crates\.io/crates/[^/]+",  # crates.io/crates/crate_name
@@ -328,7 +529,7 @@ class RustScraper:
         ]
 
         # Set environment for unstable JSON output
-        env = subprocess.os.environ.copy()
+        env = os.environ.copy()
         env["RUSTDOCFLAGS"] = "-Z unstable-options --output-format json"
 
         result = subprocess.run(
@@ -489,6 +690,10 @@ class RustScraper:
     def _cleanup_markdown(self, output_dir: Path) -> None:
         """Remove meaningless elements from generated markdown.
 
+        COUPLING NOTE: The cleanup patterns are specific to artifacts produced
+        by cargo-docs-md v0.2.x (empty anchor spans, empty divs). If the tool
+        changes its HTML generation, these patterns may need updating.
+
         Args:
             output_dir: Directory containing markdown files
         """
@@ -522,6 +727,220 @@ class RustScraper:
 
         if cleaned_count > 0:
             console.print(f"[dim]Cleaned {cleaned_count} files[/]")
+
+    def _flatten_structure(self, output_dir: Path) -> set[str]:
+        """Flatten subdirectory structure from module/index.md to module.md.
+
+        This ONLY flattens subdirectories within crates, NOT the crate roots themselves.
+        Crate roots stay as `crate/index.md` to preserve cross-crate link paths.
+
+        COUPLING NOTE: This logic depends on cargo-docs-md v0.2.x output format,
+        which generates `module/index.md` for each Rust module. If cargo-docs-md
+        changes its output structure (e.g., flat files by default), this method
+        and _rewrite_links will need to be updated or removed.
+
+        Returns:
+            Set of flattened module paths (relative to output_dir) for link rewriting.
+        """
+        console.print("[dim]Flattening subdirectory structure...[/]")
+
+        flattened_count = 0
+        files_to_move = []
+        flattened_modules: set[str] = set()
+
+        crate_dirs = _get_crate_dirs(output_dir)
+
+        # Collect all files to move
+        for index_file in list(output_dir.glob("**/index.md")):
+            parent_dir = index_file.parent
+
+            # Skip the root index.md (if any)
+            if parent_dir == output_dir:
+                continue
+
+            # Skip crate roots (top-level crate directories with index.md)
+            if parent_dir.parent == output_dir:
+                continue
+
+            # Only flatten subdirectories within crates
+            flattened_path = parent_dir.parent / f"{parent_dir.name}.md"
+            files_to_move.append((index_file, flattened_path, parent_dir))
+
+        # Move files
+        for index_file, flattened_path, parent_dir in files_to_move:
+            if flattened_path.exists():
+                console.print(f"[yellow]Skipping:[/] {index_file} (target exists: {flattened_path.name})")
+                continue
+
+            # Track this flattened module
+            original_rel = index_file.relative_to(output_dir)
+            flattened_modules.add(str(original_rel.parent))  # e.g., "ratatui_core/style/palette"
+
+            index_file.rename(flattened_path)
+            flattened_count += 1
+
+        # Remove empty directories
+        removed_dirs = 0
+        for index_file, flattened_path, parent_dir in files_to_move:
+            try:
+                if parent_dir.exists() and not any(parent_dir.iterdir()):
+                    parent_dir.rmdir()
+                    removed_dirs += 1
+            except OSError:
+                pass
+
+        if flattened_count > 0:
+            console.print(f"[dim]Flattened {flattened_count} files, removed {removed_dirs} empty directories[/]")
+
+        return flattened_modules
+
+    def _rewrite_links(self, output_dir: Path, flattened_modules: set[str]) -> None:
+        """Rewrite links for the flattened subdirectory structure.
+
+        After flattening module/index.md -> module.md, every file that was at
+        depth N within a crate is now at depth N-1. Links that used ../ to go
+        up to parent modules need one fewer ../, and links to flattened modules
+        need /index.md replaced with .md.
+
+        COUPLING NOTE: The fix strategies are empirical — derived from observing
+        broken-link patterns in cargo-docs-md v0.2.x output after flattening.
+        See _LINK_FIX_STRATEGIES for the ordered list of strategy functions.
+
+        Args:
+            output_dir: Directory containing markdown files
+            flattened_modules: Set of module paths that were flattened (e.g., "ratatui_core/style/palette")
+        """
+        console.print("[dim]Rewriting internal links...[/]")
+
+        md_files = list(output_dir.glob("**/*.md"))
+        if not md_files:
+            return
+
+        rewritten_count = 0
+        crate_dirs = _get_crate_dirs(output_dir)
+
+        # Pre-build existence sets to avoid repeated filesystem stat calls
+        file_set = {p.resolve() for p in output_dir.glob("**/*") if p.is_file()}
+        dir_set = {p.resolve() for p in output_dir.glob("**/*") if p.is_dir()}
+
+        for md_file in md_files:
+            content = md_file.read_text()
+            original_content = content
+
+            file_rel = md_file.relative_to(output_dir)
+            file_parts = file_rel.parts
+
+            containing_crate = file_parts[0] if len(file_parts) > 1 and file_parts[0] in crate_dirs else None
+            is_crate_root = md_file.name == 'index.md' and containing_crate and len(file_parts) == 2
+            is_summary = md_file.name == 'SUMMARY.md' and md_file.parent == output_dir
+
+            file_parent = str(file_rel.parent)
+            file_stem = md_file.stem
+            was_flattened = f"{file_parent}/{file_stem}" in flattened_modules if file_parent != '.' else file_stem in flattened_modules
+            is_crate_child = containing_crate is not None and len(file_parts) == 2 and md_file.name != 'index.md'
+
+            ctx = LinkContext(
+                md_file=md_file,
+                was_flattened=was_flattened,
+                is_crate_child=is_crate_child,
+                crate_dirs=crate_dirs,
+                file_set=file_set,
+                dir_set=dir_set,
+            )
+
+            def rewrite_link(match: re.Match) -> str:
+                link = match.group(1)
+
+                split = _split_link(link)
+                if split is None:
+                    return match.group(0)
+
+                link_path, anchor = split
+                if not link_path.endswith('.md'):
+                    return match.group(0)
+
+                # Self-reference: for flattened files, bare index.md -> #
+                if link_path == 'index.md' and ctx.was_flattened:
+                    return f']({anchor})' if anchor else '](#)'
+
+                # If link resolves as-is, no fix needed
+                if ctx.path_exists(ctx.md_file.parent / link_path):
+                    return match.group(0)
+
+                # Try each strategy in order
+                for strategy in _LINK_FIX_STRATEGIES:
+                    result = strategy(ctx, link_path, anchor)
+                    if result is not None:
+                        return result
+
+                return match.group(0)
+
+            content = MD_LINK_PATTERN.sub(rewrite_link, content)
+
+            # Fix SUMMARY.md crate links
+            if is_summary:
+                for crate_name in crate_dirs:
+                    pattern = rf'\]\({crate_name}\.md(\#[^)]*)?\)'
+                    replacement = rf']({crate_name}/index.md\1)'
+                    content = re.sub(pattern, replacement, content)
+
+            # Fix crate root cross-crate links
+            if is_crate_root:
+                for crate_name in crate_dirs:
+                    if crate_name != md_file.parent.name:
+                        pattern = rf'\]\(\.\./{crate_name}\.md(\#[^)]*)?\)'
+                        replacement = rf'](../{crate_name}/index.md\1)'
+                        content = re.sub(pattern, replacement, content)
+
+            if content != original_content:
+                md_file.write_text(content)
+                rewritten_count += 1
+
+        if rewritten_count > 0:
+            console.print(f"[dim]Rewrote links in {rewritten_count} files[/]")
+
+    def _verify_links(self, output_dir: Path, file_set: set[Path] | None = None) -> list[tuple[Path, str]]:
+        """Verify all internal links resolve correctly."""
+        console.print("[dim]Verifying internal links...[/]")
+
+        md_files = list(output_dir.glob("**/*.md"))
+        if not md_files:
+            return []
+
+        if file_set is None:
+            file_set = {p.resolve() for p in output_dir.glob("**/*") if p.is_file()}
+
+        broken_links = []
+
+        for md_file in md_files:
+            content = md_file.read_text()
+
+            for match in MD_LINK_PATTERN.finditer(content):
+                link = match.group(1)
+
+                split = _split_link(link)
+                if split is None:
+                    continue
+
+                link_path, _ = split
+                if link_path in ('CONTRIBUTING.md', '../CONTRIBUTING.md', '../../CONTRIBUTING.md'):
+                    continue
+
+                target_path = (md_file.parent / link_path).resolve()
+
+                if target_path not in file_set:
+                    broken_links.append((md_file, link))
+
+        if broken_links:
+            console.print(f"[yellow]Warning:[/] Found {len(broken_links)} broken links:")
+            for md_file, link in broken_links[:10]:
+                console.print(f"  {md_file.relative_to(output_dir)}: {link}")
+            if len(broken_links) > 10:
+                console.print(f"  ... and {len(broken_links) - 10} more")
+        else:
+            console.print("[green]All internal links verified[/]")
+
+        return broken_links
 
     def _cleanup(self) -> None:
         """Clean up temporary directories."""
@@ -561,8 +980,18 @@ class RustScraper:
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self._generate_markdown(json_dir, self.output_dir)
 
+            # Flatten directory structure (module/index.md -> module.md)
+            flattened_modules = self._flatten_structure(self.output_dir)
+
+            # Rewrite internal links to match new structure
+            self._rewrite_links(self.output_dir, flattened_modules)
+
             # Cleanup markdown artifacts
             self._cleanup_markdown(self.output_dir)
+
+            # Verify all links work (reuse file_set from rewrite step)
+            file_set = {p.resolve() for p in self.output_dir.glob("**/*") if p.is_file()}
+            broken_links = self._verify_links(self.output_dir, file_set)
 
             # Report results
             md_files = list(self.output_dir.glob("**/*.md"))
