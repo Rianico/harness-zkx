@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from rich.box import ROUNDED
 from rich.console import Console
 from rich.table import Table
 
@@ -346,7 +347,7 @@ def print_validation_result(result: dict[str, Any], title: str):
     console.print(f"Status: {status}")
 
     if result.get("stats"):
-        table = Table(title="Statistics")
+        table = Table(title="Statistics", box=ROUNDED)
         table.add_column("Metric", style="cyan")
         table.add_column("Value", style="green")
 
