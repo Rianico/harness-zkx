@@ -1,26 +1,36 @@
 ---
 name: ratatui-guide
-description: "Ratatui TUI framework domain expertise for building terminal user interfaces in Rust. Use when implementing TUI applications, widgets, layouts, styling, or terminal handling with ratatui. TRIGGER when: code imports ratatui, building terminal apps, implementing custom widgets, handling terminal events, creating layouts with Constraint, styling text with Style/Color/Modifier, working with Buffer/Cell/Frame, or questions about ratatui widgets (Block, Paragraph, List, Table, Chart, Canvas, Gauge, Scrollbar, Tabs, BarChart, Sparkline, Clear, Fill). Covers immediate mode rendering, backend selection (crossterm, termion, termwiz), terminal initialization patterns, event handling, and workspace crate organization (ratatui, ratatui-core, ratatui-widgets)."
-argument-hint: "[topic|module]"
+description: |
+  Rust TUI framework for building terminal user interfaces with widgets, layouts, and styling. TRIGGER when: user mentions ratatui, TUI, terminal UI/app/interface; asks about building terminal apps, event loops, widget rendering, layout constraints, text styling in terminal; "ratatui hello world", "ratatui app structure", terminal layout, terminal widgets, custom widget.
+argument-hint: "[topic]"
 ---
 
-# Ratatui Guide
+# Ratatui TUI Library
 
-Domain expertise for building terminal user interfaces with the Ratatui framework in Rust.
+> **Version:** 0.30.0 | **Last Updated:** 2026-05-10
+>
+> Check for updates: https://docs.rs/ratatui/
+
+Rust library for building rich terminal user interfaces with widgets, layouts, and styling.
+
+## Code Generation Rules
+
+- Use `edition = "2024"` in Cargo.toml
+- Use latest ratatui version: `ratatui = "0.30"`
+- Use crossterm backend by default (cross-platform)
+- Always call `ratatui::restore()` or use `ratatui::run()` to ensure terminal restoration
 
 ## Quick Start
-
-```bash
-cargo add ratatui crossterm
-```
 
 ```rust
 use crossterm::event;
 
 fn main() -> std::io::Result<()> {
-    ratatui::run(|mut terminal| {
+    ratatui::run(|terminal| {
         loop {
-            terminal.draw(|frame| frame.render_widget("Hello World!", frame.area()))?;
+            terminal.draw(|frame| {
+                frame.render_widget("Hello World!", frame.area())
+            })?;
             if event::read()?.is_key_press() {
                 break Ok(());
             }
@@ -31,159 +41,187 @@ fn main() -> std::io::Result<()> {
 
 ## Core Concepts
 
-### Immediate Mode Rendering
+1. **Terminal** - Main entry point, manages backend and rendering
+2. **Frame** - Passed to draw closure, provides rendering context
+3. **Widget** - Trait for renderable components (Block, Paragraph, List, etc.)
+4. **Layout** - Constraint-based area splitting for responsive UIs
+5. **Style** - Colors, modifiers, and text styling
 
-Ratatui uses immediate rendering with intermediate buffers. For each frame, render all widgets that should be visible. This differs from retained mode where widgets persist and auto-redraw.
+Ratatui uses **immediate rendering with intermediate buffers**: each frame, render all widgets to a buffer; terminal compares current/previous buffers; only changed cells are written.
 
-### Terminal Initialization
-
-| Function | Use Case |
-|----------|----------|
-| `ratatui::run()` | Normal applications (handles init, cleanup, panic hooks) |
-| `init()` / `restore()` | Manual control over terminal lifetime |
-| `init_with_options()` | Custom viewport (inline, fixed region) |
-| `Terminal::new()` | Custom backend construction |
-
-### Event Handling
-
-Ratatui doesn't include input handling. Use backend events directly:
+## App Struct Pattern
 
 ```rust
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event;
 
-fn handle_events() -> std::io::Result<bool> {
-    match event::read()? {
-        Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-            KeyCode::Char('q') => return Ok(true),
-            _ => {}
-        },
-        _ => {}
-    }
-    Ok(false)
+fn main() -> std::io::Result<()> {
+    let mut app = App::default();
+    ratatui::run(|terminal| app.run(terminal))
 }
-```
 
-### Layout
-
-```rust
-use ratatui::layout::{Constraint, Layout};
-
-let [title, main, status] = Layout::vertical([
-    Constraint::Length(1),
-    Constraint::Min(0),
-    Constraint::Length(1),
-]).areas(frame.area());
-```
-
-## Workspace Organization
-
-Starting with 0.30.0, ratatui is modular:
-
-| Crate | Use For |
-|-------|---------|
-| `ratatui` | Applications (recommended) |
-| `ratatui-core` | Widget libraries, custom integrations |
-| `ratatui-widgets` | Built-in widgets only |
-| `ratatui-crossterm` | Crossterm backend directly |
-| `ratatui-termwiz` | Termwiz backend directly |
-
-## Built-in Widgets
-
-| Widget | Purpose |
-|--------|---------|
-| `Block` | Container with borders, titles |
-| `Paragraph` | Styled text with wrapping |
-| `List` | Selectable list of items |
-| `Table` | Grid with rows/columns, selection |
-| `Chart` | Line/scatter graphs |
-| `Canvas` | Arbitrary shapes |
-| `Gauge` | Progress percentage |
-| `BarChart` | Multiple datasets as bars |
-| `Scrollbar` | Scroll indicator |
-| `Tabs` | Tab bar with selection |
-| `Sparkline` | Single dataset sparkline |
-| `Clear` | Clear area (overlay) |
-| `Fill` | Fill with repeated symbol |
-
-## Styling
-
-```rust
-use ratatui::style::{Color, Modifier, Style, Stylize};
-
-// Builder pattern
-Style::new().fg(Color::Green).bg(Color::White).add_modifier(Modifier::BOLD);
-
-// Shorthand trait
-"Hello".red().on_white().bold();
-paragraph.blue().on_yellow();
-```
-
-## Common Patterns
-
-### Application Structure
-
-```rust
-struct App {
-    should_quit: bool,
-    // state...
+#[derive(Debug, Default)]
+pub struct App {
+    counter: u8,
+    exit: bool,
 }
 
 impl App {
-    fn run(&mut self, terminal: &mut ratatui::DefaultTerminal) -> io::Result<()> {
-        while !self.should_quit {
-            terminal.draw(|frame| self.render(frame))?;
+    pub fn run(&mut self, terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
+        while !self.exit {
+            terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
         }
         Ok(())
     }
 
-    fn render(&self, frame: &mut Frame) { /* ... */ }
-    fn handle_events(&mut self) -> io::Result<()> { /* ... */ }
+    fn handle_events(&mut self) -> std::io::Result<()> {
+        match event::read()? {
+            event::Event::Key(key) if key.kind == crossterm::event::KeyEventKind::Press => {
+                match key.code {
+                    crossterm::event::KeyCode::Char('q') => self.exit = true,
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
 }
 ```
 
-### Custom Widget
-
-Implement `Widget` for stateless, `StatefulWidget` for stateful:
+## Layout
 
 ```rust
-impl Widget for MyWidget {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        // Draw to buffer
-    }
-}
+use ratatui::layout::{Constraint, Layout};
 
-impl StatefulWidget for MyStatefulWidget {
-    type State = MyState;
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        // Draw with state
-    }
-}
+// Vertical split (header/body/footer)
+let [header, body, footer] = Layout::vertical([
+    Constraint::Length(3),
+    Constraint::Fill(1),
+    Constraint::Length(1),
+]).areas(frame.area());
+
+// Horizontal split (sidebar/main)
+let [sidebar, main] = Layout::horizontal([
+    Constraint::Length(20),
+    Constraint::Fill(1),
+]).areas(frame.area());
+
+// With spacing
+let [left, right] = Layout::horizontal([
+    Constraint::Percentage(50),
+    Constraint::Percentage(50),
+]).spacing(2).areas(frame.area());
 ```
 
-## Common Issues
+## Constraint Types
 
-### Terminal not restored on panic
+| Constraint | Description |
+|------------|-------------|
+| `Length(n)` | Exactly n cells |
+| `Min(n)` | At least n cells |
+| `Max(n)` | At most n cells |
+| `Percentage(n)` | n% of available |
+| `Ratio(a, b)` | a/b of available |
+| `Fill(n)` | Fill with weight n |
 
-Always use `ratatui::run()` or ensure `restore()` is called. The init functions install panic hooks, but call them after other panic hooks.
+## Styled Text
 
-### Resize events
+```rust
+use ratatui::style::Stylize;
+use ratatui::text::{Line, Span};
 
-Ratatui doesn't auto-redraw on resize. Continue the event loop and call `draw()` again - it checks the backend's current size during render.
+let style = Style::default().fg(Color::Green).bg(Color::Black).add_modifier(Modifier::BOLD);
+let span = Span::styled("Hello", style);
+let line = Line::from(vec![
+    "Normal ".into(),
+    "bold".bold(),
+    " and ".into(),
+    "red".red(),
+]);
+```
 
-### Cursor position conflicts
+## Common Widgets
 
-Don't mix `Frame` cursor methods with direct backend cursor changes. Choose one path consistently.
+```rust
+// Block with borders
+let block = Block::bordered().title("My Block");
 
-## Reference Documentation
+// Paragraph with wrapping
+Paragraph::new("Long text...").block(Block::bordered()).wrap(Wrap { trim: true });
 
-Full API documentation generated from source using compact output (flattened `module/index.md` → `module.md`, crate roots preserved as `index.md`):
+// Selectable list
+let list = List::new(items).highlight_style(Style::new().reversed()).highlight_symbol("> ");
+frame.render_stateful_widget(list, area, &mut state);
 
-- `references/ratatui/` — Main crate with init, prelude, widgets; also contains all sub-crates
-- `references/ratatui/SUMMARY.md` — Full documentation index
+// Table
+Table::new(rows, [Constraint::Length(10), Constraint::Length(10)])
+    .header(Row::new(vec!["H1", "H2"]).bold());
 
-## External Resources
+// Gauge (progress bar)
+Gauge::default().percent(75).label("75%");
 
-- [Ratatui Website](https://ratatui.rs) — Concepts, tutorials
-- [Examples](https://github.com/ratatui-org/ratatui/tree/main/examples) — Official examples
-- [FAQ](https://ratatui.rs/faq/) — Common questions
+// Chart
+Chart::new(vec![Dataset::default().data(&[(0.0, 1.0), (1.0, 2.0)]).graph_type(GraphType::Line)])
+    .x_axis(Axis::default().title("X"))
+    .y_axis(Axis::default().title("Y"));
+```
+
+## API Reference Table
+
+| Function/Type | Description | Example |
+|---------------|-------------|---------|
+| `ratatui::init()` | Initialize terminal with panic hook | `let terminal = ratatui::init();` |
+| `ratatui::restore()` | Restore terminal to original state | `ratatui::restore();` |
+| `ratatui::run(f)` | Run app with auto init/restore | `ratatui::run(\|t\| app.run(t))` |
+| `terminal.draw(f)` | Draw a frame | `terminal.draw(\|frame\| { ... })?;` |
+| `Layout::vertical([...])` | Create vertical layout | `Layout::vertical([Length(3), Fill(1)])` |
+| `Layout::horizontal([...])` | Create horizontal layout | `Layout::horizontal([Percentage(50); 2])` |
+| `frame.render_widget(w, a)` | Render widget | `frame.render_widget(para, area);` |
+| `frame.render_stateful_widget(w, a, s)` | Render with state | `frame.render_stateful_widget(list, area, &mut state);` |
+
+## Built-in Widgets
+
+| Widget | State Type | Description |
+|--------|------------|-------------|
+| `Block` | - | Container with borders/title |
+| `Paragraph` | - | Text display with wrapping |
+| `List` | `ListState` | Selectable list items |
+| `Table` | `TableState` | Rows and columns |
+| `Tabs` | - | Tab bar |
+| `Gauge` | - | Progress bar |
+| `Scrollbar` | `ScrollbarState` | Scroll indicator |
+| `Chart` | - | Line/scatter charts |
+| `BarChart` | - | Bar charts |
+| `Canvas` | - | Custom drawing |
+
+## References
+
+For detailed patterns and complete API documentation, read:
+
+| Module | File | Topics |
+|--------|------|--------|
+| Basics | `$SKILL_DIR/references/basics.md` | Terminal init, app structure, event loop, backends |
+| Layout | `$SKILL_DIR/references/layout.md` | Constraints, splitting, flex modes, nesting |
+| Styling | `$SKILL_DIR/references/styling.md` | Colors, modifiers, Span/Line/Text, alignment |
+| Widgets | `$SKILL_DIR/references/widgets.md` | All widget patterns, stateful widgets, composition |
+
+For edge cases and complete API surface not covered above, read the raw docs at `$SKILL_DIR/references/ratatui-raw/`.
+
+## When Writing Code
+
+1. Use `ratatui::run()` for simple apps - handles init/restore automatically
+2. Use `KeyEventKind::Press` to avoid double key events on some terminals
+3. Use `Layout::vertical/horizontal()` with `areas()` for compile-time known layouts
+4. Wrap content widgets with `Block` for borders and titles
+5. Use `Fill(1)` for flexible areas, `Length()` for fixed-size headers/footers
+6. Chain `.spacing()` to add gaps between layout areas
+7. Implement `Widget for &MyWidget` for reusable custom widgets
+8. Use `Stylize` trait (`.red()`, `.bold()`) for concise styling
+
+## When Answering Questions
+
+1. Answer from patterns and tables above first
+2. If the question involves deeper details, read `$SKILL_DIR/references/<module>.md`
+3. For edge cases, obscure parameters, or complete API surface, read `$SKILL_DIR/references/ratatui-raw/`
+4. If still insufficient, inform user and answer from built-in knowledge
