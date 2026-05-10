@@ -9,12 +9,14 @@ Mandatory requirements for all skills in this project.
 - Descriptions MUST be third-person (not "I can help you...")
 - SKILL.md MUST stay under 500 lines
 - Reference files MUST be one level deep from SKILL.md (no nested references)
+- All skill-internal resource paths MUST use `$SKILL_DIR/` prefix, not relative paths
 
 ## Prohibited Patterns
 
 - Orchestration logic in skills — use orchestration skills or commands instead
 - Content duplication across skills
 - Windows-style paths — always use forward slashes
+- Relative paths like `../../references/` — use `$SKILL_DIR/references/` instead
 - Vague descriptions like "Helps with documents"
 
 ## Reference

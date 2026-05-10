@@ -188,9 +188,12 @@ If it's not in the description, the skill will not trigger.
 - Deep content in `references/` (one level deep)
 - Executable logic in `scripts/`
 
-**Script Conventions**
-- Run scripts from any directory: `uv run $SKILL_DIR/scripts/xxx.py`
-- Avoid `cd` prefixes — the script should handle paths internally
+**Resource Path Convention**
+- `$SKILL_DIR` is the universal path anchor for ALL skill-owned resources (scripts, references, raw docs, config)
+- Scripts: `uv run $SKILL_DIR/scripts/xxx.py` — runs from any directory
+- References: `$SKILL_DIR/references/<module>.md` — not relative paths like `../../references/`
+- Raw docs: `$SKILL_DIR/references/raw/` — self-contained within skill
+- Avoid `cd` prefixes — scripts should handle paths internally
 - Use `~/.claude/lsz/$SKILL_DIR/` for runtime artifacts (results, temp files)
 - Scripts are invoked via `uv run` with inline script metadata for dependencies
 

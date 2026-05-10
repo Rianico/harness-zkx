@@ -172,6 +172,25 @@ Skills support string substitution for dynamic values in the skill content:
 | `${CLAUDE_EFFORT}` | Current effort level |
 | `$SKILL_DIR` | Skill directory path (for referencing bundled files). **Official substitution:** `${CLAUDE_SKILL_DIR}` |
 
+### `$SKILL_DIR` Path Convention
+
+`$SKILL_DIR` is the universal path anchor for **all** skill-owned resources — scripts, references, raw docs, config files, anything bundled with the skill. Always use `$SKILL_DIR/` paths instead of relative paths like `../../references/`.
+
+**Why:** Relative paths break when the referencing file moves (e.g., sub-skill to main skill, reference to another reference). `$SKILL_DIR` resolves correctly from any file in the skill regardless of nesting depth.
+
+**Applies to:**
+| Resource | Path Pattern | Example |
+|----------|-------------|---------|
+| Scripts | `$SKILL_DIR/scripts/<name>.py` | `uv run $SKILL_DIR/scripts/compile.py` |
+| References | `$SKILL_DIR/references/<module>.md` | `Read $SKILL_DIR/references/layout.md` |
+| Raw docs | `$SKILL_DIR/references/raw/` | `Read $SKILL_DIR/references/raw/ratatui/` |
+| Config | `$SKILL_DIR/config/<file>` | `source $SKILL_DIR/config/defaults.sh` |
+
+**Anti-patterns:**
+- `../../references/<module>/<file>.md` — brittle, breaks on file moves
+- `./references/<file>.md` — assumes cwd is the skill directory
+- Absolute paths like `/Users/x/skills/my-skill/references/` — not portable
+
 **Example:**
 ```yaml
 ---
@@ -185,6 +204,9 @@ $message
 
 Run the bundled script:
 uv run $SKILL_DIR/scripts/helper.py
+
+Read the reference:
+$SKILL_DIR/references/format-spec.md
 ```
 
 ## Trigger Pattern Coverage
