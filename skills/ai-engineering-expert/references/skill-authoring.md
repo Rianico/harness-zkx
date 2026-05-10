@@ -183,7 +183,7 @@ Skills support string substitution for dynamic values in the skill content:
 |----------|-------------|---------|
 | Scripts | `$SKILL_DIR/scripts/<name>.py` | `uv run $SKILL_DIR/scripts/compile.py` |
 | References | `$SKILL_DIR/references/<module>.md` | `Read $SKILL_DIR/references/layout.md` |
-| Raw docs | `$SKILL_DIR/references/raw/` | `Read $SKILL_DIR/references/raw/ratatui/` |
+| Raw docs | `$SKILL_DIR/references/<skill-name>-raw/` | `Read $SKILL_DIR/references/ratatui-raw/` |
 | Config | `$SKILL_DIR/config/<file>` | `source $SKILL_DIR/config/defaults.sh` |
 
 **Anti-patterns:**

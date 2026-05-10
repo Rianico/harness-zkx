@@ -192,7 +192,7 @@ If it's not in the description, the skill will not trigger.
 - `$SKILL_DIR` is the universal path anchor for ALL skill-owned resources (scripts, references, raw docs, config)
 - Scripts: `uv run $SKILL_DIR/scripts/xxx.py` — runs from any directory
 - References: `$SKILL_DIR/references/<module>.md` — not relative paths like `../../references/`
-- Raw docs: `$SKILL_DIR/references/raw/` — self-contained within skill
+- Raw docs: `$SKILL_DIR/references/<skill-name>-raw/` — self-contained within skill
 - Avoid `cd` prefixes — scripts should handle paths internally
 - Use `~/.claude/lsz/$SKILL_DIR/` for runtime artifacts (results, temp files)
 - Scripts are invoked via `uv run` with inline script metadata for dependencies
