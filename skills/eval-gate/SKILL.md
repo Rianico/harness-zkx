@@ -14,18 +14,18 @@ Run eval-driven development gates while keeping substantive work out of the main
 ## Core Loop
 
 ```
-Define criteria  →  Capture baseline  →  Execute implementation
-                                              ↓
+Define + baseline  →  Execute implementation
+                           ↓
 Compare deltas  ←  Re-run evals  ←  Implementation complete
 ```
 
-**Baseline capture**: Before implementation, run `check` to capture what fails. This anchors expectations and prevents "it works because I wrote tests after."
+**Baseline capture** happens inside `define`: the subagent writes scripts, runs them, and writes `baseline.json`. This anchors expectations and prevents "it works because I wrote tests after." The orchestrator never needs to run eval scripts directly.
 
 ## Command Modes
 
 | Mode | Purpose |
 |------|---------|
-| `define <feature> [source]` | Create acceptance criteria from source-of-truth |
+| `define <feature> [source]` | Create acceptance criteria from source-of-truth, verify scripts, capture baseline |
 | `check <feature>` | Run criteria against current implementation |
 | `report <feature>` | Produce comprehensive report with metrics |
 | `list` | Show all eval definitions and statuses |
@@ -97,11 +97,21 @@ Agent tool (general-purpose):
     Execute entirely inside this subagent. Do not launch subagents.
 
     Modes:
-    - `define`: Read source docs, extract observable criteria, write definition with scripts for each criterion.
+    - `define`: Read source docs, extract observable criteria, write definition with scripts for each criterion. Then verify scripts run and capture baseline by running each script. Write `baseline.json` to eval dir. Return baseline summary table.
     - `check`: Run each criterion's script, parse JSON output, append results to log, return status with routing.
     - `report`: Read definition and log, write report, return recommendation.
     - `list`: Summarize definitions and statuses.
     - `clean`: Remove old logs, keep last 10 runs.
+
+    **CRITICAL for `define` mode:**
+    1. Write the eval definition and scripts
+    2. Verify each script is executable and produces valid JSON output
+    3. Run each script to capture baseline state
+    4. Write `baseline.json` to the eval dir with structure:
+       ```json
+       {"captured": "<ISO timestamp>", "criteria": {"<id>": {"status": "pass|fail", "summary": "..."}}}
+       ```
+    5. Return a compact baseline summary table — do NOT paste full script output into your return
 
     **CRITICAL for `check` mode:**
     1. Run the script defined for each criterion
@@ -256,7 +266,7 @@ Report: [path]
 ## Best Practices
 
 1. **Define before coding** — Criteria anchor to approved requirements, not post-hoc justification
-2. **Capture baseline** — Run check before implementation to know what fails
+2. **Baseline inside define** — The define subagent verifies scripts and captures baseline; the orchestrator never runs eval scripts directly
 3. **Prefer deterministic graders** — Model graders introduce variance
 4. **Keep fast** — Evals should run repeatedly without cost anxiety
 5. **Gate on thresholds** — Ship only when all thresholds met
