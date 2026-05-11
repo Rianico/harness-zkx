@@ -1,4 +1,4 @@
-# Code Quality & Security Baseline
+# Development Patterns
 
 ## 1. Coding Style & Principles
 - **Immutability (CRITICAL):** ALWAYS create new objects, NEVER mutate existing ones (e.g., `update(orig)` not `modify(orig)`).
@@ -63,6 +63,12 @@ Serialize only at output boundaries (transport, IPC, API responses). Deserialize
 - **Input boundary:** API endpoints, message handlers, file parsers, config loaders
 - **Never in application layer:** If you see `model_dump()` or `toJSON()` in business logic, question whether it belongs there
 - **Layering check:** When type narrowing seems complex, ask: "Why does this serialization function exist here? Should it move to the boundary?"
+
+### Test After Conflict Resolution
+After resolving git merge/rebase conflicts, run the full test suite before continuing. Conflict resolution is a manual edit that can introduce subtle breakage.
+- **Why:** Manual conflict resolution bypasses CI checks and can silently break functionality
+- **When:** After `git rebase --continue` or before `git merge --continue`, run tests locally
+- **Minimum:** Run tests for files touched by the conflict; ideally run full suite
 
 ## 5. Pre-Completion Checklist
 - [ ] Code is readable and well-named
