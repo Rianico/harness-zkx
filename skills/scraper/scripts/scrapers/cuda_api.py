@@ -379,6 +379,20 @@ Examples:
         print("\n5. Creating index...")
         self._create_index(out_modules_dir, out_structures_dir)
 
+        # Generate README with metadata
+        print("\n6. Generating README...")
+        self.generate_readme(
+            output_dir=self.output_dir,
+            doc_name=f"CUDA {self.api_type.title()} API Documentation",
+            source_url=self.base_url,
+            extra_metadata={
+                "Vendor": "NVIDIA",
+                "API Type": self.api_type.title(),
+                "Modules": str(len(modules)),
+                "Data Structures": str(len(structures)),
+            },
+        )
+
         print("\n" + "=" * 70)
         print("COMPLETE")
         print("=" * 70)

@@ -96,6 +96,19 @@ Examples:
         print("\nCreating index...")
         self._create_index()
 
+        # Generate README with metadata
+        print("\nGenerating README...")
+        self.generate_readme(
+            output_dir=self.output_dir,
+            doc_name="LSP 3.17 Specification",
+            source_url=self.base_url,
+            version="3.17",
+            extra_metadata={
+                "Spec": "Language Server Protocol",
+                "Maintainer": "Microsoft",
+            },
+        )
+
         print(f"\n✓ Complete! Documentation saved to: {self.output_dir}")
 
     def _extract_sections(self, soup) -> list[dict]:

@@ -78,6 +78,18 @@ Examples:
 
             self._save_section(section, current_chapter_dir)
 
+        # Generate README with metadata
+        print("\nGenerating README...")
+        self.generate_readme(
+            output_dir=self.output_dir,
+            doc_name="PTX ISA Documentation",
+            source_url=f"{self.base_url}index.html",
+            extra_metadata={
+                "Vendor": "NVIDIA",
+                "Format": "Parallel Thread Execution ISA",
+            },
+        )
+
         print(f"\n✓ Complete! Documentation saved to: {self.output_dir}")
 
     def _extract_sections(self, soup):

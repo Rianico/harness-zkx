@@ -143,6 +143,40 @@ BaseScraper(
 - **`--force`**: Clear cache and re-fetch from network
 - **Manual**: Delete `.cache/` directory
 
+## README Generation
+
+Every scraper generates a `README.md` in the output directory with metadata:
+
+- **Scraped date**: When the documentation was fetched (UTC timestamp)
+- **Source URL**: Where the documentation came from
+- **Version**: If available (e.g., "3.17" for LSP, crate version for Rust)
+- **Extra metadata**: Scraper-specific info (vendor, file counts, etc.)
+
+### Example README
+
+```markdown
+# LSP 3.17 Specification
+
+**Scraped:** 2026-05-11 14:30 UTC
+
+## Source
+
+- **URL:** https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/
+- **Version:** 3.17
+- **Spec:** Language Server Protocol
+- **Maintainer:** Microsoft
+
+## Usage
+
+This documentation was scraped and converted to LLM-friendly markdown format...
+```
+
+### Why This Matters
+
+- **Freshness check**: Users can see when docs were scraped and decide if they need updating
+- **Version tracking**: Know which version of a spec or crate the docs represent
+- **Source attribution**: Easy link back to canonical documentation
+
 ## Output Quality Checklist
 
 Before considering a scrape complete, verify:
