@@ -417,6 +417,7 @@ Every modification to skills, rules, workflows, agents, or hooks must preserve o
 - **Consolidate, don't accumulate** — Merge related sections, remove superseded content
 - **One concept, one location** — Reference other files rather than copying
 - **Reorganize when needed** — If a file has grown unclear, restructure before adding
+- **Group by topic by default** — Comprehensive rules or broad information files must be organized by topic (e.g., Code Quality, Git Workflow, Testing). Topic-based grouping improves discoverability and enables readers to scan by concern.
 
 **Red Flags**
 - File exceeds size limits (SKILL.md > 500 lines, reference files bloating)

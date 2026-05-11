@@ -1,30 +1,18 @@
 # Development Patterns
 
-## 1. Coding Style & Principles
-- **Immutability (CRITICAL):** ALWAYS create new objects, NEVER mutate existing ones (e.g., `update(orig)` not `modify(orig)`).
-- **File Organization:** MANY SMALL FILES > FEW LARGE FILES (200-400 lines typical, 800 max). Organize by feature/domain.
-- **Error Handling:** Handle errors explicitly. Never silently swallow errors. Fail fast.
-- **Input Validation:** ALWAYS validate at system boundaries.
-- **Principles:** Readability First, KISS (Keep It Simple), DRY (extract logic if repeated >3 times), YAGNI (don't build until needed).
+## Code Quality
 
-## 2. Security Guidelines
-- **Mandatory Checks before commit:** No hardcoded secrets, inputs validated, SQL/XSS/CSRF prevention, Auth verified, rate limiting, no sensitive data leaked in errors.
-- **Secret Management:** ALWAYS use environment variables/secret manager. NEVER hardcode.
-- **Security Protocol:** If an issue is found: STOP, use `security-reviewer` agent, fix CRITICAL issues, rotate exposed secrets.
+### Immutability (CRITICAL)
+ALWAYS create new objects, NEVER mutate existing ones (e.g., `update(orig)` not `modify(orig)`).
 
-## 3. Performance Assertions
-- **MANDATORY:** When making performance claims, benchmark with real tests first—never guess by theory.
-- **Process awareness:** Count subprocess spawns. Each fork/exec has overhead that compounds.
-- **Measure wall-clock time** with realistic payloads, not synthetic benchmarks.
-- **Example lesson:** Bash was assumed faster than Python for hooks, but measured 3x slower (183ms vs 61ms) due to 34 subprocess spawns vs 0.
+### File Organization
+MANY SMALL FILES > FEW LARGE FILES (200-400 lines typical, 800 max). Organize by feature/domain.
 
-## 4. Engineering Principles
+### Error Handling
+Handle errors explicitly. Never silently swallow errors. Fail fast.
 
-### Trust But Verify
-After fixing issues, restart/refresh and re-verify. Caches can become stale - a fix that appears successful may not persist.
-- Server: Restart daemon after type changes
-- Build: Clean build after significant refactors
-- Tests: Clear test cache if results seem wrong
+### Principles
+Readability First, KISS (Keep It Simple), DRY (extract logic if repeated >3 times), YAGNI (don't build until needed).
 
 ### API Visibility Matches Usage
 Visibility modifiers should reflect actual usage patterns. Private functions/classes used across modules create warnings and confusion.
@@ -38,6 +26,13 @@ Fix issues at the most precise scope possible. Targeted fixes preserve overall s
 3. Suppress at file level
 4. Suppress at project level (avoid)
 5. Disable rule globally (never)
+
+---
+
+## Types & Data Flow
+
+### Input Validation
+ALWAYS validate at system boundaries.
 
 ### Validate at Boundaries
 Dynamic data enters at boundaries; validate there, not everywhere. Once validated, internal code can trust types.
@@ -64,13 +59,56 @@ Serialize only at output boundaries (transport, IPC, API responses). Deserialize
 - **Never in application layer:** If you see `model_dump()` or `toJSON()` in business logic, question whether it belongs there
 - **Layering check:** When type narrowing seems complex, ask: "Why does this serialization function exist here? Should it move to the boundary?"
 
+---
+
+## Git Workflow
+
 ### Test After Conflict Resolution
 After resolving git merge/rebase conflicts, run the full test suite before continuing. Conflict resolution is a manual edit that can introduce subtle breakage.
 - **Why:** Manual conflict resolution bypasses CI checks and can silently break functionality
 - **When:** After `git rebase --continue` or before `git merge --continue`, run tests locally
 - **Minimum:** Run tests for files touched by the conflict; ideally run full suite
 
-## 5. Pre-Completion Checklist
+---
+
+## Verification
+
+### Trust But Verify
+After fixing issues, restart/refresh and re-verify. Caches can become stale - a fix that appears successful may not persist.
+- Server: Restart daemon after type changes
+- Build: Clean build after significant refactors
+- Tests: Clear test cache if results seem wrong
+
+---
+
+## Security
+
+### Mandatory Checks Before Commit
+No hardcoded secrets, inputs validated, SQL/XSS/CSRF prevention, Auth verified, rate limiting, no sensitive data leaked in errors.
+
+### Secret Management
+ALWAYS use environment variables/secret manager. NEVER hardcode.
+
+### Security Protocol
+If an issue is found: STOP, use `security-reviewer` agent, fix CRITICAL issues, rotate exposed secrets.
+
+---
+
+## Performance
+
+### Benchmark Before Claiming
+When making performance claims, benchmark with real tests first—never guess by theory.
+
+### Process Awareness
+Count subprocess spawns. Each fork/exec has overhead that compounds.
+
+### Measure Realistically
+Measure wall-clock time with realistic payloads, not synthetic benchmarks.
+- **Example:** Bash was assumed faster than Python for hooks, but measured 3x slower (183ms vs 61ms) due to 34 subprocess spawns vs 0.
+
+---
+
+## Pre-Completion Checklist
 - [ ] Code is readable and well-named
 - [ ] Functions are small (<50 lines), Files focused (<800 lines), no deep nesting (>4 levels)
 - [ ] Proper error handling, validation, and no mutation
