@@ -112,19 +112,17 @@ Workflows that generate files, reports, plans, evals, reviews, or tracking state
 All tests MUST be placed in the project root `tests/` directory, never inside skill or feature directories.
 
 * **Anti-Pattern:** Placing tests alongside source code in `skills/<name>/tests/` or `features/<name>/tests/`. This fragments test discovery, complicates CI configuration, and duplicates conftest.py files.
-* **LSZ Pattern:** All tests live under `tests/` at project root, organized by feature/skill name:
+* **LSZ Pattern:** All tests live under `tests/` at project root. Test directory names MUST exactly match their corresponding skill directory names:
   ```
   tests/
   ├── conftest.py              # Shared fixtures for all tests
-  ├── scraper/                 # Tests for skills/docs-scraper
-  │   ├── conftest.py
-  │   ├── fixtures.py
-  │   └── test_*.py
-  ├── continuous-learning/     # Tests for continuous-learning feature
-  │   └── phase*/
-  │       └── test_*.py
+  ├── continuous-learning/     # Tests for skills/continuous-learning
+  ├── docs-scraper/            # Tests for skills/docs-scraper
+  ├── skill-comply/            # Tests for skills/skill-comply
+  ├── skill-stocktake/         # Tests for skills/skill-stocktake
   └── test_hook_install_smoke.py
   ```
+* **Naming rule:** `tests/<name>/` must correspond to `skills/<name>/`. No exceptions.
 * **Path resolution:** Test conftest.py files must add the source directory to `sys.path` for imports. Use `Path(__file__).parent.parent.parent / "skills" / "<skill-name>" / "scripts"` pattern.
 * **Benefits:** Single `pytest` command runs all tests. Shared fixtures are discoverable. No duplicate test infrastructure.
 
