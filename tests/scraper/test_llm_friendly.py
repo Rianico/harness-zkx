@@ -410,3 +410,170 @@ class TestFetchViaJinaReader:
                 "https://r.jina.ai/https://example.com/page",
                 timeout=scraper_with_mock_session.timeout,
             )
+
+
+class TestFetchViaDefuddle:
+    """Tests for fetch_via_defuddle method."""
+
+    def test_returns_markdown_on_success(self, scraper_with_mock_session) -> None:
+        """Should return markdown from defuddle CLI."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "# Title\n\nContent from defuddle"
+
+        with patch("subprocess.run", return_value=mock_result):
+            content, fmt = scraper_with_mock_session.fetch_via_defuddle(TEST_PAGE_URL)
+
+            assert content == "# Title\n\nContent from defuddle"
+            assert fmt == "markdown"
+
+    def test_returns_none_on_nonzero_exit(self, scraper_with_mock_session) -> None:
+        """Should return (None, 'html') when defuddle exits with error."""
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+
+        with patch("subprocess.run", return_value=mock_result):
+            content, fmt = scraper_with_mock_session.fetch_via_defuddle(TEST_PAGE_URL)
+
+            assert content is None
+            assert fmt == "html"
+
+    def test_returns_none_when_defuddle_not_installed(self, scraper_with_mock_session) -> None:
+        """Should return (None, 'html') when defuddle CLI is not found."""
+        with patch("subprocess.run", side_effect=FileNotFoundError()):
+            content, fmt = scraper_with_mock_session.fetch_via_defuddle(TEST_PAGE_URL)
+
+            assert content is None
+            assert fmt == "html"
+
+    def test_returns_none_on_timeout(self, scraper_with_mock_session) -> None:
+        """Should return (None, 'html') when defuddle times out."""
+        import subprocess
+
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="defuddle", timeout=30)):
+            content, fmt = scraper_with_mock_session.fetch_via_defuddle(TEST_PAGE_URL)
+
+            assert content is None
+            assert fmt == "html"
+
+    def test_constructs_correct_command(self, scraper_with_mock_session) -> None:
+        """Should call defuddle with correct arguments."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "# Content"
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock_result
+
+            scraper_with_mock_session.fetch_via_defuddle("https://example.com/page")
+
+            mock_run.assert_called_once_with(
+                ["defuddle", "parse", "https://example.com/page", "--md"],
+                capture_output=True,
+                text=True,
+                timeout=scraper_with_mock_session.timeout,
+            )
+
+    def test_returns_none_on_empty_output(self, scraper_with_mock_session) -> None:
+        """Should return (None, 'html') when defuddle returns empty output."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "   \n  "  # Whitespace only
+
+        with patch("subprocess.run", return_value=mock_result):
+            content, fmt = scraper_with_mock_session.fetch_via_defuddle(TEST_PAGE_URL)
+
+            assert content is None
+            assert fmt == "html"
+
+
+class TestFetchPageLlmFriendlyFallbackChain:
+    """Tests for fallback chain order in fetch_page_llm_friendly."""
+
+    def test_tries_defuddle_before_jina(self, scraper_with_mock_session) -> None:
+        """Should try defuddle before Jina Reader."""
+        with patch.object(
+            scraper_with_mock_session,
+            "fetch_markdown_via_negotiation",
+            return_value=(None, "html"),
+        ):
+            with patch.object(
+                scraper_with_mock_session,
+                "fetch_markdown_extension",
+                return_value=(None, "html"),
+            ):
+                with patch.object(
+                    scraper_with_mock_session,
+                    "fetch_via_defuddle",
+                    return_value=("# Defuddle Content", "markdown"),
+                ) as mock_defuddle:
+                    with patch.object(
+                        scraper_with_mock_session,
+                        "fetch_via_jina_reader",
+                    ) as mock_jina:
+                        content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                            TEST_PAGE_URL
+                        )
+
+                        assert content == "# Defuddle Content"
+                        assert fmt == "markdown"
+                        mock_defuddle.assert_called_once()
+                        mock_jina.assert_not_called()
+
+    def test_falls_back_to_jina_when_defuddle_fails(self, scraper_with_mock_session) -> None:
+        """Should fall back to Jina when defuddle fails."""
+        with patch.object(
+            scraper_with_mock_session,
+            "fetch_markdown_via_negotiation",
+            return_value=(None, "html"),
+        ):
+            with patch.object(
+                scraper_with_mock_session,
+                "fetch_markdown_extension",
+                return_value=(None, "html"),
+            ):
+                with patch.object(
+                    scraper_with_mock_session,
+                    "fetch_via_defuddle",
+                    return_value=(None, "html"),
+                ):
+                    with patch.object(
+                        scraper_with_mock_session,
+                        "fetch_via_jina_reader",
+                        return_value=("# Jina Content", "markdown"),
+                    ):
+                        content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                            TEST_PAGE_URL
+                        )
+
+                        assert content == "# Jina Content"
+                        assert fmt == "markdown"
+
+    def test_skips_defuddle_when_disabled(self, scraper_with_mock_session) -> None:
+        """Should skip defuddle when use_defuddle=False."""
+        with patch.object(
+            scraper_with_mock_session,
+            "fetch_markdown_via_negotiation",
+            return_value=(None, "html"),
+        ):
+            with patch.object(
+                scraper_with_mock_session,
+                "fetch_markdown_extension",
+                return_value=(None, "html"),
+            ):
+                with patch.object(
+                    scraper_with_mock_session,
+                    "fetch_via_defuddle",
+                ) as mock_defuddle:
+                    with patch.object(
+                        scraper_with_mock_session,
+                        "fetch_via_jina_reader",
+                        return_value=("# Jina Content", "markdown"),
+                    ):
+                        content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                            TEST_PAGE_URL, use_defuddle=False
+                        )
+
+                        assert content == "# Jina Content"
+                        mock_defuddle.assert_not_called()

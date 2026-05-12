@@ -108,13 +108,33 @@ Workflows that generate files, reports, plans, evals, reviews, or tracking state
   * **Workflow Artifact Pattern:** `.lsz/{date}/{topic_creation_time}_{short_topic}/{workflow_kind}/` (e.g., `.lsz/20260409/120123_auth_migration/plan/plan_v1.md`).
   * **Execution:** Create the selected artifact directory with `mkdir -p` before writing artifacts. Downstream phases in an orchestrated workflow MUST reuse the caller-provided topic root or artifact directory instead of generating unrelated roots.
 
-## 6. Parallel Agent Execution
+## 6. Test Placement Convention
+All tests MUST be placed in the project root `tests/` directory, never inside skill or feature directories.
+
+* **Anti-Pattern:** Placing tests alongside source code in `skills/<name>/tests/` or `features/<name>/tests/`. This fragments test discovery, complicates CI configuration, and duplicates conftest.py files.
+* **LSZ Pattern:** All tests live under `tests/` at project root, organized by feature/skill name:
+  ```
+  tests/
+  ├── conftest.py              # Shared fixtures for all tests
+  ├── scraper/                 # Tests for skills/docs-scraper
+  │   ├── conftest.py
+  │   ├── fixtures.py
+  │   └── test_*.py
+  ├── continuous-learning/     # Tests for continuous-learning feature
+  │   └── phase*/
+  │       └── test_*.py
+  └── test_hook_install_smoke.py
+  ```
+* **Path resolution:** Test conftest.py files must add the source directory to `sys.path` for imports. Use `Path(__file__).parent.parent.parent / "skills" / "<skill-name>" / "scripts"` pattern.
+* **Benefits:** Single `pytest` command runs all tests. Shared fixtures are discoverable. No duplicate test infrastructure.
+
+## 7. Parallel Agent Execution
 To maximize context efficiency and reduce latency, you MUST leverage parallel execution when orchestrating multiple independent or read-only tasks.
 
 * **Anti-Pattern:** Running a security review agent, waiting for it to finish, and then running a performance review agent.
 * **LSZ Pattern:** Launching multiple sub-agents concurrently in a single tool call payload when their tasks do not depend on each other's outputs.
 
-## 7. Native Agent Orchestration Constraints
+## 8. Native Agent Orchestration Constraints
 Shell-wrapper scripts executing sub-processes for multi-model collaboration are brittle, but Native Agents have strict constraints that must be respected.
 
 * **Anti-Pattern:** Using bash to run python scripts to pipe outputs between multiple models.
@@ -122,14 +142,14 @@ Shell-wrapper scripts executing sub-processes for multi-model collaboration are 
 * **CRITICAL ARCHITECTURE CONSTRAINT (No Sub-Agent UI):** Sub-agents do not own the interaction flow with the user. If a sub-agent needs approval or a branch decision, it must return a structured response to the primary agent, which then handles the next step.
 * **CRITICAL ARCHITECTURE CONSTRAINT (Stateless Iteration):** When iterating on a sub-agent's artifact (e.g., a user rejects a plan and provides feedback), DO NOT use the `to:` routing / `SendMessage` to resume the old sub-agent. Resumed agents accumulate context bloat and act statefully. Instead, spawn a **NEW** agent and explicitly pass the file path of the previous artifact alongside the user's feedback in the prompt.
 
-## 8. Interaction Patterns
+## 9. Interaction Patterns
 Destructive or highly divergent workflows should not guess the user's intent.
 
 * **Anti-Pattern:** Generating 5 files or writing a massive plan to disk, then asking "Is this okay?" via an unstructured follow-up.
 * **LSZ Pattern:** Heavy orchestration skills and complex workflow skills should define explicit checkpoints and structured branching points when approval or divergence is required.
 * **Preferred Structure:** When encoding interactive branches, use the Dialog Contract pattern (YAML format that maps to `AskUserQuestion` tool calls). See `ai-engineering-expert` skill's `dialog-contract.md` reference for the full specification.
 
-## 9. Required Frontmatter (Argument Hints & Allowed Tools)
+## 10. Required Frontmatter (Argument Hints & Allowed Tools)
 To ensure a seamless user experience and strict system bounds, skills, commands, and agents have explicit YAML frontmatter requirements.
 
 * **Anti-Pattern:** Creating skills, commands, or agents without explicit argument hints, forcing the user or the LLM to guess what arguments are accepted, or omitting tool scoping for commands and agents.

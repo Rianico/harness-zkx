@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Add the scraper scripts directory to the path for imports
-# When running from project root: skills/scraper/scripts/scrapers
-scraper_path = Path(__file__).parent.parent.parent / "skills" / "scraper" / "scripts" / "scrapers"
+# When running from project root: skills/docs-scraper/scripts/scrapers
+scraper_path = Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts" / "scrapers"
 scraper_path = scraper_path.resolve()
 if str(scraper_path) not in sys.path:
     sys.path.insert(0, str(scraper_path))
