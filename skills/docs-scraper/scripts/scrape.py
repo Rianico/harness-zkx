@@ -42,7 +42,7 @@ import sys
 from pathlib import Path
 
 # Import scrapers
-from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper
+from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper, SiteScraper
 
 # Registry of available scrapers
 SCRAPERS = {
@@ -51,12 +51,14 @@ SCRAPERS = {
         "requires_api_type": False,
         "default_output": "references/lsp-3.17-docs",
         "is_rust": False,
+        "is_site": False,
     },
     "ptx": {
         "class": PTXScraper,
         "requires_api_type": False,
         "default_output": "references/ptx-docs",
         "is_rust": False,
+        "is_site": False,
     },
     "runtime": {
         "class": APIScraper,
@@ -64,6 +66,7 @@ SCRAPERS = {
         "api_type": "runtime",
         "default_output": "references/cuda-runtime-docs",
         "is_rust": False,
+        "is_site": False,
     },
     "driver": {
         "class": APIScraper,
@@ -71,11 +74,19 @@ SCRAPERS = {
         "api_type": "driver",
         "default_output": "references/cuda-driver-docs",
         "is_rust": False,
+        "is_site": False,
     },
     "rust": {
         "class": RustScraper,
         "default_output": "references/rust-docs",
         "is_rust": True,
+        "is_site": False,
+    },
+    "site": {
+        "class": SiteScraper,
+        "default_output": "site-output",
+        "is_rust": False,
+        "is_site": True,
     },
 }
 
@@ -164,6 +175,33 @@ For detailed help on a specific scraper:
                 default=True,
                 help="Exclude private items (default: True)",
             )
+        elif config.get("is_site"):
+            # Site scraper has base_url and urls arguments
+            sub = subparsers.add_parser(
+                name,
+                help="Scrape generic site via llms.txt/sitemap.xml",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                description=config["class"].description,
+            )
+            sub.add_argument(
+                "urls",
+                nargs="*",
+                help="URLs to fetch (fetch mode). If omitted, uses discovery mode.",
+            )
+            sub.add_argument(
+                "--base-url",
+                help="Base URL for discovery mode (finds URLs via llms.txt/sitemap.xml)",
+            )
+            sub.add_argument(
+                "--output-dir",
+                type=Path,
+                help=f"Output directory (default: {config['default_output']})",
+            )
+            sub.add_argument(
+                "--force",
+                action="store_true",
+                help="Clear cache and re-fetch from network",
+            )
         else:
             # Standard web scrapers
             sub = subparsers.add_parser(
@@ -219,6 +257,13 @@ def main() -> None:
             include_examples=getattr(args, "include_examples", False),
             full_method_docs=getattr(args, "full_method_docs", True),
             exclude_private=getattr(args, "exclude_private", True),
+        )
+    elif config.get("is_site"):
+        scraper = config["class"](
+            base_url=getattr(args, "base_url", None) or "",
+            urls=getattr(args, "urls", None),
+            output_dir=output_dir,
+            force=args.force,
         )
     elif config.get("requires_api_type"):
         scraper = config["class"](

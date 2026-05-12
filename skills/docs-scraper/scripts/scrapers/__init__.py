@@ -5,6 +5,7 @@ from .cuda_api import APIScraper
 from .ptx import PTXScraper
 from .lsp import LSPScraper
 from .rust import RustScraper, detect_rust_project
+from .site import SiteScraper, parse_llms_txt, parse_sitemap_xml
 
 __all__ = [
     "DocumentationScraper",
@@ -12,5 +13,8 @@ __all__ = [
     "PTXScraper",
     "LSPScraper",
     "RustScraper",
+    "SiteScraper",
     "detect_rust_project",
+    "parse_llms_txt",
+    "parse_sitemap_xml",
 ]

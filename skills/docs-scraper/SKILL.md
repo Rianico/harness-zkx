@@ -1,7 +1,7 @@
 ---
-name: scraper
-description: "Documentation scraper for converting technical docs to LLM-friendly markdown. Use when scraping LSP specification, PTX ISA, CUDA Runtime/Driver API, Rust crate documentation, or other technical docs. For Rust projects (docs.rs, crates.io, GitHub repos), automatically uses cargo-docs-md for cleaner output. Handles emoji anchor cleanup, internal link resolution, section splitting, and caching. Triggers on: scrape LSP, scrape PTX, scrape CUDA, scrape Rust docs, docs.rs, rust documentation, convert HTML to markdown, technical docs to markdown."
-argument-hint: "[lsp|ptx|runtime|driver|rust <target>] [--force] [--output-dir <path>]"
+name: docs-scraper
+description: "Documentation scraper for converting technical docs to LLM-friendly markdown. Use when scraping LSP specification, PTX ISA, CUDA Runtime/Driver API, Rust crate documentation, or general documentation websites. For Rust projects (docs.rs, crates.io, GitHub repos), automatically uses cargo-docs-md for cleaner output. For general sites, uses LLM-driven discovery via llms.txt/sitemap. Handles emoji anchor cleanup, internal link resolution, section splitting, and caching. Triggers on: scrape LSP, scrape PTX, scrape CUDA, scrape Rust docs, scrape site, docs.rs, rust documentation, convert HTML to markdown, technical docs to markdown, llms.txt, sitemap."
+argument-hint: "[lsp|ptx|runtime|driver|rust <target>|site] [--force] [--output-dir <path>] [--base-url <url>]"
 ---
 
 # Documentation Scraper Skill
@@ -23,6 +23,10 @@ uv run $SKILL_DIR/scripts/scrape.py driver --output-dir ./references/cuda-driver
 uv run $SKILL_DIR/scripts/scrape.py rust ratatui --output-dir ./references/ratatui-docs
 uv run $SKILL_DIR/scripts/scrape.py rust https://github.com/ratatui/ratatui
 
+# General site scraping
+uv run $SKILL_DIR/scripts/scrape.py site --base-url https://example.com  # Discovery mode
+uv run $SKILL_DIR/scripts/scrape.py site --output-dir ./docs url1 url2  # Fetch mode
+
 # Force re-fetch (ignore cache)
 uv run $SKILL_DIR/scripts/scrape.py lsp --force
 ```
@@ -36,6 +40,7 @@ uv run $SKILL_DIR/scripts/scrape.py lsp --force
 | `runtime` | CUDA Runtime API | Multi-page API documentation |
 | `driver` | CUDA Driver API | Multi-page API documentation |
 | `rust` | Rust Crates | Uses cargo-docs-md for clean output |
+| `site` | General Websites | LLM-driven discovery via llms.txt/sitemap |
 
 ## Rust Documentation
 
@@ -90,6 +95,132 @@ The `cargo-docs-md` output includes:
 - Cross-crate links within workspace
 - SUMMARY.md for mdBook compatibility
 - search_index.json for search functionality
+
+## General Site Scraping
+
+The `site` scraper provides LLM-driven discovery and fetching for general documentation websites.
+
+### Workflow
+
+```
+Step 1: Discover Pages (Semantic)
+  ┌─────────────────────────────────────────┐
+  │ Try built-in skill (e.g., tavily-tools) │
+  │         ↓ (not available or partial)    │
+  │ Check llms.txt                          │
+  │         ↓ (not found)                   │
+  │ Check sitemap.xml                       │
+  │         ↓ (not found)                   │
+  │ Script returns raw URLs                 │
+  └─────────────────────────────────────────┘
+                    ↓
+         LLM analyzes relevance
+                    ↓
+         LLM builds filtered URL list
+
+Step 2: Fetch Docs (Deterministic)
+  ┌─────────────────────────────────────────┐
+  │ Script receives URL list                │
+  │ Fetch each URL (LLM-friendly methods)   │
+  │ Convert to markdown                     │
+  │ Generate README with placeholders       │
+  └─────────────────────────────────────────┘
+
+Step 3: Fill README (Semantic)
+  ┌─────────────────────────────────────────┐
+  │ LLM reads scraped pages                 │
+  │ LLM extracts project info               │
+  │ LLM fills README placeholders           │
+  └─────────────────────────────────────────┘
+```
+
+### Discovery Mode
+
+When URLs are not provided, returns discovered URLs for LLM analysis:
+
+```bash
+uv run $SKILL_DIR/scripts/scrape.py site --base-url https://example.com
+# Returns JSON with discovered URLs
+```
+
+### Fetch Mode
+
+After LLM analysis, pass filtered URL list to fetch:
+
+```bash
+uv run $SKILL_DIR/scripts/scrape.py site --output-dir ./docs \
+  "https://example.com/page1/" \
+  "https://example.com/page2/"
+```
+
+### Output Structure
+
+```
+output-dir/
+├── README.md           # Template with placeholders for LLM
+├── 001-title.md        # Fetched pages
+├── 002-title.md
+└── ...
+```
+
+### README Template
+
+The scraper generates README.md with placeholders for LLM to fill:
+
+```markdown
+# {PROJECT_NAME}
+
+{BRIEF_INTRODUCTION}
+
+## Metadata
+
+- **Version:** {VERSION}
+- **GitHub:** {GITHUB_URL}
+- **Scraped:** 2026-05-12
+- **Source:** https://example.com
+
+## Tech Stack
+
+{TECH_STACK}
+
+## Pages
+
+- [Title](001-title.md) — https://example.com/page
+...
+```
+
+| Placeholder | Filled By | Description |
+|-------------|-----------|-------------|
+| `{PROJECT_NAME}` | LLM | Extract from content |
+| `{BRIEF_INTRODUCTION}` | LLM | Synthesize from pages |
+| `{VERSION}` | Script | Fetch via `gh release list` CLI, fallback to GitHub API |
+| `{GITHUB_URL}` | LLM | Link to source repo |
+| `{TECH_STACK}` | LLM | Infer from content |
+| `Scraped` | Script | Deterministic date |
+| `Source` | Script | Base URL |
+| `Pages` | Script | File index |
+
+After scraping, LLM should read the scraped pages and fill the placeholders. If `{GITHUB_URL}` is filled, the script can fetch `{VERSION}` via:
+
+1. `gh release list --repo owner/repo --limit 1 --json tagName` (requires gh CLI)
+2. Fallback to `https://api.github.com/repos/{owner}/{repo}/releases/latest`
+
+### Footer
+
+All generated READMEs include author attribution:
+
+```
+---
+*Generated by scraper skill on {date}*
+*Author: Rianico, Email: zhxuankun@163.com*
+```
+
+### Site-Specific Modules
+
+If a site requires unique cleaning rules:
+1. First try adding to `references/cleanup-patterns.md` as a common pattern
+2. If rules are site-specific, not a common pattern, and may break other sites → create a curated module (e.g., `rust` module)
+3. This isolation prevents site-specific rules from affecting common sites
 
 ## Best Practices
 
