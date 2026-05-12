@@ -1,6 +1,6 @@
 ---
 name: llm-lsp-cli-guide
-description: "Practical guide for LLMs to use llm-lsp-cli for code intelligence. Use when navigating codebases, finding definitions, tracking call chains, identifying symbol sources, getting project overviews, or analyzing code structure. Covers document-symbol, workspace-symbol, definition, references, hover, incoming-calls, outgoing-calls, diagnostics, rename, and completion. Invoke when user asks to find where something is defined, who calls a function, what a file contains, how code is structured, or to rename symbols."
+description: "Practical guide for LLMs to use llm-lsp-cli for code intelligence. Use when navigating codebases, finding definitions, tracking call chains, identifying symbol sources, getting project overviews, analyzing code structure, checking diagnostics, or fixing type errors. Covers document-symbol, workspace-symbol, definition, references, hover, incoming-calls, outgoing-calls, diagnostics, rename, completion, and did-change for cache coherence. Invoke when user asks to find where something is defined, who calls a function, what a file contains, how code is structured, rename symbols, check type errors, or fix diagnostics."
 argument-hint: "[command] <file> [line] [column]"
 ---
 
@@ -74,7 +74,7 @@ Returns matching symbols grouped by file. Use this to locate symbols without kno
 ### Get Diagnostics
 
 ```bash
-# Single file
+# Individual file
 llm-lsp-cli lsp diagnostics src/main.py
 
 # Entire workspace
@@ -82,6 +82,21 @@ llm-lsp-cli lsp workspace-diagnostics
 ```
 
 Diagnostics include severity (`Error`, `Warning`, `Information`, `Hint`), range, message, and diagnostic code (e.g., `reportUndefinedVariable`).
+
+### Notify External File Changes (CRITICAL)
+
+When files are edited outside the daemon (by editors, scripts, or manual fixes), notify the daemon before querying diagnostics:
+
+```bash
+# 1. Fix code externally
+# 2. Notify daemon
+llm-lsp-cli lsp did-change src/main.py
+
+# 3. Query fresh diagnostics
+llm-lsp-cli lsp diagnostics src/main.py
+```
+
+> NOTE: In general, use mechanisms like `hook` to send `did-change` request automatically after any edits.
 
 ---
 
@@ -320,6 +335,27 @@ llm-lsp-cli lsp outgoing-calls src/module.py 200 5
 llm-lsp-cli lsp hover src/module.py 200 15
 ```
 
+### Workflow: Fix Diagnostics Loop
+
+Iterate on type errors until clean:
+
+```bash
+# 1. Get current diagnostics
+llm-lsp-cli lsp diagnostics src/module.py
+
+# 2. Fix the error in your editor (externally)
+
+# 3. Notify daemon of the change
+llm-lsp-cli lsp did-change src/module.py
+
+# 4. Re-check — should show fewer errors
+llm-lsp-cli lsp diagnostics src/module.py
+
+# 5. Repeat until clean
+```
+
+The `did-change` step is required between external edits and diagnostic queries. Without it, the daemon returns cached (stale) results from before your fix.
+
 ---
 
 ## 5. Position Conventions
@@ -380,7 +416,8 @@ All commands support `--format`:
 
 - **Daemon must be running.** All `lsp` commands fail if the daemon is down. Check with `daemon status`.
 - **File must be in workspace.** The LSP server only knows about files under the workspace root.
-- **Stale after external edits.** If files are modified outside the tool, run `llm-lsp-cli lsp did-change <file>` to notify the daemon.
+- **Stale after external edits.** If files are modified outside the tool, run `llm-lsp-cli lsp did-change <file>` to notify the daemon. Without this, diagnostics and other queries return cached (possibly stale) results.
+- **Diagnostic cache has two layers.** Both workspace-diagnostics and diagnostics share a unified cache but track versions independently, while the previous one is updated asynchronously, the later one is synchronous.
 - **Test files excluded by default.** Use `--include-tests` to include them in references, workspace-symbol, and workspace-diagnostics.
 - **Ranges are 1-based.** `"44:5-44:26"` means line 44, columns 5 to 26. Do NOT subtract 1.
 - **Call hierarchy needs a function name.** Point `incoming-calls`/`outgoing-calls` at a function/method name, not at a random line.
