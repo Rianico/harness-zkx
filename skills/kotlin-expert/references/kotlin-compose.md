@@ -1,12 +1,6 @@
----
-name: compose-multiplatform-patterns
-description: Compose Multiplatform and Jetpack Compose patterns for KMP projects — state management, navigation, theming, performance, and platform-specific UI.
+# Kotlin Compose & Compose Multiplatform Patterns
 
----
-
-# Compose Multiplatform Patterns
-
-Patterns for building shared UI across Android, iOS, Desktop, and Web using Compose Multiplatform and Jetpack Compose. Covers state management, navigation, theming, and performance.
+Patterns for building shared UI across Android, iOS, Desktop, and Web using Compose Multiplatform and Jetpack Compose. Covers state management, navigation, composable design, platform-specific UI, and performance.
 
 ## When to Activate
 
@@ -292,7 +286,3 @@ fun AppTheme(
 - Heavy computation inside `@Composable` functions — move to ViewModel or `remember {}`
 - Using `LaunchedEffect(Unit)` as a substitute for ViewModel init — it re-runs on configuration change in some setups
 - Creating new object instances in composable parameters — causes unnecessary recomposition
-
-## References
-
-See skill: `kotlin-expert` for coroutine and Flow patterns.
