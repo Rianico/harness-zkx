@@ -7,9 +7,13 @@
 .claude/skills/
 .claude/hooks/
 .claude/commands/
-.claude/settings.json
-.claude/settings.local.json
-.claude/*.json
+.claude/settings.*
+
+# ADR
+.adr-dir
+
+# Claude Tap
+.traces/
 
 # extra repo
 everything-claude-code/
