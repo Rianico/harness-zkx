@@ -1,6 +1,6 @@
 ---
 name: python-expert
-description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, complex type scenarios including type boundary enforcement and suppression handling, and stub file (.pyi) authoring. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; implementing IPC or transport layers with generic types; seeing reportUnknownVariableType diagnostics; deciding when to call model_dump(); premature serialization causing type loss; tracing types to source definitions; serialization functions in application layer causing complex type narrowing; writing or maintaining stub files (.pyi); generating stubs with stubgen/stubtest; distributing type information for third-party libraries; handling Incomplete vs Any in stubs; creating overloaded function stubs; defining protocols in stubs.
+description: Python domain expertise for async patterns, testing strategy, Django architecture, PyTorch workflows, complex type scenarios including type boundary enforcement and suppression handling, and stub file (.pyi) authoring. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline knowledge. TRIGGER when: designing type boundaries between external data and internal code; choosing between object and Any at API boundaries; implementing single-gateway validation patterns; handling type checker diagnostics; deciding how to fix pyright/mypy errors; deciding suppression scope (line/file/config level); resolving warnings appearing 50+ times (category-level thinking); implementing IPC or transport layers with generic types; seeing reportUnknownVariableType or reportMissingTypeStubs diagnostics; deciding when to call model_dump(); premature serialization causing type loss; tracing types to source definitions; serialization functions in application layer causing complex type narrowing; writing or maintaining stub files (.pyi); generating stubs with stubgen/stubtest; distributing type information for third-party libraries; handling Incomplete vs Any in stubs; creating overloaded function stubs; defining protocols in stubs.
 argument-hint: "[async|testing|django|pytorch|typing|stubs]"
 ---
 
@@ -10,18 +10,28 @@ Deep domain knowledge for complex Python scenarios. Invoke when baseline rules a
 
 ## Handling Type Diagnostics
 
-**NO INLINE SUPPRESSIONS** - Fix the underlying issue instead of hiding with `# pyright: ignore`.
+**Fix over suppress** — Address real issues whenever possible; suppress only when pattern is intentional.
 
-**CRITICAL: Never assume a diagnostic is "legitimate"** — trace the calling chain, definitions, and specs to find the concrete type. Even LSP responses have concrete types from the spec.
+**CRITICAL: Never assume a diagnostic is "legitimate"** — trace the calling chain, definitions, and specs to find the concrete type.
 
-| Diagnostic | Fix |
-|------------|-----|
+| Diagnostic | Resolution |
+|------------|------------|
+| `reportMissingTypeStubs` (internal) | `allowedUntypedLibraries` in config |
+| `reportCallInDefaultInitializer` (Typer) | Line-level suppression |
+| `reportImplicitStringConcatenation` | Fix code (use f-string or `+`) |
 | `reportUnusedParameter` | Use `_param` prefix |
 | `reportArgumentType` | Use Pydantic models |
 | `reportReturnType` | Align signatures |
 | `reportAny` | Annotate containers |
 | `reportExplicitAny` | Use concrete type |
 | `reportUnknownVariableType` | Trace to source, find concrete type |
+
+**Decision Framework:**
+1. Is it a real bug? → Fix the code
+2. Is it a false positive? → Suppress at most precise scope
+3. Is it intentional pattern (e.g., Typer)? → Suppress + document why
+
+**Reference:** [diagnostic-resolution.md](references/diagnostic-resolution.md) — Full playbook with scope hierarchy, category-level thinking, and suppression patterns.
 
 ```python
 # Unused param: use _ prefix

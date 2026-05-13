@@ -138,8 +138,11 @@ Low-level infrastructure handling raw external data may use `Any` with file-leve
 
 ## Diagnostic Quick Reference
 
-| Diagnostic | Fix |
-|------------|-----|
+| Diagnostic | Resolution |
+|------------|------------|
+| `reportMissingTypeStubs` (internal) | `allowedUntypedLibraries` in config |
+| `reportCallInDefaultInitializer` (Typer) | Line-level suppression |
+| `reportImplicitStringConcatenation` | Fix code (use f-string or `+`) |
 | `reportUnusedParameter` | Use `_param` prefix |
 | `reportArgumentType` | Use Pydantic model, not raw dict |
 | `reportReturnType` | Align signature with actual return |
@@ -147,7 +150,9 @@ Low-level infrastructure handling raw external data may use `Any` with file-leve
 | `reportExplicitAny` | Replace with concrete type |
 | `reportUnknownVariableType` | Trace to source, find concrete type |
 
-**NO INLINE SUPPRESSIONS** — Fix the underlying issue.
+**Fix over suppress** — Address real issues; suppress only when pattern is intentional. Document every suppression with a comment explaining why.
+
+**Full playbook:** See [diagnostic-resolution.md](diagnostic-resolution.md) for scope hierarchy, category-level thinking, and decision framework.
 
 ### `_` Prefix for Unused Parameters
 
