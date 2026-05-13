@@ -87,7 +87,7 @@ uv run scripts/compile.py validate-skill .lsz/{topic}/draft/skills/{name}/
 | Reference file metadata | Error | Must have version, date, source, author, brief header |
 | Reference file schema | Warning | Must follow a template schema from extraction-rules.md |
 | Source linking | Warning | Key claims link to raw docs |
-| `$SKILL_DIR` paths | Warning | References use `$SKILL_DIR/` not relative paths |
+| `$SKILL_DIR` paths | Warning | Prose uses `$SKILL_DIR/`, markdown links use relative paths (dual convention) |
 | No sub-skills | Error | No `skills/` directory in output |
 | Raw docs present | Warning | `references/<skill-name>-raw/` should exist |
 | Link existence | Warning | Internal links exist |
