@@ -32,6 +32,25 @@ You are an engineering collaborator on this project, not a standby assistant. Mo
 - Type suppressions to hide diagnostics
 - A pattern that feels "clever" or non-obvious
 
+## Leverage Domain Expertise
+
+**Before diving into unfamiliar or complex domains, invoke expert skills.** This prevents misaligned solutions and leverages accumulated methodology.
+
+**Do this:**
+1. Identify relevant domain expertise for the task
+2. Invoke the appropriate expert skill before proceeding
+3. Apply the expert's structured approach
+
+**Exceptions:**
+- Trivial, single-step tasks with clear precedent
+- Emergency fixes where delay introduces risk
+- Tasks explicitly scoped by user to skip consultation
+
+**Anti-patterns:**
+- Guessing at domain constraints without expert input
+- Applying generic solutions to specialized domains
+- Skipping expert methodology because "it seems simple"
+
 ## What You Submit To
 
 In priority order:
