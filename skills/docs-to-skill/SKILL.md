@@ -17,7 +17,7 @@ Transform scraped documentation into a layered skill architecture. This skill is
 ```
 Layer 1: Curated References (LLM-optimized)
 ├── SKILL.md with essential patterns, triggers, API tables
-├── references/<module>.md merged by module (up to 2000 lines)
+├── references/<module>.md — extracted per schema, source-linked
 ├── Covers 80% of queries from memory
 └── Fast retrieval, minimal file reads
 
@@ -52,16 +52,16 @@ Flat skill with curated references merged by module and raw docs self-contained:
 skills/<skill-name>/
 ├── SKILL.md                  # Essential patterns, API tables, quick starts
 └── references/               # Layer 1 + Layer 2 combined
-    ├── <module>.md           # Merged curated + key raw doc content per module (up to 2000 lines)
+    ├── <module>.md           # Curated per schema (see extraction-rules.md)
     └── <skill-name>-raw/     # Complete raw docs (copied from source)
 ```
 
 **Key design decisions:**
 - No sub-skills — SKILL.md contains all essential info, references contain detailed patterns
-- References merged by module dimension — one file per module, not one file per topic
-- `$SKILL_DIR/references/<module>.md` path pattern — like scripts, not relative paths
+- References extracted per schema — one file per module using template schemas from extraction-rules.md
+- `$SKILL_DIR/references/<module>.md` in prose, relative paths in markdown links — `$SKILL_DIR` when cwd is ambiguous, `[text](references/<file>.md)` for standard relative-to-file links
 - Raw docs copied into skill — self-contained, no external dependencies
-- Reference files up to 2000 lines — allows substantial raw doc inclusion
+- Quality governed by extraction rules, not line counts — atomic data, source linking, schema-first
 
 ## Artifact Storage Convention
 
@@ -92,58 +92,58 @@ Dialog:
 
 If user provides supplementary docs, fetch and store at `{topic_root}/supplementary/`.
 
----
+**Move raw docs into final location:**
 
-### Phase 1: Structure Analysis
-
-**Dispatch:**
-```markdown
-Agent tool (Explore):
-  description: "Analyze documentation structure"
-  prompt: |
-    Read reference: {SKILL_DIR}/references/module-detection.md
-
-    Analyze the documentation directory: {DOC_DIR}
-
-    Output a structure report to: {TOPIC_ROOT}/draft/structure-report.json
-
-    Include:
-    - File count and token estimates
-    - Directory hierarchy
-    - API surface summary (types, functions)
-    - Issues (empty files, missing indices)
-
-    Return: Summary (≤100 words) + path to structure report.
-```
-
-**Script validation:**
 ```bash
-uv run {SKILL_DIR}/scripts/validate-structure.py {DOC_DIR} --output {TOPIC_ROOT}/draft/structure-report.json
+mkdir -p {TOPIC_ROOT}/draft/skills/{SKILL_NAME}/references/{SKILL_NAME}-raw/
+mv {DOC_DIR}/* {TOPIC_ROOT}/draft/skills/{SKILL_NAME}/references/{SKILL_NAME}-raw/
 ```
+
+This places raw docs at their final path (`references/<skill-name>-raw/`) before any phase reads them. All subsequent phases reference the same stable location — no path shifts between analysis and generation.
 
 ---
 
-### Phase 2: Module Detection
+### Phase 1: Documentation Analysis (Consolidated)
+
+Single agent analyzes documentation and produces all planning artifacts.
 
 **Dispatch:**
 ```markdown
-Agent tool (architect):
-  description: "Propose module structure"
+Agent tool (architecture-scribe):
+  description: "Analyze docs and extract skill components"
   prompt: |
-    Read reference: {SKILL_DIR}/references/module-detection.md
+    Read references:
+    - {SKILL_DIR}/references/module-detection.md
+    - {SKILL_DIR}/references/trigger-extraction.md
+    - {SKILL_DIR}/references/pattern-extraction.md
 
-    Analyze structure report: {TOPIC_ROOT}/draft/structure-report.json
+    Analyze the documentation directory: {TOPIC_ROOT}/draft/skills/{SKILL_NAME}/references/{SKILL_NAME}-raw/
 
-    Propose module groupings based on directory structure and API surface.
+    Output analysis to: {TOPIC_ROOT}/draft/analysis.yaml
 
-    Output modules to: {TOPIC_ROOT}/draft/modules.yaml
+    Produce ALL of the following in one pass:
+    1. **Structure**: File count, line counts, token estimates, directory hierarchy
+    2. **Modules**: Functional groupings with source files, topics, rationale, estimated token weight
+    3. **Triggers**: Domain terms, task phrases, problem-framing keywords, query-style English triggers only
+    4. **Patterns**: Initialization, common usage, error handling, integration patterns, with complexity labels
+    5. **Confidence notes**: Uncertainties, edge cases, and raw docs that should be checked during generation
 
-    Format per reference file. Consider:
-    - Functional groupings
-    - Token distribution
-    - User mental model
+    For modules, consider:
+    - Functional groupings (commands, config, etc.)
+    - Token distribution (aim for balanced modules)
+    - User mental model (what would someone look up?)
 
-    Return: Summary (≤150 words, star rules format) + path to modules.yaml.
+    For triggers, extract what USERS would type, not internal API names:
+    - Domain terms (library name, framework category)
+    - Task phrases (verb + domain object)
+    - Problem-framing keywords (troubleshooting scenarios)
+
+    For patterns, prioritize practical examples:
+    - Simple patterns for common operations
+    - Medium patterns for workflows
+    - Skip complex edge cases
+
+    Return: Summary (≤150 words) with module proposal + path to analysis.yaml.
 ```
 
 **Checkpoint:**
@@ -166,81 +166,7 @@ Record user adjustments to `{TOPIC_ROOT}/learning-log.md`.
 
 ---
 
-### Phase 3: Trigger Extraction
-
-**Dispatch:**
-```markdown
-Agent tool (Explore):
-  description: "Extract trigger keywords"
-  prompt: |
-    Read reference: {SKILL_DIR}/references/trigger-extraction.md
-
-    Extract triggers from:
-    - Structure report: {TOPIC_ROOT}/draft/structure-report.json
-    - Supplementary docs: {TOPIC_ROOT}/supplementary/ (if exists)
-    - Source documentation: {DOC_DIR}
-
-    Output triggers to: {TOPIC_ROOT}/draft/triggers.yaml
-
-    Extract:
-    - Type names from API surface
-    - Function names from API surface
-    - Query phrases from headings/FAQ
-    - Problem-framing keywords from troubleshooting
-
-    Return: Summary (≤100 words) + path to triggers.yaml.
-```
-
-**Script validation:**
-```bash
-uv run {SKILL_DIR}/scripts/compile.py validate-triggers {TOPIC_ROOT}/draft/triggers.yaml
-```
-
-**Checkpoint:**
-```yaml
-Dialog:
-  header: "Triggers"
-  question: "Are these triggers complete?"
-  options:
-    - label: "Yes, proceed"
-      description: "Use extracted triggers"
-    - label: "Add triggers"
-      description: "Specify additional trigger keywords"
-    - label: "Remove triggers"
-      description: "Remove some triggers"
-```
-
----
-
-### Phase 4: Pattern Extraction
-
-**Dispatch:**
-```markdown
-Agent tool (Explore):
-  description: "Extract code patterns"
-  prompt: |
-    Read reference: {SKILL_DIR}/references/pattern-extraction.md
-
-    Extract patterns from:
-    - Supplementary docs: {TOPIC_ROOT}/supplementary/ (if exists, prioritize)
-    - Source documentation: {DOC_DIR}
-    - FAQ sections
-
-    Output patterns to: {TOPIC_ROOT}/draft/patterns.yaml
-
-    Extract by category:
-    - Initialization patterns
-    - Common usage patterns
-    - Stateful patterns
-    - Error handling patterns
-    - Integration patterns
-
-    Return: Summary (≤100 words) + path to patterns.yaml.
-```
-
----
-
-### Phase 5: Skill Generation
+### Phase 2: Skill Generation
 
 **Dispatch:**
 ```markdown
@@ -250,12 +176,11 @@ Agent tool (developer):
     Read references:
     - {SKILL_DIR}/references/skill-template.md
     - {SKILL_DIR}/references/compilation-contract.md
+    - {SKILL_DIR}/references/extraction-rules.md
 
-    Generate skill from drafts:
-    - Modules: {TOPIC_ROOT}/draft/modules.yaml
-    - Triggers: {TOPIC_ROOT}/draft/triggers.yaml
-    - Patterns: {TOPIC_ROOT}/draft/patterns.yaml
-    - Raw docs location: {DOC_DIR}
+    Generate skill from analysis:
+    - Analysis: {TOPIC_ROOT}/draft/analysis.yaml
+    - Raw docs (already in place): {TOPIC_ROOT}/draft/skills/{SKILL_NAME}/references/{SKILL_NAME}-raw/
 
     Output to: {TOPIC_ROOT}/draft/skills/{SKILL_NAME}/
 
@@ -263,25 +188,27 @@ Agent tool (developer):
     ```
     {SKILL_NAME}/
     ├── SKILL.md                  # Essential patterns, API tables, quick starts
-    └── references/               # Merged by module + raw docs
-        ├── <module>.md           # Curated + key raw doc content (up to 2000 lines)
-        └── raw/                  # Complete raw docs (copied from {DOC_DIR})
+    └── references/               # Curated by schema + raw docs
+        ├── <module>.md           # Curated per schema (see extraction-rules.md)
+        └── <skill-name>-raw/     # Already in place from Phase 0
     ```
 
     SKILL.md MUST include:
     - Essential patterns for all modules (consolidated)
     - API reference tables for all modules
     - Quick start guide
-    - References table using `$SKILL_DIR/references/<module>.md` path pattern
-    - "When to use raw docs" guidance pointing to `$SKILL_DIR/references/<skill-name>-raw/`
+    - References table with source column using `$SKILL_DIR/references/<module>.md` path pattern
+    - "When to use raw docs" section with escalation criteria (missing flag, complete API, conflict resolution)
+    - "Path Convention" section: `$SKILL_DIR/` in prose (cwd unknown), relative paths in markdown links (relative-to-file)
 
-    Each reference file MUST include:
-    - Key patterns from the module (from patterns.yaml)
-    - Curated reference content merged into single file
-    - Key raw doc excerpts for that module (API signatures, important details)
-    - Up to 2000 lines per file
+    Each reference file MUST follow extraction-rules.md:
+    - Mandatory metadata header (version, date, source, author, generated by, brief)
+    - Choose appropriate schema (CLI Reference, Technical Docs, etc.)
+    - Extract atomic data with source-to-row links
+    - One idea per paragraph, sentences under 25 words
+    - Link key claims back to raw docs
 
-    Copy raw docs into references/<skill-name>-raw/ preserving source structure.
+    Raw docs are already at references/<skill-name>-raw/ — do NOT move or copy them.
 
     Return: Summary (≤150 words) + paths to generated files.
 ```
@@ -291,9 +218,11 @@ Agent tool (developer):
 uv run {SKILL_DIR}/scripts/compile.py validate-skill {TOPIC_ROOT}/draft/skills/{SKILL_NAME}/
 ```
 
+**Remediation on failure:** If validation returns `valid: false`, re-dispatch a new developer agent with the issues list and the previous draft path. Do NOT resume the old agent — spawn fresh with feedback.
+
 ---
 
-### Phase 6: Quality Evaluation
+### Phase 3: Quality Evaluation
 
 **Dispatch:**
 ```markdown
@@ -313,7 +242,7 @@ Agent tool (code-reviewer):
     - Graceful Degradation (15%)
 
     Also verify:
-    - Each sub-skill has raw docs fallback pointers
+    - Each reference file has raw docs fallback pointers
     - Layer 1 → Layer 2 escalation path is clear
     - Output structure matches official skill format
 
@@ -338,7 +267,7 @@ Dialog:
 
 ---
 
-### Phase 7: Install (if accepted)
+### Phase 4: Install (if accepted)
 
 Copy generated skill from `{TOPIC_ROOT}/draft/skills/{SKILL_NAME}/` to `skills/{SKILL_NAME}/`.
 
@@ -349,6 +278,7 @@ Subagents load these for methodology:
 - `references/module-detection.md` - Module detection methodology
 - `references/trigger-extraction.md` - Trigger extraction patterns
 - `references/pattern-extraction.md` - Pattern extraction methodology
+- `references/extraction-rules.md` - Extraction, synthesis, and referencing rules with template schemas
 - `references/skill-template.md` - Template for generated SKILL.md
 - `references/quality-metrics.md` - Quality evaluation criteria
 - `references/compilation-contract.md` - Script/LLM interface contract
@@ -393,5 +323,5 @@ The original design used `skills/<module>/SKILL.md` sub-skills for each module. 
 
 1. **Simpler navigation**: One SKILL.md with essential info + references table, no indirection through sub-skills
 2. **`$SKILL_DIR` paths**: Use path patterns like scripts (`$SKILL_DIR/references/<module>.md`) instead of brittle relative paths
-3. **Merged references**: Per-module reference files (up to 2000 lines) combine curated patterns + key raw doc content, avoiding the need for sub-skill SKILL.md files
+3. **Schema-driven references**: Per-module files follow template schemas from extraction-rules.md, ensuring consistent quality
 4. **Self-contained**: Raw docs are copied into `references/<skill-name>-raw/` so the skill works without external dependencies

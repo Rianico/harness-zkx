@@ -174,22 +174,23 @@ Skills support string substitution for dynamic values in the skill content:
 
 ### `$SKILL_DIR` Path Convention
 
-`$SKILL_DIR` is the universal path anchor for **all** skill-owned resources — scripts, references, raw docs, config files, anything bundled with the skill. Always use `$SKILL_DIR/` paths instead of relative paths like `../../references/`.
+`$SKILL_DIR` is the universal path anchor for **prose references** to skill-owned resources — scripts, references, raw docs, config files, anything bundled with the skill. Use `$SKILL_DIR/` in prose text; use relative paths in markdown links.
 
-**Why:** Relative paths break when the referencing file moves (e.g., sub-skill to main skill, reference to another reference). `$SKILL_DIR` resolves correctly from any file in the skill regardless of nesting depth.
+**Why:** Prose references like `Read $SKILL_DIR/references/layout.md` are consumed by an LLM whose cwd is unknown — relative paths would resolve against the wrong directory. Markdown links like `[layout](references/layout.md)` follow the standard relative-to-file convention and work correctly.
 
 **Applies to:**
-| Resource | Path Pattern | Example |
-|----------|-------------|---------|
-| Scripts | `$SKILL_DIR/scripts/<name>.py` | `uv run $SKILL_DIR/scripts/compile.py` |
-| References | `$SKILL_DIR/references/<module>.md` | `Read $SKILL_DIR/references/layout.md` |
-| Raw docs | `$SKILL_DIR/references/<skill-name>-raw/` | `Read $SKILL_DIR/references/ratatui-raw/` |
-| Config | `$SKILL_DIR/config/<file>` | `source $SKILL_DIR/config/defaults.sh` |
+| Resource | Prose Path | Markdown Link |
+|----------|-----------|---------------|
+| Scripts | `$SKILL_DIR/scripts/<name>.py` | — |
+| References | `$SKILL_DIR/references/<module>.md` | `[text](references/<module>.md)` |
+| Raw docs | `$SKILL_DIR/references/<skill-name>-raw/` | `[text](references/<skill-name>-raw/<file>.md)` |
+| Config | `$SKILL_DIR/config/<file>` | — |
 
 **Anti-patterns:**
-- `../../references/<module>/<file>.md` — brittle, breaks on file moves
-- `./references/<file>.md` — assumes cwd is the skill directory
+- `../../references/<module>/<file>.md` in prose — brittle, breaks on file moves
+- `./references/<file>.md` in prose — assumes cwd is the skill directory
 - Absolute paths like `/Users/x/skills/my-skill/references/` — not portable
+- `$SKILL_DIR/references/<file>.md` in markdown links — unnecessary, relative-to-file is standard
 
 **Example:**
 ```yaml

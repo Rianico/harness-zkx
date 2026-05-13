@@ -155,6 +155,21 @@ Issues: CAP-01: 3 warnings, NEG-01: suppressions in commands/lsp.py
 - **Orchestrator as reviewer** — Main agent reviewing code instead of dispatching `code-reviewer`
 - **Unstructured subagent output** — Prose without Summary/Artifacts/Route fields
 
+### Workflow Phase Design
+
+**Consolidate stages that share sources.** When multiple stages are independent and derive from the same source files, merge into one stage.
+
+**Checklist:**
+1. Do all stages read from the same source?
+2. Are there dependencies forcing sequential execution?
+3. Is combined task size manageable?
+
+If (1) yes, (2) and (3) no → consolidate.
+
+**Why:** Each stage incurs orchestration overhead (dispatch, context loading, summary). Merging eliminates redundant reads.
+
+**Example:** docs-to-skill had 4 separate stages (structure, modules, triggers, patterns) all reading the same docs. Consolidated to 1 stage, reducing 8 phases to 5.
+
 ### Reference
 
 [Full details: subagent-first-execution.md](references/subagent-first-execution.md)
@@ -189,10 +204,11 @@ If it's not in the description, the skill will not trigger.
 - Executable logic in `scripts/`
 
 **Resource Path Convention**
-- `$SKILL_DIR` is the universal path anchor for ALL skill-owned resources (scripts, references, raw docs, config)
+- `$SKILL_DIR` is the path anchor for ALL skill-owned resources (scripts, references, raw docs, config)
+- **Prose text:** Always `$SKILL_DIR/references/<module>.md` — cwd is unknown to the reader
+- **Markdown links:** Always relative like `[text](references/<module>.md)` — standard relative-to-file convention
 - Scripts: `uv run $SKILL_DIR/scripts/xxx.py` — runs from any directory
-- References: `$SKILL_DIR/references/<module>.md` — not relative paths like `../../references/`
-- Raw docs: `$SKILL_DIR/references/<skill-name>-raw/` — self-contained within skill
+- Raw docs: `$SKILL_DIR/references/<skill-name>-raw/` in prose — self-contained within skill
 - Avoid `cd` prefixes — scripts should handle paths internally
 - Use `~/.claude/lsz/$SKILL_DIR/` for runtime artifacts (results, temp files)
 - Scripts are invoked via `uv run` with inline script metadata for dependencies
