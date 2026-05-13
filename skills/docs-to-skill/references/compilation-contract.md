@@ -100,22 +100,7 @@ uv run scripts/compile.py validate-skill .lsz/{topic}/draft/skills/{name}/
 - Validated draft from Stage 2
 - Compilation report
 
-**Output:** Quality report
-```yaml
-quality_report:
-  overall_score: 0.85
-  scores:
-    trigger_coverage: 0.90
-    pattern_usefulness: 0.80
-    beginner_friendliness: 0.75
-    documentation_completeness: 0.85
-    navigation_clarity: 0.90
-    graceful_degradation: 0.80
-  suggestions:
-    - "Add pattern for 'how to handle resize events'"
-```
-
-**Quality Criteria:** See `quality-metrics.md`
+**Output:** Quality report (format and criteria: see `quality-metrics.md`)
 
 ## Stage 4: User Review
 
@@ -186,33 +171,3 @@ quality_report:
 | Duplicate triggers | Script | Warn with duplicates list |
 | Low quality score | LLM Evaluator | Show suggestions, allow proceed |
 | User rejection | User Review | Return to relevant phase |
-
-## Learning Record Format
-
-Saved after user corrections:
-
-```yaml
-learning_record:
-  phase: <phase name>
-  llm_proposed: <original value>
-  user_adjusted: <corrected value>
-  lesson: <extracted pattern>
-```
-
-## Design Decision: No Wiki Layer
-
-The original design included an LLM-processed wiki layer between curated references and raw docs. This was removed because:
-
-1. **Information loss risk**: Processing (flattening, chrome removal) risks stripping details critical for edge cases
-2. **No clear value**: Wiki would be neither optimized (like references) nor complete (like raw docs)
-3. **Simpler architecture**: Two layers sufficient for 80% + edge case coverage
-4. **Source of truth**: Raw docs remain authoritative for tricky scenarios
-
-## Design Decision: Flat Structure (No Sub-Skills)
-
-The original design used `skills/<module>/SKILL.md` sub-skills. This was changed to a flat structure:
-
-1. **Simpler navigation**: One SKILL.md with essential info, references for deep dives
-2. **`$SKILL_DIR` paths**: Stable path pattern like scripts, no brittle relative paths
-3. **Schema-driven references**: Per-module files follow template schemas from extraction-rules.md
-4. **Self-contained**: Raw docs copied into `references/<skill-name>-raw/`, no external dependencies

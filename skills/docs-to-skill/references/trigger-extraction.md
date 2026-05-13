@@ -14,38 +14,56 @@ Triggers serve one purpose: help the LLM decide **when to invoke the skill**. Th
 ### 1. Domain Terms (Highest Priority)
 
 The library name, framework category, and domain vocabulary:
-- `ratatui`, `TUI`, `terminal UI`, `terminal app`
+- `<library-name>`, `<framework-category>`, `<domain-keywords>`
 - These are the strongest signals — if someone mentions the domain, the skill is relevant
 
 ### 2. Task Phrases
 
 What users ask to do:
-- "build terminal app", "create TUI", "event loop"
-- "split area", "responsive layout", "terminal widgets"
-- "style terminal text", "custom widget"
+- "<verb> <domain-object>", "<create/build> <thing>"
+- "<action> <component>", "<configure> <setting>"
 
 **Pattern:** Verb + domain object in natural language
 
 ### 3. Problem-Framing Keywords
 
 How users describe problems:
-- "widget not rendering", "layout not fitting", "text wrapping"
-- "center widget", "handle resize", "scrollable list"
+- "<component> not <expected-behavior>", "<feature> not working"
+- "<action> fails", "<behavior> broken", "how to <goal>"
 
 **Pattern:** Problem or goal the user is trying to solve
 
 ### 4. Beginner Queries
 
 Common entry-point phrases:
-- "ratatui hello world", "ratatui app structure", "getting started with TUI"
+- "<library> hello world", "<library> tutorial", "getting started with <library>"
 - These catch users who don't know the terminology yet
+
+## Domain Problem-Framing Keywords
+
+When extracting problem-framing triggers, use these domain patterns:
+
+| Domain | Common Problem Framings |
+|--------|------------------------|
+| Layout | "center", "resize", "responsive", "split", "divide", "align" |
+| Forms | "validate", "submit", "error handling", "required field" |
+| Lists | "scrollable", "selectable", "filter", "search", "paginate" |
+| Tables | "sort", "filter", "select row", "column width" |
+| Styling | "change color", "bold", "theme", "dark mode" |
+| Events | "handle key", "on click", "event loop", "input" |
+
+## Trigger Enrichment Lessons
+
+- **Include "how to" phrases:** LLMs often miss natural language queries. Add phrases like "how to center", "how to create", "how to handle". Source: FAQ sections and tutorial headings.
+- **Include error messages:** Users search for error text. Add common error messages or panic conditions as triggers.
+- **Include conceptual synonyms:** Users may describe the same concept using different vocabulary (e.g., "responsive layout" / "adaptive sizing" / "flexible constraints").
 
 ## What NOT to Include
 
 | Skip | Why |
 |------|-----|
-| Internal type names (`Frame`, `Buffer`, `Rect`) | Users don't say these; if they mention the library name, it already triggers |
-| Method names (`render_widget`, `split`) | Too generic without context; "render" could be anything |
+| Internal type names (`Widget`, `Buffer`, `Area`) | Users don't say these; if they mention the library name, it already triggers |
+| Method names (`render`, `split`, `draw`) | Too generic without context; "render" could be anything |
 | Enum variants (`Direction::Vertical`) | Implementation detail, not a user query |
 | Every type in the API | Bloats description without improving discovery |
 
@@ -78,16 +96,16 @@ description: |
 
 ## Example
 
-From ratatui documentation:
+For a UI framework library:
 
 ```yaml
 description: |
-  Rust TUI framework for building terminal user interfaces. TRIGGER when: user mentions ratatui, TUI, terminal UI/app/interface; asks about building terminal apps, event loops, widget rendering, layout constraints; "ratatui hello world", terminal layout, terminal widgets, custom widget.
+  <Language> <category> for building <domain> applications. TRIGGER when: user mentions <library-name>, <framework-category>; asks about building <domain> apps, <component> rendering, layout constraints; "<library> hello world", <domain> layout, <domain> widgets, custom widget.
 ```
 
 **Not this:**
 ```yaml
 # BAD: API surface dump, not user-facing triggers
 description: |
-  TRIGGER when: Layout, Constraint, Rect, Flex, Direction, Block, Paragraph, List, Table, Frame, Buffer, Span, Line, Text, render_widget, split, areas, vertical, horizontal...
+  TRIGGER when: Widget, Container, Layout, Flex, Direction, Block, Paragraph, List, Table, Frame, Buffer, Span, Line, Text, render, split, areas, vertical, horizontal...
 ```

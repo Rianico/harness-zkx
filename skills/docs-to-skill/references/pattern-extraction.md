@@ -8,13 +8,10 @@ How to extract practical code patterns from documentation.
 
 First code users need to run:
 
-```rust
-// Example: Hello world / basic setup
-fn main() -> std::io::Result<()> {
-    ratatui::run(|terminal| {
-        // minimal app
-    })
-}
+```
+# Example: Hello world / basic setup
+initialize_library()
+run_minimal_app()
 ```
 
 **Sources:**
@@ -27,13 +24,10 @@ fn main() -> std::io::Result<()> {
 
 Operations users do frequently:
 
-```rust
-// Example: Basic layout split
-let [header, body, footer] = Layout::vertical([
-    Constraint::Length(3),
-    Constraint::Fill(1),
-    Constraint::Length(1),
-]).areas(frame.area());
+```
+# Example: Basic layout configuration
+layout = create_vertical([fixed(3), fill(1), fixed(1)])
+header, body, footer = layout.split(area)
 ```
 
 **Sources:**
@@ -45,30 +39,29 @@ let [header, body, footer] = Layout::vertical([
 
 Components with external state:
 
-```rust
-// Example: List with selection
-let mut state = ListState::default();
-state.select(Some(0));
-frame.render_stateful_widget(list, area, &mut state);
+```
+# Example: List with selection state
+state = ListState()
+state.select(0)
+render_with_state(list, area, state)
 ```
 
 **Indicators:**
-- `State` suffix types
-- `render_stateful_widget` calls
-- `&mut state` parameters
+- Types with `State` suffix
+- Render calls that accept mutable state references
+- State initialization and update patterns
 
 ### 4. Error Handling Patterns
 
 Common pitfalls and solutions:
 
-```rust
-// Example: Proper terminal cleanup
-fn main() -> std::io::Result<()> {
-    let terminal = ratatui::init();
-    // ... app logic ...
-    ratatui::restore();  // Always restore!
-    Ok(())
-}
+```
+# Example: Proper resource cleanup
+resource = acquire_resource()
+try:
+    run_app(resource)
+finally:
+    release_resource()  # Always release!
 ```
 
 **Sources:**
@@ -80,11 +73,11 @@ fn main() -> std::io::Result<()> {
 
 Combining multiple features:
 
-```rust
-// Example: Nested layout with widgets
-let [header, body, footer] = Layout::vertical([...]).areas(area);
-let [sidebar, main] = Layout::horizontal([...]).areas(body);
-// Render widgets in each area
+```
+# Example: Nested layout with components
+header, body, footer = vertical_layout.split(area)
+sidebar, main_content = horizontal_layout.split(body)
+# Render components in each region
 ```
 
 **Sources:**
@@ -106,6 +99,22 @@ let [sidebar, main] = Layout::horizontal([...]).areas(body);
 | Generality | Reusable template | Example-specific |
 | Frequency | Common operation | Rare use case |
 | Clarity | Self-contained | Requires external context |
+
+### Target Distribution
+
+Aim for this complexity split across modules:
+
+| Complexity | Percentage | Purpose |
+|------------|------------|---------|
+| Simple | 40% | Quick wins, common tasks |
+| Medium | 40% | Typical usage, best practices |
+| Complex | 20% | Advanced scenarios, edge cases |
+
+### Selection Lessons
+
+- **Prefer generalizable patterns:** Example-specific code confuses users. Patterns should work with any input, not just tutorial data.
+- **Include state management patterns:** Users struggle with stateful components. Cover state initialization, updates, and synchronization.
+- **Show error recovery:** Users don't know how to handle failures. Include try-catch patterns and fallback behaviors.
 
 ## Pattern Complexity Levels
 

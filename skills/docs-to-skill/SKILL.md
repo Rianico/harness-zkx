@@ -282,7 +282,6 @@ Subagents load these for methodology:
 - `references/skill-template.md` - Template for generated SKILL.md
 - `references/quality-metrics.md` - Quality evaluation criteria
 - `references/compilation-contract.md` - Script/LLM interface contract
-- `references/learning-patterns.md` - Patterns from user corrections
 
 ## Scripts
 
@@ -302,7 +301,7 @@ After each user correction, append to `{TOPIC_ROOT}/learning-log.md`:
 **Lesson:** {extracted pattern}
 ```
 
-Aggregate lessons into `references/learning-patterns.md` periodically.
+Aggregate lessons into the relevant specialized reference file (module-detection, trigger-extraction, pattern-extraction, or quality-metrics).
 
 ## Design Rationale
 

@@ -10,12 +10,12 @@ Map source directories to skill modules:
 
 ```
 doc-dir/
-├── crate_init/         → basics module
-├── crate_backend/      → basics module
-├── core_layout/        → layout module
-├── core_style/         → styling module
-├── widgets_block/      → widgets module
-└── widgets_list/       → widgets module
+├── getting_started/    → basics module
+├── core/               → basics module
+├── layout/             → layout module
+├── style/              → styling module
+├── widgets/            → widgets module
+└── advanced/           → advanced module
 ```
 
 **Process:**
@@ -65,13 +65,29 @@ proposed_modules:
 
 ## Common Patterns by Library Type
 
-| Library Type | Typical Modules |
-|--------------|-----------------|
-| UI Framework | basics, layout, widgets, styling |
-| Data Library | basics, query, transformation, serialization |
-| CLI Tool | basics, commands, configuration |
-| Web Framework | basics, routing, middleware, database |
-| Async Runtime | basics, tasks, channels, synchronization |
+| Library Type | Typical Modules | Detection Signals |
+|--------------|-----------------|-------------------|
+| UI Framework | basics, layout, widgets, styling, theming | Widgets, rendering, event handling |
+| Data Library | basics, query, transformation, serialization | Query builders, data structures |
+| CLI Tool | basics, commands, configuration, plugins | Command handlers, argument parsing |
+| Network Library | basics, client, server, middleware | Request/response, protocols |
+| Web Framework | basics, routing, middleware, database | HTTP methods, route definitions |
+| Async Runtime | basics, tasks, channels, synchronization | Spawn, join, channel primitives |
+| Testing Framework | basics, assertions, mocking, fixtures | Test runners, matchers |
+
+## Module Grouping Rules
+
+**Separate Styling from Theming:**
+- When UI framework has both style attributes and named color schemes
+- Split: `styling` for style/color primitives, `theming` for palettes/themes
+
+**Group by User Mental Model:**
+- When directory structure doesn't match how users think about the library
+- Group by task (e.g., "building forms" vs "form components")
+
+**Keep "Basics" Small:**
+- When basics module exceeds 8000 tokens
+- Move initialization to `getting-started`, keep lifecycle in basics
 
 ## Module Merging Heuristics
 

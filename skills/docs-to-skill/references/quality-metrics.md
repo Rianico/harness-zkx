@@ -105,6 +105,15 @@ trigger_coverage = (
 | 0.5 - 0.7 | Acceptable | Show suggestions, user choice |
 | < 0.5 | Needs Work | Require improvements |
 
+### Minimum Per-Criterion Scores
+
+| Criterion | Minimum | Reason |
+|-----------|---------|--------|
+| Trigger Coverage | 0.6 | Skills need discoverability |
+| Pattern Usefulness | 0.5 | Skills need practical value |
+| Beginner Friendliness | 0.5 | Attract new users |
+| Graceful Degradation | 0.7 | Skills must work offline |
+
 ## Suggestion Generation
 
 Automatically generate suggestions for low-scoring criteria:
@@ -141,17 +150,17 @@ quality_report:
     graceful_degradation: 0.80
   suggestions:
     - "Add pattern for 'how to handle resize events'"
-    - "Consider adding Chinese trigger keywords for broader coverage"
+    - "Consider adding conceptual synonyms for broader trigger coverage"
     - "Add a simple 'hello world' pattern for beginners"
 ```
 
 ## Manual Review Triggers
 
 Always flag for manual review if:
-- Overall score < 0.5
-- Any criterion < 0.4
-- Empty patterns list
-- No triggers for a module
+- Overall score < 0.7 or any criterion < 0.5
+- Generated patterns > 10 per module (overwhelming) or < 3 per module (insufficient)
+- Triggers > 40 per module (too many) or < 8 per module (too few)
+- Empty patterns list or no triggers for a module
 - SKILL.md exceeds 600 lines
 - Reference files missing metadata headers
 - No source links in curated references
