@@ -25,6 +25,18 @@ Use `llm-lsp-cli` for semantic code navigation when you need definitions, refere
 llm-lsp-cli daemon status || llm-lsp-cli daemon start
 ```
 
+### Worktree Management
+Use `wt` (worktrunk) instead of built-in `EnterWorktree`/`ExitWorktree` tools and raw `git worktree` commands when worktrunk is available (check `which wt`):
+
+- **Create worktree:** `wt switch --create <name>` — creates branch + worktree, runs hooks
+- **Switch worktree:** `wt switch <name>` — switches to existing worktree
+- **List worktrees:** `wt list` — worktrees with status, divergence, CI
+- **Remove worktree:** `wt remove <name>` — removes worktree and optionally branch
+- **Merge to main:** `wt merge` — squash, rebase, merge, cleanup with pre-merge hooks
+- **Previous worktree:** `wt switch -` — like `cd -`
+
+**Do NOT use** the built-in `EnterWorktree`/`ExitWorktree` tools when `wt` is available — they bypass worktrunk hooks (copy-ignored, pre-merge tests, etc.).
+
 ### Tool Selection Guide
 | Task | Tool |
 |------|------|
@@ -37,6 +49,10 @@ llm-lsp-cli daemon status || llm-lsp-cli daemon start
 | Understand file structure | `llm-lsp-cli lsp document-symbol` |
 | Find symbol by name (workspace-wide) | `llm-lsp-cli lsp workspace-symbol` |
 | Check type errors/warnings | `llm-lsp-cli lsp diagnostics` / `workspace-diagnostics` |
+| Create/switch worktree | `wt switch --create <name>` / `wt switch <name>` |
+| List worktrees | `wt list` |
+| Merge worktree to main | `wt merge` |
+| Remove worktree | `wt remove <name>` |
 
 ### Reading Content
 - **Targeted reading:** Use the built-in `Read` tool — never `cat`/`bat` (they dump entire files and bloat context).
@@ -56,7 +72,7 @@ When starting to explore a project without prior context:
 
 1. **Confirm your location** — Verify the current working directory and repository context:
    ```
-   pwd && git worktree list
+   pwd && wt list 2>/dev/null || git worktree list
    ```
    This prevents operations in the wrong directory (e.g., editing the main repo when you intended to work in a worktree).
 
