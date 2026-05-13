@@ -11,11 +11,23 @@
       "sourceType": "github",
       "computedHash": "1a4b45a0016a1aaf4842f6e996fe08ce2b4b62b454db0d0414035782d8185c0a"
     },
+    "obsidian-markdown": {
+      "source": "kepano/obsidian-skills",
+      "sourceType": "github",
+      "skillPath": "skills/obsidian-markdown/SKILL.md",
+      "computedHash": "cacc9058a35ad3fd4985b4c31121bff8202f1337c39808c1326ded6a19a7915f"
+    },
     "tavily-extract": {
       "source": "tavily-ai/skills",
       "sourceType": "github",
       "skillPath": "skills/tavily-extract/SKILL.md",
       "computedHash": "8d52d231d67d398637d06234e09e9207fb7caa692ff1c33c0df43493b7d4ca7e"
+    },
+    "tavily-map": {
+      "source": "tavily-ai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/tavily-map/SKILL.md",
+      "computedHash": "9a4996c7249ff1a1e0757e16c89d1e197ec6ef3b0ced9fe7fc103d4707d8ba27"
     },
     "tavily-search": {
       "source": "tavily-ai/skills",

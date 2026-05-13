@@ -275,14 +275,26 @@ def validate_skill_directory(skill_dir: Path) -> dict[str, Any]:
         else:
             result["warnings"].append("No raw docs found (expected references/<skill-name>-raw/ or references/raw/)")
 
-        # Check reference file sizes
+        # Check reference file metadata headers and quality
         for ref_file in merged_refs:
-            lines = len(ref_file.read_text().split("\n"))
-            if lines > 2000:
-                result["issues"].append(f"Reference file too large: {ref_file.name} ({lines} lines, max: 2000)")
-                result["valid"] = False
-            elif lines > 1500:
-                result["warnings"].append(f"Reference file large: {ref_file.name} ({lines} lines)")
+            content = ref_file.read_text()
+            lines = len(content.split("\n"))
+            result["stats"][f"ref_{ref_file.stem}_lines"] = lines
+
+            # Check mandatory metadata header
+            has_version = "**Version:**" in content or "- **Version:**" in content
+            has_date = "**Date:**" in content or "- **Date:**" in content
+            has_source = "**Source:**" in content or "- **Source:**" in content
+            has_brief = "**Brief:**" in content or "- **Brief:**" in content
+
+            if not has_version:
+                result["issues"].append(f"Reference file missing Version: {ref_file.name}")
+            if not has_date:
+                result["issues"].append(f"Reference file missing Date: {ref_file.name}")
+            if not has_source:
+                result["warnings"].append(f"Reference file missing Source: {ref_file.name}")
+            if not has_brief:
+                result["warnings"].append(f"Reference file missing Brief: {ref_file.name}")
     else:
         result["warnings"].append("No references/ directory found")
 

@@ -125,7 +125,10 @@ let [sidebar, main] = Layout::horizontal([...]).areas(body);
     <code block>
   complexity: simple | medium | complex
   category: initialization | common_usage | stateful | error_handling | integration
+  source: "<raw-doc-filename>#<section>"
 ```
+
+**Source linking:** Every pattern MUST include a `source` field linking to the raw doc where it was found. This satisfies the Golden Source rule from extraction-rules.md.
 
 ## Anti-Patterns to Avoid
 

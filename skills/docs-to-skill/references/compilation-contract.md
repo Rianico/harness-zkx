@@ -10,7 +10,7 @@ The compilation pipeline produces a flat, self-contained skill:
 <skill-name>/
 ├── SKILL.md                  # Essential patterns, API tables, quick starts
 └── references/               # Layer 1 + Layer 2 combined
-    ├── <module>.md           # Merged curated + key raw doc content (up to 2000 lines)
+    ├── <module>.md           # Curated per schema (see extraction-rules.md)
     └── <skill-name>-raw/     # Complete raw docs (copied from source)
 ```
 
@@ -22,15 +22,7 @@ LLM Generation → Script Compiler → LLM Evaluator → User Review
 
 ## Official Skill Structure
 
-Generated skills must match this flat structure (no sub-skills):
-
-```
-<skill-name>/
-├── SKILL.md                  # Essential patterns, API tables, quick starts
-└── references/               # Merged by module + raw docs
-    ├── <module>.md           # Curated + key raw doc content (up to 2000 lines)
-    └── <skill-name>-raw/     # Complete raw docs (copied from source)
-```
+Generated skills must match the flat structure defined in SKILL.md's "Output Structure" section.
 
 ## Stage 1: LLM Generation
 
@@ -92,7 +84,9 @@ uv run scripts/compile.py validate-skill .lsz/{topic}/draft/skills/{name}/
 | Name match | Error | `name` matches directory |
 | Description length | Error | <=1024 chars |
 | SKILL.md line count | Warning | <=500 lines recommended |
-| Reference file line count | Warning | <=2000 lines |
+| Reference file metadata | Error | Must have version, date, source, author, brief header |
+| Reference file schema | Warning | Must follow a template schema from extraction-rules.md |
+| Source linking | Warning | Key claims link to raw docs |
 | `$SKILL_DIR` paths | Warning | References use `$SKILL_DIR/` not relative paths |
 | No sub-skills | Error | No `skills/` directory in output |
 | Raw docs present | Warning | `references/<skill-name>-raw/` should exist |
@@ -220,5 +214,5 @@ The original design used `skills/<module>/SKILL.md` sub-skills. This was changed
 
 1. **Simpler navigation**: One SKILL.md with essential info, references for deep dives
 2. **`$SKILL_DIR` paths**: Stable path pattern like scripts, no brittle relative paths
-3. **Merged references**: Per-module files (up to 2000 lines) combine curated + raw doc content
+3. **Schema-driven references**: Per-module files follow template schemas from extraction-rules.md
 4. **Self-contained**: Raw docs copied into `references/<skill-name>-raw/`, no external dependencies
