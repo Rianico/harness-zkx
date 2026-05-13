@@ -19,16 +19,28 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 
 ## Type Safety (First Principle)
 
-- **NO suppressions:** Never use `# pyright: ignore` or `# type: ignore` — fix underlying issues
+- **Fix over suppress:** Address real issues whenever possible; suppress only when pattern is intentional
+- **Most precise scope:** Line-level > file-level > targeted config > project-level (follow Scoped Over Global in common rules)
+- **Document suppressions:** Every suppression includes a comment explaining why
 - **Unused parameters:** `_param` prefix convention
-- **File-level suppressions:** Only in designated zones (transport/IPC layers, external lib stubs), NEVER in pyrightconfig.json
 - **`getattr()` returns `Any`:** Avoid it; use explicit method dispatch instead
 - **Keep typed models:** Access `model.field` directly; call `model_dump()` only at output boundaries
 - **`object` over `Any`:** `object` forces validation; `Any` silently propagates
 - **Validate at boundaries:** External data → `object` → Pydantic → typed model; internal code trusts types
 - **Trace unknown types:** Never assume diagnostic is "legitimate" — find source, check spec, build model
-- **Serialization layering:** If `model_dump()` or type narrowing is complex in application layer, move it to transport/IPC boundary
 - **Verification:** Static (basedpyright), LSP (workspace diagnostics), Pattern (`rg "# pyright: "`)
+
+### Diagnostic Resolution Quick Reference
+
+| Diagnostic | Resolution |
+|------------|------------|
+| `reportMissingTypeStubs` (internal) | `allowedUntypedLibraries` in config |
+| `reportCallInDefaultInitializer` (Typer) | Line-level suppression |
+| `reportImplicitStringConcatenation` | Fix code (use f-string or `+`) |
+| N803 (protocol names) | File-level suppression with comment |
+| D107/D102 (trivial docstrings) | Disable rules or add docstrings |
+
+**For complex diagnostics:** Invoke `python-expert` skill with `typing` argument.
 
 ## Code Quality
 
