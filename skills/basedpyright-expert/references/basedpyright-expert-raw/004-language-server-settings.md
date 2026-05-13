@@ -1,0 +1,241 @@
+## Language Server Settings
+
+## settings
+
+for users migrating from pyright or pylance
+
+with the exception of `python.pythonPath` and `python.venvPath`, settings prefixed with `python.*` are not supported in basedpyright. use `basedpyright.*` instead.
+
+The basedpyright language server honors the following settings.
+
+**basedpyright.disableLanguageServices** \[boolean\]: Disables all language services. This includes hover text, type completion, signature completion, find definition, find references, etc. This option is useful if you want to use pyright only as a type checker but want to run another Python language server for language service features.
+
+**basedpyright.disableOrganizeImports** \[boolean\]: Disables the “Organize Imports” command. This is useful if you are using another extension that provides similar functionality and you don’t want the two extensions to fight each other.
+
+**basedpyright.disableTaggedHints** \[boolean\]: Disables the use of hint diagnostics with special tags to tell the client to display text ranges in a "grayed out" manner (to indicate unreachable code or unreferenced symbols) or in a "strike through" manner (to indicate use of a deprecated feature).
+
+**basedpyright.openFilesOnly** \[boolean\]: Determines whether pyright analyzes (and reports errors for) all files in the workspace, as indicated by the config file. If this option is set to true, pyright analyzes only open files. This setting is deprecated in favor of basedpyright.analysis.diagnosticMode. It will be removed at a future time.
+
+**basedpyright.useLibraryCodeForTypes** \[boolean\]: This setting is deprecated in favor of basedpyright.analysis.useLibraryCodeForTypes. It will be removed at a future time.
+
+**basedpyright.analysis.autoImportCompletions** \[boolean\]: Determines whether pyright offers auto-import completions.
+
+Note
+
+this setting is only for import suggestion [*completions*](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion), which are displayed as you type. it does not affect [import suggestion *code actions*](https://docs.basedpyright.com/latest/benefits-over-pyright/pylance-features/#import-suggestions), which are tied to the [`reportUndefinedVariable`](https://docs.basedpyright.com/latest/configuration/config-files/#reportUndefinedVariable) diagnostic rule. to disable those, you must disable the diagnostic rule itself.
+
+**basedpyright.analysis.autoSearchPaths** \[boolean\]: Determines whether pyright automatically adds common search paths like "src" if there are no execution environments defined in the config file.
+
+**basedpyright.analysis.diagnosticMode** \["openFilesOnly", "workspace"\]: Determines whether pyright analyzes (and reports errors for) all files in the workspace, as indicated by the config file. If this option is set to "openFilesOnly", pyright analyzes only open files. Defaults to "openFilesOnly"
+
+**basedpyright.analysis.logLevel** \["Error", "Warning", "Information", or "Trace"\]: Level of logging for Output panel. The default value for this option is "Information".
+
+**python.pythonPath** \[path\]: Path to Python interpreter. if you're using vscode, this setting is being deprecated by the VS Code Python extension in favor of a setting that is stored in the Python extension’s internal configuration store. Pyright supports both mechanisms but prefers the new one if both settings are present.
+
+**python.venvPath** \[path\]: Path to folder with subdirectories that contain virtual environments. The `python.pythonPath` setting is recommended over this mechanism for most users. For more details, refer to the [import resolution](https://docs.basedpyright.com/latest/usage/import-resolution/#configuring-your-python-environment) documentation.
+
+Note
+
+`python.venvPath` is discouraged in basedpyright. [more info](https://docs.basedpyright.com/latest/benefits-over-pyright/better-defaults/#default-value-for-pythonpath)
+
+### based settings
+
+the following settings are exclusive to basedpyright
+
+**basedpyright.analysis.inlayHints.variableTypes** \[boolean\]: Whether to show inlay hints on assignments to variables. Defaults to `true`:
+
+![](https://docs.basedpyright.com/latest/configuration/inlayHints.variableTypes.png)
+
+**basedpyright.analysis.inlayHints.callArgumentNames** \[boolean\]: Whether to show inlay hints on function arguments. Defaults to `true`:
+
+![](https://docs.basedpyright.com/latest/configuration/inlayHints.callArgumentNames.png)
+
+**basedpyright.analysis.inlayHints.callArgumentNamesMatching** \[boolean\]: Whether to show inlay hints on function arguments when the input expression is a variable with the same name as the parameter. Defaults to `false`.
+
+**basedpyright.analysis.inlayHints.functionReturnTypes** \[boolean\]: Whether to show inlay hints on function return types. Defaults to `true`:
+
+![](https://docs.basedpyright.com/latest/configuration/inlayHints.functionReturnTypes.png)
+
+**basedpyright.analysis.inlayHints.genericTypes** \[boolean\]: Whether to show inlay hints on inferred generic types. Defaults to `true`:
+
+![](https://docs.basedpyright.com/latest/configuration/inlayHints.genericTypes.png)
+
+**basedpyright.analysis.useTypingExtensions** \[boolean\]: Whether to rely on imports from the `typing_extensions` module when targeting older versions of python that do not include certain typing features such as the `@override` decorator. Defaults to `false`. [more info](https://docs.basedpyright.com/latest/benefits-over-pyright/language-server-improvements/#autocomplete-improvements)
+
+**basedpyright.analysis.fileEnumerationTimeout** \[integer\]: Timeout (in seconds) for file enumeration operations. When basedpyright scans your workspace files, it can take a long time in some workspaces. This setting controls when to show a "slow enumeration" warning. Default is 10 seconds.
+
+**basedpyright.analysis.autoFormatStrings** \[boolean\]: Whether to automatically insert an `f` in front of a string when typing a `{` inside it. Defaults to `true`. [more info](https://docs.basedpyright.com/latest/benefits-over-pyright/pylance-features/#automatic-conversion-to-f-string-when-typing-inside-a-string)
+
+**basedpyright.analysis.configFilePath** \[path\]: Path to the directory or file containing the Pyright configuration (`pyrightconfig.json` or `pyproject.toml`). If a directory is specified, basedpyright will search for the config file in that directory. This is useful for monorepo structures where the config file is in a subdirectory rather than the workspace root. For example, if your Python code is in a `backend/` subdirectory with its own `pyproject.toml`, you can set this to `${workspaceFolder}/backend` to make basedpyright use that configuration file instead of searching from the workspace root.
+
+**basedpyright.analysis.baselineMode** \["auto", "discard"\]: Controls how the baseline file is updated when files are saved. Use `auto` to automatically remove fixed errors from the baseline (default), or `discard` to prevent automatic updates. [more info](https://docs.basedpyright.com/latest/benefits-over-pyright/baseline/)
+
+### discouraged settings
+
+these options can also be configured [using a config file](https://docs.basedpyright.com/latest/configuration/config-files/). it's recommended to use either a `pyproject.toml` or `pyrightconfig.json` file instead of the language server to configure type checking for the following reasons:
+
+- the config should be the same for everybody working on your project. you should commit the config file so that other contributors don't have to manually configure their language server to match yours.
+- it ensures that the basedpyright language server behaves the same as the `basedpyright` CLI, which is useful if you have [your CI configured to type check your code](https://docs.basedpyright.com/latest/benefits-over-pyright/improved-ci-integration/) (you should!)
+
+however these settings are still supported to maintain compatibility with pyright.
+
+**basedpyright.analysis.diagnosticSeverityOverrides** \[map\]: Allows a user to override the severity levels for individual diagnostic rules. "reportXXX" rules in the type check diagnostics settings in [configuration](https://docs.basedpyright.com/latest/configuration/config-files/#type-check-diagnostics-settings) are supported. Use the rule name as a key and one of "error," "warning," "information," "true," "false," or "none" as value.
+
+**basedpyright.analysis.exclude** \[array of paths\]: Paths of directories or files that should not be included. This can be overridden in the configuration file.
+
+**basedpyright.analysis.extraPaths** \[array of paths\]: Paths to add to the default execution environment extra paths if there are no execution environments defined in the config file.
+
+**basedpyright.analysis.ignore** \[array of paths\]: Paths of directories or files whose diagnostic output (errors and warnings) should be suppressed. This can be overridden in the configuration file.
+
+**basedpyright.analysis.include** \[array of paths\]: Paths of directories or files that should be included. This can be overridden in the configuration file.
+
+**basedpyright.analysis.stubPath** \[path\]: Path to directory containing custom type stub files.
+
+**basedpyright.analysis.typeCheckingMode** \["off", "basic", "standard", "strict", "recommended", "all"\]: Determines the default type-checking level used by pyright. This can be overridden in the configuration file. (Note: This setting used to be called "basedpyright.typeCheckingMode". The old name is deprecated but is still currently honored.)
+
+**basedpyright.analysis.typeshedPaths** \[array of paths\]: Paths to look for typeshed modules. Pyright currently honors only the first path in the array.
+
+**basedpyright.analysis.useLibraryCodeForTypes** \[boolean\]: Determines whether pyright reads, parses and analyzes library code to extract type information in the absence of type stub files. Type information will typically be incomplete. We recommend using type stubs where possible. The default value for this option is true.
+
+#### basedpyright exclusive settings
+
+as mentioned [above](https://docs.basedpyright.com/latest/configuration/language-server-settings/#discouraged-settings), it's recommended to configure these settings [using a config file](https://docs.basedpyright.com/latest/configuration/config-files/) instead.
+
+**basedpyright.analysis.baselineFile** \[path\]: Path to a baseline file that contains a list of diagnostics that should be ignored. defaults to `./.basedpyright/baseline.json`. [more info](https://docs.basedpyright.com/latest/benefits-over-pyright/baseline/)
+
+## where do i configure these settings?
+
+the way you configure the basedpyright language server depends on your IDE. below are some examples for [some of the supported editors](https://docs.basedpyright.com/latest/installation/ides/). this is not a comprehensive list, so if your editor is missing, consult the documentation for its language server support.
+
+### vscode / vscodium
+
+the basedpyright language server settings can be configured using a workspace or global `settings.json`:
+
+```
+./.vscode/settings.json{
+    "basedpyright.analysis.diagnosticMode": "openFilesOnly"
+}
+```
+
+For monorepo projects where your Python code is in a subdirectory:
+
+```
+./.vscode/settings.json{
+    "basedpyright.analysis.configFilePath": "${workspaceFolder}/backend"
+}
+```
+
+### neovim
+
+The language server can be configured in your neovim settings:
+
+For Neovim 0.11+
+
+```
+lsp/basedpyright.luareturn {
+  settings = {
+    basedpyright = {
+      analysis = {
+        diagnosticMode = "openFilesOnly",
+        inlayHints = {
+          callArgumentNames = true
+        }
+      }
+    }
+  }
+}
+```
+
+For monorepo projects where your Python code is in a subdirectory:
+
+```
+lsp/basedpyright.luareturn {
+  settings = {
+    basedpyright = {
+      analysis = {
+        configFilePath = vim.fn.getcwd() .. "/backend"
+      }
+    }
+  }
+}
+```
+
+For Neovim 0.10 (legacy)
+
+```
+require("lspconfig").basedpyright.setup {
+  settings = {
+    basedpyright = {
+      analysis = {
+        diagnosticMode = "openFilesOnly",
+        inlayHints = {
+          callArgumentNames = true
+        }
+      }
+    }
+  }
+}
+```
+
+### helix
+
+```
+languages.toml[language-server.basedpyright]
+command = "basedpyright-langserver"
+args = ["--stdio"]
+
+[language-server.basedpyright.config]
+basedpyright.analysis.diagnosticMode = "openFilesOnly"
+```
+
+### zed
+
+```
+{
+    "languages": {
+        "Python": {
+            "language_servers": ["basedpyright"]
+        }
+    },
+    "lsp": {
+        "basedpyright": {
+            "settings": {
+                "python": {
+                    "pythonPath": ".venv/bin/python"
+                },
+                "basedpyright.analysis": {
+                    "diagnosticMode": "openFilesOnly"
+                }
+            }
+        }
+    }
+}
+```
+
+### emacs
+
+#### eglot
+
+```
+(use-package eglot
+  :ensure t
+  :config
+    (add-to-list 'eglot-server-programs '(
+      (python-mode python-ts-mode)
+         "basedpyright-langserver" "--stdio"
+    ))
+    (setq-default
+       eglot-workspace-configuration
+       '(:basedpyright (
+           :typeCheckingMode "recommended"
+         )
+         :basedpyright.analysis (
+           :diagnosticSeverityOverrides (
+             :reportUnusedCallResult "none"
+           )
+           :inlayHints (
+             :callArgumentNames :json-false
+           )
+         )))
+)
+```

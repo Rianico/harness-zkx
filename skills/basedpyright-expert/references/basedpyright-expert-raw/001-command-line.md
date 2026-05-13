@@ -1,0 +1,180 @@
+## Command line
+
+## Command-Line
+
+Usage: basedpyright \[options\] \[files...\] [^1]
+
+basedpyright can be run as either a language server or as a command-line tool. The command-line version allows for the following options:
+
+| Flag | Description |
+| --- | --- |
+| \--createstub `<IMPORT>` | Create type stub file(s) for import |
+| \--dependencies | Emit import dependency information |
+| \-h, --help | Show help message |
+| \--ignoreexternal | Ignore external imports for --verifytypes |
+| \--level | Minimum diagnostic level (error or warning) |
+| \--outputjson | Output results in JSON format |
+| \--gitlabcodequality | Output results to a gitlab code quality report |
+| \--writebaseline | Write new errors to the baseline file |
+| \--baselinefile `<FILE>` | Path to the baseline file to be used [^2] |
+| \--baselinemode `<MODE>` | Specify the [baseline mode](https://docs.basedpyright.com/latest/configuration/command-line/#option-2-baselinemode-experimental) |
+| \-p, --project `<FILE OR DIRECTORY>` | Use the configuration file at this location |
+| \--pythonpath `<FILE>` | Path to the Python interpreter [^3] |
+| \--pythonplatform `<PLATFORM>` | Analyze for platform (Darwin, Linux, Windows, iOS, Android) |
+| \--pythonversion `<VERSION>` | Analyze for version (3.3, 3.4, etc.) |
+| \--skipunannotated | Skip type analysis of unannotated functions |
+| \--stats | Print detailed performance stats |
+| \-t, --typeshedpath `<DIRECTORY>` | Use typeshed type stubs at this location [^4] |
+| \--threads | Use up to N threads to parallelize type checking [^5] |
+| \-v, --venvpath `<DIRECTORY>` | Directory that contains virtual environments [^6] |
+| \--verbose | Emit verbose diagnostics |
+| \--verifytypes `<IMPORT>` | Verify completeness of types in py.typed package |
+| \--version | Print pyright version and exit |
+| \--warnings | Use exit code of 1 if warnings are reported [^7] |
+| \-w, --watch | Continue to run and watch for changes [^8] |
+| \- | Read file or directory list from stdin |
+
+## Pyright Exit Codes
+
+| Exit Code | Meaning |
+| --- | --- |
+| 0 | No errors reported |
+| 1 | One or more errors reported |
+| 2 | Fatal error occurred with no errors or warnings reported |
+| 3 | Config file could not be read or parsed |
+| 4 | Illegal command-line parameters specified |
+
+## JSON Output
+
+If the “--outputjson” option is specified on the command line, diagnostics are output in JSON format. The JSON structure is as follows:
+
+```
+interface PyrightJsonResults {
+    version: string,
+    time: string,
+    generalDiagnostics: Diagnostic[],
+    summary: {
+        filesAnalyzed: number,
+        errorCount: number,
+        warningCount: number,
+        informationCount: number,
+        timeInSec: number
+    }
+}
+```
+
+Each Diagnostic is output in the following format:
+
+```
+interface Diagnostic {
+    file: string,
+    cell?: string // if the file is a jupyter notebook
+    severity: 'error' | 'warning' | 'information',
+    message: string,
+    rule?: string,
+    range: {
+        start: {
+            line: number,
+            character: number
+        },
+        end: {
+            line: number,
+            character: number
+        }
+    }
+}
+```
+
+Diagnostic line and character numbers are zero-based.
+
+Not all diagnostics have an associated diagnostic rule. Diagnostic rules are used only for diagnostics that can be disabled or enabled. If a rule is associated with the diagnostic, it is included in the output. If it’s not, the rule field is omitted from the JSON output.
+
+## Gitlab code quality report
+
+the `--gitlabcodequality` argument will output a [gitlab code quality report](https://docs.gitlab.com/ee/ci/testing/code_quality.html).
+
+to enable this in your gitlab CI, you need to specify a path to the code quality report file to this argument, and in the `artifacts` section in your gitlab CI file:
+
+```
+basedpyright:
+  script: basedpyright --gitlabcodequality report.json
+  artifacts:
+    reports:
+      codequality: report.json
+```
+
+## Regenerating the baseline file
+
+if you're using [baseline](https://docs.basedpyright.com/latest/benefits-over-pyright/baseline/), as baselined errors are removed from your code, the CLI will automatically update the baseline file to remove them:
+
+```
+>basedpyright
+updated ./.basedpyright/baseline.json with 200 errors (went down by 5)
+0 errors, 0 warnings, 0 notes
+```
+
+the `--writebaseline` argument is only required if you are intentionally writing new errors to the baseline file. for more information about when to use this argument, [see here](https://docs.basedpyright.com/latest/benefits-over-pyright/baseline/#how-often-do-i-need-to-update-the-baseline-file).
+
+the CLI provides two options for managing the baseline file:
+
+#### when not specified
+
+- if running locally, behaves the same as [`--baselinemode=auto`](https://docs.basedpyright.com/latest/configuration/command-line/#-baselinemodeauto)
+- if [running in CI](https://www.npmjs.com/package/is-ci), behaves the same as [`--baselinemode=lock`](https://docs.basedpyright.com/latest/configuration/command-line/#-baselinemodelock)
+
+#### when specified
+
+always updates the baseline file, even if new errors are added.
+
+### Option 2: --baselinemode (experimental)
+
+Warning
+
+`--baselinemode` is an experimental feature and is subject to breaking changes in the future. if you have feedback for this feature, please [open an issue](https://github.com/DetachHead/basedpyright/issues/new/choose)
+
+Tip
+
+for most users, we don't recommend `--baselinemode` as the [`--writebaseline` flag](https://docs.basedpyright.com/latest/configuration/command-line/#option-1-writebaseline-recommended) is sufficient for most use cases. `--baselinemode` exists for users who want more control over how and when the baseline file is used.
+
+#### \--baselinemode=auto
+
+only updates the baseline file if diagnostics have been removed and no new diagnostics have been added.
+
+Note
+
+this is the same as not specifying `--baselinemode` or `--writebaseline` when running locally. you only need to specify `--baselinemode=auto` explicitly if you want to [disable the default `--baselinemode=lock` behavior in CI environments](https://docs.basedpyright.com/latest/configuration/command-line/#option-1-writebaseline-recommended)
+
+#### \--baselinemode=lock
+
+never writes to the baseline file, even if no new diagnostics have surfaced, and instead exits with a non-zero exit code if the baseline file needs to be updated. useful in CI environments when you want to ensure that the baseline file is up-to-date.
+
+Note
+
+basedpyright [already defaults to this mode if running in CI](https://docs.basedpyright.com/latest/configuration/command-line/#option-1-writebaseline-recommended). you only need to specify this explicitly if your CI environment is not detected for some reason, or if you want this behavior locally (such as a [prek](https://github.com/j178/prek) hook).
+
+you can think of it like a [lockfile](https://docs.astral.sh/uv/concepts/projects/sync/#checking-the-lockfile). you don't want the baseline file to contain errors that don't exist anymore because:
+
+- when other contributors run basedpyright, it could update the baseline file to remove errors in code they have not changed, which is unexpected and leads to confusion
+- it would make it possible to unintentionally re-introduce the error in the future without it being flagged by basedpyright
+
+#### \--baselinemode=discard
+
+reads the baseline file but never updates it, even if it needs to be updated. exits with code 0 unless new diagnostics have surfaced.
+
+[^1]: If specific files are specified on the command line, it overrides the files or directories specified in the pyrightconfig.json or pyproject.toml file.
+
+[^2]: Defaults to `./.basedpyright/baseline.json`
+
+[^3]: This option is the same as the language server setting `python.pythonPath`. It cannot be used with `--venvpath`. The `--pythonpath` option is recommended over `--venvpath` in most cases. For more details, refer to the [import resolution](https://docs.basedpyright.com/latest/usage/import-resolution/#configuring-your-python-environment) documentation.
+
+[^4]: Pyright has built-in typeshed type stubs for Python stdlib functionality. To use a different version of typeshed type stubs, specify the directory with this option.
+
+[^5]: This feature is experimental. If thread count is > 1, multiple copies of pyright are executed in parallel to type check files in a project. If no thread count is specified, the thread count is based on the number of available logical processors (if at least 4) or 1 (if less than 4).
+
+[^6]: `--venvpath` is discouraged in basedpyright. [see here](https://docs.basedpyright.com/latest/benefits-over-pyright/better-defaults/#default-value-for-pythonpath) for more info.
+
+This option is the same as the language server setting `python.venvPath`. It used in conjunction with configuration file, which can refer to different virtual environments by name. For more details, refer to the [configuration](https://docs.basedpyright.com/latest/configuration/config-files/) and [import resolution](https://docs.basedpyright.com/latest/usage/import-resolution/#configuring-your-python-environment) documentation. This allows a common config file to be checked in to the project and shared by everyone on the development team without making assumptions about the local paths to the venv directory on each developer’s computer.
+
+[^7]: `--warnings` is equivalent to [`failOnWarnings`](https://docs.basedpyright.com/latest/configuration/config-files/#failOnWarnings), which is enabled by default in basedpyright, meaning this option is redundant unless you explicitly disable `failOnWarnings`. [see here](https://docs.basedpyright.com/latest/benefits-over-pyright/better-defaults/#typecheckingmode) for more information about this decision
+
+[^8]: When running in watch mode, pyright will reanalyze only those files that have been modified. These “deltas” are typically much faster than the initial analysis, which needs to analyze all files in the source tree.

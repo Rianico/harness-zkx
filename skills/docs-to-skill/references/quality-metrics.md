@@ -69,10 +69,16 @@ trigger_coverage = (
 | All modules have curated reference files | +0.2 |
 | Reference files have mandatory metadata header | +0.2 |
 | Reference files follow template schemas | +0.2 |
-| Reference files use `$SKILL_DIR` path pattern | +0.2 |
+| Reference files use correct path convention | +0.2 |
 | Raw docs copied into `references/<skill-name>-raw/` | +0.2 |
 
 **Note:** Skills must be self-contained. Raw docs are copied into `references/<skill-name>-raw/` within the skill. Reference quality is governed by extraction rules, not line counts.
+
+**Path convention for reference files:** Dual convention applies:
+- **Prose text** (inline references, descriptions): Use `$SKILL_DIR/references/...` because cwd is unknown to the reader
+- **Markdown links**: Use relative paths like `[text](basedpyright-expert-raw/file.md)` per standard relative-to-file convention
+
+Do NOT flag relative markdown links as incorrect — they are the correct form for link elements.
 
 ### 5. Navigation Clarity (15%)
 
