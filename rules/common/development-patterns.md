@@ -21,11 +21,23 @@ Visibility modifiers should reflect actual usage patterns. Private functions/cla
 
 ### Scoped Over Global
 Fix issues at the most precise scope possible. Targeted fixes preserve overall safety; global suppressions hide real issues.
-1. Fix the actual issue (preferred)
-2. Suppress at line/block level
-3. Suppress at file level
-4. Suppress at project level (avoid)
-5. Disable rule globally (never)
+
+**Scope Hierarchy (most precise to least):**
+1. **Fix the code** (preferred) — Address the actual issue
+2. **Line-level suppression** — Single instance, document why
+3. **File-level suppression** — Pattern in one file, document why
+4. **Targeted config** — Category-level (e.g., `allowedUntypedLibraries` for internal packages)
+5. **Project-level disable** — Last resort, signals potential architectural issue
+6. **Disable rule globally** — Never
+
+**Category-Level Thinking:**
+When a diagnostic appears 50+ times for the same category (e.g., internal modules without stubs), use targeted config instead of 50+ line suppressions. This signals intent clearly and reduces noise.
+
+**Document Every Suppression:**
+```python
+# <tool>: ignore[<rule>]
+# Reason: <one-line explanation of why this suppression is legitimate>
+```
 
 ---
 
