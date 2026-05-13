@@ -73,16 +73,24 @@ After resolving git merge/rebase conflicts, run the full test suite before conti
 
 ## Language Management
 
-### asdf for Version Control
-Use asdf with `.tool-versions` for language and tool version management.
-- **Why:** Single source of truth across environments; uv and other tools respect `.tool-versions`
+### Single-Language Projects
+Use the language's native tool for version and dependency management.
+- **Python:** uv (respects `.python-version` or system Python)
+- **Rust:** cargo with `rust-toolchain.toml`
+- **Node.js:** Use corepack or nvm with `.nvmrc`
+- **Why:** Native tools provide better integration, faster operations, and idiomatic workflows
+
+### Multi-Language Projects
+Use asdf with `.tool-versions` when a project requires multiple language runtimes.
+- **When:** Two or more languages in active development (e.g., Python backend + Node frontend)
 - **File:** Commit `.tool-versions` to version control
-- **Setup:** `asdf install` after cloning to sync versions
+- **Setup:** `asdf install` after cloning to sync all versions
+- **Note:** uv and other tools respect `.tool-versions` when present
 
 ### Python Version
 Default to Python 3.14 for new projects.
-- Specify in `.tool-versions`: `python 3.14.x`
-- uv automatically uses the asdf-managed Python version
+- Single-lang: specify in `.python-version` (uv reads this)
+- Multi-lang: specify in `.tool-versions`: `python 3.14.x`
 
 ---
 
