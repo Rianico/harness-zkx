@@ -71,6 +71,21 @@ After resolving git merge/rebase conflicts, run the full test suite before conti
 
 ---
 
+## Language Management
+
+### asdf for Version Control
+Use asdf with `.tool-versions` for language and tool version management.
+- **Why:** Single source of truth across environments; uv and other tools respect `.tool-versions`
+- **File:** Commit `.tool-versions` to version control
+- **Setup:** `asdf install` after cloning to sync versions
+
+### Python Version
+Default to Python 3.14 for new projects.
+- Specify in `.tool-versions`: `python 3.14.x`
+- uv automatically uses the asdf-managed Python version
+
+---
+
 ## Verification
 
 ### Trust But Verify
