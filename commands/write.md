@@ -1,8 +1,12 @@
 ---
 name: write
-description: Single entry point for the content creation cluster. Routes to the appropriate skill based on intent.
-argument-hint: "[article|publish] [--publish]"
-allowed-tools: [Read, Edit, Write, Bash, Agent, Skill]
+description: Content creation and distribution cluster. Routes to write-article for long-form writing (articles, blog posts, guides, tutorials, newsletters, voice matching) or write-publish for platform-native content and multi-platform distribution (X, LinkedIn, Threads, Bluesky, TikTok, YouTube, newsletters). TRIGGER on article writing, blog drafting, newsletter creation, social posts, crossposting, content repurposing, or voice-consistent writing.
+arguments: mode
+argument-hint: |
+  [article] -- long-form writing with voice capture and structure
+  [publish] -- platform-native content creation and distribution
+  [--publish] -- after article, adapt and distribute across platforms
+allowed-tools: [Read, Edit, Write, Bash, Agent]
 ---
 
 # Write Command
@@ -11,26 +15,26 @@ Single entry point for content creation and distribution.
 
 ## Routing
 
-| Argument | Skill | Purpose |
-|----------|-------|---------|
-| `article` | write-article | Long-form writing craft (voice capture, structure, anti-patterns) |
-| `publish` | write-publish | Platform-native content creation and multi-platform distribution |
-| `article --publish` | write-article then write-publish | Create article then adapt and distribute |
+| Argument | Skill file | Purpose |
+|----------|------------|---------|
+| `article` | `$SKILL_DIR/../skills/write-article/SKILL.md` | Long-form writing craft (voice capture, structure, anti-patterns) |
+| `publish` | `$SKILL_DIR/../skills/write-publish/SKILL.md` | Platform-native content creation and multi-platform distribution |
+| `article --publish` | both skills sequentially | Create article then adapt and distribute |
 
 ## Instructions
 
 ### `/write article`
 
-Invoke the `write-article` skill. Use for crafting long-form content with voice capture, structural guidance, and anti-pattern avoidance.
+Read `$SKILL_DIR/../skills/write-article/SKILL.md` and follow its instructions. Use for crafting long-form content with voice capture, structural guidance, and anti-pattern avoidance.
 
 ### `/write publish`
 
-Invoke the `write-publish` skill. Use for creating platform-native social content and distributing it across platforms (X, LinkedIn, newsletters, TikTok, YouTube).
+Read `$SKILL_DIR/../skills/write-publish/SKILL.md` and follow its instructions. Use for creating platform-native social content and distributing it across platforms (X, LinkedIn, newsletters, TikTok, YouTube).
 
 ### `/write article --publish`
 
-1. Invoke `write-article` to craft the long-form content
-2. Then invoke `write-publish` to adapt and distribute it across platforms
+1. Read `$SKILL_DIR/../skills/write-article/SKILL.md` and craft the long-form content
+2. Then read `$SKILL_DIR/../skills/write-publish/SKILL.md` and adapt/distribute across platforms
 
 ### No argument provided
 

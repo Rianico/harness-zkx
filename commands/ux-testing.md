@@ -1,6 +1,6 @@
 ---
 name: ux-testing
-description: Single entry point for the UX testing cluster. Routes to the appropriate skill based on intent.
+description: UX testing cluster for verifying user-facing experience. Routes to click-path-audit for state cancellation bugs (sequential undo, stale closures, handler conflicts), e2e-workflow for E2E test infrastructure (POM, locators, flakiness quarantine), or browser-qa for ad-hoc QA and post-deploy monitoring. TRIGGER on UI bugs, broken buttons, E2E testing, browser testing, state interaction bugs, test infrastructure, or post-deploy verification.
 argument-hint: |
   [audit] -- static code analysis of handler state interactions
   [build] -- build persistent E2E test suite with POM and locators
