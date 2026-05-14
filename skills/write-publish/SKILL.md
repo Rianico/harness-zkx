@@ -1,6 +1,10 @@
 ---
 name: write-publish
 description: Create platform-native content and distribute across X, LinkedIn, Threads, Bluesky, TikTok, YouTube, and newsletters. Use when the user wants social posts, threads, scripts, content calendars, crossposting, multi-platform posting, or repurposing content across platforms. TRIGGER on content creation, crossposting, social media distribution, or platform-specific adaptation requests.
+arguments: platform source
+argument-hint: |
+  [x|linkedin|threads|bluesky|tiktok|youtube|newsletter] -- target platform
+  <source> -- content to adapt (article, notes, url, or description)
 user-invocable: false
 disable-model-invocation: true
 ---
