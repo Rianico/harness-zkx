@@ -1,12 +1,12 @@
 ---
 name: ux-testing
 description: UX testing cluster for verifying user-facing experience. Routes to click-path-audit for state cancellation bugs (sequential undo, stale closures, handler conflicts), e2e-workflow for E2E test infrastructure (POM, locators, flakiness quarantine), or browser-qa for ad-hoc QA and post-deploy monitoring. TRIGGER on UI bugs, broken buttons, E2E testing, browser testing, state interaction bugs, test infrastructure, or post-deploy verification.
+arguments: mode
 argument-hint: |
-  [audit] -- static code analysis of handler state interactions
-  [build] -- build persistent E2E test suite with POM and locators
-  [check] -- ad-hoc runtime verification or sustained post-deploy monitoring
-  [--once] -- single-pass ad-hoc QA check (default)
-  [--watch] -- sustained post-deploy monitoring with alert thresholds
+  audit -- find state cancellation bugs (sequential undo, stale closures)
+  build -- set up E2E test infrastructure (POM, locators, flakiness quarantine)
+  check [--once|--watch] -- ad-hoc QA or sustained monitoring
+  [--compare <staging> <prod>] -- diff mode comparing environments
 allowed-tools: [Read, Edit, Write, Bash, Agent]
 ---
 
@@ -18,9 +18,9 @@ Single entry point for verifying that the user-facing experience works as intend
 
 | Argument | Skill file | Purpose |
 |----------|------------|---------|
-| `audit` | `$SKILL_DIR/../skills/click-path-audit/SKILL.md` | Static code analysis of handler state interactions |
-| `build` | `$SKILL_DIR/../skills/e2e-workflow/SKILL.md` | Build persistent E2E test suite with POM and locators |
-| `check` | `$SKILL_DIR/../skills/browser-qa/SKILL.md` | Ad-hoc runtime verification or sustained post-deploy monitoring |
+| `audit` | `$SKILL_DIR/../skills/click-path-audit/SKILL.md` | Find state cancellation bugs |
+| `build` | `$SKILL_DIR/../skills/e2e-workflow/SKILL.md` | Build E2E test infrastructure |
+| `check` | `$SKILL_DIR/../skills/browser-qa/SKILL.md` | Ad-hoc QA or post-deploy monitoring |
 
 ## Instructions
 
