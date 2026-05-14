@@ -1,7 +1,7 @@
 ---
 name: eval-gate
-description: Eval-driven development gate for pass/fail decisions on implementation quality. Use for eval define, check, report, list, and clean; for creating acceptance criteria from specs, plans, ADRs, or requirements; for running capability, contract, negative, and regression evals; for pass@k metrics, model graders, and compact subagent-run reports. TRIGGER when validating implementation against approved requirements, running acceptance gates, defining verification scripts, or checking deterministic criteria. Always use this when validating implementation against approved requirements or running acceptance gates.
-argument-hint: "[define|check|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>|artifact_dir=<path>]"
+description: Eval-driven development gate for pass/fail decisions on implementation quality. Use for eval define, check, report, list, and clean; for creating acceptance criteria from specs, plans, ADRs, or requirements; for running capability, contract, negative, and regression evals; for pass@k metrics, model graders, and compact subagent-run reports. TRIGGER when validating implementation against approved requirements, running acceptance gates, defining verification scripts, or checking deterministic criteria. Also use for quick quality gates: build verification, type checking, lint, test coverage, security scans, and diff review before PRs. Always use this when validating implementation against approved requirements, running acceptance gates, or running pre-PR quality checks.
+argument-hint: "[define|check|quick|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>|artifact_dir=<path>]"
 tools:
   - Agent
   - Bash
@@ -27,11 +27,56 @@ Compare deltas  ←  Re-run evals  ←  Implementation complete
 |------|---------|
 | `define <feature> [source]` | Create acceptance criteria from source-of-truth, verify scripts, capture baseline |
 | `check <feature>` | Run criteria against current implementation |
+| `quick` | Run 6 standard quality phases without formal definition (Build, Types, Lint, Tests, Security, Diff) |
 | `report <feature>` | Produce comprehensive report with metrics |
 | `list` | Show all eval definitions and statuses |
 | `clean` | Remove old logs, keep last 10 runs per feature |
 
 **Source docs**: Pass any combination of design.md, ADR, plan, or other requirements. Eval criteria are derived from whatever sources are provided.
+
+## Quick Mode
+
+`eval-gate quick` runs 6 standard quality phases without requiring a formal eval definition. Use for fast pre-PR quality gates or periodic verification during long sessions.
+
+### Six Phases
+
+| Phase | Checks | Commands |
+|-------|--------|----------|
+| **Build** | Project compiles | `npm run build` / `pnpm build` |
+| **Types** | No type errors | `tsc --noEmit` / `basedpyright .` |
+| **Lint** | Style compliance | `npm run lint` / `ruff check .` |
+| **Tests** | Suite passes + coverage | `npm run test -- --coverage` |
+| **Security** | No secrets, no leaks | `grep -rn "sk-" .` / `grep -rn "api_key" .` |
+| **Diff** | Review changed files | `git diff --stat` |
+
+### Quick Mode Output
+
+```
+EVAL QUICK CHECK
+================
+Build:     PASS
+Types:     PASS (0 errors)
+Lint:      PASS (2 warnings)
+Tests:     PASS (42/42, 87% coverage)
+Security:  FAIL (1 hardcoded API key in src/config.ts:12)
+Diff:      3 files changed
+
+Overall:   NOT READY for PR
+Route:     remediate
+Issues:
+- hardcoded API key in src/config.ts:12
+```
+
+**Routing Decision:**
+- `Overall: READY` + `Route: continue` → Proceed to PR
+- `Overall: NOT READY` + `Route: remediate` → Fix issues before PR
+
+### Continuous Mode Guidance
+
+For long development sessions, run `eval-gate quick` every 15 minutes or after major changes:
+- After completing each function or component
+- Before moving to the next task
+- Before creating a PR
 
 ## Four Eval Types
 
@@ -99,9 +144,34 @@ Agent tool (general-purpose):
     Modes:
     - `define`: Read source docs, extract observable criteria, write definition with scripts for each criterion. Then verify scripts run and capture baseline by running each script. Write `baseline.json` to eval dir. Return baseline summary table.
     - `check`: Run each criterion's script, parse JSON output, append results to log, return status with routing.
+    - `quick`: Run 6 standard quality phases (Build, Types, Lint, Tests, Security, Diff) without formal definition. Return compact PASS/FAIL per phase.
     - `report`: Read definition and log, write report, return recommendation.
     - `list`: Summarize definitions and statuses.
     - `clean`: Remove old logs, keep last 10 runs.
+
+    **CRITICAL for `quick` mode:**
+    1. Run each phase in sequence: Build, Type Check, Lint, Test Suite, Security Scan, Diff Review
+    2. For each phase, determine PASS/FAIL based on command output
+    3. Report errors/warnings counts, test results, coverage, and security issues
+    4. Output format:
+       ```
+       EVAL QUICK CHECK
+       ================
+       Build:     PASS | FAIL
+       Types:     PASS | FAIL (X errors)
+       Lint:      PASS | FAIL (X warnings)
+       Tests:     PASS | FAIL (X/Y passed, Z% coverage)
+       Security:  PASS | FAIL (X issues)
+       Diff:      X files changed
+
+       Overall:   READY | NOT READY for PR
+       Route:     continue | remediate
+       Issues:
+       - [brief issue 1, ≤10 words each]
+       - [brief issue 2]
+       ```
+    5. If any phase fails, `Overall: NOT READY` and `Route: remediate`
+    6. List specific issues found for remediation
 
     **CRITICAL for `define` mode:**
     1. Write the eval definition and scripts

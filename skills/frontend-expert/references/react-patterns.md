@@ -1,21 +1,6 @@
----
-name: frontend-patterns
-description: React component patterns, Next.js architecture, state management hooks, performance optimization, and UI accessibility patterns for modern frontend development. TRIGGER when: building React components, implementing custom hooks, managing state with useState/useReducer/Zustand/Context, optimizing render performance with memoization/virtualization/code splitting, handling forms with validation, implementing keyboard navigation, focus management, or responsive layouts. Covers composition, compound components, render props, error boundaries, and animation patterns.
----
+# React Patterns Reference
 
-# Frontend Development Patterns
-
-Modern frontend patterns for React, Next.js, and performant user interfaces.
-
-## When to Activate
-
-- Building React components (composition, props, rendering)
-- Managing state (useState, useReducer, Zustand, Context)
-- Implementing data fetching (SWR, React Query, server components)
-- Optimizing performance (memoization, virtualization, code splitting)
-- Working with forms (validation, controlled inputs, Zod schemas)
-- Handling client-side routing and navigation
-- Building accessible, responsive UI patterns
+Code examples and detailed implementations for React component patterns, custom hooks, and state management.
 
 ## Component Patterns
 
@@ -131,9 +116,11 @@ export function DataLoader<T>({ url, children }: DataLoaderProps<T>) {
 </DataLoader>
 ```
 
-## Custom Hooks Patterns
+---
 
-### State Management Hook
+## Custom Hooks
+
+### useToggle
 
 ```typescript
 export function useToggle(initialValue = false): [boolean, () => void] {
@@ -150,7 +137,35 @@ export function useToggle(initialValue = false): [boolean, () => void] {
 const [isOpen, toggleOpen] = useToggle()
 ```
 
-### Async Data Fetching Hook
+### useDebounce
+
+```typescript
+export function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => clearTimeout(handler)
+  }, [value, delay])
+
+  return debouncedValue
+}
+
+// Usage
+const [searchQuery, setSearchQuery] = useState('')
+const debouncedQuery = useDebounce(searchQuery, 500)
+
+useEffect(() => {
+  if (debouncedQuery) {
+    performSearch(debouncedQuery)
+  }
+}, [debouncedQuery])
+```
+
+### useQuery (Async Data Fetching)
 
 ```typescript
 interface UseQueryOptions<T> {
@@ -205,35 +220,9 @@ const { data: markets, loading, error, refetch } = useQuery(
 )
 ```
 
-### Debounce Hook
+---
 
-```typescript
-export function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value)
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value)
-    }, delay)
-
-    return () => clearTimeout(handler)
-  }, [value, delay])
-
-  return debouncedValue
-}
-
-// Usage
-const [searchQuery, setSearchQuery] = useState('')
-const debouncedQuery = useDebounce(searchQuery, 500)
-
-useEffect(() => {
-  if (debouncedQuery) {
-    performSearch(debouncedQuery)
-  }
-}, [debouncedQuery])
-```
-
-## State Management Patterns
+## State Management
 
 ### Context + Reducer Pattern
 
@@ -287,6 +276,8 @@ export function useMarkets() {
   return context
 }
 ```
+
+---
 
 ## Performance Optimization
 
@@ -382,7 +373,9 @@ export function VirtualMarketList({ markets }: { markets: Market[] }) {
 }
 ```
 
-## Form Handling Patterns
+---
+
+## Form Handling
 
 ### Controlled Form with Validation
 
@@ -459,7 +452,9 @@ export function CreateMarketForm() {
 }
 ```
 
-## Error Boundary Pattern
+---
+
+## Error Boundary
 
 ```typescript
 interface ErrorBoundaryState {
@@ -506,6 +501,8 @@ export class ErrorBoundary extends React.Component<
   <App />
 </ErrorBoundary>
 ```
+
+---
 
 ## Animation Patterns
 
@@ -560,6 +557,8 @@ export function Modal({ isOpen, onClose, children }: ModalProps) {
   )
 }
 ```
+
+---
 
 ## Accessibility Patterns
 
@@ -637,5 +636,3 @@ export function Modal({ isOpen, onClose, children }: ModalProps) {
   ) : null
 }
 ```
-
-**Remember**: Modern frontend patterns enable maintainable, performant user interfaces. Choose patterns that fit your project complexity.

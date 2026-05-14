@@ -1,5 +1,7 @@
 # Python Stub Files (.pyi) Guide
 
+> **For type checker configuration, stub generation workflows, and diagnostic resolution, see the basedpyright-expert skill.**
+
 Stub files provide type information for Python modules without implementation. They're essential for type-checking third-party libraries, distributing type hints separately from runtime code, and maintaining backwards compatibility.
 
 ## When to Use Stub Files

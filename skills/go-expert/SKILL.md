@@ -20,14 +20,14 @@ You have invoked the Go Expert Skill. This skill contains actionable checklists 
 - **Concurrency:** Prefer channels for passing data. Use `sync.Mutex` or `sync.RWMutex` only when protecting shared state. Start goroutines safely and ensure they can exit to avoid leaks.
 - **Interfaces:** Define interfaces where they are *used*, not where they are implemented. Keep them small (1-2 methods).
 - **Naming:** Use MixedCaps. Keep package names short, lowercase, and single-word.
-> **Need Deep Knowledge?** Read `skills/go-expert/references/golang-patterns.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/golang-patterns.md`.
 
 ### Testing & Verification
 - **Test Structure:** Use Table-Driven Tests (`[]struct`) for robust unit testing.
 - **Subtests:** Run subtests using `t.Run()` for better isolation and naming.
 - **Mocks:** Generate mocks using `gomock` or implement simple mock structs directly in the test file.
-> **Need Deep Knowledge?** Read `skills/go-expert/references/golang-testing.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/golang-testing.md`.
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "build", "review", "testing"), apply the relevant checklist above.
-2. For deeper idiomatic Go patterns or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/go-expert/references/`.
+2. For deeper idiomatic Go patterns or testing guidance, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.

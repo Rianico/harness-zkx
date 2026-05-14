@@ -20,14 +20,14 @@ You have invoked the Rust Expert Skill. This skill contains actionable checklist
 - **Error Handling:** Use the `?` operator and `Result` universally. Prefer libraries like `anyhow` for applications or `thiserror` for libraries.
 - **Enums over Booleans:** Use `enum` for state machines instead of multiple boolean flags.
 - **Concurrency:** Prefer message passing (`mpsc`) or `RwLock` over `Mutex` where applicable.
-> **Need Deep Knowledge?** Read `skills/rust-expert/references/rust-patterns.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/rust-patterns.md`.
 
 ### Testing & Verification
 - **Unit Tests:** Keep them in the same file inside a `#[cfg(test)]` module.
 - **Integration Tests:** Place them in the `tests/` directory at the project root.
 - **Mocks:** Use traits for dependency injection to allow mocking in tests.
-> **Need Deep Knowledge?** Read `skills/rust-expert/references/rust-testing.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/rust-testing.md`.
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "build", "testing", "review"), apply the relevant checklist above.
-2. For deeper Rust patterns or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/rust-expert/references/`.
+2. For deeper Rust patterns or testing guidance, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.

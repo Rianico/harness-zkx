@@ -1,81 +1,123 @@
-# Browser QA — Automated Visual Testing & Interaction
+---
+name: browser-qa
+description: Automates browser-based QA and post-deploy monitoring. Use for pre-deploy verification, ad-hoc testing, and sustained monitoring after deploys, merges, or dependency upgrades.
+---
+
+# Browser QA — Automated Testing & Monitoring
 
 ## When to Use
 
-- After deploying a feature to staging/preview
-- When you need to verify UI behavior across pages
-- Before shipping — confirm layouts, forms, interactions actually work
-- When reviewing PRs that touch frontend code
+- After deploying to staging/preview/production
+- Pre-deploy verification before shipping
+- Post-deploy monitoring during launch windows
+- After merging risky PRs or dependency upgrades
 - Accessibility audits and responsive testing
+- Comparing staging vs production for regressions
 
-## How It Works
+## Modes
 
-Uses the browser automation MCP (claude-in-chrome, Playwright, or Puppeteer) to interact with live pages like a real user.
+### --once (default)
 
-### Phase 1: Smoke Test
+Single-pass ad-hoc verification. Runs all phases and reports.
+
 ```
-1. Navigate to target URL
-2. Check for console errors (filter noise: analytics, third-party)
-3. Verify no 4xx/5xx in network requests
-4. Screenshot above-the-fold on desktop + mobile viewport
-5. Check Core Web Vitals: LCP < 2.5s, CLS < 0.1, INP < 200ms
-```
-
-### Phase 2: Interaction Test
-```
-1. Click every nav link — verify no dead links
-2. Submit forms with valid data — verify success state
-3. Submit forms with invalid data — verify error state
-4. Test auth flow: login → protected page → logout
-5. Test critical user journeys (checkout, onboarding, search)
+/browser-qa https://myapp.com
+/browser-qa https://myapp.com --once
 ```
 
-### Phase 3: Visual Regression
+### --watch
+
+Sustained monitoring with interval and duration.
+
 ```
-1. Screenshot key pages at 3 breakpoints (375px, 768px, 1440px)
-2. Compare against baseline screenshots (if stored)
-3. Flag layout shifts > 5px, missing elements, overflow
-4. Check dark mode if applicable
+/browser-qa https://myapp.com --watch --interval 5m --duration 2h
 ```
 
-### Phase 4: Accessibility
+### --compare
+
+Diff mode: compare staging vs production for regressions.
+
 ```
-1. Run axe-core or equivalent on each page
-2. Flag WCAG AA violations (contrast, labels, focus order)
-3. Verify keyboard navigation works end-to-end
-4. Check screen reader landmarks
+/browser-qa --compare https://staging.myapp.com https://myapp.com
 ```
+
+## What It Checks
+
+**Ad-hoc (--once) phases:**
+1. Smoke Test — console errors, network failures, Core Web Vitals
+2. Interaction Test — nav links, forms, auth flows, critical journeys
+3. Visual Regression — screenshots at 3 breakpoints, layout shift detection
+4. Accessibility — axe-core scan, WCAG AA violations, keyboard nav
+
+**Watch (--watch) monitors:**
+- HTTP Status — is the page returning 200?
+- Console Errors — new errors that weren't there before?
+- Network Failures — failed API calls, 5xx responses?
+- Performance — LCP/CLS/INP regression vs baseline?
+- Content — did key elements disappear? (h1, nav, footer, CTA)
+- API Health — are critical endpoints responding within SLA?
+
+## Alert Thresholds
+
+```yaml
+critical:  # immediate alert
+  - HTTP status != 200
+  - Console error count > 5 (new errors only)
+  - LCP > 4s
+  - API endpoint returns 5xx
+
+warning:   # flag in report
+  - LCP increased > 500ms from baseline
+  - CLS > 0.1
+  - New console warnings
+  - Response time > 2x baseline
+
+info:      # log only
+  - Minor performance variance
+  - New network requests (third-party scripts added?)
+```
+
+## Notifications
+
+When a critical threshold is crossed in watch mode:
+- Desktop notification (macOS/Linux)
+- Optional: Slack/Discord webhook
+- Log to `~/.claude/browser-qa.log`
 
 ## Output Format
 
 ```markdown
-## QA Report — [URL] — [timestamp]
+## QA Report — myapp.com — 2026-05-14 10:30 PST
 
-### Smoke Test
+### Mode: --once
+
+#### Smoke Test
 - Console errors: 0 critical, 2 warnings (analytics noise)
 - Network: all 200/304, no failures
-- Core Web Vitals: LCP 1.2s ✓, CLS 0.02 ✓, INP 89ms ✓
+- Core Web Vitals: LCP 1.2s, CLS 0.02, INP 89ms
 
-### Interactions
+#### Interactions
 - [✓] Nav links: 12/12 working
 - [✗] Contact form: missing error state for invalid email
 - [✓] Auth flow: login/logout working
 
-### Visual
-- [✗] Hero section overflows on 375px viewport
-- [✓] Dark mode: all pages consistent
-
-### Accessibility
-- 2 AA violations: missing alt text on hero image, low contrast on footer links
+#### Accessibility
+- 2 AA violations: missing alt text, low contrast footer links
 
 ### Verdict: SHIP WITH FIXES (2 issues, 0 blockers)
 ```
 
 ## Integration
 
-Works with any browser MCP:
-- `mChild__claude-in-chrome__*` tools (preferred — uses your actual Chrome)
+**Browser MCP support:**
+- `mChild__claude-in-chrome__*` tools (preferred)
 - Playwright via `mcp__browserbase__*`
 - Direct Puppeteer scripts
 
-Pair with `/canary-watch` for post-deploy monitoring.
+**Workflow pairing:**
+- `/e2e-workflow` — structured E2E test generation
+- `/click-path-audit` — user journey analysis
+
+**Hooks:**
+- Add as PostToolUse hook on `git push` to auto-check after deploys
+- Run in CI after deploy step for automated monitoring

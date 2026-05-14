@@ -54,6 +54,25 @@ Use `wt` (worktrunk) instead of built-in `EnterWorktree`/`ExitWorktree` tools an
 | Merge worktree to main | `wt merge` |
 | Remove worktree | `wt remove <name>` |
 
+### Common Flag Reference
+```
+fd -H "pattern"          # include hidden files
+fd -I "pattern"          # include .gitignored files
+fd -HI "pattern"         # both (closest to `find` default)
+fd -e txt -x rm {}       # execute command on matches
+fd "pattern" -E "dir"    # exclude directory
+
+rg -t py "pattern"       # search only Python files
+rg --hidden "pattern"    # include hidden files
+rg -u "pattern"          # include .gitignored files
+rg -uu "pattern"         # hidden + ignored (everything)
+rg -l "pattern"          # filenames only
+rg -C 2 "pattern"        # 2 lines context
+
+eza --tree --level=2     # tree view with depth limit
+eza -la --sort=modified  # detailed list, sorted by mtime
+```
+
 ### Reading Content
 - **Targeted reading:** Use the built-in `Read` tool — never `cat`/`bat` (they dump entire files and bloat context).
 - **Partial inspection:** Use `head`/`tail` when you only need the beginning or end of a file.

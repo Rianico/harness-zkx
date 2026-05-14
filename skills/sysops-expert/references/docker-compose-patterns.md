@@ -1,24 +1,8 @@
----
-name: docker-patterns
-description: Docker and Docker Compose patterns for local development, container security, networking, volume strategies, and multi-service orchestration.
+# Docker Compose Patterns
 
----
+Local development stacks, networking, and volume strategies.
 
-# Docker Patterns
-
-Docker and Docker Compose best practices for containerized development.
-
-## When to Activate
-
-- Setting up Docker Compose for local development
-- Designing multi-container architectures
-- Troubleshooting container networking or volume issues
-- Reviewing Dockerfiles for security and size
-- Migrating from local dev to containerized workflow
-
-## Docker Compose for Local Development
-
-### Standard Web App Stack
+## Standard Web App Stack
 
 ```yaml
 # docker-compose.yml
@@ -78,45 +62,7 @@ volumes:
   redisdata:
 ```
 
-### Development vs Production Dockerfile
-
-```dockerfile
-# Stage: dependencies
-FROM node:22-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-
-# Stage: dev (hot reload, debug tools)
-FROM node:22-alpine AS dev
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-EXPOSE 3000
-CMD ["npm", "run", "dev"]
-
-# Stage: build
-FROM node:22-alpine AS build
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npm run build && npm prune --production
-
-# Stage: production (minimal image)
-FROM node:22-alpine AS production
-WORKDIR /app
-RUN addgroup -g 1001 -S appgroup && adduser -S appuser -u 1001
-USER appuser
-COPY --from=build --chown=appuser:appgroup /app/dist ./dist
-COPY --from=build --chown=appuser:appgroup /app/node_modules ./node_modules
-COPY --from=build --chown=appuser:appgroup /app/package.json ./
-ENV NODE_ENV=production
-EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:3000/health || exit 1
-CMD ["node", "dist/server.js"]
-```
-
-### Override Files
+## Override Files
 
 ```yaml
 # docker-compose.override.yml (auto-loaded, dev-only settings)
@@ -224,23 +170,6 @@ services:
 
 ## Container Security
 
-### Dockerfile Hardening
-
-```dockerfile
-# 1. Use specific tags (never :latest)
-FROM node:22.12-alpine3.20
-
-# 2. Run as non-root
-RUN addgroup -g 1001 -S app && adduser -S app -u 1001
-USER app
-
-# 3. Drop capabilities (in compose)
-# 4. Read-only root filesystem where possible
-# 5. No secrets in image layers
-```
-
-### Compose Security
-
 ```yaml
 services:
   app:
@@ -281,27 +210,7 @@ services:
 # ENV API_KEY=sk-proj-xxxxx      # NEVER DO THIS
 ```
 
-## .dockerignore
-
-```
-node_modules
-.git
-.env
-.env.*
-dist
-coverage
-*.log
-.next
-.cache
-docker-compose*.yml
-Dockerfile*
-README.md
-tests/
-```
-
-## Debugging
-
-### Common Commands
+## Debugging Commands
 
 ```bash
 # View logs
@@ -325,18 +234,10 @@ docker compose build --no-cache app   # Force full rebuild
 docker compose down                   # Stop and remove containers
 docker compose down -v                # Also remove volumes (DESTRUCTIVE)
 docker system prune                   # Remove unused images/containers
-```
 
-### Debugging Network Issues
-
-```bash
-# Check DNS resolution inside container
+# Debug network issues
 docker compose exec app nslookup db
-
-# Check connectivity
 docker compose exec app wget -qO- http://api:3000/health
-
-# Inspect network
 docker network ls
 docker network inspect <project>_default
 ```

@@ -20,13 +20,13 @@ You have invoked the C++ Expert Skill. This skill contains actionable checklists
 - **Initialization:** Use uniform initialization (brace initialization `{}`).
 - **Const Correctness:** Apply `const` liberally to methods, parameters, and variables.
 - **Auto:** Use `auto` when the type is obvious or overly complex, but prefer explicit types for readability if it's ambiguous.
-> **Need Deep Knowledge?** Read `skills/cpp-expert/references/cpp-coding-standards.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/cpp-coding-standards.md`.
 
 ### Testing & Verification (GoogleTest/Catch2)
 - **Test Structure:** Use `TEST_F` for fixtures. Keep setup logic in the fixture constructor or `SetUp()` method.
 - **Mocks:** Use GoogleMock (`MOCK_METHOD`) for dependency injection.
-> **Need Deep Knowledge?** Read `skills/cpp-expert/references/cpp-testing.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/cpp-testing.md`.
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "build", "review", "testing"), apply the relevant checklist above.
-2. For deeper coding standards or testing guidance, use the `Read` tool to fetch the relevant reference document from `skills/cpp-expert/references/`.
+2. For deeper coding standards or testing guidance, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.

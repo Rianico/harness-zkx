@@ -1,6 +1,7 @@
 ---
 name: brainstorming
-description: "Use before creative or constructive work (features, architecture, behavior). Transforms vague ideas into validated designs through disciplined reasoning and collaboration."
+description: "Use before creative or constructive work (features, architecture, behavior). Transforms vague ideas into validated designs through disciplined reasoning and collaboration. Escalate to --peer-review for high-impact, high-risk designs requiring multi-agent validation and stress-testing."
+argument-hint: "[--peer-review]"
 ---
 
 # Brainstorming Ideas Into Designs
@@ -35,7 +36,7 @@ Your job is to **slow the process down just enough to get it right**.
 
 ## The Process
 
-### 1️⃣ Understand the Current Context (Mandatory First Step)
+### 1. Understand the Current Context (Mandatory First Step)
 
 Before asking any questions:
 
@@ -51,7 +52,7 @@ Before asking any questions:
 
 ---
 
-### 2️⃣ Understanding the Idea (One Question at a Time)
+### 2. Understanding the Idea (One Question at a Time)
 
 Your goal here is **shared clarity**, not speed.
 
@@ -89,7 +90,7 @@ Focus on understanding:
 
 ---
 
-### 3️⃣ Non-Functional Requirements (Mandatory)
+### 3. Non-Functional Requirements (Mandatory)
 
 You MUST explicitly clarify or propose assumptions for:
 
@@ -106,7 +107,7 @@ If the user is unsure:
 
 ---
 
-### 4️⃣ Understanding Lock (Hard Gate)
+### 4. Understanding Lock (Hard Gate)
 
 Before proposing **any design**, you MUST pause and do the following:
 
@@ -128,23 +129,23 @@ Then ask for confirmation:
 
 ```yaml
 Dialog:
-  header: “Understanding Lock”
-  question: “Does this accurately reflect your intent? Please confirm or correct before we move to design.”
+  header: "Understanding Lock"
+  question: "Does this accurately reflect your intent? Please confirm or correct before we move to design."
   multipleChoice: false
   options:
-    - label: “Confirmed”
-      description: “Proceed to design exploration”
-    - label: “Needs revision”
-      description: “Clarify or correct specific items”
-    - label: “Other”
-      description: “Provide detailed feedback”
+    - label: "Confirmed"
+      description: "Proceed to design exploration"
+    - label: "Needs revision"
+      description: "Clarify or correct specific items"
+    - label: "Other"
+      description: "Provide detailed feedback"
 ```
 
 **Do NOT proceed until explicit confirmation is given.**
 
 ---
 
-### 5️⃣ Explore Design Approaches
+### 5. Explore Design Approaches
 
 Once understanding is confirmed:
 
@@ -177,7 +178,7 @@ This is still **not** final design.
 
 ---
 
-### 6️⃣ Present the Design (Incrementally)
+### 6. Present the Design (Incrementally)
 
 When presenting the design:
 
@@ -186,16 +187,16 @@ When presenting the design:
 
 ```yaml
 Dialog:
-  header: “Design Checkpoint”
-  question: “Does this section look right so far?”
+  header: "Design Checkpoint"
+  question: "Does this section look right so far?"
   multipleChoice: false
   options:
-    - label: “Continue”
-      description: “Proceed to next section”
-    - label: “Revise”
-      description: “Something needs adjustment”
-    - label: “Other”
-      description: “Provide specific feedback”
+    - label: "Continue"
+      description: "Proceed to next section"
+    - label: "Revise"
+      description: "Something needs adjustment"
+    - label: "Other"
+      description: "Provide specific feedback"
 ```
 
 Cover, as relevant:
@@ -209,7 +210,7 @@ Cover, as relevant:
 
 ---
 
-### 7️⃣ Decision Log (Mandatory)
+### 7. Decision Log (Mandatory)
 
 Maintain a running **Decision Log** throughout the design discussion.
 
@@ -222,7 +223,7 @@ This log should be preserved for documentation.
 
 ---
 
-### 8️⃣ Design Validation with Examples (Mandatory Before Documentation)
+### 8. Design Validation with Examples (Mandatory Before Documentation)
 
 Before finalizing any design, you MUST present **concrete, detailed examples** that illustrate how the design behaves in real scenarios.
 
@@ -283,7 +284,7 @@ If examples reveal design gaps:
 
 ## After the Design
 
-### 📄 Documentation
+### Documentation
 
 Once the design AND examples are validated:
 
@@ -295,26 +296,26 @@ Once the design AND examples are validated:
   - Final design
   - Validated examples
 
-Persist the document according to the project’s standard workflow.
+Persist the document according to the project's standard workflow.
 
 ---
 
-### 🛠️ Implementation Handoff (Optional)
+### Implementation Handoff (Optional)
 
 Only after documentation is complete, ask:
 
 ```yaml
 Dialog:
-  header: “Implementation Handoff”
-  question: “Ready to set up for implementation?”
+  header: "Implementation Handoff"
+  question: "Ready to set up for implementation?"
   multipleChoice: false
   options:
-    - label: “Yes, proceed”
-      description: “Create implementation plan and begin”
-    - label: “Not yet”
-      description: “Need more design refinement or review”
-    - label: “Other”
-      description: “Provide specific requirements”
+    - label: "Yes, proceed"
+      description: "Create implementation plan and begin"
+    - label: "Not yet"
+      description: "Need more design refinement or review"
+    - label: "Other"
+      description: "Provide specific requirements"
 ```
 
 If yes:
@@ -341,7 +342,7 @@ If any criterion is unmet:
 
 ---
 
-## 9️⃣ Complexity Classification (Mandatory Output)
+## 9. Complexity Classification (Mandatory Output)
 
 After the design is validated, you MUST classify the task complexity for orchestration routing.
 
@@ -380,14 +381,67 @@ After the design is validated, you MUST classify the task complexity for orchest
 ### Complexity Transformation
 
 Complexity can change during brainstorming:
-- **Simple → Complex**: Discovery of hidden dependencies, security implications, or architectural impact
-- **Complex → Simple**: Discovery of elegant solution that reduces scope
+- **Simple to Complex**: Discovery of hidden dependencies, security implications, or architectural impact
+- **Complex to Simple**: Discovery of elegant solution that reduces scope
 
 When complexity changes, re-evaluate and update classification before finalizing.
 
 ### Default Behavior
 
 When uncertain, classify as **heavy**. The cost of extra architecture review is lower than the cost of skipping it when needed.
+
+---
+
+## Peer Review Escalation (--peer-review)
+
+For high-impact, high-risk, or elevated-confidence designs, escalate to **peer review mode**.
+
+### When to Escalate
+
+Escalate to `--peer-review` when:
+- Design has significant architectural impact
+- Failure would be costly (revenue, safety, user trust)
+- Security or compliance implications exist
+- Multiple non-functional constraints are in tension
+- Stakeholder alignment is critical
+
+### Peer Review Process (3 Phases)
+
+**Phase 1: Single-Agent Design**
+- Complete the standard brainstorming process (Steps 1-9)
+- Understanding Lock confirmed
+- Initial design produced
+- Decision Log started
+
+**Phase 2: Structured Review Loop**
+- Reviewers invoked sequentially: Skeptic, Constraint Guardian, User Advocate
+- Each reviewer provides scoped feedback
+- Primary Designer responds to objections and revises
+
+**Phase 3: Integration & Arbitration**
+- Arbiter reviews design, Decision Log, and unresolved objections
+- Arbiter accepts/rejects objections with rationale
+- Design declared complete or returned for revision
+
+### Detailed Roles and Process
+
+See `$SKILL_DIR/references/peer-review-roles.md` for:
+- Full role definitions (Primary Designer, Skeptic, Constraint Guardian, User Advocate, Arbiter)
+- May/May NOT mandates for each role
+- Phase 2 and Phase 3 process details
+- Decision Log requirements
+
+### Peer Review Exit Criteria
+
+You may exit peer review mode **only when all are true**:
+
+- Understanding Lock was completed
+- All reviewer agents have been invoked
+- All objections are resolved or explicitly rejected
+- Decision Log is complete
+- Arbiter has declared the design acceptable
+
+If invoked by orchestration, report disposition: **APPROVED**, **REVISE**, or **REJECT** with rationale.
 
 ---
 
@@ -402,7 +456,6 @@ When uncertain, classify as **heavy**. The cost of extra architecture review is 
 - **YAGNI ruthlessly**
 
 ---
-If the design is high-impact, high-risk, or requires elevated confidence, you MUST hand off the finalized design and Decision Log to the `multi-agent-brainstorming` skill before implementation.
 
 ## When to Use
 This skill is applicable to execute the workflow or actions described in the overview.

@@ -1,5 +1,7 @@
 # Diagnostic Resolution Playbook
 
+> **For type checker configuration, diagnostic rules, and suppression decisions, see the basedpyright-expert skill.**
+
 Patterns and decisions for resolving Python type checker (basedpyright) and linter (ruff) warnings.
 
 ## Decision Framework

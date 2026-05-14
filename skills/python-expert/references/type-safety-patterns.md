@@ -1,5 +1,7 @@
 # Type Safety Patterns
 
+> **For type checker configuration, diagnostic resolution, and suppression decisions, see the basedpyright-expert skill.**
+
 Core patterns for maintaining type safety in Python codebases with Pydantic.
 
 ## Core Principles

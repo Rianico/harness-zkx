@@ -14,20 +14,20 @@ You have invoked the Swift Expert Skill. This skill contains actionable checklis
 - **Async/Await:** Avoid legacy completion handlers (closures). Use `async`/`await`.
 - **Actors:** Protect mutable state using `actor` or `@MainActor` for UI-bound state. Avoid unchecked `Sendable` warnings.
 - **Tasks:** Avoid unstructured concurrency (`Task { }`) unless bridging synchronous and asynchronous code. Prefer `TaskGroup` or `async let` for parallel operations.
-> **Need Deep Knowledge?** Read `skills/swift-expert/references/swift-concurrency.md` or `swift-actor-persistence.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/swift-concurrency.md` or `$SKILL_DIR/references/swift-actor-persistence.md`.
 
 ### SwiftUI Architecture & Patterns
 - **State Management:** Use `@Observable` macro (Swift 5.9+) over legacy `@StateObject`/`@ObservedObject` where possible.
 - **Views:** Keep views small. Extract complex logic into view models or domain objects.
 - **Modifiers:** Order modifiers logically (e.g., layout and framing before styling and background).
-> **Need Deep Knowledge?** Read `skills/swift-expert/references/swiftui-patterns.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/swiftui-patterns.md`.
 
 ### Testing & Protocol-Oriented Design
 - **Dependency Injection:** Use Protocols for all dependencies to allow for easy mocking. Avoid singletons (`.shared`).
 - **XCTest:** Group tests logically. Use `setUpWithError` and `tearDownWithError` for test fixtures.
 - **Async Testing:** Use `await` inside tests seamlessly; `XCTest` natively supports async test methods.
-> **Need Deep Knowledge?** Read `skills/swift-expert/references/swift-protocol-di-testing.md`.
+> **Need Deep Knowledge?** Read `$SKILL_DIR/references/swift-protocol-di-testing.md`.
 
 ## Instructions for the Agent
 1. Based on the arguments provided (e.g., "concurrency", "swiftui", "testing"), apply the relevant checklist above.
-2. If the task is complex, architectural, or requires resolving strict concurrency warnings, use the `Read` tool to fetch the relevant reference document from `skills/swift-expert/references/`.
+2. If the task is complex, architectural, or requires resolving strict concurrency warnings, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.
