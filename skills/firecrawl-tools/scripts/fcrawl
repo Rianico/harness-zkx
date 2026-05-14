@@ -1,0 +1,42 @@
+#!/bin/bash
+# Firecrawl wrapper - runs with CWD in .lsz/ so cache goes to .lsz/.firecrawl/
+# Usage: fcrawl <firecrawl args>
+# Returns: absolute path to output file (if -o specified)
+#
+# Examples:
+#   fcrawl scrape "https://example.com" -o .firecrawl/topic/page.md
+#   # Returns: /abs/path/.lsz/.firecrawl/topic/page.md
+
+set -e
+
+# Find project root (where .lsz/ should be)
+PROJECT_ROOT="$(pwd)"
+LSZ_DIR="$PROJECT_ROOT/.lsz"
+
+# Create .lsz if needed
+if [[ ! -d "$LSZ_DIR" ]]; then
+    mkdir -p "$LSZ_DIR"
+fi
+
+# Run firecrawl from .lsz/ directory
+cd "$LSZ_DIR"
+firecrawl "$@"
+EXIT_CODE=$?
+
+# If output file was specified, return absolute path
+if [[ $EXIT_CODE -eq 0 ]]; then
+    # Extract output path from args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -o|--output)
+                OUTPUT_PATH="$2"
+                # Convert to absolute path
+                echo "$LSZ_DIR/$OUTPUT_PATH"
+                break
+                ;;
+        esac
+        shift
+    done
+fi
+
+exit $EXIT_CODE

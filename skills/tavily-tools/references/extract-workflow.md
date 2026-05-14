@@ -6,15 +6,15 @@ Detailed guide for extracting markdown content from URLs.
 
 **Always save extracted content to file to avoid bloating context.**
 
-Standard output path: `.lsz/extract/<short_topic>/`
+Standard output path: `.lsz/tavily/<short_topic>/`
 
 ```bash
 # Create output directory
-mkdir -p .lsz/extract/react-hooks
+mkdir -p .lsz/tavily/react-hooks
 
 # Extract with file output
 tvly extract "https://react.dev/reference/react/useEffect" \
-  -o .lsz/extract/react-hooks/useEffect.md \
+  -o .lsz/tavily/react-hooks/useEffect.md \
   --json
 ```
 
@@ -22,10 +22,10 @@ tvly extract "https://react.dev/reference/react/useEffect" \
 
 ```bash
 # Single URL - save to file
-tvly extract "https://example.com/article" -o .lsz/extract/<topic>/article.md --json
+tvly extract "https://example.com/article" -o .lsz/tavily/<topic>/article.md --json
 
 # Batch - save combined output
-tvly extract "url1" "url2" "url3" -o .lsz/extract/<topic>/batch.md --json
+tvly extract "url1" "url2" "url3" -o .lsz/tavily/<topic>/batch.md --json
 ```
 
 ## Batch Extraction
