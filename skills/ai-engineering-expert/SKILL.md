@@ -193,7 +193,7 @@ The `description` field is the **only way Claude discovers skills**. A skill tha
 If it's not in the description, the skill will not trigger.
 
 **Key Optional Fields**
-- `arguments` + `argument-hint` (pair): `arguments` declares named params for `$name` substitution; `argument-hint` documents them for autocomplete. Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
+- `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
 - `allowed-tools`: Tool allowlist without permission prompts
 - `user-invocable`: Show in `/` menu (default: `true`). Set `false` for internal skills accessed only through routing commands.
 - `disable-model-invocation`: Prevents the `Skill` tool from invoking the skill entirely (default: `false`). Do NOT use for skills accessed through routing commands — it blocks both automatic loading AND explicit invocation.

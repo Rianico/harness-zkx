@@ -97,7 +97,8 @@ These fields extend the Agent Skills spec for Claude Code specifically.
 
 #### `arguments`
 
-Named positional arguments substituted via `$name` in skill body:
+Named positional arguments substituted via `$name` in skill body. Names should reflect the skill's function — use semantic names that describe what the argument means, not just syntax.
+
 ```yaml
 arguments: feature mode
 # or
@@ -106,24 +107,36 @@ arguments:
   - mode
 ```
 
+**Good semantic names:**
+- `content_type` not `arg1` — describes what kind of content
+- `platform` not `target` — specifies where to publish
+- `scope` not `area` — defines audit boundary
+- `feature` not `thing` — what's being tested
+
 #### `argument-hint`
 
-One line per hint. Use bash conventions: `<arg>` required, `[arg]` optional, `[a|b|c]` options, `[--flag]` flags. Show defaults with `[arg=default]` and a comment.
+One line per hint. Use bash conventions: `<arg>` required, `[arg]` optional, `[a|b|c]` options, `[--flag]` flags. Show defaults with `[arg=default]` and a comment. Descriptions should explain what the argument does in the skill's context.
 
 ```yaml
 argument-hint: |
-  <template> -- component type (react|vue|angular)
-  <name> -- component name
+  [blog|essay|guide|tutorial|newsletter] -- content type to write (default: blog)
+  <topic> -- subject or prompt for the article
 ```
 
 ```yaml
 argument-hint: |
-  [mode=full] -- verification depth (default: full)
-  [--security-focus] -- include security analysis (default: off)
-  [topic_root=<path>] -- shared topic root override
+  [x|linkedin|threads|bluesky|tiktok|youtube] -- target platform
+  <source> -- content to adapt (article, notes, url, or description)
+```
+
+```yaml
+argument-hint: |
+  <scope> -- component, page, or store to audit (e.g., "email page", "userStore")
 ```
 
 **Field ordering convention:** Place `arguments` before `argument-hint`. `argument-hint` serves as inline docs for each argument.
+
+**Principle:** Arguments and hints are documentation. A user reading only the `argument-hint` should understand what inputs the skill expects and what each input means.
 
 #### `allowed-tools`
 
