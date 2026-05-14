@@ -95,13 +95,6 @@ These fields extend the Agent Skills spec for Claude Code specifically.
 | `paths` | Optional | string or array | Glob patterns limiting skill activation |
 | `shell` | Optional | string | Shell for inline commands (`bash` default, `powershell`) |
 
-#### `argument-hint`
-
-Use square brackets for optional parts, angle brackets for required:
-```yaml
-argument-hint: "[balanced|uncle-bob|fowler|evans] <topic>"
-```
-
 #### `arguments`
 
 Named positional arguments substituted via `$name` in skill body:
@@ -112,6 +105,25 @@ arguments:
   - feature
   - mode
 ```
+
+#### `argument-hint`
+
+One line per hint. Use bash conventions: `<arg>` required, `[arg]` optional, `[a|b|c]` options, `[--flag]` flags. Show defaults with `[arg=default]` and a comment.
+
+```yaml
+argument-hint: |
+  <template> -- component type (react|vue|angular)
+  <name> -- component name
+```
+
+```yaml
+argument-hint: |
+  [mode=full] -- verification depth (default: full)
+  [--security-focus] -- include security analysis (default: off)
+  [topic_root=<path>] -- shared topic root override
+```
+
+**Field ordering convention:** Place `arguments` before `argument-hint`. `argument-hint` serves as inline docs for each argument.
 
 #### `allowed-tools`
 
@@ -175,6 +187,8 @@ Skills support string substitution for dynamic values in the skill content:
 ### `$SKILL_DIR` Path Convention
 
 `$SKILL_DIR` is the universal path anchor for **prose references** to skill-owned resources — scripts, references, raw docs, config files, anything bundled with the skill. Use `$SKILL_DIR/` in prose text; use relative paths in markdown links.
+
+**Also works in commands:** `$SKILL_DIR` resolves in command files too, pointing to the command's directory. Use `$SKILL_DIR/../skills/` to reference skills from a routing command.
 
 **Why:** Prose references like `Read $SKILL_DIR/references/layout.md` are consumed by an LLM whose cwd is unknown — relative paths would resolve against the wrong directory. Markdown links like `[layout](references/layout.md)` follow the standard relative-to-file convention and work correctly.
 

@@ -1,6 +1,11 @@
 ---
 description: Interactive planner. Assesses risks and creates step-by-step implementation plans.
-argument-hint: "<task_description> [topic_root=<path>|artifact_dir=<path>]"
+arguments:
+  - task_description
+argument-hint: |
+  <task_description> -- planning request
+  [topic_root=<path>] -- shared topic root override
+  [artifact_dir=<path>] -- exact output directory override
 allowed-tools:
   - Agent
   - Bash
@@ -26,7 +31,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 
 ## PHASE 0: INITIALIZATION
 **Action:** Prepare the workspace.
-1. Extract the planning request from `$ARGUMENTS`.
+1. Extract the planning request from `$task_description`.
 2. Generate a `short_topic` (lowercase, snake_case).
 3. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
 4. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/plan` as `[base_dir]`.
@@ -44,7 +49,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 Agent tool (planner):
   description: "Generate execution plan"
   prompt: |
-    You are the Planner agent. Generate an execution plan for: [$ARGUMENTS].
+    You are the Planner agent. Generate an execution plan for: [$task_description].
 
     **[DOMAIN CONTEXT]**
     Language/Domain: [Identify based on project]

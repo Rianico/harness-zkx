@@ -1,6 +1,9 @@
 ---
 description: Build and Fix
-argument-hint: "<optional_error_context>"
+arguments:
+  - error_context
+argument-hint: |
+  <error_context> -- build error output or context
 allowed-tools:
   - Agent
   - Bash
@@ -34,7 +37,7 @@ Agent tool (build-resolver):
     Root File: [Identify based on project]
 
     **[TASK]**
-    Resolve the following build errors: [$ARGUMENTS]. Implement the fixes using your tools and ensure the build succeeds. Return a summary of the fixes applied.
+    Resolve the following build errors: [$error_context]. Implement the fixes using your tools and ensure the build succeeds. Return a summary of the fixes applied.
 ```
 
 **Transition Rules (Post-Execution):**

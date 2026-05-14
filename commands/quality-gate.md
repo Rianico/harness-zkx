@@ -1,3 +1,16 @@
+---
+name: quality-gate
+description: Run the LSZ quality pipeline on demand — formatter, linter, type checker, and remediation list.
+arguments: path --fix --strict
+argument-hint: |
+  [path|.] -- target path (default: current directory)
+  [--fix] -- allow auto-format/fix where configured
+  [--strict] -- fail on warnings where supported
+allowed-tools:
+  - Bash
+  - Read
+---
+
 # Quality Gate Command
 
 Run the LSZ quality pipeline on demand for a file or project scope.

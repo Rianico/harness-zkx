@@ -1,6 +1,13 @@
 ---
 description: "Orchestrate comprehensive multi-dimensional code review using specialized review agents across architecture, security, performance, testing, and best practices"
-argument-hint: "<target path or description> [--security-focus] [--performance-critical] [--strict-mode] [--framework react|spring|django|rails]"
+arguments:
+  - target
+argument-hint: |
+  <target> -- path or description to review
+  [--security-focus] -- include security analysis
+  [--performance-critical] -- flag performance concerns
+  [--strict-mode] -- zero-tolerance for warnings
+  [--framework react|spring|django|rails] -- framework context
 ---
 
 # Comprehensive Code Review Orchestrator
@@ -43,7 +50,7 @@ Create `.full-review/` directory and `state.json`:
 
 ```json
 {
-  "target": "$ARGUMENTS",
+  "target": "$target",
   "status": "in_progress",
   "flags": {
     "security_focus": false,
@@ -64,7 +71,7 @@ Parse `$ARGUMENTS` for `--security-focus`, `--performance-critical`, `--strict-m
 
 ### 3. Identify review target
 
-Determine what code to review from `$ARGUMENTS`:
+Determine what code to review from `$target`:
 
 - If a file/directory path is given, verify it exists
 - If a description is given (e.g., "recent changes", "authentication module"), identify the relevant files
@@ -112,7 +119,7 @@ Run both agents in parallel using multiple Task tool calls in a single response.
 ```
 Task:
   subagent_type: "code-reviewer"
-  description: "Code quality analysis for $ARGUMENTS"
+  description: "Code quality analysis for $target"
   prompt: |
     Perform a comprehensive code quality review.
 
@@ -142,7 +149,7 @@ Task:
 ```
 Task:
   subagent_type: "architect"
-  description: "Architecture review for $ARGUMENTS"
+  description: "Architecture review for $target"
   prompt: |
     Review the architectural design and structural integrity of the target code.
 
@@ -215,7 +222,7 @@ Run both agents in parallel using multiple Task tool calls in a single response.
 ```
 Task:
   subagent_type: "security-reviewer"
-  description: "Security audit for $ARGUMENTS"
+  description: "Security audit for $target"
   prompt: |
     Execute a comprehensive security audit on the target code.
 
@@ -249,7 +256,7 @@ Task:
 ```
 Task:
   subagent_type: "general-purpose"
-  description: "Performance analysis for $ARGUMENTS"
+  description: "Performance analysis for $target"
   prompt: |
     You are a performance engineer. Conduct a performance and scalability analysis of the target code.
 
@@ -354,7 +361,7 @@ Run both agents in parallel using multiple Task tool calls in a single response.
 ```
 Task:
   subagent_type: "general-purpose"
-  description: "Test coverage analysis for $ARGUMENTS"
+  description: "Test coverage analysis for $target"
   prompt: |
     You are a test automation engineer. Evaluate the testing strategy and coverage for the target code.
 
@@ -387,7 +394,7 @@ Task:
 ```
 Task:
   subagent_type: "general-purpose"
-  description: "Documentation review for $ARGUMENTS"
+  description: "Documentation review for $target"
   prompt: |
     You are a technical documentation architect. Review documentation completeness and accuracy.
 
@@ -459,7 +466,7 @@ Run both agents in parallel using multiple Task tool calls in a single response.
 ```
 Task:
   subagent_type: "general-purpose"
-  description: "Framework best practices review for $ARGUMENTS"
+  description: "Framework best practices review for $target"
   prompt: |
     You are an expert in modern framework and language best practices. Verify adherence to current standards.
 
@@ -491,7 +498,7 @@ Task:
 ```
 Task:
   subagent_type: "general-purpose"
-  description: "CI/CD and DevOps practices review for $ARGUMENTS"
+  description: "CI/CD and DevOps practices review for $target"
   prompt: |
     You are a DevOps engineer. Review CI/CD pipeline and operational practices.
 
@@ -639,7 +646,7 @@ Update `state.json`: set `status` to `"complete"`, `last_updated` to current tim
 Present the final summary:
 
 ```
-Comprehensive code review complete for: $ARGUMENTS
+Comprehensive code review complete for: $target
 
 ## Review Output Files
 - Scope: .full-review/00-scope.md

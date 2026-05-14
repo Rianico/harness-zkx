@@ -1,6 +1,8 @@
 ---
 name: doc-workflow
 description: Consolidated workflow for generating project documentation and architectural codemaps. Includes interactive prompts for user alignment.
+arguments: target
+argument-hint: "[codemaps|project-docs|all] -- documentation target (default: interactive prompt)"
 allowed-tools: Read Grep Glob Bash
 ---
 

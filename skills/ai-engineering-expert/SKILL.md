@@ -193,8 +193,10 @@ The `description` field is the **only way Claude discovers skills**. A skill tha
 If it's not in the description, the skill will not trigger.
 
 **Key Optional Fields**
-- `argument-hint`: Autocomplete hint like `[mode] <topic>`
+- `arguments` + `argument-hint` (pair): `arguments` declares named params for `$name` substitution; `argument-hint` documents them for autocomplete. Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
 - `allowed-tools`: Tool allowlist without permission prompts
+- `user-invocable`: Show in `/` menu (default: `true`). Set `false` for internal skills accessed only through routing commands.
+- `disable-model-invocation`: Prevents the `Skill` tool from invoking the skill entirely (default: `false`). Do NOT use for skills accessed through routing commands — it blocks both automatic loading AND explicit invocation.
 - `model`: Override model (`opus`, `sonnet`, `haiku`, `inherit`)
 - `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)
 
@@ -243,6 +245,7 @@ Before publishing a skill:
 **Structure**
 - [ ] Frontmatter includes `name` and `description` (both required)
 - [ ] `argument-hint` present if skill accepts arguments
+- [ ] `user-invocable: false` set for internal skills accessed only through routing commands (do NOT use `disable-model-invocation` — it blocks the `Skill` tool)
 - [ ] Gotchas section for non-obvious environment facts
 - [ ] Templates/checklists for multi-step workflows
 - [ ] Validation loops for quality-critical tasks

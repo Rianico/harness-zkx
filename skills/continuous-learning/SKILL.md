@@ -1,6 +1,13 @@
 ---
 name: continuous-learning
 description: Manages the continuous learning system that observes sessions, detects patterns, and creates learned behaviors (instincts). Provides commands for status, analysis, evolution, and promotion of instincts.
+arguments: command
+argument-hint: |
+  <status|analyze|evolve|promote|projects> -- subcommand
+  [--project <id>] -- filter by project
+  [--scope <project|global>] -- filter by scope
+  [--domain <name>] -- filter by domain
+  [--json] -- output as JSON
 ---
 
 # Continuous Learning Skill

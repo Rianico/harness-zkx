@@ -1,8 +1,13 @@
 ---
 name: ux-testing
 description: Single entry point for the UX testing cluster. Routes to the appropriate skill based on intent.
-argument-hint: "[audit|build|check] [--once|--watch]"
-allowed-tools: [Read, Edit, Write, Bash, Agent, Skill]
+argument-hint: |
+  [audit] -- static code analysis of handler state interactions
+  [build] -- build persistent E2E test suite with POM and locators
+  [check] -- ad-hoc runtime verification or sustained post-deploy monitoring
+  [--once] -- single-pass ad-hoc QA check (default)
+  [--watch] -- sustained post-deploy monitoring with alert thresholds
+allowed-tools: [Read, Edit, Write, Bash, Agent]
 ---
 
 # UX Testing Command
@@ -11,25 +16,25 @@ Single entry point for verifying that the user-facing experience works as intend
 
 ## Routing
 
-| Argument | Skill | Purpose |
-|----------|-------|---------|
-| `audit` | click-path-audit | Static code analysis of handler state interactions |
-| `build` | e2e-workflow | Build persistent E2E test suite with POM and locators |
-| `check` | browser-qa | Ad-hoc runtime verification or sustained post-deploy monitoring |
+| Argument | Skill file | Purpose |
+|----------|------------|---------|
+| `audit` | `$SKILL_DIR/../skills/click-path-audit/SKILL.md` | Static code analysis of handler state interactions |
+| `build` | `$SKILL_DIR/../skills/e2e-workflow/SKILL.md` | Build persistent E2E test suite with POM and locators |
+| `check` | `$SKILL_DIR/../skills/browser-qa/SKILL.md` | Ad-hoc runtime verification or sustained post-deploy monitoring |
 
 ## Instructions
 
 ### `/ux-testing audit`
 
-Invoke the `click-path-audit` skill. Use for finding state cancellation bugs that runtime tests won't catch deterministically (sequential undo, stale closures, event handler conflicts).
+Read `$SKILL_DIR/../skills/click-path-audit/SKILL.md` and follow its instructions. Use for finding state cancellation bugs that runtime tests won't catch deterministically (sequential undo, stale closures, event handler conflicts).
 
 ### `/ux-testing build`
 
-Invoke the `e2e-workflow` skill. Use for building maintainable E2E test infrastructure with Page Object Model, locator strategies, and flakiness quarantine.
+Read `$SKILL_DIR/../skills/e2e-workflow/SKILL.md` and follow its instructions. Use for building maintainable E2E test infrastructure with Page Object Model, locator strategies, and flakiness quarantine.
 
 ### `/ux-testing check [--once|--watch] [--interval 5m] [--duration 2h] [--compare <staging> <prod>]`
 
-Invoke the `browser-qa` skill with the appropriate flags:
+Read `$SKILL_DIR/../skills/browser-qa/SKILL.md` and follow its instructions with the appropriate flags:
 
 - `--once` (default): Single-pass ad-hoc QA check
 - `--watch`: Sustained post-deploy monitoring with alert thresholds

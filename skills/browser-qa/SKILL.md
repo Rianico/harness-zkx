@@ -1,6 +1,8 @@
 ---
 name: browser-qa
 description: Automates browser-based QA and post-deploy monitoring. Use for pre-deploy verification, ad-hoc testing, and sustained monitoring after deploys, merges, or dependency upgrades.
+user-invocable: false
+disable-model-invocation: true
 ---
 
 # Browser QA — Automated Testing & Monitoring

@@ -1,6 +1,11 @@
 ---
 description: Code Review Command. Assesses code quality, security, and maintainability.
-argument-hint: "<optional_focus_area> [topic_root=<path>|artifact_dir=<path>]"
+arguments:
+  - focus_area
+argument-hint: |
+  <focus_area> -- review focus area
+  [topic_root=<path>] -- shared topic root override
+  [artifact_dir=<path>] -- exact output directory override
 allowed-tools:
   - Agent
   - Bash
@@ -35,7 +40,7 @@ In this mode:
 
 ## PHASE 0: INITIALIZATION
 **Action:** Prepare the workspace.
-1. Extract the code review focus from `$ARGUMENTS`.
+1. Extract the code review focus from `$focus_area`.
 2. Generate a `short_topic` (lowercase, snake_case).
 3. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
 4. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/review` as `[base_dir]`.
@@ -53,7 +58,7 @@ In this mode:
 Agent tool (code-reviewer):
   description: "Conduct code review"
   prompt: |
-    You are the Code Reviewer agent. Conduct a repository-level review focusing on: [$ARGUMENTS].
+    You are the Code Reviewer agent. Conduct a repository-level review focusing on: [$focus_area].
 
     **[DOMAIN CONTEXT]**
     Language/Domain: [Identify based on project]

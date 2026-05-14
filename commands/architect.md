@@ -1,6 +1,11 @@
 ---
 description: Interactive architectural design and review. Produces traced architecture outputs: blueprint, technical standards, and ADR-backed decision records.
-argument-hint: "<task_description> [topic_root=<path>|artifact_dir=<path>]"
+arguments:
+  - task_description
+argument-hint: |
+  <task_description> -- architecture design request
+  [topic_root=<path>] -- shared topic root override
+  [artifact_dir=<path>] -- exact output directory override
 allowed-tools:
   - Agent
   - Bash
@@ -25,7 +30,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 
 ## PHASE 0: INITIALIZATION
 **Action:** Prepare the workspace.
-1. Extract the architectural request from `$ARGUMENTS`.
+1. Extract the architectural request from `$task_description`.
 2. Generate a `short_topic` (lowercase, snake_case).
 3. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
 4. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/architect` as `[base_dir]`.
@@ -46,7 +51,7 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 Agent tool (architect):
   description: "Produce architecture artifacts"
   prompt: |
-    You are the Architect agent. Design or review the architecture for: [$ARGUMENTS].
+    You are the Architect agent. Design or review the architecture for: [$task_description].
 
     First, do a lightweight repository scan so expert design/review has current project context. Discover existing ADRs through the ADR workflow, then discover or initialize the canonical architecture blueprint and technical standards under the repository's `doc/` convention. If the ADR location is `doc/adr`, prefer `doc/architecture/blueprint.md` and `doc/architecture/technical-standards.md`; otherwise choose the closest consistent `doc/...` architecture location.
 

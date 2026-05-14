@@ -1,3 +1,13 @@
+---
+name: verify
+description: Run comprehensive verification on current codebase state — build, types, lint, tests, secrets, and git status.
+arguments: mode
+argument-hint: "[quick|full|pre-commit|pre-pr] -- verification mode (default: full)"
+allowed-tools:
+  - Bash
+  - Read
+---
+
 # Verification Command
 
 Run comprehensive verification on current codebase state.

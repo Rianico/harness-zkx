@@ -1,7 +1,8 @@
 ---
 name: e2e-workflow
 description: Language-agnostic End-to-End Testing methodology. Enforces Page Object Model (POM), stable locator strategies, auto-waiting, artifact capture, and flaky test quarantine.
-
+user-invocable: false
+disable-model-invocation: true
 ---
 
 # End-to-End (E2E) Testing Workflow

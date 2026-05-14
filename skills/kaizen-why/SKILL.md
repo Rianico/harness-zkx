@@ -1,7 +1,8 @@
 ---
 name: kaizen:why
 description: Iterative Five Whys root cause analysis drilling from symptoms to fundamentals
-argument-hint: Optional issue or symptom description
+arguments: issue_description
+argument-hint: "[issue_description] -- issue or symptom to analyze"
 ---
 
 # Five Whys Analysis

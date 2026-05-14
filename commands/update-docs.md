@@ -1,6 +1,10 @@
 ---
 description: Interactive workflow to sync project docs or generate architecture codemaps.
-argument-hint: "[codemaps|project-docs|all] [topic_root=<path>|artifact_dir=<path>]"
+arguments: target topic_root artifact_dir
+argument-hint: |
+  [codemaps|project-docs|all] -- documentation target (default: interactive prompt)
+  [topic_root=<path>] -- shared topic root override
+  [artifact_dir=<path>] -- exact output directory override
 allowed-tools:
   - Agent
   - Bash

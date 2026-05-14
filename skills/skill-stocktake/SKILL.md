@@ -1,8 +1,8 @@
 ---
 name: skill-stocktake
 description: Use when auditing Claude skills and commands for quality. Supports Quick Scan (changed skills only), Full Stocktake, and Overview modes with sequential subagent batch evaluation.
-argument-hint: "[full|quick|overview]"
-
+arguments: mode
+argument-hint: "[full|quick|overview] -- audit mode (default: overview)"
 ---
 # skill-stocktake
 

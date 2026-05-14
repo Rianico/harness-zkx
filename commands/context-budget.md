@@ -1,5 +1,7 @@
 ---
 description: Analyze context window usage across agents, skills, MCP servers, and rules to find optimization opportunities. Helps reduce token overhead and avoid performance warnings.
+arguments: [--verbose]
+argument-hint: "[--verbose] -- full breakdown per component (default: summary with top recommendations)"
 ---
 
 # Context Budget Optimizer
