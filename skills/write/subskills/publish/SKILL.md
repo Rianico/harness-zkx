@@ -5,8 +5,8 @@ arguments: platform source
 argument-hint: |
   [x|linkedin|threads|bluesky|tiktok|youtube|newsletter] -- target platform
   <source> -- content to adapt (article, notes, url, or description)
-user-invocable: false
-disable-model-invocation: true
+metadata:
+  managed-by: write
 ---
 
 # Write & Publish

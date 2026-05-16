@@ -5,8 +5,8 @@ arguments: content_type topic
 argument-hint: |
   [blog|essay|guide|tutorial|newsletter] -- content type (default: blog)
   <topic> -- subject or prompt for the article
-user-invocable: false
-disable-model-invocation: true
+metadata:
+  managed-by: write
 ---
 
 # Article Writing

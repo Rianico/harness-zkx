@@ -159,10 +159,10 @@ To ensure a seamless user experience and strict system bounds, skills, commands,
   * Add a command only when it provides clear CLI ergonomics beyond retrieval, such as high-frequency shorthand, compatibility with existing workflows, argument autocomplete, or a genuinely command-specific interaction shell.
   * When a command is justified, ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
   * When a command is justified, ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from going rogue outside their intended workflow.
-  * **Routing Command Pattern:** When a command manages a cluster of related skills, hide the managed skills from both the LLM and the user. Skills get `user-invocable: false` + `disable-model-invocation: true` in frontmatter. The command routes via `Read` with `$SKILL_DIR/../skills/<name>/SKILL.md` paths (remove `Skill` from `allowed-tools`). The command's `description` MUST carry full trigger vocabulary for all managed skills so the LLM can discover the command when users ask about any of those domains.
 * **LSZ Pattern (Skills):**
   * Invoke the `ai-engineering-expert` skill for comprehensive methodology on designing skills, agents, workflows, and orchestration patterns.
   * See `.claude/rules/skill-conventions.md` for mandatory guardrails only.
+  * **Parent Skill with Sub-Skills Pattern:** When a skill manages multiple related capabilities, structure as `skills/<name>/SKILL.md` (parent) with `skills/<name>/subskills/<sub>/SKILL.md` (children). Parent has `metadata.manage: [...]`; sub-skills have `metadata.managed-by: <parent>`. Parent dispatches via `Read` (not `Skill` tool — nested paths not discoverable). Use this instead of routing commands for better discoverability and explicit relationships.
 
 ## Trade-Offs to Consider
 * **Latency vs Context Bloat:** The Hybrid JIT Architecture adds a small runtime penalty to complex tasks because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request.

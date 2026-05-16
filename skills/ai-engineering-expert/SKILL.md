@@ -250,6 +250,38 @@ Before publishing a skill:
 - [ ] Templates/checklists for multi-step workflows
 - [ ] Validation loops for quality-critical tasks
 
+### Parent Skill with Sub-Skills
+
+When a skill manages multiple related capabilities, use the parent-skill-with-sub-skills pattern instead of routing commands.
+
+**Structure:**
+```
+skills/write/
+  SKILL.md              # Parent: registry + dispatch
+  subskills/
+    article/SKILL.md    # Sub-skill: long-form content
+    publish/SKILL.md    # Sub-skill: platform distribution
+```
+
+**Metadata:**
+```yaml
+# Parent
+metadata:
+  manage: [article, publish]
+
+# Sub-skill
+metadata:
+  managed-by: write
+```
+
+**Key points:**
+- Sub-skills are nested in `subskills/` directory (hidden from Claude Code discovery)
+- Parent uses `Read` tool to dispatch (not `Skill` tool — nested paths not discoverable)
+- Sub-skills are full skills with frontmatter, references, scripts
+
+**Reference:**
+- [skill-authoring.md](references/skill-authoring.md) — Full "Parent Skill with Sub-Skills Pattern" section with structure, metadata, registry format, dispatch mechanism, and migration guide
+
 ### Skill Gotchas
 
 - **Vague descriptions** — "Helps with documents" won't trigger. Use explicit trigger vocabulary.

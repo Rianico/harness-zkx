@@ -652,3 +652,175 @@ The v1 API is no longer supported.
 - Move detailed reference material to separate files in `references/`
 - Keep file references **one level deep** from `SKILL.md`
 - Reference supporting files from `SKILL.md` so Claude knows what each contains
+
+## Parent Skill with Sub-Skills Pattern
+
+When a skill manages multiple related capabilities, use the **parent skill with sub-skills** pattern instead of routing commands. This pattern provides better discoverability, explicit relationships, and maintainability.
+
+### When to Use
+
+Use this pattern when:
+- Multiple related skills share a common domain (e.g., `write-article` and `write-publish` under `write`)
+- You want discoverability: sub-skills are visibly nested under their parent
+- You need explicit relationships: metadata fields express parent-child connections
+- Each sub-skill may have its own references, scripts, or resources
+
+**Do NOT use for:**
+- Single-purpose skills (no sub-skills needed)
+- Skills with no shared domain or relationship
+- Cases where a single skill file is sufficient
+
+### Structure
+
+```
+skills/<parent-name>/
+  SKILL.md              # Parent skill with registry + dispatch logic
+  subskills/
+    <subskill-1>/
+      SKILL.md          # Full skill with frontmatter, references, scripts
+      references/
+      scripts/
+    <subskill-2>/
+      SKILL.md
+      references/
+      scripts/
+```
+
+**Example:**
+```
+skills/write/
+  SKILL.md              # Parent: routes to article or publish
+  subskills/
+    article/
+      SKILL.md          # Long-form content writing
+    publish/
+      SKILL.md          # Platform distribution
+```
+
+### Metadata Fields
+
+Express parent-child relationships via `metadata` frontmatter:
+
+**Parent skill:**
+```yaml
+metadata:
+  manage: [article, publish]
+```
+
+**Sub-skill:**
+```yaml
+metadata:
+  managed-by: write
+```
+
+| Field | Location | Purpose |
+|-------|----------|---------|
+| `manage` | Parent | List of sub-skill names this parent manages |
+| `managed-by` | Sub-skill | Back-reference to parent skill name |
+
+**Why these fields:**
+- Discoverable via grep/search
+- Enables tooling to identify relationships
+- Natural verb phrases (`manage`, `managed-by`)
+- No `skill-kind` field needed (redundant with the pair)
+
+### Registry Format
+
+Parent skill includes a formal YAML registry:
+
+```yaml
+---
+name: write
+description: Content creation and distribution cluster...
+arguments: mode content_type platform
+metadata:
+  manage: [article, publish]
+---
+
+# Write Skill
+
+## Sub-Skill Registry
+
+```yaml
+subskills:
+  article: $SKILL_DIR/subskills/article/SKILL.md
+  publish: $SKILL_DIR/subskills/publish/SKILL.md
+```
+
+## Dispatch
+
+Parse `$ARGUMENTS` to determine mode...
+```
+
+**Minimal registry:** Just paths. Sub-skill frontmatter already contains descriptions and arguments. Avoid duplication.
+
+### Dispatch Mechanism
+
+**CRITICAL:** Claude Code's skill discovery only finds `skills/*/SKILL.md` (top-level). Nested `skills/*/subskills/*/SKILL.md` are **NOT discoverable** via the `Skill` tool.
+
+**Parent must use `Read` to dispatch:**
+
+```markdown
+## Dispatch
+
+| First Arg | Action |
+|-----------|--------|
+| `article` | Read `$SKILL_DIR/subskills/article/SKILL.md` and follow its instructions |
+| `publish` | Read `$SKILL_DIR/subskills/publish/SKILL.md` and follow its instructions |
+```
+
+**Anti-pattern:** Using `Skill` tool to invoke sub-skills — it returns "Unknown skill" for nested paths.
+
+### Sub-Skill Identity
+
+Sub-skills are **full skills**:
+- Complete frontmatter (`name`, `description`, `arguments`, `argument-hint`)
+- Can have `references/` and `scripts/`
+- Are hidden from direct invocation (nested path, not discovered)
+
+**No special frontmatter needed** beyond `managed-by: <parent>` in metadata.
+
+### Migration from Routing Commands
+
+**Old pattern (routing command):**
+```
+commands/write.md           → routing command (forwards to skills)
+skills/write-article/SKILL.md  → hidden skill (user-invocable: false)
+skills/write-publish/SKILL.md  → hidden skill (user-invocable: false)
+```
+
+**Problems:**
+- Sub-skills have no back-reference to their manager
+- Relationship only visible in command file, not skills
+- Requires reading command to understand skill relationships
+
+**Migration steps:**
+1. Create `skills/<name>/` directory
+2. Convert `commands/<name>.md` → `skills/<name>/SKILL.md`
+   - Add frontmatter with `metadata.manage`
+   - Add sub-skill registry section
+   - Add dispatch logic using `Read`
+3. Move sibling skills to `skills/<name>/subskills/<subskill>/`
+4. Add `metadata.managed-by` to each sub-skill
+5. Remove `user-invocable: false` and `disable-model-invocation: true` from sub-skills
+6. Delete old command and standalone skill directories
+
+### Benefits Over Routing Commands
+
+| Aspect | Routing Command | Parent Skill with Sub-Skills |
+|--------|-----------------|------------------------------|
+| Discoverability | Sub-skills invisible in directory | Sub-skills visibly nested |
+| Relationship | Only in command file | In metadata + directory structure |
+| Maintenance | Scattered (command + skills) | Consolidated (one parent skill) |
+| Resources | Sub-skills can't have scripts/references | Each sub-skill has full capabilities |
+
+### Checklist
+
+Before using this pattern:
+- [ ] Multiple related capabilities share a domain
+- [ ] Each sub-skill may need its own references or scripts
+- [ ] Parent skill has clear dispatch logic
+- [ ] Registry lists all sub-skills with `$SKILL_DIR/` paths
+- [ ] Parent has `manage: [...]` in metadata
+- [ ] Sub-skills have `managed-by: <parent>` in metadata
+- [ ] Dispatch uses `Read`, not `Skill` tool
