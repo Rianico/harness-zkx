@@ -1,5 +1,5 @@
 ---
-name: firecrawl-tools
+name: firecrawl
 description: |
   Firecrawl CLI for web search, scraping, crawling, and document parsing. Use for:
   (1) SEARCH - find web pages, articles, news, documentation when you don't have URLs. Triggers on: search for, find me, look up, what's the latest on.
@@ -13,9 +13,11 @@ description: |
 argument-hint: "search <query> | scrape <url> | map <site_url> | crawl <url> | parse <file> | interact --prompt <action> | download <url>"
 allowed-tools:
   - Bash($SKILL_DIR/scripts/fcrawl *)
+metadata:
+  managed-by: web-accessing
 ---
 
-# Firecrawl Tools
+# Firecrawl
 
 Unified CLI for web search, scraping, crawling, and document parsing.
 

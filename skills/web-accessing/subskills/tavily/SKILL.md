@@ -1,5 +1,5 @@
 ---
-name: tavily-tools
+name: tavily
 description: |
   Tavily CLI for web search, content extraction, site mapping, crawling, and AI-powered research. Use for:
   (1) SEARCH - finding web pages, articles, news, documentation when you don't have URLs. Triggers on: search for, find me, look up, what's the latest on.
@@ -10,9 +10,11 @@ description: |
   Returns LLM-optimized markdown with relevance scores.
 argument-hint: "search <query> | extract <url> | map <site_url> | crawl <url> | research <topic> [--model mini|pro]"
 allowed-tools: Bash(tvly *)
+metadata:
+  managed-by: web-accessing
 ---
 
-# Tavily Tools
+# Tavily
 
 Unified CLI for web search, content extraction, site mapping, crawling, and AI-powered research.
 
