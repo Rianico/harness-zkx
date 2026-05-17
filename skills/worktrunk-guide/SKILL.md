@@ -1,7 +1,7 @@
 ---
 name: worktrunk-guide
 description: |
-  CLI for git worktree management with parallel development, hooks, and LLM integration. TRIGGER when: switching worktrees, creating isolated branches, managing parallel development, setting up dev servers per worktree, configuring hooks, generating LLM commit messages, eliminating cold starts, agent handoff workflows.
+  CLI for git worktree management with parallel development, hooks, and LLM integration. TRIGGER when: switching worktrees, creating isolated branches, merging branch to main, committing and merging feature work, managing parallel development, setting up dev servers per worktree, configuring hooks, generating LLM commit messages, eliminating cold starts, agent handoff workflows, cleaning up after merge.
 argument-hint: "[topic]"
 ---
 
@@ -229,6 +229,7 @@ Read `$SKILL_DIR/references/worktrunk-guide-raw/` when:
 
 ### Task Phrases
 - switch worktree, create worktree, list worktrees, remove worktree, merge worktree branch
+- commit and merge to main, merge feature branch, squash and merge, cleanup after merge
 - set up hooks, dev server per worktree, configure worktrunk, shell integration
 - llm commit messages, copy ignored files, squash and rebase
 

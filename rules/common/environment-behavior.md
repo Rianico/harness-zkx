@@ -26,7 +26,7 @@ llm-lsp-cli daemon status || llm-lsp-cli daemon start
 ```
 
 ### Worktree Management
-Use `wt` (worktrunk) instead of built-in `EnterWorktree`/`ExitWorktree` tools and raw `git worktree` commands when worktrunk is available (check `which wt`):
+**Check `which wt` first.** If worktrunk is available, use it for ALL git branch/worktree operations:
 
 - **Create worktree:** `wt switch --create <name>` — creates branch + worktree, runs hooks
 - **Switch worktree:** `wt switch <name>` — switches to existing worktree
@@ -35,7 +35,15 @@ Use `wt` (worktrunk) instead of built-in `EnterWorktree`/`ExitWorktree` tools an
 - **Merge to main:** `wt merge` — squash, rebase, merge, cleanup with pre-merge hooks
 - **Previous worktree:** `wt switch -` — like `cd -`
 
-**Do NOT use** the built-in `EnterWorktree`/`ExitWorktree` tools when `wt` is available — they bypass worktrunk hooks (copy-ignored, pre-merge tests, etc.).
+**Complete merge workflow:**
+1. Commit changes: `git commit` or `wt step commit`
+2. Merge and cleanup: `wt merge` (from feature worktree)
+3. If manual cleanup needed: `wt remove <branch>`
+
+**Do NOT use:**
+- Raw `git worktree` commands — bypass hooks
+- Built-in `EnterWorktree`/`ExitWorktree` tools — bypass hooks
+- Manual `git checkout main && git merge` — use `wt merge` instead
 
 ### Tool Selection Guide
 | Task | Tool |
@@ -51,7 +59,7 @@ Use `wt` (worktrunk) instead of built-in `EnterWorktree`/`ExitWorktree` tools an
 | Check type errors/warnings | `llm-lsp-cli lsp diagnostics` / `workspace-diagnostics` |
 | Create/switch worktree | `wt switch --create <name>` / `wt switch <name>` |
 | List worktrees | `wt list` |
-| Merge worktree to main | `wt merge` |
+| Merge branch to main | `wt merge` (from feature worktree) |
 | Remove worktree | `wt remove <name>` |
 
 ### Common Flag Reference
