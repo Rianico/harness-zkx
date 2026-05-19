@@ -169,3 +169,17 @@ To ensure a seamless user experience and strict system bounds, skills, commands,
 * **Agent Hero-Mode:** Generic agents are heavily prone to ignoring delegation instructions. Orchestration skills and complex workflow skills that dispatch agents SHOULD use explicit execution schemas with stable Agent dispatch templates to force the LLM into orchestration mode.
 * **Command vs Skill Ergonomics:** Skills are the default product surface, including for simple action workflows. Commands are reserved for cases where CLI ergonomics materially improve use; thin forwarding wrappers create drift and should be avoided.
 * **Tooling Preference:** When using shell-based search, prefer `rg` for content search and `fd` for file discovery over `grep`, `find`, and agent built-in search tools. Reserve `ls` and `tree` for structural inspection.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues. Use `gh` CLI for all operations. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
