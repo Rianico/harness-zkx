@@ -1,6 +1,6 @@
 ---
 name: skill-authoring
-description: Skill design, frontmatter, descriptions, progressive disclosure, parent-skill pattern, and authoring checklists for the LSZ architecture.
+description: "Skill design, authoring process (Gather-Draft-Review), taxonomy classification, frontmatter, descriptions, progressive disclosure, parent-skill pattern, and authoring checklists for the LSZ architecture. TRIGGER when creating, writing, or building a new skill; designing skill structure, frontmatter, or descriptions; classifying skill type (orchestration, complex workflow, domain knowledge, action); or improving an existing skill's structure."
 metadata:
   managed-by: ai-engineering-expert
 ---
@@ -8,6 +8,68 @@ metadata:
 # Skill Authoring
 
 Designing and building skills in the LSZ architecture.
+
+## Skill Taxonomy
+
+Every LSZ skill falls into one of four types:
+
+| Type | When to Use | Key Trait |
+|------|-------------|-----------|
+| **Orchestration** | Multi-phase, multi-party, fan-out/fan-in workflows | Owns sequencing, branching, checkpoints; delegates all implementation |
+| **Complex Workflow** | Substantial single-purpose workflow with multiple phases | May invoke agents; owns phase transitions and artifact generation |
+| **Domain Knowledge** | Guides, patterns, expert methodology, reusable constraints | Retrieval-time expertise; does not own orchestration |
+| **Action** | Narrow, simple workflows and direct task execution | Low-ambiguity; compact and self-contained |
+
+**When to embed logic directly in an Agent** instead of creating a skill: only when the workflow is Atomic (one specific thing, no loops), Universal (doesn't vary by language/framework), and Short (< 300 words). Example: the `planner` agent.
+
+**Full definitions:** See [skill-authoring.md](references/skill-authoring.md) for detailed descriptions of each type, including when to use each and common pitfalls.
+
+## Authoring Process
+
+### Phase 1: Gather
+
+Ask the user about:
+
+1. **Task and domain** -- What does the skill do? What specific use cases must it handle?
+2. **Taxonomy classification** -- Which of the four types above fits? If unsure, ask: "Does this need multiple phases or parties?" (orchestration), "Is there a single multi-step workflow?" (complex workflow), "Is this expertise to load on demand?" (domain knowledge), or "Is this a narrow, self-contained task?" (action).
+3. **Skill identity** -- What `name` fits the directory? What `description` triggers cover the use cases?
+4. **Resources needed** -- Does it need executable scripts (deterministic operations), reference files (deep content beyond 500 lines), or just instructions?
+5. **Dependencies** -- Does it depend on other skills? If so, declare `metadata.depends-on`.
+6. **Parent-skill relationship** -- Is this part of a cluster? Should it be a sub-skill under a parent, or a standalone skill?
+
+### Phase 2: Draft
+
+Create the skill following LSZ conventions:
+
+1. **Directory structure** -- `skills/<name>/SKILL.md` plus `references/` and `scripts/` as needed
+2. **Frontmatter** -- `name` (matches directory), `description` (third-person, what + when, trigger vocabulary), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies
+3. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`
+4. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
+5. **Scripts** -- Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally, don't punt to the LLM
+6. **Taxonomy-specific structure:**
+   - Orchestration: dispatch table + subagent templates, no implementation logic
+   - Complex workflow: phase definitions with state transitions, artifact contracts
+   - Domain knowledge: organized by topic, patterns with examples, gotchas
+   - Action: compact, focused, minimal structure
+
+### Phase 3: Review
+
+Validate the draft before presenting to the user:
+
+**First-Pass Review Checklist:**
+- [ ] Taxonomy type is correct and structure matches that type
+- [ ] Description is third-person, includes what + when, covers trigger patterns
+- [ ] Frontmatter complete: `name`, `description`, `arguments`/`argument-hint` if needed, `metadata` for relationships
+- [ ] References are one level deep from SKILL.md
+- [ ] Scripts handle errors internally and use `uv run $SKILL_DIR/scripts/` invocation
+- [ ] No content that belongs in rules (always-on preferences) or other skills
+
+Then ask the user:
+- Does this cover your use cases?
+- Anything missing or unclear?
+- Should any section be more or less detailed?
+
+**Before publishing**, run the full [Skill Authoring Checklist](#skill-authoring-checklist) below.
 
 ## Required Frontmatter
 

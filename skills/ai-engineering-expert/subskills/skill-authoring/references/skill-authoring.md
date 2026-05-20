@@ -4,6 +4,71 @@ Complete reference for authoring skills. Documents both the Agent Skills specifi
 
 **Default behavior: Claude Code spec.** Use official Agent Skills format only when portability is explicitly required.
 
+## Skill Taxonomy
+
+All LSZ skills are one of four primary types. Classification determines structure, dispatch pattern, and resource needs.
+
+### Orchestration Skills
+
+Use for multi-phase, multi-party, or fan-out/fan-in workflows.
+
+- May invoke multiple skills and agents
+- May define branching, checkpoints, and approval points
+- Own workflow sequencing and complex state transitions
+- Must not do implementation work directly
+
+**Structure:** Dispatch table mapping phases to subagent templates. No implementation logic in the skill body.
+
+**Example:** `orchestrating` -- dispatches architect, developer, code-reviewer, eval-gate across plan/implement/review cycles.
+
+### Complex Workflow Skills
+
+Use for a substantial single-purpose workflow with multiple phases.
+
+- May invoke agents
+- May generate artifacts and enforce phase transitions
+- Should prefer structured, schema-like execution instructions when dispatching agents
+
+**Structure:** Phase definitions with state transitions, artifact contracts, and phase-specific dispatch templates.
+
+**Example:** `tdd-cycle` -- RED/GREEN/REFACTOR phases with test-first enforcement and phase gates.
+
+### Domain Knowledge Skills
+
+Use for guides, patterns, expert methodology, and reusable domain constraints.
+
+- Provide retrieval-time expertise
+- Do not generally own orchestration
+- Designed to be loaded just-in-time by agents or higher-level skills
+
+**Structure:** Organized by topic. Patterns with examples. Gotchas for non-obvious pitfalls. No dispatch templates.
+
+**Example:** `ai-engineering-expert` -- loaded when designing skills/agents/workflows; provides methodology, not execution.
+
+### Action Skills
+
+Use for narrow, simple workflows and direct task execution.
+
+- Best fit for small, low-ambiguity tasks
+- Should usually be invoked directly as skills rather than exposed through command wrappers
+- Should remain simple and compact
+
+**Structure:** Compact, focused. Minimal sections. No subagent dispatch.
+
+**Example:** `skill-stocktake` -- audits skill inventory and reports status. Single pass, no phases.
+
+### When to Embed Logic Directly in an Agent
+
+Only embed workflow logic directly into an Agent's system prompt if the workflow is:
+
+1. **Atomic** -- Does one specific thing without loops
+2. **Universal** -- Does not change based on language/framework
+3. **Short** -- Under 300 words
+
+Example: The `planner` agent -- takes a task, produces a plan, done. No branching, no framework-specific behavior, fits in a short prompt.
+
+If the workflow violates any of these constraints, it belongs in a skill.
+
 ## Required Fields
 
 | Field | Required | Constraints |

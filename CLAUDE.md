@@ -6,35 +6,8 @@ The core of LSZ architecture is a skills-first design that keeps reusable workfl
 *   **Agents define the WHO and the TOOLS.** Agents are lean execution engines. They define persona, tool boundaries, and focused execution roles. *Agents should generally NOT contain long workflow instructions unless the workflow is atomic, universal, and short.*
 
 ## 2. Skill Taxonomy
-All skills should be designed as one of four primary types:
 
-### 2.1 Orchestration Skills
-Use orchestration skills for multi-phase, multi-party, or fan-out/fan-in workflows.
-- They may invoke multiple skills and agents.
-- They may define branching, checkpoints, and approval points.
-- They own workflow sequencing and complex state transitions.
-- They must not do implementation work directly.
-
-### 2.2 Complex Workflow Skills
-Use complex workflow skills for a substantial single-purpose workflow with multiple phases.
-- They may invoke agents.
-- They may generate artifacts and enforce phase transitions.
-- They should prefer structured, schema-like execution instructions when dispatching agents.
-
-### 2.3 Domain Knowledge Skills
-Use domain knowledge skills for guides, patterns, expert methodology, and reusable domain constraints.
-- They provide retrieval-time expertise.
-- They do not generally own orchestration.
-- They are designed to be loaded Just-In-Time by agents or higher-level skills.
-
-### 2.4 Action Skills
-Use action skills for narrow, simple workflows and direct task execution.
-- They are the best fit for small, low-ambiguity tasks.
-- They should usually be invoked directly as skills rather than exposed through command wrappers.
-- They should remain simple and compact.
-
-**When to embed logic directly in an Agent:**
-Only embed workflow logic directly into an Agent's system prompt if the workflow is **Atomic** (does one specific thing without loops), **Universal** (does not change based on language/framework), and **Short** (< 300 words). Example: The `planner` agent.
+Skill taxonomy (orchestration, complex workflow, domain knowledge, action) and the authoring process (Gather-Draft-Review) are defined in `ai-engineering-expert skill-authoring`. Invoke that skill when creating, classifying, or structuring a skill.
 
 ## 3.1 Expert Role Placement Policy
 When you want the model to "play" a specialist role (for example, architect expert, TDD expert, refactoring expert, API reviewer), place that role according to scope rather than stuffing it into one layer.
