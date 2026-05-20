@@ -145,7 +145,7 @@ Destructive or highly divergent workflows should not guess the user's intent.
 
 * **Anti-Pattern:** Generating 5 files or writing a massive plan to disk, then asking "Is this okay?" via an unstructured follow-up.
 * **LSZ Pattern:** Heavy orchestration skills and complex workflow skills should define explicit checkpoints and structured branching points when approval or divergence is required.
-* **Preferred Structure:** When encoding interactive branches, use the Dialog Contract pattern (YAML format that maps to `AskUserQuestion` tool calls). See `ai-engineering-expert` skill's `dialog-contract.md` reference for the full specification.
+* **Preferred Structure:** When encoding interactive branches, use the Dialog Contract pattern (YAML format that maps to `AskUserQuestion` tool calls). See `ai-engineering-expert skill-authoring` sub-skill's `dialog-contract.md` reference for the full specification.
 
 ## 10. Required Frontmatter (Argument Hints & Allowed Tools)
 To ensure a seamless user experience and strict system bounds, skills, commands, and agents have explicit YAML frontmatter requirements.
@@ -160,7 +160,7 @@ To ensure a seamless user experience and strict system bounds, skills, commands,
   * When a command is justified, ALWAYS include `argument-hint:`. Use clear syntax matching the underlying routing. This provides immediate visual autocomplete for the human user in the CLI.
   * When a command is justified, ALWAYS include `allowed-tools:`. Restrict the tools the command's context has access to as a YAML array. This prevents commands from going rogue outside their intended workflow.
 * **LSZ Pattern (Skills):**
-  * Invoke the `ai-engineering-expert` skill for comprehensive methodology on designing skills, agents, workflows, and orchestration patterns.
+  * Invoke the `ai-engineering-expert` skill (with domain argument: `skill-authoring`, `rules-development`, `agent-harness`, `extension-dev`, `testing`, or `process-arch`) for comprehensive methodology on designing skills, agents, workflows, and orchestration patterns.
   * See `.claude/rules/skill-conventions.md` for mandatory guardrails only.
   * **Parent Skill with Sub-Skills Pattern:** When a skill manages multiple related capabilities, structure as `skills/<name>/SKILL.md` (parent) with `skills/<name>/subskills/<sub>/SKILL.md` (children). Parent has `metadata.manage: [...]`; sub-skills have `metadata.managed-by: <parent>`. Parent dispatches via `Read` (not `Skill` tool — nested paths not discoverable). Use this instead of routing commands for better discoverability and explicit relationships.
 

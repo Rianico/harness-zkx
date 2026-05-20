@@ -21,9 +21,10 @@ Mandatory requirements for all skills in this project.
 
 ## Reference
 
-Full methodology: invoke the `ai-engineering-expert` skill.
-
-Normative specs:
-- Frontmatter: `skills/ai-engineering-expert/references/skill-frontmatter.md`
-- Structure: `skills/ai-engineering-expert/references/skill-structure.md`
-- Descriptions: `skills/ai-engineering-expert/references/skill-description-patterns.md`
+Full methodology: invoke the `ai-engineering-expert` skill with the appropriate domain argument:
+- `ai-engineering-expert skill-authoring` -- skill design, frontmatter, descriptions, progressive disclosure
+- `ai-engineering-expert rules-development` -- rules vs skills boundary, rules design principles
+- `ai-engineering-expert agent-harness` -- action space design, observation, error recovery
+- `ai-engineering-expert extension-dev` -- MCP servers, hooks, language selection
+- `ai-engineering-expert testing` -- AI regression testing patterns
+- `ai-engineering-expert process-arch` -- eval-first loop, model routing, session strategy

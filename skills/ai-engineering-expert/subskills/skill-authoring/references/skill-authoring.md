@@ -76,6 +76,25 @@ metadata:
   version: "1.0"
 ```
 
+### Metadata Conventions
+
+The `metadata` field supports project-specific structural declarations. The LSZ architecture defines these conventions:
+
+| Key | Type | Purpose |
+|-----|------|---------|
+| `manage` | list | Parent skill: names of sub-skills this parent manages |
+| `managed-by` | string | Sub-skill: name of the parent skill |
+| `depends-on` | list | Hard dependencies on other skills (must exist in `skills/` or `skills-lock.json`) |
+| `author` | string | Attribution for third-party skills |
+| `version` | string | Version for third-party skills |
+
+**`depends-on` rules:**
+- Hard dependencies only -- list skills whose absence breaks this skill's behavior
+- Simple list of skill names, no arguments
+- Sub-skills declare their own `depends-on` independently
+- When renaming or moving a skill, run `uv run $SKILL_DIR/scripts/validate-deps.py --fix` to update all references
+- Validation: `uv run $SKILL_DIR/scripts/validate-deps.py` from project root
+
 ### Claude Code Extension Fields
 
 These fields extend the Agent Skills spec for Claude Code specifically.

@@ -2,6 +2,8 @@
 name: tdd-cycle
 description: Execute a compact TDD workflow with strict RED, GREEN, and REFACTOR discipline. Use for test-first implementation, bug fixes, regression tests, failing-test-first development, minimal passing changes, refactoring under green tests, and implementation-level verification.
 argument-hint: "<feature or module> [--lightweight] [issues=<path>|topic_root=<path>|artifact_dir=<path>]"
+metadata:
+  depends-on: [tdd-expert]
 ---
 
 # TDD Cycle Orchestration Skill

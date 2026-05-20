@@ -6,6 +6,8 @@ description: |
   building skill from scraped docs, "make a skill from these docs", "create skill from documentation",
   "transform docs into skill", documentation to skill conversion.
 argument-hint: "<doc-dir> [--name <skill-name>] [--supplementary <paths-or-urls>]"
+metadata:
+  depends-on: [ai-engineering-expert]
 ---
 
 # Docs-to-Skill Meta Skill
@@ -185,14 +187,14 @@ Agent tool (ai-engineering-designer):
   prompt: |
     Generate a domain knowledge skill from the analysis results.
 
-    **Mandatory first step:** Invoke the ai-engineering-expert skill to load skill design methodology.
+    **Mandatory first step:** Invoke the ai-engineering-expert skill with `skill-authoring` argument to load skill design methodology.
     Apply its guidance on skill authoring (frontmatter, descriptions, triggers, structure, path convention).
 
     **Input files:**
     - Analysis: {TOPIC_ROOT}/draft/analysis.yaml
     - Raw docs (already in place): {TOPIC_ROOT}/draft/skills/{SKILL_NAME}/references/{SKILL_NAME}-raw/
 
-    **Methodology references (read after ai-engineering-expert):**
+    **Methodology references (read after ai-engineering-expert skill-authoring):**
     - {SKILL_DIR}/references/skill-template.md
     - {SKILL_DIR}/references/compilation-contract.md
     - {SKILL_DIR}/references/extraction-rules.md
