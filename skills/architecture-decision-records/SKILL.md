@@ -1,6 +1,6 @@
 ---
 name: architecture-decision-records
-description: Manage architecture decision records with the `adr` CLI. Use for initializing an ADR repository, creating, linking, superseding, listing, and reading ADRs; for deciding whether a new decision relates to older ADRs; and for keeping ADR content short, historical, and compatible with adr-tools templates and status/link behavior.
+description: Manage architecture decision records with the `adr` CLI. Use for initializing an ADR repository, creating, linking, superseding, listing, and reading ADRs; for deciding whether a new decision relates to older ADRs; for evaluating whether a decision warrants an ADR (hard to reverse, surprising without context, genuine trade-off); and for keeping ADR content short, historical, and compatible with adr-tools templates and status/link behavior.
 argument-hint: [init [dir]|create <title>|link <source> <forward-link> <target> <reverse-link>|supersede <old-ref...> <new-title>|list|read <ref|query>]
 ---
 
@@ -55,6 +55,26 @@ Read ADRs by exact reference first, then fall back to keyword search and explana
 - When reading ADRs, include lineage and linked relationships when relevant.
 - Prefer a quick repository scan before creating a new ADR so related records are not missed.
 - Do not create trivial ADRs for local implementation details, naming choices, or minor refactors without architectural significance.
+
+## When to Create
+
+Offer an ADR **only when all three are true**:
+
+1. **Hard to reverse** — the cost of changing your mind later is meaningful
+2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
+3. **The result of a real trade-off** — there were genuine alternatives and you picked one for specific reasons
+
+If any of the three is missing, skip the ADR. The decision can be captured in a design doc's decision log, a code comment, or nowhere at all — not every decision needs a record.
+
+### What qualifies
+
+- **Architectural shape.** "We're using a monorepo." "The write model is event-sourced, the read model is projected into Postgres."
+- **Integration patterns between contexts.** "Ordering and Billing communicate via domain events, not synchronous HTTP."
+- **Technology choices that carry lock-in.** Database, message bus, auth provider, deployment target. Not every library — just the ones that would take a quarter to swap out.
+- **Boundary and scope decisions.** "Customer data is owned by the Customer context; other contexts reference it by ID only." The explicit no-s are as valuable as the yes-s.
+- **Deliberate deviations from the obvious path.** "We're using manual SQL instead of an ORM because X." Anything where a reasonable reader would assume the opposite.
+- **Constraints not visible in the code.** "We can't use AWS because of compliance requirements." "Response times must be under 200ms because of the partner API contract."
+- **Rejected alternatives when the rejection is non-obvious.** If you considered GraphQL and picked REST for subtle reasons, record it — otherwise someone will suggest GraphQL again in six months.
 
 ## Default Template Shape
 

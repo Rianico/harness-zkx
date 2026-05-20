@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: "Use before creative or constructive work (features, architecture, behavior). Transforms vague ideas into validated designs through disciplined reasoning and collaboration. Escalate to --peer-review for high-impact, high-risk designs requiring multi-agent validation and stress-testing."
+description: "Use before creative or constructive work (features, architecture, behavior). Transforms vague ideas into validated designs through disciplined reasoning and collaboration. Maintains project glossary (CONTEXT.md) inline as domain terms are discovered or clarified during design. Escalate to --peer-review for high-impact, high-risk designs requiring multi-agent validation and stress-testing."
 argument-hint: "[--peer-review]"
 ---
 
@@ -45,8 +45,12 @@ Before asking any questions:
   - documentation
   - plans
   - prior decisions
+- Read `CONTEXT.md` (or `CONTEXT-MAP.md` if it exists) to extract canonical domain terminology
+- Read relevant ADRs from `docs/adr/` that touch the area being designed
 - Identify what already exists vs. what is proposed
 - Note constraints that appear implicit but unconfirmed
+
+If the user's language drifts from the glossary, flag it immediately: "Your glossary defines X as Y, but you seem to mean Z — which is it?"
 
 **Do not design yet.**
 
@@ -124,6 +128,9 @@ List all assumptions explicitly.
 
 #### Open Questions
 List unresolved questions, if any.
+
+#### Domain Terminology
+Surface the canonical terms from `CONTEXT.md` that are relevant to this design. If the user has used terms that conflict with or are absent from the glossary, call it out here. If new terms were introduced during the interview, note them for glossary update.
 
 Then ask for confirmation:
 
@@ -297,6 +304,18 @@ Once the design AND examples are validated:
   - Validated examples
 
 Persist the document according to the project's standard workflow.
+
+---
+
+### Glossary Maintenance (Mandatory)
+
+If the design introduced, resolved, or clarified domain terms:
+
+- Update `CONTEXT.md` **inline** — don't batch term changes
+- Use the format defined in `$SKILL_DIR/references/context-format.md`
+- Be opinionated: pick the canonical term, list synonyms to avoid
+- Keep definitions tight: what it IS, not what it does
+- If `CONTEXT.md` doesn't exist yet, create it lazily with the first resolved term
 
 ---
 
