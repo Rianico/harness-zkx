@@ -157,8 +157,12 @@ The `metadata` field supports project-specific structural declarations. The LSZ 
 - Hard dependencies only -- list skills whose absence breaks this skill's behavior
 - Simple list of skill names, no arguments
 - Sub-skills declare their own `depends-on` independently
-- When renaming or moving a skill, run `uv run $SKILL_DIR/scripts/validate-deps.py --fix` to update all references
-- Validation: `uv run $SKILL_DIR/scripts/validate-deps.py` from project root
+- Add `depends-on` when this skill must load or invoke another skill, read its scripts/references, consume its artifacts, or rely on its output contract
+- Keep optional alternatives, related reading, examples, and background context in prose, not `depends-on`
+- Before renaming, moving, merging, or deleting a skill, run `uv run $SKILL_DIR/scripts/validate-deps.py callers <skill-name>`, then update listed dependent skills or remove stale dependency entries
+- Validation: `uv run $SKILL_DIR/scripts/validate-deps.py` from project root after dependency edits
+- Caller scan: `uv run $SKILL_DIR/scripts/validate-deps.py callers <skill-name>` before renames, moves, merges, or removals
+- Interactive repair: `uv run $SKILL_DIR/scripts/validate-deps.py --fix` after renames or removals
 
 ### Claude Code Extension Fields
 

@@ -163,9 +163,12 @@ metadata:
 - Hard dependencies only -- only list skills whose absence breaks this skill's behavior
 - Simple list of skill names, no arguments (argument details belong in the skill body)
 - Sub-skills declare their own `depends-on` independently
-- When renaming or moving a skill, run validation to find and update all `depends-on` references pointing to the old name
+- Add `depends-on` when a skill must load/invoke another skill, read its resources, consume its artifacts, or rely on its output contract
+- Keep optional alternatives, related reading, examples, and background mentions in prose, not `depends-on`
+- Before renaming, moving, merging, or deleting a skill, run `uv run $SKILL_DIR/scripts/validate-deps.py callers <skill-name>` and update every listed dependent skill first
+- After dependency edits or skill renames, run validation to catch stale references
 
-**Validation:** Run `uv run $SKILL_DIR/scripts/validate-deps.py` from the project root to check all `depends-on` entries against the skill registry. Use `--fix` to interactively resolve stale references after renames.
+**Validation:** Run `uv run $SKILL_DIR/scripts/validate-deps.py` from the project root to check all `depends-on` entries against the skill registry. Use `uv run $SKILL_DIR/scripts/validate-deps.py callers <skill-name>` to list inbound callers before renaming, moving, merging, or deleting a skill. Use `--fix` to interactively resolve stale references after renames.
 
 ### `author` and `version` (Attribution)
 
