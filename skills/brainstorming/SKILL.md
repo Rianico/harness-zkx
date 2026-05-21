@@ -326,7 +326,7 @@ Dialog:
   multipleChoice: false
   options:
     - label: "Yes, proceed"
-      description: "Create implementation plan and begin"
+      description: "Invoke the handoff skill to prepare for implementation"
     - label: "Not yet"
       description: "Need more design refinement or review"
     - label: "Other"
@@ -334,9 +334,9 @@ Dialog:
 ```
 
 If yes:
-- Create an explicit implementation plan
-- Isolate work if the workflow supports it
-- Proceed incrementally
+1. **Standard Handoff**: Invoke the `handoff` skill to generate the `handoff.md` artifact in the topic root.
+2. **Handoff Pointer**: Provide the absolute path to the handoff document.
+3. **Transition**: Instruct the user to invoke `tdd-cycle` (or relevant implementation skill) using the handoff pointer.
 
 ---
 

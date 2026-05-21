@@ -54,9 +54,17 @@ Generic agents executing workflows should not waste tokens doing their own domai
   ```
 
 * **Pointer-Based State Passing:** This pattern is mainly for complex orchestration. When multiple phases or agents must exchange rich outputs, the orchestrator should pass absolute file paths or equivalent pointers between phases instead of re-reading large artifacts into its own context.
-* **Skill-Oriented Orchestration:** When orchestrating complex, multi-step DAGs, prefer orchestrating skills rather than stringing bare agents together. Invoke agents directly only when a skill's execution contract explicitly calls for it.
+* **Skill-Oriented Orchestration**: When orchestrating complex, multi-step DAGs, prefer orchestrating skills rather than stringing bare agents together. Invoke agents directly only when a skill's execution contract explicitly calls for it.
+
+## 3.2 Phase Transitions and Handoffs
+For complex missions, transitions between major phases (e.g., Design to Implementation) MUST be handled via the **Standard LSZ Handoff** methodology.
+
+- **The Handoff Skill**: Use the `handoff` skill to generate a durable state artifact.
+- **Pointer-Based Continuity**: Downstream phases MUST read the handoff artifact to initialize their state, ensuring context efficiency and avoiding "Hero Mode" halluncinations about previous chat history.
+- **Artifact Trail Hygiene**: The handoff document is the canonical index of all relevant pointers (`design.md`, `lineage.md`, etc.).
 
 ## 4. Hook Design Philosophy
+
 Reusable hook capabilities MUST follow a consistent family-based design so they stay editable, installable, and understandable.
 
 * **Family layout is the module boundary.** Each hook capability lives under `hooks/<family>/`. Canonical source files, runtime scripts, family-specific installer logic, and any family-local prompt/spec files stay inside that directory.

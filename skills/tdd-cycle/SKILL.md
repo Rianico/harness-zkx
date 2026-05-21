@@ -1,7 +1,7 @@
 ---
 name: tdd-cycle
-description: Execute a compact TDD workflow with strict RED, GREEN, and REFACTOR discipline. Use for test-first implementation, bug fixes, regression tests, failing-test-first development, minimal passing changes, refactoring under green tests, and implementation-level verification.
-argument-hint: "<feature or module> [--lightweight] [issues=<path>|topic_root=<path>|artifact_dir=<path>]"
+description: "Orchestrates the TDD workflow (Red-Green-Refactor) using Vertical Slicing. Supports Full Mode (Design -> Implement -> Verify) and Lightweight Mode (Direct Fix). Accepts an optional [handoff_pointer] for seamless transitions from brainstorming."
+argument-hint: "<feature or module> [--lightweight] [handoff_pointer=<path>] [issues=<path>]"
 metadata:
   depends-on: [tdd-expert]
 ---
@@ -38,13 +38,15 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 **Action:** Prepare the workspace.
 1. Extract arguments from `$ARGUMENTS`.
 2. Detect mode: `--lightweight` flag present → lightweight mode, else full mode.
-3. Generate a `short_topic` (lowercase, snake_case).
-4. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
-5. Else if `topic_root=<path>` is provided by a caller or orchestrator, use `[topic_root]/tdd` as `[base_dir]`.
-6. Otherwise create a standalone topic root once as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`, then use `[topic_root]/tdd` as `[base_dir]`.
-7. Use the `Bash` tool to run: `mkdir -p [base_dir]`.
-8. Reserve `[lineage_pointer]` as `[base_dir]/00-workflow-lineage.md`.
-9. If lightweight mode: extract `issues=<path>` pointer as `[issues_pointer]`.
+3. **Handoff Pointer Extraction**: If a `handoff_pointer=<path>` or the last positional argument is a handoff path, read it first. Extract `design_pointer`, `lineage_pointer`, and `topic_root`.
+4. Generate a `short_topic` (lowercase, snake_case) if not provided in handoff.
+5. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
+6. Else if `topic_root` is recovered from handoff, use `[topic_root]/tdd` as `[base_dir]`.
+7. Else if `topic_root=<path>` is provided by a caller, use `[topic_root]/tdd` as `[base_dir]`.
+8. Otherwise create a standalone topic root once as `.lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]`, then use `[topic_root]/tdd` as `[base_dir]`.
+9. Use the `Bash` tool to run: `mkdir -p [base_dir]`.
+10. Use recovered `[lineage_pointer]` or reserve as `[base_dir]/00-workflow-lineage.md`.
+11. If lightweight mode: extract `issues=<path>` pointer as `[issues_pointer]`.
 
 **Transition:**
 - Lightweight mode → proceed immediately to Phase 2 (skip Phase 1).
