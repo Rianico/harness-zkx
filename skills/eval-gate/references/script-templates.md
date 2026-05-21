@@ -78,7 +78,7 @@ fi
 
 # Build exclude filter
 if [ -n "$EXCLUDE" ]; then
-    MATCHES=$(rg "$PATTERN" $PATHS --type py | grep -Ev "$EXCLUDE" || true)
+    MATCHES=$(rg "$PATTERN" $PATHS --type py -v "$EXCLUDE" || true)
 else
     MATCHES=$(rg "$PATTERN" $PATHS --type py || true)
 fi
@@ -236,7 +236,7 @@ if [ ! -f "$FILE_PATH" ]; then
 fi
 
 if [ -n "$EXPECTED_CONTENT" ]; then
-    if grep -q "$EXPECTED_CONTENT" "$FILE_PATH"; then
+    if rg -q "$EXPECTED_CONTENT" "$FILE_PATH"; then
         echo "{\"status\": \"pass\", \"summary\": \"File exists and contains expected content\", \"issues\": []}"
     else
         echo "{\"status\": \"fail\", \"summary\": \"File exists but missing expected content\", \"issues\": [\"Pattern not found: $EXPECTED_CONTENT\"]}"

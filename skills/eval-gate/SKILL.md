@@ -48,7 +48,7 @@ Compare deltas  ←  Re-run evals  ←  Implementation complete
 | **Types** | No type errors | `tsc --noEmit` / `basedpyright .` |
 | **Lint** | Style compliance | `npm run lint` / `ruff check .` |
 | **Tests** | Suite passes + coverage | `npm run test -- --coverage` |
-| **Security** | No secrets, no leaks | `grep -rn "sk-" .` / `grep -rn "api_key" .` |
+| **Security** | No secrets, no leaks | `rg "sk-" .` / `rg "api_key" .` |
 | **Diff** | Review changed files | `git diff --stat` |
 
 ### Quick Mode Output
@@ -394,7 +394,7 @@ ISSUES:
 |-------|-------|
 | Exit code 0 = pass | Parse output JSON, check `status: "pass"` |
 | `basedpyright && echo "pass"` | `basedpyright --outputjson \| jq '{status: if .errorCount > 0 then "fail" else "pass" end, issues: ...}'` |
-| `grep -q pattern && exit 0` | `grep pattern \| jq -R -s '{status: if . == "" then "pass" else "fail" end, issues: split("\n")}'` |
+| `rg "pattern" .` | `rg "pattern" \| jq -R -s '{status: if . == "" then "pass" else "fail" end, issues: split("\n")}'` |
 | LLM interprets test output | Script parses own output, returns structured result |
 
 ### Example: Type Checking Script
@@ -460,7 +460,7 @@ fi
 | Check Type | Grader | Why |
 |------------|--------|-----|
 | Type errors, test pass/fail | Code/Script | Deterministic, repeatable |
-| Pattern matching (regex, grep) | Rule | Exact match, no variance |
+| Pattern matching (regex) | Rule | Exact match, no variance |
 | Code style, behavior quality | Model | Requires semantic understanding |
 | Security, architecture decisions | Human | Judgment required |
 

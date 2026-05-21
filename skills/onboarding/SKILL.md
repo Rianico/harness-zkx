@@ -45,11 +45,11 @@ Gather raw signals about the project without reading every file. Run these check
 
 When you are lost in a specific area of code, perform a "Zoom Out" to regain perspective:
 
-1. **Identify the Core**: Start with the current file/module and its immediate `Read` data.
+1. **Identify the Core**: Start with the current file/module and its immediate context.
 2. **Map the Neighborhood**:
-   - Use `Grep` to find **Callers** (who uses this module?).
-   - Scan **Imports** to find **Dependencies** (what does this module use?).
-   - Identify **Interfaces/Contracts** that define how this area interacts with the rest of the system.
+   - **Find Callers**: Search the codebase to identify who uses this module. Use semantic code navigation (LSP) or text search where appropriate.
+   - **Analyze Dependencies**: Scan imports and module declarations to find what this module uses.
+   - **Identify Interfaces/Contracts**: Determine the boundaries and contracts that define how this area interacts with the rest of the system.
 3. **Abstract**: 
    - Move up one layer (e.g., from `Repository` to `Service`, or `Component` to `Page`).
    - Map how this module fits into the **Domain Glossary** (from `CONTEXT.md`).
@@ -59,9 +59,10 @@ When you are lost in a specific area of code, perform a "Zoom Out" to regain per
 
 ## Best Practices
 
-1. **Don't read everything** — Use Glob and Grep for mapping; use Read only for verification.
-2. **Respect CLAUDE.md** — Use existing project instructions to anchor the "Zoom Out" mapping.
-3. **Domain-First** — Always use the terms found in `CONTEXT.md` to describe the map.
+1. **Focus on Discovery**: Use file discovery and text search tools for mapping; use targeted reading only for verification.
+2. **Respect CLAUDE.md**: Use existing project instructions to anchor the "Zoom Out" mapping.
+3. **Domain-First**: Always use the terms found in `CONTEXT.md` to describe the map.
+
 
 ## Anti-Patterns
 

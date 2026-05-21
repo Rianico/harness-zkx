@@ -5,7 +5,7 @@ description: >-
 arguments: target
 argument-hint: >-
    "[codemaps|project-docs|all] -- documentation target (default: interactive prompt)"
-allowed-tools: Read Grep Glob Bash
+allowed-tools: Read Bash
 ---
 
 # Documentation Workflow Skill
@@ -21,7 +21,7 @@ If the user did not explicitly provide arguments specifying what to update, you 
 What documentation should be updated? (You may select multiple)
 
 1. **Project Docs** — Sync CONTRIBUTING.md, RUNBOOK.md, and ENV variables from source files.
-2. **Architecture Codemaps** — Perform a deep codebase scan and generate token-lean maps in docs/CODEMAPS/.
+2. **Architecture Codemaps** — Perform a deep codebase scan using file discovery and text search tools to generate token-lean maps in docs/CODEMAPS/.
 ---
 
 Wait for the user's response before proceeding.
