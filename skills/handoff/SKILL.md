@@ -32,8 +32,8 @@ Extract all paths from the `## Artifacts` sections of previous responses. Provid
 - Note technical constraints for the next agent.
 
 ### 4. Next Directive (LSZ Standard)
-- Be explicit: "Invoke `tdd-cycle` with `handoff_pointer=[handoff_path]`".
-- Define the success criteria for the next phase.
+- Be explicit: "Invoke the [Next Skill] (e.g., `architect`, `tdd-cycle`, `update-docs`) with `handoff_pointer=[handoff_path]`".
+- Define the specific success criteria for the next agent to meet.
 
 ## The Handoff Loop
 
