@@ -52,21 +52,27 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 
 ---
 
-## PHASE 1: TEST SPECIFICATION (Full Mode Only)
+## PHASE 1: BEHAVIOR SEQUENCE MAPPING (Full Mode Only)
 **Action:** Call `Agent` tool
 **Payload Template:**
 ```text
 Agent tool (architect):
-  description: "Derive executable test specification from approved design"
+  description: "Derive a behavior sequence map for iterative implementation"
   prompt: |
-    You are the Phase 1 agent. Consume the approved feature design and implementation plan for: [Feature], and derive an executable test specification for the TDD workflow. Focus on test scenarios, test boundaries, required fixtures, execution strategy, and any implementation constraints the RED+GREEN phase must honor. Only fill gaps in upstream artifacts when necessary to design the tests; do not perform a second broad feature-architecture pass. Also create or update the compact lineage artifact at [lineage_pointer] with: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases. You MUST use the Write tool to save the main artifact to [base_dir]/01-test-spec.md.
+    You are the Phase 1 agent. Consume the approved design for: [Feature]. Your goal is to map out a sequence of observable behaviors that will be implemented using TDD.
+
+    1. Identify the **Tracer Bullet**: The single most critical end-to-end behavior that establishes the public interface.
+    2. Sequence remaining behaviors: Order them to build complexity incrementally.
+    3. Define constraints: Note any architectural boundaries or performance targets that downstream phases must honor.
+
+    Avoid writing actual test code or detailed test cases here. Focus on defining the *what* and the *order*. Create or update the compact lineage artifact at [lineage_pointer] with: phase name, result (the tracer bullet), and artifact pointer. You MUST use the Write tool to save the sequence map to [base_dir]/01-behavior-sequence.md.
 
     **Return format per rules/templates/resp-format.md:**
     ## Summary
-    <what test scenarios were defined, key boundaries, tradeoffs made>
+    <the identified tracer bullet and the logic behind the behavior sequence>
 
     ## Artifacts
-    - [base_dir]/01-test-spec.md
+    - [base_dir]/01-behavior-sequence.md
     - [lineage_pointer]
 
     ## Route
@@ -78,33 +84,39 @@ Agent tool (architect):
 **Transition Rules (Post-Execution):**
 1. Parse subagent response, extract artifact paths from `## Artifacts` section.
 2. If `Route: blocked`, stop and surface issues to user.
-3. If `Route: continue`, proceed immediately to Phase 2. DO NOT read the specification file yourself.
+3. If `Route: continue`, proceed immediately to Phase 2.
 
 ---
 
-## PHASE 2: COMBINED RED + GREEN
+## PHASE 2: ITERATIVE RED-GREEN-REFACTOR
 **Action:** Call `Agent` tool
 **Payload Template (Full Mode):**
 ```text
 Agent tool (developer):
-  description: "Write failing tests and implement minimal passing code"
+  description: "Implement behavior sequence using iterative Vertical Slices"
   skill: tdd-expert
   prompt: |
-    You are the combined RED+GREEN phase agent. Use the `tdd-expert` skill as the methodology for this phase, especially the smallest-failing-test discipline for RED and the minimum-passing-change discipline for GREEN. Read the specifications at [spec_pointer]. Work in two internal sub-phases. First perform RED: write FAILING unit tests for the feature, do NOT implement production code yet, and run the tests via Bash to verify they fail for the right reasons. Save a concise RED summary artifact to [base_dir]/02-failing-tests.md. Then perform GREEN: implement the MINIMAL production code needed to make those tests pass, do not add extra features, and rerun the smallest relevant test target first. When the change or observed fallout justifies it, you may also run broader or repo-wide test commands to verify that your implementation did not break shared behavior. All failure analysis, debugging, code edits, and test reruns stay inside this phase agent; do not push failure details back to the orchestrator for diagnosis. Save a concise GREEN summary artifact to [base_dir]/03-green-implementation.md. Also create or update the compact lineage artifact at [lineage_pointer] with separate entries for RED and GREEN, each containing: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases.
+    You are the Phase 2 agent. Use the `tdd-expert` skill to implement the behavior sequence at [sequence_pointer].
+
+    **CRITICAL MANDATE: VERTICAL SLICING ONLY.**
+    Do NOT write all tests first. For each behavior in the sequence:
+    1. **RED**: Write ONE failing test for that behavior.
+    2. **GREEN**: Write the MINIMAL code to make that test pass.
+    3. **REFACTOR**: Immediately clean up the code and tests while staying green.
+    Repeat for the next behavior.
+
+    All failure analysis, debugging, and micro-refactors stay inside this phase. When the implementation justifies it, run broader test targets to ensure no regressions. Save a concise summary of the implementation progress to [base_dir]/02-implementation-summary.md. Update the lineage artifact at [lineage_pointer] with entries for each major behavior milestone reached.
 
     **Return format per rules/templates/resp-format.md:**
     ## Summary
-    <what tests were written, what was implemented, key tradeoffs>
+    <how many behaviors were implemented, architectural decisions made during the loop, final status>
 
     ## Artifacts
-    - [base_dir]/02-failing-tests.md
-    - [base_dir]/03-green-implementation.md
+    - [base_dir]/02-implementation-summary.md
     - [lineage_pointer]
 
     ## Route
     continue | blocked
-    Issues:
-    - <specific blocker if blocked>
 ```
 
 **Payload Template (Lightweight Mode):**
@@ -138,28 +150,32 @@ Agent tool (developer):
 
 ---
 
-## PHASE 3: REFACTOR + EXTENDED VERIFICATION (Full Mode Only)
+## PHASE 3: EXTENDED VERIFICATION (Full Mode Only)
 **Action:** Call `Agent` tool
 **Payload Template:**
 ```text
 Agent tool (developer):
-  description: "Refactor code and complete extended verification"
+  description: "Complete extended verification and final polish"
   skill: tdd-expert
   prompt: |
-    You are the REFACTOR + EXTENDED VERIFICATION phase agent. Use the `tdd-expert` skill as the methodology for this phase, especially the refactor discipline of improving structure only with passing tests and preserving behavioral clarity in both code and tests. Read the implementation summary at [green_pointer]. Iterate internally until the invariant is satisfied or a clear failure is reached. Refactor the production code and test code to improve quality, remove duplication, and simplify structure while keeping behavior intact. Then perform the implementation-level verification needed for this change: rerun the smallest relevant test targets first, add or update integration tests, edge-case tests, or other non-unit checks when required by the approved spec and execution plan, and when the refactor or observed fallout justifies it, run broader or repo-wide test commands to verify shared behavior. Inspect failures, repair code or tests, and rerun until the implemented scope is verified or a clear blocker remains. All failure analysis, debugging, code edits, and test reruns stay inside this phase agent; do not push failure details back to the orchestrator for diagnosis. This phase owns implementation validation only; do not perform a broad repository-level review. Save the summary report to [base_dir]/04-refactor-and-verification.md. Also create or update the compact lineage artifact at [lineage_pointer] with: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases.
+    You are the PHASE 3 agent. Your goal is to provide final verification for the implementation described in [implementation_pointer].
+
+    1. **Edge Cases**: Identify and implement any remaining edge cases or boundary conditions not covered by the core behavior sequence.
+    2. **Integration**: Run broader system-level or integration tests to ensure the new feature fits perfectly into the existing codebase.
+    3. **Cleanup**: Perform a final pass on variable names, documentation, and test clarity.
+
+    Save the summary report to [base_dir]/03-verification-report.md. Update the lineage artifact at [lineage_pointer] with the final verification result.
 
     **Return format per rules/templates/resp-format.md:**
     ## Summary
-    <what was refactored, verification results, key tradeoffs>
+    <verification results, any final minor adjustments, overall confidence>
 
     ## Artifacts
-    - [base_dir]/04-refactor-and-verification.md
+    - [base_dir]/03-verification-report.md
     - [lineage_pointer]
 
     ## Route
     continue | blocked
-    Issues:
-    - <specific blocker if blocked>
 ```
 
 **Transition Rules (Post-Execution):**
@@ -167,10 +183,9 @@ Agent tool (developer):
 2. If `Route: blocked`, stop and surface issues to user.
 3. If `Route: continue`, output a final summary to the user listing all the pointers:
    - Lineage: `[lineage_pointer]`
-   - Specification: `[spec_pointer]`
-   - Failing Tests: `[red_pointer]`
-   - Implementation: `[green_pointer]`
-   - Refactor + Verification: `[verification_pointer]`
+   - Sequence Map: `[sequence_pointer]`
+   - Implementation: `[implementation_pointer]`
+   - Verification: `[verification_pointer]`
 4. Terminate the workflow.
 
 ---
@@ -182,10 +197,9 @@ Agent tool (developer):
 TDD Cycle Complete
 Mode: full
 Lineage: [lineage_pointer]
-Specification: [spec_pointer]
-Failing Tests: [red_pointer]
-Implementation: [green_pointer]
-Refactor + Verification: [verification_pointer]
+Sequence Map: [sequence_pointer]
+Implementation: [implementation_pointer]
+Verification: [verification_pointer]
 ```
 
 **Lightweight Mode:**

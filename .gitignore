@@ -10,7 +10,7 @@
 .claude/settings.*
 
 ## npx skills 
-skills-lock.json
+.skills-lock.json
 
 # ADR
 .adr-dir
