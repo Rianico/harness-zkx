@@ -3,7 +3,7 @@ name: orchestrating
 description: Orchestrate multi-step LSZ workflows for feature development, refactors, bug fixes, and documentation updates. Defines the skill sequence across brainstorming, architect, plan, eval-gate, TDD, build-fix, update-docs, and code-review, with approval checkpoints, shared topic roots, remediation loops, final review behavior, and pointer-based state passing. Supports lightweight (5-phase) and heavy (7-phase) pipelines with complexity-based routing.
 argument-hint: "[feature|refactor|bugfix|docs] [--lightweight|--heavy]"
 metadata:
-  depends-on: [brainstorming, architect, eval-gate, tdd-cycle, code-review, build-fix, update-docs]
+  depends-on: [brainstorming, architect, eval-gate, tdd-cycle, code-review, build-fix, update-docs, handoff]
 ---
 
 # Orchestration
