@@ -1,7 +1,9 @@
 ---
 name: kotlin-expert
-description: Kotlin domain expertise for Android, KMP, Jetpack Compose, Compose Multiplatform, Ktor, Exposed, Coroutines, Flow, structured concurrency, Gradle builds, Kotest, MockK, null-safety, extension functions, and idiomatic Kotlin design. Use for Kotlin implementation, debugging, testing, build resolution, coroutine design, Android/KMP architecture, Compose UI patterns (state management, navigation, theming, recomposition performance), and refactoring tasks.
-argument-hint: "[frameworks|coroutines|testing|build|compose]"
+description: >-
+  Kotlin domain expertise for Android, KMP, Jetpack Compose, Compose Multiplatform, Ktor, Exposed, Coroutines, Flow, structured concurrency, Gradle builds, Kotest, MockK, null-safety, extension functions, and idiomatic Kotlin design. Use for Kotlin implementation, debugging, testing, build resolution, coroutine design, Android/KMP architecture, Compose UI patterns (state management, navigation, theming, recomposition performance), and refactoring tasks.
+argument-hint: >-
+  [frameworks|coroutines|testing|build|compose]
 ---
 
 # Kotlin Expert Skill

@@ -1,6 +1,7 @@
 ---
 name: testing
-description: AI regression testing patterns, sandbox/production mismatch detection, error state leakage tests, and optimistic update rollback verification for the LSZ architecture.
+description: >-
+  AI regression testing patterns, sandbox/production mismatch detection, error state leakage tests, and optimistic update rollback verification for the LSZ architecture.
 metadata:
   managed-by: ai-engineering-expert
 ---

@@ -1,6 +1,7 @@
 ---
 name: agent-harness
-description: Agent action space design, observation formatting, error recovery contracts, and context budgeting for the LSZ architecture.
+description: >-
+  Agent action space design, observation formatting, error recovery contracts, and context budgeting for the LSZ architecture.
 metadata:
   managed-by: ai-engineering-expert
 ---

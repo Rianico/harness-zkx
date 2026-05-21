@@ -1,10 +1,12 @@
 ---
 name: ux-testing
-description: |
+description: >-
+  |
   UX testing cluster for verifying user-facing experience. Routes to click-path-audit for state cancellation bugs (sequential undo, stale closures, handler conflicts), e2e-workflow for E2E test infrastructure (POM, locators, flakiness quarantine), or browser-qa for ad-hoc QA and post-deploy monitoring.
   TRIGGER on UI bugs, broken buttons, E2E testing, browser testing, state interaction bugs, test infrastructure, or post-deploy verification.
 arguments: mode options
-argument-hint: |
+argument-hint: >-
+  |
   audit -- find state cancellation bugs (sequential undo, stale closures)
   build -- set up E2E test infrastructure (POM, locators, flakiness quarantine)
   check [--once|--watch] -- ad-hoc QA or sustained monitoring

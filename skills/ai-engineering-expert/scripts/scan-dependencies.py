@@ -2,34 +2,16 @@
 """
 LSZ Skill Dependency Scanner
 Parses all SKILL.md files and identifies inbound dependencies (callers).
-Handles potential YAML parsing issues in skill frontmatter.
+Uses python-frontmatter for robust Markdown metadata parsing.
 """
-import os
-import re
 import sys
 from pathlib import Path
 
-# Try to import yaml, but fall back to a simple regex parser if needed
-# as some SKILL.md frontmatter might have non-standard YAML.
 try:
-    import yaml
-    HAS_YAML = True
+    import frontmatter
 except ImportError:
-    HAS_YAML = False
-
-def parse_frontmatter_regex(content):
-    """Fallback parser for frontmatter using regex."""
-    data = {}
-    match = re.search(r"^name:\s*(.*)$", content, re.MULTILINE)
-    if match:
-        data['name'] = match.group(1).strip()
-    
-    # Simple extraction for depends-on: [a, b, c]
-    match = re.search(r"depends-on:\s*\[(.*?)\]", content, re.DOTALL)
-    if match:
-        deps = [d.strip() for d in match.group(1).split(',')]
-        data['metadata'] = {'depends-on': deps}
-    return data
+    print("Error: 'python-frontmatter' library not found. Install it with 'uv add --dev python-frontmatter'.")
+    sys.exit(1)
 
 def scan_skills(root_dir):
     skills_dir = Path(root_dir) / "skills"
@@ -42,31 +24,17 @@ def scan_skills(root_dir):
 
     for skill_file in skills_dir.glob("**/SKILL.md"):
         try:
-            content = skill_file.read_text()
-            # Extract frontmatter block
-            match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-            if not match:
+            # Load the markdown file with frontmatter
+            post = frontmatter.load(skill_file)
+            
+            if 'name' not in post:
                 continue
             
-            frontmatter_text = match.group(1)
-            data = None
-            
-            if HAS_YAML:
-                try:
-                    data = yaml.safe_load(frontmatter_text)
-                except Exception:
-                    # Fallback to regex if YAML fails
-                    data = parse_frontmatter_regex(frontmatter_text)
-            else:
-                data = parse_frontmatter_regex(frontmatter_text)
-            
-            if not data or 'name' not in data:
-                continue
-            
-            name = data['name']
+            name = post['name']
             skill_map[name] = skill_file
             
-            metadata = data.get('metadata', {})
+            # Check metadata.depends-on
+            metadata = post.get('metadata', {})
             dependencies = metadata.get('depends-on', [])
             
             if isinstance(dependencies, str):
@@ -78,6 +46,7 @@ def scan_skills(root_dir):
                 dependency_graph[dep].append(name)
                 
         except Exception as e:
+            # Report the error but continue scanning other files
             print(f"Warning: Failed to parse {skill_file}: {e}")
 
     return skill_map, dependency_graph
@@ -92,7 +61,7 @@ def main():
             print(f"No inbound dependencies found for skill: {target_skill}")
         else:
             print(f"Inbound dependencies (callers) for '{target_skill}':")
-            for caller in callers:
+            for caller in sorted(callers):
                 path = skill_map.get(caller, "Unknown path")
                 print(f"  - {caller} ({path})")
     else:

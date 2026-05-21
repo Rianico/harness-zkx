@@ -1,6 +1,7 @@
 ---
 name: extension-dev
-description: MCP server patterns, hook development, language selection, output format, and transport decisions for the LSZ architecture.
+description: >-
+  MCP server patterns, hook development, language selection, output format, and transport decisions for the LSZ architecture.
 metadata:
   managed-by: ai-engineering-expert
 ---

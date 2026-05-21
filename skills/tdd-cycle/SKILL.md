@@ -1,7 +1,9 @@
 ---
 name: tdd-cycle
-description: "Orchestrates the TDD workflow (Red-Green-Refactor) using Vertical Slicing. Supports Full Mode (Design -> Implement -> Verify) and Lightweight Mode (Direct Fix). Accepts an optional [handoff_pointer] for seamless transitions from brainstorming."
-argument-hint: "<feature or module> [--lightweight] [handoff_pointer=<path>] [issues=<path>]"
+description: >-
+  Orchestrates the TDD workflow (Red-Green-Refactor) using Vertical Slicing. Supports Full Mode (Design -> Implement -> Verify) and Lightweight Mode (Direct Fix). Accepts an optional [handoff_pointer] for seamless transitions from brainstorming.
+argument-hint: >-
+  <feature or module> [--lightweight] [handoff_pointer=<path>] [issues=<path>]
 metadata:
   depends-on: [tdd-expert, handoff]
 ---

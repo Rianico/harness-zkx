@@ -1,6 +1,7 @@
 ---
 name: tavily
-description: |
+description: >-
+  |
   Tavily CLI for web search, content extraction, site mapping, crawling, and AI-powered research. Use for:
   (1) SEARCH - finding web pages, articles, news, documentation when you don't have URLs. Triggers on: search for, find me, look up, what's the latest on.
   (2) EXTRACT - pulling markdown from specific URLs, batch extraction, query-focused extraction. Triggers on: extract from URL, get content from, pull text from.
@@ -8,7 +9,8 @@ description: |
   (4) CRAWL - bulk extract content from entire site sections, download docs. Triggers on: crawl, get all pages, download the docs, bulk extract, extract everything under /docs.
   (5) RESEARCH - AI-powered deep research with citations. Triggers on: research, investigate, analyze in depth, compare X vs Y, market analysis, literature review.
   Returns LLM-optimized markdown with relevance scores.
-argument-hint: "search <query> | extract <url> | map <site_url> | crawl <url> | research <topic> [--model mini|pro]"
+argument-hint: >-
+  search <query> | extract <url> | map <site_url> | crawl <url> | research <topic> [--model mini|pro]
 allowed-tools: Bash(tvly *)
 metadata:
   managed-by: web-accessing

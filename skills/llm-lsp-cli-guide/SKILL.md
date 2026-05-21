@@ -1,7 +1,9 @@
 ---
 name: llm-lsp-cli-guide
-description: "Practical guide for LLMs to use llm-lsp-cli for code intelligence. Use when navigating codebases, finding definitions, tracking call chains, identifying symbol sources, getting project overviews, analyzing code structure, checking diagnostics, or fixing type errors. Covers document-symbol, workspace-symbol, definition, references, hover, incoming-calls, outgoing-calls, diagnostics, rename, completion, and did-change for cache coherence. Invoke when user asks to find where something is defined, who calls a function, what a file contains, how code is structured, rename symbols, check type errors, or fix diagnostics."
-argument-hint: "[command] <file> [line] [column]"
+description: >-
+  Practical guide for LLMs to use llm-lsp-cli for code intelligence. Use when navigating codebases, finding definitions, tracking call chains, identifying symbol sources, getting project overviews, analyzing code structure, checking diagnostics, or fixing type errors. Covers document-symbol, workspace-symbol, definition, references, hover, incoming-calls, outgoing-calls, diagnostics, rename, completion, and did-change for cache coherence. Invoke when user asks to find where something is defined, who calls a function, what a file contains, how code is structured, rename symbols, check type errors, or fix diagnostics.
+argument-hint: >-
+  [command] <file> [line] [column]
 ---
 
 # llm-lsp-cli Guide for LLMs

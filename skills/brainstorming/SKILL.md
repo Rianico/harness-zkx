@@ -1,7 +1,9 @@
 ---
 name: brainstorming
-description: "Use before creative or constructive work (features, architecture, behavior). Transforms vague ideas into validated designs through disciplined reasoning and collaboration. Maintains project glossary (CONTEXT.md) inline as domain terms are discovered or clarified during design. Escalate to --peer-review for high-impact, high-risk designs requiring multi-agent validation and stress-testing."
-argument-hint: "[--peer-review]"
+description: >-
+  Use before creative or constructive work (features, architecture, behavior). Transforms vague ideas into validated designs through disciplined reasoning and collaboration. Maintains project glossary (CONTEXT.md) inline as domain terms are discovered or clarified during design. Escalate to --peer-review for high-impact, high-risk designs requiring multi-agent validation and stress-testing.
+argument-hint: >-
+  [--peer-review]
 metadata:
   depends-on: [handoff]
 ---

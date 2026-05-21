@@ -1,9 +1,11 @@
 ---
 name: ai-engineering-expert
 description: >-
+  >-
   AI engineering expertise for designing skills, agents, rules, workflows, MCP servers, hooks, evals, and regression tests in the LSZ architecture. TRIGGER when designing, refining, iterating, or redesigning a skill, rule, workflow, agent, command, hook, or MCP server; creating, writing, or building a new skill; classifying skill type (orchestration, complex workflow, domain knowledge, action); skill taxonomy or what type of skill; structuring agent orchestration; defining tool boundaries, action spaces, observation formats, or error recovery contracts; implementing MCP tools, resources, or prompts; choosing bash vs python for hook scripts; choosing stdio vs HTTP transport; hook output format with systemMessage vs additionalContext; eval-first execution, model routing, AI regression testing, bug-check workflows, sandbox/production mismatch tests, SELECT clause omission tests, error state leakage tests, or optimistic update rollback tests; reorganizing or consolidating skill/rule content to reduce redundancy and bloat; deciding when to delegate to subagents; designing subagent dispatch patterns; context window too small or too many tokens; skill doesn't trigger or triggers incorrectly; hook too slow or too frequent; agent keeps doing the wrong thing; which model tier for this task; how do I test AI-generated code; this skill is too bloated; consolidate these rules; organize this skill; should I delegate this task; when to use subagents; should this be a rule or skill; is this the right granularity; how should I structure this workflow; what's the right action space; how do I make this trigger reliably; add this to rules/skills; update this to xxx rule/skill; move this to rules; put this in the skill.
 arguments: domain
-argument-hint: |
+argument-hint: >-
+  |
   skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, arguments, dependencies, progressive disclosure, parent/sub-skill layout, and authoring checklists
   rules-development -- loads rules methodology: rules vs skills boundaries, concise always-on constraints, routing conventions, and rule quality checks
   agent-harness -- loads agent methodology: lean persona design, tool/action-space boundaries, observation formats, context budgeting, and error recovery contracts

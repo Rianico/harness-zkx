@@ -1,7 +1,9 @@
 ---
 name: docs-scraper
-description: "Documentation scraper for converting technical docs to LLM-friendly markdown. Use when scraping LSP specification, PTX ISA, CUDA Runtime/Driver API, Rust crate documentation, or general documentation websites. For Rust projects (docs.rs, crates.io, GitHub repos), automatically uses cargo-docs-md for cleaner output. For general sites, uses LLM-driven discovery via llms.txt/sitemap. Handles emoji anchor cleanup, internal link resolution, section splitting, and caching. Triggers on: scrape LSP, scrape PTX, scrape CUDA, scrape Rust docs, scrape site, docs.rs, rust documentation, convert HTML to markdown, technical docs to markdown, llms.txt, sitemap."
-argument-hint: "[lsp|ptx|runtime|driver|rust <target>|site] [--force] [--output-dir <path>] [--base-url <url>]"
+description: >-
+   "Documentation scraper for converting technical docs to LLM-friendly markdown. Use when scraping LSP specification, PTX ISA, CUDA Runtime/Driver API, Rust crate documentation, or general documentation websites. For Rust projects (docs.rs, crates.io, GitHub repos), automatically uses cargo-docs-md for cleaner output. For general sites, uses LLM-driven discovery via llms.txt/sitemap. Handles emoji anchor cleanup, internal link resolution, section splitting, and caching. Triggers on: scrape LSP, scrape PTX, scrape CUDA, scrape Rust docs, scrape site, docs.rs, rust documentation, convert HTML to markdown, technical docs to markdown, llms.txt, sitemap."
+argument-hint: >-
+  [lsp|ptx|runtime|driver|rust <target>|site] [--force] [--output-dir <path>] [--base-url <url>]
 ---
 
 # Documentation Scraper Skill

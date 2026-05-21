@@ -1,7 +1,9 @@
 ---
 name: frontend-expert
-description: Cross-cutting frontend patterns for React, Next.js, Vue, and Nuxt. Covers component composition, state management, performance optimization, forms, accessibility, and SSR/hydration patterns. TRIGGER when: building React or Vue components; implementing custom hooks or composables; managing state with useState/useReducer/Zustand/Context or Pinia; optimizing render performance with memoization/virtualization/code splitting; handling forms with validation; debugging hydration mismatches; configuring Next.js Turbopack or Nuxt route rules; implementing lazy hydration or SSR data fetching.
-argument-hint: "[react|vue|nextjs|nuxt|performance|state|forms|accessibility]"
+description: >-
+  Cross-cutting frontend patterns for React, Next.js, Vue, and Nuxt. Covers component composition, state management, performance optimization, forms, accessibility, and SSR/hydration patterns. TRIGGER when: building React or Vue components; implementing custom hooks or composables; managing state with useState/useReducer/Zustand/Context or Pinia; optimizing render performance with memoization/virtualization/code splitting; handling forms with validation; debugging hydration mismatches; configuring Next.js Turbopack or Nuxt route rules; implementing lazy hydration or SSR data fetching.
+argument-hint: >-
+  [react|vue|nextjs|nuxt|performance|state|forms|accessibility]
 ---
 
 # Frontend Development Patterns

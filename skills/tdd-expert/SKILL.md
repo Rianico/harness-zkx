@@ -1,7 +1,9 @@
 ---
 name: tdd-expert
-description: TDD domain expertise for RED-GREEN-REFACTOR execution, failing tests first, test design, regression tests, behavior-focused assertions, refactoring discipline, incremental implementation, and test-first workflow review. Use when a workflow needs strict TDD rigor beyond a generic developer baseline.
-argument-hint: "[red|green|refactor|full-cycle]"
+description: >-
+  TDD domain expertise for RED-GREEN-REFACTOR execution, failing tests first, test design, regression tests, behavior-focused assertions, refactoring discipline, incremental implementation, and test-first workflow review. Use when a workflow needs strict TDD rigor beyond a generic developer baseline.
+argument-hint: >-
+  [red|green|refactor|full-cycle]
 ---
 
 # TDD Expert Skill

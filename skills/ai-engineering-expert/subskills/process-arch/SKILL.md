@@ -1,6 +1,7 @@
 ---
 name: process-arch
-description: Eval-first development loop, model routing, session strategy, and team operating model for AI-assisted engineering in the LSZ architecture.
+description: >-
+  Eval-first development loop, model routing, session strategy, and team operating model for AI-assisted engineering in the LSZ architecture.
 metadata:
   managed-by: ai-engineering-expert
 ---

@@ -1,6 +1,7 @@
 ---
 name: rules-development
-description: Rules design principles, rules vs skills boundary, and placement criteria for the LSZ architecture.
+description: >-
+  Rules design principles, rules vs skills boundary, and placement criteria for the LSZ architecture.
 metadata:
   managed-by: ai-engineering-expert
 ---

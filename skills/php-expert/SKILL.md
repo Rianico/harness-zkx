@@ -1,7 +1,9 @@
 ---
 name: php-expert
-description: PHP and Laravel domain expertise for Laravel architecture, controllers, actions, services, Eloquent ORM, eager loading, Form Requests, Auth, Policies, mass assignment, Pest, PHPUnit, factories, and security. Use for PHP/Laravel implementation, debugging, testing, authorization, database, and refactoring tasks.
-argument-hint: "[patterns|security|testing]"
+description: >-
+  PHP and Laravel domain expertise for Laravel architecture, controllers, actions, services, Eloquent ORM, eager loading, Form Requests, Auth, Policies, mass assignment, Pest, PHPUnit, factories, and security. Use for PHP/Laravel implementation, debugging, testing, authorization, database, and refactoring tasks.
+argument-hint: >-
+  [patterns|security|testing]
 ---
 
 # PHP/Laravel Expert Skill

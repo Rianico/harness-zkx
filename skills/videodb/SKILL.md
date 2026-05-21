@@ -1,9 +1,11 @@
 ---
 name: videodb
-description: Video and audio processing for ingestion, indexing, search, transcoding, editing, and live capture. Use when the user wants to upload, transcode, search inside, clip, subtitle, reframe, or edit video/audio files; connect RTSP/live streams; record desktop sessions; generate media assets; or build real-time visual/spoken alerts from video feeds. Covers uploads, YouTube/local files, spoken word indexing, scene detection, timestamped search, timeline composition, subtitles, overlays, dubbing, aspect ratio conversion, resolution changes, and desktop capture with episodic memory.
+description: >-
+  Video and audio processing for ingestion, indexing, search, transcoding, editing, and live capture. Use when the user wants to upload, transcode, search inside, clip, subtitle, reframe, or edit video/audio files; connect RTSP/live streams; record desktop sessions; generate media assets; or build real-time visual/spoken alerts from video feeds. Covers uploads, YouTube/local files, spoken word indexing, scene detection, timestamped search, timeline composition, subtitles, overlays, dubbing, aspect ratio conversion, resolution changes, and desktop capture with episodic memory.
 
 allowed-tools: Read Grep Glob Bash(python:*)
-argument-hint: "[task description]"
+argument-hint: >-
+  [task description]
 ---
 
 # VideoDB Skill

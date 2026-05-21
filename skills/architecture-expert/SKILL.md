@@ -1,7 +1,9 @@
 ---
 name: architecture-expert
-description: Architecture domain expertise for software and system design, architectural trade-offs, system boundaries, module boundaries, clean architecture, domain modeling, bounded contexts, architectural styles, 4+1 views, microservice decomposition, blueprint reasoning, technical standards, ADR reasoning, and architecture review. Use for design critique, refactoring strategy, service boundaries, reusable project paradigms, and architectural decision support with lenses such as balanced, uncle-bob, fowler, evans, shaw-garlan, kruchten, and newman.
-argument-hint: "[balanced|uncle-bob|fowler|evans|shaw-garlan|kruchten|newman]"
+description: >-
+  Architecture domain expertise for software and system design, architectural trade-offs, system boundaries, module boundaries, clean architecture, domain modeling, bounded contexts, architectural styles, 4+1 views, microservice decomposition, blueprint reasoning, technical standards, ADR reasoning, and architecture review. Use for design critique, refactoring strategy, service boundaries, reusable project paradigms, and architectural decision support with lenses such as balanced, uncle-bob, fowler, evans, shaw-garlan, kruchten, and newman.
+argument-hint: >-
+  [balanced|uncle-bob|fowler|evans|shaw-garlan|kruchten|newman]
 ---
 
 # Architecture Expert Skill

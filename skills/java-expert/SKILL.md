@@ -1,7 +1,9 @@
 ---
 name: java-expert
-description: Java and Spring Boot domain expertise for layered services, Spring MVC, Spring Security, Bean Validation, JPA repositories, Maven/Gradle builds, JUnit 5, Mockito, integration testing, architecture review, and production hardening. Use for Java implementation, debugging, testing, build resolution, security, and Spring architecture tasks.
-argument-hint: "[frameworks|security|testing|build]"
+description: >-
+  Java and Spring Boot domain expertise for layered services, Spring MVC, Spring Security, Bean Validation, JPA repositories, Maven/Gradle builds, JUnit 5, Mockito, integration testing, architecture review, and production hardening. Use for Java implementation, debugging, testing, build resolution, security, and Spring architecture tasks.
+argument-hint: >-
+  [frameworks|security|testing|build]
 ---
 
 # Java Expert Skill

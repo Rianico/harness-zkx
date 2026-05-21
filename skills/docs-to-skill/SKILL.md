@@ -1,11 +1,13 @@
 ---
 name: docs-to-skill
-description: |
+description: >-
+  |
   Transform scraped documentation into practical, actionable skills with modular structure.
   TRIGGER when: converting docs to skills, creating skill from documentation, generating skill from API docs,
   building skill from scraped docs, "make a skill from these docs", "create skill from documentation",
   "transform docs into skill", documentation to skill conversion.
-argument-hint: "<doc-dir> [--name <skill-name>] [--supplementary <paths-or-urls>]"
+argument-hint: >-
+  <doc-dir> [--name <skill-name>] [--supplementary <paths-or-urls>]
 metadata:
   depends-on: [ai-engineering-expert]
 ---

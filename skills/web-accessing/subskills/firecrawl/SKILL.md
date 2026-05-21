@@ -1,6 +1,7 @@
 ---
 name: firecrawl
-description: |
+description: >-
+  |
   Firecrawl CLI for web search, scraping, crawling, and document parsing. Use for:
   (1) SEARCH - find web pages, articles, news, documentation when you don't have URLs. Triggers on: search for, find me, look up, what's the latest on.
   (2) SCRAPE - extract clean markdown from any URL including JS-rendered SPAs. Triggers on: scrape, grab, fetch, pull, get the page, extract from this URL.
@@ -10,7 +11,8 @@ description: |
   (6) DOWNLOAD - save entire site as local files for offline use. Triggers on: download the site, save as local files, offline copy.
   (7) PARSE - convert local files (PDF, DOCX, XLSX) to markdown. Triggers on: parse this PDF, convert this document, extract text from file.
   Returns LLM-optimized markdown.
-argument-hint: "search <query> | scrape <url> | map <site_url> | crawl <url> | parse <file> | interact --prompt <action> | download <url>"
+argument-hint: >-
+  search <query> | scrape <url> | map <site_url> | crawl <url> | parse <file> | interact --prompt <action> | download <url>
 allowed-tools:
   - Bash($SKILL_DIR/scripts/fcrawl *)
 metadata:

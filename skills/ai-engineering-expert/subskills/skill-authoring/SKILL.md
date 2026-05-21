@@ -1,6 +1,7 @@
 ---
 name: skill-authoring
-description: "Skill design, authoring process (Gather-Draft-Review), taxonomy classification, frontmatter, descriptions, progressive disclosure, parent-skill pattern, and authoring checklists for the LSZ architecture. TRIGGER when creating, writing, or building a new skill; designing skill structure, frontmatter, or descriptions; classifying skill type (orchestration, complex workflow, domain knowledge, action); or improving an existing skill's structure."
+description: >-
+  Skill design, authoring process (Gather-Draft-Review), taxonomy classification, frontmatter, descriptions, progressive disclosure, parent-skill pattern, and authoring checklists for the LSZ architecture. TRIGGER when creating, writing, or building a new skill; designing skill structure, frontmatter, or descriptions; classifying skill type (orchestration, complex workflow, domain knowledge, action); or improving an existing skill's structure.
 metadata:
   managed-by: ai-engineering-expert
 ---

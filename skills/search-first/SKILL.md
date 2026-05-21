@@ -1,6 +1,7 @@
 ---
 name: search-first
-description: "Research-before-coding workflow that searches for existing tools, libraries, packages, and patterns before writing custom code. Use before implementing new features, adding integrations, or choosing dependencies. Searches GitHub, package registries (npm, PyPI, crates.io), and docs via the researcher agent."
+description: >-
+  Research-before-coding workflow that searches for existing tools, libraries, packages, and patterns before writing custom code. Use before implementing new features, adding integrations, or choosing dependencies. Searches GitHub, package registries (npm, PyPI, crates.io), and docs via the researcher agent.
 ---
 
 # /search-first — Research Before You Code

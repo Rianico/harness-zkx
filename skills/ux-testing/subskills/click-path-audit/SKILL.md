@@ -1,8 +1,10 @@
 ---
 name: click-path-audit
-description: Find state cancellation bugs in event handlers that runtime tests won't catch. Detects sequential undo bugs, stale closures, and event handler conflicts. TRIGGER on UI bugs, broken buttons, click not working, state not updating, event handler bugs.
+description: >-
+  Find state cancellation bugs in event handlers that runtime tests won't catch. Detects sequential undo bugs, stale closures, and event handler conflicts. TRIGGER on UI bugs, broken buttons, click not working, state not updating, event handler bugs.
 arguments: scope
-argument-hint: |
+argument-hint: >-
+  |
   <scope> -- component, page, or feature to audit (e.g., "form page", "checkout flow")
 metadata:
   managed-by: ux-testing
