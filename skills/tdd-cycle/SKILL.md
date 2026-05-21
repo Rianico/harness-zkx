@@ -122,18 +122,26 @@ Agent tool (developer):
 **Payload Template (Lightweight Mode):**
 ```text
 Agent tool (developer):
-  description: "Write failing tests and fix enumerated issues"
+  description: "Fix enumerated issues using iterative Vertical Slices"
   skill: tdd-expert
   prompt: |
-    You are the combined RED+GREEN phase agent in lightweight mode. Use the `tdd-expert` skill as the methodology for this phase, especially the smallest-failing-test discipline for RED and the minimum-passing-change discipline for GREEN. Read the issues file at [issues_pointer] to understand what must be fixed. Work in two internal sub-phases. First perform RED: write FAILING unit tests that reproduce the enumerated issues, do NOT implement production code yet, and run the tests via Bash to verify they fail for the right reasons. Save a concise RED summary artifact to [base_dir]/02-failing-tests.md. Then perform GREEN: implement the MINIMAL production code needed to make those tests pass, do not add extra features, and rerun the smallest relevant test target first. All failure analysis, debugging, code edits, and test reruns stay inside this phase agent; do not push failure details back to the orchestrator for diagnosis. Save a concise GREEN summary artifact to [base_dir]/03-green-implementation.md. Also create or update the compact lineage artifact at [lineage_pointer] with separate entries for RED and GREEN, each containing: phase name, invariant checked, result, artifact pointer, and any critical constraints for downstream phases.
+    You are the Phase 2 agent in lightweight mode. Use the `tdd-expert` skill to resolve the issues enumerated at [issues_pointer].
+
+    **CRITICAL MANDATE: VERTICAL SLICING ONLY.**
+    Do NOT write all tests first. For each issue identified:
+    1. **RED**: Write ONE failing test that reproduces the issue.
+    2. **GREEN**: Write the MINIMAL code to fix the issue and pass the test.
+    3. **REFACTOR**: Immediately clean up the code and tests while staying green.
+    Repeat for the next issue.
+
+    All failure analysis, debugging, and micro-refactors stay inside this phase. When the implementation justifies it, run broader test targets to ensure no regressions. Save a concise summary of the fixes to [base_dir]/02-implementation-summary.md. Update the lineage artifact at [lineage_pointer] with entries for each issue resolved.
 
     **Return format per rules/templates/resp-format.md:**
     ## Summary
-    <what tests were written, what issues were fixed, key tradeoffs>
+    <how many issues were fixed, architectural decisions made during the loop, final status>
 
     ## Artifacts
-    - [base_dir]/02-failing-tests.md
-    - [base_dir]/03-green-implementation.md
+    - [base_dir]/02-implementation-summary.md
     - [lineage_pointer]
 
     ## Route
