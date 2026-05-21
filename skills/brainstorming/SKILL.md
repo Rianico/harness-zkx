@@ -229,63 +229,58 @@ For each decision:
 This log should be preserved for documentation.
 
 ---
+### 8. Behavioral Specification (BDD) (Mandatory Before Documentation)
 
-### 8. Design Validation with Examples (Mandatory Before Documentation)
+Before finalizing any design, you MUST present **concrete behavioral specifications** using BDD (Behavior-Driven Development) syntax. This ensures the design is validated through human-readable scenarios that clarify intent better than raw code or abstract diagrams.
 
-Before finalizing any design, you MUST present **concrete, detailed examples** that illustrate how the design behaves in real scenarios.
+#### Required Scenario Types
 
-#### Required Example Types
+Present at least **2-3 scenarios** using the **Given / When / Then** format, covering:
 
-Present at least **2-3 examples** covering:
+1. **Happy Path** - The primary use case working as intended.
+2. **Edge Case** - Boundary conditions, unusual inputs, or scale limits.
+3. **Error Scenario** - How the system behaves when things go wrong.
 
-1. **Happy Path Example** - The primary use case working as intended
-2. **Edge Case Example** - Boundary conditions or unusual inputs
-3. **Error Scenario Example** - How failures are handled
+#### BDD Format
 
-#### Example Format
-
-Each example MUST include:
+Each scenario MUST include:
 
 ```markdown
-**Example: <descriptive name>**
+**Scenario: <descriptive name>**
 
-**Scenario:** <what's happening>
+**Given** <the initial state of the system and context>
+**When** <the user or system performs a specific action>
+**Then** <the observable behavior or result that should occur>
 
-**Input:** <concrete data/command/action>
-
-**System Behavior:** <step-by-step what the design does>
-
-**Output/Result:** <what the user or system receives>
-
-**Design Decisions Demonstrated:** <which decisions this validates>
+**Rationale:** <briefly explain which design decisions this validates>
 ```
 
 #### Confirmation Dialog
 
-After presenting examples, ask for explicit confirmation:
+After presenting BDD scenarios, ask for explicit confirmation:
 
 ```yaml
 Dialog:
-  header: "Example Validation"
-  question: "Do these examples accurately demonstrate the design behavior?"
+  header: "BDD Validation"
+  question: "Do these behavioral scenarios accurately capture the intended design?"
   multipleChoice: false
   options:
     - label: "Confirmed"
-      description: "Examples align with intent, proceed to documentation"
+      description: "Scenarios align with intent, proceed to documentation"
     - label: "Needs adjustment"
-      description: "Examples don't match expected behavior"
-    - label: "Add more examples"
-      description: "Need additional scenarios covered"
+      description: "Scenarios don't match expected behavior"
+    - label: "Add more scenarios"
+      description: "Need additional behaviors covered"
     - label: "Other"
       description: "Provide specific feedback"
 ```
 
-**Do NOT proceed to documentation until examples are confirmed.**
+**Do NOT proceed to documentation until BDD scenarios are confirmed.**
 
-If examples reveal design gaps:
+If scenarios reveal design gaps:
 - Return to step 5 (Explore Design Approaches) or step 6 (Present the Design)
 - Update the design to address gaps
-- Re-present examples with fixes
+- Re-present scenarios with fixes
 
 ---
 
@@ -293,17 +288,18 @@ If examples reveal design gaps:
 
 ### Documentation
 
-Once the design AND examples are validated:
+Once the design AND BDD scenarios are validated:
 
-- Write the final design to a durable, shared format (e.g. Markdown)
+- Write the final design to a durable, shared format (e.g. `design.md`)
 - Include:
   - Understanding summary
   - Assumptions
   - Decision log
   - Final design
-  - Validated examples
+  - Behavioral Specification (BDD)
 
 Persist the document according to the project's standard workflow.
+
 
 ---
 
