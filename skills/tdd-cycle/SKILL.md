@@ -61,9 +61,10 @@ Agent tool (architect):
   prompt: |
     You are the Phase 1 agent. Consume the approved design for: [Feature]. Your goal is to map out a sequence of observable behaviors that will be implemented using TDD.
 
-    1. Identify the **Tracer Bullet**: The single most critical end-to-end behavior that establishes the public interface.
-    2. Sequence remaining behaviors: Order them to build complexity incrementally.
-    3. Define constraints: Note any architectural boundaries or performance targets that downstream phases must honor.
+    1. **BDD Alignment**: Review the **Behavioral Specification (BDD)** in the design. Use the Given/When/Then scenarios as the foundation for your implementation sequence.
+    2. Identify the **Tracer Bullet**: The single most critical end-to-end behavior that establishes the public interface.
+    3. Sequence remaining behaviors: Order them to build complexity incrementally, following the BDD scenarios.
+    4. Define constraints: Note any architectural boundaries or performance targets that downstream phases must honor.
 
     Avoid writing actual test code or detailed test cases here. Focus on defining the *what* and the *order*. Create or update the compact lineage artifact at [lineage_pointer] with: phase name, result (the tracer bullet), and artifact pointer. You MUST use the Write tool to save the sequence map to [base_dir]/01-behavior-sequence.md.
 
