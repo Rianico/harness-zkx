@@ -336,7 +336,7 @@ Dialog:
 If yes:
 1. **Standard Handoff**: Invoke the `handoff` skill to generate the `handoff.md` artifact in the topic root.
 2. **Handoff Pointer**: Provide the absolute path to the handoff document.
-3. **Transition**: Instruct the user to invoke `tdd-cycle` (or relevant implementation skill) using the handoff pointer.
+3. **Transition**: Recommend the next step to the user (e.g., invoking `tdd-cycle` or a relevant implementation skill) using the handoff pointer.
 
 ---
 
