@@ -5,41 +5,50 @@ argument-hint: "[next-phase-description]"
 
 # LSZ Handoff Methodology
 
-You are performing a **Phase Handoff**. Your goal is to compress the current session's complexity into a single **Source of Truth** pointer that a fresh agent can use to resume work with 100% fidelity.
+You are performing a **Phase Handoff**. Your goal is to compress the current session's complexity into a single **Source of Truth** pointer (`handoff.md`) that a fresh agent can use to resume work with 100% fidelity.
 
 ## Mandatory Handoff Schema
 
 The handoff document MUST be stored in the project's standard artifact location:
 `.lsz/{date}/{topic_creation_time}_{short_topic}/handoff.md`
 
-### 1. Executive Summary
+### 1. Executive Summary (LSZ Standard)
+Inherit and refine the `## Summary` sections from the skills executed in this session.
 - **Current Objective**: What were we trying to achieve?
-- **Status**: DONE | IN_PROGRESS | BLOCKED.
-- **Key Outcome**: The single most important result (e.g., "Architecture approved").
+- **Status**: DONE | IN_PROGRESS | BLOCKED (Map from `## Route`).
+- **Key Outcome**: The single most important result.
 
-### 2. Artifact Trail (The Pointers)
-Provide a table of **absolute paths** to all durable artifacts created or modified.
+### 2. Artifact Trail (LSZ Standard)
+Extract all paths from the `## Artifacts` sections of previous responses. Provide a table of **absolute paths**.
 
 | Artifact | Pointer (Absolute Path) | Role |
 | :--- | :--- | :--- |
 | **Design** | `/path/to/design.md` | Primary behavioral spec |
 | **Lineage** | `/path/to/lineage.md` | Audit trail of execution |
-| **Code** | `/path/to/src/` | Implementation root |
+| **Implementation** | `/path/to/summary.md` | Implementation progress |
 
 ### 3. Decisions & Constraints
 - List non-obvious decisions made.
-- Note technical constraints for the next agent (e.g., "Must use Pydantic v2").
+- Note technical constraints for the next agent.
 
-### 4. Next Directive
-- Be explicit: "Invoke `tdd-cycle` with `[handoff_pointer]`".
+### 4. Next Directive (LSZ Standard)
+- Be explicit: "Invoke `tdd-cycle` with `handoff_pointer=[handoff_path]`".
 - Define the success criteria for the next phase.
 
 ## The Handoff Loop
 
-1. **Identify the Topic Root**: Use the LSZ pattern (`.lsz/{date}/{topic}/`).
-2. **Scan the Artifacts**: Gather all pointers generated in this session.
+1. **Identify the Topic Root**: Use the LSZ pattern or the `topic_root` passed by the orchestrator.
+2. **Scan for Artifacts**: Gather all `## Artifacts` returned by skills/agents in the current context.
 3. **Write the Handoff**: Create `handoff.md` in the topic root.
-4. **Final Response**: Return ONLY the absolute path to the handoff document.
+4. **Final Response**:
+   ```markdown
+   ## Summary
+   Handoff generated for [Topic].
+   ## Artifacts
+   - [base_dir]/handoff.md
+   ## Route
+   continue
+   ```
 
 ## Principles
 

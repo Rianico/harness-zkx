@@ -204,17 +204,26 @@ Agent tool (general-purpose):
     Negative: X/Y passing
     Regression: X/Y passing (pass^3: N%)
     Status: READY | FAILED
-    Route: continue | remediate | blocked
-    Issues:
-    - [brief issue 1 summary, ≤10 words each]
-    - [brief issue 2 summary]
-    Issues File: [path to issues.md if remediate, omitted otherwise]
     Definition: [path]
     Log: [path]
     ```
 
-    Return: Brief summary (≤100 words) of what was done, followed by artifact paths.
-    Never paste full artifacts.
+    **Standard Return Format (Mandatory):**
+    ```markdown
+    ## Summary
+    <technical summary of eval results and baseline comparisons>
+
+    ## Artifacts
+    - [eval_dir]/<feature>.md
+    - [eval_dir]/<feature>.log
+    - [eval_dir]/issues.md (if remediate)
+
+    ## Route
+    continue | remediate | blocked
+    Issues:
+    - [brief issue 1, ≤10 words]
+    - [brief issue 2]
+    ```
 ```
 
 ## Definition Template

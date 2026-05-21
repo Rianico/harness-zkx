@@ -27,6 +27,30 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
     - Retry remediation at most twice before stopping. Do NOT proceed to `code-review` until evals pass.
 11. **Final Review Remediation:** When `code-review` is the final phase, invoke it with `orchestrated_final_review=true`. Safe `medium`, `low`, or `minor` findings should be delegated for remediation without asking the user first. Ask for approval only when findings are `blocking`, `high`, security-critical, destructive, risky to fix, or require a product or architecture decision.
 
+## Standard Return Format (The LSZ Contract)
+Every phase execution (whether via Skill or Agent) MUST return a structured response for the orchestrator to parse:
+
+```markdown
+## Summary
+<Carmack-style technical summary of what was done and why>
+
+## Artifacts
+- <absolute/path/to/artifact_1>
+- <absolute/path/to/artifact_2>
+
+## Route
+continue | remediate | blocked
+Issues:
+- <brief issue summary if route is not continue>
+```
+
+## Phase Transitions and Handoffs
+For complex missions where the agent's context may be reset (session end) or where a clean break between "Thinking" and "Doing" is required, the orchestrator MUST invoke the `handoff` skill.
+
+- **Checkpoint Handoff**: After Step 1 (Brainstorming) or Step 3 (Plan), generate a `handoff.md` in the `topic_root`.
+- **Final Handoff**: At the end of the pipeline, generate a final `handoff.md` that serves as the mission summary and index of all durable artifacts.
+- **Pointer Recovery**: If the orchestrator is invoked with a `handoff_pointer`, it MUST read the handoff to recover the `topic_root` and previous state before resuming the pipeline.
+
 Use this prompt shape when injecting domain context:
 
 ```text

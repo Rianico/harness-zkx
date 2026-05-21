@@ -27,6 +27,20 @@ After you have retrieved the expert methodology:
 2. Check for logical bugs, security vulnerabilities (OWASP top 10), and maintainability.
 3. Provide actionable, concise feedback. Do not nitpick unless the code violates explicit domain rules.
 
-## PHASE 3: REPORT DELIVERY
-1. Format your findings into a structured, concise review report.
-2. Return this report to the Orchestrator (Primary Agent). Do not ask for user approval or delegation yourself—the Orchestrator will handle all human interaction and pipeline routing based on your report.
+## PHASE 3: REPORT DELIVERY (MANDATORY CONTRACT)
+Format your findings into a structured response per `rules/templates/resp-format.md`:
+
+```markdown
+## Summary
+<Carmack-style technical summary of findings, security status, and maintainability review.>
+
+## Artifacts
+- <absolute/path/to/review_report.md>
+
+## Route
+continue | remediate | blocked
+Issues:
+- <brief summary of critical/blocking issues>
+```
+
+**No Fluff**: No sycophantic openers or closing filler. Be concise but thorough in reasoning.
