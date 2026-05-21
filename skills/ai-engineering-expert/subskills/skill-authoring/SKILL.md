@@ -43,7 +43,12 @@ Ask the user about:
 Create the skill following LSZ conventions:
 
 1. **Directory structure** -- `skills/<name>/SKILL.md` plus `references/` and `scripts/` as needed
-2. **Frontmatter** -- `name` (matches directory), `description` (third-person, what + when, trigger vocabulary), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies
+2. **Frontmatter** -- `name` (matches directory), `description` (third-person, what + when, trigger vocabulary), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies.
+   - **CRITICAL: YAML Formatting** -- Always use YAML block scalars (`>-` or `|`) for `description` and `argument-hint` to prevent parsing errors caused by unquoted colons, special characters, or multi-line text.
+     ```yaml
+     description: >-
+       Expert methodology for X. TRIGGER when...
+     ```
 3. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`
 4. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
 5. **Scripts** -- Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally, don't punt to the LLM
@@ -75,7 +80,7 @@ Then ask the user:
 ## Required Frontmatter
 
 - `name`: **Required** -- must match directory name (lowercase, hyphens, max 64 chars)
-- `description`: **Required** -- what + when, third-person, trigger vocabulary
+- `description`: **Required** -- what + when, third-person, trigger vocabulary. Use `>-` block scalar.
 
 **CRITICAL: Description Triggers Discovery**
 The `description` field is the **only way Claude discovers skills**. A skill that cannot be found cannot be used. Every time you add a new capability (hooks, MCP servers, testing patterns), you MUST update the description with:
@@ -86,7 +91,7 @@ The `description` field is the **only way Claude discovers skills**. A skill tha
 If it's not in the description, the skill will not trigger.
 
 **Key Optional Fields**
-- `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
+- `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line using the `|` or `>-` block scalar: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
 - `allowed-tools`: Tool allowlist without permission prompts
 - `user-invocable`: Show in `/` menu (default: `true`). Set `false` for internal skills accessed only through routing commands.
 - `disable-model-invocation`: Prevents the `Skill` tool from invoking the skill entirely (default: `false`). Do NOT use for skills accessed through routing commands -- it blocks both automatic loading AND explicit invocation.
@@ -137,8 +142,10 @@ Before publishing a skill:
 
 **Structure**
 - [ ] Frontmatter includes `name` and `description` (both required)
+- [ ] `description` and `argument-hint` use YAML block scalars (`>-` or `|`)
 - [ ] `argument-hint` present if skill accepts arguments
 - [ ] `user-invocable: false` set for internal skills accessed only through routing commands (do NOT use `disable-model-invocation` -- it blocks the `Skill` tool)
+- [ ] All `depends-on` entries validated via `uv run $SKILL_DIR/scripts/validate-deps.py`
 - [ ] Gotchas section for non-obvious environment facts
 - [ ] Templates/checklists for multi-step workflows
 - [ ] Validation loops for quality-critical tasks
