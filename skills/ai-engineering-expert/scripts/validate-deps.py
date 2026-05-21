@@ -43,7 +43,6 @@ def scan_skills(root_dir):
                     
             except Exception:
                 # Store the path even if it fails to parse, so we can lint/fix it
-                # We'll try a raw read to get the name if possible
                 try:
                     content = skill_file.read_text()
                     match = re.search(r"^name:\s*(.*)$", content, re.MULTILINE)
@@ -92,42 +91,45 @@ def check_all_dependencies(skill_map):
         print("All dependencies validated successfully.")
     return found_errors
 
-def list_callers(target_skill, skill_map, dependency_graph):
-    callers = dependency_graph.get(target_skill, [])
-    if not callers:
-        print(f"No inbound dependencies found for skill: {target_skill}")
-    else:
-        print(f"Inbound dependencies (callers) for '{target_skill}':")
-        for caller in sorted(callers):
-            location = skill_map.get(caller, "Unknown location")
-            print(f"  - {caller} ({location})")
-
-def list_deps(target_skill, skill_map):
+def show_related(target_skill, skill_map, dependency_graph):
     location = skill_map.get(target_skill)
     if not location:
         print(f"Error: Skill '{target_skill}' not found.")
         return
-    
-    if location == "skills-lock.json":
-        print(f"Skill '{target_skill}' is managed by skills-lock.json (no local frontmatter).")
-        return
 
-    try:
-        post = frontmatter.load(location)
-        metadata = post.get('metadata', {})
-        dependencies = metadata.get('depends-on', [])
-        if isinstance(dependencies, str):
-            dependencies = [dependencies]
-        
-        if not dependencies:
-            print(f"Skill '{target_skill}' has no outbound dependencies.")
-        else:
-            print(f"Outbound dependencies for '{target_skill}':")
-            for dep in sorted(dependencies):
-                status = " (Found)" if dep in skill_map else " (MISSING)"
-                print(f"  - {dep}{status}")
-    except Exception as e:
-        print(f"Error parsing '{target_skill}': {e}")
+    print(f"--- Skill: {target_skill} ---")
+    print(f"Location: {location}")
+    
+    # 1. Outbound Dependencies (What it depends on)
+    print("\nOutbound Dependencies (depends-on):")
+    if location == "skills-lock.json":
+        print("  (Managed by skills-lock.json, outbound deps not visible)")
+    else:
+        try:
+            post = frontmatter.load(location)
+            metadata = post.get('metadata', {})
+            dependencies = metadata.get('depends-on', [])
+            if isinstance(dependencies, str):
+                dependencies = [dependencies]
+            
+            if not dependencies:
+                print("  (None)")
+            else:
+                for dep in sorted(dependencies):
+                    status = " [OK]" if dep in skill_map else " [MISSING]"
+                    print(f"  -> {dep}{status}")
+        except Exception as e:
+            print(f"  Error parsing outbound deps: {e}")
+
+    # 2. Inbound Dependencies (What depends on it)
+    print("\nInbound Dependencies (callers):")
+    callers = dependency_graph.get(target_skill, [])
+    if not callers:
+        print("  (None)")
+    else:
+        for caller in sorted(callers):
+            caller_loc = skill_map.get(caller, "Unknown location")
+            print(f"  <- {caller} ({caller_loc})")
 
 def lint_skills(skill_map):
     print("Linting skill frontmatter...")
@@ -157,7 +159,6 @@ def lint_skills(skill_map):
                 fm_text = match.group(1)
                 for field in ['description', 'argument-hint']:
                     if f"{field}:" in fm_text and not re.search(rf"^{field}:\s*[|>]-?", fm_text, re.MULTILINE):
-                        # Only warn if it contains colons or is long
                         val = str(post.get(field, ""))
                         if ":" in val or len(val) > 80:
                             print(f"LINT WARN: {location} - Field '{field}' should use YAML block scalar (|> or >-)")
@@ -182,17 +183,14 @@ def fix_skills(skill_map):
             if not match: continue
             
             fm_text = match.group(1)
-            # Use raw regex to fix without breaking existing formatting
             lines = fm_text.splitlines()
             new_lines = []
             changed = False
             
-            # Simple line-by-line fix for unquoted colons
             for line in lines:
                 if line.startswith(("description:", "argument-hint:")) and not re.search(r":\s*[|>]-?", line):
                     key, val = line.split(":", 1)
                     val = val.strip()
-                    # Clean existing quotes if they are messy
                     if (val.startswith("\"") and val.endswith("\"")) or (val.startswith("'") and val.endswith("'")):
                         val = val[1:-1]
                     val = val.replace("\\\"", "\"").replace("\\'", "'")
@@ -222,13 +220,9 @@ def main():
     # check
     subparsers.add_parser("check", help="Validate all skill dependencies")
     
-    # callers
-    parser_callers = subparsers.add_parser("callers", help="List inbound dependencies for a skill")
-    parser_callers.add_argument("skill", help="Target skill name")
-    
-    # deps
-    parser_deps = subparsers.add_parser("deps", help="List outbound dependencies for a skill")
-    parser_deps.add_argument("skill", help="Target skill name")
+    # related
+    parser_related = subparsers.add_parser("related", help="Show inbound and outbound dependencies for a skill")
+    parser_related.add_argument("skill", help="Target skill name")
     
     # lint
     subparsers.add_parser("lint", help="Check skill frontmatter for quality")
@@ -245,10 +239,8 @@ def main():
 
     if args.command == "check":
         sys.exit(1 if check_all_dependencies(skill_map) else 0)
-    elif args.command == "callers":
-        list_callers(args.skill, skill_map, dependency_graph)
-    elif args.command == "deps":
-        list_deps(args.skill, skill_map)
+    elif args.command == "related":
+        show_related(args.skill, skill_map, dependency_graph)
     elif args.command == "lint":
         sys.exit(1 if lint_skills(skill_map) else 0)
     elif args.command == "fix":

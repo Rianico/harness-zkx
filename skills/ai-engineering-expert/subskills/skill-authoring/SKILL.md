@@ -145,7 +145,7 @@ Before publishing a skill:
 - [ ] `description` and `argument-hint` use YAML block scalars (`>-` or `|`)
 - [ ] `argument-hint` present if skill accepts arguments
 - [ ] `user-invocable: false` set for internal skills accessed only through routing commands (do NOT use `disable-model-invocation` -- it blocks the `Skill` tool)
-- [ ] All `depends-on` entries validated via `uv run $SKILL_DIR/scripts/validate-deps.py`
+- [ ] All `depends-on` entries validated via `uv run $SKILL_DIR/scripts/validate-deps.py check`
 - [ ] Gotchas section for non-obvious environment facts
 - [ ] Templates/checklists for multi-step workflows
 - [ ] Validation loops for quality-critical tasks
@@ -173,10 +173,10 @@ metadata:
 - Sub-skills declare their own `depends-on` independently
 - Add `depends-on` when a skill must load/invoke another skill, read its resources, consume its artifacts, or rely on its output contract
 - Keep optional alternatives, related reading, examples, and background mentions in prose, not `depends-on`
-- Before renaming, moving, merging, or deleting a skill, run `uv run $SKILL_DIR/scripts/validate-deps.py callers <skill-name>` and update every listed dependent skill first
+- Before renaming, moving, merging, or deleting a skill, run `uv run $SKILL_DIR/scripts/validate-deps.py related <skill-name>` and update every listed dependent skill first
 - After dependency edits or skill renames, run validation to catch stale references
 
-**Validation:** Run `uv run $SKILL_DIR/scripts/validate-deps.py` from the project root to check all `depends-on` entries against the skill registry. Use `uv run $SKILL_DIR/scripts/validate-deps.py callers <skill-name>` to list inbound callers before renaming, moving, merging, or deleting a skill. Use `--fix` to interactively resolve stale references after renames.
+**Validation:** Run `uv run $SKILL_DIR/scripts/validate-deps.py check` from the project root to check all `depends-on` entries against the skill registry. Use `uv run $SKILL_DIR/scripts/validate-deps.py related <skill-name>` to list both inbound and outbound dependencies before refactoring. Use `fix` to automatically resolve common frontmatter issues.
 
 ### `author` and `version` (Attribution)
 
