@@ -3,7 +3,7 @@ name: architect
 description: >-
   Expert methodology for software architecture and system design. TRIGGER when planning new features, refactoring systems, or making architectural decisions.
 metadata:
-  depends-on: [architecture-decision-records, architecture-expert]
+  depends-on: [adr, architecture-expert]
 ---
 
 # Architect Skill
@@ -17,4 +17,4 @@ Expert methodology for software architecture.
 - Rejected alternatives
 
 ## Methodology
-Use the `architecture-expert` skill for deep design principles and `architecture-decision-records` for recording decisions.
+Use the `architecture-expert` skill for deep design principles and `adr` for recording decisions.

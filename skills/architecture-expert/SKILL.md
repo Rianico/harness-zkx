@@ -152,7 +152,7 @@ When used by an architecture workflow:
 - tie lens-specific concerns back to system boundaries, invariants, and risks
 
 This skill should NOT:
-- replace ADR-writing methodology already owned by `architecture-decision-records`
+- replace ADR-writing methodology already owned by `adr`
 - define workflow sequencing
 - define artifact locations
 - turn architecture work into a style imitation exercise
