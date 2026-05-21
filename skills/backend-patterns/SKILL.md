@@ -1,6 +1,6 @@
 ---
 name: backend-patterns
-description: Backend architecture and API design patterns for REST/GraphQL APIs, database optimization, caching, authentication, and server-side development. TRIGGER on API design, endpoint structure, status codes, pagination, filtering, versioning, repository/service layers, N+1 queries, caching strategies, background jobs, rate limiting, middleware, or authentication/authorization.
+description: Backend architecture and API design patterns for REST/GraphQL APIs, database optimization, caching, authentication, and server-side development. TRIGGER on API design, endpoint structure, status codes, pagination, filtering, versioning, repository/service layers, N+1 queries, caching strategies, background jobs, rate limiting, middleware, or authentication/authorization. Also trigger on: REST API, GraphQL schema, endpoint, route, controller, DTO, serializer, HTTP status, 401, 403, 404, 500, database query, SQL, index, migration, transaction, Redis, cache, queue, worker, job, JWT, token, OAuth, session, middleware, CORS, rate limit, throttle.
 
 ---
 

@@ -208,6 +208,21 @@ For detailed patterns and complete API documentation, read:
 
 For edge cases and complete API surface not covered above, read the raw docs at `$SKILL_DIR/references/ratatui-raw/`.
 
+## Trigger Examples
+
+Activate this skill when you see any of these patterns:
+
+- "Build a terminal UI" / "Create a TUI app"
+- "ratatui hello world" / "ratatui app structure"
+- "Terminal dashboard" / "CLI interface with widgets"
+- "Layout for terminal app" / "Split terminal screen"
+- "Terminal progress bar" / "Text-based UI"
+- "Rust TUI" / "crossterm event loop"
+- "Widget rendering" / "Frame drawing"
+- Questions about ratatui widgets: List, Table, Gauge, Chart, Block, Paragraph
+- Implementing keyboard input handling in terminal
+- Terminal restoration and cleanup patterns
+
 ## When Writing Code
 
 1. Use `ratatui::run()` for simple apps - handles init/restore automatically

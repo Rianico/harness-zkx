@@ -256,4 +256,4 @@ Before delivering or posting:
 
 ## Related Skills
 
-- `x-api` — X/Twitter API integration
+- `write-article` — Long-form content creation for articles and guides
