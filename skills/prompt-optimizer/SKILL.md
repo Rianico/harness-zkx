@@ -1,7 +1,6 @@
 ---
 name: prompt-optimizer
 description: >-
-  >-
   Analyze raw prompts, identify intent and gaps, match LSZ components
   (skills/commands/agents/hooks), and output a ready-to-paste optimized
   prompt. Advisory role only — never executes the task itself.

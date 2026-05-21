@@ -3,8 +3,7 @@ name: e2e-workflow
 description: >-
   Build maintainable E2E test infrastructure with Page Object Model, locator strategies, and flakiness quarantine. TRIGGER on E2E testing, Playwright setup, test infrastructure, POM, locator strategy, flaky tests.
 arguments: feature
-argument-hint: >-
-  |
+argument-hint: |
   <feature> -- feature or page to build E2E tests for (e.g., "login flow", "checkout")
 metadata:
   managed-by: ux-testing

@@ -3,8 +3,7 @@ name: e2e-workflow
 description: >-
   Language-agnostic End-to-End Testing methodology. Enforces Page Object Model (POM), stable locator strategies, auto-waiting, artifact capture, and flaky test quarantine.
 arguments: feature
-argument-hint: >-
-  |
+argument-hint: |
   <feature> -- feature or user journey to test (e.g., "login flow", "checkout")
 user-invocable: false
 disable-model-invocation: true

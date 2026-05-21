@@ -3,8 +3,7 @@ name: browser-qa
 description: >-
   Automates browser-based QA and post-deploy monitoring. Use for pre-deploy verification, ad-hoc testing, and sustained monitoring after deploys, merges, or dependency upgrades.
 arguments: mode target
-argument-hint: >-
-  |
+argument-hint: |
   [--once] -- single-pass ad-hoc QA check (default)
   [--watch] -- sustained post-deploy monitoring with alert thresholds
   [--compare <staging> <prod>] -- diff mode comparing environments

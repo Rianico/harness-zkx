@@ -191,12 +191,25 @@ def fix_skills(skill_map):
                 if line.startswith(("description:", "argument-hint:")) and not re.search(r":\s*[|>]-?", line):
                     key, val = line.split(":", 1)
                     val = val.strip()
+
+                    # Skip if value is just a block scalar indicator (| or >)
+                    # This means content is on subsequent lines
+                    if val in ("|", ">", "|-", ">-", "|+", ">+"):
+                        continue
+
+                    # Unquote if wrapped in quotes
                     if (val.startswith("\"") and val.endswith("\"")) or (val.startswith("'") and val.endswith("'")):
                         val = val[1:-1]
                     val = val.replace("\\\"", "\"").replace("\\'", "'")
-                    
-                    new_lines.append(f"{key}: >-")
-                    new_lines.append(f"  {val}")
+
+                    # Use literal block scalar (|) if content has newlines, folded (>-) otherwise
+                    if "\n" in val:
+                        new_lines.append(f"{key}: |")
+                        for vline in val.split("\n"):
+                            new_lines.append(f"  {vline}")
+                    else:
+                        new_lines.append(f"{key}: >-")
+                        new_lines.append(f"  {val}")
                     changed = True
                 else:
                     new_lines.append(line)
