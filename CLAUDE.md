@@ -57,11 +57,11 @@ Generic agents executing workflows should not waste tokens doing their own domai
 * **Skill-Oriented Orchestration**: When orchestrating complex, multi-step DAGs, prefer orchestrating skills rather than stringing bare agents together. Invoke agents directly only when a skill's execution contract explicitly calls for it.
 
 ## 3.2 Phase Transitions and Handoffs
-For complex missions, transitions between major phases (e.g., Design to Implementation) MUST be handled via the **Standard LSZ Handoff** methodology.
+For complex missions, transitions between major phases (e.g., Design to Implementation) should be used to preserve **intent, reasoning, and context**.
 
-- **The Handoff Skill**: Use the `handoff` skill to generate a durable state artifact.
-- **Pointer-Based Continuity**: Downstream phases MUST read the handoff artifact to initialize their state, ensuring context efficiency and avoiding "Hero Mode" halluncinations about previous chat history.
-- **Artifact Trail Hygiene**: The handoff document is the canonical index of all relevant pointers (`design.md`, `lineage.md`, etc.).
+- **The Handoff Methodology**: Use the `handoff` skill to capture *why* decisions were made and *what* the user truly cares about.
+- **Intent Preservation**: The handoff serves as the "Goal and Reason" bridge, ensuring subsequent agents understand the human context of the work.
+- **Pointer Continuity**: Use the handoff document as the index for durable artifacts (`design.md`, `lineage.md`, etc.) to keep the context window efficient.
 
 ## 4. Hook Design Philosophy
 

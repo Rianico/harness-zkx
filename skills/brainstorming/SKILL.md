@@ -338,9 +338,10 @@ Dialog:
 ```
 
 If yes:
-1. **Standard Handoff**: Invoke the `handoff` skill to generate the `handoff.md` artifact in the topic root.
-2. **Handoff Pointer**: Provide the absolute path to the handoff document.
-3. **Transition**: Recommend the next step to the user (e.g., invoking `tdd-cycle` or a relevant implementation skill) using the handoff pointer.
+1. **Handoff Intent**: Invoke the `handoff` skill to summarize the decisions, designs, and user intent. This ensures the next agent understands the "why" behind the design.
+2. **Handoff Document**: Provide the path to the `handoff.md` artifact.
+3. **Transition**: Suggest the next implementation step (e.g., `tdd-cycle`) using the design and handoff as context.
+
 
 ---
 
