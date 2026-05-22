@@ -338,9 +338,9 @@ Dialog:
 ```
 
 If yes:
-1. **Handoff Intent**: Invoke the `handoff` skill to summarize the decisions, designs, and user intent. This ensures the next agent understands the "why" behind the design.
-2. **Handoff Document**: Provide the path to the `handoff.md` artifact.
-3. **Transition**: Suggest the next implementation step (e.g., `tdd-cycle`) using the design and handoff as context.
+1. **Handoff Intent**: Invoke the `handoff` skill with `artifacts=[topic_root]/design.md` to distill the decisions, designs, and user intent.
+2. **Handoff Document**: Provide the path to the `handoff.md` artifact. This document acts as the high-signal bridge, potentially displacing the need for the next agent to immediately re-read the full `design.md`.
+3. **Transition**: Suggest the next implementation step (e.g., `tdd-cycle`) using the handoff pointer.
 
 
 ---

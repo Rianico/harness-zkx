@@ -1,48 +1,50 @@
 name: handoff
-description: "Handoff the decisions, designs, and user intent so subsequent agents understand the goals, reasoning, and context of the work. Ensures that the 'why' behind the design is preserved alongside the technical pointers."
-argument-hint: "[intent-or-goal-description]"
+description: "Handoff the decisions, designs, and user intent. Acts as a context aggregator that distills 'Goal', 'Reason', and 'Intent' from the current session and provided artifacts to ensure subsequent agents understand the human context without re-reading full specs or chat history."
+argument-hint: "[intent-or-goal-description] [artifacts=path1,path2]"
 ---
 
 # LSZ Handoff Methodology
 
-You are performing a **Phase Handoff**. Your goal is to capture the **Goal, Reason, and Intent** of the current session so that the next agent doesn't just see *what* was done, but understands *why* it was done and what the user is trying to achieve.
+You are performing a **Phase Handoff**. Your goal is to capture the **Goal, Reason, and Intent** of the current session. The resulting `handoff.md` is a **Context Aggregator** that should be high-signal enough to stand in for the full documents or chat history during the initial context load of the next phase.
 
 ## Mandatory Handoff Schema
 
-The handoff document MUST be stored in: `.lsz/{date}/{topic}/handoff.md`
+The handoff document MUST be stored in the project's standard artifact location:
+`.lsz/{date}/{topic}/handoff.md`
 
 ### 1. Goal & Reason (The "Why")
-- **Primary Goal**: What is the ultimate objective of this feature or fix?
-- **User Intent**: What specific concerns or requirements did the user emphasize?
-- **Core Reasoning**: Why was this specific architectural path or design chosen?
+- **Primary Goal**: The ultimate objective.
+- **User Intent**: Specific concerns or requirements the user emphasized.
+- **Core Reasoning**: Why this specific path was chosen.
 
-### 2. Decisions & Concerns
-- **Key Decisions**: List the "hard-to-reverse" choices made in this session.
-- **Constraints**: What are we specifically avoiding or respecting?
-- **Open Questions**: What still needs to be clarified with the user?
+### 2. Distilled Context (The "What")
+If `artifacts` were provided, read them and extract:
+- **Key Decisions**: The "hard-to-reverse" choices from the design/plan.
+- **Behavioral Summary**: A high-level summary of the BDD scenarios or implemented behaviors.
+- **Constraints/Blockers**: Essential technical boundaries or unresolved issues.
 
-### 3. Artifact Trail (The "Evidence")
-Provide a table of **absolute paths** to the durable artifacts that represent the "What."
+### 3. Artifact Trail (The Pointers)
+Provide a table of **absolute paths** to the durable artifacts for deep reference.
 
 | Artifact | Pointer (Absolute Path) | Role |
 | :--- | :--- | :--- |
-| **Design/Spec** | `/path/to/design.md` | Decisions & Behavioral specs |
-| **Lineage** | `/path/to/lineage.md` | Audit trail of execution |
+| **Design/Spec** | `/path/to/design.md` | Full source of truth |
+| **Implementation** | `/path/to/...` | Implementation summary |
 
 ### 4. Next Directive
-- **Success Criteria**: What does "done" look like for the next phase?
-- **Suggested Next Step**: "Invoke [Skill] with `handoff_pointer=[path]` to continue [Task]."
+- **Success Criteria**: What does "done" look like for the next agent?
+- **Suggested Action**: e.g., "Invoke `eval-gate` with `handoff_pointer=[path]`".
 
 ## The Handoff Loop
 
-1. **Synthesize Intent**: Review the conversation to identify the user's primary concerns and the reasoning behind the current design.
-2. **Collect Pointers**: Gather all relevant artifacts (`design.md`, implementation summaries, etc.).
-3. **Write the Handoff**: Create a narrative-driven `handoff.md` that bridges the gap between the design and implementation.
-4. **Final Response**: Return a standard LSZ response with the summary and the path to the handoff document.
-
+1. **Identify the Topic Root**: Use the LSZ pattern `.lsz/{date}/{topic}/`.
+2. **Scan Artifacts**: If `artifacts=` is provided, use `Read` to extract the "Why" and "Critical Decisions" from them.
+3. **Synthesize Intent**: Review the current session to capture the user's explicit preferences and reasoning.
+4. **Write the Handoff**: Create `handoff.md` in the topic root.
+5. **Final Response**: Return a standard LSZ response with the summary and the path to the handoff document.
 
 ## Principles
 
-- **Pointer Passing Only**: Never embed the content of a 500-line design in the handoff. Pass the path.
-- **Carmack Signal**: High technical signal, low filler.
-- **Context Hygiene**: The handoff should allow the next agent to IGNORE the previous chat history.
+- **Context Displacement**: Aim to make the `handoff.md` the *only* thing the next agent needs to read to understand the mission's intent.
+- **Pointer-Based Handoff**: Always pass absolute paths to the full files; never embed 500-line specs in the handoff.
+- **Carmack Signal**: Technical depth, zero fluff.

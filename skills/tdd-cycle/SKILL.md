@@ -190,11 +190,9 @@ Agent tool (developer):
 **Transition Rules (Post-Execution):**
 1. Parse subagent response, extract artifact paths from `## Artifacts` section.
 2. If `Route: blocked`, stop and surface issues to user.
-3. If `Route: continue`, output a final summary to the user listing all the pointers:
-   - Lineage: `[lineage_pointer]`
-   - Sequence Map: `[sequence_pointer]`
-   - Implementation: `[implementation_pointer]`
-   - Verification: `[verification_pointer]`
+3. If `Route: continue`:
+   - **Mission Handoff**: Invoke the `handoff` skill with `artifacts=[design_pointer],[implementation_pointer],[verification_pointer]` to aggregate the final mission state.
+   - **Final Summary**: Output the final summary listing all pointers, with the `handoff_pointer` as the primary bridge for any subsequent documentation or review phases.
 4. Terminate the workflow.
 
 ---
