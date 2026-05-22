@@ -147,7 +147,7 @@ Agent tool (general-purpose):
     - `define`: Read source docs, extract observable criteria, write definition with scripts for each criterion. Then verify scripts run and capture baseline by running each script. Write `baseline.json` to eval dir. Return baseline summary table.
     - `check`: Run each criterion's script, parse JSON output, append results to log, return status with routing.
     - `quick`: Run 6 standard quality phases (Build, Types, Lint, Tests, Security, Diff) without formal definition. Return compact PASS/FAIL per phase.
-    - `report`: Read definition and log, write report, return recommendation.
+    - `report`: Read definition and log, write report, return recommendation. If this is the final report for the phase, invoke the `handoff` skill with `artifacts=[report_path]` to distill the readiness status and any residual issues.
     - `list`: Summarize definitions and statuses.
     - `clean`: Remove old logs, keep last 10 runs.
 

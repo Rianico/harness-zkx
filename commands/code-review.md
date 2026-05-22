@@ -88,7 +88,9 @@ Options:
 ---
 
 4. **Handle User Response:**
-- If **Approve & Continue**: Output a final summary with the `[review_pointer]` and terminate the workflow.
+- If **Approve & Continue**: 
+    1. **Mission Handoff**: Invoke the `handoff` skill with `artifacts=[review_pointer]` to aggregate the final review findings and readiness status.
+    2. Output a final summary with the `handoff_pointer` and the `[review_pointer]`, then terminate the workflow.
 - If **Delegate Fixes**: Delegate implementation of the findings to the Phase 2 remediation agent using the `[review_pointer]`, without treating `/code-review` itself as an internal TDD verification pass.
 - If **Manual Fix**: Wait for the user to make changes, then they can re-run the review.
 

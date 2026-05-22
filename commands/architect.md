@@ -121,7 +121,9 @@ Options:
 ---
 
 3. **Handle User Response:**
-- If **Approve Design**: Output a final summary with `[adr_pointer]`, `[blueprint_pointer]`, `[technical_standards_pointer]`, and their workflow-local symlinks, then terminate the workflow.
+- If **Approve Design**:
+    1. **Mission Handoff**: Invoke the `handoff` skill with `artifacts=[adr_pointer],[blueprint_pointer],[technical_standards_pointer]` to distill architectural intent and decisions.
+    2. **Final Summary**: Output a final summary with the `handoff_pointer` and all canonical pointers, then terminate the workflow.
 - If **Modify Design**: Ask the user what they want to change via standard chat. Once they reply, invoke a **NEW** `architect` agent (do NOT resume the old one) using the payload from Phase 1, but explicitly pass all artifact pointers and symlink pointers plus the user's feedback in the prompt so the new agent can iterate on the architecture artifacts and replace symlink targets if needed. Then return to CHECKPOINT 1.
 - If **Reject & Exit**: Acknowledge the rejection and exit the workflow.
 

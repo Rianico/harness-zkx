@@ -64,4 +64,5 @@ Agent tool (planner):
 
 **Transition Rules (Post-Execution):**
 1. Wait for Phase 1 to complete and extract the file pointer (`[plan_pointer]`).
-2. Output a final summary with the `[plan_pointer]` and terminate the workflow.
+2. **Mission Handoff**: Invoke the `handoff` skill with `artifacts=[plan_pointer]` to distill the implementation intent and sequencing.
+3. Output a final summary with the `handoff_pointer` and `[plan_pointer]`, then terminate the workflow.
