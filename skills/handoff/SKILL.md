@@ -1,54 +1,45 @@
 name: handoff
-description: "Standard LSZ Handoff methodology. Compacts current session state, decision logs, and artifact pointers into a durable handoff document stored in .lsz/ for the next agent or phase transition."
-argument-hint: "[next-phase-description]"
+description: "Handoff the decisions, designs, and user intent so subsequent agents understand the goals, reasoning, and context of the work. Ensures that the 'why' behind the design is preserved alongside the technical pointers."
+argument-hint: "[intent-or-goal-description]"
 ---
 
 # LSZ Handoff Methodology
 
-You are performing a **Phase Handoff**. Your goal is to compress the current session's complexity into a single **Source of Truth** pointer (`handoff.md`) that a fresh agent can use to resume work with 100% fidelity.
+You are performing a **Phase Handoff**. Your goal is to capture the **Goal, Reason, and Intent** of the current session so that the next agent doesn't just see *what* was done, but understands *why* it was done and what the user is trying to achieve.
 
 ## Mandatory Handoff Schema
 
-The handoff document MUST be stored in the project's standard artifact location:
-`.lsz/{date}/{topic_creation_time}_{short_topic}/handoff.md`
+The handoff document MUST be stored in: `.lsz/{date}/{topic}/handoff.md`
 
-### 1. Executive Summary (LSZ Standard)
-Inherit and refine the `## Summary` sections from the skills executed in this session.
-- **Current Objective**: What were we trying to achieve?
-- **Status**: DONE | IN_PROGRESS | BLOCKED (Map from `## Route`).
-- **Key Outcome**: The single most important result.
+### 1. Goal & Reason (The "Why")
+- **Primary Goal**: What is the ultimate objective of this feature or fix?
+- **User Intent**: What specific concerns or requirements did the user emphasize?
+- **Core Reasoning**: Why was this specific architectural path or design chosen?
 
-### 2. Artifact Trail (LSZ Standard)
-Extract all paths from the `## Artifacts` sections of previous responses. Provide a table of **absolute paths**.
+### 2. Decisions & Concerns
+- **Key Decisions**: List the "hard-to-reverse" choices made in this session.
+- **Constraints**: What are we specifically avoiding or respecting?
+- **Open Questions**: What still needs to be clarified with the user?
+
+### 3. Artifact Trail (The "Evidence")
+Provide a table of **absolute paths** to the durable artifacts that represent the "What."
 
 | Artifact | Pointer (Absolute Path) | Role |
 | :--- | :--- | :--- |
-| **Design** | `/path/to/design.md` | Primary behavioral spec |
+| **Design/Spec** | `/path/to/design.md` | Decisions & Behavioral specs |
 | **Lineage** | `/path/to/lineage.md` | Audit trail of execution |
-| **Implementation** | `/path/to/summary.md` | Implementation progress |
 
-### 3. Decisions & Constraints
-- List non-obvious decisions made.
-- Note technical constraints for the next agent.
-
-### 4. Next Recommendation (LSZ Standard)
-- Suggest the next logical step: "Recommendation: Invoke the [Next Skill] (e.g., `architect`, `tdd-cycle`, `update-docs`) with `handoff_pointer=[handoff_path]`".
-- Define the specific success criteria for the next agent to meet.
+### 4. Next Directive
+- **Success Criteria**: What does "done" look like for the next phase?
+- **Suggested Next Step**: "Invoke [Skill] with `handoff_pointer=[path]` to continue [Task]."
 
 ## The Handoff Loop
 
-1. **Identify the Topic Root**: Use the LSZ pattern or the `topic_root` passed by the orchestrator.
-2. **Scan for Artifacts**: Gather all `## Artifacts` returned by skills/agents in the current context.
-3. **Write the Handoff**: Create `handoff.md` in the topic root.
-4. **Final Response**:
-   ```markdown
-   ## Summary
-   Handoff generated for [Topic].
-   ## Artifacts
-   - [base_dir]/handoff.md
-   ## Route
-   continue
-   ```
+1. **Synthesize Intent**: Review the conversation to identify the user's primary concerns and the reasoning behind the current design.
+2. **Collect Pointers**: Gather all relevant artifacts (`design.md`, implementation summaries, etc.).
+3. **Write the Handoff**: Create a narrative-driven `handoff.md` that bridges the gap between the design and implementation.
+4. **Final Response**: Return a standard LSZ response with the summary and the path to the handoff document.
+
 
 ## Principles
 
