@@ -9,8 +9,11 @@ You are performing a **Phase Handoff**. Your goal is to capture the **Goal, Reas
 
 ## Mandatory Handoff Schema
 
-The handoff document MUST be stored in the project's standard artifact location:
-`.lsz/{date}/{topic}/handoff.md`
+The handoff document MUST be stored in the current phase's artifact location:
+`[artifact_dir]/handoff.md`
+
+- **Context Placement**: If `artifact_dir` is not explicitly provided, default to the topic root: `.lsz/{date}/{topic}/handoff.md`.
+- **Conflict Prevention**: In multi-phase missions, each phase (e.g., `brainstorming`, `tdd`, `review`) should have its own `handoff.md` within its respective subdirectory to preserve the audit trail and prevent overwrites.
 
 ### 1. Goal & Reason (The "Why")
 - **Primary Goal**: The ultimate objective.

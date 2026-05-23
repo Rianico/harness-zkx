@@ -50,8 +50,8 @@ Issues:
 ## Phase Transitions and Handoffs
 For complex missions where the agent's context may be reset (session end) or where a clean break between "Thinking" and "Doing" is required, the orchestrator MUST invoke the `handoff` skill.
 
-- **Checkpoint Handoff**: After Step 1 (Brainstorming) or Step 3 (Plan), generate a `handoff.md` in the `topic_root`.
-- **Final Handoff**: At the end of the pipeline, generate a final `handoff.md` that serves as the mission summary and index of all durable artifacts.
+- **Checkpoint Handoff**: After Step 1 (Brainstorming) or Step 3 (Plan), generate a `handoff.md` in the current phase's artifact directory (e.g., `[topic_root]/brainstorming/handoff.md`).
+- **Final Handoff**: At the end of the pipeline, generate a final `handoff.md` in the `review/` or `mission/` directory that serves as the summary and index of all durable artifacts.
 - **Pointer Recovery**: If the orchestrator is invoked with a `handoff_pointer`, it MUST read the handoff to recover the `topic_root` and previous state before resuming the pipeline.
 
 Use this prompt shape when injecting domain context:
