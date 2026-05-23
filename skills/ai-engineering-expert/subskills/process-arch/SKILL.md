@@ -33,7 +33,8 @@ Operating models for teams and individuals doing AI-assisted development.
 
 - Continue for closely-coupled units
 - Fresh session after major phase transitions
-- Compact at milestones, not during debugging
+- Compact at milestones using the **High-Fidelity Handoff** pattern
+- Use `handoff.md` to displace history and re-initialize context with 100% fidelity
 
 ## Reference
 
