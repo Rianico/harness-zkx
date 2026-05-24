@@ -9,6 +9,11 @@ The core of LSZ architecture is a skills-first design that keeps reusable workfl
 
 Skill taxonomy (orchestration, complex workflow, domain knowledge, action) and the authoring process (Gather-Draft-Review) are defined in `ai-engineering-expert skill-authoring`. Invoke that skill when creating, classifying, or structuring a skill.
 
+**Naming Conventions:**
+- **Domain Knowledge**: Use nouns (standardize on `[topic]-expert` for expertise skills).
+- **Actions/Workflows**: Use verbs or prepositional phrases (e.g., `to-prd`, `handoff`).
+- **Orchestration**: Use present participles (e.g., `orchestrating`).
+
 ## 3.1 Expert Role Placement Policy
 When you want the model to "play" a specialist role (for example, architect expert, TDD expert, refactoring expert, API reviewer), place that role according to scope rather than stuffing it into one layer.
 

@@ -84,11 +84,27 @@ If the workflow violates any of these constraints, it belongs in a skill.
 4. Must not contain consecutive hyphens (`--`)
 5. Must match the parent directory name
 
+#### Taxonomy-Based Naming Conventions
+
+Select the naming pattern that matches the skill's taxonomy:
+
+- **Domain Knowledge (Expertise/Methodology)**: For skills that teach *how* to do things, standardize on the `[topic]-expert` suffix to keep domain knowledge naming universal.
+  - *Examples:* `python-expert`, `backend-expert`, `tdd-expert`.
+  - *Avoid:* `python-guide`, `backend-patterns`.
+- **Domain Knowledge (Facts/Docs)**: For skills that are purely informational repositories, constraints, or vocabularies, use bare nouns or plural concepts without suffixes.
+  - *Examples:* `adr`, `triage-labels`, `design-system`.
+- **Actions & Workflows**: For executable tasks, use verbs, imperatives, or prepositional phrases like `[action]-[target]` or `to-[target]`.
+  - *Focus:* Names should flow naturally in a chat invocation.
+  - *Examples:* `handoff`, `to-prd`, `build-fix`, `update-docs`.
+  - *Usage:* "Let's `/handoff` the tasks" or "convert this `/to-prd`".
+- **Orchestration**: For skills managing continuous multi-phase processes, use present participles (`[process]-ing`).
+  - *Examples:* `orchestrating`, `brainstorming`.
+
 **Valid:**
 ```yaml
-name: pdf-processing
-name: data-analysis
-name: code-review
+name: pdf-processing  # action (verb-noun)
+name: adr             # domain knowledge facts (noun)
+name: python-expert   # domain knowledge expertise (noun-expert)
 ```
 
 **Invalid:**

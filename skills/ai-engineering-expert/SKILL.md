@@ -35,6 +35,48 @@ Skills that violate these constraints produce fragile agents that fail silently,
 
 ---
 
+## Respect Tool Feedback
+
+Agents MUST treat feedback from automated tools — LSP diagnostics, type checkers, linters, test failures — as authoritative signals. Ignoring tool feedback is a systemic failure, not a style choice.
+
+### LSP Diagnostics Are Blockers
+
+After writing or editing code, the agent MUST check and resolve all diagnostics before declaring done.
+
+1. **Read every diagnostic** — never skip, never dismiss as "just a warning"
+2. **Fix or suppress** each one — both are valid; silent ignore is not
+3. **Errors first, then warnings** — but all must be triaged
+4. **Suppressions require justification** — use the most precise scope available
+
+### Common Diagnostic Categories
+
+| Category | Examples | Resolution |
+|----------|----------|------------|
+| Unused code | unused imports, variables, parameters | Remove, or prefix with `_` |
+| Missing types | implicit `any`, missing type arguments | Add proper types; suppress only at external boundaries |
+| Type errors | incompatible types, missing properties | Fix the code; suppress when type system can't express the pattern |
+| Dead code | unreachable code, unused assignments | Remove or restructure control flow |
+
+### When Type Looseness Is Acceptable
+
+- Interfacing with untyped external APIs (HTTP responses, JSON parsing)
+- Dynamic dispatch where type narrowing is impossible
+- Third-party libraries without type stubs
+
+Even in these cases, **add a suppression comment** explaining why — never silently pass.
+
+### Verification Pattern
+
+```bash
+# After any code change, check diagnostics
+llm-lsp-cli lsp diagnostics <file>
+llm-lsp-cli lsp workspace-diagnostics
+```
+
+This principle applies to all languages and all tool types. Domain-specific exceptions (e.g., exploratory notebooks, prototype scripts) must be explicitly scoped by the user.
+
+---
+
 ## High-Fidelity Handoffs
 
 ### Core Principle

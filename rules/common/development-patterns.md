@@ -39,6 +39,10 @@ When a diagnostic appears 50+ times for the same category (e.g., internal module
 # Reason: <one-line explanation of why this suppression is legitimate>
 ```
 
+### Respect LSP Diagnostics (CRITICAL)
+
+LSP diagnostics (basedpyright, tsc, rust-analyzer, gopls, etc.) are authoritative signals. Treat all diagnostics as blockers until triaged — fix or suppress, never ignore. See ai-engineering-expert "Respect Tool Feedback" for full methodology.
+
 ---
 
 ## Types & Data Flow

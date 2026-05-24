@@ -33,7 +33,7 @@ Ask the user about:
 
 1. **Task and domain** -- What does the skill do? What specific use cases must it handle?
 2. **Taxonomy classification** -- Which of the four types above fits? If unsure, ask: "Does this need multiple phases or parties?" (orchestration), "Is there a single multi-step workflow?" (complex workflow), "Is this expertise to load on demand?" (domain knowledge), or "Is this a narrow, self-contained task?" (action).
-3. **Skill identity** -- What `name` fits the directory? What `description` triggers cover the use cases?
+3. **Skill identity** -- What `name` fits the directory? (Noun for domain knowledge, verb for actions; see [Taxonomy-Based Naming Conventions](references/skill-authoring.md#taxonomy-based-naming-conventions)). What `description` triggers cover the use cases?
 4. **Resources needed** -- Does it need executable scripts (deterministic operations), reference files (deep content beyond 500 lines), or just instructions?
 5. **Dependencies** -- Does it depend on other skills? If so, declare `metadata.depends-on`.
 6. **Parent-skill relationship** -- Is this part of a cluster? Should it be a sub-skill under a parent, or a standalone skill?
