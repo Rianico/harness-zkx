@@ -77,6 +77,31 @@ This principle applies to all languages and all tool types. Domain-specific exce
 
 ---
 
+## Skill Infrastructure
+
+### Validation & Management Tool
+
+The canonical tool for skill management is located in the `skill-authoring` sub-skill.
+
+**Usage from parent:**
+```bash
+# Validate all skill dependencies
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py check
+
+# Check inbound/outbound dependencies for a skill
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py related <skill_name>
+
+# Lint all skills for quality and conventions
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py lint
+```
+
+**Features:**
+- Dependency validation (`depends-on`)
+- Frontmatter linting and automated fixes
+- Skill renaming with cascaded reference updates
+
+---
+
 ## High-Fidelity Handoffs
 
 ### Core Principle
