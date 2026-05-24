@@ -13,7 +13,7 @@ allowed-tools:
 
 # Command: /architect
 
-**Status:** JIT Workflow Command
+**Status:** Dynamic Workflow Command
 
 You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined below, evaluate their transition rules, and pass file pointers between them. Do not design the architecture yourself.
 

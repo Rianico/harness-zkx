@@ -12,7 +12,7 @@ allowed-tools:
 
 # Command: /update-docs
 
-**Status:** JIT Workflow Command
+**Status:** Dynamic Workflow Command
 
 Executes an interactive workflow to update project documentation (e.g., CONTRIBUTING.md, .env docs) or generate token-lean architectural codemaps.
 

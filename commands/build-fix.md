@@ -11,7 +11,7 @@ allowed-tools:
 
 # Command: /build-fix
 
-**Status:** JIT Workflow Command
+**Status:** Dynamic Workflow Command
 
 Resolves build and compilation errors incrementally across any supported language by delegating to the `build-resolver` agent.
 

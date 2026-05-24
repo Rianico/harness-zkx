@@ -1,9 +1,22 @@
-## 1. The Skills-First Architecture Philosophy
-The core of LSZ architecture is a skills-first design that keeps reusable workflow logic in one place, preserves context efficiency, and avoids duplicating methodology across commands, agents, and rules.
+## 1. The Skills-First Mental Model
+The core of LSZ architecture is a **Subagent-First Execution** model that keeps reusable workflow logic in skills, preserves context efficiency, and avoids duplicating methodology.
 
-*   **Skills are the primary product surface.** Skills may define the workflow contract, user interaction model, and methodology. A skill can own both the WHAT and the HOW when that produces a cleaner, more reusable abstraction.
-*   **Commands are exceptional convenience entrypoints.** Prefer invoking skills directly rather than creating thin command wrappers. Add a command only when there is a strong CLI ergonomics reason, such as a high-frequency shortcut, special argument autocomplete, or compatibility with existing user muscle memory. Commands should not exist solely to forward to a skill.
-*   **Agents define the WHO and the TOOLS.** Agents are lean execution engines. They define persona, tool boundaries, and focused execution roles. *Agents should generally NOT contain long workflow instructions unless the workflow is atomic, universal, and short.*
+### 1.1 The 7-Factor Engineering Mindset
+Every mission must be evaluated against these seven factors:
+1. **Action Space**: What tools and skills are available?
+2. **Observation**: What does the environment tell us (LSP, tests, logs)?
+3. **Recovery**: How do we backtrack from errors or unexpected states?
+4. **Displacement**: Use handoffs to ignore old history and stay lean.
+5. **Tool Feedback**: Automated signals (LSP/Linter) are authoritative blockers.
+6. **Intent Preservation**: Handoffs bridge the "why" between agents.
+7. **Artifact Hygiene**: Keep the workspace organized to prevent discovery failure.
+
+### 1.2 Structural Rules
+*   **Skills are the primary product surface.** Skills define the workflow contract and methodology.
+*   **Agents define the WHO and the TOOLS.** Agents are lean execution engines. They define persona and tool boundaries.
+*   **No Hero Mode**: Orchestrators are forbidden from doing implementation work directly. They MUST dispatch agents using strict **API Schema Templates** (Job Requisitions).
+*   **Pointer-Based State Passing**: Pass absolute file paths between phases instead of re-reading large artifacts into the orchestrator's context.
+*   **Commands are ergonomic shortcuts**: Only add a command if it provides CLI benefits beyond simple retrieval. Prefer direct skill invocation.
 
 ## 2. Skill Taxonomy
 
@@ -29,44 +42,20 @@ When you want the model to "play" a specialist role (for example, architect expe
 - If the behavior is a broad repository-wide constraint -> put it in rules.
 
 **Examples**
-- `architect` agent: keep a short baseline architecture persona in the agent; load ADR methodology or other deep architecture methods via skills; inject workflow-specific ADR output constraints in `/architect`.
-- `developer` agent in TDD: keep the agent generic; load a future `tdd-expert` skill for Beck-style methodology; inject scope boundaries like "implementation-level verification only" in the TDD workflow prompt.
+- `developer` agent in TDD: keep the agent generic; load the `tdd-expert` skill for methodology; inject scope boundaries like "implementation-level verification only" in the TDD workflow prompt.
+- `onboarding` agent: load the `onboarding` skill for codebase-specific context; use the agent to answer high-level structural questions.
 - `code-reviewer` agent: keep the agent generally reusable; inject "do not replay TDD verification" only in the `/code-review` command.
 
-Generic agents executing workflows should not waste tokens doing their own domain discovery where they are invoked before any files are read, meaning no Domain Rules are injected. To protect the orchestrator's context window and prevent it from trying to write code itself ("Hero Mode"), you MUST follow these critical patterns for complex orchestration:
-
-* **The API Schema Pattern (Job Requisitions):** When authoring orchestration skills or complex workflow skills that dispatch agents, DO NOT rely only on prose instructions like "Step 1: Write a failing test". Prefer a strict State Machine providing exact Agent tool dispatch templates alongside transition rules. A YAML-like text block is the default format because it is more stable under iterative editing than embedded JSON while still fencing the LLM into a pure routing/dispatch persona.
-
-  **Default Agent Dispatch Template**
-  ```text
-  Agent tool (<subagent_type>):
-    description: "<short task summary>"
-    prompt: |
-      <full prompt body>
-  ```
-
-  Use JSON only when a command or skill truly benefits from machine-shaped structure beyond what this template provides.
-
-  **Example: Coercing LLM via Agent Dispatch Template**
-  ```text
-  ## PHASE 1: RED (Write Failing Tests)
-  **Action:** Call `Agent` tool
-  **Payload Template:**
-  Agent tool (code-reviewer):
-    description: "Write failing tests for [Feature]"
-    prompt: |
-      You are the RED phase agent. Read the specifications at [spec_pointer]. Write FAILING unit tests for the feature. Return a summary right before the absolute file path to your summary report. Format: bullet list (≤100 words) if reporting status only; star rules (≤150 words) if encoding constraints or decisions the next agent must follow.
-  ```
-
-* **Pointer-Based State Passing:** This pattern is mainly for complex orchestration. When multiple phases or agents must exchange rich outputs, the orchestrator should pass absolute file paths or equivalent pointers between phases instead of re-reading large artifacts into its own context.
-* **Skill-Oriented Orchestration**: When orchestrating complex, multi-step DAGs, prefer orchestrating skills rather than stringing bare agents together. Invoke agents directly only when a skill's execution contract explicitly calls for it.
-
 ## 3.2 Phase Transitions and Handoffs
-For complex missions, transitions between major phases (e.g., Design to Implementation) should be used to preserve **intent, reasoning, and context**.
+For complex missions, transitions between major phases (e.g., Design to Implementation) must be used to preserve **intent, reasoning, and context**.
 
-- **The Handoff Methodology**: Use the `handoff` skill to capture *why* decisions were made and *what* the user truly cares about.
-- **Intent Preservation**: The handoff serves as the "Goal and Reason" bridge, ensuring subsequent agents understand the human context of the work.
-- **Pointer Continuity**: Use the handoff document as the index for durable artifacts (`design.md`, `lineage.md`, etc.) to keep the context window efficient.
+- **The Handoff as Context Aggregator**: Use the `handoff` skill to capture *why* decisions were made. The handoff acts as a **Context Aggregator** that distills Goals, Reasoning, and Intent from a sprawling session into a single source of truth, allowing subsequent agents to **displace** (ignore) the original full conversation history for better efficiency.
+- **The Subagent Response Contract**: Sub-agents MUST return a structured response (using the format in `ai-engineering-expert process-arch`) that includes:
+  * **Summary**: Concise bullet list of work completed.
+  * **Artifact Pointers**: Absolute file paths to generated plans, code, or reviews.
+  * **Route/Status**: Explicit signal for the orchestrator (e.g., `COMPLETED`, `REJECTED`, `BLOCKED`).
+  * **Issues**: List of discovered risks or required follow-ups.
+- **Pointer Continuity**: Use the handoff document as the index for durable artifacts (`design.md`, `lineage.md`, etc.) to keep the context window efficient. Subsequent agents start by reading the handoff to initialize state.
 
 ## 4. Hook Design Philosophy
 
@@ -151,7 +140,7 @@ To ensure a seamless user experience and strict system bounds, skills, commands,
   * **Parent Skill with Sub-Skills Pattern:** When a skill manages multiple related capabilities, structure as `skills/<name>/SKILL.md` (parent) with `skills/<name>/subskills/<sub>/SKILL.md` (children). Parent has `metadata.manage: [...]`; sub-skills have `metadata.managed-by: <parent>`. Parent dispatches via `Read` (not `Skill` tool — nested paths not discoverable). Use this instead of routing commands for better discoverability and explicit relationships.
 
 ## Trade-Offs to Consider
-* **Latency vs Context Bloat:** The Hybrid JIT Architecture adds a small runtime penalty to complex tasks because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request.
+* **Latency vs Context Efficiency:** The **On-Demand Skill Loading** pattern adds a small runtime penalty because the agent must call the `Skill` tool to retrieve deep knowledge. This is an intentional trade-off to keep the base context window pristine and focused on the user's immediate request. Load only what is needed for the current sub-task.
 * **Agent Hero-Mode:** Generic agents are heavily prone to ignoring delegation instructions. Orchestration skills and complex workflow skills that dispatch agents SHOULD use explicit execution schemas with stable Agent dispatch templates to force the LLM into orchestration mode.
 * **Command vs Skill Ergonomics:** Skills are the default product surface, including for simple action workflows. Commands are reserved for cases where CLI ergonomics materially improve use; thin forwarding wrappers create drift and should be avoided.
 * **Tooling Preference:** When using shell-based search, prefer `rg` for content search and `fd` for file discovery over `grep`, `find`, and agent built-in search tools. Reserve `ls` and `tree` for structural inspection.

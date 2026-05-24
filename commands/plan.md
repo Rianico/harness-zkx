@@ -14,7 +14,7 @@ allowed-tools:
 
 # Command: /plan
 
-**Status:** JIT Workflow Command
+**Status:** Dynamic Workflow Command
 
 Invokes the `planner` agent to create a comprehensive implementation plan before writing any code. Uses interactive prompts for approval.
 

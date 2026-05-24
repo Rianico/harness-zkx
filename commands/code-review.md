@@ -13,7 +13,7 @@ allowed-tools:
 
 # Command: /code-review
 
-**Status:** JIT Workflow Command
+**Status:** Dynamic Workflow Command
 
 Executes a universal code review workflow by delegating to the `code-reviewer` agent, followed by interactive resolution. This command is the repository-level review gate for security, maintainability, cross-cutting correctness gaps, and overall readiness after implementation workflows such as `/tdd`.
 
