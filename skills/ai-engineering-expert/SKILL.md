@@ -17,7 +17,19 @@ metadata:
 
 # AI Engineering Expert
 
-Core principles for building robust AI systems. Use this skill when designing or refining skills, agents, workflows, and orchestration patterns.
+Core principles for building robust AI systems. All boundaries, constraints, rules, and patterns in this architecture derive from the following foundational philosophy.
+
+## The Foundation: GDD (Goal-Driven Development)
+
+The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs are fundamentally **Probabilistic Machines** trying to operate in a **Deterministic World**, we use **GDD** to bridge this gap through three non-negotiable pillars:
+
+1.  **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task. It ensures the probabilistic model is anchored to a deterministic behavioral specification.
+2.  **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model *says* it did; we only trust what the *environment says* it did. The source of truth is moved from the model's context to the runtime environment. Success is defined by fresh environmental signals (LSP diagnostics, test exit codes, logs) generated *after* the implementation phase.
+3.  **Semantic vs. Deterministic Split (Execution Efficiency):** We treat hard reality and qualitative alignment as distinct domains:
+    *   **Deterministic Work (Hard Gates):** Measured by non-LLM tools (compilers, linters, property tests). These are 100% reliable and cost zero tokens.
+    *   **Semantic Work (Qualitative Audit):** Verified by Adversarial Orchestration (e.g., a "Skeptic" agent). We use the LLM exclusively for what it does best: verifying architecture, elegance, and intent alignment, stripped of deterministic noise.
+
+---
 
 ## Core Mental Model
 

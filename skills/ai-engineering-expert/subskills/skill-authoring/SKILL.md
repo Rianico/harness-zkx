@@ -32,18 +32,22 @@ Every LSZ skill falls into one of four types:
 Ask the user about:
 
 1. **Task and domain** -- What does the skill do? What specific use cases must it handle?
-2. **Taxonomy classification** -- Which of the four types above fits? If unsure, ask: "Does this need multiple phases or parties?" (orchestration), "Is there a single multi-step workflow?" (complex workflow), "Is this expertise to load on demand?" (domain knowledge), or "Is this a narrow, self-contained task?" (action).
-3. **Skill identity** -- What `name` fits the directory? (Noun for domain knowledge, verb for actions; see [Taxonomy-Based Naming Conventions](references/skill-authoring.md#taxonomy-based-naming-conventions)). What `description` triggers cover the use cases?
-4. **Resources needed** -- Does it need executable scripts (deterministic operations), reference files (deep content beyond 500 lines), or just instructions?
-5. **Dependencies** -- Does it depend on other skills? If so, declare `metadata.depends-on`.
-6. **Parent-skill relationship** -- Is this part of a cluster? Should it be a sub-skill under a parent, or a standalone skill?
+2. **Success Criteria (GDD/EDD)** -- How do we know the goal is achieved? What are the measurable, deterministic outputs? What are the qualitative, semantic goals?
+3. **Behavioral Scenarios (BDD)** -- What are the key Given/When/Then scenarios the skill must satisfy?
+4. **Taxonomy classification** -- Which of the four types above fits? If unsure, ask: "Does this need multiple phases or parties?" (orchestration), "Is there a single multi-step workflow?" (complex workflow), "Is this expertise to load on demand?" (domain knowledge), or "Is this a narrow, self-contained task?" (action).
+5. **Skill identity** -- What `name` fits the directory? (Noun for domain knowledge, verb for actions; see [Taxonomy-Based Naming Conventions](references/skill-authoring.md#taxonomy-based-naming-conventions)). What `description` triggers cover the use cases?
+6. **Resources needed** -- Does it need executable scripts (deterministic operations), reference files (deep content beyond 500 lines), or just instructions?
+7. **Dependencies** -- Does it depend on other skills? If so, declare `metadata.depends-on`.
+8. **Parent-skill relationship** -- Is this part of a cluster? Should it be a sub-skill under a parent, or a standalone skill?
 
 ### Phase 2: Draft
 
 Create the skill following LSZ conventions:
 
 1. **Directory structure** -- `skills/<name>/SKILL.md` plus `references/` and `scripts/` as needed
-2. **Frontmatter** -- `name` (matches directory), `description` (third-person, what + when, trigger vocabulary), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies.
+2. **Verification Logic (EDD)** -- Include scripts in `scripts/` for deterministic verification. Define how semantic verification (e.g., via a Skeptic subagent) will be handled.
+3. **Behavioral Spec (BDD)** -- Include a `references/bdd-scenarios.md` if the workflow is complex, or embed scenarios directly in the SKILL.md body.
+4. **Frontmatter** -- `name` (matches directory), `description` (third-person, what + when, trigger vocabulary), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies.
    - **CRITICAL: YAML Formatting** -- Always use YAML block scalars (`>-` or `|`) for `description` and `argument-hint` to prevent parsing errors caused by unquoted colons, special characters, or multi-line text.
      ```yaml
      description: >-
@@ -64,6 +68,8 @@ Validate the draft before presenting to the user:
 
 **First-Pass Review Checklist:**
 - [ ] Taxonomy type is correct and structure matches that type
+- [ ] BDD scenarios are defined (Given/When/Then)
+- [ ] EDD verification path is clear (scripts for deterministic, skepticism for semantic)
 - [ ] Description is third-person, includes what + when, covers trigger patterns
 - [ ] Frontmatter complete: `name`, `description`, `arguments`/`argument-hint` if needed, `metadata` for relationships
 - [ ] References are one level deep from SKILL.md
@@ -129,6 +135,9 @@ If it's not in the description, the skill will not trigger.
 Before publishing a skill:
 
 **Core Quality**
+- [ ] BDD scenarios cover Happy Path, Edge Case, and Error Case
+- [ ] Deterministic goals have corresponding evaluation scripts (EDD)
+- [ ] Semantic goals have a verification plan (e.g., Adversarial Review)
 - [ ] Description is third-person, specific, includes trigger terms
 - [ ] Description includes both what AND when to use
 - [ ] Description updated for any new capability added (hooks, MCP, testing patterns)

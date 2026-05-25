@@ -10,11 +10,12 @@ metadata:
 
 Operating models for teams and individuals doing AI-assisted development.
 
-## Team Operating Model
+## Team Operating Model (GDD)
 
-- Planning quality > typing speed
-- Eval coverage > anecdotal confidence
-- Review focus: behavior and invariants, not style
+The LSZ operating model follows **GDD (Goal-Driven Development)**:
+- Planning quality > typing speed (BDD Scenarios first)
+- Eval coverage > anecdotal confidence (EDD verification)
+- Review focus: behavior and invariants (Semantic vs. Deterministic split), not style
 
 ## Eval-First Loop
 
