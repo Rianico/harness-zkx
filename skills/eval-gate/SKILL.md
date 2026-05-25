@@ -9,16 +9,16 @@ tools:
   - Bash
 ---
 
-# Eval Gate
+# Eval Gate (EDD)
 
-Run eval-driven development gates while keeping substantive work out of the main context. The primary agent orchestrates; a subagent reads artifacts, runs checks, and returns compact status plus pointers.
+Run **EDD (Eval-Driven Development)** gates while keeping substantive work out of the main context. The primary agent acts as an **Executioner**, orchestrating the **Deterministic Gate** via scripts and environmental truth.
 
-## Core Loop
+## Core Loop (GDD)
 
 ```
-Define + baseline  →  Execute implementation
+Define (Intent -> Spec)  →  Execute Implementation
                            ↓
-Compare deltas  ←  Re-run evals  ←  Implementation complete
+Deterministic Gate  ←  Re-run evals  ←  Implementation complete
 ```
 
 **Baseline capture** happens inside `define`: the subagent writes scripts, runs them, and writes `baseline.json`. This anchors expectations and prevents "it works because I wrote tests after." The orchestrator never needs to run eval scripts directly.
