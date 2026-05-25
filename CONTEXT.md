@@ -22,6 +22,12 @@ _Avoid_: Hero-mode orchestrators that do implementation work directly.
 A distilled document (`handoff.md`) used as a Mission Bridge to preserve intent, reasoning, and artifact pointers between phases.
 _Avoid_: History hoarding, prose-only summaries.
 
+**Manifest**:
+A deterministic, externalized log (e.g., `manifest.json`) that tracks sub-tasks, job IDs, and the current state of a mission. It prevents "hallucinated completion" by anchoring the AI to verifiable evidence.
+
+**Provenance**:
+The traceable record of how an artifact was created, including file hashes, timestamps, and the specific agent/tool responsible for each transition. It enables auditability and localized repair.
+
 **Artifact Hygiene**:
 The discipline of organizing, deduplicating, and consolidating project files to prevent context bloat and discovery failures.
 

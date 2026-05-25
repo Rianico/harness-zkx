@@ -79,9 +79,11 @@ Agent tool (architect):
 
     **[TASK]**
     Produce a focused architecture design or review judgment first, then update the traced architecture artifacts as needed:
-    - Blueprint: current architecture model and expert design detail.
-    - Technical standards: reusable project paradigms and engineering rules.
-    - ADR: concise decision record for meaningful architectural decisions, compatible with Nygard-core ADR guidance and the repository ADR template if customized.
+    - **Blueprint**: current architecture model and expert design detail.
+    - **High-Level Execution Strategy**: Identifying affected modules, dependency sequencing (e.g., DB migrations), cross-module risks, and the overall "attack plan."
+    - **BDD Scenario Intent**: High-level mapping of the design to the BDD scenarios from brainstorming.
+    - **Technical standards**: reusable project paradigms and engineering rules.
+    - **ADR**: concise decision record for meaningful architectural decisions, compatible with Nygard-core ADR guidance and the repository ADR template if customized.
 
     Before creating a new ADR, use the ADR workflow's discovery pass so you can determine whether this architecture should be a new ADR, a superseding ADR, or a related ADR with links.
 
