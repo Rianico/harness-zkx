@@ -6,6 +6,8 @@ Date: 2026-05-24
 
 Accepted
 
+implemented by [4. Goal-Driven Development (GDD) as Foundational Philosophy](0004-goal-driven-development-gdd-as-foundational-philosophy.md)
+
 ## Context
 
 AI agents often ignore "minor" warnings or "style" diagnostics from tools like LSP servers, linters, and type checkers. This leads to silent failures, hidden regressions, and degraded code quality over time, especially in long-running or multi-agent missions where technical debt accumulates quickly.

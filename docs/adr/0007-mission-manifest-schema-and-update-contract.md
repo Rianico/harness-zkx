@@ -7,6 +7,8 @@ Date: 2026-05-25
 Accepted
 Amends [ADR-0005](0005-manifest-driven-orchestration-and-provenance-trace.md)
 
+amended by [8. Goal Locking and Aggregated Manifest Hierarchy](0008-goal-locking-and-aggregated-manifest-hierarchy.md)
+
 ## Context
 
 While ADR-0005 established the concept of Manifest-Driven Orchestration, we need a specific, parseable schema and a clear update contract to ensure consistency across different skills and orchestrators. This schema must support "Provenance Trace" and "Localized Repair" as non-negotiable requirements.
