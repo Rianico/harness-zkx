@@ -15,11 +15,11 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
 ## Orchestration Rules
 1. **Subagent-First Execution (Mandatory Delegation):** The orchestrator MUST NOT perform turn-intensive interactive phases (Brainstorming, Architect) or implementation work (TDD, Build-Fix) directly. You MUST dispatch a specialized subagent (e.g., `generalist`, `architect`, `developer`) and instruct it to load the relevant skill via the `Skill` tool. This preserves the orchestrator's context window and adheres to the "No Hero Mode" mandate.
 2. **Sequential Execution:** You must execute the skills in the exact order specified by the pipeline.
-3. **The "Executioner" Mindset (EDD):** The orchestrator never trusts a subagent's claim of completion. After implementation, you MUST execute the **Deterministic Gate** (`eval-gate`) and the **Semantic Audit** (`code-review`) to verify success via fresh environmental signals.
+3. **The "Executioner" Mindset (EDD):** The orchestrator never trusts a subagent's claim of completion. After implementation, you MUST **dispatch** the **Deterministic Gate** (`eval-gate`) and the **Semantic Audit** (`code-review`) subagents to verify success via fresh environmental signals. The orchestrator MUST NOT run verification commands (pytest, mypy, ruff, type checks) directly — that is the eval-gate's job.
 4. **Manifest-Driven Execution (ADR-0007, ADR-0008, ADR-0009):**
    - **Initialization:** Create `[topic_root]/mission_manifest.json` after Step 1 (Brainstorming). Initialize with `intent_hash` (SHA-256 of `design.md`).
    - **Goal Locking (Pre-population):** BEFORE dispatching implementation, the orchestrator MUST pre-allocate the expected **Work Units** (BDD scenarios) in the mission manifest using `manifest-manager add-unit`.
-   - **Observation Turns:** After each phase or implementation unit, the orchestrator MUST perform an "Observation Turn" using `eza` and `sha256sum`. **Environmental Truth (EDD) overrides any manifest claim.**
+   - **Observation Turns:** After each phase or implementation unit, the orchestrator MUST perform an "Observation Turn" using `eza` (verify artifact files exist) and `sha256sum` (verify file hashes match manifest). This is NOT verification of correctness — that is the eval-gate's job. Observation Turns only confirm artifacts are present and unmodified. **Environmental Truth (EDD) overrides any manifest claim.**
    - **Aggregated Hierarchy:** For IPS skills, record the path and hash of the `[skill]_manifest.json` in the mission manifest.
    - **Scripted Updates:** All updates MUST use the `uv run $SKILL_DIR/scripts/manifest-manager.py` script.
    - **Resume Logic:** Verify file hashes against the manifest using `sha256sum --check`.
