@@ -1,16 +1,7 @@
 ---
 name: firecrawl
 description: >-
-  |
-  Firecrawl CLI for web search, scraping, crawling, and document parsing. Use for:
-  (1) SEARCH - find web pages, articles, news, documentation when you don't have URLs. Triggers on: search for, find me, look up, what's the latest on.
-  (2) SCRAPE - extract clean markdown from any URL including JS-rendered SPAs. Triggers on: scrape, grab, fetch, pull, get the page, extract from this URL.
-  (3) MAP - discover URLs on a site, list all pages, find site structure. Triggers on: map the site, find the URL for, what pages are on, list all pages.
-  (4) CRAWL - bulk extract content from entire site sections. Triggers on: crawl, get all pages, extract everything under /docs, bulk extract.
-  (5) INTERACT - click buttons, fill forms, navigate flows on scraped pages. Triggers on: interact, click, fill out the form, log in to, paginated, infinite scroll.
-  (6) DOWNLOAD - save entire site as local files for offline use. Triggers on: download the site, save as local files, offline copy.
-  (7) PARSE - convert local files (PDF, DOCX, XLSX) to markdown. Triggers on: parse this PDF, convert this document, extract text from file.
-  Returns LLM-optimized markdown.
+  Firecrawl CLI for web search, scraping, crawling, site mapping, page interaction, downloads, and local document parsing. Use for finding web pages when no URL is known; extracting clean markdown from URLs including JS-rendered pages; mapping site structure; bulk crawling site sections; interacting with pages that need clicks, forms, pagination, or infinite scroll; saving sites for offline use; and converting local PDFs, DOCX, XLSX, or other documents to markdown.
 argument-hint: >-
   search <query> | scrape <url> | map <site_url> | crawl <url> | parse <file> | interact --prompt <action> | download <url>
 allowed-tools:
