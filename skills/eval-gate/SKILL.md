@@ -148,8 +148,8 @@ Agent tool (general-purpose):
     Execute entirely inside this subagent. Do not launch subagents.
 
     Modes:
-    - `define`: Read source docs, extract observable criteria, write definition with scripts for each criterion. Then verify scripts run and capture baseline by running each script. Write `baseline.json` to eval dir. Return baseline summary table.
-    - `check`: Run each criterion's script, parse JSON output, append results to log, return status with routing.
+    - `define`: Read source docs, extract observable criteria. Write a single, consolidated evaluation script (e.g., `run_evals.py` or `run_evals.sh`) that executes all criteria checks in one pass and outputs a unified LLM-friendly JSON report. Verify the script runs and capture baseline state for all criteria.
+    - `check`: Execute the consolidated evaluation script directly (execute once, get all checked items). Parse the unified JSON output, append results to log, return status with routing.
     - `quick`: Run 6 standard quality phases (Build, Types, Lint, Tests, Security, Diff) without formal definition. Return compact PASS/FAIL per phase.
     - `report`: Read definition and log, write report, return recommendation. If this is the final report for the phase, invoke the `handoff` skill with `artifacts=[report_path]` to distill the readiness status and any residual issues.
     - `list`: Summarize definitions and statuses.
@@ -180,9 +180,9 @@ Agent tool (general-purpose):
     6. List specific issues found for remediation
 
     **CRITICAL for `define` mode:**
-    1. Write the eval definition and scripts
-    2. Verify each script is executable and produces valid JSON output
-    3. Run each script to capture baseline state
+    1. Write the evaluation definition and a single, consolidated execution script.
+    2. Verify the consolidated script is executable and produces valid, unified JSON output.
+    3. Run the consolidated script once to capture baseline state for all criteria.
     4. Write `baseline.json` to the eval dir with structure:
        ```json
        {"captured": "<ISO timestamp>", "criteria": {"<id>": {"status": "pass|fail", "summary": "..."}}}
@@ -190,14 +190,15 @@ Agent tool (general-purpose):
     5. Return a compact baseline summary table — do NOT paste full script output into your return
 
     **CRITICAL for `check` mode:**
-    1. Run the script defined for each criterion
-    2. Parse the JSON output: `{"status": "pass|fail", "summary": "...", "issues": [...]}`
-    3. NEVER rely on exit code — parse the output
-    4. If ANY criterion has `status: "fail"`, the eval fails
-    5. Enumerate all issues from `issues` array for remediation
-    6. Do NOT interpret results with LLM — use script output directly
-    7. If any eval fails, write enumerated issues to `[eval_dir]/issues.md` (one issue per line, no formatting)
-    8. Include routing decision, brief issue summary, and issues path in output:
+    1. Execute the consolidated evaluation script directly. Do NOT execute commands one by one.
+    2. The script's output MUST be a clear, concise, LLM-friendly report (JSON) including failed tests, desired vs actual, and enumerated issues.
+    3. Parse the unified JSON output: `{"status": "pass|fail", "summary": "...", "criteria": {"<id>": {"status": "pass|fail", "summary": "...", "issues": [...]}}, "issues": [...]}`
+    4. NEVER rely on exit code — parse the output.
+    5. If ANY criterion has `status: "fail"`, the eval fails.
+    6. Enumerate all issues from the unified `issues` array for remediation.
+    7. Do NOT interpret results with LLM — use script output directly.
+    8. If any eval fails, write enumerated issues to `[eval_dir]/issues.md` (one issue per line, no formatting).
+    9. Include routing decision, brief issue summary, and issues path in output:
        - `Route: continue` if all pass
        - `Route: remediate` if any fail (with brief summary + issues file path)
        - `Route: blocked` if cannot proceed (e.g., missing dependencies)
@@ -269,112 +270,41 @@ Eval directory: [eval_dir]
 
 For each criterion, define:
 
-```markdown
 ### [ID]: [Title]
 
 **Description:** What this criterion checks.
 
 **Grader:** code | rule | model | human
 
-**Script:** (for code/rule graders)
-```bash
-# Script that outputs JSON: {"status": "pass|fail", "summary": "...", "issues": [...]}
-```
+**Implementation:** All "code" or "rule" criteria MUST be implemented within the consolidated evaluation script (`run_evals.py` or similar). The script must perform the check for this ID and include it in the unified JSON report.
 
-**Pass Condition:** Script output has `status: "pass"`
+**Pass Condition:** Unified JSON report shows `status: "pass"` for this ID.
 
-**Fail Condition:** Script output has `status: "fail"` with enumerated issues
-```
+**Fail Condition:** Unified JSON report shows `status: "fail"` for this ID with enumerated issues.
 
-**Critical:** Scripts MUST output JSON with `status`, `summary`, and `issues` fields. The orchestrator parses this output — never rely on exit code.
+**Critical:** The consolidated evaluation script MUST output a unified JSON report with a top-level `status` and `issues` array, and a `criteria` object mapping criterion IDs to their individual `status`, `summary`, and `issues`.
 
-## Grader Types
-
-| Grader | Use For | Example |
-|--------|---------|---------|
-| **Code** | Deterministic checks | Tests, CLI commands, scripts |
-| **Rule** | Structural assertions | Regex, schema, snapshot |
-| **Model** | Open-ended outputs | LLM-as-judge rubric |
-| **Human** | Subjective or security-critical | Manual review flag |
-
-**Model routing for graders:**
-- Simple contract/rule → fast model
-- Complex behavior judgment → balanced model
-- Security/signoff → human (never fully automate)
-
-## Metrics
-
-| Metric | Definition | Use When |
-|--------|------------|----------|
-| `pass@1` | First-attempt success | Contract, negative evals |
-| `pass@3` | Success within 3 attempts | Capability evals |
-| `pass^3` | 3 consecutive passes | Release-critical regression |
-
-## Check Output
-
-```
-EVAL CHECK: feature-name
-Capability: X/Y passing (pass@3: N%)
-Contract: X/Y passing
-Negative: X/Y passing
-Regression: X/Y passing (pass^3: N%)
-Status: IN PROGRESS | READY | FAILED
-Route: continue | remediate | blocked
-Issues:
-- [brief issue 1 summary, ≤10 words each]
-- [brief issue 2 summary]
-Issues File: [path to issues.md if remediate, omitted otherwise]
-Definition: [path]
-Log: [path]
-```
-
-**Routing Decision:**
-- `Status: READY` + `Route: continue` → Proceed to next phase
-- `Status: FAILED` + `Route: remediate` → Invoke `tdd-cycle --lightweight issues=[path]` with issues file
-- `Status: IN PROGRESS` + `Route: blocked` → Stop, requires user decision
-
-**Why both Issues and Issues File:**
-- `Issues:` provides brief context for orchestrator awareness (≤10 words each)
-- `Issues File:` contains full details for tdd-cycle remediation
-
-## Report Output
-
-```
-EVAL REPORT: feature-name
-Capability pass@1: N%
-Capability pass@3: N%
-Regression pass^3: N%
-Gate Status: SHIP | NEEDS WORK | BLOCKED
-Report: [path]
-```
-
-## Best Practices
-
-1. **Define before coding** — Criteria anchor to approved requirements, not post-hoc justification
-2. **Baseline inside define** — The define subagent verifies scripts and captures baseline; the orchestrator never runs eval scripts directly
-3. **Prefer deterministic graders** — Model graders introduce variance
-4. **Keep fast** — Evals should run repeatedly without cost anxiety
-5. **Gate on thresholds** — Ship only when all thresholds met
-6. **Mark human review** — Security signoff never fully automated
+---
 
 ## Script-Based Verification & Remediation
 
-**Core Principle:** All deterministic checks MUST use scripts that output structured, parseable results. The orchestrator parses script output to determine pass/fail — never rely on exit codes alone.
+**Core Principle:** All deterministic checks MUST use a single, consolidated evaluation script that outputs structured, parseable, and LLM-friendly results. The orchestrator executes this script once per check cycle — never execute commands or criterion-specific scripts one by one.
 
-### Avoiding "Prose" Scripts
+### Consolidated Reporting
 
-When `defining` evals, you MUST NOT write vague or non-executable descriptions of checks. Every "Code" or "Rule" grader MUST correspond to a concrete, executable script (Python or Bash) located in the eval artifact directory. 
+When `defining` evals, you MUST create a single executable script (Python or Bash) in the eval artifact directory that serves as the "source of truth" for the implementation's quality.
 
-- **Use Templates:** Strictly follow the templates in `$SKILL_DIR/references/script-templates.md`.
-- **No Manual Grep:** Do not instruct the next agent to "run grep and see if it looks okay." The script MUST do the work and output JSON.
-- **Enumerated Issues:** If a script fails, it MUST populate the `issues` array in the JSON output with specific, actionable failure locations (file:line:message).
+- **Unified Output:** The script MUST output a single JSON blob containing all results.
+- **LLM-Friendly:** The output should include clear failure details (desired vs actual), failed tests, and specific line-level issues.
+- **Execute Once:** The agent should be able to run `python3 run_evals.py` (or similar) and receive the full state of the project.
+- **Enumerated Issues:** If any check fails, the script MUST populate a global `issues` array with specific, actionable failure locations (file:line:message).
 
 ### The Remediation Loop (EDD -> TDD)
 
 The `check` mode is the trigger for the **Remediation Loop**. 
 
-1. **Failure Detection**: `eval-gate check` detects a `status: "fail"` in a script's JSON output.
-2. **Issue Aggregation**: The orchestrator or eval agent extracts all strings from the `issues` array and writes them to `[eval_dir]/issues.md` (one per line).
+1. **Failure Detection**: `eval-gate check` executes the consolidated script and detects a top-level `status: "fail"`.
+2. **Issue Aggregation**: The orchestrator extracts all strings from the global `issues` array in the JSON output and writes them to `[eval_dir]/issues.md` (one per line).
 3. **Route: remediate**: The orchestrator receives the `remediate` route and the path to `issues.md`.
 4. **TDD Resumption**: The orchestrator invokes `tdd-cycle --lightweight issues=[eval_dir]/issues.md topic_root=[topic_root]`.
 5. **Deterministic Fix**: The `tdd-cycle` skill treats each line in `issues.md` as a **Work Unit** to be resolved.
@@ -384,7 +314,8 @@ The `check` mode is the trigger for the **Remediation Loop**.
 
 | Wrong | Right |
 |-------|-------|
-| Description: "Check if types are okay" | Script: `scripts/check-types.py` (executable) |
+| Running `check-types.py`, then `check-tests.py` | Running `run_evals.py` which calls both and aggregates |
+| Description: "Check if types are okay" | Script: `scripts/run_evals.py` (executable) |
 | Output: "It failed with some errors" | Output: `{"status": "fail", "issues": ["src/main.py:12: Type error..."]}` |
 | Remediation: "Look at the logs and fix it" | Remediation: `tdd-cycle --lightweight issues=eval/issues.md` |
 | Relying on exit code 0 | Parsing `status: "pass"` from JSON output |

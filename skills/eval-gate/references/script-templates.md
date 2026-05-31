@@ -268,3 +268,106 @@ uv run scripts/typecheck.py
 ```
 
 And parses the JSON output to determine pass/fail.
+
+---
+
+## Template: Consolidated Runner (Python)
+
+This template shows how to combine multiple checks into a single execution step that outputs a unified, LLM-friendly report.
+
+```python
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Consolidated evaluation runner. Executes all criteria and outputs a unified JSON report."""
+import subprocess
+import json
+import sys
+import time
+from pathlib import Path
+
+# Paths to individual check scripts or commands
+CHECKS = {
+    "TYPE-01": ["python3", "scripts/check-types.py"],
+    "TEST-01": ["python3", "scripts/run-tests.py"],
+    "LINT-01": ["ruff", "check", ".", "--format", "json"],
+    "SEC-01": ["rg", "sk-", "."], # Example simple check
+}
+
+def run_check(id, command):
+    start_time = time.time()
+    try:
+        # Run the command. We capture output to parse it.
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent # Adjust based on project root
+        )
+        
+        # Try to parse as JSON if it looks like JSON
+        try:
+            data = json.loads(result.stdout)
+            # If the script already follows the {status, summary, issues} format, use it
+            if isinstance(data, dict) and "status" in data:
+                return {
+                    "id": id,
+                    "status": data.get("status", "fail"),
+                    "summary": data.get("summary", ""),
+                    "issues": data.get("issues", []),
+                    "duration": time.time() - start_time
+                }
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback for raw commands (like rg or ruff)
+        status = "pass" if result.returncode == 0 else "fail"
+        issues = []
+        if status == "fail":
+            issues = [line.strip() for line in (result.stdout + result.stderr).split('\n') if line.strip()]
+
+        return {
+            "id": id,
+            "status": status,
+            "summary": f"Executed: {' '.join(command)}",
+            "issues": issues,
+            "duration": time.time() - start_time
+        }
+    except Exception as e:
+        return {
+            "id": id,
+            "status": "fail",
+            "summary": f"Execution error: {str(e)}",
+            "issues": [str(e)],
+            "duration": time.time() - start_time
+        }
+
+def main():
+    results = {}
+    global_issues = []
+    all_passed = True
+
+    for id, command in CHECKS.items():
+        res = run_check(id, command)
+        results[id] = res
+        if res["status"] == "fail":
+            all_passed = False
+            # Aggregate issues into the global list with ID prefix
+            for issue in res["issues"]:
+                global_issues.append(f"[{id}] {issue}")
+
+    report = {
+        "status": "pass" if all_passed else "fail",
+        "summary": f"{sum(1 for r in results.values() if r['status'] == 'pass')}/{len(results)} criteria passing",
+        "criteria": results,
+        "issues": global_issues,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+    print(json.dumps(report, indent=2))
+
+if __name__ == "__main__":
+    main()
+```
