@@ -18,7 +18,13 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
 3. **The "Executioner" Mindset (EDD):** The orchestrator never trusts a subagent's claim of completion. After implementation, you MUST **dispatch** the **Deterministic Gate** (`eval-gate`) and the **Semantic Audit** (`code-review`) subagents to verify success via fresh environmental signals. The orchestrator MUST NOT run verification commands (pytest, mypy, ruff, type checks) directly — that is the eval-gate's job.
 4. **Manifest-Driven Execution (ADR-0007, ADR-0008, ADR-0009):**
    - **Initialization:** Create `[topic_root]/mission_manifest.json` after Step 1 (Brainstorming). Initialize with `intent_hash` (SHA-256 of `design.md`).
+   - **Lifecycle Management (Timestamps):** To ensure accurate `created_at` and `finished_at` timestamps, you MUST:
+     1. Call `manifest-manager add-phase ... in_progress` BEFORE starting a phase.
+     2. Call `manifest-manager add-phase ... completed` AFTER a phase finishes.
+     3. For units, call `add-unit ... in_progress` before and `completed` after.
+   - **Granular Eval Units:** For multi-step tools like `eval-gate`, track each mode (`define`, `check`, `report`) as an individual **Work Unit** within the `eval` phase.
    - **Goal Locking (Pre-population):** BEFORE dispatching implementation, the orchestrator MUST pre-allocate the expected **Work Units** (BDD scenarios) in the mission manifest using `manifest-manager add-unit`.
+
    - **Observation Turns:** After each phase or implementation unit, the orchestrator MUST perform an "Observation Turn" using `eza` (verify artifact files exist) and `sha256sum` (verify file hashes match manifest). This is NOT verification of correctness — that is the eval-gate's job. Observation Turns only confirm artifacts are present and unmodified. **Environmental Truth (EDD) overrides any manifest claim.**
    - **Aggregated Hierarchy:** For IPS skills, record the path and hash of the `[skill]_manifest.json` in the mission manifest.
    - **Scripted Updates:** All updates MUST use the `uv run $SKILL_DIR/scripts/manifest-manager.py` script.

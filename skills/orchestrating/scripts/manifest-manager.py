@@ -17,10 +17,13 @@ def get_file_hash(path: str) -> str:
         return "missing"
 
 
+def get_utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _build_provenance(agent_id: str, artifact_paths: list[str]) -> dict:
     return {
         "agent_id": agent_id,
-        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "artifacts": [{"path": p, "hash": get_file_hash(p)} for p in artifact_paths],
     }
 
@@ -68,13 +71,18 @@ def main():
         for p in manifest["phases"]:
             if p["phase_id"] == phase_id and p["run_id"] == run_id:
                 p["status"] = status
+                if status == "completed" and not p.get("finished_at"):
+                    p["finished_at"] = get_utc_now()
                 p["provenance"] = provenance
                 break
         else:
+            now = get_utc_now()
             manifest["phases"].append({
                 "phase_id": phase_id,
                 "run_id": run_id,
                 "status": status,
+                "created_at": now,
+                "finished_at": now if status == "completed" else None,
                 "provenance": provenance,
                 "units": [],
             })
@@ -89,10 +97,13 @@ def main():
 
         phase = next((p for p in manifest["phases"] if p["phase_id"] == phase_id and p["run_id"] == run_id), None)
         if not phase:
+            now = get_utc_now()
             phase = {
                 "phase_id": phase_id,
                 "run_id": run_id,
                 "status": "in_progress",
+                "created_at": now,
+                "finished_at": None,
                 "units": [],
                 "provenance": None,
             }
@@ -101,12 +112,17 @@ def main():
         for u in phase["units"]:
             if u["unit_id"] == unit_id:
                 u["status"] = status
+                if status == "completed" and not u.get("finished_at"):
+                    u["finished_at"] = get_utc_now()
                 u["provenance"] = provenance
                 break
         else:
+            now = get_utc_now()
             phase["units"].append({
                 "unit_id": unit_id,
                 "status": status,
+                "created_at": now,
+                "finished_at": now if status == "completed" else None,
                 "provenance": provenance,
             })
 
