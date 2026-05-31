@@ -9,6 +9,8 @@ Amends [ADR-0007](0007-mission-manifest-schema-and-update-contract.md)
 
 amends [7. Mission Manifest Schema and Update Contract](0007-mission-manifest-schema-and-update-contract.md)
 
+enforced by [9. Behavioral Evals and Manifest-Indexed Handoffs](0009-behavioral-evals-and-manifest-indexed-handoffs.md)
+
 ## Context
 
 To scale manifest-driven orchestration without bloating the mission-level context, we need a way to decompose the manifest record. We also need to prevent "Scope Shrinkage," where the model omits difficult sub-tasks from its reports.

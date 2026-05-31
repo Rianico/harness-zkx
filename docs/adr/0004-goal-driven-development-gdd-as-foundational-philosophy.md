@@ -10,6 +10,8 @@ implements [3. Respect authoritative tool signals](0003-respect-authoritative-to
 
 supports [5. Manifest-Driven Orchestration and Provenance Trace](0005-manifest-driven-orchestration-and-provenance-trace.md)
 
+refined by [9. Behavioral Evals and Manifest-Indexed Handoffs](0009-behavioral-evals-and-manifest-indexed-handoffs.md)
+
 ## Context
 
 LLMs are fundamentally **Probabilistic Machines** trying to operate in a **Deterministic World**. Without a structured way to anchor the AI's output to human intent and environmental truth, agents suffer from "Hallucinated Completion" and "Intent Drift." We need a root philosophy that governs all boundaries, constraints, and verification logic in the LSZ architecture.
