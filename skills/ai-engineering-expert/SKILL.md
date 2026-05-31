@@ -33,6 +33,8 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs 
 To prevent "hallucinated completion" and "scope shrinkage," we enforce a strict manifest protocol:
 - **IPS Criteria (Iterative, Parallel, State-Dependent):** Any skill meeting these criteria MUST maintain a local `[skill]_manifest.json`.
 - **Goal Locking:** The Orchestrator MUST pre-allocate work units (Scenarios) in the mission manifest *before* dispatching a skill.
+- **Manifest Engineering:** Manifests must use granular units and dual timestamps (`created_at`, `finished_at`) to ensure state recovery is deterministic.
+    *   **Reference:** [Manifest Engineering Patterns](references/manifest-engineering.md)
 - **Manifest-Indexed Handoffs:** Handoffs MUST NOT repeat details found in the manifest or design. They serve as "Mission Pointers" to the JSON record.
     *   **Deterministic Work (Hard Gates):** Measured by non-LLM tools (compilers, linters, property tests). These are 100% reliable and cost zero tokens.
     *   **Semantic Work (Qualitative Audit):** Verified by Adversarial Orchestration (e.g., a "Skeptic" agent). We use the LLM exclusively for what it does best: verifying architecture, elegance, and intent alignment, stripped of deterministic noise.
@@ -47,9 +49,11 @@ AI system quality is constrained by six factors:
 2. **Observation quality** -- Does the agent see what it needs to decide?
 3. **Recovery quality** -- Can the agent handle errors gracefully?
 4. **Context budget quality** -- Is guidance loaded when needed, not before?
-5. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
-6. **Subagent-first execution** -- Is all implementation work delegated to subagents?
-7. **Handoff quality (Intent preservation)** -- Is state captured such that a fresh agent can resume with full fidelity?
+6. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
+7. **Manifest engineering** -- Does the manifest track granular units with dual timestamps for reliable recovery?
+8. **Subagent-first execution** -- Is all implementation work delegated to subagents?
+9. **Handoff quality (Intent preservation)** -- Is state captured such that a fresh agent can resume with full fidelity?
+
 
 Skills that violate these constraints produce fragile agents that fail silently, exhaust context on irrelevant details, or accumulate technical debt through disorganized artifacts.
 
