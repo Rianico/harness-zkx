@@ -357,109 +357,41 @@ Report: [path]
 5. **Gate on thresholds** — Ship only when all thresholds met
 6. **Mark human review** — Security signoff never fully automated
 
-## Script-Based Verification
+## Script-Based Verification & Remediation
 
 **Core Principle:** All deterministic checks MUST use scripts that output structured, parseable results. The orchestrator parses script output to determine pass/fail — never rely on exit codes alone.
 
-### Script Requirements
+### Avoiding "Prose" Scripts
 
-1. **Structured output** — JSON for complex data, single-line text for simple pass/fail
-2. **Fail-fast on issues** — If any issues remain, output them clearly for remediation
-3. **No exit code reliance** — Scripts may have bugs; parse output to detect actual state
-4. **Issue enumeration** — When failing, list each issue so remediation can target them
+When `defining` evals, you MUST NOT write vague or non-executable descriptions of checks. Every "Code" or "Rule" grader MUST correspond to a concrete, executable script (Python or Bash) located in the eval artifact directory. 
 
-### Script Output Formats
+- **Use Templates:** Strictly follow the templates in `$SKILL_DIR/references/script-templates.md`.
+- **No Manual Grep:** Do not instruct the next agent to "run grep and see if it looks okay." The script MUST do the work and output JSON.
+- **Enumerated Issues:** If a script fails, it MUST populate the `issues` array in the JSON output with specific, actionable failure locations (file:line:message).
 
-**JSON format (preferred for complex checks):**
-```json
-{
-  "status": "pass|fail",
-  "summary": "0 errors, 0 warnings",
-  "issues": [],
-  "details": {}
-}
-```
+### The Remediation Loop (EDD -> TDD)
 
-**Text format (for simple checks):**
-```
-PASS: <description>
-```
-or
-```
-FAIL: <description>
-ISSUES:
-- issue 1
-- issue 2
-```
+The `check` mode is the trigger for the **Remediation Loop**. 
+
+1. **Failure Detection**: `eval-gate check` detects a `status: "fail"` in a script's JSON output.
+2. **Issue Aggregation**: The orchestrator or eval agent extracts all strings from the `issues` array and writes them to `[eval_dir]/issues.md` (one per line).
+3. **Route: remediate**: The orchestrator receives the `remediate` route and the path to `issues.md`.
+4. **TDD Resumption**: The orchestrator invokes `tdd-cycle --lightweight issues=[eval_dir]/issues.md topic_root=[topic_root]`.
+5. **Deterministic Fix**: The `tdd-cycle` skill treats each line in `issues.md` as a **Work Unit** to be resolved.
+6. **Re-Verification**: Once `tdd-cycle` completes, control returns to the orchestrator, which MUST re-run `eval-gate check` to verify the fix.
 
 ### Anti-Patterns
 
 | Wrong | Right |
 |-------|-------|
-| Exit code 0 = pass | Parse output JSON, check `status: "pass"` |
-| `basedpyright && echo "pass"` | `basedpyright --outputjson \| jq '{status: if .errorCount > 0 then "fail" else "pass" end, issues: ...}'` |
-| `rg "pattern" .` | `rg "pattern" \| jq -R -s '{status: if . == "" then "pass" else "fail" end, issues: split("\n")}'` |
-| LLM interprets test output | Script parses own output, returns structured result |
-
-### Example: Type Checking Script
-
-```python
-#!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.10"
-# dependencies = []
-# ///
-import subprocess
-import json
-import sys
-
-result = subprocess.run(
-    ["basedpyright", "--outputjson"],
-    capture_output=True,
-    text=True
-)
-
-try:
-    data = json.loads(result.stdout)
-except json.JSONDecodeError:
-    print(json.dumps({"status": "fail", "summary": "Failed to parse basedpyright output", "issues": [result.stderr]}))
-    sys.exit(0)  # Exit 0 — we output status ourselves
-
-errors = data.get("generalDiagnostics", [])
-issues = [
-    f"{e['file']}:{e['range']['start']['line']+1}: {e['message']}"
-    for e in errors
-]
-
-output = {
-    "status": "pass" if len(issues) == 0 else "fail",
-    "summary": f"{len(issues)} issues found",
-    "issues": issues
-}
-print(json.dumps(output))
-# Always exit 0 — status is in output
-```
-
-### Example: Pattern Check Script (Bash)
-
-```bash
-#!/usr/bin/env bash
-# Check for suppressions outside designated zones
-
-DESIGNATED="lsp/transport.py|ipc/"
-ISSUES=$(rg "# pyright:" src/ --type py | grep -Ev "$DESIGNATED" || true)
-
-if [ -z "$ISSUES" ]; then
-    echo '{"status": "pass", "summary": "No suppressions outside designated zones", "issues": []}'
-else
-    echo "{"status": "fail", "summary": "Suppressions found outside designated zones", "issues": $(echo "$ISSUES" | jq -R -s 'split("\n") | map(select(length > 0))')}"
-fi
-# Always exit 0 — status is in output
-```
+| Description: "Check if types are okay" | Script: `scripts/check-types.py` (executable) |
+| Output: "It failed with some errors" | Output: `{"status": "fail", "issues": ["src/main.py:12: Type error..."]}` |
+| Remediation: "Look at the logs and fix it" | Remediation: `tdd-cycle --lightweight issues=eval/issues.md` |
+| Relying on exit code 0 | Parsing `status: "pass"` from JSON output |
 
 ---
 
-## Grader Selection: Determinism vs Semantics
+## Metric Reference
 
 | Check Type | Grader | Why |
 |------------|--------|-----|

@@ -345,6 +345,16 @@ If yes:
 
 ---
 
+## Context Management (Compaction)
+
+Brainstorming sessions are often turn-intensive. If you notice the conversation history becoming large or the model becoming slow:
+
+- **Artifact Finalization**: Ensure the `design.md` and `handoff.md` are fully written to disk. These are your state recovery artifacts.
+- **Compaction Recommendation**: Suggest the user run the `/compact` command to reset the context window.
+- **State Recovery**: Inform the user that they can resume from the current state by pointing a fresh agent to the generated artifacts (specifically `handoff.md` and `design.md`).
+
+---
+
 ## Exit Criteria (Hard Stop Conditions)
 
 You may exit brainstorming mode **only when all of the following are true**:
