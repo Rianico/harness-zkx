@@ -28,6 +28,36 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
    - **Observation Turns:** After each phase or implementation unit, the orchestrator MUST perform an "Observation Turn" using `eza` (verify artifact files exist) and `sha256sum` (verify file hashes match manifest). This is NOT verification of correctness — that is the eval-gate's job. Observation Turns only confirm artifacts are present and unmodified. **Environmental Truth (EDD) overrides any manifest claim.**
    - **Aggregated Hierarchy:** For IPS skills, record the path and hash of the `[skill]_manifest.json` in the mission manifest.
    - **Scripted Updates:** All updates MUST use the `uv run $SKILL_DIR/scripts/manifest-manager.py` script.
+   - **Command Signatures:**
+     - `init <mission_id> <design_doc_path>`
+     - `get-next-run <phase_id>`
+     - `add-phase <phase_id> <run_id> <status> [agent_id] [artifact_paths...]`
+     - `add-unit <phase_id> <run_id> <unit_id> <status> [agent_id] [artifact_paths...]`
+     - `set-status <status>`
+   - **JSON Schema (Phase/Unit):**
+     ```json
+     {
+       "phase_id": "eval",
+       "run_id": "run-1",
+       "status": "completed",
+       "created_at": "ISO-TIMESTAMP",
+       "finished_at": "ISO-TIMESTAMP",
+       "artifacts": [
+         { "path": "path/to/artifact", "hash": "sha256" }
+       ],
+       "units": [
+         {
+           "unit_id": "define",
+           "status": "completed",
+           "created_at": "ISO-TIMESTAMP",
+           "finished_at": "ISO-TIMESTAMP",
+           "artifacts": [...],
+           "provenance": { "agent_id": "..." }
+         }
+       ],
+       "provenance": { "agent_id": "..." }
+     }
+     ```
    - **Resume Logic:** Verify file hashes against the manifest using `sha256sum --check`.
 5. **Manifest-Indexed Handoffs (Zero-Detail Handoffs):** The `handoff.md` acts as a **Mission Pointer**. It MUST NOT repeat technical decisions, file lists, or test results. It should only contain:
    - The high-level **Mission Goal**.

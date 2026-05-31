@@ -43,11 +43,11 @@ Pre-populate the manifest with expected units *before* execution.
   "status": "in_progress | completed | failed",
   "created_at": "ISO-8601 UTC",
   "finished_at": "ISO-8601 UTC | null",
+  "artifacts": [
+    { "path": "string", "hash": "sha256" }
+  ],
   "provenance": {
-    "agent_id": "string",
-    "artifacts": [
-      { "path": "string", "hash": "sha256" }
-    ]
+    "agent_id": "string"
   }
 }
 ```

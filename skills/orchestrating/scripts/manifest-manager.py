@@ -21,11 +21,8 @@ def get_utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _build_provenance(agent_id: str, artifact_paths: list[str]) -> dict:
-    return {
-        "agent_id": agent_id,
-        "artifacts": [{"path": p, "hash": get_file_hash(p)} for p in artifact_paths],
-    }
+def _build_artifacts(artifact_paths: list[str]) -> list[dict]:
+    return [{"path": p, "hash": get_file_hash(p)} for p in artifact_paths]
 
 
 def _require_args(args: list[str], count: int, label: str) -> None:
@@ -43,7 +40,13 @@ def main():
     command = sys.argv[2]
     args = sys.argv[3:]
 
-    manifest = {"mission_id": "", "status": "in_progress", "intent_hash": "", "phases": []}
+    manifest = {
+        "mission_id": "",
+        "status": "in_progress",
+        "intent_hash": "",
+        "artifacts": [],
+        "phases": []
+    }
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
 
@@ -51,6 +54,7 @@ def main():
         _require_args(args, 2, "init")
         manifest["mission_id"] = args[0]
         manifest["intent_hash"] = get_file_hash(args[1])
+        manifest["artifacts"] = _build_artifacts([args[1]])
 
     elif command == "get-next-run":
         _require_args(args, 1, "get-next-run")
@@ -66,13 +70,15 @@ def main():
         agent_id = args[3] if len(args) > 3 else "orchestrator"
         artifact_paths = args[4:]
 
-        provenance = _build_provenance(agent_id, artifact_paths)
+        artifacts = _build_artifacts(artifact_paths)
+        provenance = {"agent_id": agent_id}
 
         for p in manifest["phases"]:
             if p["phase_id"] == phase_id and p["run_id"] == run_id:
                 p["status"] = status
                 if status == "completed" and not p.get("finished_at"):
                     p["finished_at"] = get_utc_now()
+                p["artifacts"] = artifacts
                 p["provenance"] = provenance
                 break
         else:
@@ -83,6 +89,7 @@ def main():
                 "status": status,
                 "created_at": now,
                 "finished_at": now if status == "completed" else None,
+                "artifacts": artifacts,
                 "provenance": provenance,
                 "units": [],
             })
@@ -93,7 +100,8 @@ def main():
         agent_id = args[4] if len(args) > 4 else "orchestrator"
         artifact_paths = args[5:]
 
-        provenance = _build_provenance(agent_id, artifact_paths)
+        artifacts = _build_artifacts(artifact_paths)
+        provenance = {"agent_id": agent_id}
 
         phase = next((p for p in manifest["phases"] if p["phase_id"] == phase_id and p["run_id"] == run_id), None)
         if not phase:
@@ -104,6 +112,7 @@ def main():
                 "status": "in_progress",
                 "created_at": now,
                 "finished_at": None,
+                "artifacts": [],
                 "units": [],
                 "provenance": None,
             }
@@ -114,6 +123,7 @@ def main():
                 u["status"] = status
                 if status == "completed" and not u.get("finished_at"):
                     u["finished_at"] = get_utc_now()
+                u["artifacts"] = artifacts
                 u["provenance"] = provenance
                 break
         else:
@@ -123,6 +133,7 @@ def main():
                 "status": status,
                 "created_at": now,
                 "finished_at": now if status == "completed" else None,
+                "artifacts": artifacts,
                 "provenance": provenance,
             })
 
