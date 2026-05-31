@@ -16,14 +16,17 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
 1. **Skill Execution, Not Bare Agents:** You MUST NOT invoke the `Agent` tool directly unless instructed by a specific skill's execution rules. Instead, load the phase skill via the `Skill` tool, then execute its workflow exactly as written.
 2. **Sequential Execution:** You must execute the skills in the exact order specified by the pipeline.
 3. **The "Executioner" Mindset (EDD):** The orchestrator never trusts a subagent's claim of completion. After implementation, you MUST execute the **Deterministic Gate** (`eval-gate`) and the **Semantic Audit** (`code-review`) to verify success via fresh environmental signals.
-4. **Manifest-Driven Execution (ADR-0007, ADR-0008):**
+4. **Manifest-Driven Execution (ADR-0007, ADR-0008, ADR-0009):**
    - **Initialization:** Create `[topic_root]/mission_manifest.json` after Step 1 (Brainstorming). Initialize with `intent_hash` (SHA-256 of `design.md`).
-   - **Goal Locking:** BEFORE dispatching an IPS skill (Iterative, Parallel, State-Dependent), the orchestrator MUST pre-allocate the expected **Work Units** (e.g., specific BDD scenarios) in the mission manifest.
+   - **Goal Locking (Pre-population):** BEFORE dispatching implementation, the orchestrator MUST pre-allocate the expected **Work Units** (BDD scenarios) in the mission manifest using `manifest-manager add-unit`.
    - **Observation Turns:** After each phase or implementation unit, the orchestrator MUST perform an "Observation Turn" using `eza` and `sha256sum`. **Environmental Truth (EDD) overrides any manifest claim.**
    - **Aggregated Hierarchy:** For IPS skills, record the path and hash of the `[skill]_manifest.json` in the mission manifest.
    - **Scripted Updates:** All updates MUST use the `uv run $SKILL_DIR/scripts/manifest-manager.py` script.
    - **Resume Logic:** Verify file hashes against the manifest using `sha256sum --check`.
-5. **Handoff-First State Passing**: Prioritize passing the `handoff_pointer` between skills. The `handoff.md` document acts as the high-signal "Mission Bridge" that distills intent and decisions.
+5. **Manifest-Indexed Handoffs (Zero-Detail Handoffs):** The `handoff.md` acts as a **Mission Pointer**. It MUST NOT repeat technical decisions, file lists, or test results. It should only contain:
+   - The high-level **Mission Goal**.
+   - Pointer to **`mission_manifest.json`** for technical state and artifact index.
+   - Pointer to **`design.md`** for intent and amended decisions.
 6. **Interactive Approval Propagation:** By executing skills rather than bare agents, you naturally inherit their interactive approval loops. You MUST honor these user interaction prompts and handle user feedback exactly as defined in the skill's instructions before proceeding to the next step in the pipeline.
 7. **Shared Topic Root:** For a multi-phase workflow on the same topic, create `[topic_root] = .lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]` once at the start of the workflow, then pass it downstream as an explicit `topic_root=<path>` override. Downstream workflow skills own their standalone defaults and MUST treat the orchestrated topic root as a caller override.
 8. **Strict Phase Ownership:**

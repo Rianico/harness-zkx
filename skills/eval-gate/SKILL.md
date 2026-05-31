@@ -91,7 +91,10 @@ For long development sessions, run `eval-gate quick` every 15 minutes or after m
 
 ### Capability Evals
 
-Test new behavior. Observable through code, tests, CLI, API, UI, or artifacts.
+Test new behavior. Observable through code execution, tests, CLI commands, APIs, or environmental side effects.
+
+**CRITICAL: No Paper Tigers.** 
+Capability evals MUST be **Executable Assertions**. You are strictly forbidden from writing "Source Grep" evals that only check for substrings in the source code (e.g., `if 'logic' in file.read()`). An eval must prove that the goal was *achieved in the environment*, not just *promised in the code text*.
 
 **Threshold**: `pass@3 >= 0.90` (success within 3 attempts)
 

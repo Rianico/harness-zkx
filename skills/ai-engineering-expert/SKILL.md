@@ -24,13 +24,16 @@ Core principles for building robust AI systems. All boundaries, constraints, rul
 The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs are fundamentally **Probabilistic Machines** trying to operate in a **Deterministic World**, we use **GDD** to bridge this gap through three non-negotiable pillars:
 
 1.  **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task. It ensures the probabilistic model is anchored to a deterministic behavioral specification.
-2.  **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model *says* it did; we only trust what the *environment says* it did. **Environmental Truth (EDD) is the Supreme Authority.** In any conflict between a manifest claim and an environmental signal (test fail, hash mismatch), the environment always wins.
+2.  **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model *says* it did; we only trust what the *environment says* it did. **Environmental Truth (EDD) is the Supreme Authority.** 
+    *   **Behavioral-First Evals:** Every Capability eval MUST be an **Executable Assertion** (run code/tools). Static grep-based code checks are forbidden for behavioral goals.
 3.  **Semantic vs. Deterministic Split (Execution Efficiency):** We treat hard reality and qualitative alignment as distinct domains.
+    *   **Design-Implementation Sync:** The Semantic Audit MUST verify that implementation changes (e.g., path shifts, logic tweaks) are back-propagated as amendments to the `design.md` (Source of Truth).
 
-### Manifest Hierarchy & Goal Locking (ADR-0008)
+### Manifest Hierarchy & Goal Locking (ADR-0008, ADR-0009)
 To prevent "hallucinated completion" and "scope shrinkage," we enforce a strict manifest protocol:
 - **IPS Criteria (Iterative, Parallel, State-Dependent):** Any skill meeting these criteria MUST maintain a local `[skill]_manifest.json`.
-- **Goal Locking:** The Orchestrator MUST pre-allocate work units in the mission manifest *before* dispatching a skill, ensuring the model cannot move the goalposts.
+- **Goal Locking:** The Orchestrator MUST pre-allocate work units (Scenarios) in the mission manifest *before* dispatching a skill.
+- **Manifest-Indexed Handoffs:** Handoffs MUST NOT repeat details found in the manifest or design. They serve as "Mission Pointers" to the JSON record.
     *   **Deterministic Work (Hard Gates):** Measured by non-LLM tools (compilers, linters, property tests). These are 100% reliable and cost zero tokens.
     *   **Semantic Work (Qualitative Audit):** Verified by Adversarial Orchestration (e.g., a "Skeptic" agent). We use the LLM exclusively for what it does best: verifying architecture, elegance, and intent alignment, stripped of deterministic noise.
 
