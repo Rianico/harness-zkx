@@ -120,16 +120,17 @@ Test existing behavior remains intact. Prefer narrow deterministic checks over f
 
 ```
 [eval_dir]/
-├── <feature>.md          # Definition
-├── <feature>.log         # Append-only check log
-├── <feature>-report.md   # Report artifact
-└── baseline.json         # Pre-implementation baseline
+├── run-[N]/
+│   ├── <feature>.md          # Definition
+│   ├── <feature>.log         # Append-only check log
+│   ├── <feature>-report.md   # Report artifact
+│   └── baseline.json         # Pre-implementation baseline
 ```
 
 **Directory selection:**
-1. `artifact_dir=<path>` → use exactly
-2. `topic_root=<path>` → use `[topic_root]/eval/`
-3. Default → `.lsz/{date}/{timestamp}_{topic}/eval/`
+1. `artifact_dir=<path>` → use exactly (orchestrator should pass `eval/run-[N]`)
+2. `topic_root=<path>` → use `[topic_root]/eval/run-1/`
+3. Default → `.lsz/{date}/{timestamp}_{topic}/eval/run-1/`
 
 ## Dispatch Template
 

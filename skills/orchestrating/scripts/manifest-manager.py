@@ -38,38 +38,18 @@ def main():
         manifest["mission_id"] = sys.argv[3]
         manifest["intent_hash"] = get_file_hash(sys.argv[4])
     
+    elif command == "get-next-run":
+        # get-next-run <phase_id>
+        phase_id = sys.argv[3]
+        runs = [int(p["run_id"].split("-")[1]) for p in manifest["phases"] if p["phase_id"] == phase_id]
+        next_run = max(runs, default=0) + 1
+        print(f"run-{next_run}")
+        return
+
     elif command == "add-phase":
-        # add-phase <phase_id> <status> [agent_id] [artifact_paths...]
+        # add-phase <phase_id> <run_id> <status> [agent_id] [artifact_paths...]
         phase_id = sys.argv[3]
-        status = sys.argv[4]
-        agent_id = sys.argv[5] if len(sys.argv) > 5 else "orchestrator"
-        artifact_paths = sys.argv[6:]
-
-        artifacts = [{"path": p, "hash": get_file_hash(p)} for p in artifact_paths]
-        provenance = {
-            "agent_id": agent_id,
-            "timestamp": datetime.utcnow().isoformat(),
-            "artifacts": artifacts
-        }
-        
-        # Update existing or add new
-        for p in manifest["phases"]:
-            if p["phase_id"] == phase_id:
-                p["status"] = status
-                p["provenance"] = provenance
-                break
-        else:
-            manifest["phases"].append({
-                "phase_id": phase_id,
-                "status": status,
-                "provenance": provenance,
-                "units": []
-            })
-
-    elif command == "add-unit":
-        # add-unit <phase_id> <unit_id> <status> [agent_id] [artifact_paths...]
-        phase_id = sys.argv[3]
-        unit_id = sys.argv[4]
+        run_id = sys.argv[4]
         status = sys.argv[5]
         agent_id = sys.argv[6] if len(sys.argv) > 6 else "orchestrator"
         artifact_paths = sys.argv[7:]
@@ -80,11 +60,43 @@ def main():
             "timestamp": datetime.utcnow().isoformat(),
             "artifacts": artifacts
         }
+        
+        # In Versioned Run pattern, every add-phase is effectively a new record or updating specific run
+        for p in manifest["phases"]:
+            if p["phase_id"] == phase_id and p["run_id"] == run_id:
+                p["status"] = status
+                p["provenance"] = provenance
+                break
+        else:
+            manifest["phases"].append({
+                "phase_id": phase_id,
+                "run_id": run_id,
+                "status": status,
+                "provenance": provenance,
+                "units": []
+            })
 
-        phase = next((p for p in manifest["phases"] if p["phase_id"] == phase_id), None)
+    elif command == "add-unit":
+        # add-unit <phase_id> <run_id> <unit_id> <status> [agent_id] [artifact_paths...]
+        phase_id = sys.argv[3]
+        run_id = sys.argv[4]
+        unit_id = sys.argv[5]
+        status = sys.argv[6]
+        agent_id = sys.argv[7] if len(sys.argv) > 7 else "orchestrator"
+        artifact_paths = sys.argv[8:]
+
+        artifacts = [{"path": p, "hash": get_file_hash(p)} for p in artifact_paths]
+        provenance = {
+            "agent_id": agent_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "artifacts": artifacts
+        }
+
+        phase = next((p for p in manifest["phases"] if p["phase_id"] == phase_id and p["run_id"] == run_id), None)
         if not phase:
             phase = {
                 "phase_id": phase_id,
+                "run_id": run_id,
                 "status": "in_progress",
                 "units": [],
                 "provenance": None

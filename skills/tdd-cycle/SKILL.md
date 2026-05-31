@@ -40,10 +40,12 @@ You are the Orchestrator. Your ONLY job is to dispatch the sub-agents defined be
 **Action:** Prepare the workspace.
 1. Extract arguments from `$ARGUMENTS`.
 2. Detect mode: `--lightweight` flag present → lightweight mode, else full mode.
-3. **Path Resolution**: Use the standard LSZ artifact pattern: `.lsz/{date}/{topic}/tdd/` as the base directory (`[base_dir]`) for all artifacts created in this cycle. Re-use `topic_root` if provided by the caller.
-4. If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
-5. Use the `Bash` tool to run: `mkdir -p [base_dir]`.
-6. Use the provided `lineage_pointer` or reserve as `[base_dir]/00-workflow-lineage.md`.
+3. **Path Resolution**: 
+   - If `artifact_dir=<path>` is provided, use it exactly as `[base_dir]`.
+   - Else if `topic_root=<path>` is provided, use `.lsz/{date}/{topic}/tdd/run-1/` as `[base_dir]`.
+   - Otherwise use a fresh timestamp-based root.
+4. Use the `Bash` tool to run: `mkdir -p [base_dir]`.
+5. Use the provided `lineage_pointer` or reserve as `[base_dir]/00-workflow-lineage.md`.
 7. If lightweight mode: extract `issues=<path>` pointer as `[issues_pointer]`.
 
 **Transition:**
