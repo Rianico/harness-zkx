@@ -16,22 +16,28 @@ You have invoked the Orchestration Workflow Skill. This skill defines the strict
 1. **Skill Execution, Not Bare Agents:** You MUST NOT invoke the `Agent` tool directly unless instructed by a specific skill's execution rules. Instead, load the phase skill via the `Skill` tool, then execute its workflow exactly as written.
 2. **Sequential Execution:** You must execute the skills in the exact order specified by the pipeline.
 3. **The "Executioner" Mindset (EDD):** The orchestrator never trusts a subagent's claim of completion. After implementation, you MUST execute the **Deterministic Gate** (`eval-gate`) and the **Semantic Audit** (`code-review`) to verify success via fresh environmental signals.
-4. **Handoff-First State Passing**: Prioritize passing the `handoff_pointer` between skills. The `handoff.md` document acts as the high-signal "Mission Bridge" that distills intent and decisions.
-
-5. **Interactive Approval Propagation:** By executing skills rather than bare agents, you naturally inherit their interactive approval loops. You MUST honor these user interaction prompts and handle user feedback exactly as defined in the skill's instructions before proceeding to the next step in the pipeline.
-6. **Shared Topic Root:** For a multi-phase workflow on the same topic, create `[topic_root] = .lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]` once at the start of the workflow, then pass it downstream as an explicit `topic_root=<path>` override. Downstream workflow skills own their standalone defaults and MUST treat the orchestrated topic root as a caller override.
-7. **Strict Phase Ownership:**
+4. **Manifest-Driven Execution (ADR-0007, ADR-0008):**
+   - **Initialization:** Create `[topic_root]/mission_manifest.json` after Step 1 (Brainstorming). Initialize with `intent_hash` (SHA-256 of `design.md`).
+   - **Goal Locking:** BEFORE dispatching an IPS skill (Iterative, Parallel, State-Dependent), the orchestrator MUST pre-allocate the expected **Work Units** (e.g., specific BDD scenarios) in the mission manifest.
+   - **Observation Turns:** After each phase or implementation unit, the orchestrator MUST perform an "Observation Turn" using `eza` and `sha256sum`. **Environmental Truth (EDD) overrides any manifest claim.**
+   - **Aggregated Hierarchy:** For IPS skills, record the path and hash of the `[skill]_manifest.json` in the mission manifest.
+   - **Scripted Updates:** All updates MUST use the `uv run $SKILL_DIR/scripts/manifest-manager.py` script.
+   - **Resume Logic:** Verify file hashes against the manifest using `sha256sum --check`.
+5. **Handoff-First State Passing**: Prioritize passing the `handoff_pointer` between skills. The `handoff.md` document acts as the high-signal "Mission Bridge" that distills intent and decisions.
+6. **Interactive Approval Propagation:** By executing skills rather than bare agents, you naturally inherit their interactive approval loops. You MUST honor these user interaction prompts and handle user feedback exactly as defined in the skill's instructions before proceeding to the next step in the pipeline.
+7. **Shared Topic Root:** For a multi-phase workflow on the same topic, create `[topic_root] = .lsz/$(date +%Y%m%d)/$(date +%H%M%S)_[short_topic]` once at the start of the workflow, then pass it downstream as an explicit `topic_root=<path>` override. Downstream workflow skills own their standalone defaults and MUST treat the orchestrated topic root as a caller override.
+8. **Strict Phase Ownership:**
    - **Intent Locking:** Brainstorming and Architect phases lock the "What" and "Why".
    - **Empirical Execution:** TDD and Eval-gate phases prove the "How" works.
    - **Semantic Verification:** Code Review proves the "Intent Alignment" is preserved.
-8. **No Redundant Re-encoding:** Do not ask a downstream phase to recreate an upstream artifact as a rewritten checklist, summary, or review unless that transformation is the explicit purpose of the phase.
-9. **Topic-Root Source of Truth Exception:** `design.md` may live directly at `[topic_root]/design.md` because it is the mission-level source of truth, not a workflow-specific artifact directory. Workflow phase artifacts still belong under `[topic_root]/{workflow_kind}/` unless `artifact_dir=<path>` overrides them.
-10. **Domain Context Injection:** When a phase skill's execution instructions require launching an agent or passing state, prepend concise domain context to the task prompt, then pass only approved upstream pointers relevant to that phase.
-11. **Eval Gate (Deterministic Gate) Remediation:** After `eval-gate check`, parse the output routing decision:
+9. **No Redundant Re-encoding:** Do not ask a downstream phase to recreate an upstream artifact as a rewritten checklist, summary, or review unless that transformation is the explicit purpose of the phase.
+10. **Topic-Root Source of Truth Exception:** `design.md` may live directly at `[topic_root]/design.md` because it is the mission-level source of truth, not a workflow-specific artifact directory. Workflow phase artifacts still belong under `[topic_root]/{workflow_kind}/` unless `artifact_dir=<path>` overrides them.
+11. **Domain Context Injection:** When a phase skill's execution instructions require launching an agent or passing state, prepend concise domain context to the task prompt, then pass only approved upstream pointers relevant to that phase.
+12. **Eval Gate (Deterministic Gate) Remediation:** After `eval-gate check`, parse the output routing decision:
     - `Route: continue` → Proceed to `code-review` (Semantic Audit)
     - `Route: remediate` → Invoke `tdd-cycle --lightweight issues=[issues_path] topic_root=[topic_root]`.
     - `Route: blocked` → Stop and surface blocker to user.
-12. **Code Review (Semantic Audit) Remediation:** When `code-review` is the final phase, invoke it with `orchestrated_final_review=true`. Safe `medium`, `low`, or `minor` findings should be delegated for remediation without asking the user first. Ask for approval only when findings are `blocking`, `high`, security-critical, destructive, risky to fix, or require a product or architecture decision.
+13. **Code Review (Semantic Audit) Remediation:** When `code-review` is the final phase, invoke it with `orchestrated_final_review=true`. Safe `medium`, `low`, or `minor` findings should be delegated for remediation without asking the user first. Ask for approval only when findings are `blocking`, `high`, security-critical, destructive, risky to fix, or require a product or architecture decision.
 
 ## Standard Return Format (The LSZ Contract)
 Every phase execution (whether via Skill or Agent) MUST return a structured response for the orchestrator to parse:
@@ -92,6 +98,8 @@ After brainstorming completes:
 - **`tdd-cycle` owns Execution Planning & Implementation:** Vertical slicing. Phase 1 maps the BDD intent into an ordered **Behavior Sequence Map**. Phase 2 executes the Red-Green-Refactor loop.
 - **`eval-gate check` owns the Deterministic Gate:** Running the EDD spec against the implementation and producing pass/fail logs based on environmental truth.
 - **`code-review` owns the Semantic Audit:** Adversarial review (Skeptic) of architecture, intent alignment, and maintainability gaps not covered by deterministic scripts.
+
+---
 
 ## Standard Pipelines
 
