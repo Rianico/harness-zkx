@@ -18,6 +18,7 @@ Modern Python 3.12+ environment setup and language features.
   - Install: `uv pip install <pkg>`
 - **`ruff`**: Formatting and linting (replaces black, isort, flake8)
 - **`basedpyright`**: Default LSP and type checker. Fallback to `mypy` only when unavailable.
+- **LSP freshness**: If diagnostics contradict edited files, restart/reload the language server before judging results.
 - **`pytest`**: Run with `uv run pytest -q` (quiet by default, verbose only when needed)
 
 ## Project Configuration

@@ -14,6 +14,8 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 
 - **Formatting:** PEP 8, `snake_case` for variables/functions, `CamelCase` for classes
 - **Typing:** Type hints on all function signatures
+- **Class state:** Annotate instance attributes in `__init__` unless the class is `@final`
+- **Module APIs:** Do not import private helpers across modules; make cross-module helpers public
 - **Immutability:** Never use mutable defaults (`def func(x=[]):` → BAD)
 - **Imports:** Standard Library → Third Party → Local
 
@@ -23,10 +25,13 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 - **Most precise scope:** Line-level > file-level > targeted config > project-level (follow Scoped Over Global in common rules)
 - **Document suppressions:** Every suppression includes a comment explaining why
 - **Unused parameters:** `_param` prefix convention
-- **`getattr()` returns `Any`:** Avoid it; use explicit method dispatch instead
+- **Unused call results:** Assign to `_` when intentionally discarding a meaningful return value
+- **`hasattr()`/`getattr()` weaken types:** Prefer `Protocol` + `isinstance` or explicit dispatch
+- **Dict narrowing:** After `isinstance(x, dict)`, cast/narrow to `dict[str, object]` before passing onward
 - **Keep typed models:** Access `model.field` directly; call `model_dump()` only at output boundaries
 - **`object` over `Any`:** `object` forces validation; `Any` silently propagates
 - **Validate at boundaries:** External data → `object` → Pydantic → typed model; internal code trusts types
+- **Concrete normalizers:** Response normalizers return concrete domain types, not `object`
 - **Trace unknown types:** Never assume diagnostic is "legitimate" — find source, check spec, build model
 - **Verification:** Static (basedpyright), LSP (workspace diagnostics), Pattern (`rg "# pyright: "`)
 
@@ -37,6 +42,11 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 | `reportMissingTypeStubs` (internal) | `allowedUntypedLibraries` in config |
 | `reportCallInDefaultInitializer` (Typer) | Line-level suppression |
 | `reportImplicitStringConcatenation` | Fix code (use f-string or `+`) |
+| `reportPrivateUsage` | Rename helper public or move ownership boundary |
+| `reportUnannotatedClassAttribute` | Add explicit instance attribute annotations |
+| `reportUnknownArgumentType` | Narrow/cast at the boundary before calling typed helpers |
+| `reportUnusedCallResult` | Assign to `_` or use the result |
+| `reportReturnType` from `object` | Strengthen helper return type and remove ignore |
 | N803 (protocol names) | File-level suppression with comment |
 | D107/D102 (trivial docstrings) | Disable rules or add docstrings |
 
