@@ -1,6 +1,10 @@
 """Tests for the md-to-html rendering pipeline."""
 
+from pathlib import Path
+
 from bs4 import BeautifulSoup
+
+from render import AssetBundler, BodyRenderer, FrontmatterParser, ParsedDocument
 
 
 class TestBasicStructure:
@@ -314,3 +318,205 @@ class TestMermaidWrap:
         """Sample without mermaid blocks produces no wraps."""
         html = renderer.render(sample_md)
         assert 'class="md-mermaid-wrap"' not in html
+
+
+class TestFrontmatterParser:
+    """Stage 1: FrontmatterParser.parse() behavior."""
+
+    def test_parse_with_frontmatter(self):
+        md = "---\ntitle: Test\nkey: value\n---\n\nBody content"
+        doc = FrontmatterParser().parse(md)
+        assert doc.frontmatter == {"title": "Test", "key": "value"}
+        assert doc.body.strip() == "Body content"
+
+    def test_parse_no_frontmatter(self):
+        md = "Just body content\n\nNo frontmatter here"
+        doc = FrontmatterParser().parse(md)
+        assert doc.frontmatter == {}
+        assert doc.body == md
+
+    def test_parse_empty_frontmatter(self):
+        md = "---\n---\n\nBody"
+        doc = FrontmatterParser().parse(md)
+        assert doc.frontmatter == {}
+        assert "Body" in doc.body
+
+    def test_parse_no_closing_frontmatter(self):
+        md = "---\ntitle: Test\nNo closing marker"
+        doc = FrontmatterParser().parse(md)
+        assert doc.frontmatter == {}
+        assert doc.body == md
+
+    def test_parse_applies_list_fixes(self):
+        md = "---\ntitle: Test\n---\n\n**Wins:**\n- item"
+        doc = FrontmatterParser().parse(md)
+        assert "**Wins:**\n\n-" in doc.body
+
+    def test_parse_yaml_parse_error_produces_empty_frontmatter(self):
+        md = "---\n[invalid: yaml: broken\n---\n\nBody"
+        doc = FrontmatterParser().parse(md)
+        assert doc.frontmatter == {}
+        assert "Body" in doc.body
+
+
+class TestBodyRenderer:
+    """Stage 2: BodyRenderer.render() behavior."""
+
+    def test_render_returns_soup(self):
+        doc = ParsedDocument(frontmatter={}, body="# Hello")
+        soup = BodyRenderer().render(doc)
+        assert soup is not None
+        assert soup.find("h1") is not None
+
+    def test_render_empty_body(self):
+        doc = ParsedDocument(frontmatter={}, body="")
+        soup = BodyRenderer().render(doc)
+        assert soup is not None
+
+    def test_render_headings_only(self):
+        doc = ParsedDocument(frontmatter={}, body="# Title\n\n## Section")
+        soup = BodyRenderer().render(doc)
+        assert soup.find("h2") is not None
+
+    def test_render_standard_classes(self):
+        doc = ParsedDocument(frontmatter={}, body="Test paragraph")
+        soup = BodyRenderer().render(doc)
+        p = soup.find("p")
+        assert p is not None
+        assert "md-paragraph" in p.get("class", [])
+
+    def test_render_callout_badge(self):
+        md = "## 1. Section\n\n> [!badge]\n> Strong"
+        doc = ParsedDocument(
+            frontmatter={"strength_enum": {"Strong": {"css": "badge-strong"}}},
+            body=md,
+        )
+        soup = BodyRenderer().render(doc)
+        badge = soup.find("span", class_="md-tag")
+        assert badge is not None
+        assert badge.get_text() == "Strong"
+
+    def test_render_with_sections(self):
+        md = "## 1. First Section\n\nContent\n\n## 2. Second Section\n\nMore"
+        doc = ParsedDocument(frontmatter={}, body=md)
+        soup = BodyRenderer().render(doc)
+        sections = soup.find_all("section")
+        assert len(sections) >= 2
+
+    def test_render_skip_title_h1(self):
+        """H1 matching frontmatter title should be skipped."""
+        md = "# My Title\n\n## 1. Section\n\nContent"
+        doc = ParsedDocument(frontmatter={"title": "My Title"}, body=md)
+        soup = BodyRenderer().render(doc)
+        assert not any(h.get_text().strip() == "My Title" for h in soup.find_all("h1"))
+
+
+class TestAssetBundler:
+    """Stage 3: AssetBundler.bundle() behavior."""
+
+    def test_bundle_returns_html_string(self, tmp_path):
+        asset_dir = tmp_path / "assets"
+        asset_dir.mkdir()
+        flavors_dir = tmp_path / "flavors"
+        (flavors_dir / "kami").mkdir(parents=True)
+        (flavors_dir / "kami" / "style.css").write_text("body {}")
+        (asset_dir / "mermaid.min.js").write_text("// mermaid")
+        (asset_dir / "zoom.js").write_text("// zoom")
+
+        bundler = AssetBundler("kami", flavors_dir, asset_dir)
+        soup = BeautifulSoup("<p>Hello</p>", "html.parser")
+        doc = ParsedDocument(frontmatter={"title": "Test"}, body="")
+        html = bundler.bundle(soup, doc, None)
+        assert isinstance(html, str)
+        assert "Hello" in html
+        assert "Test" in html
+
+    def test_bundle_with_output_path(self, tmp_path):
+        asset_dir = tmp_path / "assets"
+        asset_dir.mkdir()
+        (asset_dir / "mermaid.min.js").write_text("// mermaid")
+        (asset_dir / "zoom.js").write_text("// zoom")
+        flavors_dir = tmp_path / "flavors"
+        (flavors_dir / "kami").mkdir(parents=True)
+        (flavors_dir / "kami" / "style.css").write_text("body {}")
+
+        bundler = AssetBundler("kami", flavors_dir, asset_dir)
+        doc = ParsedDocument(frontmatter={}, body="")
+        soup = BeautifulSoup("", "html.parser")
+        out_path = tmp_path / "report.html"
+        html = bundler.bundle(soup, doc, str(out_path))
+
+        assert "style.css" in html
+        assert "mermaid.min.js" in html
+        assert "zoom.js" in html
+
+    def test_bundle_inline_style_on_no_path(self, tmp_path):
+        asset_dir = tmp_path / "assets"
+        asset_dir.mkdir()
+        flavors_dir = tmp_path / "flavors"
+        (flavors_dir / "kami").mkdir(parents=True)
+        (flavors_dir / "kami" / "style.css").write_text("body { color: red; }")
+
+        bundler = AssetBundler("kami", flavors_dir, asset_dir)
+        doc = ParsedDocument(frontmatter={}, body="")
+        soup = BeautifulSoup("", "html.parser")
+        html = bundler.bundle(soup, doc, None)
+
+        assert "color: red" in html
+
+    def test_bundle_with_glossary(self, tmp_path):
+        asset_dir = tmp_path / "assets"
+        asset_dir.mkdir()
+        flavors_dir = tmp_path / "flavors"
+        (flavors_dir / "kami").mkdir(parents=True)
+
+        bundler = AssetBundler("kami", flavors_dir, asset_dir)
+        doc = ParsedDocument(
+            frontmatter={"glossary": {"term_one": "first term", "term_two": "second term"}},
+            body="",
+        )
+        soup = BeautifulSoup("", "html.parser")
+        html = bundler.bundle(soup, doc, None)
+
+        assert "Glossary" in html
+        assert "first term" in html
+        assert "second term" in html
+        assert 'id="glossary"' in html
+
+    def test_bundle_legend_css_inlined(self, tmp_path):
+        asset_dir = tmp_path / "assets"
+        asset_dir.mkdir()
+        flavors_dir = tmp_path / "flavors"
+        (flavors_dir / "kami").mkdir(parents=True)
+
+        bundler = AssetBundler("kami", flavors_dir, asset_dir)
+        doc = ParsedDocument(
+            frontmatter={
+                "legend": {
+                    "module": {"css": "border-slate-400"},
+                },
+            },
+            body="",
+        )
+        soup = BeautifulSoup("", "html.parser")
+        html = bundler.bundle(soup, doc, None)
+
+        assert ".legend-tag-module::before" in html
+        assert "#94a3b8" in html
+
+    def test_get_dynamic_legend_css_none_data(self):
+        """get_dynamic_legend_css returns empty string for None data."""
+        bundler = AssetBundler("kami", Path("/tmp/flavors"), Path("/tmp/assets"))
+        assert bundler.get_dynamic_legend_css(None) == ""
+
+    def test_get_dynamic_legend_css_no_css_key(self):
+        """get_dynamic_legend_css returns empty string for entries without css key."""
+        bundler = AssetBundler("kami", Path("/tmp/flavors"), Path("/tmp/assets"))
+        result = bundler.get_dynamic_legend_css({"item": {"symbol": "solid box"}})
+        assert result == ""
+
+    def test_get_dynamic_legend_css_unrecognized_css(self):
+        """get_dynamic_legend_css returns empty string for unrecognized CSS."""
+        bundler = AssetBundler("kami", Path("/tmp/flavors"), Path("/tmp/assets"))
+        result = bundler.get_dynamic_legend_css({"item": {"css": "border-purple-300"}})
+        assert result == ""
