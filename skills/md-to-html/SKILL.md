@@ -87,6 +87,24 @@ The self-consistency tests in `tests/md-to-html/test_contract.py` also verify th
 uv run pytest tests/md-to-html/ -q
 ```
 
+### Asset Integrity
+
+The `assets/` directory contains immutable files — third-party libraries and skill-owned scripts that must never be manually edited. To verify asset integrity against the locked manifest:
+
+```bash
+uv run python3 skills/md-to-html/scripts/verify_assets.py
+```
+
+This compares SHA-256 hashes of every file in `assets/` against `assets/MANIFEST.json`. If a file has been modified, deleted, or added without updating the manifest, the check fails.
+
+After intentionally updating an asset (e.g., upgrading mermaid.min.js to a new version), regenerate the manifest:
+
+```bash
+uv run python3 skills/md-to-html/scripts/verify_assets.py --update
+```
+
+Then manually edit `assets/MANIFEST.json` to record the new `source` and `version` before committing.
+
 ## Directory Layout
 
 The skill's directory splits into three zones: skill internals, shared assets, and documentation for consuming skills.
@@ -101,17 +119,22 @@ skills/md-to-html/
 │   ├── RENDERING-CONTRACT.md  # CSS class manifest for verification
 │   ├── kami/style.css     # Kami design system stylesheet
 │   └── minimal/style.css  # Minimal design system stylesheet
-├── assets/                # Shared files — consumed by generated HTML
-│   ├── mermaid.min.js     # Mermaid diagram renderer
-│   └── zoom.js            # Zoom/pan/fullscreen controls
+├── assets/                # Immutable shared files — consumed by generated HTML
+│   ├── mermaid.min.js     # Mermaid diagram renderer (CDN-fetched, do not edit)
+│   ├── zoom.js            # Zoom/pan/fullscreen controls (skill-owned, do not edit)
+│   └── MANIFEST.json      # SHA-256 manifest for asset integrity verification
 └── scripts/               # Implementation (skill internal)
     ├── render.py          # The renderer
-    └── validate_flavor.py # Contract conformance checker
+    ├── validate_flavor.py # Contract conformance checker
+    └── verify_assets.py   # Asset integrity verifier
 ```
 
-The `assets/` directory is the **shared boundary** — files there are
-referenced by generated HTML via relative paths. Everything else is
-skill-internal: the renderer, flavors, and documentation.
+The `assets/` directory is the **immutable shared boundary** — files there are
+referenced by generated HTML via relative paths. These files must never be
+manually edited. Third-party libraries (mermaid.min.js) are fetched from CDN
+and pinned by hash. Skill-owned scripts (zoom.js) are authored in this repo
+but treated as immutable artifacts once committed. Run `verify_assets.py` to
+confirm integrity before and after any intentional asset change.
 
 The test suite lives at the project root under `tests/md-to-html/` per
 project convention.
@@ -124,6 +147,8 @@ project convention.
 | [Element Mapping](references/element-mapping.md) | Precise MD→HTML contract — every element, its output, validation rules |
 | [scripts/render.py](scripts/render.py) | The renderer implementation |
 | [scripts/validate_flavor.py](scripts/validate_flavor.py) | CSS contract conformance checker |
-| [assets/](assets/) | Shared files — referenced by generated HTML (mermaid.min.js, zoom.js) |
+| [scripts/verify_assets.py](scripts/verify_assets.py) | Asset integrity verifier |
+| [assets/](assets/) | Immutable shared files — referenced by generated HTML (mermaid.min.js, zoom.js) |
+| [assets/MANIFEST.json](assets/MANIFEST.json) | SHA-256 manifest for asset integrity |
 | [flavors/kami/](flavors/kami/) | Kami design system (style.css) |
 | [flavors/minimal/](flavors/minimal/) | Minimal design system |
