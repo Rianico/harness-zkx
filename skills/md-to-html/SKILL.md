@@ -70,7 +70,7 @@ A skill only needs to follow the card section order and use the supported callou
 When developing or modifying a flavor's `style.css`, run the validator to ensure the CSS covers every class, attribute selector, and design token in the rendering contract:
 
 ```bash
-uv run python3 skills/md-to-html/scripts/validate_flavor.py flavors/<flavor>/style.css
+uv run python3 skills/md-to-html/scripts/validate_flavor.py <flavor>
 ```
 
 The validator parses the machine-readable manifest from `flavors/RENDERING-CONTRACT.md` and reports any missing selectors or tokens. A passing validator is required before committing CSS changes.

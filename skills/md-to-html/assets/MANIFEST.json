@@ -5,8 +5,8 @@
     "version": "11.15.0"
   },
   "zoom.js": {
-    "sha256": "bdcc73b371557c5419de1c78ea51244bc27ba5429671bc288bf041745384dfe0",
+    "sha256": "46e4b6010a4f9e4e045843d6ef60a5c0e9791b3f069bb788126719d181f1a40a",
     "source": "first-party (skill-owned)",
-    "version": "1.0.0"
+    "version": "1.1.0"
   }
 }

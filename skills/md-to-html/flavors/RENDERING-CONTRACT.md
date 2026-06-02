@@ -69,11 +69,11 @@ Only present when `frontmatter.statistics` has values.
 
 | Class | Role |
 |-------|------|
-| `.md-dashboard` | Flex container for stat groups |
-| `.md-dashboard-group` | Groups related stat cards (total vs. strength) |
-| `.md-stat-card` | Individual stat card (flex:1, dashed border) |
+| `.md-dashboard` | Four-column responsive grid for stat cards |
+| `.md-dashboard-group` | Logical grouping wrapper; CSS uses `display: contents` so cards align as equal grid items |
+| `.md-stat-card` | Individual stat card with solid paper border and hover elevation |
 | `.md-stat-label` | Stat label (uppercase, small) |
-| `.md-stat-value` | Stat number (large, bold) |
+| `.md-stat-value` | Stat number (large, tabular) |
 | `.badge-strong` / `.badge-worth` / `.badge-speculative` | Optional tint class on stat card |
 
 ### Meta block
@@ -409,11 +409,13 @@ When styling mermaid diagrams, selectors must be scoped under `.md-mermaid-wrap`
 .md-mermaid-wrap .edgePath path   → edge lines
 .md-mermaid-wrap marker path      → arrowheads
 .md-mermaid-wrap .edgeLabel       → edge labels
+.md-mermaid-wrap .edgeLabel p     → neutralize Mermaid HTML-label defaults
+.md-mermaid-wrap .labelBkg        → neutralize Mermaid HTML-label defaults
 .md-mermaid-wrap .nodeLabel       → node labels
 .md-mermaid-wrap .cluster rect    → subgraph backgrounds
 ```
 
-These override Mermaid's inline SVG styles — `!important` is expected and appropriate here.
+These override Mermaid's inline SVG and HTML-label styles — `!important` is expected and appropriate here. Avoid broad transitions on Mermaid nodes; color-only `fill` and `stroke` transitions preserve Mermaid layout math during theme changes.
 
 ---
 
