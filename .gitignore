@@ -9,6 +9,8 @@
 .claude/commands/
 .claude/settings.*
 
+.llm-lsp-cli/
+
 ## npx skills 
 .skills-lock.json
 
