@@ -1,186 +1,129 @@
+---
+name: md-to-html
+description: >-
+  Convert structured Markdown into styled HTML using the kami design system. Acts as the authoritative source for how to write markdown that deterministically converts to curated HTML. Use when generating human-readable reports from LLM-authored markdown, or when a skill needs guidance on writing script-friendly MD.
+argument-hint: >-
+  <source.md> [-o output.html] [-f flavor]
+---
+
 # md-to-html
 
-Convert Markdown files into styled, human-readable HTML views using the "kami" design system (v2).
+Convert structured Markdown into styled, human-readable HTML using the kami design system. This skill is the authoritative source of truth for "how to write markdown that converts deterministically to HTML."
 
-## Overview
+## When to Target This Format
 
-This skill treats Markdown as the canonical source and HTML as a generated view. It bundles assets like CSS and Mermaid.js for performance and offline usage.
+Markdown files are primarily for LLM consumption. Normal markdown works everywhere — Obsidian, GitHub, any viewer.
 
-## Features (v2)
+**Add the extra structure only when the file also needs curated HTML display for humans.** The structure is optional overhead; pay it only when the HTML output justifies it.
 
-- **Multi-Flavor Design Systems**: Support for multiple design systems (flavors) including `kami` and `minimal`. Any system from [nexu-io/open-design](https://github.com/nexu-io/open-design) can be added.
-- **Dynamic Skinning**: Automatically skins the report layout by injecting design tokens from the selected flavor's `tokens.css`.
-- **Enhanced Kami Layout**: A robust, responsive report layout that automatically applies `md-{element}` classes and handles tabular alignment for numeric data.
-- **Section & Card Synthesis**: Numeric H2s and "Problem/Solution/Wins" patterns are transformed into styled `.md-section` and `.md-card` blocks.
-- **Detail Grid Synthesis**: Groups core deepening opportunity elements into a responsive 3-column `md-detail-grid`.
-- **Mermaid.js Support**: Renders diagrams using bundled Mermaid.js (v11) referenced from skill assets.
+When a skill needs HTML output, point it to the [Authoring Guide](references/authoring-guide.md). That document is the textbook — every pattern it describes is guaranteed by the renderer implementation.
+
+## The Contract
+
+Three mechanisms bridge markdown and HTML. The renderer looks for these and only these:
+
+| Mechanism | Markdown | Purpose |
+|-----------|----------|---------|
+| **Frontmatter** | YAML between `---` fences | Data: metadata, enums, glossary, statistics |
+| **Callouts** | `> [!type]` blockquotes | Structured elements: badges, files, legend, problem, warnings |
+| **Mermaid** | ` ```mermaid ``` ` fences | Diagrams: graph, sequence, flowchart |
+
+Everything else — headings, paragraphs, lists, bold, code, tables — passes through as standard markdown with typographic CSS classes applied.
 
 ## Usage
 
 ```bash
-uv run python3 skills/md-to-html/scripts/render.py <source.md> [-o output.html] [-f <flavor>] [--inline]
+uv run python3 skills/md-to-html/scripts/render.py <source.md> [-o output.html] [-f <flavor>]
 ```
 
 ### Arguments
 
 - `source`: Path to the source Markdown file.
-- `-o, --output`: Optional output path (defaults to same name as source).
+- `-o, --output`: Optional output path (defaults to same name as source with `.html` extension). When provided, the HTML links to the skill's own CSS and JS via relative paths instead of inlining them.
 - `-f, --flavor`: Design system flavor (default: `kami`). Supported: `kami`, `minimal`.
-- `--inline`: Embed Mermaid.js directly into the HTML (CSS is always inlined for flavor portability).
 
-## Element Mappings
+The HTML output is **repository-local** — it references CSS and JS from the skill's `assets/` and `flavors/` directories rather than copying them alongside the output. Open the HTML from within the repo tree for full styling. Without `-o`, everything is inlined for standalone use.
 
-| Markdown Element | HTML Element | Kami Class / Wrapper |
-| :--- | :--- | :--- |
-| Document Root | `<body>` | `<article class="md-document">` |
-| Frontmatter: `project` | `<h1>` | `class="md-heading-level-1"` (Inside `.md-header`) |
-| Frontmatter: `metadata`| `<div>` | Render repo, branch, reviewed, model in header |
-| Frontmatter: `glossary`| `<dl>` | Render glossary from YAML at bottom |
-| Frontmatter: `statistics`| `<div>` | `class="md-meta"` / `.md-meta-item` |
-| H1 (`#`) | `<h1>` | `class="md-heading-level-1"` |
-| H2 (`## N. Title`) | `<section>` | `class="md-section"` with `.md-section-num` |
-| H3 (`###`) | `<div>` | `class="md-card"` with `.md-card-header` |
-| Pattern: Problem/Sol/Wins| `<div>` | `class="md-detail-grid"` with 3 cols |
-| Table Cell (Numeric) | `<td>` | `class="md-tabular"` |
-| Mermaid Block | `<div>` | `class="mermaid"` |
+### Invoking from Another Skill
 
-## Assets & Flavors
-
-- **Common Assets**: `skills/md-to-html/assets/mermaid.min.js`.
-- **Flavors**: Stored in `skills/md-to-html/flavors/`. Each contains a `style.css` (base) or `reference/tokens.css` (tokens).
-
-## Script-Friendly Markdown Patterns
-
-These patterns teach other skills how to write markdown that a script can deterministically convert to HTML. The core idea: **frontmatter carries data, callouts carry structured elements, Mermaid carries diagrams**.
-
-### 1. Callout-as-data-carrier
-
-Use Obsidian `> [!TYPE]` callouts as machine-parseable markers for structured elements that don't have native markdown equivalents. The script detects `[!TYPE]`, extracts the body, and routes it to the corresponding HTML renderer.
-
-**Supported callout types:**
-
-| Callout | Purpose | Body format | HTML output |
-|---------|---------|-------------|-------------|
-| `> [!badge]` | Classification tags | `**Strong** · in-process` | Badge row with colored spans |
-| `> [!files]` | Related files | `- \`path/file.py\`` | Monospaced file list |
-| `> [!legend]` | Glossary term tags | `leakage · seam · locality` | Term badges |
-| `> [!problem]` | Problem statement | Free text | Styled blockquote |
-
-**Why callouts over bold text:** `> **Problem:** text` is prose that requires regex to extract. `> [!problem]\n> text` is a structured token the script can split on reliably. The callout type is the routing key; the body is the payload.
-
-**Pattern for adding new callouts:**
-1. Pick a type name: `[!typename]`
-2. Define the body format (one-line, list, or free text)
-3. Add the type to the script's regex: `r'\[!(badge|files|legend|problem|typename)\]'`
-4. Add the renderer branch in the callout handler
-
-### 2. Frontmatter separation
-
-Frontmatter is **data**, not presentation. The HTML template owns colors, spacing, and layout.
-
-**Rules:**
-- `css` class names belong in frontmatter (they're the script contract)
-- Color tokens (`emerald`, `amber`) belong in the stylesheet (they're design decisions)
-- Enum values are semantic (`Strong`, `Worth exploring`) — the template maps them to CSS
-
-**Example — strength enum:**
-```yaml
-# Correct: css class is the contract
-strength_enum:
-  Strong: { css: "badge-strong" }
-
-# Wrong: color token leaks design into data
-strength_enum:
-  Strong: { color: emerald, css: "badge-strong" }
-```
-
-### 3. Mermaid-only diagrams
-
-All diagrams use ```` ```mermaid ``` ```` blocks. No hand-built prose, no `<!-- diagram: TYPE -->` comments, no mixed rendering strategies.
-
-**Why:** A single rendering pipeline (parse Mermaid block → copy to `<pre class="mermaid">`) eliminates ambiguity. The script doesn't need to detect diagram types or switch between renderers.
-
-**Before/after pattern:**
-```markdown
-> **BEFORE** — Description of current state
-
-```mermaid
-graph TD
-    A["Module"] --> B["Responsibility 1"]
-    A --> C["Responsibility 2"]
-```
-
-> **AFTER** — Description of proposed state
-
-```mermaid
-graph TD
-    A["Module"] --> B["Consolidated"]
-```
-```
-
-### 4. Card section order
-
-When a markdown file represents a list of items (candidates, issues, features), each item follows a fixed order that mirrors its HTML rendering:
+When a skill needs to render HTML, it invokes md-to-html via the Skill tool — never by hardcoding the script path:
 
 ```
-## N. Title                    → <section> with <h2>
-
-> [!badge]                    → badge row
-> **Strong** · category
-
-> [!files]                    → file list
-> - `path/file.py`
-
-> [!legend]                   → term tags
-> term1 · term2 · term3
-
-> [!problem]                  → problem statement
-> Description text.
-
-**Solution:** What changes.    → plain bold paragraph
-**Wins:**                      → plain bold paragraph
-- glossary-term: the gain      → bullet list
-
-### Before / After             → Mermaid diagrams
+Skill tool (md-to-html):
+  args: "<source.md> -o <output.html> -f kami"
 ```
 
-**Why this order:** Badge and metadata come first (scanning), then the problem (context), then the solution and wins (action), then diagrams (evidence). This matches how humans read: "what is this?" → "what's wrong?" → "what should change?" → "show me."
+The md-to-html skill owns its script location. Callers declare what they need; the skill resolves how.
 
-### 5. Enum pattern
+## Teaching Consuming Skills
 
-Frontmatter enums carry semantic values with optional css class hints. The HTML template maps these to visual styles.
+When another skill or agent needs to write markdown that renders as HTML:
 
-```yaml
-strength_enum:          # keys are semantic values
-  Strong: { css: "badge-strong" }
-  Worth exploring: { css: "badge-worth" }
+1. **Point them to the [Authoring Guide](references/authoring-guide.md)** — the complete textbook for writing compatible markdown
+2. **The [Element Mapping](references/element-mapping.md)** is the precise contract — what each markdown element produces in HTML
+3. **Key principle**: frontmatter carries data, callouts carry structured elements, Mermaid carries diagrams. Everything else is standard markdown.
 
-category_enum:          # keys are identifiers, values have label + description
-  in_process: { label: "in-process", description: "pure computation, no I/O" }
+A skill only needs to follow the card section order and use the supported callout types. The renderer handles the rest.
 
-glossary:               # keys are terms, values are definitions
-  module: anything with an interface and an implementation
-  seam: where an interface lives
+## Verification
 
-legend:                 # keys are visual symbols, css describes appearance
-  module: { symbol: "solid box", css: "border-slate-400" }
-  leakage: { symbol: "red arrow", css: "border-red-500" }
+When developing or modifying a flavor's `style.css`, run the validator to ensure the CSS covers every class, attribute selector, and design token in the rendering contract:
+
+```bash
+uv run python3 skills/md-to-html/scripts/validate_flavor.py flavors/<flavor>/style.css
 ```
 
-**Distinction:** `legend.css` describes diagram symbols (intrinsic to meaning). `strength_enum.css` describes badge styling (presentation). Both are css class contracts, but legend ties to visual semantics while strength ties to chrome.
+The validator parses the machine-readable manifest from `flavors/RENDERING-CONTRACT.md` and reports any missing selectors or tokens. A passing validator is required before committing CSS changes.
 
-### 6. Review metadata
+To list all required items without running a check:
 
-Frontmatter can carry generation metadata. This is data about the review itself, not the content.
-
-```yaml
-# ── Review metadata (generated per review) ───────────────
-repository: <org/repo>
-branch: <branch-name>
-reviewed: <ISO-datetime-with-tz>
-files_scanned: <int>
-model: <model-name>
+```bash
+uv run python3 skills/md-to-html/scripts/validate_flavor.py --list
 ```
 
-The script renders these in the report header. Template placeholders (`<org/repo>`) in specs, concrete values in actual reviews.
+The self-consistency tests in `tests/md-to-html/test_contract.py` also verify that every class in rendered HTML is documented in the contract and vice versa — run the full suite after contract or renderer changes:
 
+```bash
+uv run pytest tests/md-to-html/ -q
+```
+
+## Directory Layout
+
+The skill's directory splits into three zones: skill internals, shared assets, and documentation for consuming skills.
+
+```
+skills/md-to-html/
+├── SKILL.md               # Skill definition (entry point)
+├── references/            # Documentation for consuming skills
+│   ├── authoring-guide.md # Textbook: how to write compatible MD
+│   └── element-mapping.md # Precise MD→HTML contract
+├── flavors/               # Flavor definitions (skill internal)
+│   ├── RENDERING-CONTRACT.md  # CSS class manifest for verification
+│   ├── kami/style.css     # Kami design system stylesheet
+│   └── minimal/style.css  # Minimal design system stylesheet
+├── assets/                # Shared files — consumed by generated HTML
+│   ├── mermaid.min.js     # Mermaid diagram renderer
+│   └── zoom.js            # Zoom/pan/fullscreen controls
+└── scripts/               # Implementation (skill internal)
+    ├── render.py          # The renderer
+    └── validate_flavor.py # Contract conformance checker
+```
+
+The `assets/` directory is the **shared boundary** — files there are
+referenced by generated HTML via relative paths. Everything else is
+skill-internal: the renderer, flavors, and documentation.
+
+The test suite lives at the project root under `tests/md-to-html/` per
+project convention.
+
+## Reference Files
+
+| File | Role |
+|------|------|
+| [Authoring Guide](references/authoring-guide.md) | Textbook for consuming skills — how to write compatible MD |
+| [Element Mapping](references/element-mapping.md) | Precise MD→HTML contract — every element, its output, validation rules |
+| [scripts/render.py](scripts/render.py) | The renderer implementation |
+| [scripts/validate_flavor.py](scripts/validate_flavor.py) | CSS contract conformance checker |
+| [assets/](assets/) | Shared files — referenced by generated HTML (mermaid.min.js, zoom.js) |
+| [flavors/kami/](flavors/kami/) | Kami design system (style.css) |
+| [flavors/minimal/](flavors/minimal/) | Minimal design system |

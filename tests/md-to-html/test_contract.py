@@ -1,0 +1,260 @@
+"""Self-consistency: every class in the rendered HTML is documented in the contract."""
+
+import sys
+from pathlib import Path
+
+import pytest
+from bs4 import BeautifulSoup
+
+SCRIPTS_DIR = (
+    Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts"
+).resolve()
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from render import KamiRenderer
+from validate_flavor import parse_required_classes
+
+SKILL_DIR = Path(__file__).parent.parent.parent / "skills" / "md-to-html"
+CONTRACT_PATH = SKILL_DIR / "flavors" / "RENDERING-CONTRACT.md"
+
+# Classes that are dynamically generated and NOT expected to be in the contract
+# because they are data-driven and don't need flavor styling.
+DYNAMIC_CLASSES = {
+    "legend-tag-",          # prefix for data-driven legend colors
+    "flavor-",              # prefix for active flavor name
+    "language-",            # prefix from markdown library syntax highlighting
+}
+
+# Classes that are part of the JS interaction layer and styled via parent
+JS_INTERACTION_CLASSES = {
+    "zoom-in",              # styled via .md-mermaid-zoom button
+    "zoom-out",
+    "zoom-fullscreen",
+}
+
+# Classes that are semantic HTML element targets (styled by element, not class)
+ELEMENT_TARGETS = {
+    "mermaid",              # pre.mermaid in the HTML
+}
+
+# Classes that apply to specific instances and are styled via context
+CONTEXT_CLASSES = {
+    "md-tabular",               # applied to numeric cells, styled via .md-tabular
+    "md-card-files",            # only when [!files] callout is used
+    "md-heading-level-3",       # renderer skips h3 inside card divs
+    "md-heading-level-4",       # renderer skips h4 inside card divs
+    "md-mermaid-viewport",      # only when mermaid diagram is present
+    "md-mermaid-wrap",          # only when mermaid diagram is present
+    "md-mermaid-zoom",          # only when mermaid diagram is present
+    "md-section-level-2",       # only for nested sub-sections
+    "md-section-level-3",       # only for deeper nested sub-sections
+    "md-tag-success",           # only for specific category tags
+    "md-tag-warn",              # only for specific category tags
+    "md-tag-info",              # fallback tag class for unmatched items
+}
+
+SAMPLE_MD = """---
+title: Test Architecture Review
+project: test-project
+date: 2026-06-01
+repository: test/repo
+branch: main
+strength_enum:
+  Strong: { color: emerald, css: "badge-strong" }
+  Worth exploring: { color: amber, css: "badge-worth" }
+  Speculative: { color: slate, css: "badge-speculative" }
+category_enum:
+  in_process: { label: "in-process", description: "pure computation, no I/O" }
+  mock: { label: "mock", description: "true external, third-party" }
+legend:
+  module: { symbol: "solid box", css: "border-slate-400" }
+  deep_module: { symbol: "thick dark box", css: "border-emerald-600 bg-emerald-50" }
+glossary:
+  module: anything with an interface and an implementation
+  seam: where an interface lives
+statistics:
+  candidates: 3
+  strong: [1, 2]
+  worth_exploring: [3]
+  speculative: []
+  total_lines_reviewed: 1500
+  files_involved: 8
+candidates:
+  - id: 1
+    title: Test Candidate One
+    strength: Strong
+    category: in_process
+    diagram_type: boxes_arrows
+    files:
+      - path: src/module1.py
+        lines: 500
+    total_lines: 500
+    problem: "Duplicated logic across two modules"
+    solution: "Extract shared logic into a single authority"
+    wins:
+      - "locality: logic in one module"
+      - "leverage: one handler for all callers"
+  - id: 2
+    title: Test Candidate Two
+    strength: Strong
+    category: in_process
+    diagram_type: boxes_arrows
+    problem: "Overlapping responsibilities"
+    solution: "Merge into single service"
+    wins:
+      - "locality: fewer files to touch"
+  - id: 3
+    title: Speculative Candidate
+    strength: Speculative
+    category: mock
+    diagram_type: boxes_arrows
+    problem: "Thin wrapper"
+    solution: "Delegate directly to underlying library"
+    wins:
+      - "leverage: delete wrapper"
+top_recommendation:
+  primary: 1
+  secondary: 2
+  rationale: "Highest leverage-to-risk ratio"
+---
+
+## 1. Test Candidate One
+
+> [!badge]
+> Strong · in-process
+
+> [!legend]
+> module · deep_module
+
+> [!problem]
+> Duplicated logic across two modules
+
+> [!warning]
+> This candidate conflicts with ADR-0019
+
+### Before / After
+
+Test prose content.
+
+### Wins
+
+- locality: logic in one module
+- leverage: one handler for all callers
+
+## 2. Test Candidate Two
+
+> [!badge]
+> Strong · in-process
+
+> [!note]
+> This follows the established pattern
+
+> [!legend]
+> deep_module
+
+### Details
+
+More test content here.
+
+```python
+def hello():
+    pass
+```
+
+## Overview
+
+| Candidate | Strength | Category |
+|-----------|----------|----------|
+| Test Candidate One | Strong | in-process |
+| Test Candidate Two | Strong | in-process |
+
+## Additional Analysis
+
+Some extra content with a note.
+
+> [!note]
+> Here is a note callout
+
+## Top Recommendation
+
+Primary choice is candidate 1.
+"""
+
+
+def extract_all_classes(html):
+    """Extract every CSS class name from rendered HTML."""
+    doc = BeautifulSoup(html, "html.parser")
+    classes = set()
+    for tag in doc.find_all(True):
+        for cls in tag.get("class", []):
+            classes.add(cls)
+    return classes
+
+
+def is_documented(cls, manifest):
+    """Check if a class appears in the contract manifest."""
+    # Direct match
+    if f".{cls}" in manifest:
+        return True
+    # Dynamic prefix match
+    for prefix in DYNAMIC_CLASSES:
+        if cls.startswith(prefix):
+            return True
+    return False
+
+
+class TestContractSelfConsistency:
+    """Every CSS class in rendered HTML must be documented in the contract."""
+
+    @pytest.fixture(scope="class")
+    def rendered_classes(self):
+        """Generate HTML from the full sample and extract all classes."""
+        renderer = KamiRenderer(flavor="kami")
+        html = renderer.render(SAMPLE_MD)
+        return extract_all_classes(html)
+
+    @pytest.fixture(scope="class")
+    def contract_manifest(self):
+        return parse_required_classes(CONTRACT_PATH)
+
+    def test_all_classes_documented(self, rendered_classes, contract_manifest):
+        """Every class in the HTML appears in the contract or is known-dynamic."""
+        undocumented = set()
+        for cls in sorted(rendered_classes):
+            if is_documented(cls, contract_manifest):
+                continue
+            if cls in JS_INTERACTION_CLASSES:
+                continue
+            if cls in ELEMENT_TARGETS:
+                continue
+            if cls in CONTEXT_CLASSES:
+                continue
+            undocumented.add(cls)
+
+        assert not undocumented, (
+            f"Undocumented CSS classes in rendered HTML: {sorted(undocumented)}"
+        )
+
+    def test_no_stale_contract_classes(self, rendered_classes, contract_manifest):
+        """Every class-only item in the contract is actually generated."""
+        unused = []
+        for item in contract_manifest:
+            if not item.startswith("."):
+                continue  # skip tokens and attributes
+            # Skip pseudo-elements (::before, ::after), compound selectors (space), attributes
+            if "::" in item or " " in item:
+                continue
+            cls = item[1:]  # strip leading dot
+            if any(cls.startswith(p[1:]) for p in DYNAMIC_CLASSES):
+                continue
+            if cls not in rendered_classes:
+                unused.append(cls)
+
+        # Allow known JS interaction classes that aren't in this sample
+        known_unused = JS_INTERACTION_CLASSES | ELEMENT_TARGETS | CONTEXT_CLASSES
+        actual_unused = [c for c in unused if c not in known_unused]
+
+        assert not actual_unused, (
+            f"Contract documents classes never generated: {sorted(actual_unused)}"
+        )

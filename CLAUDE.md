@@ -98,7 +98,10 @@ All tests MUST be placed in the project root `tests/` directory, never inside sk
   └── test_hook_install_smoke.py
   ```
 * **Naming rule:** `tests/<name>/` must correspond to `skills/<name>/`. No exceptions.
+* **Test file naming:** Within `tests/<skill>/`, individual test files follow `test_<component>.py` (e.g., `test_render.py`, `test_validate_flavor.py`, `test_contract.py`). Shared fixtures live in `conftest.py` at the skill test directory level. This convention is NOT yet enforced — see the gap note below.
+* **Known gap:** The individual test file naming convention (`test_<component>.py`) is observed but not enforced by any tooling. New test files should follow it by convention.
 * **Path resolution:** Test conftest.py files must add the source directory to `sys.path` for imports. Use `Path(__file__).parent.parent.parent / "skills" / "<skill-name>" / "scripts"` pattern.
+* **Known gap:** Individual test files currently duplicate the `sys.path.insert()` boilerplate from conftest.py at module level (e.g., `test_validate_flavor.py`, `test_contract.py`). This is needed because conftest.py's `sys.path` manipulation happens at fixture definition time, which is after module-level imports in test files are resolved. The correct fix is to move the source module(s) into a proper package structure under the skill directory so imports resolve naturally, eliminating the conftest dependency. Until then, the duplication is accepted but flagged — each test file independently manages its own import path.
 * **Benefits:** Single `pytest` command runs all tests. Shared fixtures are discoverable. No duplicate test infrastructure.
 
 ## 7. Parallel Agent Execution

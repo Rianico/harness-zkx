@@ -122,6 +122,7 @@ html {
   font: 400 var(--text-base)/var(--leading-body) var(--font-body);
   color: var(--fg-2);
   max-width: 70ch;
+  margin-bottom: 16px;
 }
 
 .md-eyebrow {
@@ -200,35 +201,20 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── legend ─────────────────────────────────────────────────────────── */
-.md-legend {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 40px;
-  font: 500 var(--text-sm)/1 var(--font-display);
-  color: var(--meta);
-  letter-spacing: var(--tracking-label);
-}
-.md-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.md-legend-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-xs);
-  flex-shrink: 0;
-}
 
 /* ── section header (numbered divider) ──────────────────────────────── */
 .md-section-header {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 16px;
   margin: 56px 0 28px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+}
+.md-section-badges {
+  display: flex;
+  gap: 8px;
+  align-self: baseline;
 }
 .md-section-num {
   font: 500 var(--text-sm)/1 var(--font-display);
@@ -240,6 +226,11 @@ html {
 /* ── sections (markdown-derived) ────────────────────────────────────── */
 .md-section {
   margin-bottom: 28px;
+}
+.md-section > .md-heading-level-2 {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 .md-section-level-1 {
   margin-top: 56px;
@@ -262,6 +253,9 @@ html {
   margin-bottom: 4px;
   font: 400 var(--text-base)/var(--leading-body) var(--font-body);
   color: var(--muted);
+}
+.md-list-item .md-paragraph {
+  max-width: none;
 }
 .md-list-item::before {
   content: "\2013";
@@ -352,6 +346,18 @@ html {
   background: var(--tag-bg-soft);
   color: var(--accent);
 }
+.badge-strong {
+  background: #e4ecf5;
+  color: var(--success);
+}
+.badge-worth {
+  background: #f0e8d0;
+  color: var(--warn);
+}
+.badge-speculative {
+  background: var(--surface-warm);
+  color: var(--meta);
+}
 
 /* severity variants (code review) */
 .md-severity {
@@ -430,14 +436,26 @@ html {
 /* ── mermaid wrapper ────────────────────────────────────────────────── */
 .md-mermaid-wrap {
   position: relative;
+  width: 100%;
+  overflow: hidden;
+  margin-bottom: 24px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 20px;
+}
+
+.md-mermaid-viewport {
   overflow: hidden;
 }
-.md-mermaid-wrap .mermaid {
+
+.md-mermaid-viewport .mermaid {
   text-align: center;
+}
+.md-mermaid-wrap .mermaid svg {
+  max-width: 100%;
+  height: auto;
+  width: 100%;
 }
 
 /* Zoom controls */
@@ -468,64 +486,123 @@ html {
   place-items: center;
   transition: background 0.15s, color 0.15s;
 }
-.md-mermaid-zoom button:hover {
-  background: var(--surface-warm);
-  color: var(--accent);
-}
 
-/* Zoomed container — when .md-mermaid-wrap has data-zoom, switch to
-   overflow:auto so the user can pan the scaled SVG */
-.md-mermaid-wrap[data-zoom] {
+/* Zoomed state — viewport scrolls, buttons stay fixed in wrap */
+.md-mermaid-wrap[data-zoom] .md-mermaid-viewport {
   overflow: auto;
   cursor: grab;
 }
-.md-mermaid-wrap[data-zoom].dragging {
+.md-mermaid-wrap[data-zoom] .md-mermaid-viewport.dragging {
   cursor: grabbing;
 }
 .md-mermaid-wrap[data-zoom] .mermaid {
   transform-origin: 0 0;
   transition: transform 0.15s ease;
 }
-.md-mermaid-wrap.dragging .mermaid {
+.md-mermaid-wrap .md-mermaid-viewport.dragging .mermaid {
   transition: none;
 }
+/* Fullscreen mode — fill viewport, keep kami aesthetic */
+.md-mermaid-wrap:fullscreen,
+.md-mermaid-wrap:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  padding: 32px;
+}
+.md-mermaid-wrap:fullscreen .md-mermaid-viewport,
+.md-mermaid-wrap:-webkit-full-screen .md-mermaid-viewport {
+  width: 100%;
+  height: 100%;
+}
+.md-mermaid-wrap:fullscreen .md-mermaid-zoom,
+.md-mermaid-wrap:-webkit-full-screen .md-mermaid-zoom {
+  position: fixed;
+  opacity: 1;
+  top: 16px;
+  right: 16px;
+}
+.md-mermaid-wrap:fullscreen .md-mermaid-zoom button,
+.md-mermaid-wrap:-webkit-full-screen .md-mermaid-zoom button {
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+}
+
+/* ── Mermaid Overrides ────────────────────────────────────────────── */
 /* Override mermaid's default boxy UI look with kami's paper aesthetic.
-   Nodes become flat parchment boxes with ink-blue edges — no drop
-   shadows, no bright fills, no rounded-corner card feel. */
+   Nodes become flat parchment boxes with ink-blue edges and subtle
+   rounding. Edges use ink-blue arrows. Subgraphs get rounded corners
+   with thin solid borders. Sequence diagram elements match the same
+   paper-and-ink design language. */
+
+/* ── Node boxes ──────────────────────────────────────────────────── */
 .md-mermaid-wrap .node rect,
 .md-mermaid-wrap .node polygon,
 .md-mermaid-wrap .node circle {
   fill: var(--surface) !important;
   stroke: var(--accent) !important;
-  stroke-width: 1px !important;
+  stroke-width: 1.5px !important;
   filter: none !important;
+  transition: all 150ms ease;
 }
+.md-mermaid-wrap .node rect {
+  rx: 4px;
+  ry: 4px;
+}
+.md-mermaid-wrap .node:hover rect,
+.md-mermaid-wrap .node:hover polygon,
+.md-mermaid-wrap .node:hover circle {
+  fill: var(--tag-bg-faint) !important;
+}
+
+/* ── Edge paths & arrowheads ─────────────────────────────────────── */
 .md-mermaid-wrap .edgePath path {
-  stroke: var(--meta) !important;
-  stroke-width: 1px !important;
+  stroke: var(--accent) !important;
+  stroke-width: 1.5px !important;
 }
+.md-mermaid-wrap .edgePath:hover path {
+  stroke: var(--accent-light) !important;
+  stroke-width: 2px !important;
+}
+.md-mermaid-wrap marker path {
+  fill: var(--accent) !important;
+}
+
+/* ── Edge labels ─────────────────────────────────────────────────── */
 .md-mermaid-wrap .edgeLabel {
-  font: 400 11px/1 var(--font-mono) !important;
-  color: var(--meta) !important;
+  font: 400 12px/1 var(--font-mono) !important;
+  letter-spacing: 0.3px !important;
+  color: var(--fg-2) !important;
   background: var(--surface) !important;
+  padding: 2px 6px !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: var(--radius-xs);
 }
+
+/* ── Node labels ─────────────────────────────────────────────────── */
 .md-mermaid-wrap .nodeLabel {
-  font: 500 13px/1.3 var(--font-display) !important;
+  font: 500 14px/1.3 var(--font-display) !important;
+  letter-spacing: 0.2px !important;
   color: var(--fg) !important;
 }
-/* Subgraph titles — kami eyebrow style */
+
+/* ── Subgraph clusters ───────────────────────────────────────────── */
 .md-mermaid-wrap .cluster text {
-  font: 500 11px/1 var(--font-display) !important;
+  font: 600 11px/1 var(--font-display) !important;
   letter-spacing: 0.4px !important;
   fill: var(--meta) !important;
 }
 .md-mermaid-wrap .cluster rect {
   fill: var(--bg) !important;
   stroke: var(--border) !important;
-  stroke-width: 1px !important;
-  stroke-dasharray: 4 3 !important;
+  stroke-width: 0.5px !important;
+  stroke-dasharray: none !important;
+  rx: 6px;
+  ry: 6px;
 }
-/* Problem / solution node variants via mermaid classDef */
+
+/* ── Problem / solution node variants ────────────────────────────── */
 .md-mermaid-wrap .node.problem rect,
 .md-mermaid-wrap .node.problem polygon {
   fill: #f5f4ed !important;
@@ -536,6 +613,109 @@ html {
   fill: var(--tag-bg-faint) !important;
   stroke: var(--success) !important;
 }
+
+/* ── Sequence diagram ────────────────────────────────────────────── */
+.md-mermaid-wrap .actor-box {
+  fill: var(--surface) !important;
+  stroke: var(--accent) !important;
+  stroke-width: 1.5px !important;
+  rx: 4px;
+  ry: 4px;
+}
+.md-mermaid-wrap .actor text,
+.md-mermaid-wrap .actor .actor-label {
+  font: 500 14px/1.3 var(--font-display) !important;
+  fill: var(--fg) !important;
+}
+.md-mermaid-wrap .note {
+  fill: var(--surface-warm) !important;
+  stroke: var(--border) !important;
+  stroke-width: 1px !important;
+}
+.md-mermaid-wrap .note rect {
+  rx: 4px;
+  ry: 4px;
+  fill: var(--surface-warm) !important;
+  stroke: var(--border) !important;
+  stroke-width: 1px !important;
+}
+.md-mermaid-wrap .note text,
+.md-mermaid-wrap .note .note-text {
+  font: 400 12px/1.4 var(--font-body) !important;
+  fill: var(--fg-2) !important;
+}
+.md-mermaid-wrap .actor-line {
+  stroke: var(--border) !important;
+  stroke-width: 1px !important;
+  stroke-dasharray: 3 3 !important;
+}
+.md-mermaid-wrap .messageLine0,
+.md-mermaid-wrap .messageLine1 {
+  stroke: var(--accent) !important;
+  stroke-width: 1.5px !important;
+  fill: none !important;
+}
+.md-mermaid-wrap .messageLine0 marker path,
+.md-mermaid-wrap .messageLine1 marker path {
+  fill: var(--accent) !important;
+}
+
+/* ── legend key ─────────────────────────────────────────────────── */
+.md-legend-key { display: flex; align-items: center; gap: 16px; padding: 16px 0; margin-bottom: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--border-soft); }
+.md-legend-key-label { font: 600 var(--text-xs) var(--font-display); color: var(--meta); text-transform: uppercase; letter-spacing: 0.05em; }
+.md-legend-key-item { display: inline-flex; align-items: center; gap: 6px; font: 500 var(--text-xs) var(--font-display); color: var(--fg-2); background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 3px 10px 3px 8px; }
+.md-legend-key-item::before { content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── card legend row (per-card legend tags, separated from header) ── */
+.md-card-legend-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; flex-wrap: wrap; }
+.md-card-legend-row .md-legend-key-item { font-size: 11px; padding: 2px 8px 2px 6px; }
+.md-card-legend-row .md-legend-key-item::before { width: 7px; height: 7px; }
+
+/* ── tooltip ──────────────────────────────────────────────────── */
+[data-tooltip] { position: relative; cursor: help; }
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  font: 400 13px/1.45 var(--font-display);
+  color: var(--fg);
+  background: rgba(250, 249, 245, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(43, 86, 138, 0.3);
+  padding: 8px 14px;
+  border-radius: 8px;
+  width: max-content;
+  max-width: 340px;
+  white-space: normal;
+  z-index: 100;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease, visibility 0.5s ease, transform 0.5s ease;
+}
+[data-tooltip]:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── statistics dashboard ─────────────────────────────────────────── */
+.md-dashboard { display: flex; gap: 32px; padding: 16px 0; border-bottom: 1px solid var(--border-soft); margin-bottom: 16px; }
+.md-dashboard-group { display: flex; gap: 12px; }
+.md-stat-card { flex: 1; min-width: 100px; padding: 12px 16px; border: 1px dashed var(--border); border-radius: 8px; }
+.md-stat-label { display: block; font: 500 var(--text-xs) var(--font-display); color: var(--meta); text-transform: uppercase; letter-spacing: 0.05em; }
+.md-stat-value { display: block; font: 700 28px/1 var(--font-display); color: var(--fg); margin-top: 8px; }
+
+/* ── enum legend strip ──────────────────────────────────────────── */
+.md-enum-bar { display: flex; flex-direction: column; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border-soft); margin-bottom: 12px; }
+.md-enum-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.md-enum-row + .md-enum-row { padding-top: 8px; border-top: 1px solid var(--border-soft); }
+.md-enum-label { font: 600 var(--text-xs) var(--font-display); color: var(--meta); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
 
 /* ── code block ─────────────────────────────────────────────────────── */
 .md-code-block {
@@ -869,6 +1049,15 @@ html {
   border-bottom: 1px solid var(--border-soft);
   color: var(--fg-2);
 }
+.md-overview-link {
+  color: var(--fg);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+.md-overview-link:hover {
+  border-bottom-color: var(--accent);
+}
 
 /* ── blockquote ─────────────────────────────────────────────────────── */
 .md-blockquote {
@@ -892,6 +1081,14 @@ html {
   font-weight: 500;
   color: var(--accent);
   letter-spacing: var(--tracking-label);
+}
+.md-blockquote-warn {
+  border-left: 3px solid var(--warn);
+  background: #fefce8;
+}
+.md-blockquote-note {
+  border-left: 3px solid var(--accent);
+  background: var(--surface-warm);
 }
 .md-blockquote.md-callout {
   background: var(--surface);
@@ -947,6 +1144,12 @@ html {
   padding: 20px 24px;
 }
 
+.md-hr {
+  border: none;
+  border-top: 1px solid var(--border-soft);
+  margin: 24px 0;
+}
+
 /* ── responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .md-document {
@@ -954,10 +1157,6 @@ html {
   }
   .md-meta {
     gap: 16px;
-  }
-  .md-legend {
-    flex-wrap: wrap;
-    gap: 12px;
   }
   .md-glossary {
     grid-template-columns: 1fr;
