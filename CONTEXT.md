@@ -89,3 +89,45 @@ _Avoid_: Guessed semantic role.
 **Role Annotation**:
 An explicit Markdown-readable marker that gives a source section a presentation role, such as an Obsidian-style callout or task checkbox. Role annotations allow richer generated views without requiring the renderer to guess meaning.
 _Avoid_: Custom opaque syntax, inferred role.
+
+## Context Load
+
+**Context Load**:
+The permanent token and attention cost a skill's `description` imposes on every turn by sitting in the initial skill-list metadata. Paid regardless of invocation class.
+_Avoid_: Token cost, context bloat.
+
+**Invocation Class**:
+Whether a skill is reachable by model inference (`implicit-allowed`) or only by explicit name (`explicit-only`). Controls selection, not metadata presence.
+_Avoid_: Invocation mode, trigger mode.
+
+**Description Budget**:
+The adopted character limit for a skill `description`, enforced by the static guard in `validate-deps.py`. Codex has a global 8,000-char initial-list budget and shortens descriptions before omitting skills.
+_Avoid_: Description length, char limit.
+
+**Selection Mode**:
+How the runtime decides to load a skill: autonomously (description match) or by name (user types it or another skill invokes it via `$skill`).
+_Avoid_: Discovery mode, pick mode.
+
+**Metadata Cost**:
+The context consumed by a skill's name and description being listed in the initial available-skills inventory. Distinct from selection — paid even when implicit invocation is disabled.
+_Avoid_: Listing cost, inventory cost.
+
+**Static Guard**:
+A CI-time script (`validate-deps.py context-check`) that parses every `SKILL.md` and sibling `agents/openai.yaml`, failing on missing descriptions, budget violations, invocation-class mismatches, or platform drift.
+_Avoid_: Linter, validator.
+
+**Runtime Trace**:
+A recorded invocation log from a Codex surface proving that explicit-only skills are not implicitly loaded but remain explicitly reachable via `$skill`.
+_Avoid_: Invocation receipt, trace log.
+
+**Compatibility Field**:
+A frontmatter key recognized by one platform (e.g., `disable-model-invocation`) that has no defined semantics in the target Codex runtime. Must be paired with the supported platform mechanism.
+_Avoid_: Legacy field, foreign key.
+
+**80/20 Principle**:
+A recursive content-architecture rule: a SKILL.md holds the 20% of knowledge that solves 80% of problems; references hold the deep 80%. Applied at every level — parent spine, subskills, references.
+_Avoid_: Pareto content, essential-first.
+
+**Platform Adapter**:
+A script-generated mapping from Claude Code canonical frontmatter to a target platform's mechanism (e.g., `disable-model-invocation: true` → `allow_implicit_invocation: false` in `agents/openai.yaml`).
+_Avoid_: Sync layer, shim.
