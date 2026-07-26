@@ -1,3 +1,6 @@
+## Talking Style
+Sacrifice the grammar for the sake of concision.
+
 ## 1. The Skills-First Mental Model
 The core of LSZ architecture is a **Subagent-First Execution** model that keeps reusable workflow logic in skills, preserves context efficiency, and avoids duplicating methodology.
 
