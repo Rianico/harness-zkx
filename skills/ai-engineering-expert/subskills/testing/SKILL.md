@@ -49,6 +49,28 @@ Write tests for bugs that were found, not just for code that works. AI tends to 
 2. **Isolate:** Use mocks ONLY for external dependencies; keep logic tests as integrated as possible.
 3. **Verify via Fresh Signal:** Run the test in a fresh shell after implementation to avoid context leakage.
 
-## Reference
+## Eval-First Loop
 
-[Full details: sandbox-testing-patterns.md](references/sandbox-testing-patterns.md)
+1. Define capability eval and regression eval
+2. Run baseline, capture failure signatures
+3. Execute implementation
+4. Re-run evals, compare deltas
+
+## Model Routing
+
+| Model Tier | Use For | Avoid |
+|------------|---------|-------|
+| Fast/Cheap | Classification, boilerplate, narrow edits | Complex reasoning, architecture decisions |
+| Balanced | Implementation, refactors, multi-file work | Root-cause analysis, subtle invariants |
+| Strong | Architecture, root-cause analysis, complex invariants | Simple tasks (wasteful) |
+
+Escalate tier only when lower tier fails with a clear reasoning gap.
+
+## Runtime Trace Fixtures
+
+For testing invocation class behavior against live Codex surfaces. See the context-load policy runtime trace fixture spec for fixture design and test procedure.
+
+## References
+
+[Sandbox testing patterns](references/sandbox-testing-patterns.md)
+[Eval-first development](references/eval-first-development.md)

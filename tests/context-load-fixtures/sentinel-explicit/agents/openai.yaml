@@ -1,0 +1,5 @@
+interface:
+  display_name: sentinel-explicit-alpha
+  short_description: Handles sentinel-explicit-alpha commands. Use when running explicit invocation tests. TRIGGER: sentinel-explicit-alpha.
+policy:
+  allow_implicit_invocation: false

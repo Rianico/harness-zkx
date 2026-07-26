@@ -1,113 +1,106 @@
 ---
 name: ai-engineering-expert
 description: >-
-  AI engineering expertise for LSZ skills, agents, rules, workflows, MCP servers, hooks, evals, and regression tests. Use when designing or refining skills/rules/agents/workflows; creating new skills; classifying skill type or granularity; setting action spaces, observation formats, tool boundaries, context budgets, or recovery contracts; implementing MCP tools/resources/prompts; choosing hook script language, transport, or output format; planning eval-first workflows, model routing, AI regression tests, and sandbox/production mismatch checks; reducing skill/rule bloat; deciding when to delegate to subagents; or fixing unreliable triggers, slow hooks, poor agent behavior, or context-window pressure.
+  AI engineering philosophy and routing spine for the LSZ harness. Covers skill design principles, description budgets, invocation classes, context-load policy, agent action spaces, rules-vs-skills boundaries, eval-first testing, and model routing. Use when designing or refining skills/agents/rules/workflows; creating new skills; classifying skill type or granularity; setting invocation class, description budget, or platform-sync contracts; designing agent tool boundaries, observation formats, or context budgets; planning eval-first workflows, regression tests, or runtime trace fixtures; reducing skill/rule bloat; or deciding when to delegate to subagents.
 arguments: domain
 argument-hint: |
-  skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, arguments, dependencies, progressive disclosure, parent/sub-skill layout, and authoring checklists
-  rules-development -- loads rules methodology: rules vs skills boundaries, concise always-on constraints, routing conventions, and rule quality checks
+  skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, progressive disclosure, rules-vs-skills boundary, platform sync, parent/sub-skill layout, and authoring checklists
   agent-harness -- loads agent methodology: lean persona design, tool/action-space boundaries, observation formats, context budgeting, and error recovery contracts
-  extension-dev -- loads extension methodology: MCP servers, hooks, lifecycle scripts, transport choices, hook output formats, and extension boundaries
-  testing -- loads AI testing methodology: evals, regression tests, sandbox/production mismatch checks, error-state leakage tests, and behavior-specific cases
-  process-arch -- loads process architecture methodology: eval-first loops, model routing, session strategy, and team operating model design
+  testing -- loads testing methodology: EDD, eval-first loops, model routing, AI regression tests, sandbox/production mismatch checks, runtime trace fixtures, and error-state leakage tests
   omitted -- loads only the core AI engineering philosophy and the sub-skill dispatch registry
 metadata:
-  manage: [skill-authoring, rules-development, agent-harness, extension-dev, testing, process-arch]
+  manage: [skill-authoring, agent-harness, testing]
 ---
 
 # AI Engineering Expert
 
-Core principles for building robust AI systems. All boundaries, constraints, rules, and patterns in this architecture derive from the following foundational philosophy.
+Core principles for building robust AI systems in the LSZ harness. This file holds the 20% that solves 80% of problems; deep methodology lives in subskills and their references.
 
 ## The Foundation: GDD (Goal-Driven Development)
 
 The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs are fundamentally **Probabilistic Machines** trying to operate in a **Deterministic World**, we use **GDD** to bridge this gap through three non-negotiable pillars:
 
-1.  **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task. It ensures the probabilistic model is anchored to a deterministic behavioral specification.
-2.  **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model *says* it did; we only trust what the *environment says* it did. **Environmental Truth (EDD) is the Supreme Authority.** 
-    *   **Behavioral-First Evals:** Every Capability eval MUST be an **Executable Assertion** (run code/tools). Static grep-based code checks are forbidden for behavioral goals.
-3.  **Semantic vs. Deterministic Split (Execution Efficiency):** We treat hard reality and qualitative alignment as distinct domains.
-    *   **Design-Implementation Sync:** The Semantic Audit MUST verify that implementation changes (e.g., path shifts, logic tweaks) are back-propagated as amendments to the `design.md` (Source of Truth).
-
-### Manifest Hierarchy & Goal Locking (ADR-0008, ADR-0009)
-To prevent "hallucinated completion" and "scope shrinkage," we enforce a strict manifest protocol:
-- **IPS Criteria (Iterative, Parallel, State-Dependent):** Any skill meeting these criteria MUST maintain a local `[skill]_manifest.json`.
-- **Goal Locking:** The Orchestrator MUST pre-allocate work units (Scenarios) in the mission manifest *before* dispatching a skill.
-- **Manifest Engineering:** Manifests must use granular units and dual timestamps (`created_at`, `finished_at`) to ensure state recovery is deterministic.
-    *   **Reference:** [Manifest Engineering Patterns](references/manifest-engineering.md)
-- **Manifest-Indexed Handoffs:** Handoffs MUST NOT repeat details found in the manifest or design. They serve as "Mission Pointers" to the JSON record.
-    *   **Deterministic Work (Hard Gates):** Measured by non-LLM tools (compilers, linters, property tests). These are 100% reliable and cost zero tokens.
-    *   **Semantic Work (Qualitative Audit):** Verified by Adversarial Orchestration (e.g., a "Skeptic" agent). We use the LLM exclusively for what it does best: verifying architecture, elegance, and intent alignment, stripped of deterministic noise.
+1. **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task.
+2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model *says* it did; we only trust what the *environment says* it did. **Environmental Truth is the Supreme Authority.**
+3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Deterministic work is measured by non-LLM tools (compilers, linters, property tests). Semantic work is verified by Adversarial Orchestration (a "Skeptic" agent).
 
 ---
 
 ## Core Mental Model
 
-AI system quality is constrained by six factors:
+AI system quality is constrained by five factors:
 
 1. **Action space quality** -- Can the agent express the right operations?
 2. **Observation quality** -- Does the agent see what it needs to decide?
 3. **Recovery quality** -- Can the agent handle errors gracefully?
-4. **Context budget quality** -- Is guidance loaded when needed, not before?
-6. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
-7. **Manifest engineering** -- Does the manifest track granular units with dual timestamps for reliable recovery?
-8. **Subagent-first execution** -- Is all implementation work delegated to subagents?
-9. **Handoff quality (Intent preservation)** -- Is state captured such that a fresh agent can resume with full fidelity?
-
-
-Skills that violate these constraints produce fragile agents that fail silently, exhaust context on irrelevant details, or accumulate technical debt through disorganized artifacts.
+4. **Context budget quality** -- Is guidance loaded when needed, not before? Are descriptions within budget and invocation classes declared correctly?
+5. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
+6. **Subagent-first execution** -- Is all implementation work delegated to subagents?
+7. **Handoff quality** -- Is state captured such that a fresh agent can resume with full fidelity?
 
 ---
 
-## Respect Tool Feedback
+## 80/20 Principle
 
-Agents MUST treat feedback from automated tools — LSP diagnostics, type checkers, linters, test failures — as authoritative signals. Ignoring tool feedback is a systemic failure, not a style choice.
+The 20% of knowledge that solves 80% of problems lives in SKILL.md files. The deep 80% lives in reference files behind context pointers. This applies recursively at every level -- parent spine, subskills, and subskill references.
 
-### LSP Diagnostics Are Blockers
+Every line in a SKILL.md earns its place by passing the test: does this solve 80% of problems? If it's deep methodology, edge-case patterns, or platform-specific detail, disclose it behind a pointer. If the pointer fires unreliably on must-have material, sharpen its wording first; pull it inline only if that fails.
 
-After writing or editing code, the agent MUST check and resolve all diagnostics before declaring done.
+---
 
-1. **Read every diagnostic** — never skip, never dismiss as "just a warning"
-2. **Fix or suppress** each one — both are valid; silent ignore is not
-3. **Errors first, then warnings** — but all must be triaged
-4. **Suppressions require justification** — use the most precise scope available
+## Context-Load Policy
 
-### Common Diagnostic Categories
+Context load is a first-class architectural constraint. Every skill's `description` sits in the initial skill-list metadata on every turn, spending tokens and attention regardless of invocation class.
 
-| Category | Examples | Resolution |
-|----------|----------|------------|
-| Unused code | unused imports, variables, parameters | Remove, or prefix with `_` |
-| Missing types | implicit `any`, missing type arguments | Add proper types; suppress only at external boundaries |
-| Type errors | incompatible types, missing properties | Fix the code; suppress when type system can't express the pattern |
-| Dead code | unreachable code, unused assignments | Remove or restructure control flow |
+### Invocation Classes
 
-### When Type Looseness Is Acceptable
+Every skill declares one of two classes via the canonical `disable-model-invocation` field:
 
-- Interfacing with untyped external APIs (HTTP responses, JSON parsing)
-- Dynamic dispatch where type narrowing is impossible
-- Third-party libraries without type stubs
+| Declaration | Class | Behavior |
+|-------------|-------|-----------|
+| Omit (default `false`) | `implicit-allowed` | Model can invoke autonomously; description triggers discovery |
+| `disable-model-invocation: true` | `explicit-only` | Only user or `$skill` can invoke |
 
-Even in these cases, **add a suppression comment** explaining why — never silently pass.
+**Selection ≠ metadata cost.** The `description` is always present in the initial skill list -- invocation class only controls _selection_, not _presence_. Explicit-only is not zero-load.
 
-### Verification Pattern
+### Description Budget
 
-```bash
-# After any code change, check diagnostics
-llm-lsp-cli lsp diagnostics <file>
-llm-lsp-cli lsp workspace-diagnostics
-```
+- Description must be present and non-empty
+- Maximum 300 characters
+- Should contain trigger vocabulary ("use when", "when the user", "trigger")
 
-This principle applies to all languages and all tool types. Domain-specific exceptions (e.g., exploratory notebooks, prototype scripts) must be explicitly scoped by the user.
+### Platform Sync
+
+Claude Code `SKILL.md` is the canonical format. Scripts generate platform-specific artifacts:
+
+`SKILL.md` (canonical) → `validate-deps.py sync` → `agents/openai.yaml` (generated)
+
+| Canonical field | Generated field |
+|----------------|-----------------|
+| `name` | `interface.display_name` |
+| `description` | `interface.short_description` |
+| `disable-model-invocation: true` | `policy.allow_implicit_invocation: false` |
+| `disable-model-invocation: false` | `policy.allow_implicit_invocation: true` |
+
+Sync always regenerates output from canonical source. No drift detection needed.
+
+### Enforcement
+
+`validate-deps.py context-check` enforces hard gates (fail CI) and soft warnings (pass CI):
+- Missing/empty description → hard fail
+- Description over 300 chars → hard fail
+- No trigger vocabulary → soft warning
+
+Semantic quality rules (third-person voice, front-loaded leading word, deduplication) are enforced by `skill-authoring` methodology during authoring, not by CI.
+
+Reference: [Context-load policy contract](references/context-load-policy.md)
 
 ---
 
 ## Skill Infrastructure
 
-### Validation & Management Tool
+The canonical tool for skill management is in the `skill-authoring` sub-skill.
 
-The canonical tool for skill management is located in the `skill-authoring` sub-skill.
-
-**Usage from parent:**
 ```bash
 # Validate all skill dependencies
 uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py check
@@ -117,66 +110,38 @@ uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py related <sk
 
 # Lint all skills for quality and conventions
 uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py lint
-```
 
-**Features:**
-- Dependency validation (`depends-on`)
-- Frontmatter linting and automated fixes
-- Skill renaming with cascaded reference updates
+# Generate platform-specific artifacts from canonical metadata
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py sync
+
+# Enforce context-load policy (hard gates + soft warnings)
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check
+```
 
 ---
 
 ## High-Fidelity Handoffs
 
-### Core Principle
-
-**The Handoff is the Mission Bridge.** In complex multi-agent systems or long-running tasks, the handoff document (`handoff.md`) acts as a **Context Aggregator** that distills Goals, Reasoning, and Intent from a sprawling session into a single, high-signal source of truth.
-
-This pattern enables:
-- **Multi-Agent Continuity**: Subagent A can hand off a mission to Subagent B (or even a different model/platform) with 100% fidelity.
-- **Context Displacement**: The handoff document is high-signal enough to stand in for full specifications or deep chat history, keeping the next session's context window pristine.
-- **Session Compaction**: Instead of re-reading 1,000 lines of history, the agent reads a 50-line distilled handoff.
-
-### The Handoff Contract
-
-Every major phase transition (e.g., Design -> Implement, Implement -> Verify) MUST conclude with a handoff aggregation.
+**The Handoff is the Mission Bridge.** In complex multi-agent systems or long-running tasks, the handoff document distills Goals, Reasoning, and Intent from a sprawling session into a single source of truth.
 
 | Requirement | Description |
 |-------------|-------------|
-| **Intent First** | Preserve the "Why" (Reasoning) and the "Goal" (User Intent) over just the "What" (Code). |
-| **Artifact Trail** | Provide absolute pointers to all durable artifacts (Design, ADRs, Code, Evals). |
-| **Success Criteria** | Define exactly what "done" looks like for the next agent. |
-| **Context Recovery** | The next phase starts by reading the handoff to initialize its state. |
-
-### Multi-Agent Interaction
-
-The Handoff pattern is the primary mechanism for **Cross-Agent Collaboration**:
-- **Subagent-to-Subagent**: Direct state passing via pointers in the handoff.
-- **Cross-Model Portability**: A handoff generated by Claude can be consumed by Pi or GPT, as it relies on durable markdown artifacts rather than internal model state.
-- **System Stability**: Missions can survive complete context resets if the handoff document is persisted in the repository (`.lsz/`).
+| **Intent First** | Preserve the "Why" and the "Goal" over just the "What" |
+| **Artifact Trail** | Absolute pointers to all durable artifacts (Design, ADRs, Code, Evals) |
+| **Success Criteria** | Define exactly what "done" looks like for the next agent |
+| **Context Recovery** | The next phase starts by reading the handoff to initialize state |
 
 ### Anti-Patterns
 
-- **History Hoarding**: Expecting the next agent to re-read the entire chat history.
-- **Embedded Bloat**: Pasting 500-line specs into the handoff instead of passing pointers.
-- **Prose-Only Handoff**: Vague summaries without concrete artifact trails or success criteria.
-- **Hero-Mode Resumption**: Starting a new phase without reading the previous handoff.
+- **History Hoarding** -- Expecting the next agent to re-read the entire chat history
+- **Embedded Bloat** -- Pasting 500-line specs into the handoff instead of passing pointers
+- **Prose-Only Handoff** -- Vague summaries without concrete artifact trails or success criteria
 
 ---
 
 ## Subagent-First Execution
 
-### Core Principle
-
-**The orchestrator never does implementation work.** All code writing, file editing, test execution, doc updates, and review work happens in subagents. The main agent is a pure router: dispatch, monitor, receive results.
-
-This is not a context optimization -- it is a fundamental architectural constraint that ensures:
-- Clean separation between orchestration logic and execution logic
-- Predictable context budgets (orchestrator sees summaries, not full artifacts)
-- Parallelizable work (multiple subagents can run concurrently)
-- Isolated failure domains (subagent errors don't corrupt orchestrator state)
-
-### The Orchestrator Role
+**The orchestrator never does implementation work.** All code writing, file editing, test execution, doc updates, and review work happens in subagents.
 
 | Orchestrator DOES | Orchestrator NEVER DOES |
 |-------------------|------------------------|
@@ -184,21 +149,17 @@ This is not a context optimization -- it is a fundamental architectural constrai
 | Dispatch with structured prompts | Edit files directly |
 | Monitor for completion/failure | Run tests directly |
 | Receive and synthesize summaries | Read full artifact contents into context |
-| Handle user interaction and approvals | Execute shell commands for implementation |
 | Pass pointers between phases | Re-process subagent outputs |
 
 ### Dispatch Pattern
 
-Always use structured dispatch templates. Every dispatch MUST specify the expected response format (default: `rules/templates/resp-format.md`) so the orchestrator can make routing decisions.
-
-**Standard dispatch template:**
+Always use structured dispatch templates. Every dispatch MUST specify the expected response format.
 
 ```markdown
 Agent tool (<subagent_type>):
   description: "<short task summary>"
   prompt: |
     <context and requirements>
-
     <execution instructions>
 
     Return format per rules/templates/resp-format.md:
@@ -207,173 +168,47 @@ Agent tool (<subagent_type>):
     ## Route (if applicable)
 ```
 
-**Why the response format matters:**
-- Orchestrator parses output to decide next action -- needs structured fields, not prose
-- Route + Issues enable automated remediation loops without user intervention
-- Without explicit format, subagents return unstructured text that the orchestrator cannot reliably parse
-
-**When to customize the format:**
-- Add domain-specific fields (e.g., `## Test Results` for test runners)
-- Omit `## Route` when the subagent has no routing decision to make
-- Never remove `## Summary` or `## Artifacts` -- these are always required
-
 ### Pointer-Based State Passing
 
-Subagents exchange state through **file paths**, not content. The orchestrator passes pointers; subagents read/write artifacts at those paths.
-
-**Why pointers:**
-- Preserves orchestrator context budget
-- Enables phase-to-phase continuity without orchestrator re-reading
-- Supports large artifacts (plans, reports, code diffs)
-
-**Pattern:**
-
-```markdown
-Agent tool (developer):
-  prompt: |
-    Plan file: /path/to/.lsz/.../plan/plan_v1.md
-
-    Implement the feature described in the plan.
-
-    Return: Summary (<=100 words) + paths to modified files.
-```
-
-**Anti-patterns:**
-- Orchestrator reads plan, then passes plan content to subagent
-- Subagent returns full artifact content instead of path
-- Creating fresh topic roots for each phase instead of reusing one
-
-### Subagent Response Contract
-
-Every subagent and skill invocation MUST return structured output per `rules/templates/resp-format.md`. This section adds skill-to-skill routing semantics on top of that default.
-
-**Key addition: route-based handoff.**
-
-When Skill A invokes Skill B:
-```
-Skill B -> structured output (status + route + issues)
-     |
-Skill A -> parses output, makes routing decision
-     |
-Next action (remediate, continue, block)
-```
-
-- **Skill B:** produce status, enumerate issues, recommend route. NOT assume what "remediate" means in caller's context.
-- **Skill A:** parse output, translate route into the right action for its workflow.
-
-**Why this boundary matters:** Skills remain composable -- eval-gate works with orchestrating, brainstorming, or standalone. No upstream coupling. Orchestrator retains control.
-
-**Example:**
-```text
-# eval-gate outputs:
-Route: remediate
-Issues: CAP-01: 3 warnings, NEG-01: suppressions in commands/lsp.py
-
-# orchestrating decides: dispatch developer agent (not full tdd-cycle)
-```
-
-**Anti-patterns:**
-- Subagent returns prose without structure -> orchestrator cannot reliably parse
-- Subagent assumes caller's workflow -> eval-gate references tdd-cycle internals
-- Subagent returns full artifact content -> wastes orchestrator context
-
-### When to Use Which Subagent
-
-| Task | Subagent Type |
-|------|---------------|
-| Write/modify code | `developer` |
-| Review code for quality | `code-reviewer` |
-| Security analysis | `security-reviewer` |
-| Database schema work | `database-reviewer` |
-| Research/explore codebase | `Explore` |
-| General multi-step tasks | `general-purpose` |
-| Architecture design | `architect` |
+Subagents exchange state through **file paths**, not content. The orchestrator passes pointers; subagents read/write artifacts at those paths. Preserves orchestrator context budget and supports large artifacts.
 
 ### Anti-Patterns
 
 - **Hero mode orchestrator** -- "Let me just write this quick fix directly"
 - **Context hoarding** -- Reading full artifact contents instead of dispatching a subagent
 - **Sequential when parallel is possible** -- Running review agents one after another instead of concurrently
-- **Orchestrator as reviewer** -- Main agent reviewing code instead of dispatching `code-reviewer`
 - **Unstructured subagent output** -- Prose without Summary/Artifacts/Route fields
 
-### Workflow Phase Design
-
-**Consolidate stages that share sources.** When multiple stages are independent and derive from the same source files, merge into one stage.
-
-**Checklist:**
-1. Do all stages read from the same source?
-2. Are there dependencies forcing sequential execution?
-3. Is combined task size manageable?
-
-If (1) yes, (2) and (3) no -> consolidate.
-
-**Why:** Each stage incurs orchestration overhead (dispatch, context loading, summary). Merging eliminates redundant reads.
-
-**Example:** docs-to-skill had 4 separate stages (structure, modules, triggers, patterns) all reading the same docs. Consolidated to 1 stage, reducing 8 phases to 5.
-
-### Reference
-
-[Full details: subagent-first-execution.md](references/subagent-first-execution.md)
+Reference: [Subagent-first execution](references/subagent-first-execution.md)
 
 ---
 
 ## Artifact Hygiene
 
-### Core Principle
+Every modification must preserve or improve organization. Additive changes without consolidation create bloat; scattered knowledge creates discovery failures.
 
-Every modification to skills, rules, workflows, agents, or hooks must preserve or improve organization. Additive changes without consolidation create bloat; scattered knowledge creates discovery failures.
+**Before any update:** audit the target, identify redundancy, find the right home.
 
-### Before Any Update
+**During updates:** consolidate don't accumulate, one concept one location, reorganize when needed, group by topic.
 
-1. **Audit the target** -- Read the file structure, understand existing organization
-2. **Identify redundancy** -- Check if new content duplicates existing knowledge elsewhere
-3. **Find the right home** -- Determine if content belongs in this file or should be a reference/linked elsewhere
+**Red flags:** files over size limits, duplicated concepts, copy-pasted content, catch-all sections, unclear ordering.
 
-### During Updates
-
-- **Consolidate, don't accumulate** -- Merge related sections, remove superseded content
-- **One concept, one location** -- Reference other files rather than copying
-- **Reorganize when needed** -- If a file has grown unclear, restructure before adding
-- **Group by topic by default** -- Comprehensive rules or broad information files must be organized by topic (e.g., Code Quality, Git Workflow, Testing). Topic-based grouping improves discoverability and enables readers to scan by concern.
-
-### Red Flags
-
-- File exceeds size limits (SKILL.md > 500 lines, reference files bloating)
-- Multiple sections explaining the same concept
-- Copy-pasted content across files
-- "Misc" or "Other" catch-all sections
-- Unclear section ordering or naming
-
-### Enforcement
-
-- When adding new capability: update description, check for duplicates, consolidate if found
-- When refining existing content: remove obsolete parts, not just add new ones
-- When file feels disorganized: fix organization first, then add new content
-
----
-
-## Cross-Cutting Gotchas
-
-- **Windows-style paths** -- Always use forward slashes (`skills/my-skill/` not `skills\my-skill\`). Cross-platform compatibility matters.
-- **Additive-only updates** -- Adding without removing creates bloat. Every new section should prompt: "Is there old content this replaces?"
-- **Copy-paste across skills** -- Duplicated methodology rots independently. Reference the canonical source instead.
-- **Catch-all sections** -- "Miscellaneous", "Other Notes", "Tips" sections are organization debt. Every item should have a clear category.
-- **Size blindness** -- Files grow silently. Check line counts periodically; split or consolidate when over limits.
+**Gotchas:**
+- Windows-style paths -- always use forward slashes
+- Additive-only updates -- every new section should prompt "is there old content this replaces?"
+- Copy-paste across skills -- reference the canonical source instead
+- Size blindness -- check line counts periodically
 
 ---
 
 ## Sub-Skill Dispatch
 
-This skill manages six domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument.
+This skill manages three domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument.
 
 | Domain | Sub-Skill | Covers |
 |--------|-----------|--------|
-| `skill-authoring` | `$SKILL_DIR/subskills/skill-authoring/SKILL.md` | Skill design, frontmatter, descriptions, progressive disclosure, parent-skill pattern, checklists |
-| `rules-development` | `$SKILL_DIR/subskills/rules-development/SKILL.md` | Rules vs skills boundary, rules design principles, when to use rules vs skills |
+| `skill-authoring` | `$SKILL_DIR/subskills/skill-authoring/SKILL.md` | Skill design, descriptions, invocation classes, description budgets, platform sync, rules-vs-skills boundary, progressive disclosure, parent-skill pattern, authoring checklists |
 | `agent-harness` | `$SKILL_DIR/subskills/agent-harness/SKILL.md` | Action space design, observation design, error recovery, context budgeting |
-| `extension-dev` | `$SKILL_DIR/subskills/extension-dev/SKILL.md` | MCP server patterns, hook development, language selection, output format |
-| `testing` | `$SKILL_DIR/subskills/testing/SKILL.md` | AI regression testing, sandbox/production mismatch, error state leakage, optimistic update rollback |
-| `process-arch` | `$SKILL_DIR/subskills/process-arch/SKILL.md` | Eval-first loop, model routing, session strategy, team operating model |
+| `testing` | `$SKILL_DIR/subskills/testing/SKILL.md` | EDD, eval-first loops, model routing, AI regression tests, runtime trace fixtures, sandbox mismatch |
 
 **Dispatch:** When `$domain` is provided, read the matching sub-skill file and follow its instructions. When no domain is specified, only the philosophy above is loaded.

@@ -229,6 +229,22 @@ metadata:
 **Reference:**
 - [skill-authoring.md](references/skill-authoring.md) -- Full "Parent Skill with Sub-Skills Pattern" section with structure, metadata, registry format, dispatch mechanism, and migration guide
 
+## Rules vs Skills Boundary
+
+Rules are always-on, skills are on-demand. Every token in a rule costs context every conversation.
+
+| Rules | Skills |
+|-------|--------|
+| Always loaded | Loaded on demand |
+| WHAT to use | HOW to implement |
+| Personal taste, defaults | Non-obvious patterns |
+| STATE, don't explain | Show examples |
+| One-liner preferences | Framework gotchas |
+
+**When to use rules:** tool/lib selection, style defaults, baseline patterns, personal taste that should always apply.
+
+**When to use skills:** non-obvious patterns, framework gotchas, examples needed, architectural decisions.
+
 ## Skill Gotchas
 
 - **Vague descriptions** -- "Helps with documents" won't trigger. Use explicit trigger vocabulary.
