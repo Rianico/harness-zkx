@@ -64,7 +64,7 @@ If the user's language drifts from the glossary, flag it immediately: "Your glos
 
 Your goal here is **shared clarity**, not speed.
 
-**Dialog Contract (use AskUserQuestion tool):**
+**Dialog Contract (present as plain text):**
 
 ```yaml
 Dialog:

@@ -126,7 +126,7 @@ Destructive or highly divergent workflows should not guess the user's intent.
 
 * **Anti-Pattern:** Generating 5 files or writing a massive plan to disk, then asking "Is this okay?" via an unstructured follow-up.
 * **LSZ Pattern:** Heavy orchestration skills and complex workflow skills should define explicit checkpoints and structured branching points when approval or divergence is required.
-* **Preferred Structure:** When encoding interactive branches, use the Dialog Contract pattern (YAML format that maps to `AskUserQuestion` tool calls). See `ai-engineering-expert skill-authoring` sub-skill's `dialog-contract.md` reference for the full specification.
+* **Preferred Structure:** When encoding interactive branches, use the Dialog Contract pattern — present structured questions as plain text. See `ai-engineering-expert skill-authoring` sub-skill's `dialog-contract.md` reference for the full specification.
 
 ## 10. Required Frontmatter (Argument Hints & Allowed Tools)
 To ensure a seamless user experience and strict system bounds, skills, commands, and agents have explicit YAML frontmatter requirements.

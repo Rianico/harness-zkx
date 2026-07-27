@@ -123,7 +123,7 @@ If it's not in the description, the skill will not trigger.
 - Use Dialog Contract pattern for all user questions (tool-agnostic structural spec)
 - One question per dialog, 2-4 options plus "Other"
 - Always include clear descriptions explaining tradeoffs
-- Each coding agent maps to its native tool (Claude Code: AskUserQuestion, OpenCode: diag)
+- Present questions as plain text — structured but no special tool required
 
 **References:**
 - [skill-authoring.md](references/skill-authoring.md) -- Complete skill authoring reference (frontmatter, descriptions, triggers, string substitutions, calibration)

@@ -1,10 +1,10 @@
 # Dialog Contract Pattern
 
-Structural specification for user interactions in coding agent workflows. Tool-agnostic — each agent maps to its native questioning tool.
+Structural specification for user interactions in coding agent workflows. Present questions as plain text — structured, readable, and tool-free.
 
 ## Purpose
 
-Ensure consistent, structured user dialogs that work across different coding agents (Claude Code, OpenCode, etc.).
+Ensure consistent, structured user dialogs. Use plain text to present questions — no special tools required.
 
 ## Contract Structure
 
@@ -42,33 +42,21 @@ Dialog:
 5. **"Other" always included** — Users can provide custom input
 6. **Header is context** — Brief topic for quick recognition
 
-## Tool Mappings by Agent
+## Rendering as Plain Text
 
-Different coding agents map this contract to their native tools:
+Present the contract as a clear, structured block of plain text:
 
-### Claude Code → AskUserQuestion
+```
+**<header>**
 
-```yaml
-Dialog:                           AskUserQuestion:
-  header: "Topic"           →      questions[0].header
-  question: "What?"         →      questions[0].question
-  multipleChoice: false     →      questions[0].multiSelect
-  options: [...]            →      questions[0].options
+<question>
+
+1. <option A> — <description>
+2. <option B> — <description>
+3. Other — <provide custom input>
 ```
 
-### OpenCode → diag
-
-```yaml
-Dialog:                           diag tool:
-  header: "Topic"           →      title
-  question: "What?"         →      message
-  multipleChoice: false     →      (single select mode)
-  options: [...]            →      choices array
-```
-
-### Other Agents
-
-Map to the agent's native user-interaction tool. The structural contract remains the same.
+The YAML contract is the design artifact. The plain-text rendering is how it reaches the user. Keep the same structure: one question per dialog, 2-4 options plus "Other", clear descriptions explaining tradeoffs.
 
 ## Examples
 
