@@ -1,7 +1,7 @@
 ---
 name: write
 description: >-
-  Content creation and distribution cluster. Routes to article for long-form writing (articles, blog posts, guides, tutorials, newsletters) or publish for platform-native content and multi-platform distribution (X, LinkedIn, Threads, Bluesky, TikTok, YouTube, newsletters). TRIGGER on article writing, blog drafting, newsletter creation, social posts, crossposting, content repurposing, or voice-consistent writing.
+  Content creation and distribution cluster: article for long-form writing (blog/newsletter/guide/tutorial), publish for platform-native content (X/LinkedIn/Threads/Bluesky/TikTok/YouTube/newsletter). TRIGGER: article, blog, social posts, crossposting, content repurposing.
 arguments: mode content_type platform
 argument-hint: |
   article [blog|essay|guide|tutorial|newsletter] -- long-form writing with voice capture

@@ -1,7 +1,7 @@
 ---
 name: safety-guard
 description: >-
-  Prevent destructive operations during autonomous agent sessions. Use for production systems, full-auto mode, directory-restricted edits, and sensitive operations like migrations, deploys, or data changes. Covers careful mode (warnings), freeze mode (write restrictions), and guard mode (combined protection).
+  Prevent destructive operations during autonomous agent sessions. Use for production systems, full-auto mode, directory-restricted edits, and sensitive operations like migrations, deploys, or data changes. Covers careful (warnings), freeze (write restrictions), and guard (combined protection) modes.
 ---
 
 # Safety Guard — Prevent Destructive Operations

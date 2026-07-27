@@ -1,7 +1,7 @@
 ---
 name: write-article
 description: >-
-  Long-form content writing for articles, blog posts, essays, guides, tutorials, newsletters, and launch posts with voice matching. Use when the user wants to write an article, draft a blog post, create a guide, write a tutorial, produce a newsletter issue, turn notes into polished content, or match a specific writing voice. TRIGGER on article drafting, blog writing, newsletter creation, long-form content, or voice-consistent writing requests.
+  Long-form content writing for articles/blog posts/essays/guides/tutorials/newsletters with voice matching. Use when drafting content, turning notes into polished pieces, or matching a writing voice. TRIGGER: article drafting, blog writing, newsletter creation, long-form content, voice matching
 arguments: content_type topic
 argument-hint: |
   [blog|essay|guide|tutorial|newsletter] -- content type (default: blog)

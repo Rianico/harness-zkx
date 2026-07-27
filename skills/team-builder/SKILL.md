@@ -1,7 +1,7 @@
 ---
 name: team-builder
 description: >-
-  Build, compose, and dispatch parallel agent teams for multi-perspective tasks. Use for team composition, parallel agent dispatch, ad-hoc expert teams, multi-domain reviews, cross-functional analysis, and concurrent agent workflows. Supports browsing available agents, selecting by domain or name, spawning up to 5 agents in parallel, and synthesizing results.
+  Parallel agent team composition and dispatch for multi-perspective tasks. Browse agents by domain or name, spawn up to 5 in parallel, synthesize results. TRIGGER: team building, multi-domain review, cross-functional analysis, concurrent agent workflows.
 origin: community
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: kotlin-expert
 description: >-
-  Kotlin domain expertise for Android, KMP, Jetpack Compose, Compose Multiplatform, Ktor, Exposed, Coroutines, Flow, structured concurrency, Gradle builds, Kotest, MockK, null-safety, extension functions, and idiomatic Kotlin design. Use for Kotlin implementation, debugging, testing, build resolution, coroutine design, Android/KMP architecture, Compose UI patterns (state management, navigation, theming, recomposition performance), and refactoring tasks.
+  Kotlin domain expertise for Android/KMP, Compose Multiplatform, Ktor/Exposed, Coroutines/Flow, and Gradle builds. Use for implementation, debugging, testing, architecture, and Compose UI patterns. TRIGGER: Kotlin, Android, KMP, Compose, Coroutines, Ktor, Exposed, Kotest, Gradle
 argument-hint: >-
   [frameworks|coroutines|testing|build|compose]
 ---

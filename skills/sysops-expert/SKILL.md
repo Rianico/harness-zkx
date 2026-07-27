@@ -1,7 +1,7 @@
 ---
 name: sysops-expert
 description: >-
-  Systems operations expertise for deployment strategies, Docker containerization, CI/CD pipelines, health checks, rollback strategies, and production readiness. TRIGGER on: deployment, deploy, release, rollout, Docker, Dockerfile, docker-compose, container, Kubernetes, k8s, pod, CI, CD, pipeline, GitHub Actions, GitLab CI, Jenkins, health check, readiness probe, liveness probe, rollback, staging, production, infrastructure, DevOps, SRE, monitoring, observability, containerization, multi-stage build, volume, networking, security hardening, resource limits.
+  Systems operations for deployment/Docker/CI-CD/health checks/rollback/production readiness. TRIGGER: deploy, Docker/k8s/container, CI/CD/GitHub Actions/Jenkins, health/readiness/liveness probe, rollback, staging/production, DevOps/SRE, monitoring/observability, security hardening, resource limits
 argument-hint: >-
   [deploy|docker|cicd|containers]
 ---

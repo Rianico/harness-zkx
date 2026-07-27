@@ -1,7 +1,7 @@
 ---
 name: click-path-audit
 description: >-
-   "Trace every user-facing button/touchpoint through its full state change sequence to find bugs where functions individually work but cancel each other out, produce wrong final state, or leave the UI in an inconsistent state. Use when: systematic debugging found no bugs but users report broken buttons, or after any major refactor touching shared state stores."
+   Behavioural flow audit tracing every user-facing button/touchpoint through state change sequences. Finds bugs where functions individually work but produce wrong final state or leave inconsistent UI. TRIGGER: broken buttons, refactor of shared state stores.
 arguments: scope
 argument-hint: |
   <scope> -- component, page, or store to audit (e.g., "email page", "userStore")

@@ -1,7 +1,7 @@
 ---
 name: cuda
 description: >-
-  CUDA kernel development, debugging, and performance optimization for Claude Code. Use when writing, debugging, or optimizing CUDA code, GPU kernels, or parallel algorithms. Covers non-interactive profiling with nsys/ncu, debugging with cuda-gdb/compute-sanitizer, binary inspection with cuobjdump, and performance analysis workflows. Triggers on CUDA, GPU programming, kernel optimization, nsys, ncu, cuda-gdb, compute-sanitizer, PTX, GPU profiling, parallel performance.
+  CUDA kernel development and performance optimization. Use when writing or optimizing GPU kernels and parallel algorithms. Covers profiling, debugging, and binary inspection workflows. TRIGGER: CUDA, GPU programming, kernel optimization, nsys, ncu, cuda-gdb, compute-sanitizer, PTX, GPU profiling
 ---
 
 # CUDA Programming Skill

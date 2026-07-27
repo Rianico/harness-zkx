@@ -1,7 +1,7 @@
 ---
 name: checkpoint
 description: >-
-  Manage workflow checkpoints for milestone tracking and state comparison. Use when creating named savepoints, comparing current state against saved checkpoints, or tracking progress through multi-phase work. TRIGGER when: user mentions "checkpoint", "savepoint", "milestone", "before/after comparison", "track progress", or asks to save/restore state during refactors or feature work.
+  Workflow checkpoint management for milestone tracking and state comparison. Use when creating savepoints, comparing state, or tracking multi-phase progress. TRIGGER: checkpoint, savepoint, milestone, before/after comparison, progress tracking.
 argument-hint: >-
   [create|diff|list|clear] <name>
 ---

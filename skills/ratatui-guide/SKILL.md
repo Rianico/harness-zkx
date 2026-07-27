@@ -2,7 +2,7 @@
 name: ratatui-guide
 description: >-
   |
-  Rust TUI framework for building terminal user interfaces with widgets, layouts, and styling. TRIGGER when: user mentions ratatui, TUI, terminal UI/app/interface; asks about building terminal apps, event loops, widget rendering, layout constraints, text styling in terminal; "ratatui hello world", "ratatui app structure", terminal layout, terminal widgets, custom widget.
+  Ratatui/Rust TUI framework for terminal UIs with widgets, layouts, and styling. Covers event loops, widget rendering, layout constraints, text styling, custom widgets. TRIGGER: ratatui, TUI, terminal app/interface/UI, hello world, app structure.
 argument-hint: >-
   [topic]
 ---

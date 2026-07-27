@@ -1,7 +1,7 @@
 ---
 name: improve-codebase-architecture
 description: >-
-  Surface architectural friction and propose deepening opportunities — refactors that turn shallow modules into deep ones. Uses subagent-first exploration, structured MD reporting (renderable via md-to-html), and interactive grilling. Invoke when the user wants to improve architecture, find refactoring candidates, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.
+  Surface architectural friction and propose deepening opportunities -- refactors turning shallow modules into deep ones. Uses subagent exploration, structured MD reporting, and interactive grilling. TRIGGER: architecture improvement, refactoring candidates, tightly-coupled modules, testability.
 argument-hint: >-
   [topic] [artifact_dir=<path>]
 metadata:

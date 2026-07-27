@@ -1,7 +1,7 @@
 ---
 name: obsidian-markdown
 description: >-
-   "Obsidian Flavored Markdown syntax reference — wikilinks, embeds, callouts, properties, tags, highlights, and other Obsidian-specific extensions. Use when generating or editing .md files for Obsidian vaults, or when the user mentions wikilinks, callouts, frontmatter properties, embeds, or Obsidian notes. TRIGGER when: creating Obsidian notes, writing wikilinks, adding callouts, embedding files, setting frontmatter properties; OR user mentions Obsidian syntax, vault notes, internal links."
+  Obsidian Flavored Markdown syntax reference — wikilinks/embeds/callouts/properties. Use when creating or editing .md files for Obsidian vaults or user mentions Obsidian syntax. TRIGGER: wikilinks, callouts, frontmatter, embeds, Obsidian notes
 ---
 
 # Obsidian Flavored Markdown

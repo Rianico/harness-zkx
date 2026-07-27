@@ -1,7 +1,11 @@
 ---
 name: eval-gate
 description: >-
-  Eval-driven development gate for pass/fail decisions on implementation quality. Use for eval define, check, report, list, and clean; for creating acceptance criteria from specs, plans, ADRs, or requirements; for running capability, contract, negative, and regression evals; for pass@k metrics, model graders, and compact subagent-run reports. TRIGGER when validating implementation against approved requirements, running acceptance gates, defining verification scripts, or checking deterministic criteria. Also use for quick quality gates: build verification, type checking, lint, test coverage, security scans, and diff review before PRs. Always use this when validating implementation against approved requirements, running acceptance gates, or running pre-PR quality checks.
+  Eval-driven gate for pass/fail quality decisions. Defines criteria
+  from specs/plans/ADRs, runs capability/contract/negative/regression
+  evals with pass@k and model graders. Covers pre-PR gates (build,
+  type check, lint, coverage). TRIGGER: validate implementation,
+  acceptance gate.
 argument-hint: >-
   [define|check|quick|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>|artifact_dir=<path>]
 tools:

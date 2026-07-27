@@ -1,7 +1,7 @@
 ---
 name: go-expert
 description: >-
-  Go/Golang domain expertise for modules, idiomatic package design, interfaces, explicit error handling, goroutines, channels, context cancellation, concurrency leaks, table-driven tests, gomock, build failures, and code review. Use for Go implementation, debugging, testing, build resolution, concurrency design, and refactoring tasks.
+  Go/Golang domain expertise for modules, idiomatic package design, interfaces, error handling, goroutines/channels/concurrency, table-driven tests, gomock, build errors, and code review. For Go implementation, debugging, testing, build resolution, concurrency design, and refactoring.
 argument-hint: >-
   [build|review|testing]
 ---

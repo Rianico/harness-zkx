@@ -1,7 +1,7 @@
 ---
 name: iterative-retrieval
 description: >-
-  Progressive context retrieval pattern for multi-agent workflows and subagent orchestration. Use when the user wants to solve context problems in agent workflows, refine retrieval iteratively, build RAG-like pipelines for code exploration, optimize token usage in agent orchestration, or design context-aware subagent dispatching. TRIGGER on context retrieval, subagent context problems, iterative search refinement, or multi-phase retrieval workflows.
+  Progressive context retrieval for multi-agent workflows and subagent orchestration. Use when solving context problems, refining retrieval iteratively, or designing context-aware subagent dispatching. TRIGGER: context retrieval, subagent context, iterative search refinement, multi-phase retrieval
 
 argument-hint: >-
   [task or context retrieval goal]

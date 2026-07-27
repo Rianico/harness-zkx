@@ -1,7 +1,7 @@
 ---
 name: adr
 description: >-
-  Manage architecture decision records with the `adr` CLI. Use for initializing an ADR repository, creating, linking, superseding, listing, and reading ADRs; for deciding whether a new decision relates to older ADRs; for evaluating whether a decision warrants an ADR (hard to reverse, surprising without context, genuine trade-off); and for keeping ADR content short, historical, and compatible with adr-tools templates and status/link behavior.
+  ADR lifecycle management via the `adr` CLI. Use for initiating, creating, linking, superseding, listing, and reading ADRs; evaluating whether a decision warrants an ADR; and keeping ADR content short and compatible with adr-tools. TRIGGER: ADR, architecture decision record, adr-tools
 argument-hint: >-
   [init [dir]|create <title>|link <source> <forward-link> <target> <reverse-link>|supersede <old-ref...> <new-title>|list|read <ref|query>]
 ---
