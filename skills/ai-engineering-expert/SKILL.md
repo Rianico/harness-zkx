@@ -1,7 +1,7 @@
 ---
 name: ai-engineering-expert
 description: >-
-  AI engineering philosophy and routing spine for the LSZ harness. Covers skill design principles, description budgets, invocation classes, context-load policy, agent action spaces, rules-vs-skills boundaries, eval-first testing, and model routing. Use when designing or refining skills/agents/rules/workflows; creating new skills; classifying skill type or granularity; setting invocation class, description budget, or platform-sync contracts; designing agent tool boundaries, observation formats, or context budgets; planning eval-first workflows, regression tests, or runtime trace fixtures; reducing skill/rule bloat; or deciding when to delegate to subagents.
+  AI engineering methodology spine for the LSZ harness. Covers context-load policy, skill design, agent design, testing, and subagent-first execution. Use when designing skills, agents, or rules; or understanding AI engineering philosophy.
 arguments: domain
 argument-hint: |
   skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, progressive disclosure, rules-vs-skills boundary, platform sync, parent/sub-skill layout, and authoring checklists

@@ -1,7 +1,7 @@
 ---
 name: skill-authoring
 description: >-
-  Skill design, authoring process (Gather-Draft-Review), taxonomy classification, frontmatter, descriptions, progressive disclosure, parent-skill pattern, and authoring checklists for the LSZ architecture. TRIGGER when creating, writing, or building a new skill; designing skill structure, frontmatter, or descriptions; classifying skill type (orchestration, complex workflow, domain knowledge, action); or improving an existing skill's structure.
+  Skill design, authoring process (Gather-Draft-Review), taxonomy classification, frontmatter, descriptions, progressive disclosure, and authoring checklists. TRIGGER when creating, writing, or improving a skill; classifying skill type; or designing skill structure.
 metadata:
   managed-by: ai-engineering-expert
 ---
@@ -88,13 +88,39 @@ Then ask the user:
 - `name`: **Required** -- must match directory name (lowercase, hyphens, max 64 chars)
 - `description`: **Required** -- what + when, third-person, trigger vocabulary. Use `>-` block scalar.
 
-**CRITICAL: Description Triggers Discovery**
-The `description` field is the **only way Claude discovers skills**. A skill that cannot be found cannot be used. Every time you add a new capability (hooks, MCP servers, testing patterns), you MUST update the description with:
-- The domain term in the expertise list
-- Trigger scenarios in the TRIGGER clause
-- Example user questions that should invoke the skill
+**Description Writing Principles**
 
-If it's not in the description, the skill will not trigger.
+The description is the skill's machine-readable trigger and permanent context-load footprint. Budget: 300 chars (hard gate). It must trigger model discovery, stay within budget, and remain human-legible — all at once.
+
+**Structure (max 3 clauses):**
+1. **What it is** — Category noun first: "Reference for..." "Protocol for..." "Expert methodology for..."
+2. **When to use** — Category-level trigger scenarios, not verb enumeration: "managing ADRs" not "initializing, creating, linking, superseding, listing, and reading ADRs"
+3. **Value proposition** — What makes this skill distinctive (optional, recommended): "Keeps ADR content compatible with adr-tools"
+
+**Compression Rules (apply in order until within budget):**
+1. **Categories over actions** — "ADR lifecycle management" not verb-by-verb enumeration
+2. **Domain slashes** — "Spring Boot/JPA/Hibernate" not "Spring Boot, JPA, Hibernate, and JUnit"
+3. **Parentheticals to body** — "(hard to reverse, surprising without context)" moves to SKILL.md body
+4. **TRIGGER: tag for key terms** — End with `TRIGGER: term1, term2, ...` for explicit model matching
+5. **Front-load distinctive terms** — First 50 chars must distinguish this skill from related skills
+6. **Third-person, present tense** — "Manages ADRs" not "I can help you..." or "This skill manages..."
+
+**Good (108 chars):**
+```
+Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.
+```
+
+**Good (237 chars):**
+```
+Methodology spine for LSZ harness AI engineering — context-load policy, skill design, agent action spaces, testing, and subagent-first execution. Use when designing skills/agents/rules/workflows, setting invocation classes or description budgets, or planning eval-first testing. TRIGGER: context-load policy, skill design, agent design, testing methodology.
+```
+
+**Bad (443 chars):** Verb enumeration instead of categories. Parenthetical detail belongs in body, not description. Missing TRIGGER tag. Exhaustive where it should be distinctive.
+```
+Manage architecture decision records with the `adr` CLI. Use for initializing an ADR repository, creating, linking, superseding, listing, and reading ADRs; for deciding whether a new decision relates to older ADRs; for evaluating whether a decision warrants an ADR (hard to reverse, surprising without context, genuine trade-off); and for keeping ADR content short, historical, and compatible with adr-tools templates and status/link behavior.
+```
+
+Reference: [glossary.md](references/glossary.md) for the full domain vocabulary (invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms).
 
 **Key Optional Fields**
 - `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line using the `|` or `>-` block scalar: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
@@ -129,6 +155,7 @@ If it's not in the description, the skill will not trigger.
 - [skill-authoring.md](references/skill-authoring.md) -- Complete skill authoring reference (frontmatter, descriptions, triggers, string substitutions, calibration)
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts
 - [dialog-contract.md](references/dialog-contract.md) -- Standard pattern for user interactions
+- [glossary.md](references/glossary.md) -- Domain vocabulary: invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms
 
 ## Skill Authoring Checklist
 

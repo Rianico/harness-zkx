@@ -534,7 +534,8 @@ def sync_all(
 
 
 def context_check_all(
-    root_dir: Path, skill_map: dict[str, Path], json_output: bool = False
+    root_dir: Path, skill_map: dict[str, Path], json_output: bool = False,
+    show_over: bool = False,
 ) -> bool:
     """Enforce context-load policy on all skills under skills/.
 
@@ -599,17 +600,25 @@ def context_check_all(
                 "chars": desc_len,
             })
             has_failures = True
+            if show_over:
+                print(f"\n{skill_name} ({desc_len}/{DESCRIPTION_BUDGET} chars):")
+                print(f"  {description}")
             continue
 
         # Soft warning: trigger vocabulary
-        has_trigger = bool(TRIGGER_PATTERN.search(description))
-        if not has_trigger:
-            results["warn"].append({
-                "skill": skill_name,
-                "path": rel_path,
-                "reason": 'description lacks trigger vocabulary'
-                    ' -- consider adding "Use when..."',
-            })
+        # Skip check for managed-by subskills — the model can't discover
+        # them autonomously, so trigger vocabulary serves no purpose.
+        metadata = fm.get("metadata", {})
+        is_managed = bool(metadata.get("managed-by")) if isinstance(metadata, dict) else False
+        if not is_managed:
+            has_trigger = bool(TRIGGER_PATTERN.search(description))
+            if not has_trigger:
+                results["warn"].append({
+                    "skill": skill_name,
+                    "path": rel_path,
+                    "reason": 'description lacks trigger vocabulary'
+                        ' -- consider adding "Use when..."',
+                })
 
         results["pass"].append(
             {"skill": skill_name, "path": rel_path, "chars": desc_len}
@@ -683,6 +692,10 @@ def main():
         "--json", action="store_true",
         help="Machine-readable output",
     )
+    cc_parser.add_argument(
+        "--show-over", action="store_true",
+        help="Print full description text for skills exceeding budget",
+    )
 
     args = parser.parse_args()
     if not args.command:
@@ -713,7 +726,7 @@ def main():
             ok = sync_all(root, skill_map, dry_run=args.dry_run)
         sys.exit(0 if ok else 1)
     elif args.command == "context-check":
-        ok = context_check_all(root, skill_map, json_output=args.json)
+        ok = context_check_all(root, skill_map, json_output=args.json, show_over=args.show_over)
         sys.exit(0 if ok else 1)
 
 

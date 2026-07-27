@@ -69,7 +69,7 @@ The following are enforced by `skill-authoring` methodology during authoring:
 ## Scope
 
 - **Enforced on:** all skills under `skills/` directory
-- **Not enforced on:** third-party skills in `skills-lock.json`, sub-skills under `subskills/`
+- **Not enforced on:** third-party skills in `skills-lock.json`
 - **No exemption mechanism** — all owned skills comply. The policy is a contract, not guidance.
 
 ## Verification
