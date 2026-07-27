@@ -13,7 +13,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 SKILL_DIR = SCRIPT_DIR.parent
-CONTRACT_PATH = SKILL_DIR / "flavors" / "RENDERING-CONTRACT.md"
+CONTRACT_PATH = SKILL_DIR / "references" / "flavors" / "RENDERING-CONTRACT.md"
 
 
 def parse_required_classes(contract_path):
@@ -110,7 +110,7 @@ def main():
     if Path(args.flavor).is_dir():
         flavor_dir = args.flavor
     else:
-        candidate = SKILL_DIR / "flavors" / args.flavor
+        candidate = SKILL_DIR / "references" / "flavors" / args.flavor
         if candidate.is_dir():
             flavor_dir = str(candidate)
         else:

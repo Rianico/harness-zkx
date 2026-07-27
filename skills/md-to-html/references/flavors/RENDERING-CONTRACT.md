@@ -2,7 +2,7 @@
 
 The `md-to-html` renderer produces a **deterministic** HTML structure from any markdown file that follows the frontmatter schema in `MD-REPORT.md`. This document lists every CSS class, HTML structure, and data attribute the renderer generates, so new flavor authors know exactly what they need to style.
 
-A flavor must provide **one file**: `<flavor>/style.css`. Optionally, `<flavor>/reference/tokens.css` can provide design-token overrides for non-kami flavors.
+A flavor must provide **one file**: `references/flavors/<flavor>/style.css`. Optionally, `references/flavors/<flavor>/reference/tokens.css` can provide design-token overrides for non-kami flavors.
 
 ## Asset pipeline
 
@@ -10,7 +10,7 @@ The renderer writes these files alongside the output HTML:
 
 | File | Source | Purpose |
 |------|--------|---------|
-| `{stem}_assets/report.css` | `flavors/{flavor}/style.css` | All static CSS for the flavor |
+| `{stem}_assets/report.css` | `references/flavors/{flavor}/style.css` | All static CSS for the flavor |
 | `{stem}_assets/mermaid.min.js` | `assets/mermaid.min.js` | Mermaid diagram renderer |
 | `{stem}_assets/zoom.js` | `assets/zoom.js` | Zoom/pan/fullscreen controls |
 
@@ -204,6 +204,8 @@ When h2 is a direct child of `.md-section` (no `.md-section-header` wrapper), th
 ---
 
 ## Card content
+
+For the complete list of callout types, their semantics, and the flavor implementer checklist, see the [Callouts Manifest](callouts-manifest.md). This section documents only the CSS classes each callout produces.
 
 ### Callout blocks
 
@@ -515,9 +517,11 @@ The variable `--text` does NOT exist — use `--fg` for foreground color.
 
 ## Creating a new flavor
 
-1. Create `flavors/{name}/style.css` with the above CSS custom properties and all listed classes
-2. Optionally `flavors/{name}/reference/tokens.css` for `:root` token overrides (only read when flavor != "kami")
+1. Create `references/flavors/{name}/style.css` with the above CSS custom properties and all listed classes
+2. Optionally `references/flavors/{name}/reference/tokens.css` for `:root` token overrides (only read when flavor != "kami")
 3. Render with `-f {name}`
+
+See also the [Callouts Manifest](callouts-manifest.md) for the complete list of callout types a flavor must style.
 
 **Minimal checklist of CSS sections a flavor must define:**
 - [ ] `:root` design tokens

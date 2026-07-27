@@ -12,27 +12,22 @@ When a `.md` file is primarily for LLM consumption, write normal markdown. When 
 
 Use Obsidian `> [!TYPE]` callouts as machine-parseable markers for structured elements that have no native markdown equivalent. The script detects `[!TYPE]`, extracts the body, and routes it to the corresponding HTML renderer.
 
-### Supported Callout Types
+**The [Callouts Manifest](flavors/callouts-manifest.md) is the authoritative source for callout types.** The summary below gives you enough to start writing; the manifest has full semantics, HTML output specs, and the flavor implementer checklist.
 
-| Callout | Purpose | Body format | HTML output |
-|---------|---------|-------------|-------------|
-| `> [!badge]` | Classification tags | `**Strong** · category` | Badge row with colored `<span>` tags |
-| `> [!files]` | Related file paths | `- \`path/file.py\`` | Monospaced file list separated by `·` |
-| `> [!legend]` | Glossary term tags | `leakage · seam · locality` | Term badges with swatch classes |
-| `> [!problem]` | Problem statement | Free text | Styled blockquote with "Problem:" prefix |
-| `> [!warning]` | Warning/ADR conflict | Free text | Amber-bordered blockquote |
-| `> [!note]` | Neutral annotation | Free text | Accent-bordered blockquote |
+### Supported Callout Types (Quick Reference)
 
-### Pattern for Adding New Callouts
+| Callout | Purpose | Body format | Semantic |
+|---------|---------|-------------|----------|
+| `> [!badge]` | Classification tags | `Strong · in-process` | "What kind of recommendation is this?" |
+| `> [!files]` | Related file paths | `- \`path/file.py\`` | "Which files would I need to touch?" |
+| `> [!legend]` | Glossary term tags | `leakage · seam · locality` | "Which glossary concepts apply here?" |
+| `> [!problem]` | Problem statement | Free text | "What is wrong with the current state?" |
+| `> [!warning]` | Warning/ADR conflict | Free text | "What should I be careful about?" |
+| `> [!note]` | Neutral annotation | Free text | "What else should I know?" |
 
-When adding a callout type, update both sides of the contract:
+### Adding New Callouts
 
-1. Pick a type name: `[!typename]`
-2. Define the body format (one-line, list, or free text)
-3. Add the type to the script's regex: `r'\[!(badge|files|legend|problem|warning|note|typename)\]'`
-4. Add the renderer branch in the callout handler
-5. Add CSS for any new classes
-6. Document the type in this table
+The process for adding callout types lives in the [Callouts Manifest](flavors/callouts-manifest.md) under "Adding a new callout type." Do not add types without updating the manifest — it is the single source of truth that keeps the renderer, CSS, validator, and authoring guide in sync.
 
 ### Callout Order
 

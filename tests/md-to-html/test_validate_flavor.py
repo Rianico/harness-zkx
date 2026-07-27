@@ -17,6 +17,7 @@ CONTRACT_PATH = (
     Path(__file__).parent.parent.parent
     / "skills"
     / "md-to-html"
+    / "references"
     / "flavors"
     / "RENDERING-CONTRACT.md"
 )
@@ -55,7 +56,7 @@ class TestCheckFlavor:
     @pytest.fixture
     def kami_dir(self):
         return str(
-            Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "flavors" / "kami"
+            Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "references" / "flavors" / "kami"
         )
 
     def test_kami_passes_all_checks(self, kami_dir):

@@ -447,19 +447,42 @@ class AssetBundler:
             head.append(style)
 
         # ── External assets (skill's own files, referenced in-place) ──
+        # When the output file sits inside the repo tree we write relative
+        # <link>/<script> references so the browser resolves them from the
+        # repo-local asset files.  If the output lives *outside* the repo
+        # tree the relative path would traverse through the filesystem root
+        # (e.g. ../../Users/…) which browsers block for file:// pages, so
+        # we fall back to inlining the assets instead.
         if output_path:
             out_parent = Path(output_path).parent
             flavor_css = self.flavors_dir / self.flavor / "style.css"
-            head.append(result.new_tag('link', attrs={
-                'rel': 'stylesheet',
-                'href': os.path.relpath(str(flavor_css), str(out_parent)),
-            }))
-            for js_file in ["mermaid.min.js", "zoom.js"]:
-                js_path = self.asset_dir / js_file
-                if js_path.exists():
-                    head.append(result.new_tag('script', attrs={
-                        'src': os.path.relpath(str(js_path), str(out_parent)),
-                    }))
+            css_rel = os.path.relpath(str(flavor_css), str(out_parent))
+            # Check that the relative path resolves to the actual CSS file.
+            # If not (e.g. output is outside the repo tree, producing a
+            # root-traversing path like ../../Users/…), fall back to inlining.
+            if not (out_parent / css_rel).resolve().exists():
+                if flavor_css.exists():
+                    style = result.new_tag('style')
+                    style.string = flavor_css.read_text()
+                    head.append(style)
+                for js_file in ["mermaid.min.js", "zoom.js"]:
+                    js_path = self.asset_dir / js_file
+                    if js_path.exists():
+                        script = result.new_tag('script')
+                        script.string = js_path.read_text()
+                        head.append(script)
+            else:
+                # Inside repo tree — relative references work
+                head.append(result.new_tag('link', attrs={
+                    'rel': 'stylesheet',
+                    'href': css_rel,
+                }))
+                for js_file in ["mermaid.min.js", "zoom.js"]:
+                    js_path = self.asset_dir / js_file
+                    if js_path.exists():
+                        head.append(result.new_tag('script', attrs={
+                            'src': os.path.relpath(str(js_path), str(out_parent)),
+                        }))
         else:
             # Fallback: inline everything (backward compat)
             base_css_path = self.flavors_dir / self.flavor / "style.css"
@@ -694,7 +717,7 @@ class KamiRenderer:
         else:
             self.asset_dir = Path(asset_dir).absolute()
 
-        self.flavors_dir = script_dir / "flavors"
+        self.flavors_dir = script_dir / "references" / "flavors"
         self.flavor = flavor
 
         self._parser = FrontmatterParser()

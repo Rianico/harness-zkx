@@ -56,6 +56,8 @@ Precise contract between markdown input and HTML output. Use this to understand 
 
 ## Callout HTML Output Specs
 
+The [Callouts Manifest](flavors/callouts-manifest.md) is the authoritative source for callout semantics, usage guidance, and the complete flavor implementer checklist. This section documents the precise HTML output the renderer produces for each callout type — use the manifest for "why" and "when," use this section for "what HTML."
+
 ### `[!badge]`
 
 ```html

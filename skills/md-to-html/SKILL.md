@@ -61,7 +61,8 @@ When another skill or agent needs to write markdown that renders as HTML:
 
 1. **Point them to the [Authoring Guide](references/authoring-guide.md)** — the complete textbook for writing compatible markdown
 2. **The [Element Mapping](references/element-mapping.md)** is the precise contract — what each markdown element produces in HTML
-3. **Key principle**: frontmatter carries data, callouts carry structured elements, Mermaid carries diagrams. Everything else is standard markdown.
+3. **The [Callouts Manifest](references/flavors/callouts-manifest.md)** lists every supported callout type, its semantics, and when to use it
+4. **Key principle**: frontmatter carries data, callouts carry structured elements, Mermaid carries diagrams. Everything else is standard markdown.
 
 A skill only needs to follow the card section order and use the supported callout types. The renderer handles the rest.
 
@@ -73,7 +74,7 @@ When developing or modifying a flavor's `style.css`, run the validator to ensure
 uv run python3 skills/md-to-html/scripts/validate_flavor.py <flavor>
 ```
 
-The validator parses the machine-readable manifest from `flavors/RENDERING-CONTRACT.md` and reports any missing selectors or tokens. A passing validator is required before committing CSS changes.
+The validator parses the machine-readable manifest from `references/flavors/RENDERING-CONTRACT.md` and reports any missing selectors or tokens. A passing validator is required before committing CSS changes.
 
 To list all required items without running a check:
 
@@ -113,12 +114,16 @@ The skill's directory splits into three zones: skill internals, shared assets, a
 skills/md-to-html/
 ├── SKILL.md               # Skill definition (entry point)
 ├── references/            # Documentation for consuming skills
-│   ├── authoring-guide.md # Textbook: how to write compatible MD
-│   └── element-mapping.md # Precise MD→HTML contract
-├── flavors/               # Flavor definitions (skill internal)
-│   ├── RENDERING-CONTRACT.md  # CSS class manifest for verification
-│   ├── kami/style.css     # Kami design system stylesheet
-│   └── minimal/style.css  # Minimal design system stylesheet
+│   ├── authoring-guide.md      # Textbook: how to write compatible MD
+│   ├── element-mapping.md      # Precise MD→HTML contract
+│   ├── frontmatter-rendering-design.md
+│   └── flavors/                # Flavor definitions (skill internal)
+│       ├── callouts-manifest.md    # Callout type spec + implementer checklist
+│       ├── RENDERING-CONTRACT.md   # CSS class manifest for verification
+│       ├── kami/style.css      # Kami design system stylesheet
+│       ├── kami/reference/     # Kami design reference (DESIGN.md, tokens.css, components.html)
+│       ├── minimal/style.css   # Minimal design system stylesheet
+│       └── minimal/reference/  # Minimal design reference
 ├── assets/                # Immutable shared files — consumed by generated HTML
 │   ├── mermaid.min.js     # Mermaid diagram renderer (CDN-fetched, do not edit)
 │   ├── zoom.js            # Zoom/pan/fullscreen controls (skill-owned, do not edit)
@@ -145,10 +150,12 @@ project convention.
 |------|------|
 | [Authoring Guide](references/authoring-guide.md) | Textbook for consuming skills — how to write compatible MD |
 | [Element Mapping](references/element-mapping.md) | Precise MD→HTML contract — every element, its output, validation rules |
+| [Callouts Manifest](references/flavors/callouts-manifest.md) | Authoritative list of all callout types, usage semantics, and flavor implementer checklist |
 | [scripts/render.py](scripts/render.py) | The renderer implementation |
 | [scripts/validate_flavor.py](scripts/validate_flavor.py) | CSS contract conformance checker |
 | [scripts/verify_assets.py](scripts/verify_assets.py) | Asset integrity verifier |
 | [assets/](assets/) | Immutable shared files — referenced by generated HTML (mermaid.min.js, zoom.js) |
 | [assets/MANIFEST.json](assets/MANIFEST.json) | SHA-256 manifest for asset integrity |
-| [flavors/kami/](flavors/kami/) | Kami design system (style.css) |
-| [flavors/minimal/](flavors/minimal/) | Minimal design system |
+| [references/flavors/kami/](references/flavors/kami/) | Kami design system (style.css + reference docs) |
+| [references/flavors/minimal/](references/flavors/minimal/) | Minimal design system |
+| [references/flavors/RENDERING-CONTRACT.md](references/flavors/RENDERING-CONTRACT.md) | Machine-readable CSS class manifest for flavor validation |

@@ -18,7 +18,7 @@ from render import KamiRenderer
 from validate_flavor import parse_required_classes
 
 SKILL_DIR = Path(__file__).parent.parent.parent / "skills" / "md-to-html"
-CONTRACT_PATH = SKILL_DIR / "flavors" / "RENDERING-CONTRACT.md"
+CONTRACT_PATH = SKILL_DIR / "references" / "flavors" / "RENDERING-CONTRACT.md"
 
 # Classes that are dynamically generated and NOT expected to be in the contract
 # because they are data-driven and don't need flavor styling.
