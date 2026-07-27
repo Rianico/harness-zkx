@@ -127,7 +127,8 @@ name: my-skill        # if directory is named "other-skill"
 
 **Good:**
 ```yaml
-description: "Extracts text and tables from PDF files, fills PDF forms, merges documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction."
+description: >-
+  Extracts text and tables from PDF files, fills PDF forms, merges documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
 ```
 
 **Poor:**
@@ -135,6 +136,32 @@ description: "Extracts text and tables from PDF files, fills PDF forms, merges d
 description: "Helps with documents"  # too vague
 description: "I can help you process PDFs"  # wrong POV
 ```
+
+### YAML Frontmatter Scalar Convention
+
+Always use YAML block scalars in frontmatter — never inline strings. This ensures consistent parsing and makes it easy to add multi-line values without changing format.
+
+| Field | Required Scalar | Rationale |
+|-------|----------------|-----------|
+| `description` | `>-` (folded, strip) | Folds accidental line wraps; desc is always a single paragraph |
+| `argument-hint` | `|-` (literal, strip) | May become multi-line; preserves intentional breaks, no trailing noise |
+
+**Correct:**
+```yaml
+description: >-
+  Single paragraph that can wrap at any editor width — newlines fold to spaces.
+argument-hint: |-
+  <library> <question>
+```
+
+**Incorrect:**
+```yaml
+description: "Inline string — harder to script-check"  # wrong: no block scalar
+argument-hint: <library> <question>  # wrong: no block scalar
+argument-hint: >-  <library> <question>  # wrong: must be |- for argument-hint
+```
+
+This convention is enforced by the `validate-deps.py lint` command.
 
 ## Optional Fields
 
@@ -327,7 +354,8 @@ Skills support string substitution for dynamic values in the skill content:
 ```yaml
 ---
 name: session-logger
-description: Log activity for this session
+description: >-
+  Log activity for this session
 arguments: message
 ---
 
@@ -816,6 +844,14 @@ metadata:
 metadata:
   managed-by: write
 ```
+
+### Name Collision Rule
+
+**A sub-skill name MUST NOT match any top-level skill name.** The skill registry (`scan_skills` in validate-deps.py) indexes skills by name — duplicates cause silent overwrite, making one of the skills invisible to tooling.
+
+For example, if `skills/ux-testing/subskills/browser-qa/SKILL.md` has `name: browser-qa`, then `skills/browser-qa/SKILL.md` must not exist, and vice versa.
+
+Enforced by `validate-deps.py lint`.
 
 | Field | Location | Purpose |
 |-------|----------|---------|

@@ -253,8 +253,10 @@ metadata:
 - Parent uses `Read` tool to dispatch (not `Skill` tool -- nested paths not discoverable)
 - Sub-skills are full skills with frontmatter, references, scripts
 
+**Sub-skill names must not collide with top-level skill names** — see Name Collision Rule in the reference. Enforced by `validate-deps.py lint`.
+
 **Reference:**
-- [skill-authoring.md](references/skill-authoring.md) -- Full "Parent Skill with Sub-Skills Pattern" section with structure, metadata, registry format, dispatch mechanism, and migration guide
+- [skill-authoring.md](references/skill-authoring.md) -- Full "Parent Skill with Sub-Skills Pattern" section with structure, metadata, registry format, dispatch mechanism, migration guide, and Name Collision Rule
 
 ## Rules vs Skills Boundary
 
