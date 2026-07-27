@@ -1,12 +1,12 @@
 ---
-name: testing
+name: verification
 description: >-
-  EDD (Eval-Driven Development) methodology, including Semantic vs. Deterministic verification, AI regression patterns, and environmental truth-seeking in the LSZ architecture.
+  EDD (Eval-Driven Development) methodology — deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loops, and environmental truth-seeking in the LSZ architecture.
 metadata:
   managed-by: ai-engineering-expert
 ---
 
-# Testing & Verification
+# Verification
 
 Verification in LSZ is the process of seeking **Empirical Truth** through the environment to ensure the probabilistic model has achieved the human goal.
 
@@ -55,16 +55,6 @@ Write tests for bugs that were found, not just for code that works. AI tends to 
 2. Run baseline, capture failure signatures
 3. Execute implementation
 4. Re-run evals, compare deltas
-
-## Model Routing
-
-| Model Tier | Use For | Avoid |
-|------------|---------|-------|
-| Fast/Cheap | Classification, boilerplate, narrow edits | Complex reasoning, architecture decisions |
-| Balanced | Implementation, refactors, multi-file work | Root-cause analysis, subtle invariants |
-| Strong | Architecture, root-cause analysis, complex invariants | Simple tasks (wasteful) |
-
-Escalate tier only when lower tier fails with a clear reasoning gap.
 
 ## Runtime Trace Fixtures
 

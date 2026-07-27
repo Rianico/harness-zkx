@@ -5,11 +5,11 @@ description: >-
 arguments: domain
 argument-hint: |-
   skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, progressive disclosure, rules-vs-skills boundary, platform sync, parent/sub-skill layout, and authoring checklists
-  agent-harness -- loads agent methodology: lean persona design, tool/action-space boundaries, observation formats, context budgeting, and error recovery contracts
-  testing -- loads testing methodology: EDD, eval-first loops, model routing, AI regression tests, sandbox/production mismatch checks, runtime trace fixtures, and error-state leakage tests
+  subagent-engineering -- loads subagent methodology: action space design, observation formats, error recovery, parallel execution, orchestration constraints, and agent frontmatter
+  verification -- loads verification methodology: EDD, deterministic vs semantic verification, AI regression patterns, runtime trace fixtures, and eval-first loops
   omitted -- loads only the core AI engineering philosophy and the sub-skill dispatch registry
 metadata:
-  manage: [skill-authoring, agent-harness, testing]
+  manage: [skill-authoring, subagent-engineering, verification]
 ---
 
 # AI Engineering Expert
@@ -28,15 +28,41 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs 
 
 ## Core Mental Model
 
-AI system quality is constrained by five factors:
+AI system quality is constrained by eight factors:
 
 1. **Action space quality** -- Can the agent express the right operations?
 2. **Observation quality** -- Does the agent see what it needs to decide?
 3. **Recovery quality** -- Can the agent handle errors gracefully?
-4. **Context budget quality** -- Is guidance loaded when needed, not before? Are descriptions within budget and invocation classes declared correctly?
-5. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
-6. **Subagent-first execution** -- Is all implementation work delegated to subagents?
-7. **Handoff quality** -- Is state captured such that a fresh agent can resume with full fidelity?
+4. **Tool feedback quality** -- Are automated signals (LSP, linters, compilers) treated as authoritative blockers?
+5. **Context budget quality** -- Is guidance loaded when needed, not before? Are descriptions within budget and invocation classes declared correctly?
+6. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
+7. **Subagent-first execution** -- Is all implementation work delegated to subagents?
+8. **Handoff quality** -- Is state captured such that a fresh agent can resume with full fidelity?
+
+---
+
+## Expert Role Placement
+
+When assigning a specialist role (architect, TDD expert, refactoring expert, etc.), place it according to scope rather than stuffing it into one layer.
+
+| Layer | Scope | What Goes Here |
+|-------|-------|----------------|
+| **Agents** | Stable baseline identity | Short, durable role framing that applies in nearly every use of that agent |
+| **Skills** | Deep reusable methodology | Checklists, heuristics, trade-off frameworks, discipline-specific guidance |
+| **Orchestration / Workflows** | Workflow-specific overlay | Phase-local emphasis, suppressions, artifact-specific instructions |
+| **Rules** | Lightweight cross-cutting constraints | Conventions, tool preferences, artifact locations, global guardrails |
+
+**Default decision rule:**
+- Almost everywhere for that agent → agent definition
+- Deep and reusable across workflows → skill
+- Specific to one workflow, phase, or artifact contract → orchestration skill
+- Broad repository-wide constraint → rules
+
+### Examples
+
+- `developer` agent in TDD: keep agent generic; load `tdd-expert` skill for methodology; inject scope boundaries in the TDD workflow prompt
+- `onboarding` agent: load `onboarding` skill for codebase-specific context
+- `code-reviewer` agent: keep it generally reusable; inject "do not replay TDD verification" only in the code-review workflow
 
 ---
 
@@ -97,6 +123,18 @@ Reference: [Context-load policy contract](references/context-load-policy.md)
 
 ---
 
+## Model Routing
+
+| Model Tier | Use For | Avoid |
+|------------|---------|-------|
+| Fast/Cheap | Classification, boilerplate, narrow edits | Complex reasoning, architecture decisions |
+| Balanced | Implementation, refactors, multi-file work | Root-cause analysis, subtle invariants |
+| Strong | Architecture, root-cause analysis, complex invariants | Simple tasks (wasteful) |
+
+Escalate tier only when lower tier fails with a clear reasoning gap.
+
+---
+
 ## Skill Infrastructure
 
 The canonical tool for skill management is in the `skill-authoring` sub-skill.
@@ -130,6 +168,21 @@ uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-che
 | **Artifact Trail** | Absolute pointers to all durable artifacts (Design, ADRs, Code, Evals) |
 | **Success Criteria** | Define exactly what "done" looks like for the next agent |
 | **Context Recovery** | The next phase starts by reading the handoff to initialize state |
+
+### Subagent Response Contract
+
+Every subagent MUST return a structured response:
+
+| Field | Purpose |
+|-------|---------|
+| **Summary** | Concise bullet list of work completed |
+| **Artifact Pointers** | Absolute file paths to generated plans, code, or reviews |
+| **Route/Status** | Explicit signal: `COMPLETED`, `REJECTED`, `BLOCKED` |
+| **Issues** | List of discovered risks or required follow-ups |
+
+### Pointer Continuity
+
+Use the handoff document as the index for durable artifacts (`design.md`, `lineage.md`, etc.). Subsequent agents start by reading the handoff to initialize state, displacing (ignoring) the original full conversation history.
 
 ### Anti-Patterns
 
@@ -193,11 +246,28 @@ Every modification must preserve or improve organization. Additive changes witho
 
 **Red flags:** files over size limits, duplicated concepts, copy-pasted content, catch-all sections, unclear ordering.
 
+**After every structural change** (renames, moves, metadata edits, dependency changes): run the deterministic gate. Binary pass/fail — no ambiguity.
+
+```bash
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py check  # dependency graph
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py lint   # frontmatter conformance
+```
+
 **Gotchas:**
 - Windows-style paths -- always use forward slashes
 - Additive-only updates -- every new section should prompt "is there old content this replaces?"
 - Copy-paste across skills -- reference the canonical source instead
 - Size blindness -- check line counts periodically
+
+---
+
+## Trade-Offs
+
+Design decisions the architecture makes intentionally:
+
+- **Latency vs Context Efficiency** -- On-demand skill loading adds a small runtime penalty (model must call `Skill` tool to retrieve deep knowledge). This keeps the base context window focused on the user's immediate request. Load only what is needed for the current sub-task.
+- **Hero-Mode Prevention** -- Generic agents are prone to ignoring delegation instructions. Orchestration skills and complex workflow skills that dispatch agents SHOULD use explicit execution schemas with stable Agent dispatch templates to force the model into orchestration mode.
+- **Tooling Preference** -- When using shell-based search, prefer `rg` for content search and `fd` for file discovery over `grep`, `find`, and agent built-in search tools. Reserve `ls` and `tree` for structural inspection.
 
 ---
 
@@ -208,7 +278,7 @@ This skill manages three domain-specific sub-skills. Read the appropriate sub-sk
 | Domain | Sub-Skill | Covers |
 |--------|-----------|--------|
 | `skill-authoring` | `$SKILL_DIR/subskills/skill-authoring/SKILL.md` | Skill design, descriptions, invocation classes, description budgets, platform sync, rules-vs-skills boundary, progressive disclosure, parent-skill pattern, authoring checklists |
-| `agent-harness` | `$SKILL_DIR/subskills/agent-harness/SKILL.md` | Action space design, observation design, error recovery, context budgeting |
-| `testing` | `$SKILL_DIR/subskills/testing/SKILL.md` | EDD, eval-first loops, model routing, AI regression tests, runtime trace fixtures, sandbox mismatch |
+| `subagent-engineering` | `$SKILL_DIR/subskills/subagent-engineering/SKILL.md` | Action space design, observation design, error recovery, parallel execution, orchestration constraints, agent frontmatter |
+| `verification` | `$SKILL_DIR/subskills/verification/SKILL.md` | EDD, deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loop, runtime trace fixtures |
 
 **Dispatch:** When `$domain` is provided, read the matching sub-skill file and follow its instructions. When no domain is specified, only the philosophy above is loaded.

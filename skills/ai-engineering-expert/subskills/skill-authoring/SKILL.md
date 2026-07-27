@@ -151,6 +151,10 @@ Reference: [glossary.md](references/glossary.md) for the full domain vocabulary 
 - Always include clear descriptions explaining tradeoffs
 - Present questions as plain text — structured but no special tool required
 
+**Interaction Anti-Patterns:**
+- Generating 5 files or a massive plan to disk, then asking "Is this okay?" via an unstructured follow-up
+- Heavy orchestration and complex workflow skills MUST define explicit checkpoints and structured branching points when approval or divergence is required
+
 **References:**
 - [skill-authoring.md](references/skill-authoring.md) -- Complete skill authoring reference (frontmatter, descriptions, triggers, string substitutions, calibration)
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts
