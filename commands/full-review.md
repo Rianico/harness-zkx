@@ -1,8 +1,9 @@
 ---
-description: "Orchestrate comprehensive multi-dimensional code review using specialized review agents across architecture, security, performance, testing, and best practices"
+description: >-
+  Orchestrate comprehensive multi-dimensional code review using specialized review agents across architecture, security, performance, testing, and best practices
 arguments:
   - target
-argument-hint: |
+argument-hint: |-
   <target> -- path or description to review
   [--security-focus] -- include security analysis
   [--performance-critical] -- flag performance concerns

@@ -1,7 +1,9 @@
 ---
-description: Interactive local convention mining. Analyzes git history and interact with user to extract coding patterns.
+description: >-
+  Interactive local convention mining. Analyzes git history and interact with user to extract coding patterns.
 arguments: optional_flags
-argument-hint: "[optional_flags] -- constraints for convention mining (e.g., scope, date range)"
+argument-hint: |-
+  [optional_flags] -- constraints for convention mining (e.g., scope, date range)
 ---
 
 # Mine Conventions

@@ -2,7 +2,7 @@
 name: onboarding
 description: >-
   Systematically analyze a codebase at multiple scales. Use for global project onboarding (architecture map, entry points, conventions, CLAUDE.md) or for "zooming out" from a specific module to understand its neighbors and higher-level abstractions.
-argument-hint: >-
+argument-hint: |-
   [--zoom-out] [--global]
 ---
 

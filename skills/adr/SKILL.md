@@ -2,7 +2,7 @@
 name: adr
 description: >-
   ADR lifecycle management via the `adr` CLI. Use for initiating, creating, linking, superseding, listing, and reading ADRs; evaluating whether a decision warrants an ADR; and keeping ADR content short and compatible with adr-tools. TRIGGER: ADR, architecture decision record, adr-tools
-argument-hint: >-
+argument-hint: |-
   [init [dir]|create <title>|link <source> <forward-link> <target> <reverse-link>|supersede <old-ref...> <new-title>|list|read <ref|query>]
 ---
 

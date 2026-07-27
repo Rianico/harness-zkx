@@ -2,7 +2,7 @@
 name: python-expert
 description: >-
   Python domain expertise for async, testing, Django, and PyTorch. Use for non-obvious patterns, framework gotchas, and architectural decisions beyond baseline. For type checker config, diagnostics, suppressions, and stubs, use the basedpyright-expert skill.
-argument-hint: >-
+argument-hint: |-
   [async|testing|django|pytorch]
 ---
 

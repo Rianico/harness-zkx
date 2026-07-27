@@ -1,7 +1,9 @@
 ---
-description: Analyze a draft prompt and output an optimized, LSZ-enriched version ready to paste and run. Does NOT execute the task — outputs advisory analysis only.
+description: >-
+  Analyze a draft prompt and output an optimized, LSZ-enriched version ready to paste and run. Does NOT execute the task — outputs advisory analysis only.
 arguments: draft_prompt
-argument-hint: "<draft_prompt> -- the prompt to analyze and optimize"
+argument-hint: |-
+  <draft_prompt> -- the prompt to analyze and optimize
 ---
 
 # /prompt-optimize

@@ -1,8 +1,9 @@
 ---
-description: Interactive planner. Assesses risks and creates step-by-step implementation plans.
+description: >-
+  Interactive planner. Assesses risks and creates step-by-step implementation plans.
 arguments:
   - task_description
-argument-hint: |
+argument-hint: |-
   <task_description> -- planning request
   [topic_root=<path>] -- shared topic root override
   [artifact_dir=<path>] -- exact output directory override

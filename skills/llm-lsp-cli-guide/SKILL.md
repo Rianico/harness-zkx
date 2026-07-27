@@ -6,7 +6,7 @@ description: >-
   diagnostics, rename, completion, and cache coherence.
   TRIGGER: find definition, find references, trace call chain,
   rename symbol, check diagnostics.
-argument-hint: >-
+argument-hint: |-
   [command] <file> [line] [column]
 ---
 

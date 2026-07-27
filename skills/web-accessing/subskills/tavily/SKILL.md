@@ -6,7 +6,7 @@ description: >-
   structure mapping, bulk crawling, and citation-backed analysis.
   Returns LLM-optimized markdown. TRIGGER: search web, extract URL,
   map site, crawl docs, deep research.
-argument-hint: >-
+argument-hint: |-
   search <query> | extract <url> | map <site_url> | crawl <url> | research <topic> [--model mini|pro]
 allowed-tools: Bash(tvly *)
 metadata:

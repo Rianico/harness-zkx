@@ -2,7 +2,7 @@
 name: basedpyright-expert
 description: >-
   Domain expertise for basedpyright Python type checker: configuration, type inference, diagnostics, mypy/pyright migration, library authoring. TRIGGER: basedpyright, pyright, type stubs, strict mode, Any/Unknown, type narrowing, overload resolution, baseline workflow, diagnostic rules
-argument-hint: >-
+argument-hint: |-
   [topic]
 ---
 

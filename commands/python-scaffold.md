@@ -1,8 +1,10 @@
 ---
 name: python-scaffold
-description: Generate production-ready Python project structures with modern tooling (uv, FastAPI, Django), type hints, testing setup, and configuration.
+description: >-
+  Generate production-ready Python project structures with modern tooling (uv, FastAPI, Django), type hints, testing setup, and configuration.
 arguments: requirements
-argument-hint: "<requirements> -- project requirements and type (e.g., 'FastAPI REST API with auth', 'CLI tool with click')"
+argument-hint: |-
+  <requirements> -- project requirements and type (e.g., 'FastAPI REST API with auth', 'CLI tool with click')
 allowed-tools:
   - Bash
   - Write

@@ -3,7 +3,7 @@ name: ai-engineering-expert
 description: >-
   AI engineering methodology spine for the LSZ harness. Covers context-load policy, skill design, agent design, testing, and subagent-first execution. Use when designing skills, agents, or rules; or understanding AI engineering philosophy.
 arguments: domain
-argument-hint: |
+argument-hint: |-
   skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, progressive disclosure, rules-vs-skills boundary, platform sync, parent/sub-skill layout, and authoring checklists
   agent-harness -- loads agent methodology: lean persona design, tool/action-space boundaries, observation formats, context budgeting, and error recovery contracts
   testing -- loads testing methodology: EDD, eval-first loops, model routing, AI regression tests, sandbox/production mismatch checks, runtime trace fixtures, and error-state leakage tests

@@ -1,7 +1,9 @@
 ---
-description: Universal E2E entrypoint. Routes your request to the `e2e-runner` agent and automatically loads the correct testing methodology based on the project context.
+description: >-
+  Universal E2E entrypoint. Routes your request to the `e2e-runner` agent and automatically loads the correct testing methodology based on the project context.
 arguments: task_description
-argument-hint: "<task_description> -- E2E testing task or user journey to test"
+argument-hint: |-
+  <task_description> -- E2E testing task or user journey to test
 ---
 
 # Universal E2E Command (`/e2e`)

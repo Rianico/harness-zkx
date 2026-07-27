@@ -1,7 +1,9 @@
 ---
 name: handoff
-description: "Handoff the decisions, designs, and user intent. Acts as a context aggregator that distills 'Goal', 'Reason', and 'Intent' from the current session and provided artifacts to ensure subsequent agents understand the human context without re-reading full specs or chat history."
-argument-hint: "[intent-or-goal-description] [artifacts=path1,path2]"
+description: >-
+  Handoff the decisions, designs, and user intent. Acts as a context aggregator that distills 'Goal', 'Reason', and 'Intent' from the current session and provided artifacts to ensure subsequent agents understand the human context without re-reading full specs or chat history.
+argument-hint: |-
+  [intent-or-goal-description] [artifacts=path1,path2]
 ---
 
 # LSZ Handoff Methodology

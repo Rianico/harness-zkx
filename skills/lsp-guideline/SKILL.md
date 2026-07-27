@@ -2,7 +2,7 @@
 name: lsp-guideline
 description: >-
   LSP 3.17 implementation guide for diagnostic features and server lifecycle. Covers initialize/shutdown/exit, request/notification patterns, workspace/textDocument diagnostics, stale resultId detection, parent-child lifecycle. TRIGGER: LSP clients/servers, diagnostics, progress tokens, daemon.
-argument-hint: >-
+argument-hint: |-
   [implementation-area]
 ---
 

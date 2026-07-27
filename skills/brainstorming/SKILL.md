@@ -2,7 +2,7 @@
 name: brainstorming
 description: >-
   Design ideation and validation for features, architecture, or behavior. Transforms vague ideas into validated designs through disciplined reasoning. Maintains CONTEXT.md glossary inline. Use --peer-review for high-impact designs needing multi-agent validation.
-argument-hint: >-
+argument-hint: |-
   [--peer-review]
 metadata:
   depends-on: [handoff]

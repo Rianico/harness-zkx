@@ -1,8 +1,9 @@
 ---
-description: Interactive architectural design and review. Produces traced architecture outputs: blueprint, technical standards, and ADR-backed decision records.
+description: >-
+  Interactive architectural design and review. Produces traced architecture outputs: blueprint, technical standards, and ADR-backed decision records.
 arguments:
   - task_description
-argument-hint: |
+argument-hint: |-
   <task_description> -- architecture design request
   [topic_root=<path>] -- shared topic root override
   [artifact_dir=<path>] -- exact output directory override

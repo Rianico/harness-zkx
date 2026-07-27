@@ -251,10 +251,59 @@ def show_related(
             print(f"  <- {caller} ({loc_str})")
 
 
+SCALAR_RULES: dict[str, str] = {
+    "description": ">-",
+    "argument-hint": "|-",
+}
+"""Required YAML block scalar per frontmatter field."""
+
+
+def _detect_scalar(fm_text: str, field: str) -> str:
+    """Extract the block scalar indicator used by a frontmatter field."""
+    m = re.search(rf"^{field}:\s*([|>][-+]?)", fm_text, re.MULTILINE)
+    return m.group(1) if m else "inline"
+
+
+def _check_duplicate_skill_names(root_dir: Path) -> bool:
+    """Check that no sub-skill name collides with a top-level skill name."""
+    name_paths: dict[str, list[Path]] = {}
+    skills_dir = root_dir / "skills"
+    if not skills_dir.exists():
+        return False
+
+    for skill_file in skills_dir.rglob("SKILL.md"):
+        content = skill_file.read_text(encoding="utf-8")
+        fm = parse_frontmatter(content)
+        if not fm or "name" not in fm:
+            continue
+        name = str(fm["name"])
+        if name not in name_paths:
+            name_paths[name] = []
+        name_paths[name].append(skill_file)
+
+    found = False
+    for name, paths in name_paths.items():
+        if len(paths) < 2:
+            continue
+        rels = [p.relative_to(root_dir) for p in paths]
+        print(
+            f"LINT FAIL: Skill name '{name}'"
+            f" is declared by {len(paths)} files:"
+        )
+        for rel in rels:
+            print(f"  - {rel}")
+        found = True
+    return found
+
+
 def lint_skills(root_dir: Path, skill_map: dict[str, Path]) -> bool:
     print("Linting skill frontmatter...")
     found_issues = False
-    for _name, location in skill_map.items():
+
+    # Structural check: no name collisions
+    if _check_duplicate_skill_names(root_dir):
+        found_issues = True
+    for _, location in skill_map.items():
         if location.name == "skills-lock.json":
             continue
 
@@ -276,24 +325,46 @@ def lint_skills(root_dir: Path, skill_map: dict[str, Path]) -> bool:
                     )
                     found_issues = True
 
-            # Check for block scalar usage (recommended)
+            # Check per-field block scalar rules
             match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
             if match:
                 fm_text = match.group(1)
-                for field in ["description", "argument-hint"]:
-                    uses_block_scalar = re.search(
-                        rf"^{field}:\s*[|>]-?", fm_text, re.MULTILINE
+                for field, expected_scalar in SCALAR_RULES.items():
+                    field_present = re.search(
+                        rf"^{field}:", fm_text, re.MULTILINE
                     )
-                    if f"{field}:" in fm_text and not uses_block_scalar:
-                        val = str(fm.get(field, ""))
-                        if ":" in val or len(val) > 80:
-                            print(
-                                f"LINT WARN:"
-                                f" {location.relative_to(root_dir)}"
-                                f" - Field '{field}'"
-                                " should use YAML block scalar (|> or >-)"
-                            )
-                            found_issues = True
+                    if not field_present:
+                        continue
+
+                    # Check if it uses ANY block scalar
+                    uses_block = re.search(
+                        rf"^{field}:\s*[|>]", fm_text, re.MULTILINE
+                    )
+                    if not uses_block:
+                        print(
+                            "LINT FAIL:"
+                            f" {location.relative_to(root_dir)}"
+                            f" - '{field}' must be a YAML block scalar"
+                            f" ({expected_scalar}), got inline value"
+                        )
+                        found_issues = True
+                        continue
+
+                    # Check if it uses the CORRECT block scalar
+                    correct = re.search(
+                        rf"^{field}:\s*{re.escape(expected_scalar)}",
+                        fm_text,
+                        re.MULTILINE,
+                    )
+                    if not correct:
+                        actual = _detect_scalar(fm_text, field)
+                        print(
+                            "LINT FAIL:"
+                            f" {location.relative_to(root_dir)}"
+                            f" - '{field}' must use"
+                            f" {expected_scalar}, got {actual}"
+                        )
+                        found_issues = True
 
         except Exception as e:
             print(f"Error linting {location}: {e}")
@@ -306,7 +377,7 @@ def lint_skills(root_dir: Path, skill_map: dict[str, Path]) -> bool:
 def fix_skills(root_dir: Path, skill_map: dict[str, Path]):
     print("Fixing skill frontmatter...")
     fixed_count = 0
-    for _name, location in skill_map.items():
+    for _, location in skill_map.items():
         if location.name == "skills-lock.json":
             continue
 
@@ -315,54 +386,68 @@ def fix_skills(root_dir: Path, skill_map: dict[str, Path]):
             match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
             if not match:
                 continue
-            
+
             fm_text = match.group(1)
             lines = fm_text.splitlines()
-            new_lines = []
+            new_lines: list[str] = []
             changed = False
-            
+
             for line in lines:
-                if line.startswith(("description:", "argument-hint:")) and not re.search(
-                    r":\s*[|>]-?", line,
-                ):
-                    parts = line.split(":", 1)
-                    if len(parts) < 2: 
-                        new_lines.append(line)
-                        continue
-                    key, val = parts
-                    val = val.strip()
+                key = line.split(":", 1)[0].strip()
+                if key not in SCALAR_RULES:
+                    new_lines.append(line)
+                    continue
 
-                    if val in ("|", ">", "|-", ">-", "|+", ">+"):
-                        new_lines.append(line)
-                        continue
+                expected = SCALAR_RULES[key]
 
+                # Check for inline value (no block scalar indicator)
+                field_decl = re.match(
+                    rf"^{key}:\s*(.*)", line
+                )
+                if not field_decl:
+                    new_lines.append(line)
+                    continue
+
+                rest = field_decl.group(1).strip()
+
+                # Skip empty values (e.g., "description:" with nothing after)
+                if not rest:
+                    new_lines.append(line)
+                    continue
+
+                # Not a block scalar at all — inline value
+                if not re.match(r"[|>]", rest):
+                    val = rest
                     if (val.startswith('"') and val.endswith('"')) or (
                         val.startswith("'") and val.endswith("'")
                     ):
                         val = val[1:-1]
-                    val = val.replace("\\\"", "\"").replace("\\'", "'")
+                    val = val.replace('\\"', '"').replace("\\'", "'")
 
-                    if "\n" in val:
-                        new_lines.append(f"{key}: |")
-                        for vline in val.split("\n"):
-                            new_lines.append(f"  {vline}")
-                    else:
-                        new_lines.append(f"{key}: >-")
-                        new_lines.append(f"  {val}")
+                    new_lines.append(f"{key}: {expected}")
+                    new_lines.append(f"  {val}")
+                    changed = True
+                    continue
+
+                # Has a block scalar — check if it's the right one
+                current_scalar = re.match(r"[|>][-+]?", rest)
+                scalar = current_scalar.group(0) if current_scalar else rest
+                if scalar != expected:
+                    new_lines.append(f"{key}: {expected}")
                     changed = True
                 else:
                     new_lines.append(line)
-            
+
             if changed:
                 new_fm = "\n".join(new_lines)
                 new_content = "---\n" + new_fm + "\n---" + content[match.end():]
                 location.write_text(new_content, encoding="utf-8")
                 print(f"FIXED: {location.relative_to(root_dir)}")
                 fixed_count += 1
-                
+
         except Exception as e:
             print(f"Error fixing {location}: {e}")
-    
+
     print(f"Fixed {fixed_count} files.")
 
 

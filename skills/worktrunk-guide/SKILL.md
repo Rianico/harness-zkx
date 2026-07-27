@@ -1,9 +1,8 @@
 ---
 name: worktrunk-guide
 description: >-
-  |
   Git worktree management CLI for parallel development, hooks, and LLM integration. TRIGGER: switching/creating worktrees, merging branches, dev servers, hooks, LLM commits, cold starts, agent handoff, cleanup.
-argument-hint: >-
+argument-hint: |-
   [topic]
 ---
 

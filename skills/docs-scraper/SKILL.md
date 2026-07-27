@@ -6,7 +6,7 @@ description: >-
   sites via llms.txt/sitemap. Uses cargo-docs-md for Rust. Handles
   emoji clean, link resolution, caching. TRIGGER: scrape LSP, PTX,
   CUDA, Rust, scrape site.
-argument-hint: >-
+argument-hint: |-
   [lsp|ptx|runtime|driver|rust <target>|site] [--force] [--output-dir <path>] [--base-url <url>]
 ---
 

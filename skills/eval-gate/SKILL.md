@@ -6,7 +6,7 @@ description: >-
   evals with pass@k and model graders. Covers pre-PR gates (build,
   type check, lint, coverage). TRIGGER: validate implementation,
   acceptance gate.
-argument-hint: >-
+argument-hint: |-
   [define|check|quick|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>|artifact_dir=<path>]
 tools:
   - Agent

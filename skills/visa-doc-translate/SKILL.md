@@ -2,7 +2,7 @@
 name: visa-doc-translate
 description: >-
   Visa document translation from images to English. Translates bank/employment/retirement/income/property certificates, business licenses, ID cards, passports. Creates bilingual PDFs for Australia, USA, Canada, UK, and other countries.
-argument-hint: >-
+argument-hint: |-
   <image_file_path>
 ---
 

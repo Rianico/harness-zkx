@@ -1,9 +1,8 @@
 ---
 name: docs-to-skill
 description: >-
-  |
   Documentation-to-skill conversion: transforms scraped docs into modular, actionable skills. TRIGGER: converting docs to skills, creating skill from documentation/API docs/scraped docs.
-argument-hint: >-
+argument-hint: |-
   <doc-dir> [--name <skill-name>] [--supplementary <paths-or-urls>]
 metadata:
   depends-on: [ai-engineering-expert]

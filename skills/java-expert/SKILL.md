@@ -2,7 +2,7 @@
 name: java-expert
 description: >-
   Java and Spring Boot expertise for layered services, Spring MVC/Security, Bean Validation, JPA, Maven/Gradle, JUnit 5/Mockito, integration testing, architecture review, and production hardening. Use for Java implementation, debugging, testing, build resolution, security, and Spring architecture.
-argument-hint: >-
+argument-hint: |-
   [frameworks|security|testing|build]
 ---
 

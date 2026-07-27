@@ -2,7 +2,7 @@
 name: frontend-expert
 description: >-
   Expert methodology for React/Next.js/Vue/Nuxt: component composition, state management, performance, forms, accessibility, SSR/hydration patterns. TRIGGER: react, vue, nextjs, nuxt, hooks, composables, hydration, memoization, virtualization, code splitting, Zustand, Pinia, forms, a11y
-argument-hint: >-
+argument-hint: |-
   [react|vue|nextjs|nuxt|performance|state|forms|accessibility]
 ---
 

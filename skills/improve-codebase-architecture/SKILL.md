@@ -2,7 +2,7 @@
 name: improve-codebase-architecture
 description: >-
   Surface architectural friction and propose deepening opportunities -- refactors turning shallow modules into deep ones. Uses subagent exploration, structured MD reporting, and interactive grilling. TRIGGER: architecture improvement, refactoring candidates, tightly-coupled modules, testability.
-argument-hint: >-
+argument-hint: |-
   [topic] [artifact_dir=<path>]
 metadata:
   depends-on: [md-to-html]

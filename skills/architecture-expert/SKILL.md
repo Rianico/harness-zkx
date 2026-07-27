@@ -2,7 +2,7 @@
 name: architecture-expert
 description: >-
   Architecture methodology for system design/trade-offs/clean architecture/domain modeling/bounded contexts/microservice decomposition/ADR/lens-based review. TRIGGER: architecture, microservices, domain modeling, ADR, balanced, uncle-bob, fowler, evans, shaw-garlan, kruchten, newman
-argument-hint: >-
+argument-hint: |-
   [balanced|uncle-bob|fowler|evans|shaw-garlan|kruchten|newman]
 ---
 

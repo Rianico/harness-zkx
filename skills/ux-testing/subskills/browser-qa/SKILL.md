@@ -3,7 +3,7 @@ name: browser-qa
 description: >-
   Ad-hoc QA and post-deploy monitoring for UI verification. Supports single-pass checks, sustained monitoring, and environment comparison. TRIGGER on browser testing, UI verification, post-deploy check, staging vs prod, ad-hoc QA.
 arguments: mode options
-argument-hint: |
+argument-hint: |-
   --once -- single-pass ad-hoc QA check
   --watch --interval 5m --duration 2h -- sustained monitoring
   --compare <staging> <prod> -- diff mode comparing environments

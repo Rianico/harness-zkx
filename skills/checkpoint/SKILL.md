@@ -2,7 +2,7 @@
 name: checkpoint
 description: >-
   Workflow checkpoint management for milestone tracking and state comparison. Use when creating savepoints, comparing state, or tracking multi-phase progress. TRIGGER: checkpoint, savepoint, milestone, before/after comparison, progress tracking.
-argument-hint: >-
+argument-hint: |-
   [create|diff|list|clear] <name>
 ---
 

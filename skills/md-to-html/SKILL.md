@@ -2,7 +2,7 @@
 name: md-to-html
 description: >-
   Convert structured Markdown into styled HTML using the kami design system. The authoritative source for writing markdown that deterministically converts to curated HTML. Use when generating human-readable reports from LLM-authored markdown, or for skill guidance on script-friendly MD.
-argument-hint: >-
+argument-hint: |-
   <source.md> [-o output.html] [-f flavor]
 ---
 

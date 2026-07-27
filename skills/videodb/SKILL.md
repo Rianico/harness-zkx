@@ -4,7 +4,7 @@ description: >-
   Video/audio: ingestion/indexing/search/transcoding/editing/live capture. Covers uploads, RTSP, desktop capture, scene detection, subtitle/overlay/dubbing, aspect/resolution conversion, timeline composition, spoken word indexing. TRIGGER: video, audio, transcode, clip, subtitle, stream, RTSP
 
 allowed-tools: Read Grep Glob Bash(python:*)
-argument-hint: >-
+argument-hint: |-
   [task description]
 ---
 

@@ -3,7 +3,7 @@ name: pr-enhance
 description: >-
   Pull Request optimization expert. Generates comprehensive PR descriptions, diagrams, and checklists based on git diff analysis to facilitate efficient code reviews.
 arguments: base_branch
-argument-hint: >-
+argument-hint: |-
    "[base_branch] -- base branch to diff against (default: main)"
 ---
 

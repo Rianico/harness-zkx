@@ -42,18 +42,19 @@ def test_callers_lists_inbound_depends_on(tmp_path: Path) -> None:
     write_skill(tmp_path, "caller-a", "target")
     write_skill(tmp_path, "caller-b", "other")
 
-    result = run_validate_deps("callers", "target", "--project-root", str(tmp_path))
+    result = run_validate_deps("--project-root", str(tmp_path), "callers", "target")
 
     assert result.returncode == 0
-    assert "Skills declaring metadata.depends-on for 'target':" in result.stdout
-    assert "caller-a: skills/caller-a/SKILL.md" in result.stdout
+    assert "Inbound Dependencies (callers):" in result.stdout
+    assert "caller-a" in result.stdout
     assert "caller-b" not in result.stdout
 
 
 def test_callers_reports_no_dependents(tmp_path: Path) -> None:
     write_skill(tmp_path, "target")
 
-    result = run_validate_deps("callers", "target", "--project-root", str(tmp_path))
+    result = run_validate_deps("--project-root", str(tmp_path), "callers", "target")
 
     assert result.returncode == 0
-    assert "No skills declare metadata.depends-on for 'target'." in result.stdout
+    assert "Inbound Dependencies (callers):" in result.stdout
+    assert "(None)" in result.stdout
