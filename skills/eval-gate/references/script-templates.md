@@ -37,7 +37,7 @@ def main():
 
     # Extract diagnostics
     diagnostics = data.get("generalDiagnostics", [])
-    
+
     # Filter by severity if needed (e.g., only errors, or errors + warnings)
     issues = [
         f"{d.get('file', 'unknown')}:{d.get('range', {}).get('start', {}).get('line', 0) + 1}: [{d.get('severity_name', 'unknown')}] {d.get('message', '')}"
@@ -117,17 +117,17 @@ def main():
     )
 
     output_text = result.stdout + result.stderr
-    
+
     # Parse pytest output
     # Look for: "X passed", "Y failed", "Z errors"
     passed_match = re.search(r'(\d+) passed', output_text)
     failed_match = re.search(r'(\d+) failed', output_text)
     error_match = re.search(r'(\d+) error', output_text)
-    
+
     passed = int(passed_match.group(1)) if passed_match else 0
     failed = int(failed_match.group(1)) if failed_match else 0
     errors = int(error_match.group(1)) if error_match else 0
-    
+
     # Extract failed test names if any
     issues = []
     if failed > 0 or errors > 0:
@@ -143,70 +143,6 @@ def main():
         "passed": passed,
         "failed": failed,
         "errors": errors
-    }
-    print(json.dumps(output, indent=2))
-
-if __name__ == "__main__":
-    main()
-```
-
-## Template: LSP Diagnostics
-
-```python
-#!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.10"
-# dependencies = []
-# ///
-"""LSP workspace diagnostics eval script. Outputs JSON with diagnostics."""
-import subprocess
-import json
-import sys
-from pathlib import Path
-
-def main():
-    # Run LSP diagnostics command
-    result = subprocess.run(
-        ["llm-lsp-cli", "lsp", "workspace-diagnostics"],
-        capture_output=True,
-        text=True,
-        cwd=Path(__file__).parent.parent.parent
-    )
-
-    try:
-        data = json.loads(result.stdout) if result.stdout else {}
-    except json.JSONDecodeError:
-        print(json.dumps({
-            "status": "fail",
-            "summary": "Failed to parse LSP output",
-            "issues": [result.stderr or "Unknown error"]
-        }))
-        return
-
-    # Extract all diagnostics
-    issues = []
-    for file_entry in data.get("files", []):
-        file_path = file_entry.get("file", "unknown")
-        for diag in file_entry.get("diagnostics", []):
-            severity = diag.get("severity_name", "unknown")
-            message = diag.get("message", "")
-            range_str = diag.get("range", "")
-            code = diag.get("code", "")
-            issues.append(f"{file_path}:{range_str}: [{severity}] {message} ({code})")
-
-    # Decide pass/fail based on severity
-    # Option 1: Only errors fail
-    # has_errors = any(d.get("severity") == 1 for f in data.get("files", []) for d in f.get("diagnostics", []))
-    
-    # Option 2: Any diagnostic fails (stricter)
-    has_issues = len(issues) > 0
-
-    output = {
-        "status": "pass" if not has_issues else "fail",
-        "summary": f"{len(issues)} diagnostics found" if issues else "No diagnostics",
-        "issues": issues,
-        "file_count": len(data.get("files", [])),
-        "diagnostic_count": len(issues)
     }
     print(json.dumps(output, indent=2))
 
@@ -263,6 +199,7 @@ Each criterion references a script:
 ```
 
 The eval agent runs:
+
 ```bash
 uv run scripts/typecheck.py
 ```
@@ -306,7 +243,7 @@ def run_check(id, command):
             text=True,
             cwd=Path(__file__).parent.parent # Adjust based on project root
         )
-        
+
         # Try to parse as JSON if it looks like JSON
         try:
             data = json.loads(result.stdout)
