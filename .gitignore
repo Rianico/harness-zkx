@@ -2,6 +2,7 @@
 .agents/
 .claude/agents/
 .lsz/
+.pi/
 
 # Claude Code user-specific files (keep rules tracked)
 .claude/skills/
