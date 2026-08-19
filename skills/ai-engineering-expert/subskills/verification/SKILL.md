@@ -12,18 +12,22 @@ Verification in LSZ is the process of seeking **Empirical Truth** through the en
 
 ## The Foundation: EDD (Eval-Driven Development)
 
-The auditor (Orchestrator or Verifier) is an **Executioner**, not a reader. We never trust the model's claim of completion; we only trust fresh signals generated *after* the implementation.
+The auditor (Orchestrator or Verifier) is an **Executioner**, not a reader. We never trust the model's claim of completion; we only trust fresh signals generated _after_ the implementation.
 
 ### 1. Deterministic Verification (Hard Gates)
+
 Measured by non-LLM tools. These are binary, reliable, and cost zero tokens.
-- **LSP & Linters:** Use `llm-lsp-cli` to check for diagnostics. A "finished" task must be clean of errors and warnings.
+
+- **LSP & Linters:** Check for diagnostics with your language server and linters. A "finished" task must be clean of errors and warnings.
 - **Unit & Property Tests:** Use `pytest`, `go test`, etc. These verify logic invariants that are mathematically or logically certain.
 - **Differential Observation:** Compare output of old vs. new code against the same input. If they differ in a deterministic area, the implementation is failed.
 
 ### 2. Semantic Verification (Qualitative Alignment)
+
 Measured by Adversarial Orchestration. We use LLMs to verify what compilers cannot: Intent.
+
 - **The Skeptic Agent:** Dispatch a subagent with a "Skeptic" persona. Its only goal is to find "lazy code," "semantic drift," or "hallucinated implementation."
-- **BDD Comparison:** Compare the final `code` against the **BDD Scenarios** locked in during brainstorming. Does the code *behave* like the scenario, or does it just look like it?
+- **BDD Comparison:** Compare the final `code` against the **BDD Scenarios** locked in during brainstorming. Does the code _behave_ like the scenario, or does it just look like it?
 - **Explain-to-Verify:** Ask the model to explain how a specific complex block satisfies a BDD scenario. If the explanation fails to map to the code, reject the result.
 
 ---
