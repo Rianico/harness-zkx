@@ -5,14 +5,11 @@
 ### Immutability (CRITICAL)
 ALWAYS create new objects, NEVER mutate existing ones (e.g., `update(orig)` not `modify(orig)`).
 
-### File Organization
-MANY SMALL FILES > FEW LARGE FILES (200-400 lines typical, 800 max). Organize by feature/domain.
-
 ### Error Handling
 Handle errors explicitly. Never silently swallow errors. Fail fast.
 
 ### Principles
-Readability First, KISS (Keep It Simple), DRY (extract logic if repeated >3 times), YAGNI (don't build until needed).
+Clean Architecture, Clean Code. Strictly follow SOLID Programming.
 
 ### API Visibility Matches Usage
 Visibility modifiers should reflect actual usage patterns. Private functions/classes used across modules create warnings and confusion.
@@ -39,16 +36,9 @@ When a diagnostic appears 50+ times for the same category (e.g., internal module
 # Reason: <one-line explanation of why this suppression is legitimate>
 ```
 
-### Respect LSP Diagnostics (CRITICAL)
-
-LSP diagnostics (basedpyright, tsc, rust-analyzer, gopls, etc.) are authoritative signals. Treat all diagnostics as blockers until triaged — fix or suppress, never ignore. See ai-engineering-expert "Respect Tool Feedback" for full methodology.
-
 ---
 
 ## Types & Data Flow
-
-### Input Validation
-ALWAYS validate at system boundaries.
 
 ### Validate at Boundaries
 Dynamic data enters at boundaries; validate there, not everywhere. Once validated, internal code can trust types.
@@ -59,9 +49,8 @@ Dynamic data enters at boundaries; validate there, not everywhere. Once validate
 Dynamic languages benefit from libraries that enforce type discipline. Prefer matured libs that reduce runtime uncertainty.
 - TypeScript over JavaScript for frontend code
 - Pydantic over `Any`/`object` for Python data models
-- Zod for runtime validation in JS/TS
-- serde with derived traits for Rust serialization
-- The goal: shift type errors from runtime to compile/validation time
+
+The core: shift type errors from runtime to compile/validation time
 
 ### Keep Typed Models, Serialize at Boundaries
 When using validation libraries (Pydantic, Zod, serde), keep typed models as long as possible. Only serialize (`model_dump()`, `toJSON()`) at actual output boundaries.
@@ -77,20 +66,10 @@ Serialize only at output boundaries (transport, IPC, API responses). Deserialize
 
 ---
 
-## Git Workflow
-
-### Test After Conflict Resolution
-After resolving git merge/rebase conflicts, run the full test suite before continuing. Conflict resolution is a manual edit that can introduce subtle breakage.
-- **Why:** Manual conflict resolution bypasses CI checks and can silently break functionality
-- **When:** After `git rebase --continue` or before `git merge --continue`, run tests locally
-- **Minimum:** Run tests for files touched by the conflict; ideally run full suite
-
----
-
 ## Language Management
 
 ### Single-Language Projects
-Use the language's native tool for version and dependency management.
+Use the language's native tool for running, version and dependency management.
 - **Python:** uv (respects `.python-version` or system Python)
 - **Rust:** cargo with `rust-toolchain.toml`
 - **Node.js:** Use corepack or nvm with `.nvmrc`
@@ -138,19 +117,3 @@ If an issue is found: STOP, use `security-reviewer` agent, fix CRITICAL issues, 
 ### Benchmark Before Claiming
 When making performance claims, benchmark with real tests first—never guess by theory.
 
-### Process Awareness
-Count subprocess spawns. Each fork/exec has overhead that compounds.
-
-### Measure Realistically
-Measure wall-clock time with realistic payloads, not synthetic benchmarks.
-- **Example:** Bash was assumed faster than Python for hooks, but measured 3x slower (183ms vs 61ms) due to 34 subprocess spawns vs 0.
-
----
-
-## Pre-Completion Checklist
-- [ ] Code is readable and well-named
-- [ ] Functions are small (<50 lines), Files focused (<800 lines), no deep nesting (>4 levels)
-- [ ] Proper error handling, validation, and no mutation
-- [ ] No hardcoded values or secrets
-- [ ] Tests pass
-- [ ] Performance claims backed by real measurements (not theory)
