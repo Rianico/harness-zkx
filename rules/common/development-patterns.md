@@ -1,119 +1,116 @@
 # Development Patterns
 
-## Code Quality
+Portable code and type conventions. Consult on every change that touches state, boundaries, surfaces, or verification.
 
-### Immutability (CRITICAL)
-ALWAYS create new objects, NEVER mutate existing ones (e.g., `update(orig)` not `modify(orig)`).
+## 1. Spine — State, Boundaries, Surfaces
 
-### Error Handling
-Handle errors explicitly. Never silently swallow errors. Fail fast.
+### Immutable state
 
-### Principles
-Clean Architecture, Clean Code. Strictly follow SOLID Programming.
+Create new values from inputs; treat origins as read-only. Prefer pure functions that return updated copies (`updated = evolve(original, patch)`) over in-place mutation. Mutation narrows to the owning boundary that declares it and owns recovery.
 
-### API Visibility Matches Usage
-Visibility modifiers should reflect actual usage patterns. Private functions/classes used across modules create warnings and confusion.
-- If it's used everywhere, make it public
-- If it's truly internal, enforce encapsulation
+_Check:_ no function mutates a caller-owned object; tests assert `original` unchanged after the call.
 
-### Scoped Over Global
-Fix issues at the most precise scope possible. Targeted fixes preserve overall safety; global suppressions hide real issues.
+### Typed boundaries
 
-**Scope Hierarchy (most precise to least):**
-1. **Fix the code** (preferred) — Address the actual issue
-2. **Line-level suppression** — Single instance, document why
-3. **File-level suppression** — Pattern in one file, document why
-4. **Targeted config** — Category-level (e.g., `allowedUntypedLibraries` for internal packages)
-5. **Project-level disable** — Last resort, signals potential architectural issue
-6. **Disable rule globally** — Never
+Validate once at admission, trust types inside.
 
-**Category-Level Thinking:**
-When a diagnostic appears 50+ times for the same category (e.g., internal modules without stubs), use targeted config instead of 50+ line suppressions. This signals intent clearly and reduces noise.
+- **Admission (input boundary):** API endpoints, message handlers, file parsers, config loaders — validate with a typed schema (Pydantic, Zod, serde) and reject invalid data there.
+- **Inside:** trust the typed model. Avoid repeated defensive checks and ad-hoc `Any`/`object`/`dict.get` fallbacks.
+- **Emission (output boundary):** serialize (`model_dump()`, `toJSON()`) only at transport, IPC, file writers, and API responses. Application logic stays on typed models.
 
-**Document Every Suppression:**
 ```python
-# <tool>: ignore[<rule>]
-# Reason: <one-line explanation of why this suppression is legitimate>
+# stays typed — preferred
+for name, conf in config.languages.items():
+    ...
+
+# loses type — move to boundary or remove
+data = config.model_dump(); langs = data.get("languages")
 ```
 
----
+When type narrowing feels tangled, ask: why does this serialization exist here? Move it to the boundary.
 
-## Types & Data Flow
+Prefer type-safe libraries that shift errors to build/validation time: TypeScript over plain JS for frontend, Pydantic over `object`/`Any` for Python models.
 
-### Validate at Boundaries
-Dynamic data enters at boundaries; validate there, not everywhere. Once validated, internal code can trust types.
-- At API boundaries: validate once with Pydantic/schemas
-- Internal code: trust the type, avoid defensive checks everywhere
+### Graded surfaces
 
-### Prefer Type-Safe Libraries
-Dynamic languages benefit from libraries that enforce type discipline. Prefer matured libs that reduce runtime uncertainty.
-- TypeScript over JavaScript for frontend code
-- Pydantic over `Any`/`object` for Python data models
+Grade every exported surface by the promise it carries. Choose the narrowest visibility that satisfies actual use.
 
-The core: shift type errors from runtime to compile/validation time
+- Used across modules → make public and treat as contract (needs compatibility/cutover plan to change).
+- Truly internal → keep private and enforce encapsulation; do not widen to silence a warning — move the caller or the surface to the correct seam.
 
-### Keep Typed Models, Serialize at Boundaries
-When using validation libraries (Pydantic, Zod, serde), keep typed models as long as possible. Only serialize (`model_dump()`, `toJSON()`) at actual output boundaries.
-- WRONG: `config_data = config_obj.model_dump(); languages = config_data.get("languages")` — loses type
-- RIGHT: `for lang_name, lang_conf in config_obj.languages.items():` — stays typed
+Apply SOLID at module seams (single responsibility per module, depend on seam abstractions) — not as a per-line incantation.
 
-### Serialization/Deserialization at System Boundaries
-Serialize only at output boundaries (transport, IPC, API responses). Deserialize only at input boundaries. Application logic works with typed models throughout.
-- **Output boundary:** Transport layers, IPC handlers, network clients, file writers
-- **Input boundary:** API endpoints, message handlers, file parsers, config loaders
-- **Never in application layer:** If you see `model_dump()` or `toJSON()` in business logic, question whether it belongs there
-- **Layering check:** When type narrowing seems complex, ask: "Why does this serialization function exist here? Should it move to the boundary?"
+## 2. Guards — Errors, Security, Suppressions
 
----
+### Errors fail loud
 
-## Language Management
+Every error path has an explicit branch: handle, map to a typed error, or propagate. Log or surface the cause; keep sensitive data out of messages. Prefer fail-fast at the boundary where the invariant is known.
 
-### Single-Language Projects
-Use the language's native tool for running, version and dependency management.
-- **Python:** uv (respects `.python-version` or system Python)
-- **Rust:** cargo with `rust-toolchain.toml`
-- **Node.js:** Use corepack or nvm with `.nvmrc`
-- **Why:** Native tools provide better integration, faster operations, and idiomatic workflows
+_Check:_ no empty `except`/`catch`; every catch either re-raises, returns `Result`/`Err`, or logs with context.
 
-### Multi-Language Projects
-Use asdf with `.tool-versions` when a project requires multiple language runtimes.
-- **When:** Two or more languages in active development (e.g., Python backend + Node frontend)
-- **File:** Commit `.tool-versions` to version control
-- **Setup:** `asdf install` after cloning to sync all versions
-- **Note:** uv and other tools respect `.tool-versions` when present
+### Security — negative path designed
 
-### Python Version
-Default to Python 3.14 for new projects.
-- Single-lang: specify in `.python-version` (uv reads this)
-- Multi-lang: specify in `.tool-versions`: `python 3.14.x`
+- Read secrets from environment or secret manager; keep them out of code, logs, and error payloads.
+- Validate all inputs at admission; enforce auth, rate limits, and injection/XSS/CSRF controls at the boundary that owns the effect.
+- On finding an issue: stop, use the `security-reviewer` agent, fix CRITICAL first, rotate any exposed secret. Classify effects as reversible / compensable / irreversible and scale controls accordingly.
 
----
+### Suppressions — shrink-only, scoped to the smallest seam
 
-## Verification
+Fix the code first. When suppression is the right call, scope it as narrowly as possible and document why.
 
-### Trust But Verify
-After fixing issues, restart/refresh and re-verify. Caches can become stale - a fix that appears successful may not persist.
-- Server: Restart daemon after type changes
-- Build: Clean build after significant refactors
-- Tests: Clear test cache if results seem wrong
+**Scope ladder (most to least precise):**
 
----
+1. Fix the code — preferred
+2. Line-level `ignore` with reason — single instance
+3. File-level suppression with reason — pattern confined to one file
+4. Targeted config (e.g., `allowedUntypedLibraries` for internal packages) — one category, 50+ hits
+5. Project-level disable — signals architectural drift; record authority and review trigger
+6. Global rule disable — boundary decision only; record authority, invariant preserved, and removal condition
 
-## Security
+Document every suppression at the suppression site:
 
-### Mandatory Checks Before Commit
-No hardcoded secrets, inputs validated, SQL/XSS/CSRF prevention, Auth verified, rate limiting, no sensitive data leaked in errors.
+```python
+# <tool>: ignore[<rule>]
+# Reason: <one-line why this is legitimate and what invariant still holds>
+```
 
-### Secret Management
-ALWAYS use environment variables/secret manager. NEVER hardcode.
+_Guard rule:_ baselines shrink-only. Growth needs decision authority, narrow scope, owner, and a review trigger. Moving code outside a guard's scope is a boundary change.
 
-### Security Protocol
-If an issue is found: STOP, use `security-reviewer` agent, fix CRITICAL issues, rotate exposed secrets.
+## 3. Runtime and Verification
 
----
+### Declared runtimes
 
-## Performance
+Use the language-native tool that owns version + deps; commit the version file.
 
-### Benchmark Before Claiming
-When making performance claims, benchmark with real tests first—never guess by theory.
+- **Single-language:** `uv` + `.python-version` for Python (default 3.14 for new projects), `cargo` + `rust-toolchain.toml` for Rust, `corepack`/`nvm` + `.nvmrc` for Node. Native tooling gives faster, idiomatic integration.
+- **Multi-language (2+ active runtimes, e.g., Python + Node):** `asdf` + committed `.tool-versions`; `asdf install` syncs all. Other tools (including `uv`) respect `.tool-versions` when present.
 
+### Verification closes the loop
+
+Every fix ends with evidence of closure, not just a green run on a stale cache.
+
+- Restart/refresh the daemon after type or config changes.
+- Clean-build after significant refactors.
+- Clear test cache when results look stale.
+- Attach numbers to any performance claim — benchmark on the real path before stating it.
+
+_Check:_ after a fix, re-run the failing signal (typecheck / tests / repro) from a fresh state and confirm the terminal invariant holds.
+
+## 4. Context — Keep Lean
+
+Dispatch subtasks to subagents and keep the main session lean. When the main agent only needs the result, delegate:
+
+1. Research → subagent returns conclusions.
+2. Sub-module implementation → subagent returns a report + changed files.
+3. Staged pipeline (`tdd → refactor → verify`) → one subagent per stage.
+
+Hand off across context gaps (agent↔subagent, compaction) by file pointer + dumped artifact, not by pasting bulk content into context. The pointer names the material and the branches that trigger loading it.
+
+### Ephemeral artifacts → `.lsz/tmp`
+
+Route temporary files, scratch outputs, and ad-hoc repros through `.lsz/tmp/` (gitignored). Keep the repo root and `tests/` clean — `tests/` holds only committed, reviewable tests.
+
+- Create on demand: `mkdir -p .lsz/tmp` before writing.
+- Example: `python -c "..." > .lsz/tmp/repro.json`, `pytest --tmp-path=.lsz/tmp/…`.
+
+_Check:_ `git status` shows no untracked temp files outside `.lsz/tmp`; transient artifacts do not survive review.
