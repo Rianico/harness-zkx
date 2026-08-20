@@ -34,8 +34,10 @@ The manifest must follow this JSON structure:
 - **Verification Loop:** Before recording a `pass` status, the Auditor must verify the hashes of all claimed artifacts and the exit status of the evidence-producing tool.
 - **Atomic Writes:** The manifest must be updated immediately after each phase or unit verification, ensuring the mission is resume-ready at any point.
 
-- Rejected: Embedding the manifest inside `handoff.md` (markdown is harder to parse deterministically than JSON).
-- Rejected: Allowing subagents to write their own manifest entries (violates the "Executioner" mindset).
+### Considered Options
+
+- **Rejected: Embedding the manifest inside `handoff.md`** — markdown is harder to parse deterministically than JSON; breaks provenance trace.
+- **Rejected: Allowing subagents to write their own manifest entries** — violates the "Executioner" mindset; subagents can misreport success.
 
 ## Consequences
 

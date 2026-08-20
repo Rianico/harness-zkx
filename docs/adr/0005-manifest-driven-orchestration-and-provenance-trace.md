@@ -23,8 +23,10 @@ We will use a **Manifest-Driven Orchestration** pattern with a strict **Provenan
 3.  **Trace Granularity:** We will track the full provenance trace, including intermediate "Red/Green" transitions in TDD, rather than just final snapshots.
 4.  **Localized Repair:** Use the manifest to enable autonomous repair of specific failing "Work Units" without restarting entire missions.
 
-- Rejected: Subagent-Reported Manifests (subagents can lie about their own work).
-- Rejected: Result-Only Snapshots (loses the audit trail needed for complex debugging).
+### Considered Options
+
+- **Rejected: Subagent-Reported Manifests** — subagents can lie about their own work; violates auditor authority.
+- **Rejected: Result-Only Snapshots** — loses the audit trail needed for complex debugging; intermediate transitions are invisible.
 
 ## Consequences
 

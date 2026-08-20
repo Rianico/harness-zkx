@@ -34,8 +34,10 @@ We will implement an **Aggregated Manifest Hierarchy** and a **Goal Locking** pa
 - **Environmental Truth (EDD) is the Supreme Authority.**
 - In any conflict between a manifest claim ("Passed") and a fresh environmental signal (e.g., failing test, mismatched hash), the Orchestrator MUST overwrite the manifest to reflect the environmental reality.
 
-- Rejected: Fluid Goal Discovery (allows models to skip hard tasks).
-- Rejected: Subagent-Only Manifests (fragmented audit trail).
+### Considered Options
+
+- **Rejected: Fluid Goal Discovery** — allows models to skip hard tasks; intent drifts and scope shrinks silently.
+- **Rejected: Subagent-Only Manifests** — fragmented audit trail; loses root authority for provenance.
 
 ## Consequences
 

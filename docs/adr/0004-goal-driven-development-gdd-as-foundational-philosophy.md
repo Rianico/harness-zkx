@@ -24,8 +24,10 @@ We will use **GDD (Goal-Driven Development)** as the foundational root of the pr
 2.  **EDD (Eval-Driven Development) for Empirical Truth:** Treating the auditor as an "Executioner" who only trusts fresh environmental signals generated after the implementation.
 3.  **Semantic vs. Deterministic Split:** Separating "Hard Gates" (compilers, linters, tests) from "Semantic Audits" (adversarial Skeptic review).
 
-- Rejected: Vague Prompt-based Engineering (too fragile)
-- Rejected: Test-Only Verification (misses semantic intent/architecture quality)
+### Considered Options
+
+- **Rejected: Vague Prompt-based Engineering** — too fragile; no shared contract or empirical truth, intent drifts silently.
+- **Rejected: Test-Only Verification** — misses semantic intent and architecture quality; tests prove behavior but not whether the behavior matches human intent.
 
 ## Consequences
 

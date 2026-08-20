@@ -20,8 +20,10 @@ We will remove the standalone `plan` phase and consolidate its responsibilities 
 2.  **TDD-Cycle** absorbs the **Granular Execution Plan**: mapping BDD scenarios directly into a linear Behavior Sequence Map for implementation.
 3.  **Refined Pipeline:** The "Heavy" track is reduced to a 6-phase flow: Brainstorming → Architect → Eval-Gate Define → TDD-Cycle → Eval-Gate Check → Code Review.
 
-- Rejected: Keeping the standalone `plan` phase (redundant planning effort).
-- Rejected: Moving all planning to Brainstorming (bloats the design phase with implementation details).
+### Considered Options
+
+- **Rejected: Keeping the standalone `plan` phase** — redundant planning effort; BDD scenarios and sequence mapping already cover it.
+- **Rejected: Moving all planning to Brainstorming** — bloats the design phase with implementation details; mixes intent with execution sequencing.
 
 ## Consequences
 

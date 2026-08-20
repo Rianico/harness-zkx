@@ -36,8 +36,10 @@ The `Phase` object in `mission_manifest.json` is updated to include a `run_id`:
 - The Orchestrator MUST calculate the next run number by inspecting the existing directories or the manifest.
 - The Orchestrator MUST pass the exact `artifact_dir` (including the `run-[N]` suffix) to the downstream skill via the `artifact_dir=<path>` argument.
 
-- Rejected: Overwriting files in a single phase folder (loses provenance history).
-- Rejected: Timestamped folders (harder for humans to read and for scripts to increment).
+### Considered Options
+
+- **Rejected: Overwriting files in a single phase folder** — loses provenance history; remediation artifacts collide.
+- **Rejected: Timestamped folders** — harder for humans to read and for scripts to increment; lexicographic sort is unreliable.
 
 ## Consequences
 

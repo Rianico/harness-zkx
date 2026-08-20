@@ -45,10 +45,10 @@ Read ADRs by exact reference first, then fall back to keyword search and explana
 
 - Always use the installed `adr` command as the backend for ADR lifecycle operations.
 - Never invent your own numbering or filename scheme. Let `adr` create filenames like `0001-the-first-decision.md`.
-- Keep the default ADR shape Nygard-core when the repository has not customized the template:
+- Keep the default ADR shape from `$SKILL_DIR/references/adr-template.md` (hybrid Nygard + `### Considered Options` under `## Decision`) when the repository has not customized the template:
   - `## Status`
   - `## Context`
-  - `## Decision`
+  - `## Decision` (+ optional `### Considered Options` — compact 1-3 bullets for simple trade-offs, expanded for correctness-critical / invariant proofs)
   - `## Consequences`
 - If the ADR repository already has `templates/template.md`, respect that template instead of forcing the default shape.
 - Keep ADRs short. One page is the target. Move deep analysis to separate documents if needed.
@@ -80,7 +80,7 @@ If any of the three is missing, skip the ADR. The decision can be captured in a 
 
 ## Default Template Shape
 
-Optimize for the adr-tools-compatible Nygard core template:
+Optimize for the hybrid template in `$SKILL_DIR/references/adr-template.md` — Nygard-core with `### Considered Options` nested under `## Decision` so simple and invariant decisions both fit without a heavyweight top-level alternatives section.
 
 ```markdown
 # NUMBER. TITLE
@@ -89,7 +89,7 @@ Date: DATE
 
 ## Status
 
-STATUS
+STATUS — plus adr-tools relationship lines (Supercedes / Superceded by / Amends / Clarifies) when present
 
 ## Context
 
@@ -97,14 +97,18 @@ The issue motivating this decision, and any context that influences or constrain
 
 ## Decision
 
-State the chosen decision clearly in 1-3 sentences. When trade-offs matter, include 1-3 compact rejected alternatives under this section instead of adding a heavyweight top-level alternatives section.
+State the chosen decision clearly in 1-3 sentences.
+
+### Considered Options
+
+When trade-offs matter, document rejected alternatives here. Use the depth the decision warrants — compact 1-3 bullets for simple choices, expanded Pros/Cons/Why-not for correctness-critical or invariant proofs. See `$SKILL_DIR/references/adr-template.md` for the canonical shape and Nygard-vs-hybrid guidance.
 
 ## Consequences
 
-What becomes easier or more difficult to do and any risks introduced by the change that will need to be mitigated.
+What becomes easier or more difficult to do and any risks introduced by the change that will need to be mitigated. Record load-bearing assumptions that would require revisiting the decision.
 ```
 
-If the ADR repository already has `templates/template.md`, respect it. After `adr` generates the file, preserve the generated structure required by that repository template and keep adr-tools status/link insertion behavior intact.
+If the ADR repository already has `templates/template.md`, respect it. After `adr` generates the file, preserve the generated structure required by that repository template and keep adr-tools status/link insertion behavior intact. Full rationale and examples: `$SKILL_DIR/references/adr-template.md`.
 
 ## Init Workflow
 
@@ -177,16 +181,18 @@ When asked to create an ADR:
    - `Date:` line
    - `## Status` heading
    - any inserted relationship lines under `## Status`
-8. Keep content terse and concrete:
+8. Keep content terse and concrete (see `$SKILL_DIR/references/adr-template.md`):
    - `Context`: constraints, forces, and why this decision is being made now
-   - `Decision`: the chosen direction in clear language, plus 1-3 compact rejected alternatives when they materially clarify the trade-off
-   - `Consequences`: trade-offs, operational impact, and risks that actually matter
+   - `Decision`: the chosen direction in 1-3 sentences, plus `### Considered Options` nested inside `Decision` when trade-offs matter — compact 1-3 bullets for simple choices, expanded Pros/Cons/Why-not for correctness-critical / invariant proofs
+   - `Consequences`: trade-offs, operational impact, risks, and load-bearing assumptions that would require revisiting the decision
 
-Use this compact pattern inside `Decision` when alternatives are important:
+Use this pattern inside `Decision` when alternatives are important (depth scales with the decision):
 ```markdown
 ## Decision
 
 We will use X for Y because it best satisfies A and B under constraint C.
+
+### Considered Options
 
 - Rejected: Option A
   - Pros: ...
@@ -197,9 +203,9 @@ We will use X for Y because it best satisfies A and B under constraint C.
   - Cons: ...
   - Why not: ...
 ```
+For invariant proofs (e.g. verification model, anchor canon) expand each option as a `**Bold option** — rejected: <reason>` block with full rationale; for simple transport decisions keep it to the compact bullets above.
 
-Do not add heavyweight sections such as `Alternatives Considered`, `Positive`, `Negative`, or `Risks` unless the existing repository template already requires them. Prefer compact rejected-alternative bullets inside `Decision` when that reasoning is important.
-
+Do not add top-level `## Alternatives Considered`, `## Positive`, `## Negative`, or `## Risks` — use `### Considered Options` inside `## Decision` and `## Consequences` instead. Only add a top-level heavyweight section if the repository's existing `templates/template.md` already requires it.
 ## Link Workflow
 
 When asked to link ADRs:
@@ -243,8 +249,9 @@ A good ADR produced by this skill should be:
 - specific rather than generic
 - concise rather than exhaustive
 - honest about trade-offs
-- include compact rejected alternatives in `Decision` when they help future readers understand why the chosen option won
+- include rejected alternatives in `Decision` via `### Considered Options` when they help future readers understand why the chosen option won — compact bullets for simple decisions, expanded Pros/Cons/Why-not for invariant proofs (see `$SKILL_DIR/references/adr-template.md`)
 - readable in a couple of minutes
+
 - useful to a future engineer who needs the why, not just the what
 
 Prefer compact prose over bullet sprawl unless the repository's existing template clearly prefers bullets.

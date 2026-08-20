@@ -41,6 +41,11 @@ We will refine the GDD architecture with "Second-Generation" patterns:
 ### 4. Explicit Goal Locking (Pre-population)
 - **Rule:** The Orchestrator MUST run `manifest-manager add-unit` for every BDD Scenario discovered in Brainstorming *before* dispatching implementation.
 
+### Considered Options
+
+- **Rejected: Static grep-based evals** — text search in `.py` files performs Paper Tiger verification; environment proves nothing.
+- **Rejected: Detail-rich handoffs repeating manifest/design** — bloats context and creates a second source of truth that drifts.
+
 ## Consequences
 
 - Missions produce fewer, higher-signal documents.
