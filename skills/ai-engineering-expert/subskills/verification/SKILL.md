@@ -60,6 +60,8 @@ Write tests for bugs that were found, not just for code that works. AI tends to 
 3. Execute implementation
 4. Re-run evals, compare deltas
 
+> **Doc/writing verification:** Agent-document output (SKILL.md, AGENTS.md, CLAUDE.md) verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` + `context-check` and semantically via a Skeptic comparing prose to intent (see [writing sub-skill](../writing/SKILL.md)).
+
 ## Runtime Trace Fixtures
 
 For testing invocation class behavior against live Codex surfaces. See the context-load policy runtime trace fixture spec for fixture design and test procedure.
@@ -68,3 +70,4 @@ For testing invocation class behavior against live Codex surfaces. See the conte
 
 [Sandbox testing patterns](references/sandbox-testing-patterns.md)
 [Eval-first development](references/eval-first-development.md)
+[Writing sub-skill](../writing/SKILL.md) -- writing output verifies via deterministic gate (lint/context-check) + Skeptic; load alongside this skill when docs are produced

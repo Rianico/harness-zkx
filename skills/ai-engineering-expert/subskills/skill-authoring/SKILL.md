@@ -14,12 +14,12 @@ Designing and building skills in the LSZ architecture.
 
 Every LSZ skill falls into one of four types:
 
-| Type | When to Use | Key Trait |
-|------|-------------|-----------|
-| **Orchestration** | Multi-phase, multi-party, fan-out/fan-in workflows | Owns sequencing, branching, checkpoints; delegates all implementation |
-| **Complex Workflow** | Substantial single-purpose workflow with multiple phases | May invoke agents; owns phase transitions and artifact generation |
-| **Domain Knowledge** | Guides, patterns, expert methodology, reusable constraints | Retrieval-time expertise; does not own orchestration |
-| **Action** | Narrow, simple workflows and direct task execution | Low-ambiguity; compact and self-contained |
+| Type                 | When to Use                                                | Key Trait                                                             |
+| -------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Orchestration**    | Multi-phase, multi-party, fan-out/fan-in workflows         | Owns sequencing, branching, checkpoints; delegates all implementation |
+| **Complex Workflow** | Substantial single-purpose workflow with multiple phases   | May invoke agents; owns phase transitions and artifact generation     |
+| **Domain Knowledge** | Guides, patterns, expert methodology, reusable constraints | Retrieval-time expertise; does not own orchestration                  |
+| **Action**           | Narrow, simple workflows and direct task execution         | Low-ambiguity; compact and self-contained                             |
 
 **When to embed logic directly in an Agent** instead of creating a skill: only when the workflow is Atomic (one specific thing, no loops), Universal (doesn't vary by language/framework), and Short (< 300 words). Example: the `planner` agent.
 
@@ -53,10 +53,10 @@ Create the skill following LSZ conventions:
      description: >-
        Expert methodology for X. TRIGGER when...
      ```
-3. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`
-4. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
-5. **Scripts** -- Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally, don't punt to the LLM
-6. **Taxonomy-specific structure:**
+5. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`. Apply [writing sub-skill](../writing/SKILL.md) for information hierarchy, pointer wording, completion criteria, leading words, and pruning.
+6. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
+7. **Scripts** -- Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally, don't punt to the LLM
+8. **Taxonomy-specific structure:**
    - Orchestration: dispatch table + subagent templates, no implementation logic
    - Complex workflow: phase definitions with state transitions, artifact contracts
    - Domain knowledge: organized by topic, patterns with examples, gotchas
@@ -67,6 +67,7 @@ Create the skill following LSZ conventions:
 Validate the draft before presenting to the user:
 
 **First-Pass Review Checklist:**
+
 - [ ] Taxonomy type is correct and structure matches that type
 - [ ] BDD scenarios are defined (Given/When/Then)
 - [ ] EDD verification path is clear (scripts for deterministic, skepticism for semantic)
@@ -75,8 +76,10 @@ Validate the draft before presenting to the user:
 - [ ] References are one level deep from SKILL.md
 - [ ] Scripts handle errors internally and use `uv run $SKILL_DIR/scripts/` invocation
 - [ ] No content that belongs in rules (always-on preferences) or other skills
+- [ ] Writing rigor applied (hierarchy, pointers, completion criteria, leading words, pruning) via writing sub-skill; no-ops pruned
 
 Then ask the user:
+
 - Does this cover your use cases?
 - Anything missing or unclear?
 - Should any section be more or less detailed?
@@ -93,11 +96,13 @@ Then ask the user:
 The description is the skill's machine-readable trigger and permanent context-load footprint. Budget: 300 chars (hard gate). It must trigger model discovery, stay within budget, and remain human-legible — all at once.
 
 **Structure (max 3 clauses):**
+
 1. **What it is** — Category noun first: "Reference for..." "Protocol for..." "Expert methodology for..."
 2. **When to use** — Category-level trigger scenarios, not verb enumeration: "managing ADRs" not "initializing, creating, linking, superseding, listing, and reading ADRs"
 3. **Value proposition** — What makes this skill distinctive (optional, recommended): "Keeps ADR content compatible with adr-tools"
 
 **Compression Rules (apply in order until within budget):**
+
 1. **Categories over actions** — "ADR lifecycle management" not verb-by-verb enumeration
 2. **Domain slashes** — "Spring Boot/JPA/Hibernate" not "Spring Boot, JPA, Hibernate, and JUnit"
 3. **Parentheticals to body** — "(hard to reverse, surprising without context)" moves to SKILL.md body
@@ -106,16 +111,19 @@ The description is the skill's machine-readable trigger and permanent context-lo
 6. **Third-person, present tense** — "Manages ADRs" not "I can help you..." or "This skill manages..."
 
 **Good (108 chars):**
+
 ```
 Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.
 ```
 
 **Good (237 chars):**
+
 ```
 Methodology spine for LSZ harness AI engineering — context-load policy, skill design, agent action spaces, testing, and subagent-first execution. Use when designing skills/agents/rules/workflows, setting invocation classes or description budgets, or planning eval-first testing. TRIGGER: context-load policy, skill design, agent design, testing methodology.
 ```
 
 **Bad (443 chars):** Verb enumeration instead of categories. Parenthetical detail belongs in body, not description. Missing TRIGGER tag. Exhaustive where it should be distinctive.
+
 ```
 Manage architecture decision records with the `adr` CLI. Use for initializing an ADR repository, creating, linking, superseding, listing, and reading ADRs; for deciding whether a new decision relates to older ADRs; for evaluating whether a decision warrants an ADR (hard to reverse, surprising without context, genuine trade-off); and for keeping ADR content short, historical, and compatible with adr-tools templates and status/link behavior.
 ```
@@ -123,6 +131,7 @@ Manage architecture decision records with the `adr` CLI. Use for initializing an
 Reference: [glossary.md](references/glossary.md) for the full domain vocabulary (invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms).
 
 **Key Optional Fields**
+
 - `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line using the `|` or `>-` block scalar: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
 - `allowed-tools`: Tool allowlist without permission prompts
 - `user-invocable`: Show in `/` menu (default: `true`). Set `false` for internal skills accessed only through routing commands.
@@ -131,11 +140,12 @@ Reference: [glossary.md](references/glossary.md) for the full domain vocabulary 
 - `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)
 
 **Structure**
+
 - SKILL.md under 500 lines — practical usage guide (workflows, commands, examples)
 - SKILL.md is env-agnostic — env/config/setup/state belongs in `references/` (progressive disclosure)
 - Deep content in `references/` (one level deep)
 - Executable logic in `scripts/`
-**Resource Path Convention**
+  **Resource Path Convention**
 - `$SKILL_DIR` is the path anchor for ALL skill-owned resources (scripts, references, raw docs, config)
 - **Prose text:** Always `$SKILL_DIR/references/<module>.md` -- cwd is unknown to the reader
 - **Markdown links:** Always relative like `[text](references/<module>.md)` -- standard relative-to-file convention
@@ -146,26 +156,31 @@ Reference: [glossary.md](references/glossary.md) for the full domain vocabulary 
 - Scripts are invoked via `uv run` with inline script metadata for dependencies
 
 **User Interaction**
+
 - Use Dialog Contract pattern for all user questions (tool-agnostic structural spec)
 - One question per dialog, 2-4 options plus "Other"
 - Always include clear descriptions explaining tradeoffs
 - Present questions as plain text — structured but no special tool required
 
 **Interaction Anti-Patterns:**
+
 - Generating 5 files or a massive plan to disk, then asking "Is this okay?" via an unstructured follow-up
 - Heavy orchestration and complex workflow skills MUST define explicit checkpoints and structured branching points when approval or divergence is required
 
 **References:**
+
 - [skill-authoring.md](references/skill-authoring.md) -- Complete skill authoring reference (frontmatter, descriptions, triggers, string substitutions, calibration)
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts
 - [dialog-contract.md](references/dialog-contract.md) -- Standard pattern for user interactions
 - [glossary.md](references/glossary.md) -- Domain vocabulary: invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms
+- [writing sub-skill](../writing/SKILL.md) -- Agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; load when drafting any SKILL.md/AGENTS.md/CLAUDE.md
 
 ## Skill Authoring Checklist
 
 Before publishing a skill:
 
 **Core Quality**
+
 - [ ] BDD scenarios cover Happy Path, Edge Case, and Error Case
 - [ ] Deterministic goals have corresponding evaluation scripts (EDD)
 - [ ] Semantic goals have a verification plan (e.g., Adversarial Review)
@@ -182,6 +197,7 @@ Before publishing a skill:
 - [ ] SKILL.md is practical usage guide; env/config/setup/state is in `references/`
 
 **Structure**
+
 - [ ] Frontmatter includes `name` and `description` (both required)
 - [ ] `description` and `argument-hint` use YAML block scalars (`>-` or `|`)
 - [ ] `argument-hint` present if skill accepts arguments
@@ -210,6 +226,7 @@ metadata:
 ```
 
 **Rules:**
+
 - Hard dependencies only -- only list skills whose absence breaks this skill's behavior
 - Simple list of skill names, no arguments (argument details belong in the skill body)
 - Sub-skills declare their own `depends-on` independently
@@ -227,7 +244,7 @@ Optional metadata for third-party skills. Not used by LSZ tooling.
 ```yaml
 metadata:
   author: org-name
-  version: "1.0"
+  version: '1.0'
 ```
 
 ## Parent Skill with Sub-Skills
@@ -235,6 +252,7 @@ metadata:
 When a skill manages multiple related capabilities, use the parent-skill-with-sub-skills pattern instead of routing commands.
 
 **Structure:**
+
 ```
 skills/write/
   SKILL.md              # Parent: registry + dispatch
@@ -244,6 +262,7 @@ skills/write/
 ```
 
 **Metadata:**
+
 ```yaml
 # Parent
 metadata:
@@ -255,6 +274,7 @@ metadata:
 ```
 
 **Key points:**
+
 - Sub-skills are nested in `subskills/` directory (hidden from Claude Code discovery)
 - Parent uses `Read` tool to dispatch (not `Skill` tool -- nested paths not discoverable)
 - Sub-skills are full skills with frontmatter, references, scripts
@@ -262,19 +282,20 @@ metadata:
 **Sub-skill names must not collide with top-level skill names** — see Name Collision Rule in the reference. Enforced by `validate-deps.py lint`.
 
 **Reference:**
+
 - [skill-authoring.md](references/skill-authoring.md) -- Full "Parent Skill with Sub-Skills Pattern" section with structure, metadata, registry format, dispatch mechanism, migration guide, and Name Collision Rule
 
 ## Rules vs Skills Boundary
 
 Rules are always-on, skills are on-demand. Every token in a rule costs context every conversation.
 
-| Rules | Skills |
-|-------|--------|
-| Always loaded | Loaded on demand |
-| WHAT to use | HOW to implement |
+| Rules                    | Skills               |
+| ------------------------ | -------------------- |
+| Always loaded            | Loaded on demand     |
+| WHAT to use              | HOW to implement     |
 | Personal taste, defaults | Non-obvious patterns |
-| STATE, don't explain | Show examples |
-| One-liner preferences | Framework gotchas |
+| STATE, don't explain     | Show examples        |
+| One-liner preferences    | Framework gotchas    |
 
 **When to use rules:** tool/lib selection, style defaults, baseline patterns, personal taste that should always apply.
 

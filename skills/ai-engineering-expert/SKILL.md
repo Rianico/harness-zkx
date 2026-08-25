@@ -1,15 +1,16 @@
 ---
 name: ai-engineering-expert
 description: >-
-  AI engineering methodology spine for the LSZ harness. Covers context-load policy, skill design, agent design, testing, and subagent-first execution. Use when designing skills, agents, or rules; or understanding AI engineering philosophy.
+  AI engineering methodology spine for LSZ harness — context-load, skill/agent design, writing for agents, testing, subagent-first execution. Use when designing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md). TRIGGER: skill design, writing for agents, context-load policy
 arguments: domain
 argument-hint: |-
   skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, progressive disclosure, rules-vs-skills boundary, platform sync, parent/sub-skill layout, and authoring checklists
   subagent-engineering -- loads subagent methodology: action space design, observation formats, error recovery, parallel execution, orchestration constraints, and agent frontmatter
   verification -- loads verification methodology: EDD, deterministic vs semantic verification, AI regression patterns, runtime trace fixtures, and eval-first loops
+  writing -- loads agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or any agent-consumed doc
   omitted -- loads only the core AI engineering philosophy and the sub-skill dispatch registry
 metadata:
-  manage: [skill-authoring, subagent-engineering, verification]
+  manage: [skill-authoring, subagent-engineering, verification, writing]
 ---
 
 # AI Engineering Expert
@@ -87,7 +88,7 @@ Every skill declares one of two classes via the canonical `disable-model-invocat
 | Omit (default `false`) | `implicit-allowed` | Model can invoke autonomously; description triggers discovery |
 | `disable-model-invocation: true` | `explicit-only` | Only user or `$skill` can invoke |
 
-**Selection ≠ metadata cost.** The `description` is always present in the initial skill list -- invocation class only controls _selection_, not _presence_. Explicit-only is not zero-load.
+**Selection ≠ metadata cost.** The `description` is always present in the initial skill list -- invocation class only controls *selection*, not *presence*. Explicit-only is not zero-load.
 
 ### Description Budget
 
@@ -273,12 +274,13 @@ Design decisions the architecture makes intentionally:
 
 ## Sub-Skill Dispatch
 
-This skill manages three domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument.
+This skill manages four domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument. When the task writes or edits any agent-consumed document (SKILL.md, AGENTS.md, CLAUDE.md, pointer docs), also load `writing` — even when primary domain is `skill-authoring`.
 
 | Domain | Sub-Skill | Covers |
 |--------|-----------|--------|
 | `skill-authoring` | `$SKILL_DIR/subskills/skill-authoring/SKILL.md` | Skill design, descriptions, invocation classes, description budgets, platform sync, rules-vs-skills boundary, progressive disclosure, parent-skill pattern, authoring checklists |
 | `subagent-engineering` | `$SKILL_DIR/subskills/subagent-engineering/SKILL.md` | Action space design, observation design, error recovery, parallel execution, orchestration constraints, agent frontmatter |
 | `verification` | `$SKILL_DIR/subskills/verification/SKILL.md` | EDD, deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loop, runtime trace fixtures |
+| `writing` | `$SKILL_DIR/subskills/writing/SKILL.md` | Agent-document writing — context pointers, hierarchy, progressive disclosure, completion criteria, leading words, pruning; use for any SKILL.md/AGENTS.md/CLAUDE.md or narrative rigor in skill-authoring |
 
 **Dispatch:** When `$domain` is provided, read the matching sub-skill file and follow its instructions. When no domain is specified, only the philosophy above is loaded.
