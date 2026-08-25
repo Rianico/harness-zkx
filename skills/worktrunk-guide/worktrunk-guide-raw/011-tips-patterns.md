@@ -14,7 +14,7 @@ wsc feature -- 'Fix GH #322'          # Runs `claude 'Fix GH #322'`
 
 ## `wt` aliases
 
-Compose with template filters and [vars](https://worktrunk.dev/tips-patterns/#per-branch-variables) for branch-specific shortcuts:
+Compose with template filters and [vars](https://worktrunk.dev/tips-patterns/#per-branch-variables):
 
 ```toml
 # .config/wt.toml
@@ -24,6 +24,9 @@ open = "open http://localhost:{{ branch | hash_port }}"
 
 # Test with branch-specific features from vars
 test = "cargo test --features {{ vars.features | default('default') }}"
+
+# Switch via the interactive picker, print the chosen branch
+pick = "wt switch --format=json | jq -r '.branch'"
 ```
 
 See [Aliases](https://worktrunk.dev/extending/#aliases) for scoping, approval, and reference.
@@ -45,29 +48,28 @@ Each worktree runs its own dev server on a deterministic port. The `hash_port` f
 ```toml
 # .config/wt.toml
 [post-start]
-server = "npm run dev -- --port {{ branch | hash_port }}"
+server = "wt step tether -- npm run dev -- --port {{ branch | hash_port }}"
 
 [list]
 url = "http://localhost:{{ branch | hash_port }}"
-
-[pre-remove]
-server = "lsof -ti :{{ branch | hash_port }} -sTCP:LISTEN | xargs kill 2>/dev/null || true"
 ```
+
+[`wt step tether`](https://worktrunk.dev/step/#wt-step-tether) runs the server in its own process group and tears the whole group down when the worktree is removed, so no `pre-remove` hook is needed. See the [`wt step tether`](https://worktrunk.dev/step/#wt-step-tether) docs for the full rationale and platform behavior.
 
 The URL column in `wt list` shows each worktree's dev server:
 
-```bash
+```console
 $ wt list
-  <b>Branch</b>       <b>Status</b>        <b>HEAD±</b>    <b>main↕</b>  <b>Remote⇅</b>  <b>URL</b>                     <b>Commit</b>    <b>Age</b>
-@ main           <span class=c>?</span> <span class=d>^</span><span class=d>⇅</span>                         <span class=g>⇡1</span>  <span class=d><span class=r>⇣1</span></span>  <span class=d>http://localhost:12107</span>  <span class=d>41ee0834</span>  <span class=d>4d</span>
-+ feature-api  <span class=c>+</span>   <span class=d>↕</span><span class=d>⇡</span>     <span class=g>+54</span>   <span class=r>-5</span>   <span class=g>↑4</span>  <span class=d><span class=r>↓1</span></span>   <span class=g>⇡3</span>      <span class=d>http://localhost:10703</span>  <span class=d>6814f02a</span>  <span class=d>30m</span>
-+ fix-auth         <span class=d>↕</span><span class=d>|</span>                <span class=g>↑2</span>  <span class=d><span class=r>↓1</span></span>     <span class=d>|</span>     <span class=d>http://localhost:16460</span>  <span class=d>b772e68b</span>  <span class=d>5h</span>
-+ <span class=d>fix-typos</span>        <span class=d>_</span><span class=d>|</span>                           <span class=d>|</span>     <span class=d>http://localhost:14301</span>  <span class=d>41ee0834</span>  <span class=d>4d</span>
+  Branch       Status        HEAD±    main↕     main…±  Remote⇅  URL                     Commit
+@ main           ? ^⇅                                    ⇡1  ⇣1  http://localhost:12107  41ee083
++ feature-api  +   ↕⇡     +54   -5   ↑4  ↓1  +234  -24   ⇡3      http://localhost:10703  6814f02
++ fix-auth         ↕|                ↑2  ↓1   +25  -11     |     http://localhost:16460  b772e68
++ fix-typos        _|                                      |     http://localhost:14301  41ee083
 
-<span class=d>○</span> <span class=d>Showing 4 worktrees, 2 with changes, 2 ahead, 2 columns hidden</span>
+○ Showing 4 worktrees, 2 with changes, 2 ahead, 3 columns hidden
 ```
 
-Ports are deterministic — `fix-auth` always gets port 16460, regardless of which machine or when. The URL dims if the server isn't running.
+`fix-auth` always gets port 16460, on any machine. The URL dims if the server isn't running.
 
 ## Database per worktree
 
@@ -96,7 +98,7 @@ docker run -d --rm \
 db-stop = "docker stop {{ vars.container }} 2>/dev/null || true"
 ```
 
-The first pipeline step derives values from the branch and stores them as vars. The second step references `{{ vars.container }}` and `{{ vars.port }}` — expanded at execution time, after the vars are set. `post-remove` reads the same vars to stop the container.
+The first pipeline step derives values from the branch and stores them as vars. The second step references `{{ vars.container }}` and `{{ vars.port }}` — templates render when each step runs, so the vars are already set. `pre-remove` reads the same vars to stop the container.
 
 The `('db-' ~ branch)` concatenation hashes differently than plain `branch`, so database and dev server ports don't collide. The `sanitize_db` filter produces database-safe identifiers (lowercase, underscores, no leading digits, with a short hash suffix).
 
@@ -105,6 +107,29 @@ The connection string is accessible anywhere — not just in hooks:
 ```bash
 DATABASE_URL=$(wt config state vars get db_url) npm start
 ```
+
+## Per-worktree env vars
+
+To scope environment variables to a worktree — a tool's package path, a profile, an API endpoint — use a directory environment manager like [direnv](https://direnv.net) or [mise](https://mise.jdx.dev). Both hook the shell prompt, so they activate on the `cd` that `wt switch` already performs — no worktrunk configuration needed. Commit the config at the repo root and every worktree gets its own copy, with paths resolving relative to that worktree.
+
+**direnv** — commit `.envrc` at the repo root:
+
+```sh
+export MY_PACKAGES_PATH="$PWD/.packages"
+```
+
+Run `direnv allow` once per worktree to trust the file ([getting started](https://direnv.net/#getting-started)). After that, switching into a worktree loads the env; switching out unloads it.
+
+**mise** — commit `mise.toml` at the repo root:
+
+```toml
+[env]
+MY_PACKAGES_PATH = "{{ config_root }}/.packages"
+```
+
+`{{ config_root }}` is the project root mise resolves relative paths against ([env directives](https://mise.jdx.dev/environments/)) — the worktree root, not the primary worktree. mise also covers Windows / PowerShell, which direnv doesn't natively.
+
+Both set real environment variables in the shell session, so every child process inherits them — hooks, build tools, subshells — without the `--execute` workaround. Each new worktree is a new path, so it needs its own one-time trust step (`direnv allow` / `mise trust`); worktrunk deliberately doesn't bypass that prompt, the same safety reasoning behind [disabling `--execute` in project alias and hook bodies](https://github.com/max-sixty/worktrunk/issues/2101).
 
 ## Eliminate cold starts
 
@@ -203,11 +228,13 @@ Structured output for dashboards, statuslines, and scripts. See [`wt list`](http
 
 ## Reuse `default-branch`
 
-Worktrunk maintains useful state. Default branch [detection](https://worktrunk.dev/config/#wt-config-state-default-branch), for instance, means scripts work on any repo — no need to hardcode `main` or `master`:
+Default branch [detection](https://worktrunk.dev/config/#wt-config-state-default-branch) means scripts work on any repo — no need to hardcode `main` or `master`:
 
 ```bash
 git rebase $(wt config state default-branch)
 ```
+
+In hooks and aliases, the same value is the `{{ default_branch }}` [template variable](https://worktrunk.dev/hook/#template-variables); reserve this command for plain shell scripts.
 
 ## Task runners in hooks
 
@@ -235,7 +262,7 @@ test = "npm test"
 build = "npm run build"
 ```
 
-`pre-commit` runs on every squash commit during `wt merge`; `pre-merge` runs once per merge after the rebase, so it's the right place for the slow tests.
+`pre-commit` runs during `wt merge`, before the squash commit; `pre-merge` runs once per merge after the rebase, so it's the right place for the slow tests.
 
 ## Target-specific hooks
 
@@ -287,12 +314,6 @@ zellij run -- wt switch --create fix-auth-bug -x claude -- \
   'The login session expires after 5 minutes. Find the session timeout config and extend it to 24 hours.'
 ```
 
-**cmux** (new workspace):
-```bash
-cmux new-workspace --command "wt switch --create fix-auth-bug -x claude -- \
-  'The login session expires after 5 minutes. Find the session timeout config and extend it to 24 hours.'"
-```
-
 This lets one agent session hand off work to another that runs in the background. Hooks run inside the multiplexer session/pane.
 
 The [worktrunk skill](https://worktrunk.dev/claude-code/) includes guidance for Claude Code (and other agent CLIs that load it) to execute this pattern. To enable it, request it explicitly ("spawn a parallel worktree for...") or add to your project instructions (`CLAUDE.md` or `AGENTS.md`):
@@ -334,20 +355,25 @@ tmux = "tmux kill-session -t {{ branch | sanitize }} 2>/dev/null || true"
 
 To create a worktree and immediately attach:
 
-```bash
-$ wt switch --create feature -x 'tmux attach -t {{ branch | sanitize }}'
+```console
+$ wt switch --create feature -x tmux -- attach -t '{{ branch | sanitize }}'
 ```
 
 ## cmux workspace per worktree
 
-Each worktree gets its own [cmux](https://cmux.com) workspace. Switching worktrees switches workspaces; removing a worktree closes its workspace.
+Each worktree gets its own [cmux](https://cmux.com) workspace. Switching worktrees switches workspaces; removing a worktree closes its workspace. Configuration contributed by [@endigma](https://github.com/endigma) ([#2796](https://github.com/max-sixty/worktrunk/issues/2796)).
 
 **Prerequisites:** [jq](https://jqlang.org) (`brew install jq`)
 
 ```toml
 # ~/.config/worktrunk/config.toml
+
+# cmux is the navigation primitive; don't also cd the invoking shell.
+[switch]
+cd = false
+
 [pre-start]
-cmux = "cmux new-workspace --name {{ repo | sanitize }}/{{ branch | sanitize }} --cwd {{ worktree_path }}"
+cmux = "cmux new-workspace --name {{ repo | sanitize }}/{{ branch | sanitize }} --cwd {{ worktree_path }} --focus true"
 
 [pre-switch]
 cmux = """
@@ -386,8 +412,6 @@ clean-derived = """
 """
 ```
 
-This precisely targets only the DerivedData for the removed worktree, leaving caches for other worktrees and the main repository intact.
-
 ## Subdomain routing with Caddy
 <!-- Hand-tested 2026-03-07 -->
 
@@ -398,7 +422,7 @@ Clean URLs like `http://feature-auth.myproject.localhost` without port numbers. 
 ```toml
 # .config/wt.toml
 [post-start]
-server = "npm run dev -- --port {{ branch | hash_port }}"
+server = "wt step tether -- npm run dev -- --port {{ branch | hash_port }}"
 proxy = """
   curl -sf --max-time 0.5 http://localhost:2019/config/ || caddy start
   curl -sf http://localhost:2019/config/apps/http/servers/wt || \
@@ -425,7 +449,7 @@ url = "http://{{ branch | sanitize }}.{{ repo }}.localhost:8080"
 
 ## Monitor hook logs
 
-Follow background hook output in real-time:
+Follow background hook output:
 
 ```bash
 tail -f "$(wt config state logs get --hook=user:post-start:server)"
@@ -455,22 +479,47 @@ With `worktree-path = "{{ repo_path }}/../{{ branch | sanitize }}"`, worktrees b
 ```
 myproject/
 ├── .git/       # bare repository
-├── main/       # default branch
-├── feature/    # feature branch
-└── bugfix/     # bugfix branch
+├── main/       # default branch worktree
+├── feature/    # feature branch worktree
+└── bugfix/     # bugfix branch worktree
 ```
 
-Configure worktrunk:
+### Configure the worktree path
+
+On first `wt switch` in a bare repo at a hidden path (`.git`, `.bare`), worktrunk detects that the default template would produce broken paths like `myproject/.git.main` and offers a fix:
+
+```
+▲ Bare repo at myproject/.git — worktrees will be at myproject/.git.main
+◎ Configure worktree-path to place worktrees at myproject/main? [y/N/?]
+```
+
+Accepting writes a project-scoped entry to user config:
 
 ```toml
 # ~/.config/worktrunk/config.toml
+[projects."github.com/myorg/myrepo"]
 worktree-path = "{{ repo_path }}/../{{ branch | sanitize }}"
 ```
 
-Create the first worktree:
+Run `wt config show` from inside any worktree to find the project identifier (`Identifier: …` in the PROJECT CONFIG section). Set it globally with `worktree-path = "..."` at the top level if this layout is preferred for all bare repos.
+
+### Create the first worktree
 
 ```bash
-wt switch --create main
+wt switch main
 ```
 
+For a freshly cloned bare repo the default branch already exists, so `wt switch main` (without `--create`) is enough. Use `wt switch --create <branch>` for new branches.
+
 Now `wt switch --create feature` creates `myproject/feature/`.
+
+### Set up the project config
+
+The project config (`.config/wt.toml`) must live inside a worktree — the bare `.git` directory has no tracked files. Once the first worktree exists, create it from there:
+
+```bash
+cd myproject/main
+wt config create --project
+```
+
+Commit the file and it will appear in every worktree automatically.

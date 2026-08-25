@@ -8,7 +8,7 @@ Unlike `git merge`, this merges the current branch into the target branch — no
 
 Merge to the default branch:
 
-```
+```console
 $ wt merge
 ◎ Running pre-merge project:test
   cargo nextest run
@@ -25,32 +25,38 @@ $ wt merge
 
 Merge to a different branch:
 
-```bash
+```console
 $ wt merge develop
 ```
 
 Keep the worktree after merging:
 
-```bash
+```console
 $ wt merge --no-remove
 ```
 
 Preserve commit history (no squash):
 
-```bash
+```console
 $ wt merge --no-squash
 ```
 
-Create a merge commit — semi-linear history:
+Create a merge commit — rebased semi-linear history by default:
 
-```bash
+```console
 $ wt merge --no-ff
 ```
 
 Skip committing/squashing (rebase still runs unless --no-rebase):
 
-```bash
+```console
 $ wt merge --no-commit
+```
+
+Preserve the exact clean commit graph and tip:
+
+```console
+$ wt merge --no-commit --no-rebase
 ```
 
 ## Pipeline
@@ -58,15 +64,17 @@ $ wt merge --no-commit
 `wt merge` runs these steps:
 
 1. **Commit** — Pre-commit hooks run, then uncommitted changes are committed. Post-commit hooks run in background. Skipped when squashing (the default) — changes are staged during the squash step instead. With `--no-squash`, this is the only commit step.
-2. **Squash** — Combines all commits since target into one (like GitHub's "Squash and merge"). Use `--stage` to control what gets staged: `all` (default), `tracked`, or `none`. A backup ref is saved to `refs/wt-backup/<branch>`. With `--no-squash`, individual commits are preserved.
-3. **Rebase** — Rebases onto target if behind. Skipped if already up-to-date. Conflicts abort immediately.
+2. **Squash** — Combines all commits since target into one (like GitHub's "Squash and merge"). Use `--stage` to control what gets staged: `all` (default), `tracked`, or `none`. Working-tree changes swept into the squash are backed up first to `refs/wt-backup/<branch>`. With `--no-squash`, individual commits are preserved.
+3. **Rebase** — Rebases onto target, skipping when nothing needs replaying ([`wt step rebase`](https://worktrunk.dev/step/#wt-step-rebase) gives the conditions). A conflict stops the merge with the rebase left open in the worktree, to resolve or abort. With `--no-rebase`, the graph produced by earlier commit/squash steps is preserved and the target must be able to fast-forward to its tip.
 4. **Pre-merge hooks** — Hooks run after rebase, before merge. Failures abort. See [`wt hook`](https://worktrunk.dev/hook/).
-5. **Merge** — Fast-forward merge to the target branch. With `--no-ff`, a merge commit is created instead — semi-linear history with rebased commits plus a merge commit. Non-fast-forward merges are rejected.
+5. **Merge** — Fast-forward merge to the target branch ([`wt step push`](https://worktrunk.dev/step/#wt-step-push)). With `--no-ff`, a merge commit is created instead — semi-linear history after the default rebase, while explicit `--no-rebase` preserves the graph produced by earlier steps before adding the merge commit. Non-fast-forward merges are rejected.
 6. **Pre-remove hooks** — Hooks run before removing worktree. Failures abort.
 7. **Cleanup** — Removes the worktree and branch. Use `--no-remove` to keep the worktree. When already on the target branch or in the primary worktree, the worktree is preserved.
 8. **Post-remove + post-merge hooks** — Run in background after cleanup.
 
-Use `--no-commit` to skip committing uncommitted changes and squashing; rebase still runs by default and can rewrite commits unless `--no-rebase` is passed. Useful after preparing commits manually with `wt step commit`. Requires a clean working tree.
+Use `--no-commit` to skip committing uncommitted changes and squashing; rebase still runs by default and can rewrite commits unless `--no-rebase` is passed. Combining both flags preserves the exact source graph and requires the target to be its ancestor. Useful after preparing commits manually with `wt step commit`. Requires a clean working tree.
+
+`wt merge` targets the *local* default-branch ref and never fetches. When that ref lags its upstream — e.g. a primary checkout's `main` left behind `origin/main` — a branch based on the newer upstream tip is measured, squashed, and rebased against the upstream (so already-upstream commits are never folded into the squash), and the final fast-forward carries the local ref through the already-fetched upstream commits by their real SHAs. `wt step squash` and `wt step rebase` measure the same way. A local target that has *diverged* from its upstream — its own commits and behind — cannot fast-forward, so the merge is refused until the target is reconciled.
 
 ## Local CI
 
@@ -105,7 +113,7 @@ Options:
           Skip commit and squash
 
       --no-rebase
-          Skip rebase (fail if not already rebased)
+          Skip rebase; require the target to fast-forward to the resulting tip
 
       --no-remove
           Keep worktree after merge
@@ -133,11 +141,8 @@ Automation:
 
           JSON prints structured result to stdout after merge completes.
 
-          Possible values:
-          - text: Human-readable text output
-          - json: JSON output
-
           [default: text]
+          [possible values: text, json]
 
 Global Options:
   -C <path>
@@ -146,9 +151,13 @@ Global Options:
       --config <path>
           User config file path
 
+      --config-set <toml>
+          Override config with inline TOML, e.g. --config-set list.full=true (repeatable)
+
   -v, --verbose...
-          Verbose output (-v: info logs + hook/alias template variable & output; -vv: debug logs +
-          diagnostic report + trace.log/output.log under .git/wt/logs/)
+          Verbose output (-v: info logs + hook/alias template variables on stderr; -vv: also debug
+          logs and raw subprocess output written to .git/wt/logs/). Set WORKTRUNK_VERBOSE=0|1|2 to
+          apply the same level everywhere — including shell completion, which no flag can reach
 
   -y, --yes
           Skip approval prompts
