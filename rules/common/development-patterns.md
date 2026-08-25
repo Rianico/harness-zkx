@@ -106,7 +106,22 @@ Dispatch subtasks to subagents and keep the main session lean. When the main age
 
 Hand off across context gaps (agent↔subagent, compaction) by file pointer + dumped artifact, not by pasting bulk content into context. The pointer names the material and the branches that trigger loading it.
 
-### Ephemeral artifacts → `.lsz/tmp`
+### Subagent + Worktree Coordination
+
+Builtin `subagent` workers share the same git worktree/filesystem. Parallel subagents that will write files race and clobber each other. Isolate them with `worktree`.
+
+**When to use `worktree`:** Fan-out ≥2 that touches `src/`, `test/`, or any tracked files (architecture deepening, parallel refactors, multi-candidate reviews). Single subagent or read-only research → no worktree needed.
+
+**Pattern:**
+1. Main creates one worktree per task. Each worktree = own directory, own branch.
+2. Dispatch each `subagent` with that worktree's path as its `cwd`. Pass the branch/worktree path in the task: "You are in worktree at <path> on branch <branch> — only edit there."
+3. Subagents work isolated — no cross-worktree file writes.
+4. Main verifies each worktree (`typecheck`/`build`/`tests` in that path), then integrates.
+5. Clean up worktree.
+
+**Do not:** run ≥2 file-writing subagents in the same worktree. If you must stay in one worktree, run subtasks sequentially.
+
+## Ephemeral artifacts → `.lsz/tmp`
 
 Route temporary files, scratch outputs, and ad-hoc repros through `.lsz/tmp/` (gitignored). Keep the repo root and `tests/` clean — `tests/` holds only committed, reviewable tests.
 

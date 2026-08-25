@@ -1,14 +1,27 @@
 # Git Workflow Conventions
 
-Rules extracted from git history analysis to prevent common mistakes.
+Rules extracted from git history analysis to prevent common mistakes. Flow is `ticket/spec → branch+worktree → commit hygiene → PR → release`.
 
-## Atomic Commit Separation
+## 1 Branch + Worktree + PR — ==tight worktree== entry
 
-Implementation changes and documentation updates must be separate commits. Task-orientation is always a good perspective to identify the boundary.
+Must not submit code on the default branch. Every change goes `ticket/spec → branch → isolated worktree → PR`.
+
+- **Branch + worktree:** `feat|fix|doc/<ticket-slug>` or `map/<slug>` (integration, replaces `dev`) from ticket/spec. Prefer `wt` (worktrunk) over raw `git worktree` — `wt switch --create <branch> --base <parent>`, `wt list --format=json`, `wt merge <parent>` (`pre-merge` gate), `wt remove`, `wt step copy-ignored` + `{{ branch | hash_port }}` — preserves hooks/cold-start/port allocation. Raw `git worktree add`/`git merge` is fallback only.
+- **Tracker is pluggable:** anchor is always the `ticket/spec` (`docs/agents/issue-tracker.md` — GitHub `gh` default, `.scratch/*.md` or Linear/Jira via freeform). GitHub binding is `Closes #NN` / `Part of #<map>` last line of PR body.
+- **PR hygiene:** one intent per PR, `gh pr create --fill` with `Closes`/`Part of` + `Co-authored-by` when ticket author ≠ merger (squash loses ancestry — trailer is provenance).
+
+> [!warning] NEVER without approval
+> Never merge a PR (`gh pr merge` / `wt merge <main>`) or create/push a tag (`npm run release -- X.Y.Z` / `cargo publish`) without explicit user approval. Leave PR `OPEN` and present `a:merge b:tag/release c:publish d:hold` confirm dialog.
 
 ---
 
-## Reset Safety Protocol
+## 2 Commit Hygiene
+
+### Atomic Commit Separation
+
+Implementation changes and documentation updates must be separate commits. Task-orientation is always a good perspective to identify the boundary.
+
+### Reset Safety Protocol
 
 **Never use `git reset --hard`.** Always reset in soft mode and explicitly discard changes if needed.
 
@@ -38,9 +51,7 @@ git restore .                # Discard all changes in working directory
 git reset --hard HEAD~N  # NEVER use
 ```
 
----
-
-## Pre-Commit File Audit
+### Pre-Commit File Audit
 
 Before committing, audit staged files for cross-cutting concerns.
 
@@ -61,7 +72,7 @@ git add <doc-files> && git commit
 
 ---
 
-## Tag, Release, And Publish
+## 3 Release — Tag, Release, Publish
 
 The release shape is language-agnostic — the examples below are per-ecosystem stand-ins (npm → TypeScript/JavaScript, cargo → Rust, uv/pip → Python). Use your project's native tooling.
 
@@ -110,6 +121,13 @@ Keep-a-Changelog, layout after pi-interactive-shell:
   the convention.
 - Dates and versions are real: taken from the release commit, not the PR date.
 
+---
+
+## 4 Docs & Locale — release-adjacent reference
+
+> [!note] Disclosure
+> This section is reference, not daily gate. Loaded every turn but consulted only when cutting docs/release. Keep tight; deep examples live in project `README.md` / `docs/` — not here.
+
 ### README style — brooks-lint layout
 
 Centered, image-led, example-driven. Facts over marketing; every number must match the
@@ -138,7 +156,3 @@ reproducible output at the current commit (a stale benchmark figure is a bug, no
   of tables stay **byte-identical**; only prose is translated.
 - Keep all locales in sync on every README change — a stale number in one locale is a bug equal
   to a stale number in the default.
-
-### Code Merge
-
-Must not submit code on default branch, always adopt branch + worktree + pr + issue.
