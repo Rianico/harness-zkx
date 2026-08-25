@@ -131,3 +131,9 @@ _Avoid_: Pareto content, essential-first.
 **Platform Adapter**:
 A script-generated mapping from Claude Code canonical frontmatter to a target platform's mechanism (e.g., `disable-model-invocation: true` → `allow_implicit_invocation: false` in `agents/openai.yaml`).
 _Avoid_: Sync layer, shim.
+
+**Router Skill**:
+A skill with `metadata.manage` that enumerates hidden subskills via `argument-hint`; its `description` is the sole always-loaded pointer (1× ~280c forever), leaves with `managed-by` pay 0 `Metadata Cost` and are loaded via `Read` not `Skill`. See `skills/ai-engineering-expert`. _Avoid_: explicit `router: true` flag (duplicate of `manage`), per-leaf injection.
+
+**Argument Hint**:
+The `argument-hint: |-` block scalar enumerating router domains (`skill-authoring -- ... | writing -- ...`). Lives outside 300c `Description Budget`, carries inventory for Codex autocomplete (Pi: injected via `skill-router-injector.ts` extension). _Avoid_: duplicating hint in description verbs.
