@@ -6,7 +6,7 @@ Rules extracted from git history analysis to prevent common mistakes. Flow is `t
 
 Must not submit code on the default branch. Every change goes `ticket/spec → branch → isolated worktree → PR`.
 
-- **Branch + worktree:** `feat|fix|doc/<ticket-slug>` or `map/<slug>` (integration, replaces `dev`) from ticket/spec. Prefer `wt` (worktrunk) over raw `git worktree` — `wt switch --create <branch> --base <parent>`, `wt list --format=json`, `wt merge <parent>` (`pre-merge` gate), `wt remove`, `wt step copy-ignored` + `{{ branch | hash_port }}` — preserves hooks/cold-start/port allocation. Raw `git worktree add`/`git merge` is fallback only.
+- **Branch + worktree — target stays in session, children isolated:** `git switch -c feat|map/<slug> <base>` creates the target **in place** (session cwd stays, branch changes) — `wt switch --create` sibling would leave the session. Children are `wt` siblings: `wt switch --create <child> --base <parent> --no-cd` (keeps cwd on target), then `wt switch <child> && wt merge <parent>` (child → target, `wt merge` pre-merge gate). Use `wt list --format=json` / `wt step copy-ignored` + `{{ branch | hash_port }}` for hooks/ports; raw `git worktree add`/`git merge` is fallback only.
 - **Tracker is pluggable:** anchor is always the `ticket/spec` (`docs/agents/issue-tracker.md` — GitHub `gh` default, `.scratch/*.md` or Linear/Jira via freeform). GitHub binding is `Closes #NN` / `Part of #<map>` last line of PR body.
 - **PR hygiene:** one intent per PR, `gh pr create --fill` with `Closes`/`Part of` + `Co-authored-by` when ticket author ≠ merger (squash loses ancestry — trailer is provenance).
 
