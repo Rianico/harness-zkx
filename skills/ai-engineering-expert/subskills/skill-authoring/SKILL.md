@@ -131,10 +131,10 @@ Reference: [glossary.md](references/glossary.md) for the full domain vocabulary 
 - `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)
 
 **Structure**
-- SKILL.md under 500 lines
+- SKILL.md under 500 lines — practical usage guide (workflows, commands, examples)
+- SKILL.md is env-agnostic — env/config/setup/state belongs in `references/` (progressive disclosure)
 - Deep content in `references/` (one level deep)
 - Executable logic in `scripts/`
-
 **Resource Path Convention**
 - `$SKILL_DIR` is the path anchor for ALL skill-owned resources (scripts, references, raw docs, config)
 - **Prose text:** Always `$SKILL_DIR/references/<module>.md` -- cwd is unknown to the reader
@@ -179,6 +179,7 @@ Before publishing a skill:
 - [ ] Consistent terminology throughout
 - [ ] Examples are concrete, not abstract
 - [ ] No redundant sections -- each concept lives in one place
+- [ ] SKILL.md is practical usage guide; env/config/setup/state is in `references/`
 
 **Structure**
 - [ ] Frontmatter includes `name` and `description` (both required)
@@ -189,6 +190,7 @@ Before publishing a skill:
 - [ ] Gotchas section for non-obvious environment facts
 - [ ] Templates/checklists for multi-step workflows
 - [ ] Validation loops for quality-critical tasks
+- [ ] Env-agnostic SKILL.md — no env/config/setup/state inlined (see references/)
 
 ## Metadata Conventions
 
