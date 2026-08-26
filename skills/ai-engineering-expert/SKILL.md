@@ -272,6 +272,15 @@ Design decisions the architecture makes intentionally:
 
 ---
 
+## Skill Refinement Pattern
+When workflow steps are plain shell that the model rewrites each time, they add variance. Tighten by packing.
+- **Pack plain steps into scripts.** Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/` — shell for file and branch work, Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`.
+- **Fix inside the copy.** If a merge shows a conflict, the main flow does not edit files. A separate worker opens that copy's folder, checks `git status`, fixes each file (`git rm` for delete vs change, `git add` after), runs `npm run typecheck && npm test`, then `GIT_EDITOR=true git rebase --continue` and tries the merge again.
+- **Use plain words.** Keep prompts as `branch, copy, merge, conflict, fix, test, check, file, folder`. Plain words travel reliably and keep the guide short.
+Each fix must remove the inline lines it replaces. Otherwise the guide grows.
+
+
+
 ## Sub-Skill Dispatch
 
 This skill manages four domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument. When the task writes or edits any agent-consumed document (SKILL.md, AGENTS.md, CLAUDE.md, pointer docs), also load `writing` — even when primary domain is `skill-authoring`.
