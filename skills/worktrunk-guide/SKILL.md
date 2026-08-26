@@ -179,7 +179,7 @@ Environment-related setup (shell, paths, env vars, approvals, state) is delibera
 Raw source (authoritative for flag-level detail): `$SKILL_DIR/worktrunk-guide-raw/`
 
 - Prose pointer: `$SKILL_DIR/worktrunk-guide-raw/<file>.md` (cwd unknown)
-- Markdown link: `[001-switch.md](worktrunk-guide-raw/001-switch.md)` from SKILL.md; `[../worktrunk-guide-raw/001-switch.md](../worktrunk-guide-raw/001-switch.md)` from `references/`
+- Markdown link: `worktrunk-guide-raw/001-switch.md` from SKILL.md; `../worktrunk-guide-raw/001-switch.md` from `references/` (e.g. `[switch](worktrunk-guide-raw/001-switch.md)` vs `[switch](../worktrunk-guide-raw/001-switch.md)`)
 - If curated summary conflicts with observation, raw doc wins
 
 ## When writing code
