@@ -137,3 +137,21 @@ A skill with `metadata.manage` that enumerates hidden subskills via `argument-hi
 
 **Argument Hint**:
 The `argument-hint: |-` block scalar enumerating router domains (`skill-authoring -- ... | writing -- ...`). Lives outside 300c `Description Budget`, carries inventory for Codex autocomplete (Pi: injected via `skill-router-injector.ts` extension). _Avoid_: duplicating hint in description verbs.
+
+## Worktree Workflow
+
+**Gate**:
+Authoritative pre-merge check declared in `.config/wt.toml [pre-merge].gate` and executed by `wt merge`. One writer (`wt.toml`), many readers (scripts). Auto-scaffolded once from `wt-template.toml` on first run per stack (rust/python/typescript); unknown stack fails loud.
+_Avoid_: hardcoded `npm` fallback, runtime sniffing
+
+**Worktree**:
+Isolated checkout owned by `wt` with branch and hooks (`post-start` copy-ignored, `pre-merge` gate, `hash_port`).
+_Avoid_: raw `git worktree add`
+
+**Copy**:
+Ephemeral child worktree `feat/<slug>--<phase>` for one ticket part, merged via `wt merge <parent>` from inside the copy.
+_Avoid_: sibling branch, parent-side merge
+
+**Target**:
+Parent branch (`feat/<slug>` or `map/<slug>`) created in place via `git switch -c` at session cwd; children are `wt` siblings.
+_Avoid_: `wt switch --create` for target
