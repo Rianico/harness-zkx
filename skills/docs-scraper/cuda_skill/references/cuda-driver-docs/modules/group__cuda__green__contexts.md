@@ -2,39 +2,31 @@
 
 **Source:** group__CUDA__GREEN__CONTEXTS.html#group__CUDA__GREEN__CONTEXTS
 
-
 ### Classes
 
 struct
 
 CU_DEV_SM_RESOURCE_GROUP_PARAMS
 
-
 struct
 
 CUdevResource
-
 
 struct
 
 CUdevSmResource
 
-
 struct
 
 CUdevWorkqueueConfigResource
-
 
 struct
 
 CUdevWorkqueueResource
 
-
-
 ### Typedefs
 
 typedef CUdevResourceDesc_st * CUdevResourceDesc
-
 
 ### Enumerations
 
@@ -42,15 +34,13 @@ enum CUdevResourceType
 
 enum CUdevWorkqueueConfigScope
 
-
 ### Functions
 
 CUresult cuCtxFromGreenCtx ( CUcontext* pContext, CUgreenCtx hCtx )
 
-
 Converts a green context into the primary context.
 
-######  Parameters
+###### Parameters
 
 `pContext`
     Returned primary context with green context resources
@@ -69,10 +59,9 @@ Users are expected to call this API before calling any CUDA APIs that accept a C
 
 CUresult cuCtxGetDevResource ( CUcontext hCtx, CUdevResource* resource, CUdevResourceType type )
 
-
 Get context resources.
 
-######  Parameters
+###### Parameters
 
 `hCtx`
     \- Context to get resource for
@@ -89,12 +78,11 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Get the `type` resources available to the context represented by `hCtx` Note: The API is not supported on 32-bit platforms.
 
-CUresult cuDevResourceGenerateDesc ( CUdevResourceDesc* phDesc, CUdevResource* resources, unsigned int  nbResources )
-
+CUresult cuDevResourceGenerateDesc ( CUdevResourceDesc*phDesc, CUdevResource* resources, unsigned int  nbResources )
 
 Generate a resource descriptor.
 
-######  Parameters
+###### Parameters
 
 `phDesc`
     \- Output descriptor
@@ -113,17 +101,15 @@ Generates a single resource descriptor with the set of resources specified in `r
 
 A successful API call must have:
 
-  * A valid output pointer for the `phDesc` descriptor as well as a valid array of `resources` pointers, with the array size passed in `nbResources`. If multiple resources are provided in `resources`, the device they came from must be the same, otherwise CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION is returned. If multiple resources are provided in `resources` and they are of type CU_DEV_RESOURCE_TYPE_SM, they must be outputs (whether `result` or `remaining`) from the same split API instance and have the same smCoscheduledAlignment values, otherwise CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION is returned.
-
+* A valid output pointer for the `phDesc` descriptor as well as a valid array of `resources` pointers, with the array size passed in `nbResources`. If multiple resources are provided in `resources`, the device they came from must be the same, otherwise CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION is returned. If multiple resources are provided in `resources` and they are of type CU_DEV_RESOURCE_TYPE_SM, they must be outputs (whether `result` or `remaining`) from the same split API instance and have the same smCoscheduledAlignment values, otherwise CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION is returned.
 
 Note: The API is not supported on 32-bit platforms.
 
-CUresult cuDevSmResourceSplit ( CUdevResource* result, unsigned int  nbGroups, const CUdevResource* input, CUdevResource* remainder, unsigned int  flags, CU_DEV_SM_RESOURCE_GROUP_PARAMS* groupParams )
-
+CUresult cuDevSmResourceSplit ( CUdevResource*result, unsigned int  nbGroups, const CUdevResource* input, CUdevResource*remainder, unsigned int  flags, CU_DEV_SM_RESOURCE_GROUP_PARAMS* groupParams )
 
 Splits a `CU_DEV_RESOURCE_TYPE_SM` resource into structured groups.
 
-######  Parameters
+###### Parameters
 
 `result`
     \- Output array of `CUdevResource` resources. Can be NULL, alongside an smCount of 0, for discovery purpose.
@@ -152,33 +138,27 @@ The `groupParams` array is evaluated from index 0 to `nbGroups` \- 1. For each i
 
 For a valid call:
 
-  * `result` should point to a `CUdevResource` array of size `nbGroups`, or alternatively, may be NULL, if the developer wishes for only the groupParams entries to be updated
+* `result` should point to a `CUdevResource` array of size `nbGroups`, or alternatively, may be NULL, if the developer wishes for only the groupParams entries to be updated
 
+* `input` should be a valid CU_DEV_RESOURCE_TYPE_SM resource that originates from querying the green context, device context, or device.
 
-  * `input` should be a valid CU_DEV_RESOURCE_TYPE_SM resource that originates from querying the green context, device context, or device.
+* The `remainder` group may be NULL.
 
+* There are no API `flags` at this time, so the value passed in should be 0.
 
-  * The `remainder` group may be NULL.
+* A CU_DEV_SM_RESOURCE_GROUP_PARAMS array of size `nbGroups`. Each entry must be zero-initialized.
+  * `smCount:` must be either 0 or in the range of [2,inputSmCount] where inputSmCount is the amount of SMs the `input` resource has. `smCount` must be a multiple of 2, as well as a multiple of `coscheduledSmCount`. When assigning SMs to a group (and if results are expected by having the `result` parameter set), `smCount` cannot end up with 0 or a value less than `coscheduledSmCount` otherwise CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION will be returned.
 
+  * `coscheduledSmCount:` allows grouping SMs together in order to be able to launch clusters on Compute Architecture 9.0+. The default value may be queried from the device’s CU_DEV_RESOURCE_TYPE_SM resource (8 on Compute Architecture 9.0+ and 2 otherwise). The maximum is 32 on Compute Architecture 9.0+ and 2 otherwise.
 
-  * There are no API `flags` at this time, so the value passed in should be 0.
+  * `preferredCoscheduledSmCount:` Attempts to merge `coscheduledSmCount` groups into larger groups, in order to make use of `preferredClusterDimensions` on Compute Architecture 10.0+. The default value is set to `coscheduledSmCount`.
 
-
-  * A CU_DEV_SM_RESOURCE_GROUP_PARAMS array of size `nbGroups`. Each entry must be zero-initialized.
-    * `smCount:` must be either 0 or in the range of [2,inputSmCount] where inputSmCount is the amount of SMs the `input` resource has. `smCount` must be a multiple of 2, as well as a multiple of `coscheduledSmCount`. When assigning SMs to a group (and if results are expected by having the `result` parameter set), `smCount` cannot end up with 0 or a value less than `coscheduledSmCount` otherwise CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION will be returned.
-
-    * `coscheduledSmCount:` allows grouping SMs together in order to be able to launch clusters on Compute Architecture 9.0+. The default value may be queried from the device’s CU_DEV_RESOURCE_TYPE_SM resource (8 on Compute Architecture 9.0+ and 2 otherwise). The maximum is 32 on Compute Architecture 9.0+ and 2 otherwise.
-
-    * `preferredCoscheduledSmCount:` Attempts to merge `coscheduledSmCount` groups into larger groups, in order to make use of `preferredClusterDimensions` on Compute Architecture 10.0+. The default value is set to `coscheduledSmCount`.
-
-    * `flags:`
-      * `CU_DEV_SM_RESOURCE_SPLIT_BACKFILL:` lets `smCount` be a non-multiple of `coscheduledSmCount`, filling the difference between SM count and already assigned co-scheduled groupings with other SMs. This lets any resulting group behave similar to the `remainder` group for example.
-
+  * `flags:`
+    * `CU_DEV_SM_RESOURCE_SPLIT_BACKFILL:` lets `smCount` be a non-multiple of `coscheduledSmCount`, filling the difference between SM count and already assigned co-scheduled groupings with other SMs. This lets any resulting group behave similar to the `remainder` group for example.
 
 **Example params and their effect:**
 
 A groupParams array element is defined in the following order:
-
 
     ‎ { .smCount, .coscheduledSmCount, .preferredCoscheduledSmCount, .flags, \/\* .reserved \*\/ }
 
@@ -205,19 +185,17 @@ A groupParams array element is defined in the following order:
 
 The difference between a catch-all param group as the last entry and the remainder is in two aspects:
 
-  * The remainder may be NULL / _TYPE_INVALID (if there are no SMs remaining), while a result group must always be valid.
+* The remainder may be NULL / _TYPE_INVALID (if there are no SMs remaining), while a result group must always be valid.
 
-  * The remainder does not have a structure, while the result group will always need to adhere to a structure of coscheduledSmCount (even if its just 2), and therefore must always have enough coscheduled SMs to cover that requirement (even with the `CU_DEV_SM_RESOURCE_SPLIT_BACKFILL` flag enabled).
-
+* The remainder does not have a structure, while the result group will always need to adhere to a structure of coscheduledSmCount (even if its just 2), and therefore must always have enough coscheduled SMs to cover that requirement (even with the `CU_DEV_SM_RESOURCE_SPLIT_BACKFILL` flag enabled).
 
 Splitting an input into N groups, can be accomplished by repeatedly splitting off 1 group and re-splitting the remainder (a bisect operation). However, it's recommended to accomplish this with a single call wherever possible.
 
-CUresult cuDevSmResourceSplitByCount ( CUdevResource* result, unsigned int* nbGroups, const CUdevResource* input, CUdevResource* remainder, unsigned int  flags, unsigned int  minCount )
-
+CUresult cuDevSmResourceSplitByCount ( CUdevResource*result, unsigned int* nbGroups, const CUdevResource*input, CUdevResource* remainder, unsigned int  flags, unsigned int  minCount )
 
 Splits `CU_DEV_RESOURCE_TYPE_SM` resources.
 
-######  Parameters
+###### Parameters
 
 `result`
     \- Output array of `CUdevResource` resources. Can be NULL to query the number of groups.
@@ -226,7 +204,7 @@ Splits `CU_DEV_RESOURCE_TYPE_SM` resources.
 `input`
     \- Input SM resource to be split. Must be a valid `CU_DEV_RESOURCE_TYPE_SM` resource.
 `remainder`
-    \- If the input resource cannot be cleanly split among `nbGroups`, the remainder is placed in here. Can be ommitted (NULL) if the user does not need the remaining set.
+    \- If the input resource cannot be cleanly split among `nbGroups`, the remainder is placed in here. Can be omitted (NULL) if the user does not need the remaining set.
 `flags`
     \- Flags specifying how these partitions are used or which constraints to abide by when splitting the input. Zero is valid for default behavior.
 `minCount`
@@ -248,26 +226,23 @@ The `remainder` set does not have the same functional or performance guarantees 
 
 The following flags are supported:
 
-  * `CU_DEV_SM_RESOURCE_SPLIT_IGNORE_SM_COSCHEDULING` : Lower the minimum SM count and alignment, and treat each SM independent of its hierarchy. This allows more fine grained partitions but at the cost of advanced features (such as large clusters on compute capability 9.0+).
+* `CU_DEV_SM_RESOURCE_SPLIT_IGNORE_SM_COSCHEDULING` : Lower the minimum SM count and alignment, and treat each SM independent of its hierarchy. This allows more fine grained partitions but at the cost of advanced features (such as large clusters on compute capability 9.0+).
 
-  * `CU_DEV_SM_RESOURCE_SPLIT_MAX_POTENTIAL_CLUSTER_SIZE` : Compute Capability 9.0+ only. Attempt to create groups that may allow for maximally sized thread clusters. This can be queried post green context creation using cuOccupancyMaxPotentialClusterSize and launch configuration \(config\), return the maximum cluster size in *clusterSize.").
-
+* `CU_DEV_SM_RESOURCE_SPLIT_MAX_POTENTIAL_CLUSTER_SIZE` : Compute Capability 9.0+ only. Attempt to create groups that may allow for maximally sized thread clusters. This can be queried post green context creation using cuOccupancyMaxPotentialClusterSize and launch configuration \(config\), return the maximum cluster size in *clusterSize.").
 
 A successful API call must either have:
 
-  * A valid array of `result` pointers of size passed in `nbGroups`, with `input` of type `CU_DEV_RESOURCE_TYPE_SM`. Value of `minCount` must be between 0 and the SM count specified in `input`. `remainder` may be NULL.
+* A valid array of `result` pointers of size passed in `nbGroups`, with `input` of type `CU_DEV_RESOURCE_TYPE_SM`. Value of `minCount` must be between 0 and the SM count specified in `input`. `remainder` may be NULL.
 
-  * NULL passed in for `result`, with a valid integer pointer in `nbGroups` and `input` of type `CU_DEV_RESOURCE_TYPE_SM`. Value of `minCount` must be between 0 and the SM count specified in `input`. `remainder` may be NULL. This queries the number of groups that would be created by the API.
-
+* NULL passed in for `result`, with a valid integer pointer in `nbGroups` and `input` of type `CU_DEV_RESOURCE_TYPE_SM`. Value of `minCount` must be between 0 and the SM count specified in `input`. `remainder` may be NULL. This queries the number of groups that would be created by the API.
 
 Note: The API is not supported on 32-bit platforms.
 
 CUresult cuDeviceGetDevResource ( CUdevice device, CUdevResource* resource, CUdevResourceType type )
 
-
 Get device resources.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- Device to get resource for
@@ -288,10 +263,9 @@ Note: The API is not supported on 32-bit platforms.
 
 CUresult cuGreenCtxCreate ( CUgreenCtx* phCtx, CUdevResourceDesc desc, CUdevice dev, unsigned int  flags )
 
-
 Creates a green context with a specified set of resources.
 
-######  Parameters
+###### Parameters
 
 `phCtx`
     \- Pointer for the output handle to the green context
@@ -316,15 +290,13 @@ Note: The API is not supported on 32-bit platforms.
 
 The supported flags are:
 
-  * `CU_GREEN_CTX_DEFAULT_STREAM` : Creates a default stream to use inside the green context. Required.
-
+* `CU_GREEN_CTX_DEFAULT_STREAM` : Creates a default stream to use inside the green context. Required.
 
 CUresult cuGreenCtxDestroy ( CUgreenCtx hCtx )
 
-
 Destroys a green context.
 
-######  Parameters
+###### Parameters
 
 `hCtx`
     \- Green context to be destroyed
@@ -337,17 +309,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Destroys the green context, releasing the primary context of the device that this green context was created for. Any resources provisioned for this green context (that were initially available via the resource descriptor) are released as well. The API does not destroy streams created via cuGreenCtxStreamCreate, cuStreamCreate, or cuStreamCreateWithPriority. Users are expected to destroy these streams explicitly using cuStreamDestroy to avoid resource leaks. Once the green context is destroyed, any subsequent API calls involving these streams will return CUDA_ERROR_STREAM_DETACHED with the exception of the following APIs:
 
-  * cuStreamDestroy.
-
+* cuStreamDestroy.
 
 Additionally, the API will invalidate all active captures on these streams.
 
 CUresult cuGreenCtxGetDevResource ( CUgreenCtx hCtx, CUdevResource* resource, CUdevResourceType type )
 
-
 Get green context resources.
 
-######  Parameters
+###### Parameters
 
 `hCtx`
     \- Green context to get resource for
@@ -366,10 +336,9 @@ Get the `type` resources available to the green context represented by `hCtx`
 
 CUresult cuGreenCtxGetId ( CUgreenCtx greenCtx, unsigned long long* greenCtxId )
 
-
 Returns the unique Id associated with the green context supplied.
 
-######  Parameters
+###### Parameters
 
 `greenCtx`
     \- Green context for which to obtain the Id
@@ -386,10 +355,9 @@ Returns in `greenCtxId` the unique Id which is associated with a given green con
 
 CUresult cuGreenCtxRecordEvent ( CUgreenCtx hCtx, CUevent hEvent )
 
-
 Records an event.
 
-######  Parameters
+###### Parameters
 
 `hCtx`
     \- Green context to record event for
@@ -408,10 +376,9 @@ The API will return CUDA_ERROR_STREAM_CAPTURE_UNSUPPORTED if the specified green
 
 CUresult cuGreenCtxStreamCreate ( CUstream* phStream, CUgreenCtx greenCtx, unsigned int  flags, int  priority )
 
-
 Create a stream for use in the green context.
 
-######  Parameters
+###### Parameters
 
 `phStream`
     \- Returned newly created stream
@@ -432,20 +399,17 @@ Creates a stream for use in the specified green context `greenCtx` and returns a
 
 The supported values for `flags` are:
 
-  * CU_STREAM_NON_BLOCKING: This must be specified. It indicates that work running in the created stream may run concurrently with work in the default stream, and that the created stream should perform no implicit synchronization with the default stream.
-
+* CU_STREAM_NON_BLOCKING: This must be specified. It indicates that work running in the created stream may run concurrently with work in the default stream, and that the created stream should perform no implicit synchronization with the default stream.
 
 Specifying `priority` affects the scheduling priority of work in the stream. Priorities provide a hint to preferentially run work with higher priority when possible, but do not preempt already-running work or provide any other functional guarantee on execution order. `priority` follows a convention where lower numbers represent higher priorities. '0' represents default priority. The range of meaningful numerical priorities can be queried using cuCtxGetStreamPriorityRange. If the specified priority is outside the numerical range returned by cuCtxGetStreamPriorityRange, it will automatically be clamped to the lowest or the highest number in the range.
 
-  *   * In the current implementation, only compute kernels launched in priority streams are affected by the stream's priority. Stream priorities have no effect on host-to-device and device-to-host memory operations.
-
+* * In the current implementation, only compute kernels launched in priority streams are affected by the stream's priority. Stream priorities have no effect on host-to-device and device-to-host memory operations.
 
 CUresult cuGreenCtxWaitEvent ( CUgreenCtx hCtx, CUevent hEvent )
 
-
 Make a green context wait on an event.
 
-######  Parameters
+###### Parameters
 
 `hCtx`
     \- Green context to wait
@@ -460,17 +424,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Makes all future work submitted to green context `hCtx` wait for all work captured in `hEvent`. The synchronization will be performed on the device and will not block the calling CPU thread. See cuGreenCtxRecordEvent() or cuEventRecord(), for details on what is captured by an event.
 
-  * `hEvent` may be from a different context or device than `hCtx`.
+* `hEvent` may be from a different context or device than `hCtx`.
 
-  * The API will return CUDA_ERROR_STREAM_CAPTURE_UNSUPPORTED and invalidate the capture if the specified event `hEvent` is part of an ongoing capture sequence or if the specified green context `hCtx` has a stream in the capture mode.
-
+* The API will return CUDA_ERROR_STREAM_CAPTURE_UNSUPPORTED and invalidate the capture if the specified event `hEvent` is part of an ongoing capture sequence or if the specified green context `hCtx` has a stream in the capture mode.
 
 CUresult cuStreamGetDevResource ( CUstream hStream, CUdevResource* resource, CUdevResourceType type )
 
-
 Get stream resources.
 
-######  Parameters
+###### Parameters
 
 `hStream`
     \- Stream to get resource for
@@ -491,10 +453,9 @@ Note: The API will return CUDA_ERROR_INVALID_RESOURCE_TYPE is `type` is `CU_DEV_
 
 CUresult cuStreamGetGreenCtx ( CUstream hStream, CUgreenCtx* phCtx )
 
-
 Query the green context associated with a stream.
 
-######  Parameters
+###### Parameters
 
 `hStream`
     \- Handle to the stream to be queried
@@ -511,11 +472,8 @@ Returns the CUDA green context that the stream is associated with, or NULL if th
 
 The stream handle `hStream` can refer to any of the following:
 
-  * a stream created via any of the CUDA driver APIs such as cuStreamCreate, cuStreamCreateWithPriority and cuGreenCtxStreamCreate, or their runtime API equivalents such as cudaStreamCreate, cudaStreamCreateWithFlags and cudaStreamCreateWithPriority. If during stream creation the context that was active in the calling thread was obtained with cuCtxFromGreenCtx, that green context is returned in `phCtx`. Otherwise, `*phCtx` is set to NULL instead.
+* a stream created via any of the CUDA driver APIs such as cuStreamCreate, cuStreamCreateWithPriority and cuGreenCtxStreamCreate, or their runtime API equivalents such as cudaStreamCreate, cudaStreamCreateWithFlags and cudaStreamCreateWithPriority. If during stream creation the context that was active in the calling thread was obtained with cuCtxFromGreenCtx, that green context is returned in `phCtx`. Otherwise, `*phCtx` is set to NULL instead.
 
-  * special stream such as the NULL stream or CU_STREAM_LEGACY. In that case if context that is active in the calling thread was obtained with cuCtxFromGreenCtx, that green context is returned. Otherwise, `*phCtx` is set to NULL instead.
-
+* special stream such as the NULL stream or CU_STREAM_LEGACY. In that case if context that is active in the calling thread was obtained with cuCtxFromGreenCtx, that green context is returned. Otherwise, `*phCtx` is set to NULL instead.
 
 Passing an invalid handle will result in undefined behavior.
-
-

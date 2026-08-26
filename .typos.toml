@@ -1,0 +1,79 @@
+[files]
+extend-exclude = [
+  "skills/ratatui-guide/references/ratatui-raw/**",
+  "skills/docs-scraper/cuda_skill/references/**",
+  "skills/docs-scraper/references/**",
+  ".lsz/**",
+  ".venv/**",
+  "skills/docs-scraper/cuda_skill/**",
+  "skills/lsp-guideline/**",
+  "tests/continuous-learning/fixtures/**",
+  "skills/md-to-html/assets/**",
+  "**/*.min.js"
+]
+
+[default.extend-words]
+ratatui = "ratatui"
+Ratatui = "Ratatui"
+RATATUI = "RATATUI"
+Parms = "Parms"
+parms = "parms"
+ue = "ue"
+UE = "UE"
+setp = "setp"
+Setp = "Setp"
+LOD = "LOD"
+lod = "lod"
+Sems = "Sems"
+sems = "sems"
+# Additional scraped doc typos
+Specifed = "Specifed"
+Persit = "Persit"
+Optin = "Optin"
+Suports = "Suports"
+Sufficent = "Sufficent"
+Funtionality = "Funtionality"
+Indiciates = "Indiciates"
+Managment = "Managment"
+Tranferred = "Tranferred"
+Cirumstances = "Cirumstances"
+Ommitted = "Ommitted"
+Succesfully = "Succesfully"
+Equiavlent = "Equiavlent"
+Conection = "Conection"
+Specfic = "Specfic"
+Outupt = "Outupt"
+Elments = "Elments"
+Procesor = "Procesor"
+Etiher = "Etiher"
+Isssue = "Isssue"
+Returnd = "Returnd"
+Definining = "Definining"
+Guranteed = "Guranteed"
+Modifer = "Modifer"
+Contant = "Contant"
+Synchronizaton = "Synchronizaton"
+Determinstic = "Determinstic"
+Invovled = "Invovled"
+Miltiple = "Miltiple"
+Moniter = "Moniter"
+Priotity = "Priotity"
+Constrast = "Constrast"
+Dimentions = "Dimentions"
+Calulated = "Calulated"
+Achived = "Achived"
+Implict = "Implict"
+ReDoS = "ReDoS"
+Hashi = "Hashi"
+Supercedes = "Supercedes"
+Superceded = "Superceded"
+ba = "ba"
+OPTIN = "OPTIN"
+optin = "optin"
+SUCCES = "SUCCES"
+implementors = "implementors"
+RTO = "RTO"
+BRIN = "BRIN"
+brin = "brin"
+Skelton = "Skelton"
+DNE = "DNE"

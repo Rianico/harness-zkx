@@ -7,7 +7,7 @@ description: >-
   emoji clean, link resolution, caching. TRIGGER: scrape LSP, PTX,
   CUDA, Rust, scrape site.
 argument-hint: |-
-  [lsp|ptx|runtime|driver|rust <target>|site] [--force] [--output-dir <path>] [--base-url <url>]
+  [lsp|ptx|runtime|driver|rust <target>|site|skills <url|owner/collection[/skill]>...] [--force] [--output-dir <path>] [--base-url <url>] [--run <slug>] [--method auto|raw|clone|npx]
 ---
 
 # Documentation Scraper Skill
@@ -47,6 +47,7 @@ uv run $SKILL_DIR/scripts/scrape.py lsp --force
 | `driver`           | CUDA Driver API             | Multi-page API documentation                                                                                                           |
 | `rust`             | Rust Crates                 | Uses cargo-docs-md for clean output                                                                                                    |
 | `site`             | General Websites            | LLM-driven discovery via llms.txt/sitemap · handles CLI sites with global-options extraction (see CLI Scrape Standards)                |
+| `skills`           | skill.sh / GitHub           | Fetch complementary agent skills (SKILL.md + references/ + scripts/) for LLM composition — deterministic fetch/stage; compose per `references/skillsh-compose.md`               |
 | `worktrunk` (`wt`) | Worktrunk CLI (`wt --help`) | CLI reference via `site` scraper — extracts Global Options (`-C`, `--yes`, etc.) + Automation per `references/cli-scrape-standards.md` |
 
 ## Rust Documentation
@@ -230,6 +231,52 @@ If a site requires unique cleaning rules:
 1. First try adding to `references/cleanup-patterns.md` as a common pattern
 2. If rules are site-specific, not a common pattern, and may break other sites → create a curated module (e.g., `rust` module)
 3. This isolation prevents site-specific rules from affecting common sites
+
+## Skill Composition (skills.sh / GitHub)
+
+The `skills` scraper fetches complementary agent skills from skill.sh (a catalog)
+and their GitHub repos (the source of truth), then stages them so the LLM can
+compose them into **one new skill**. Fetching/staging is deterministic; all
+composition is LLM work guided by `ai-engineering-expert` (see
+`references/skillsh-compose.md`).
+
+```bash
+# Fetch one or many complementary skills (URL, owner/collection[/skill], or repo)
+uv run $SKILL_DIR/scripts/scrape.py skills \
+  https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert \
+  sickn33/agentic-awesome-skills/nodejs-best-practices \
+  --run ts-monorepo
+
+# Whole collection -> clone (or --method raw | npx opt-in)
+uv run $SKILL_DIR/scripts/scrape.py skills sickn33/agentic-awesome-skills --run coll
+```
+
+### Fetch methods
+
+| Method | Behavior                                                        |
+| ------ | --------------------------------------------------------------- |
+| `raw` (default, explicit skills) | GitHub contents API walk + `raw.githubusercontent.com` — no side effects |
+| `clone` (default, whole collections) | `git clone --depth 1` then map `skills/<name>/` dirs |
+| `npx` (opt-in) | delegate to `npx skills` inside a temp project, then harvest |
+
+### Staging layout (multi-run)
+
+```
+.lsz/tmp/skill-compose/<run>/
+├── stage/SOURCES.md               # index: repo + verbatim frontmatter per source
+├── stage/<repo>/<skill>/SKILL.md  # + references/ + scripts/ (origin-attributed)
+└── out/<new-skill>/               # LLM compose target (empty until composed)
+```
+
+`--run` names the composition; omitted → auto-slug with a numeric suffix so repeated
+compositions coexist. Fetch is shared via the `.cache/`; each run's `stage/`/`out/` is isolated.
+
+### Compose (LLM step)
+
+After staging, read `references/skillsh-compose.md` and load `ai-engineering-expert`
+(skill-authoring + writing). Merge/reorganize the staged sources into
+`out/<new-skill>/SKILL.md` + deduped `references/`/`scripts/` following skill
+frontmatter/description-budget conventions. Never edit `stage/` in place.
 
 ## Best Practices
 
@@ -567,5 +614,6 @@ Scraper-specific patterns and code examples:
 - `references/section-extraction.md` — Common patterns for splitting content
 - `references/cleanup-patterns.md` — Removing navigation, footers, duplicate content
 - `references/cli-scrape-standards.md` — CLI global-options + automation extraction (worktrunk `wt` canonical fix)
+- `references/skillsh-compose.md` — compose complementary skill.sh/GitHub sources into one skill (ai-engineering-expert guided)
 
 When adding a new scraper, check these references for similar document structures.

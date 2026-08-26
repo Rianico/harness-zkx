@@ -1,0 +1,10 @@
+{
+  "ignore": [
+    "skills/ratatui-guide/references/ratatui-raw/**",
+    "skills/md-to-html/assets/**",
+    "**/*.min.js",
+    ".lsz/**",
+    ".venv/**",
+    "tests/continuous-learning/fixtures/instincts/existing_instinct.yaml"
+  ]
+}

@@ -42,7 +42,7 @@ import sys
 from pathlib import Path
 
 # Import scrapers
-from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper, SiteScraper
+from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper, SiteScraper, SkillshScraper
 
 # Registry of available scrapers
 SCRAPERS = {
@@ -87,6 +87,13 @@ SCRAPERS = {
         "default_output": "site-output",
         "is_rust": False,
         "is_site": True,
+    },
+    "skills": {
+        "class": SkillshScraper,
+        "default_output": ".lsz/tmp/skill-compose",
+        "is_rust": False,
+        "is_site": False,
+        "is_skillsh": True,
     },
 }
 
@@ -202,6 +209,39 @@ For detailed help on a specific scraper:
                 action="store_true",
                 help="Clear cache and re-fetch from network",
             )
+        elif config.get("is_skillsh"):
+            # Skill.sh / GitHub skill fetcher (complementary skills for LLM composition)
+            sub = subparsers.add_parser(
+                name,
+                help="Fetch complementary agent skills from skill.sh/GitHub for LLM composition",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                description=config["class"].description,
+            )
+            sub.add_argument(
+                "sources",
+                nargs="+",
+                help="Skill.sh URL, owner/collection[/skill], or GitHub repo URL (one or many)",
+            )
+            sub.add_argument(
+                "--output-dir",
+                type=Path,
+                help=f"Staging root (default: {config['default_output']})",
+            )
+            sub.add_argument(
+                "--run",
+                help="Run slug for this composition (default: auto-derived)",
+            )
+            sub.add_argument(
+                "--method",
+                choices=["auto", "raw", "clone", "npx"],
+                default="auto",
+                help="Fetch method: raw (contents API), clone (git), npx (opt-in), auto",
+            )
+            sub.add_argument(
+                "--force",
+                action="store_true",
+                help="Clear cache and re-fetch from network",
+            )
         else:
             # Standard web scrapers
             sub = subparsers.add_parser(
@@ -263,6 +303,14 @@ def main() -> None:
             base_url=getattr(args, "base_url", None) or "",
             urls=getattr(args, "urls", None),
             output_dir=output_dir,
+            force=args.force,
+        )
+    elif config.get("is_skillsh"):
+        scraper = config["class"](
+            sources=args.sources,
+            output_dir=output_dir,
+            run=getattr(args, "run", None),
+            method=getattr(args, "method", "auto"),
             force=args.force,
         )
     elif config.get("requires_api_type"):

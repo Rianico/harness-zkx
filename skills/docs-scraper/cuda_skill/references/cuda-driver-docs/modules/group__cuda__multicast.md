@@ -2,15 +2,13 @@
 
 **Source:** group__CUDA__MULTICAST.html#group__CUDA__MULTICAST
 
-
 ### Functions
 
 CUresult cuMulticastAddDevice ( CUmemGenericAllocationHandle mcHandle, CUdevice dev )
 
-
 Associate a device to a multicast object.
 
-######  Parameters
+###### Parameters
 
 `mcHandle`
     Handle representing a multicast object.
@@ -27,10 +25,9 @@ Associates a device to a multicast object. The added device will be a part of th
 
 CUresult cuMulticastBindAddr ( CUmemGenericAllocationHandle mcHandle, size_t mcOffset, CUdeviceptr memptr, size_t size, unsigned long long flags )
 
-
 Bind a memory allocation represented by a virtual address to a multicast object.
 
-######  Parameters
+###### Parameters
 
 `mcHandle`
     Handle representing a multicast object.
@@ -51,16 +48,15 @@ CUDA_SUCCESS, CUDA_ERROR_INVALID_VALUE, CUDA_ERROR_INVALID_DEVICE, CUDA_ERROR_NO
 
 Binds a memory allocation specified by its mapped address `memptr` to a multicast object represented by `mcHandle`. The memory must have been allocated via cuMemCreate or cudaMallocAsync. The intended `size` of the bind, the offset in the multicast range `mcOffset` and `memptr` must be a multiple of the value returned by cuMulticastGetGranularity with the flag CU_MULTICAST_GRANULARITY_MINIMUM. For best performance however, `size`, `mcOffset` and `memptr` should be aligned to the value returned by cuMulticastGetGranularity with the flag CU_MULTICAST_GRANULARITY_RECOMMENDED.
 
-The `size` cannot be larger than the size of the allocated memory. Similarly the `size` \+ `mcOffset` cannot be larger than the total size of the multicast object. The memory allocation must have beeen created on one of the devices that was added to the multicast team via cuMulticastAddDevice. Externally shareable as well as imported multicast objects can be bound only to externally shareable memory. Note that this call will return CUDA_ERROR_OUT_OF_MEMORY if there are insufficient resources required to perform the bind. This call may also return CUDA_ERROR_SYSTEM_NOT_READY if the necessary system software is not initialized or running.
+The `size` cannot be larger than the size of the allocated memory. Similarly the `size` \+ `mcOffset` cannot be larger than the total size of the multicast object. The memory allocation must have been created on one of the devices that was added to the multicast team via cuMulticastAddDevice. Externally shareable as well as imported multicast objects can be bound only to externally shareable memory. Note that this call will return CUDA_ERROR_OUT_OF_MEMORY if there are insufficient resources required to perform the bind. This call may also return CUDA_ERROR_SYSTEM_NOT_READY if the necessary system software is not initialized or running.
 
 This call may return CUDA_ERROR_ILLEGAL_STATE if the system configuration is in an illegal state. In such cases, to continue using multicast, verify that the system configuration is in a valid state and all required driver daemons are running properly.
 
 CUresult cuMulticastBindAddr_v2 ( CUmemGenericAllocationHandle mcHandle, CUdevice dev, size_t mcOffset, CUdeviceptr memptr, size_t size, unsigned long long flags )
 
-
 Bind a memory allocation represented by a virtual address to a multicast object.
 
-######  Parameters
+###### Parameters
 
 `mcHandle`
     Handle representing a multicast object.
@@ -89,10 +85,9 @@ This call may return CUDA_ERROR_ILLEGAL_STATE if the system configuration is in 
 
 CUresult cuMulticastBindMem ( CUmemGenericAllocationHandle mcHandle, size_t mcOffset, CUmemGenericAllocationHandle memHandle, size_t memOffset, size_t size, unsigned long long flags )
 
-
 Bind a memory allocation represented by a handle to a multicast object.
 
-######  Parameters
+###### Parameters
 
 `mcHandle`
     Handle representing a multicast object.
@@ -115,16 +110,15 @@ CUDA_SUCCESS, CUDA_ERROR_INVALID_VALUE, CUDA_ERROR_INVALID_DEVICE, CUDA_ERROR_NO
 
 Binds a memory allocation specified by `memHandle` and created via cuMemCreate to a multicast object represented by `mcHandle` and created via cuMulticastCreate. The intended `size` of the bind, the offset in the multicast range `mcOffset` as well as the offset in the memory `memOffset` must be a multiple of the value returned by cuMulticastGetGranularity with the flag CU_MULTICAST_GRANULARITY_MINIMUM. For best performance however, `size`, `mcOffset` and `memOffset` should be aligned to the granularity of the memory allocation(see ::cuMemGetAllocationGranularity) or to the value returned by cuMulticastGetGranularity with the flag CU_MULTICAST_GRANULARITY_RECOMMENDED.
 
-The `size` \+ `memOffset` cannot be larger than the size of the allocated memory. Similarly the `size` \+ `mcOffset` cannot be larger than the size of the multicast object. The memory allocation must have beeen created on one of the devices that was added to the multicast team via cuMulticastAddDevice. Externally shareable as well as imported multicast objects can be bound only to externally shareable memory. Note that this call will return CUDA_ERROR_OUT_OF_MEMORY if there are insufficient resources required to perform the bind. This call may also return CUDA_ERROR_SYSTEM_NOT_READY if the necessary system software is not initialized or running.
+The `size` \+ `memOffset` cannot be larger than the size of the allocated memory. Similarly the `size` \+ `mcOffset` cannot be larger than the size of the multicast object. The memory allocation must have been created on one of the devices that was added to the multicast team via cuMulticastAddDevice. Externally shareable as well as imported multicast objects can be bound only to externally shareable memory. Note that this call will return CUDA_ERROR_OUT_OF_MEMORY if there are insufficient resources required to perform the bind. This call may also return CUDA_ERROR_SYSTEM_NOT_READY if the necessary system software is not initialized or running.
 
 This call may return CUDA_ERROR_ILLEGAL_STATE if the system configuration is in an illegal state. In such cases, to continue using multicast, verify that the system configuration is in a valid state and all required driver daemons are running properly.
 
 CUresult cuMulticastBindMem_v2 ( CUmemGenericAllocationHandle mcHandle, CUdevice dev, size_t mcOffset, CUmemGenericAllocationHandle memHandle, size_t memOffset, size_t size, unsigned long long flags )
 
-
 Bind a memory allocation represented by a handle to a multicast object.
 
-######  Parameters
+###### Parameters
 
 `mcHandle`
     Handle representing a multicast object.
@@ -149,16 +143,15 @@ CUDA_SUCCESS, CUDA_ERROR_INVALID_VALUE, CUDA_ERROR_INVALID_DEVICE, CUDA_ERROR_NO
 
 Binds a memory allocation specified by `memHandle` and created via cuMemCreate to a multicast object represented by `mcHandle` and created via cuMulticastCreate. The binding will be applicable for the device `dev`. The intended `size` of the bind, the offset in the multicast range `mcOffset` as well as the offset in the memory `memOffset` must be a multiple of the value returned by cuMulticastGetGranularity with the flag CU_MULTICAST_GRANULARITY_MINIMUM. For best performance however, `size`, `mcOffset` and `memOffset` should be aligned to the granularity of the memory allocation(see ::cuMemGetAllocationGranularity) or to the value returned by cuMulticastGetGranularity with the flag CU_MULTICAST_GRANULARITY_RECOMMENDED.
 
-The `size` \+ `memOffset` cannot be larger than the size of the allocated memory. Similarly the `size` \+ `mcOffset` cannot be larger than the size of the multicast object. The memory allocation must have beeen created on one of the devices that was added to the multicast team via cuMulticastAddDevice. For device memory, i.e., type CU_MEM_LOCATION_TYPE_DEVICE, the memory allocation must have been created on the device specified by `dev`. For host NUMA memory, i.e., type CU_MEM_LOCATION_TYPE_HOST_NUMA, the memory allocation must have been created on the CPU NUMA node closest to `dev`. That is, the value returned when querying CU_DEVICE_ATTRIBUTE_HOST_NUMA_ID for `dev`, must be the CPU NUMA node where the memory was allocated. In both cases, the device named by `dev` must have been added to the multicast team via cuMulticastAddDevice. Externally shareable as well as imported multicast objects can be bound only to externally shareable memory. Note that this call will return CUDA_ERROR_OUT_OF_MEMORY if there are insufficient resources required to perform the bind. This call may also return CUDA_ERROR_SYSTEM_NOT_READY if the necessary system software is not initialized or running.
+The `size` \+ `memOffset` cannot be larger than the size of the allocated memory. Similarly the `size` \+ `mcOffset` cannot be larger than the size of the multicast object. The memory allocation must have been created on one of the devices that was added to the multicast team via cuMulticastAddDevice. For device memory, i.e., type CU_MEM_LOCATION_TYPE_DEVICE, the memory allocation must have been created on the device specified by `dev`. For host NUMA memory, i.e., type CU_MEM_LOCATION_TYPE_HOST_NUMA, the memory allocation must have been created on the CPU NUMA node closest to `dev`. That is, the value returned when querying CU_DEVICE_ATTRIBUTE_HOST_NUMA_ID for `dev`, must be the CPU NUMA node where the memory was allocated. In both cases, the device named by `dev` must have been added to the multicast team via cuMulticastAddDevice. Externally shareable as well as imported multicast objects can be bound only to externally shareable memory. Note that this call will return CUDA_ERROR_OUT_OF_MEMORY if there are insufficient resources required to perform the bind. This call may also return CUDA_ERROR_SYSTEM_NOT_READY if the necessary system software is not initialized or running.
 
 This call may return CUDA_ERROR_ILLEGAL_STATE if the system configuration is in an illegal state. In such cases, to continue using multicast, verify that the system configuration is in a valid state and all required driver daemons are running properly.
 
-CUresult cuMulticastCreate ( CUmemGenericAllocationHandle* mcHandle, const CUmulticastObjectProp* prop )
-
+CUresult cuMulticastCreate ( CUmemGenericAllocationHandle*mcHandle, const CUmulticastObjectProp* prop )
 
 Create a generic allocation handle representing a multicast object described by the given properties.
 
-######  Parameters
+###### Parameters
 
 `mcHandle`
     Value of handle returned.
@@ -175,12 +168,11 @@ This creates a multicast object as described by `prop`. The number of participat
 
 After all participating devices have been added, multicast objects can also be mapped to a device's virtual address space using the virtual memory management APIs (see cuMemMap and cuMemSetAccess). Multicast objects can also be shared with other processes by requesting a shareable handle via cuMemExportToShareableHandle. Note that the desired types of shareable handles must be specified in the bitmask CUmulticastObjectProp::handleTypes. Multicast objects can be released using the virtual memory management API cuMemRelease.
 
-CUresult cuMulticastGetGranularity ( size_t* granularity, const CUmulticastObjectProp* prop, CUmulticastGranularity_flags option )
-
+CUresult cuMulticastGetGranularity ( size_t*granularity, const CUmulticastObjectProp* prop, CUmulticastGranularity_flags option )
 
 Calculates either the minimal or recommended granularity for multicast object.
 
-######  Parameters
+###### Parameters
 
 `granularity`
     Returned granularity.
@@ -199,10 +191,9 @@ Calculates either the minimal or recommended granularity for a given set of mult
 
 CUresult cuMulticastUnbind ( CUmemGenericAllocationHandle mcHandle, CUdevice dev, size_t mcOffset, size_t size )
 
-
 Unbind any memory allocations bound to a multicast object at a given offset and upto a given size.
 
-######  Parameters
+###### Parameters
 
 `mcHandle`
     Handle representing a multicast object.

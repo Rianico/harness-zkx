@@ -2,15 +2,13 @@
 
 **Source:** group__CUDART__EXECUTION.html#group__CUDART__EXECUTION
 
-
 ### Functions
 
-__host__  __device__ cudaError_t cudaFuncGetAttributes ( cudaFuncAttributes* attr, const void* func )
-
+**host**  **device** cudaError_t cudaFuncGetAttributes ( cudaFuncAttributes*attr, const void* func )
 
 Find out attributes for a given function.
 
-######  Parameters
+###### Parameters
 
 `attr`
     \- Return pointer to function's attributes
@@ -27,25 +25,23 @@ This function obtains the attributes of a function specified via `func`. `func` 
 
 Note that some function attributes such as maxThreadsPerBlock may vary based on the device that is currently being used.
 
-  *   * Use of a string naming a function as the `func` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
+* * Use of a string naming a function as the `func` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
 cudaFuncSetCacheConfig ( C API), cudaFuncGetAttributes ( C++ API), cudaLaunchKernel ( C API), cuFuncGetAttribute
 
-__host__ cudaError_t cudaFuncGetName ( const char** name, const void* func )
-
+**host** cudaError_t cudaFuncGetName ( const char** name, const void* func )
 
 Returns the function name for a device entry function pointer.
 
-######  Parameters
+###### Parameters
 
 `name`
     \- The returned name of the function
@@ -60,19 +56,17 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorInvalidDeviceFunction
 
 Returns in `**name` the function name associated with the symbol `func` . The function name is returned as a null-terminated string. This API may return a mangled name if the function is not declared as having C linkage. If `**name` is NULL, cudaErrorInvalidValue is returned. If `func` is not a device entry function, then it is assumed to be a cudaKernel_t and used as is.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 cudaFuncGetName (C++ API)
 
-__host__ cudaError_t cudaFuncGetParamInfo ( const void* func, size_t paramIndex, size_t* paramOffset, size_t* paramSize )
-
+**host** cudaError_t cudaFuncGetParamInfo ( const void*func, size_t paramIndex, size_t* paramOffset, size_t* paramSize )
 
 Returns the offset and size of a kernel parameter in the device-side parameter layout.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- The function to query
@@ -91,17 +85,15 @@ CUDA_SUCCESS, CUDA_ERROR_INVALID_VALUE
 
 Queries the kernel parameter at `paramIndex` in `func's` list of parameters and returns parameter information via `paramOffset` and `paramSize`. `paramOffset` returns the offset of the parameter in the device-side parameter layout. `paramSize` returns the size in bytes of the parameter. This information can be used to update kernel node parameters from the device via cudaGraphKernelNodeSetParam() and cudaGraphKernelNodeUpdatesApply(). `paramIndex` must be less than the number of parameters that `func` takes.
 
-  *   * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
-
-__host__ cudaError_t cudaFuncSetAttribute ( const void* func, cudaFuncAttribute attr, int  value )
-
+**host** cudaError_t cudaFuncSetAttribute ( const void* func, cudaFuncAttribute attr, int  value )
 
 Set attributes for a given function.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- Function to get attributes of
@@ -120,34 +112,31 @@ This function sets the attributes of a function specified via `func`. The parame
 
 Valid values for `attr` are:
 
-  * cudaFuncAttributeMaxDynamicSharedMemorySize \- The requested maximum size in bytes of dynamically-allocated shared memory. The sum of this value and the function attribute sharedSizeBytes cannot exceed the device attribute cudaDevAttrMaxSharedMemoryPerBlockOptin. The maximal size of requestable dynamic shared memory may differ by GPU architecture.
+* cudaFuncAttributeMaxDynamicSharedMemorySize \- The requested maximum size in bytes of dynamically-allocated shared memory. The sum of this value and the function attribute sharedSizeBytes cannot exceed the device attribute cudaDevAttrMaxSharedMemoryPerBlockOptin. The maximal size of requestable dynamic shared memory may differ by GPU architecture.
 
-  * cudaFuncAttributePreferredSharedMemoryCarveout \- On devices where the L1 cache and shared memory use the same hardware resources, this sets the shared memory carveout preference, in percent of the total shared memory. See cudaDevAttrMaxSharedMemoryPerMultiprocessor. This is only a hint, and the driver can choose a different ratio if required to execute the function.
+* cudaFuncAttributePreferredSharedMemoryCarveout \- On devices where the L1 cache and shared memory use the same hardware resources, this sets the shared memory carveout preference, in percent of the total shared memory. See cudaDevAttrMaxSharedMemoryPerMultiprocessor. This is only a hint, and the driver can choose a different ratio if required to execute the function.
 
-  * cudaFuncAttributeRequiredClusterWidth: The required cluster width in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
+* cudaFuncAttributeRequiredClusterWidth: The required cluster width in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
 
-  * cudaFuncAttributeRequiredClusterHeight: The required cluster height in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
+* cudaFuncAttributeRequiredClusterHeight: The required cluster height in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
 
-  * cudaFuncAttributeRequiredClusterDepth: The required cluster depth in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
+* cudaFuncAttributeRequiredClusterDepth: The required cluster depth in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
 
-  * cudaFuncAttributeNonPortableClusterSizeAllowed: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed.
+* cudaFuncAttributeNonPortableClusterSizeAllowed: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed.
 
-  * cudaFuncAttributeClusterSchedulingPolicyPreference: The block scheduling policy of a function. The value type is cudaClusterSchedulingPolicy.
+* cudaFuncAttributeClusterSchedulingPolicyPreference: The block scheduling policy of a function. The value type is cudaClusterSchedulingPolicy.
 
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
-
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 cudaLaunchKernel (C++ API), cudaFuncSetCacheConfig ( C++ API), cudaFuncGetAttributes ( C API)
 
-__host__ cudaError_t cudaFuncSetCacheConfig ( const void* func, cudaFuncCache cacheConfig )
-
+**host** cudaError_t cudaFuncSetCacheConfig ( const void* func, cudaFuncCache cacheConfig )
 
 Sets the preferred cache configuration for a device function.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- Device function symbol
@@ -170,32 +159,29 @@ Launching a kernel with a different preference than the most recent preference s
 
 The supported cache configurations are:
 
-  * cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
+* cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
 
-  * cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
+* cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
 
-  * cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
+* cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
 
-  * cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
+* cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 
+* * Use of a string naming a function as the `func` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
 
-  *   * Use of a string naming a function as the `func` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
-  * This API does not accept a cudaKernel_t casted as void*. If cache config modification is required for a cudaKernel_t (or a __global__ function), it can be replaced with a call to cudaFuncSetAttributes with the attribute cudaFuncAttributePreferredSharedMemoryCarveout to specify a more granular L1 cache and shared memory split configuration.
-
+* This API does not accept a cudaKernel_t casted as void*. If cache config modification is required for a cudaKernel_t (or a **global** function), it can be replaced with a call to cudaFuncSetAttributes with the attribute cudaFuncAttributePreferredSharedMemoryCarveout to specify a more granular L1 cache and shared memory split configuration.
 
 **See also:**
 
 cudaFuncSetCacheConfig ( C++ API), cudaFuncGetAttributes ( C API), cudaLaunchKernel ( C API), cuFuncSetCacheConfig
 
-__device__  void* cudaGetParameterBuffer ( size_t alignment, size_t size )
-
+**device**  void* cudaGetParameterBuffer ( size_t alignment, size_t size )
 
 Obtains a parameter buffer.
 
-######  Parameters
+###### Parameters
 
 `alignment`
     \- Specifies alignment requirement of the parameter buffer
@@ -216,8 +202,7 @@ This is a low level API and can only be accessed from Parallel Thread Execution 
 
 cudaLaunchDevice
 
-__device__  void cudaGridDependencySynchronize ( void ) [inline]
-
+**device**  void cudaGridDependencySynchronize ( void ) [inline]
 
 Programmatic grid dependency synchronization.
 
@@ -225,19 +210,18 @@ Programmatic grid dependency synchronization.
 
 This device function will block the thread until all direct grid dependencies have completed. This API is intended to use in conjuncture with programmatic / launch event / dependency. See cudaLaunchAttributeID::cudaLaunchAttributeProgrammaticStreamSerialization and cudaLaunchAttributeID::cudaLaunchAttributeProgrammaticEvent for more information.
 
-__host__ cudaError_t cudaLaunchCooperativeKernel ( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream )
-
+**host** cudaError_t cudaLaunchCooperativeKernel ( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream )
 
 Launches a device function where thread blocks can cooperate and synchronize as they execute.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- Device function symbol
 `gridDim`
-    \- Grid dimentions
+    \- Grid dimensions
 `blockDim`
-    \- Block dimentions
+    \- Block dimensions
 `args`
     \- Arguments
 `sharedMem`
@@ -267,23 +251,21 @@ For templated functions, pass the function symbol as follows: func_name<template
 
 `stream` specifies a stream the invocation is associated to.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
 cudaLaunchCooperativeKernel (C++ API), cuLaunchCooperativeKernel
 
-__device__ cudaError_t cudaLaunchDevice ( void* func, void* parameterBuffer, dim3 gridDimension, dim3 blockDimension, unsigned int  sharedMemSize, cudaStream_t stream )
-
+**device** cudaError_t cudaLaunchDevice ( void*func, void* parameterBuffer, dim3 gridDimension, dim3 blockDimension, unsigned int  sharedMemSize, cudaStream_t stream )
 
 Launches a specified kernel.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- Pointer to the kernel to be launched
@@ -314,12 +296,11 @@ Please refer to Execution Configuration and Parameter Buffer Layout from the CUD
 
 cudaGetParameterBuffer
 
-__host__ cudaError_t cudaLaunchHostFunc ( cudaStream_t stream, cudaHostFn_t fn, void* userData )
-
+**host** cudaError_t cudaLaunchHostFunc ( cudaStream_t stream, cudaHostFn_t fn, void* userData )
 
 Enqueues a host function call in a stream.
 
-######  Parameters
+###### Parameters
 
 `stream`
 
@@ -340,37 +321,34 @@ The host function must not make any CUDA API calls. Attempting to use a CUDA API
 
 For the purposes of Unified Memory, execution makes a number of guarantees:
 
-  * The stream is considered idle for the duration of the function's execution. Thus, for example, the function may always use memory attached to the stream it was enqueued in.
+* The stream is considered idle for the duration of the function's execution. Thus, for example, the function may always use memory attached to the stream it was enqueued in.
 
-  * The start of execution of the function has the same effect as synchronizing an event recorded in the same stream immediately prior to the function. It thus synchronizes streams which have been "joined" prior to the function.
+* The start of execution of the function has the same effect as synchronizing an event recorded in the same stream immediately prior to the function. It thus synchronizes streams which have been "joined" prior to the function.
 
-  * Adding device work to any stream does not have the effect of making the stream active until all preceding host functions and stream callbacks have executed. Thus, for example, a function might use global attached memory even if work has been added to another stream, if the work has been ordered behind the function call with an event.
+* Adding device work to any stream does not have the effect of making the stream active until all preceding host functions and stream callbacks have executed. Thus, for example, a function might use global attached memory even if work has been added to another stream, if the work has been ordered behind the function call with an event.
 
-  * Completion of the function does not cause a stream to become active except as described above. The stream will remain idle if no device work follows the function, and will remain idle across consecutive host functions or stream callbacks without device work in between. Thus, for example, stream synchronization can be done by signaling from a host function at the end of the stream.
+* Completion of the function does not cause a stream to become active except as described above. The stream will remain idle if no device work follows the function, and will remain idle across consecutive host functions or stream callbacks without device work in between. Thus, for example, stream synchronization can be done by signaling from a host function at the end of the stream.
 
+Note that, in contrast to cuStreamAddCallback, the function will not be called in the event of an error in the CUDA context.
 
-Note that, in constrast to cuStreamAddCallback, the function will not be called in the event of an error in the CUDA context.
-
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 **See also:**
 
 cudaStreamCreate, cudaStreamQuery, cudaStreamSynchronize, cudaStreamWaitEvent, cudaStreamDestroy, cudaMallocManaged, cudaStreamAttachMemAsync, cudaStreamAddCallback, cuLaunchHostFunc
 
-__host__ cudaError_t cudaLaunchKernel ( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream )
-
+**host** cudaError_t cudaLaunchKernel ( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream )
 
 Launches a device function.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- Device function symbol
 `gridDim`
-    \- Grid dimentions
+    \- Grid dimensions
 `blockDim`
-    \- Block dimentions
+    \- Block dimensions
 `args`
     \- Arguments
 `sharedMem`
@@ -394,23 +372,21 @@ For templated functions, pass the function symbol as follows: func_name<template
 
 `stream` specifies a stream the invocation is associated to.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
 cudaLaunchKernel (C++ API), cuLaunchKernel
 
-__host__ cudaError_t cudaLaunchKernelExC ( const cudaLaunchConfig_t* config, const void* func, void** args )
-
+**host** cudaError_t cudaLaunchKernelExC ( const cudaLaunchConfig_t*config, const void* func, void** args )
 
 Launches a CUDA function with launch-time configuration.
 
-######  Parameters
+###### Parameters
 
 `config`
     \- Launch configuration
@@ -441,19 +417,17 @@ If the kernel has N parameters the `args` should point to array of N pointers. E
 
 N.B. This function is so named to avoid unintentionally invoking the templated version, `cudaLaunchKernelEx`, for kernels taking a single void** or void* parameter.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
 cudaLaunchKernelEx(const cudaLaunchConfig_t *config, void (*kernel)(ExpTypes...), ActTypes &&... args) "cudaLaunchKernelEx (C++ API)", cuLaunchKernelEx
 
-__device__  void cudaTriggerProgrammaticLaunchCompletion ( void ) [inline]
-
+**device**  void cudaTriggerProgrammaticLaunchCompletion ( void ) [inline]
 
 Programmatic dependency trigger.
 
@@ -464,5 +438,3 @@ This device function ensures the programmatic launch completion edges / events a
 * * *
 
 !
-
-
