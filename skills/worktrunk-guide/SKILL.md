@@ -101,7 +101,7 @@ wt merge --no-squash    # preserve history
 wt merge --no-remove    # keep worktree after merge
 ```
 
-Pipeline details and flags: [basics](references/basics.md). Step-level overrides (`wt step squash`/`rebase`): [operations](references/operations.md).
+Pipeline details and flags (including `-C <path>` / `--yes` / `--verbose`): [basics](references/basics.md). Step-level overrides (`wt step squash`/`rebase`): [operations](references/operations.md).
 
 **Done when:** target branch contains the squashed commit and worktree is removed (unless `--no-remove`).
 
@@ -152,14 +152,16 @@ server = "lsof -ti :{{ branch | hash_port }} -sTCP:LISTEN | xargs kill 2>/dev/nu
 
 ### Core commands
 
-| Command              | Shape                                    | Key flags                                                    |
-| -------------------- | ---------------------------------------- | ------------------------------------------------------------ |
-| `wt switch [BRANCH]` | Switch or create worktree                | `--create`, `--base <BASE>`, `--execute <CMD>`, `--no-cd`    |
-| `wt list`            | List worktrees + status                  | `--full`, `--branches`, `--format=json`                      |
-| `wt remove [BRANCH]` | Remove worktree; delete branch if merged | `--force` (untracked), `-D` (unmerged), `--no-delete-branch` |
-| `wt merge [TARGET]`  | Merge current → target, then cleanup     | `--no-squash`, `--no-remove`, `--no-ff`                      |
+| Command              | Shape                                    | Key flags                                                                                                                |
+| -------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `wt switch [BRANCH]` | Switch or create worktree                | `--create`, `--base <BASE>`, `--execute <CMD>`, `--no-cd`                                                                |
+| `wt list`            | List worktrees + status                  | `--full`, `--branches`, `--format=json`                                                                                  |
+| `wt remove [BRANCH]` | Remove worktree; delete branch if merged | `--force` (untracked), `-D` (unmerged), `--no-delete-branch`                                                             |
+| `wt merge [TARGET]`  | Merge current → target, then cleanup     | `--no-squash`, `--no-remove`, `--no-ff`, `--stage`, `--no-commit`, `--no-rebase`, `--format`, plus global `-C`/`-y`/`-v` |
 
-Full flag tables: [basics](references/basics.md).
+Full flag tables (including global `-C`/`--config-set`/`--yes`): [basics](references/basics.md).
+
+> Global flags `-C <path>` / `--config-set <toml>` / `-y` apply to every `wt` command — use `-C <worktree-path>` in scripts instead of `cd`.
 
 ## Reference map — deeper detail lives in files
 
