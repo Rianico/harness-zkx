@@ -152,68 +152,85 @@ wt switch --create feat/<slug>--store --base feat/<slug> --no-cd  # module B / t
 > # dispatcher: COPY=$(uv run scripts/worktree.py make-copy feat/<slug>--auth feat/<slug>)
 > ```
 
-#### Dispatch table — one worktree per isolated module/ticket (feat fans out to modules)
+#### Dispatch table — one copy per ticket (feat fans out to modules)
 
-| Child suffix                | When                                         | Subagent template                                                           |
-| --------------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
-| `--auth`, `--store`, `--ui` | feat dispatches parallel modules (your case) | `implement` worker scoped to that module's seams (may run `tdd` internally) |
-| `--tdd`                     | test-first phase (legacy)                    | `tdd` loop: RED → GREEN → REFACTOR                                          |
-| `--refactor`                | second pass / cleanup                        | `refactor-expert` with graded surfaces                                      |
-| `--verify`                  | pre-merge gate                               | runs gate in that worktree only                                             |
+| Copy suffix                 | When                                         | Subagent prompt (plain words)                                              |
+| --------------------------- | -------------------------------------------- | -------------------------------------------------------------------------- |
+| `--auth`, `--store`, `--ui` | feat dispatches parallel modules (your case) | `implement` — fix only that copy's files (may test inside copy)            |
+| `--tdd`                     | test-first phase (legacy)                    | `tdd` loop: check → fix → test → check                                      |
+| `--refactor`                | second pass / cleanup                        | `refactor` — fix shape, keep tests green                                    |
+| `--verify`                  | pre-merge gate                               | `check` — run gate in that copy only                                        |
+| `conflict-fixer`            | merge hit conflict (Phase 3)                 | `fix` — inherit_context: true, plain words: branch, copy, merge, conflict, fix, test, check, file, folder (see Phase 3) |
 
 #### Subagent template (copy per dispatch)
 
 ```text
 Agent (worker):
+  inherit_context: false  # normal worker starts fresh
+  cwd: <absolute-copy-path>   # folder for this copy
   description: "implement <ticket-slug> — <phase>"
   prompt: |
-    You are in worktree at <absolute-path> on branch <branch> — only edit there.
+    You are in copy at <absolute-copy-path> on branch <branch> — only fix there.
     Ticket: <absolute-path-to-spec> (or gh issue <N> body)
-    Scope: <files/seams>
-    Return format per handoff:
+    Scope: files/folder for this copy
+    Steps: check files, fix, test, check
+    Return per handoff:
     ## Summary
     ## Artifacts (absolute paths)
     ## Route (COMPLETED|BLOCKED)
     ## Issues
 ```
 
+Conflict-fixer variant uses `inherit_context: true` — it forks the main session intent +
+ticket + which files hit conflict. See Phase 3 template.
+
 **Done when** each worktree subagent returns `COMPLETED` and its `git status --porcelain` in that worktree is inspectable. Main never writes inside child worktrees.
 
 For BDD scenarios driving this phase see [bdd-scenarios.md](references/bdd-scenarios.md).
 
-### Phase 3 — Merge back via `wt merge` (fan-in)
+### Phase 3 — Merge back via script (fan-in)
 
-`wt merge <TARGET>` = **merge the current branch INTO the target, then remove the current
-worktree** (like GitHub's merge button — confirmed in worktrunk-guide `004-merge.md`). So
-fan-in runs **from the child worktree**, naming the parent/map as target. The parent is never
-the source; running `wt merge <child>` from the parent worktree deletes the parent.
+`wt merge <TARGET>` merges the **current branch into target** then removes the current
+folder (like GitHub's merge button — see `worktrunk-guide` 004-merge.md). Fan-in names the
+parent/map as target. Never run `wt merge <child>` from the parent — parent is removed.
+
+Use the thin router — base runs one command, script detects. Step is done when the script exits 0.
 
 ```bash
-# Children were created with --no-cd (cwd stayed on parent) — enter child first
-wt switch <child>                 # e.g. wt switch feat/<slug>--tdd
-wt merge map/<slug>               # from child: merge child → map, child worktree removed
-# or straight to default:
-wt merge                          # current → default branch
-wt merge <parent> --no-remove     # keep child worktree after merging (debug)
-wt list --format=json | jq .
+# Thin router — absolute path + --stage tracked keeps .lsz/.pi out, avoids cd bug
+uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>
+# or via dispatcher
+uv run $SKILL_DIR/scripts/worktree.py merge-copy <copy-path> <target>
+# router does: wt merge -C <absolute-copy-path> --stage tracked <target> --yes
+# then detects: rebase incomplete / Unmerged paths → conflict (exit 2), else gate fail (exit 1)
+# check
+wt list --format=json | jq '.[] | {branch, path}'
+git log --oneline <target> ^origin/main | head
 ```
 
-> [!tip] Shim — merges from copy, fixes DU/UU/AA inside copy, runs gate via _lib.read_gate
->
-> ```bash
-> uv run scripts/merge_copy.py "$COPY" map/<slug>
-> # dispatcher: uv run scripts/worktree.py merge-copy "$COPY" map/<slug>
-> # wt merge <target> --yes is still final gate; Python delegates and fixes conflicts inside copy only
-> ```
+- Router only: `wt merge -C <absolute-copy-path> --stage tracked <target> --yes` — no hunk fixing, no `rebase --continue` here. `GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C <copy-path> rebase --continue` lives in fixer (see below), noted in script comments only.
+- `--stage tracked` stages only tracked files (like `git add -u`) — keeps `.lsz/`, `.pi/`, untracked files out of the merge commit.
+- `wt merge` runs the blocking `pre-merge` gate from `.config/wt.toml`.
+- Keep `--no-remove` only for debug.
 
-- `wt merge` runs blocking `pre-merge` gate (project's `.config/wt.toml`).
-- Prefer `--squash` for heterogeneous children; `--no-squash` only when preserving bisectability matters.
-- Never run `wt merge <child>` from the parent worktree — the parent becomes the merge source and is removed.
-- Children created with `--no-cd` left cwd on parent — `wt switch <child>` first, then `wt merge <parent>` from child; without shell integration use `git -C <child-path> wt merge <parent>`.
+**Done when** `wt list` shows the copy gone, `git log --oneline <target> ^origin/main`
+has the copy's change, branch no longer resolves.
 
-**Done when** `wt list` shows the child gone, `git log --oneline map/<slug> ^origin/main` contains the child's diff squashed, and the child's branch no longer resolves locally.
+**If router reports conflict (`rebase incomplete` / `Unmerged paths` / exit 2) → dispatch fixer inside the copy.** Do not edit the parent folder. Base dispatches a fixer that triggers `resolving-merge-conflicts`:
 
-If gate fails → Phase 2 iteration (subagent fixes in child worktree, re-dispatch).
+```text
+Agent (conflict-fixer):
+  inherit_context: true   # forks base intent + ticket + which files hit conflict
+  cwd: <copy-path>        # same absolute folder that failed
+  description: "fix merge conflict <copy-branch> → <target>"
+  prompt: |
+    Resolve merge conflicts in copy at <path>
+    You are in copy at <copy-path> on branch <copy-branch> — only fix there.
+    Target branch: <target> — merge hit conflict.
+    Use plain words: branch, copy, merge, conflict, fix, test, check, file, folder.
+```
+
+Fixer invokes `resolving-merge-conflicts` (trigger phrase above) and follows that skill inside the copy: check git status, fix each file, add, test, check, then `GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C <copy-path> rebase --continue` loop and retry `uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>` until exit 0. Main waits, checks router exits 0, then moves on. If router reported gate (no conflict markers, exit 1) → same fixer shape but fix test/typecheck, no rebase step.
 
 ### Phase 4 — Verify parent gate (heavy)
 
