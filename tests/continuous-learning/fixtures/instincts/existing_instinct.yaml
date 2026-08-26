@@ -16,6 +16,9 @@ evidence_count: 3
 Use Read tool to verify file exists and understand context before editing.
 
 ## Evidence
+# pi-lens-ignore: YAML, 0
 - Session session-abc-001: Edit failed (file not found), then Read succeeded
+# pi-lens-ignore: YAML
 - Session session-def-002: Similar pattern observed
+# pi-lens-ignore: YAML, 0
 - Session session-ghi-003: Repeated workflow detected

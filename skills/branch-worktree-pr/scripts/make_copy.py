@@ -61,8 +61,8 @@ def main(argv: list[str] | None = None) -> None:
         try:
             for w in wt_list():
                 print_err(f"  {w.branch} @ {w.path}")
-        except Exception:
-            pass
+        except Exception as _exc:
+            print_err(f"wt list debug failed: {_exc}")
         sys.exit(1)
 
     path_obj: Path = Path(path_out)

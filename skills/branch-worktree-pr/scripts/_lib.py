@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -177,12 +178,12 @@ def wt_list(cwd: Path | None = None) -> list[Worktree]:
                     worktrees.append(Worktree(branch=branch, path=path, is_current=is_current))
                 if worktrees:
                     return worktrees
-    except FileNotFoundError:
-        pass
-    except json.JSONDecodeError:
-        pass
-    except Exception:
-        pass
+    except FileNotFoundError as _exc:
+        print_err(f"wt not found, falling back to git: {_exc}")
+    except json.JSONDecodeError as _exc:
+        print_err(f"wt list JSON decode failed: {_exc}")
+    except Exception as _exc:
+        print_err(f"wt list unexpected error: {_exc}")
 
     # Fallback to git worktree list --porcelain
     result = run(["git", "worktree", "list", "--porcelain"], cwd=base)
@@ -283,16 +284,31 @@ def ensure_clean_worktree(
 
 
 def run_gate(gate: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    """Execute trusted gate string from wt.toml via shell.
+    """Execute trusted gate string from wt.toml without shell.
 
-    The gate is trusted (single writer .config/wt.toml). Caller must have
-    obtained it via read_gate().
+    The gate is trusted (single writer .config/wt.toml). Split on '&&'
+    and run each segment sequentially with shell=False (shlex.split),
+    stopping on first failure to preserve '&&' semantics.
     """
-    # trusted gate — single writer .config/wt.toml; shell needed for "&&" chains
-    # bandit: ignore[S602] -- gate is not user input, validated via read_gate()
-    return subprocess.run(  # noqa: S602
-        gate, shell=True, capture_output=True, text=True, cwd=cwd
-    )
+    parts: list[str] = [p.strip() for p in gate.split("&&")]
+    last: subprocess.CompletedProcess[str] | None = None
+    for part in parts:
+        if not part:
+            continue
+        try:
+            args: list[str] = shlex.split(part)
+        except ValueError as exc:
+            return subprocess.CompletedProcess(
+                args=[], returncode=1, stdout="", stderr=f"gate parse error: {exc}"
+            )
+        if not args:
+            continue
+        last = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+        if last.returncode != 0:
+            return last
+    if last is None:
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    return last
 
 
 def has_conflict_markers(file_path: Path) -> bool:

@@ -1,5 +1,8 @@
 name: Hook smoke tests
 
+permissions:
+  contents: read
+
 on:
   push:
     paths:
@@ -17,18 +20,22 @@ on:
 jobs:
   hook-smoke-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
 
       - name: Cache uv environment
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cache/uv
@@ -36,7 +43,7 @@ jobs:
           key: hook-smoke-${{ runner.os }}-${{ hashFiles('install-hooks.py') }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
 
       - name: Run hook smoke tests
         run: uv run python -m unittest discover -s tests -p 'test_hook_install_smoke.py'
