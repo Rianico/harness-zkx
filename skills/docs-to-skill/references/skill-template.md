@@ -35,11 +35,12 @@ Layer 2: Raw Docs (complete API surface, self-contained)
 name: <skill-name>
 description: |
   <what the skill does>. TRIGGER when: <trigger scenarios>
-argument-hint: "[topic]"
+argument-hint: '[topic]'
 ---
 ```
 
 **Requirements:**
+
 - `name`: Lowercase, alphanumeric + hyphens, matches directory name
 - `description`: Third-person, includes WHAT and WHEN, <=1024 chars
 - `argument-hint`: Optional, provides autocomplete hint
@@ -51,7 +52,7 @@ argument-hint: "[topic]"
 name: <skill-name>
 description: |
   <what>. TRIGGER when: <triggers>
-argument-hint: "[topic]"
+argument-hint: '[topic]'
 ---
 
 # <Skill Name>
@@ -86,16 +87,16 @@ argument-hint: "[topic]"
 
 ## API Reference Table
 
-| Function/Type | Description | Example |
-|---------------|-------------|---------|
-| `<api>` | <description> | `<example>` |
+| Function/Type | Description   | Example     |
+| ------------- | ------------- | ----------- |
+| `<api>`       | <description> | `<example>` |
 
 ## References
 
 For detailed patterns and complete API documentation, read:
 
-| Module | File | Source | Topics |
-|--------|------|--------|--------|
+| Module    | File                                 | Source            | Topics   |
+| --------- | ------------------------------------ | ----------------- | -------- |
 | <module1> | `$SKILL_DIR/references/<module1>.md` | `<raw-docs-path>` | <topics> |
 | <module2> | `$SKILL_DIR/references/<module2>.md` | `<raw-docs-path>` | <topics> |
 
@@ -104,6 +105,7 @@ For edge cases and complete API surface, read `$SKILL_DIR/references/<skill-name
 ## When to Use Raw Docs
 
 Read `$SKILL_DIR/references/<skill-name>-raw/` when:
+
 - Curated references lack the exact flag, option, or behavior you need
 - You need the complete API surface for an uncommon command variant
 - The curated summary conflicts with your observation — raw docs are authoritative
@@ -150,17 +152,17 @@ Each `references/<module>.md` follows the extraction rules (see `extraction-rule
 
 Choose the appropriate schema from `extraction-rules.md` based on document type:
 
-| Doc Type | Schema |
-|----------|--------|
-| CLI tools, libraries | Programming & CLI Reference |
-| System architecture | Technical Documentation |
-| Methodology/process | Productivity & Workflow Optimization |
-| Research/analysis | Research & Literature Review |
-| Principles/wisdom | Life Principles & Philosophical Guidelines |
+| Doc Type             | Schema                                     |
+| -------------------- | ------------------------------------------ |
+| CLI tools, libraries | Programming & CLI Reference                |
+| System architecture  | Technical Documentation                    |
+| Methodology/process  | Productivity & Workflow Optimization       |
+| Research/analysis    | Research & Literature Review               |
+| Principles/wisdom    | Life Principles & Philosophical Guidelines |
 
 ### Example: CLI Reference Schema
 
-```markdown
+````markdown
 # Worktrunk Guide — Commands
 
 - **Version:** v0.49.0
@@ -171,39 +173,48 @@ Choose the appropriate schema from `extraction-rules.md` based on document type:
 - **Brief:** Core commands for worktree switching, listing, merging, and cleanup.
 
 ## Command: `wt switch`
+
 - **Library/Package:** worktrunk
 - **Language/Shell:** Shell
 
 ### Syntax
+
 ```bash
 wt switch [--create] [--base <ref>] <branch>
 ```
+````
 
 ### Description
+
 - Switches active worktree by branch name
 - Creates worktree if `--create` flag provided
 
 ### Parameters & Flags
+
 - `--create`: Create worktree if it doesn't exist (Optional)
 - `--base <ref>`: Base ref for new branch (Optional, default: default branch)
 - `<branch>`: Target branch name or shortcut (Required)
 
 ### Practical Examples
+
 1. **Basic Use:** `wt switch feature-auth`
 2. **Create and switch:** `wt switch --create fix-typo`
 3. **Undo:** `wt switch -` (return to previous)
 
 ### Common Pitfalls
+
 - [switch.md]: Uncommitted changes block switch; commit or stash first
 
 ### Related Commands
+
 - [[wt list]], [[wt remove]]
+
 ```
 
 ## Template Variables
 
 | Variable | Source | Description |
-|----------|--------|-------------|
+| --- | --- | --- |
 | `<skill-name>` | User input | Skill name |
 | `<version>` | User input or docs | Library version |
 | `<date>` | Generation time | Last updated date |
@@ -216,3 +227,4 @@ wt switch [--create] [--base <ref>] <branch>
 - SKILL.md body: <=500 lines
 - Reference files: No line limit. Quality is governed by extraction rules, not size.
 - API Reference Table: <=20 rows per table
+```
