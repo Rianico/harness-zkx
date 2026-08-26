@@ -44,12 +44,15 @@ Rules:
 - Ticket branch base = `map/<slug>` when map exists, else `main`.
 
 > [!tip] Target stays in place — `git switch`, children are `wt` worktrees
-> Orchestrator (the coding agent session) is bound to its current cwd (e.g. `/project` on `main`). `wt switch --create <target>` would create a *sibling* dir `../<repo>-<target>` — the session would have to leave its cwd, beyond its scope. Instead **create the target in place** and keep children isolated:
+> Orchestrator (the coding agent session) is bound to its current cwd (e.g. `/project` on `main`). `wt switch --create <target>` would create a _sibling_ dir `../<repo>-<target>` — the session would have to leave its cwd, beyond its scope. Instead **create the target in place** and keep children isolated:
+>
 > ```bash
 > git switch -c feat/<slug> origin/main   # or map/<slug> — stays in same dir, branch changes in place
 > wt switch --create feat/<slug>--moduleA --base feat/<slug> --no-cd  # sibling worktree, cwd stays on target
 > ```
-> `wt switch --create` changing cwd is *desired* only when you intend to abandon the current session; for orchestrated `ticket → branch` inside the same session, `git switch -c` is the correct first switch. Children still get `wt` hooks (`copy-ignored`/`hash_port`) and isolated dirs. Restore with `git switch main` or `wt switch main` (`^`).
+>
+> `wt switch --create` changing cwd is _desired_ only when you intend to abandon the current session; for orchestrated `ticket → branch` inside the same session, `git switch -c` is the correct first switch. Children still get `wt` hooks (`copy-ignored`/`hash_port`) and isolated dirs. Restore with `git switch main` or `wt switch main` (`^`).
+
 ## Worktrunk config — `==environment as source of truth==`
 
 Do not restate hook mechanics in docs beyond a pointer — `.config/wt.toml` is the truth.
@@ -76,6 +79,13 @@ fd --glob "*.md" .scratch --exec cat {} \;
 gh issue view <map-N> --json body --jq .body
 ```
 
+> [!tip] Shim — typed Python (via _lib) — delegates to gh
+>
+> ```bash
+> uv run scripts/claim_gate.py <N>  # or: uv run scripts/worktree.py claim <N>
+> # checks assignees/blockedBy via gh issue view --json (list args, no shell=True)
+> ```
+
 Rules:
 
 - Ticket must be **unblocked** and **unassigned** before claim.
@@ -86,7 +96,7 @@ Rules:
 
 **Done when** ticket body + comments are captured and assignee is you.
 
-### Phase 1 — Create target branch *in place* — stay in session cwd
+### Phase 1 — Create target branch _in place_ — stay in session cwd
 
 > [!note] Orchestrator stays in its session dir — don't `wt switch` the target
 > The agent was launched at e.g. `/project` on `main`. `wt switch --create <target>` creates a sibling dir `../<repo>-<target>` and would require leaving the session cwd (beyond scope). Create the **target branch in place** instead:
@@ -98,6 +108,13 @@ Rules:
  git branch --show-current          # → feat/<ticket-slug> (or map/<slug>)
  wt list --format=json | jq '.[] | select(.is_current) | {branch, path}'
 ```
+
+> [!tip] Shim — stays in cwd, validates via _lib.wt_list
+>
+> ```bash
+> uv run scripts/create_target.py feat/<ticket-slug> origin/main
+> # dispatcher: uv run scripts/worktree.py create-target feat/<ticket-slug> origin/main
+> ```
 
 Use `feat|fix|doc` per ticket type; `map/<slug>` for Wayfinder map — both via `git switch -c` in the session worktree. Children will be `wt` siblings (Phase 2).
 
@@ -128,14 +145,22 @@ wt switch --create feat/<slug>--store --base feat/<slug> --no-cd  # module B / t
 # wt switch --create feat/<slug>--tdd --base feat/<slug> --no-cd
 ```
 
+> [!tip] Shim — creates child via wt switch --create --no-cd --yes, finds path via _lib.wt_list
+>
+> ```bash
+> COPY=$(uv run scripts/make_copy.py feat/<slug>--auth feat/<slug>)
+> # dispatcher: COPY=$(uv run scripts/worktree.py make-copy feat/<slug>--auth feat/<slug>)
+> ```
+
 #### Dispatch table — one worktree per isolated module/ticket (feat fans out to modules)
 
-| Child suffix | When | Subagent template |
-|--------------|------|-------------------|
+| Child suffix                | When                                         | Subagent template                                                           |
+| --------------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
 | `--auth`, `--store`, `--ui` | feat dispatches parallel modules (your case) | `implement` worker scoped to that module's seams (may run `tdd` internally) |
-| `--tdd` | test-first phase (legacy) | `tdd` loop: RED → GREEN → REFACTOR |
-| `--refactor` | second pass / cleanup | `refactor-expert` with graded surfaces |
-| `--verify` | pre-merge gate | runs gate in that worktree only |
+| `--tdd`                     | test-first phase (legacy)                    | `tdd` loop: RED → GREEN → REFACTOR                                          |
+| `--refactor`                | second pass / cleanup                        | `refactor-expert` with graded surfaces                                      |
+| `--verify`                  | pre-merge gate                               | runs gate in that worktree only                                             |
+
 #### Subagent template (copy per dispatch)
 
 ```text
@@ -173,6 +198,14 @@ wt merge <parent> --no-remove     # keep child worktree after merging (debug)
 wt list --format=json | jq .
 ```
 
+> [!tip] Shim — merges from copy, fixes DU/UU/AA inside copy, runs gate via _lib.read_gate
+>
+> ```bash
+> uv run scripts/merge_copy.py "$COPY" map/<slug>
+> # dispatcher: uv run scripts/worktree.py merge-copy "$COPY" map/<slug>
+> # wt merge <target> --yes is still final gate; Python delegates and fixes conflicts inside copy only
+> ```
+
 - `wt merge` runs blocking `pre-merge` gate (project's `.config/wt.toml`).
 - Prefer `--squash` for heterogeneous children; `--no-squash` only when preserving bisectability matters.
 - Never run `wt merge <child>` from the parent worktree — the parent becomes the merge source and is removed.
@@ -187,11 +220,13 @@ If gate fails → Phase 2 iteration (subagent fixes in child worktree, re-dispat
 Gate is environment, not this doc. Default recommendation (override in `.config/wt.toml`):
 
 ```bash
-npm run typecheck && npm test && npm run build
-git diff --check
+# Gate is .config/wt.toml [pre-merge].gate — auto-scaffolded once via _lib.read_gate
+# (sniffs Cargo.toml > pyproject.toml > package.json); unknown stack fails loud
+uv run scripts/verify_parent.py  # or: uv run scripts/worktree.py verify
+# delegates to wt.toml gate, then git diff --check and git status clean (allows .lsz/tmp)
 ```
 
-But authoritative gate is `.config/wt.toml [pre-merge]` — skill demands *that* gate passes, not a hard-coded `npm` string.
+But authoritative gate is `.config/wt.toml [pre-merge]` — skill demands _that_ gate passes, not a hard-coded `npm` string.
 
 **Done when** parent worktree's pre-merge hook exits 0 and `git status --porcelain` is clean or only intended untracked under `.lsz/tmp`.
 
@@ -206,6 +241,13 @@ git status --porcelain  # audit
 git reset HEAD && git add <code> && git commit && git add <docs> && git commit
 ```
 
+> [!tip] Shim — validates via _lib helpers (git log fallback to merge-base)
+>
+> ```bash
+> uv run scripts/check_history.py  # or: uv run scripts/worktree.py check-history
+> # checks atomic commits and CHANGELOG ## [Unreleased] bullet with (#issue) or by @
+> ```
+
 Never `git reset --hard` — See `[[git-workflow-conventions]]`:
 
 ```bash
@@ -218,6 +260,7 @@ git restore --staged <file> # unstage
 
 ```md
 ### Added|Changed|Fixed
+
 - Preserve stripped UTF-8 BOM across edit writes (#23).
 - Broadened interactive_shell guidance (#32, by @Rianico).
 ```
@@ -237,16 +280,10 @@ Squash loses ancestry — trailer is the only provenance. See `[[git-merge-pr]]`
 ### Phase 6 — Open PR (squash boundary)
 
 ```bash
-git push -u origin feat/<ticket-slug>
-gh pr create --fill --base <main|map/<slug>> \
-  --title "feat: <msg>" \
-  --body "Closes #<ticket> — <one-line summary>
-
-Supersedes: none
-"
-
-# Verify PR body contract
-gh pr view --json number,baseRefName,body --jq .
+# Push and open PR — ensures Closes trailer and CHANGELOG check via _lib
+uv run scripts/open_pr.py feat/<ticket-slug> main <issue-number>
+# dispatcher: uv run scripts/worktree.py open-pr feat/<ticket-slug> main <issue-number>
+# internally: git push -u origin <branch>, gh pr list --head / gh pr view, gh pr create --fill --base <base>, gh pr edit for Closes, git diff --check (not gh pr diff --check), CHANGELOG [Unreleased]
 ```
 
 - `Closes #<ticket>` last line when ticket is fully resolved; `Part of #<map>` for wayfinder children.
@@ -262,7 +299,7 @@ gh pr view --json number,baseRefName,body --jq .
 > [!warning] NEVER merge without explicit user approval
 > **Do NOT** run `gh pr merge`, `wt merge <main>`, or `git merge` that lands the PR. Stop at `gh pr view`/`gh pr diff`. Wait for user's `approve` — user needs to review and run ==extra verification==. If blocked, state `BLOCKED: awaiting PR approval`.
 
-**Done when** PR is `OPEN` and `gh pr diff --check` is clean. Merge is a **user decision**, not a model transition.
+**Done when** PR is `OPEN` and `git diff --check` is clean. Merge is a **user decision**, not a model transition.
 
 ### Phase 7 — Tag / Release / Publish (never proactive)
 
@@ -302,11 +339,11 @@ Rules from `[[git-workflow-conventions#Tag, Release, And Publish]]`:
 
 ## Disclosed references
 
-| Trigger | Material |
-|---------|----------|
-| Fork PR you can't push | `[[git-merge-pr]]` — `pr_prefix/<N>-<suffix>` + squash trailers |
-| Upstream `pi-better-edit` sync | `CLAUDE.md:Upstream sync` — `absorb/tN-*` worktrees |
+| Trigger                                              | Material                                                          |
+| ---------------------------------------------------- | ----------------------------------------------------------------- |
+| Fork PR you can't push                               | `[[git-merge-pr]]` — `pr_prefix/<N>-<suffix>` + squash trailers   |
+| Upstream `pi-better-edit` sync                       | `CLAUDE.md:Upstream sync` — `absorb/tN-*` worktrees               |
 | Worktrunk mechanics (hooks, hash_port, copy-ignored) | `worktrunk-guide` skill, `$SKILL_DIR/references/wt-template.toml` |
-| Reset / atomic commits / changelog layout | `[[git-workflow-conventions]]` |
+| Reset / atomic commits / changelog layout            | `[[git-workflow-conventions]]`                                    |
 
 For full BDD scenarios see [bdd-scenarios.md](references/bdd-scenarios.md).
