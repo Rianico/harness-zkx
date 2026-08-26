@@ -74,8 +74,7 @@ def main(argv: list[str] | None = None) -> None:
             # Fallback: ensure at least one worktree path matches cwd
             cwd_resolved: Path = Path.cwd().resolve()
             matched: bool = any(
-                Path(w.path).resolve() == cwd_resolved and w.branch == branch
-                for w in worktrees
+                Path(w.path).resolve() == cwd_resolved and w.branch == branch for w in worktrees
             )
             if not matched and worktrees:
                 print_err(f"wt list does not show {branch} as current")

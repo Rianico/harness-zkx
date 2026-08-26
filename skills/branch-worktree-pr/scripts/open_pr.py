@@ -78,9 +78,7 @@ def ensure_closes_trailer(branch: str, issue: str) -> None:
     if f"Closes #{issue}" in tail:
         return
     new_body: str = (
-        body.rstrip() + f"\n\nCloses #{issue}\n"
-        if body.strip()
-        else f"Closes #{issue}\n"
+        body.rstrip() + f"\n\nCloses #{issue}\n" if body.strip() else f"Closes #{issue}\n"
     )
     # gh pr edit <branch> --body "..."
     edit = run(["gh", "pr", "edit", branch, "--body", new_body])

@@ -294,6 +294,7 @@ def run_gate(gate: str, cwd: Path | None = None) -> subprocess.CompletedProcess[
         gate, shell=True, capture_output=True, text=True, cwd=cwd
     )
 
+
 def has_conflict_markers(file_path: Path) -> bool:
     """Return True if file contains git conflict markers."""
     try:

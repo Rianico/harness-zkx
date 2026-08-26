@@ -93,9 +93,7 @@ def main(argv: list[str] | None = None) -> None:
     section: str = m.group(1)
     has_sub: re.Match[str] | None = re.search(r"### (Added|Changed|Fixed|Removed)", section)
     if not has_sub:
-        print_err(
-            "CHANGELOG [Unreleased] missing subsection ### Added|Changed|Fixed|Removed"
-        )
+        print_err("CHANGELOG [Unreleased] missing subsection ### Added|Changed|Fixed|Removed")
         print_err(section[:500])
         sys.exit(1)
     bullets: list[str] = re.findall(r"^- .+", section, re.M)

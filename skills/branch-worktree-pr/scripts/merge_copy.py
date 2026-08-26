@@ -27,6 +27,7 @@ from _lib import (  # pyright: ignore[reportImplicitRelativeImport]
     run_gate,  # trusted gate execution
 )
 
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Merge copy worktree into target; fix conflicts inside copy only",
@@ -87,9 +88,7 @@ def main(argv: list[str] | None = None) -> None:
         or "You are currently rebasing" in status_text
         or "Unmerged paths" in status_text
         or any(
-            line.startswith("DU")
-            or line.startswith("UU")
-            or line.startswith("AA")
+            line.startswith("DU") or line.startswith("UU") or line.startswith("AA")
             for line in porcelain
         )
         or any(line.startswith("M ") for line in porcelain)
@@ -119,9 +118,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Check for UU/AA — need to ensure no conflict markers, then add
     unmerged: list[str] = [
-        line[3:].strip()
-        for line in porcelain
-        if line.startswith("UU") or line.startswith("AA")
+        line[3:].strip() for line in porcelain if line.startswith("UU") or line.startswith("AA")
     ]
     if unmerged:
         print(f"remaining unmerged files: {unmerged}", file=sys.stderr)
