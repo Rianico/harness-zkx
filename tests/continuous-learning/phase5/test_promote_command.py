@@ -27,8 +27,9 @@ from tz import TZ_CST
 from hooks.observe.agent_runner import Promotion
 from hooks.observe.instinct_manager import InstinctManager
 
-
-SCRIPTS_DIR = Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+SCRIPTS_DIR = (
+    Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+)
 
 
 @pytest.fixture
@@ -214,8 +215,7 @@ class TestPromoteCommandFunctionality:
         After promotion, the instinct should exist in global directory.
         """
         promotion = Promotion(
-            id="promotable-instinct",
-            reason="Seen in 2 projects with high confidence"
+            id="promotable-instinct", reason="Seen in 2 projects with high confidence"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -235,8 +235,7 @@ class TestPromoteCommandFunctionality:
         Promoted instinct should have updated scope and project_id.
         """
         promotion = Promotion(
-            id="promotable-instinct",
-            reason="Seen in 2 projects with high confidence"
+            id="promotable-instinct", reason="Seen in 2 projects with high confidence"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -256,8 +255,7 @@ class TestPromoteCommandFunctionality:
         The promote command should return the path to confirm success.
         """
         promotion = Promotion(
-            id="promotable-instinct",
-            reason="Seen in 2 projects with high confidence"
+            id="promotable-instinct", reason="Seen in 2 projects with high confidence"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -283,7 +281,9 @@ class TestPromoteCommandFunctionality:
         """
         Should not promote instincts with low average confidence.
         """
-        is_eligible, reason = instinct_manager.check_promotion_eligibility("low-confidence-instinct")
+        is_eligible, reason = instinct_manager.check_promotion_eligibility(
+            "low-confidence-instinct"
+        )
 
         assert not is_eligible
         assert "confidence" in reason.lower() or "0.8" in reason
@@ -308,14 +308,13 @@ class TestPromoteCommandFunctionality:
         After promotion, project-specific copies should be removed.
         """
         promotion = Promotion(
-            id="promotable-instinct",
-            reason="Seen in 2 projects with high confidence"
+            id="promotable-instinct", reason="Seen in 2 projects with high confidence"
         )
 
         instinct_manager.promote_instinct(promotion)
 
         # Check project copies are removed
-        for project_id, path in eligible_instinct_in_two_projects.items():
+        for _project_id, path in eligible_instinct_in_two_projects.items():
             assert not path.exists(), f"Project copy should be removed: {path}"
 
 
@@ -328,10 +327,7 @@ class TestPromoteCommandOptions:
         """
         --force flag should allow bypassing promotion criteria.
         """
-        promotion = Promotion(
-            id="single-instinct",
-            reason="Force promoted"
-        )
+        promotion = Promotion(id="single-instinct", reason="Force promoted")
 
         global_path = instinct_manager.promote_instinct(promotion, force=True)
 
@@ -344,10 +340,7 @@ class TestPromoteCommandOptions:
         """
         --reason should be recorded in the promoted instinct.
         """
-        promotion = Promotion(
-            id="promotable-instinct",
-            reason="User requested promotion"
-        )
+        promotion = Promotion(id="promotable-instinct", reason="User requested promotion")
 
         global_path = instinct_manager.promote_instinct(promotion)
         content = global_path.read_text()
@@ -358,16 +351,18 @@ class TestPromoteCommandOptions:
 class TestPromoteNonExistentInstinct:
     """Tests for promoting non-existent instincts."""
 
-    def test_error_for_nonexistent_instinct(
-        self, instinct_manager: InstinctManager
-    ) -> None:
+    def test_error_for_nonexistent_instinct(self, instinct_manager: InstinctManager) -> None:
         """
         Should return None for non-existent instinct.
         """
         is_eligible, reason = instinct_manager.check_promotion_eligibility("nonexistent-instinct")
 
         assert not is_eligible
-        assert "0 project" in reason.lower() or "not found" in reason.lower() or "need at least" in reason.lower()
+        assert (
+            "0 project" in reason.lower()
+            or "not found" in reason.lower()
+            or "need at least" in reason.lower()
+        )
 
     def test_promotion_returns_none_for_nonexistent(
         self, instinct_manager: InstinctManager
@@ -375,10 +370,7 @@ class TestPromoteNonExistentInstinct:
         """
         Promoting non-existent instinct should return None.
         """
-        promotion = Promotion(
-            id="nonexistent-instinct",
-            reason="Should not work"
-        )
+        promotion = Promotion(id="nonexistent-instinct", reason="Should not work")
 
         result = instinct_manager.promote_instinct(promotion)
         assert result is None
@@ -393,10 +385,7 @@ class TestPromoteCommandAudit:
         """
         Promotion should record when it occurred.
         """
-        promotion = Promotion(
-            id="promotable-instinct",
-            reason="Seen in 2 projects"
-        )
+        promotion = Promotion(id="promotable-instinct", reason="Seen in 2 projects")
 
         before = datetime.now(TZ_CST)
         global_path = instinct_manager.promote_instinct(promotion)
@@ -423,10 +412,7 @@ class TestPromoteCommandAudit:
         """
         Promotion should record which projects the instinct came from.
         """
-        promotion = Promotion(
-            id="promotable-instinct",
-            reason="Seen in 2 projects"
-        )
+        promotion = Promotion(id="promotable-instinct", reason="Seen in 2 projects")
 
         global_path = instinct_manager.promote_instinct(promotion)
         content = global_path.read_text()
@@ -443,7 +429,10 @@ class TestPromoteScriptExecution:
     """
 
     def test_script_returns_zero_exit_code(
-        self, promote_script: Path, eligible_instinct_in_two_projects: dict[str, Path], temp_home: Path
+        self,
+        promote_script: Path,
+        eligible_instinct_in_two_projects: dict[str, Path],
+        temp_home: Path,
     ) -> None:
         """
         Script should return exit code 0 on success.
@@ -459,13 +448,16 @@ class TestPromoteScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=30
+            timeout=30,
         )
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
     def test_script_outputs_promotion_result(
-        self, promote_script: Path, eligible_instinct_in_two_projects: dict[str, Path], temp_home: Path
+        self,
+        promote_script: Path,
+        eligible_instinct_in_two_projects: dict[str, Path],
+        temp_home: Path,
     ) -> None:
         """
         Script should output the promotion result.
@@ -481,10 +473,11 @@ class TestPromoteScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=30
+            timeout=30,
         )
 
         # Should mention promotion or success
         output = result.stdout.lower()
-        assert "promoted" in output or "success" in output or "global" in output, \
+        assert "promoted" in output or "success" in output or "global" in output, (
             f"Expected promotion result in output: {result.stdout}"
+        )

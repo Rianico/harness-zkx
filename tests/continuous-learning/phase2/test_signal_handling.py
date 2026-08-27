@@ -14,20 +14,15 @@ Eval 2.4: Signal Handling
 import json
 import os
 import signal
-import time
 import threading
+import time
 from pathlib import Path
-from datetime import datetime
-
-import pytest
 
 
 class TestWakeOnSigusr1:
     """Tests for waking daemon on SIGUSR1 signal."""
 
-    def test_wake_on_sigusr1(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_wake_on_sigusr1(self, homunculus_dir: Path) -> None:
         """
         Daemon should wake on SIGUSR1 signal.
 
@@ -39,10 +34,7 @@ class TestWakeOnSigusr1:
         wake_event = threading.Event()
 
         def daemon_main():
-            observer_daemon.run_daemon(
-                homunculus_dir,
-                wake_callback=lambda: wake_event.set()
-            )
+            observer_daemon.run_daemon(homunculus_dir, wake_callback=lambda: wake_event.set())
 
         thread = threading.Thread(target=daemon_main, daemon=True)
         thread.start()
@@ -60,9 +52,7 @@ class TestWakeOnSigusr1:
 
         observer_daemon.stop_daemon()
 
-    def test_signal_handler_registered(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_signal_handler_registered(self, homunculus_dir: Path) -> None:
         """
         Signal handler should be registered on daemon start.
         """
@@ -76,9 +66,7 @@ class TestWakeOnSigusr1:
         # Restore default handler
         signal.signal(signal.SIGUSR1, signal.SIG_DFL)
 
-    def test_multiple_sigusr1_queued(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_multiple_sigusr1_queued(self, homunculus_dir: Path) -> None:
         """
         Multiple SIGUSR1 signals should be handled (not lost).
         """
@@ -105,9 +93,7 @@ class TestWakeOnSigusr1:
 class TestReturnToSleep:
     """Tests for daemon returning to sleep after processing."""
 
-    def test_return_to_sleep_after_processing(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_return_to_sleep_after_processing(self, homunculus_dir: Path) -> None:
         """
         Daemon should return to sleep after processing.
 
@@ -130,9 +116,7 @@ class TestReturnToSleep:
         assert "processing" in processing_states, "Should enter processing state"
         assert "idle" in processing_states, "Should return to idle state"
 
-    def test_sleep_duration_configurable(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_sleep_duration_configurable(self, homunculus_dir: Path) -> None:
         """
         Sleep duration should be configurable.
         """
@@ -144,9 +128,7 @@ class TestReturnToSleep:
         interval = observer_daemon.get_sleep_interval()
         assert interval == 30, f"Expected interval 30, got {interval}"
 
-    def test_sleep_interrupted_by_signal(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_sleep_interrupted_by_signal(self, homunculus_dir: Path) -> None:
         """
         Sleep should be interrupted by signal.
         """
@@ -187,9 +169,7 @@ class TestReturnToSleep:
 class TestIntervalFallback:
     """Tests for interval-based fallback wake."""
 
-    def test_interval_fallback(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_interval_fallback(self, homunculus_dir: Path) -> None:
         """
         Daemon should wake on interval if no signal.
 
@@ -206,7 +186,7 @@ class TestIntervalFallback:
             wake_times.append(time.time())
 
         # Simulate daemon loop
-        start = time.time()
+        time.time()
         observer_daemon.set_wake_callback(record_wake)
 
         # Wait for interval-based wake
@@ -215,9 +195,7 @@ class TestIntervalFallback:
         # Should have woken at least once due to interval
         assert len(wake_times) >= 1, "Should wake on interval"
 
-    def test_interval_from_config(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_interval_from_config(self, homunculus_dir: Path) -> None:
         """
         Interval should be read from config file.
         """
@@ -230,9 +208,7 @@ class TestIntervalFallback:
 
         assert interval == 600, f"Expected 600 seconds (10 min), got {interval}"
 
-    def test_default_interval_when_no_config(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_default_interval_when_no_config(self, homunculus_dir: Path) -> None:
         """
         Default interval should be used when config is missing.
         """
@@ -247,9 +223,7 @@ class TestIntervalFallback:
 class TestSignalProcessing:
     """Tests for signal-based processing logic."""
 
-    def test_processes_correct_projects(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_processes_correct_projects(self, homunculus_dir: Path) -> None:
         """
         Daemon should process correct project(s).
 
@@ -280,9 +254,7 @@ class TestSignalProcessing:
         assert "project1" in processed_projects, "Should process project1"
         assert "project2" in processed_projects, "Should process project2"
 
-    def test_skips_projects_without_observations(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_skips_projects_without_observations(self, homunculus_dir: Path) -> None:
         """
         Should skip projects that have no observations.
         """
@@ -294,13 +266,9 @@ class TestSignalProcessing:
 
         processed = observer_daemon.get_projects_with_observations(homunculus_dir)
 
-        assert "empty_project" not in processed, (
-            "Should skip projects without observations"
-        )
+        assert "empty_project" not in processed, "Should skip projects without observations"
 
-    def test_updates_cursor_after_processing(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_updates_cursor_after_processing(self, homunculus_dir: Path) -> None:
         """
         Should update cursor after processing each project.
         """

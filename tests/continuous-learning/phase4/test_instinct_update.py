@@ -22,12 +22,11 @@ import pytest
 
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
-from tz import TZ_CST
 import yaml
+from tz import TZ_CST
 
-from hooks.observe.agent_runner import AgentResult, InstinctUpdated, Evidence
+from hooks.observe.agent_runner import AgentResult, Evidence, InstinctUpdated
 from hooks.observe.instinct_manager import InstinctManager
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 INSTINCTS_DIR = FIXTURES_DIR / "instincts"
@@ -55,9 +54,7 @@ def instinct_manager(homunculus_dir: Path) -> InstinctManager:
 
 
 @pytest.fixture
-def project_with_existing_instinct(
-    homunculus_dir: Path, existing_instinct_content: str
-) -> Path:
+def project_with_existing_instinct(homunculus_dir: Path, existing_instinct_content: str) -> Path:
     """Create project directory with existing instinct."""
     project_id = "a1b2c3d4e5f6"
     instincts_dir = homunculus_dir / "projects" / project_id / "instincts" / "personal"
@@ -85,9 +82,7 @@ class TestInstinctUpdate:
         update = InstinctUpdated(
             id="read-before-edit",
             new_confidence=0.85,
-            evidence_appended=[
-                Evidence(session_id="s1", description="New evidence")
-            ]
+            evidence_appended=[Evidence(session_id="s1", description="New evidence")],
         )
 
         file_path = instinct_manager.update_instinct(update, project_id)
@@ -114,8 +109,8 @@ class TestInstinctUpdate:
             new_confidence=0.85,
             evidence_appended=[
                 Evidence(session_id="new-session-001", description="New evidence 1"),
-                Evidence(session_id="new-session-002", description="New evidence 2")
-            ]
+                Evidence(session_id="new-session-002", description="New evidence 2"),
+            ],
         )
 
         file_path = instinct_manager.update_instinct(update, project_id)
@@ -143,7 +138,9 @@ class TestInstinctUpdate:
         project_id = "a1b2c3d4e5f6"
 
         # Read original timestamps
-        instincts_dir = project_with_existing_instinct / "projects" / project_id / "instincts" / "personal"
+        instincts_dir = (
+            project_with_existing_instinct / "projects" / project_id / "instincts" / "personal"
+        )
         original_file = instincts_dir / "read-before-edit.yaml"
         original_content = original_file.read_text()
         original_parts = original_content.split("---")
@@ -153,7 +150,7 @@ class TestInstinctUpdate:
         update = InstinctUpdated(
             id="read-before-edit",
             new_confidence=0.85,
-            evidence_appended=[Evidence(session_id="s1", description="Test")]
+            evidence_appended=[Evidence(session_id="s1", description="Test")],
         )
 
         before = datetime.now(TZ_CST)
@@ -191,8 +188,11 @@ class TestInstinctUpdate:
             new_confidence=0.85,
             evidence_appended=[
                 # This session already exists in the fixture
-                Evidence(session_id="session-abc-001", description="Updated evidence for existing session")
-            ]
+                Evidence(
+                    session_id="session-abc-001",
+                    description="Updated evidence for existing session",
+                )
+            ],
         )
 
         file_path = instinct_manager.update_instinct(update, project_id)
@@ -200,7 +200,9 @@ class TestInstinctUpdate:
 
         # Count occurrences of session-abc-001 in evidence section
         # It should appear exactly once
-        evidence_section = content.split("## Evidence")[1].split("---")[0] if "## Evidence" in content else content
+        evidence_section = (
+            content.split("## Evidence")[1].split("---")[0] if "## Evidence" in content else content
+        )
         count = evidence_section.count("session-abc-001")
         assert count <= 2, f"session-abc-001 should not be duplicated, found {count} times"
 
@@ -218,8 +220,8 @@ class TestInstinctUpdate:
             new_confidence=0.85,
             evidence_appended=[
                 Evidence(session_id="new-1", description="New 1"),
-                Evidence(session_id="new-2", description="New 2")
-            ]
+                Evidence(session_id="new-2", description="New 2"),
+            ],
         )
 
         file_path = instinct_manager.update_instinct(update, project_id)
@@ -240,7 +242,7 @@ class TestInstinctUpdate:
         update = InstinctUpdated(
             id="nonexistent-instinct",
             new_confidence=0.5,
-            evidence_appended=[Evidence(session_id="s1", description="Test")]
+            evidence_appended=[Evidence(session_id="s1", description="Test")],
         )
 
         result = instinct_manager.update_instinct(update, project_id)
@@ -254,7 +256,9 @@ class TestInstinctUpdate:
         """
         # Create a second instinct
         project_id = "a1b2c3d4e5f6"
-        instincts_dir = project_with_existing_instinct / "projects" / project_id / "instincts" / "personal"
+        instincts_dir = (
+            project_with_existing_instinct / "projects" / project_id / "instincts" / "personal"
+        )
         second_instinct = """---
 id: second-instinct
 trigger: "test trigger"
@@ -283,17 +287,17 @@ Test action.
                 InstinctUpdated(
                     id="read-before-edit",
                     new_confidence=0.85,
-                    evidence_appended=[Evidence(session_id="s1", description="Update 1")]
+                    evidence_appended=[Evidence(session_id="s1", description="Update 1")],
                 ),
                 InstinctUpdated(
                     id="second-instinct",
                     new_confidence=0.75,
-                    evidence_appended=[Evidence(session_id="s2", description="Update 2")]
-                )
+                    evidence_appended=[Evidence(session_id="s2", description="Update 2")],
+                ),
             ],
             promotions=[],
             processed_count=20,
-            cursor_position=20
+            cursor_position=20,
         )
 
         updated_paths = instinct_manager.process_result(result, project_id)
@@ -322,8 +326,8 @@ class TestConfidenceCalculation:
             new_confidence=0.95,  # Higher confidence
             evidence_appended=[
                 Evidence(session_id="s1", description="Confirmation"),
-                Evidence(session_id="s2", description="Another confirmation")
-            ]
+                Evidence(session_id="s2", description="Another confirmation"),
+            ],
         )
 
         file_path = instinct_manager.update_instinct(update, project_id)
@@ -344,7 +348,7 @@ class TestConfidenceCalculation:
         update = InstinctUpdated(
             id="read-before-edit",
             new_confidence=1.5,  # Invalid, should be capped or rejected
-            evidence_appended=[Evidence(session_id="s1", description="Test")]
+            evidence_appended=[Evidence(session_id="s1", description="Test")],
         )
 
         file_path = instinct_manager.update_instinct(update, project_id)

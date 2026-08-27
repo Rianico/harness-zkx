@@ -1,305 +1,302 @@
-"""Tests for the skill.sh / GitHub skill fetcher (skillsh.py).
+"""Tests for skills scraper (skill.sh composition)."""
 
-Covers: source parsing, GitHub-link extraction, frontmatter parsing, raw
-fetch-and-stage (single + whole collection), multi-run isolation, and the
-deterministic source index. Network is fully mocked.
-"""
-
+import json
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-# Expose the scrapers package (parent of scrapers/) so the module's relative
-# `.base` import resolves. The package's own base/base.py helpers are pinned by
-# conftest's scraper_path insert; this adds the enclosing scripts/ dir.
-sys.path.insert(
-    0,
-    str(Path(__file__).resolve().parent.parent.parent / "skills" / "docs-scraper" / "scripts"),
-)
+import pytest  # pyright: ignore[reportMissingImports]
 
-from scrapers.skillsh import (
-    SkillshScraper,
-    _parse_frontmatter_block,
-    extract_github_repo_from_html,
-    parse_skill_source,
-)
+_scraper_path = (
+    Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts" / "scrapers"
+).resolve()
+if str(_scraper_path) not in sys.path:
+    sys.path.insert(0, str(_scraper_path))
 
-SKILLSH_URL = "https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert"
+_scripts_path = (
+    Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts"
+).resolve()
+if str(_scripts_path) not in sys.path:
+    sys.path.insert(0, str(_scripts_path))
 
-RAW = "https://raw.githubusercontent.com/sickn33/agentic-awesome-skills/main" + "/skills"
+_tests_path = Path(__file__).parent.resolve()
+if str(_tests_path) not in sys.path:
+    sys.path.insert(0, str(_tests_path))
 
-
-class FakeResponse:
-    """Minimal stand-in for requests.Response used by _rate_limited_get."""
-
-    def __init__(self, payload):
-        self._payload = payload
-        self.status_code = 200
-        self.text = payload
-
-    def json(self):
-        # contents API returns a JSON list; default_branch returns an object.
-        return self._payload
+from scrapers.skillsh import (  # type: ignore[import-not-found]  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _cache_key,  # pyright: ignore[reportMissingImports]
+    _repo_slug,  # pyright: ignore[reportMissingImports]
+    parse_skillsh_input,  # pyright: ignore[reportMissingImports]
+)  # pyright: ignore[reportMissingImports]
 
 
-def make_scraper(tmp_path, run="test-run", method="auto"):
-    staging = tmp_path / "skill-compose"
-    inst = SkillshScraper(sources=[], output_dir=staging, run=run, method=method, force=True)
-    return inst, staging
-
-
-# ----------------------------------------------------------------------
-# Pure parsing helpers
-# ----------------------------------------------------------------------
-
-
-class TestParseSkillSource:
-    def test_skillsh_url_full(self):
-        p = parse_skill_source(SKILLSH_URL)
-        assert p["kind"] == "skillsh"
-        assert p["owner"] == "sickn33"
-        assert p["collection"] == "agentic-awesome-skills"
-        assert p["skill"] == "typescript-expert"
-        assert p["repo_url"] == "https://github.com/sickn33/agentic-awesome-skills"
-
-    def test_skillsh_url_collection_only(self):
-        p = parse_skill_source("https://www.skills.sh/sickn33/agentic-awesome-skills")
-        assert p["skill"] is None
-        assert p["repo_hint"] == "sickn33/agentic-awesome-skills"
-
-    def test_bare_triple(self):
-        p = parse_skill_source("sickn33/agentic-awesome-skills/typescript-expert")
-        assert p["kind"] == "bare"
-        assert p["skill"] == "typescript-expert"
-        assert p["repo_url"] == "https://github.com/sickn33/agentic-awesome-skills"
-
-    def test_github_repo(self):
-        p = parse_skill_source("https://github.com/sickn33/agentic-awesome-skills")
-        assert p["kind"] == "github"
-        assert p["skill"] is None
-
-    def test_bare_repo(self):
-        p = parse_skill_source("sickn33/agentic-awesome-skills")
-        assert p["repo_url"] == "https://github.com/sickn33/agentic-awesome-skills"
-
-    def test_trailing_slash_stripped(self):
-        p = parse_skill_source("sickn33/agentic-awesome-skills/typescript-expert/")
-        assert p["skill"] == "typescript-expert"
-
-
-class TestExtractGithubRepo:
-    def test_filters_noise_and_returns_target(self):
-        html = (
-            '<a href="https://github.com/vercel-labs/skills">GitHub</a>'
-            '<a href="https://github.com/sickn33/agentic-awesome-skills">Repo</a>'
+class TestParseSkillshInput:
+    def test_sk_01_skillsh_url_full(self):
+        p = parse_skillsh_input(
+            "https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert"
         )
-        assert extract_github_repo_from_html(html) == "https://github.com/sickn33/agentic-awesome-skills"
+        assert p.kind == "skill"
+        assert p.owner == "sickn33"
+        assert p.collection == "agentic-awesome-skills"
+        assert p.skill == "typescript-expert"
+        assert p.repo == "sickn33/agentic-awesome-skills"
 
-    def test_no_github_links(self):
-        assert extract_github_repo_from_html("<html><body>nope</body></html>") is None
+    def test_sk_02_skillsh_url_second_skill(self):
+        p = parse_skillsh_input("https://www.skills.sh/sickn33/agentic-awesome-skills/clean-code")
+        assert p.kind == "skill"
+        assert p.skill == "clean-code"
+        assert p.repo == "sickn33/agentic-awesome-skills"
 
-
-class TestFrontmatterBlock:
-    def test_parses_key_values(self):
-        md = "---\nname: typescript-expert\ndescription: expert\ncategory: framework\n---\n# Body"
-        fm = _parse_frontmatter_block(md)
-        assert fm["name"] == "typescript-expert"
-        assert fm["description"] == "expert"
-        assert fm["category"] == "framework"
-
-    def test_no_frontmatter(self):
-        assert _parse_frontmatter_block("# Just a heading") == {}
-
-
-# ----------------------------------------------------------------------
-# Fetch + stage (raw method, mocked network)
-# ----------------------------------------------------------------------
-
-
-class TestFetchByRaw:
-    def _raw_fake(self):
-        """fake_get for the single-skill fetch: repo info, dir walk, raw files."""
-        main = RAW
-
-        def fake_get(url, **kwargs):
-            if ("repos/sickn33/agentic-awesome-skills" in url) and ("contents" not in url):
-                return FakeResponse({"default_branch": "main"})
-            if "contents" in url and "skills/typescript-expert/references" in url:
-                return FakeResponse(
-                    [
-                        {
-                            "type": "file",
-                            "path": "skills/typescript-expert/references/cheatsheet.md",
-                            "download_url": f"{main}/typescript-expert/references/cheatsheet.md",
-                        }
-                    ]
-                )
-            if "contents" in url and "skills/typescript-expert/scripts" in url:
-                return FakeResponse(
-                    [
-                        {
-                            "type": "file",
-                            "path": "skills/typescript-expert/scripts/check.py",
-                            "download_url": f"{main}/typescript-expert/scripts/check.py",
-                        }
-                    ]
-                )
-            if "contents" in url and "skills/typescript-expert" in url:
-                return FakeResponse(
-                    [
-                        {
-                            "type": "file",
-                            "path": "skills/typescript-expert/SKILL.md",
-                            "download_url": f"{main}/typescript-expert/SKILL.md",
-                        },
-                        {"type": "dir", "path": "skills/typescript-expert/references"},
-                        {"type": "dir", "path": "skills/typescript-expert/scripts"},
-                    ]
-                )
-            if "contents" in url and "skills" in url:
-                return FakeResponse(
-                    [
-                        {
-                            "type": "dir",
-                            "name": "typescript-expert",
-                            "path": "skills/typescript-expert",
-                        }
-                    ]
-                )
-            return FakeResponse("---\nname: typescript-expert\n---\n# Body")
-
-        return fake_get
-
-    def test_stages_single_skill_files(self, tmp_path):
-        inst, _ = make_scraper(tmp_path)
-        inst._rate_limited_get = self._raw_fake()
-        stage_dir = tmp_path / "skill-compose" / "test-run" / "stage"
-        stage_dir.mkdir(parents=True, exist_ok=True)
-
-        result = inst._fetch_by_raw(
-            "https://github.com/sickn33/agentic-awesome-skills",
-            "typescript-expert",
-            stage_dir,
-        )
-
-        skill_dir = stage_dir / "sickn33-agentic-awesome-skills" / "typescript-expert"
-        assert (skill_dir / "SKILL.md").exists()
-        assert (skill_dir / "references" / "cheatsheet.md").exists()
-        assert (skill_dir / "scripts" / "check.py").exists()
-        assert result["files"] == 3
-
-    def test_fetch_all_raw(self, tmp_path):
-        inst, _ = make_scraper(tmp_path)
-
-        def fake_get(url, **kwargs):
-            if "contents/skills?ref" in url:
-                return FakeResponse(
-                    [
-                        {"type": "dir", "name": "a", "path": "skills/a"},
-                        {"type": "dir", "name": "b", "path": "skills/b"},
-                    ]
-                )
-            if "contents/skills/a" in url and "?ref" in url:
-                return FakeResponse(
-                    [
-                        {
-                            "type": "file",
-                            "path": "skills/a/SKILL.md",
-                            "download_url": "https://raw.githubusercontent.com/x/main/skills/a/SKILL.md",
-                        }
-                    ]
-                )
-            if "contents/skills/b" in url and "?ref" in url:
-                return FakeResponse(
-                    [
-                        {
-                            "type": "file",
-                            "path": "skills/b/SKILL.md",
-                            "download_url": "https://raw.githubusercontent.com/x/main/skills/b/SKILL.md",
-                        }
-                    ]
-                )
-            return FakeResponse("content")
-
-        inst._rate_limited_get = fake_get
-        stage_dir = tmp_path / "skill-compose" / "test-run" / "stage"
-        stage_dir.mkdir(parents=True, exist_ok=True)
-
-        result = inst._fetch_by_raw(
-            "https://github.com/sickn33/agentic-awesome-skills", None, stage_dir
-        )
-        assert result["files"] == 2
-        assert (stage_dir / "sickn33-agentic-awesome-skills" / "a" / "SKILL.md").exists()
-        assert (stage_dir / "sickn33-agentic-awesome-skills" / "b" / "SKILL.md").exists()
-
-
-class TestResolveAndChooseMethod:
-    def test_auto_clone_for_collection(self, tmp_path):
-        inst, _ = make_scraper(tmp_path)
-        assert inst._choose_method(parse_skill_source("sickn33/agentic-awesome-skills")) == "clone"
-
-    def test_auto_raw_for_explicit_skill(self, tmp_path):
-        inst, _ = make_scraper(tmp_path)
+    def test_sk_03_bare_triple(self):
+        p = parse_skillsh_input("sickn33/agentic-awesome-skills/typescript-expert")
+        assert p.kind == "skill"
+        assert p.owner == "sickn33"
+        assert p.collection == "agentic-awesome-skills"
+        assert p.skill == "typescript-expert"
+        assert p.repo == "sickn33/agentic-awesome-skills"
         assert (
-            inst._choose_method(parse_skill_source("sickn33/agentic-awesome-skills/tsc"))
-        ) == "raw"
-
-    def test_explicit_method_overrides(self, tmp_path):
-        inst, _ = make_scraper(tmp_path, method="npx")
-        assert inst._choose_method(parse_skill_source("a/b")) == "npx"
-
-
-# ----------------------------------------------------------------------
-# Multi-run isolation + index
-# ----------------------------------------------------------------------
-
-
-class TestRunIsolation:
-    def test_auto_run_increments(self, tmp_path):
-        inst = SkillshScraper(sources=["sickn33/agentic-awesome-skills/tsc"], output_dir=tmp_path)
-        r1 = inst._resolve_run_dir()
-        r2 = inst._resolve_run_dir()
-        assert r1 != r2
-        assert "tsc" in r1.name
-        assert r2.name == f"{r1.name}-1"
-
-    def test_explicit_run_stable(self, tmp_path):
-        inst, staging = make_scraper(tmp_path, run="stable")
-        r1 = inst._resolve_run_dir()
-        r2 = inst._resolve_run_dir()
-        assert r1 == r2
-        assert r1.parent == staging
-        assert r1.name == "stable"
-
-    def test_multi_run_coexist(self, tmp_path):
-        a = make_scraper(tmp_path, run="alpha")[0]
-        b = make_scraper(tmp_path, run="beta")[0]
-        da = a._resolve_run_dir()
-        db = b._resolve_run_dir()
-        (da / "out").mkdir(parents=True, exist_ok=True)
-        (db / "out").mkdir(parents=True, exist_ok=True)
-        assert da != db
-        assert da.exists() and db.exists()
-
-
-class TestSourcesIndex:
-    def test_writes_index_with_frontmatter(self, tmp_path):
-        inst, staging = make_scraper(tmp_path)
-        stage_dir = staging / "test-run" / "stage"
-        skill_dir = stage_dir / "repo" / "tsc"
-        skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: tsc\ndescription: an expert\n---\n# TSC", encoding="utf-8"
+            p.skillsh_url
+            == "https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert"
         )
-        inventory = [
-            {
-                "source": "sickn33/x/tsc",
-                "repo": "https://github.com/sickn33/x",
-                "skill": "tsc",
-                "staged": str(skill_dir),
-            }
-        ]
-        inst._write_sources_index(stage_dir, inventory)
-        index = (stage_dir / "SOURCES.md").read_text(encoding="utf-8")
-        assert "## tsc" in index
-        assert "name: tsc" in index
-        assert "description: an expert" in index
+
+    def test_sk_04_bare_collection(self):
+        p = parse_skillsh_input("sickn33/agentic-awesome-skills")
+        assert p.kind == "collection"
+        assert p.owner == "sickn33"
+        assert p.collection == "agentic-awesome-skills"
+        assert p.repo == "sickn33/agentic-awesome-skills"
+
+    def test_sk_05_github_repo(self):
+        p = parse_skillsh_input("https://github.com/sickn33/agentic-awesome-skills")
+        assert p.kind == "repo"
+        assert p.repo == "sickn33/agentic-awesome-skills"
+        assert p.skill is None
+
+    def test_sk_06_github_with_skill_path(self):
+        p = parse_skillsh_input(
+            "https://github.com/sickn33/agentic-awesome-skills/tree/main/skills/typescript-expert"
+        )
+        assert p.kind == "repo"
+        assert p.repo == "sickn33/agentic-awesome-skills"
+
+    def test_sk_07_non_www_host(self):
+        p = parse_skillsh_input(
+            "https://skills.sh/sickn33/agentic-awesome-skills/typescript-expert"
+        )
+        assert p.kind == "skill"
+        assert p.skill == "typescript-expert"
+
+    def test_sk_08_skills_collection_variant(self):
+        p = parse_skillsh_input("https://www.skills.sh/anthropics/skills/retrieval-expert")
+        assert p.kind == "skill"
+        assert p.owner == "anthropics"
+        assert p.collection == "skills"
+        assert p.skill == "retrieval-expert"
+        assert p.repo == "anthropics/skills"
+
+    def test_sk_09_invalid_empty(self):
+        with pytest.raises(ValueError):
+            parse_skillsh_input("")
+
+    def test_sk_10_invalid_single_segment(self):
+        with pytest.raises(ValueError):
+            parse_skillsh_input("onlyone")
+
+    def test_sk_11_invalid_host(self):
+        with pytest.raises(ValueError):
+            parse_skillsh_input("https://example.com/foo/bar/baz")
+
+    def test_sk_12_github_direct_skill_heuristic(self):
+        p = parse_skillsh_input("https://github.com/sickn33/agentic-awesome-skills/my-skill")
+        assert p.kind == "skill"
+        assert p.skill == "my-skill"
+
+    def test_sk_13_idempotence(self):
+        raw = "https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert"
+        a = parse_skillsh_input(raw)
+        b = parse_skillsh_input(raw)
+        assert a == b
+
+
+class TestHelpers:
+    def test_repo_slug(self):
+        assert _repo_slug("a/b") == Path("a/b")
+
+    def test_cache_key_sanitizes(self):
+        k = _cache_key("a/b", "c:d")
+        assert "/" not in k
+        assert ":" not in k
+        assert k == "a_b__c_d"
+
+    def test_cache_key_join(self):
+        assert _cache_key("x", "y", "z") == "x__y__z"
+
+
+class TestSkillsScraperInit:
+    def test_empty_inputs_error(self, temp_output_dir):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        with pytest.raises(ValueError):
+            SkillsScraper(inputs=[], staging=temp_output_dir)
+        with pytest.raises(ValueError):
+            SkillsScraper(inputs=None, staging=temp_output_dir)  # type: ignore[arg-type]
+
+    def test_layout_with_run(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        staging = tmp_path / "compose"
+        s = SkillsScraper(
+            inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
+            staging=staging,
+            run="my-run",
+            respect_robots_txt=False,
+        )
+        assert s.staging_base == staging
+        assert s.run_slug == "my-run"
+        assert s.run_dir == staging / "my-run"
+        assert s.stage_dir == staging / "my-run" / "stage"
+        assert s.out_dir == staging / "my-run" / "out"
+        assert s.cache_dir == Path(".cache") / "skills"
+        assert s.cache_dir.parts[-2:] == (".cache", "skills")
+
+    def test_layout_without_run(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        staging = tmp_path / "compose"
+        s = SkillsScraper(
+            inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
+            staging=staging,
+            respect_robots_txt=False,
+        )
+        assert s.run_slug is None
+        assert s.run_dir == staging
+        assert s.stage_dir == staging / "stage"
+        assert s.out_dir == staging / "out"
+        assert s.cache_dir == Path(".cache") / "skills"
+
+    def test_method_validation(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        with pytest.raises(ValueError):
+            SkillsScraper(
+                inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
+                staging=tmp_path / "compose",
+                method="bad",
+                respect_robots_txt=False,
+            )
+
+    def test_run_slug_sanitization(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        s = SkillsScraper(
+            inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
+            staging=tmp_path / "compose",
+            run="  hello world!  ",
+            respect_robots_txt=False,
+        )
+        assert s.run_dir.name == "hello-world"
+
+    def test_run_slug_invalid(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        with pytest.raises(ValueError):
+            SkillsScraper(
+                inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
+                staging=tmp_path / "compose",
+                run="---",
+                respect_robots_txt=False,
+            )
+
+
+class TestSkillsScraperNpx:
+    """Npx-based fetch tests (mocked subprocess)."""
+
+    def test_list_via_npx_parses(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        staging = tmp_path / "compose"
+        s = SkillsScraper(
+            inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
+            staging=staging,
+            respect_robots_txt=False,
+        )
+        fake_stdout = (
+            "Available Skills\n"
+            "    a-skill\n\n"
+            "    description\n"
+            "    b-skill\n"
+            "    other\n"
+            "    vercel-react-best-practices\n"
+        )
+        mock_result = MagicMock(stdout=fake_stdout, stderr="", returncode=0)
+        s._run_npx = MagicMock(return_value=mock_result)  # type: ignore[method-assign]
+        names = s._list_skills_via_npx("sickn33/agentic-awesome-skills")
+        assert "a-skill" in names
+        assert "b-skill" in names
+        assert "vercel-react-best-practices" in names
+
+    def test_fetch_via_npx_success(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        staging = tmp_path / "compose"
+        s = SkillsScraper(
+            inputs=["vercel-labs/agent-skills/vercel-react-best-practices"],
+            staging=staging,
+            respect_robots_txt=False,
+        )
+
+        def fake_run_npx(_args, cwd, timeout=300):
+            _ = timeout
+            # Simulate npx installing skill into .agents/skills
+            dest = cwd / ".agents" / "skills" / "vercel-react-best-practices"
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text("# skill")
+            return MagicMock(stdout="installed", stderr="", returncode=0)
+
+        s._run_npx = fake_run_npx  # type: ignore[method-assign]
+        work = tmp_path / "work"
+        staged = s._fetch_via_npx("vercel-labs/agent-skills", ["vercel-react-best-practices"], work)
+        assert "vercel-react-best-practices" in staged
+        dest = s.stage_dir / "vercel-labs" / "agent-skills" / "vercel-react-best-practices"
+        assert dest.exists()
+        assert (dest / "SKILL.md").read_text().strip() == "# skill"
+
+    def test_run_stages_via_mocked_npx(self, tmp_path):
+        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+
+        staging = tmp_path / "compose"
+        s = SkillsScraper(
+            inputs=["vercel-labs/agent-skills/vercel-react-best-practices"],
+            staging=staging,
+            respect_robots_txt=False,
+        )
+
+        def fake_run_npx2(args, cwd, timeout=300):
+            _ = timeout
+            # For any add, create .agents/skills entry
+            if "--list" in args:
+                return MagicMock(
+                    stdout="Available Skills\n    vercel-react-best-practices\n",
+                    stderr="",
+                    returncode=0,
+                )
+            # fetch
+            skill = "vercel-react-best-practices"
+            # extract skill from args if present
+            if "--skill" in args:
+                idx = args.index("--skill")
+                skill = args[idx + 1].split(",")[0]
+            d = cwd / ".agents" / "skills" / skill
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "SKILL.md").write_text("# skill")
+            return MagicMock(stdout="ok", stderr="", returncode=0)
+
+        s._run_npx = fake_run_npx2  # type: ignore[method-assign]
+        # Avoid skill.sh page fetch: patch resolve
+        with patch.object(s, "_resolve_github_repo", return_value="vercel-labs/agent-skills"):
+            s.run()
+        assert (s.run_dir / "README.md").exists()
+        assert (s.run_dir / "manifest.json").exists()
+        manifest = json.loads((s.run_dir / "manifest.json").read_text())
+        assert manifest["staged"][0]["status"] == "ok"
+        assert manifest["staged"][0]["skill"] == "vercel-react-best-practices"

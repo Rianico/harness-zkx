@@ -6,7 +6,6 @@ the project context for tool events.
 """
 
 import hashlib
-import os
 from pathlib import Path
 
 import pytest
@@ -72,7 +71,7 @@ class TestProjectDetection:
         result = detect_project.get_project_id()
 
         # Expected: SHA256(env_value)[:12]
-        expected_id = hashlib.sha256("/custom/project/path".encode()).hexdigest()[:12]
+        expected_id = hashlib.sha256(b"/custom/project/path").hexdigest()[:12]
 
         assert result == expected_id, f"Expected {expected_id}, got {result}"
 
@@ -112,9 +111,7 @@ class TestProjectDetection:
         expected_remote = "https://github.com/user/private-repo.git"
         expected_id = hashlib.sha256(expected_remote.encode()).hexdigest()[:12]
 
-        assert result == expected_id, (
-            f"Expected {expected_id} (credentials stripped), got {result}"
-        )
+        assert result == expected_id, f"Expected {expected_id} (credentials stripped), got {result}"
 
     def test_project_name_from_directory(
         self, fake_git_repo_with_remote: Path, monkeypatch: pytest.MonkeyPatch
@@ -167,6 +164,7 @@ class TestProjectRegistry:
         assert projects_file.exists(), "projects.json should be created"
 
         import json
+
         with open(projects_file) as f:
             projects = json.load(f)
 
@@ -191,6 +189,7 @@ class TestProjectRegistry:
         detect_project.register_project(project_id, "my-project", "/different/path")
 
         import json
+
         with open(homunculus_dir / "projects.json") as f:
             projects = json.load(f)
 

@@ -1,9 +1,6 @@
 """Tests for LLM-friendly fetching methods."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from fixtures import TEST_BASE_URL, TEST_PAGE_URL
 
@@ -60,9 +57,7 @@ class TestFetchMarkdownViaNegotiation:
         with patch.object(scraper_with_mock_session, "_rate_limited_get") as mock_get:
             mock_get.return_value = mock_response
 
-            content, fmt = scraper_with_mock_session.fetch_markdown_via_negotiation(
-                TEST_PAGE_URL
-            )
+            content, fmt = scraper_with_mock_session.fetch_markdown_via_negotiation(TEST_PAGE_URL)
 
             assert content == "# Title\n\nContent"
             assert fmt == "markdown"
@@ -76,9 +71,7 @@ class TestFetchMarkdownViaNegotiation:
         with patch.object(scraper_with_mock_session, "_rate_limited_get") as mock_get:
             mock_get.return_value = mock_response
 
-            content, fmt = scraper_with_mock_session.fetch_markdown_via_negotiation(
-                TEST_PAGE_URL
-            )
+            content, fmt = scraper_with_mock_session.fetch_markdown_via_negotiation(TEST_PAGE_URL)
 
             assert content == "<html><body>Content</body></html>"
             assert fmt == "html"
@@ -88,9 +81,7 @@ class TestFetchMarkdownViaNegotiation:
         with patch.object(scraper_with_mock_session, "_rate_limited_get") as mock_get:
             mock_get.return_value = None
 
-            content, fmt = scraper_with_mock_session.fetch_markdown_via_negotiation(
-                TEST_PAGE_URL
-            )
+            content, fmt = scraper_with_mock_session.fetch_markdown_via_negotiation(TEST_PAGE_URL)
 
             assert content is None
             assert fmt == "html"
@@ -205,9 +196,7 @@ class TestFetchPageLlmFriendly:
             respect_robots_txt=False,
         )
 
-        content, fmt = scraper.fetch_page_llm_friendly(
-            f"{TEST_BASE_URL}/page", cache_file="page"
-        )
+        content, fmt = scraper.fetch_page_llm_friendly(f"{TEST_BASE_URL}/page", cache_file="page")
 
         assert content == "# Cached Content"
         assert fmt == "markdown"
@@ -225,9 +214,7 @@ class TestFetchPageLlmFriendly:
                 "fetch_markdown_extension",
                 return_value=("# Real Markdown", "markdown"),
             ):
-                content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
-                    TEST_PAGE_URL
-                )
+                content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(TEST_PAGE_URL)
 
                 assert content == "# Real Markdown"
                 assert fmt == "markdown"
@@ -282,9 +269,7 @@ class TestFetchPageLlmFriendly:
                     "fetch_via_jina_reader",
                     return_value=(None, "html"),
                 ):
-                    with patch.object(
-                        scraper_with_mock_session, "fetch_page", return_value=None
-                    ):
+                    with patch.object(scraper_with_mock_session, "fetch_page", return_value=None):
                         content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
                             TEST_PAGE_URL
                         )
@@ -367,16 +352,13 @@ class TestFetchViaJinaReader:
 
     def test_returns_markdown_on_success(self, scraper_with_mock_session) -> None:
         """Should return markdown from Jina Reader."""
-        import requests
 
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "# Title\n\nContent from Jina"
 
         with patch("requests.get", return_value=mock_response):
-            content, fmt = scraper_with_mock_session.fetch_via_jina_reader(
-                TEST_PAGE_URL
-            )
+            content, fmt = scraper_with_mock_session.fetch_via_jina_reader(TEST_PAGE_URL)
 
             assert content == "# Title\n\nContent from Jina"
             assert fmt == "markdown"
@@ -386,16 +368,13 @@ class TestFetchViaJinaReader:
         import requests
 
         with patch("requests.get", side_effect=requests.exceptions.RequestException()):
-            content, fmt = scraper_with_mock_session.fetch_via_jina_reader(
-                TEST_PAGE_URL
-            )
+            content, fmt = scraper_with_mock_session.fetch_via_jina_reader(TEST_PAGE_URL)
 
             assert content is None
             assert fmt == "html"
 
     def test_constructs_correct_jina_url(self, scraper_with_mock_session) -> None:
         """Should construct correct r.jina.ai URL."""
-        import requests
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -451,7 +430,9 @@ class TestFetchViaDefuddle:
         """Should return (None, 'html') when defuddle times out."""
         import subprocess
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="defuddle", timeout=30)):
+        with patch(
+            "subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="defuddle", timeout=30)
+        ):
             content, fmt = scraper_with_mock_session.fetch_via_defuddle(TEST_PAGE_URL)
 
             assert content is None

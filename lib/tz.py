@@ -4,6 +4,7 @@ Timezone utilities for consistent time handling across the project.
 Auto-detects local timezone from the host machine.
 Uses ISO 8601 compact format for display (e.g., +0800).
 """
+
 import platform
 import subprocess
 from datetime import datetime
@@ -16,10 +17,7 @@ def _detect_tz_macos() -> str | None:
     # Method 1: systemsetup command
     try:
         result = subprocess.run(
-            ["systemsetup", "-gettimezone"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["systemsetup", "-gettimezone"], capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             # Output: "Time Zone: Asia/Shanghai"

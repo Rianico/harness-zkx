@@ -8,9 +8,13 @@ This module provides:
 
 Phase 3 GREEN: Pattern detection implementation.
 """
+
 from __future__ import annotations
 
 import re
+
+# Add lib to path for tz import
+import sys
 import traceback
 from collections import Counter
 from pathlib import Path
@@ -18,8 +22,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-# Add lib to path for tz import
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 from tz import now_cst_iso
 
@@ -148,7 +150,9 @@ class AgentRunner:
         initial_cursor = payload.get("cursor_position", 0)
         project_id = payload.get("project_id", "unknown")
 
-        log_info(f"AgentRunner.run: project={project_id}, sessions={len(sessions)}, cursor={initial_cursor}")
+        log_info(
+            f"AgentRunner.run: project={project_id}, sessions={len(sessions)}, cursor={initial_cursor}"
+        )
 
         all_created: list[InstinctCreated] = []
         all_updated: list[InstinctUpdated] = []
@@ -169,10 +173,12 @@ class AgentRunner:
             instincts_updated=all_updated,
             promotions=[],
             processed_count=total_events,
-            cursor_position=initial_cursor + total_events
+            cursor_position=initial_cursor + total_events,
         )
 
-        log_info(f"AgentRunner.run completed: created={len(all_created)}, updated={len(all_updated)}, events={total_events}")
+        log_info(
+            f"AgentRunner.run completed: created={len(all_created)}, updated={len(all_updated)}, events={total_events}"
+        )
         if all_created:
             for inst in all_created:
                 log_info(f"  Instinct created: {inst.id} (confidence={inst.confidence})")
@@ -225,15 +231,11 @@ class AgentRunner:
 
         if not instincts and not updates:
             return SessionAnalysis(
-                session_id=session_id,
-                instincts_created=[],
-                instincts_updated=[]
+                session_id=session_id, instincts_created=[], instincts_updated=[]
             )
 
         return SessionAnalysis(
-            session_id=session_id,
-            instincts_created=instincts,
-            instincts_updated=updates
+            session_id=session_id, instincts_created=instincts, instincts_updated=updates
         )
 
     def _detect_user_correction(
@@ -273,9 +275,9 @@ class AgentRunner:
                             evidence=[
                                 Evidence(
                                     session_id=session_id,
-                                    description=f"{rejected_tool} rejected, then {next_tool} succeeded"
+                                    description=f"{rejected_tool} rejected, then {next_tool} succeeded",
                                 )
-                            ]
+                            ],
                         )
 
         return None
@@ -290,9 +292,7 @@ class AgentRunner:
         """
         # Extract tool sequences (tool_start events)
         tool_starts = [
-            (e.get("tool"), i)
-            for i, e in enumerate(events)
-            if e.get("event") == "tool_start"
+            (e.get("tool"), i) for i, e in enumerate(events) if e.get("event") == "tool_start"
         ]
 
         if len(tool_starts) < 6:  # Need at least 6 starts for 3 repetitions of 2-tool sequence
@@ -325,9 +325,9 @@ class AgentRunner:
                         evidence=[
                             Evidence(
                                 session_id=session_id,
-                                description=f"{pattern_str} sequence repeated {count} times"
+                                description=f"{pattern_str} sequence repeated {count} times",
                             )
-                        ]
+                        ],
                     )
 
         return None
@@ -369,7 +369,13 @@ class AgentRunner:
                     next_output = next_event.get("output", "")
                     if next_output and next_output.lower() == "success":
                         # Found success after error
-                        error_key = error_keywords[0] if error_keywords else error_type.split()[0] if error_type else "fail"
+                        error_key = (
+                            error_keywords[0]
+                            if error_keywords
+                            else error_type.split()[0]
+                            if error_type
+                            else "fail"
+                        )
 
                         return InstinctCreated(
                             id=f"{failed_tool.lower()}-{error_key.replace(' ', '-')}-retry",
@@ -380,9 +386,9 @@ class AgentRunner:
                             evidence=[
                                 Evidence(
                                     session_id=session_id,
-                                    description=f"{failed_tool} failed with '{error_type}', modified approach succeeded"
+                                    description=f"{failed_tool} failed with '{error_type}', modified approach succeeded",
                                 )
-                            ]
+                            ],
                         )
 
         return None

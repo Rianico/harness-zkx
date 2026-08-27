@@ -19,8 +19,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from hooks.observe.agent_runner import AgentRunner, AgentResult, InstinctCreated, InstinctUpdated, Promotion
-
+from hooks.observe.agent_runner import (
+    AgentResult,
+    AgentRunner,
+    InstinctCreated,
+    InstinctUpdated,
+    Promotion,
+)
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 SESSIONS_DIR = FIXTURES_DIR / "sessions"
@@ -39,15 +44,10 @@ def sample_payload() -> dict:
         session = json.load(f)
 
     return {
-        "sessions": [
-            {
-                "session_id": "test-session",
-                "events": session
-            }
-        ],
+        "sessions": [{"session_id": "test-session", "events": session}],
         "project_id": "a1b2c3d4e5f6",
         "project_name": "test-project",
-        "cursor_position": 0
+        "cursor_position": 0,
     }
 
 
@@ -62,7 +62,7 @@ class TestInstinctCreatedSchema:
             confidence=0.5,
             domain="workflow",
             action="do something",
-            evidence=[{"session_id": "s1", "description": "test evidence"}]
+            evidence=[{"session_id": "s1", "description": "test evidence"}],
         )
 
         assert instinct.id == "test-instinct"
@@ -72,34 +72,14 @@ class TestInstinctCreatedSchema:
     def test_confidence_bounds(self) -> None:
         """Confidence must be between 0 and 1."""
         # Valid bounds
-        InstinctCreated(
-            id="test",
-            trigger="test",
-            confidence=0.0,
-            domain="workflow"
-        )
-        InstinctCreated(
-            id="test",
-            trigger="test",
-            confidence=1.0,
-            domain="workflow"
-        )
+        InstinctCreated(id="test", trigger="test", confidence=0.0, domain="workflow")
+        InstinctCreated(id="test", trigger="test", confidence=1.0, domain="workflow")
 
         # Invalid bounds should raise
         with pytest.raises(ValidationError):
-            InstinctCreated(
-                id="test",
-                trigger="test",
-                confidence=1.5,
-                domain="workflow"
-            )
+            InstinctCreated(id="test", trigger="test", confidence=1.5, domain="workflow")
         with pytest.raises(ValidationError):
-            InstinctCreated(
-                id="test",
-                trigger="test",
-                confidence=-0.1,
-                domain="workflow"
-            )
+            InstinctCreated(id="test", trigger="test", confidence=-0.1, domain="workflow")
 
     def test_required_fields(self) -> None:
         """Required fields must be present."""
@@ -111,12 +91,7 @@ class TestInstinctCreatedSchema:
 
     def test_optional_fields(self) -> None:
         """Optional fields should work."""
-        instinct = InstinctCreated(
-            id="test",
-            trigger="test",
-            confidence=0.5,
-            domain="workflow"
-        )
+        instinct = InstinctCreated(id="test", trigger="test", confidence=0.5, domain="workflow")
         assert instinct.action is None
         assert instinct.evidence is None
 
@@ -129,7 +104,7 @@ class TestInstinctUpdatedSchema:
         update = InstinctUpdated(
             id="existing-instinct",
             new_confidence=0.8,
-            evidence_appended=[{"session_id": "s1", "description": "test"}]
+            evidence_appended=[{"session_id": "s1", "description": "test"}],
         )
 
         assert update.id == "existing-instinct"
@@ -147,8 +122,7 @@ class TestPromotionSchema:
     def test_valid_promotion(self) -> None:
         """Valid Promotion should pass validation."""
         promo = Promotion(
-            id="instinct-to-promote",
-            reason="Seen in 3 projects with high confidence"
+            id="instinct-to-promote", reason="Seen in 3 projects with high confidence"
         )
 
         assert promo.id == "instinct-to-promote"
@@ -165,7 +139,7 @@ class TestAgentResultSchema:
             instincts_updated=[],
             promotions=[],
             processed_count=100,
-            cursor_position=100
+            cursor_position=100,
         )
 
         assert result.processed_count == 100
@@ -176,26 +150,13 @@ class TestAgentResultSchema:
         result = AgentResult(
             instincts_created=[
                 InstinctCreated(
-                    id="test",
-                    trigger="test trigger",
-                    confidence=0.5,
-                    domain="workflow"
+                    id="test", trigger="test trigger", confidence=0.5, domain="workflow"
                 )
             ],
-            instincts_updated=[
-                InstinctUpdated(
-                    id="existing",
-                    new_confidence=0.8
-                )
-            ],
-            promotions=[
-                Promotion(
-                    id="promoted",
-                    reason="Test promotion"
-                )
-            ],
+            instincts_updated=[InstinctUpdated(id="existing", new_confidence=0.8)],
+            promotions=[Promotion(id="promoted", reason="Test promotion")],
             processed_count=50,
-            cursor_position=50
+            cursor_position=50,
         )
 
         assert len(result.instincts_created) == 1
@@ -216,7 +177,7 @@ class TestAgentResultSchema:
                 promotions=[],
                 processed_count=10,
                 cursor_position=10,
-                extra_field="not allowed"  # type: ignore
+                extra_field="not allowed",  # type: ignore
             )
 
 
@@ -259,9 +220,7 @@ class TestAgentRunnerOutput:
         """
         result = agent_runner.run(sample_payload)
 
-        total_events = sum(
-            len(s["events"]) for s in sample_payload["sessions"]
-        )
+        total_events = sum(len(s["events"]) for s in sample_payload["sessions"])
         assert result.processed_count == total_events
 
     def test_cursor_position_advanced(
@@ -275,9 +234,7 @@ class TestAgentRunnerOutput:
 
         assert result.cursor_position > initial_cursor
 
-    def test_empty_sessions_handled(
-        self, agent_runner: AgentRunner
-    ) -> None:
+    def test_empty_sessions_handled(self, agent_runner: AgentRunner) -> None:
         """
         Empty sessions should return valid result with count 0.
         """
@@ -285,7 +242,7 @@ class TestAgentRunnerOutput:
             "sessions": [],
             "project_id": "test",
             "project_name": "test",
-            "cursor_position": 0
+            "cursor_position": 0,
         }
 
         result = agent_runner.run(payload)
@@ -312,7 +269,7 @@ class TestSchemaCompleteness:
             "instincts_updated",
             "promotions",
             "processed_count",
-            "cursor_position"
+            "cursor_position",
         ]
 
         for field in required_fields:
@@ -332,7 +289,7 @@ class TestSchemaCompleteness:
             "instincts_updated",
             "promotions",
             "processed_count",
-            "cursor_position"
+            "cursor_position",
         }
 
         extra_fields = set(result_dict.keys()) - expected_fields

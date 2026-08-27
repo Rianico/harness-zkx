@@ -22,12 +22,11 @@ import pytest
 
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
-from tz import TZ_CST
 import yaml
+from tz import TZ_CST
 
-from hooks.observe.agent_runner import AgentResult, InstinctCreated, Evidence
+from hooks.observe.agent_runner import AgentResult, Evidence, InstinctCreated
 from hooks.observe.instinct_manager import InstinctManager
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 AGENT_RESULTS_DIR = FIXTURES_DIR / "agent_results"
@@ -73,7 +72,7 @@ class TestInstinctCreation:
             confidence=0.5,
             domain="workflow",
             action="Read existing files first",
-            evidence=[Evidence(session_id="s1", description="Test")]
+            evidence=[Evidence(session_id="s1", description="Test")],
         )
         project_id = "a1b2c3d4e5f6"
 
@@ -100,7 +99,7 @@ class TestInstinctCreation:
             confidence=0.7,
             domain="workflow",
             action="Test action",
-            evidence=[Evidence(session_id="s1", description="Test")]
+            evidence=[Evidence(session_id="s1", description="Test")],
         )
         project_id = "a1b2c3d4e5f6"
 
@@ -136,8 +135,8 @@ class TestInstinctCreation:
             action="Read existing files in the same directory to understand patterns",
             evidence=[
                 Evidence(session_id="session-001", description="First evidence"),
-                Evidence(session_id="session-002", description="Second evidence")
-            ]
+                Evidence(session_id="session-002", description="Second evidence"),
+            ],
         )
         project_id = "a1b2c3d4e5f6"
 
@@ -168,7 +167,7 @@ class TestInstinctCreation:
             confidence=0.5,
             domain="workflow",
             action="Test action",
-            evidence=[Evidence(session_id="s1", description="Test")]
+            evidence=[Evidence(session_id="s1", description="Test")],
         )
         project_id = "a1b2c3d4e5f6"
 
@@ -208,8 +207,8 @@ class TestInstinctCreation:
             evidence=[
                 Evidence(session_id="s1", description="First"),
                 Evidence(session_id="s2", description="Second"),
-                Evidence(session_id="s3", description="Third")
-            ]
+                Evidence(session_id="s3", description="Third"),
+            ],
         )
         project_id = "a1b2c3d4e5f6"
 
@@ -234,7 +233,7 @@ class TestInstinctCreation:
                     confidence=0.5,
                     domain="workflow",
                     action="Action 1",
-                    evidence=[Evidence(session_id="s1", description="Test")]
+                    evidence=[Evidence(session_id="s1", description="Test")],
                 ),
                 InstinctCreated(
                     id="second-instinct",
@@ -242,13 +241,13 @@ class TestInstinctCreation:
                     confidence=0.6,
                     domain="debugging",
                     action="Action 2",
-                    evidence=[Evidence(session_id="s2", description="Test")]
-                )
+                    evidence=[Evidence(session_id="s2", description="Test")],
+                ),
             ],
             instincts_updated=[],
             promotions=[],
             processed_count=10,
-            cursor_position=10
+            cursor_position=10,
         )
         project_id = "a1b2c3d4e5f6"
 
@@ -271,7 +270,7 @@ class TestInstinctCreation:
             confidence=0.5,
             domain="workflow",
             action="Original action",
-            evidence=[Evidence(session_id="s1", description="Original")]
+            evidence=[Evidence(session_id="s1", description="Original")],
         )
         project_id = "a1b2c3d4e5f6"
         file_path = instinct_manager.create_instinct(instinct, project_id)
@@ -284,7 +283,7 @@ class TestInstinctCreation:
             confidence=0.7,
             domain="workflow",
             action="New action",
-            evidence=[Evidence(session_id="s2", description="New")]
+            evidence=[Evidence(session_id="s2", description="New")],
         )
 
         result = instinct_manager.create_instinct(new_instinct, project_id)
@@ -309,7 +308,7 @@ class TestInstinctCreationGlobalScope:
             confidence=0.5,
             domain="workflow",
             action="Global action",
-            evidence=[Evidence(session_id="s1", description="Test")]
+            evidence=[Evidence(session_id="s1", description="Test")],
         )
 
         file_path = instinct_manager.create_instinct(instinct, scope="global")

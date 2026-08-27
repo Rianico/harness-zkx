@@ -7,16 +7,18 @@ Project detection functionality for observation hook.
 Determines the project context for tool events by examining
 git remotes, environment variables, and directory paths.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import os
 import re
-from pathlib import Path
 
 # Add lib to path for tz import
 import sys
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 from tz import now_cst_iso
 
@@ -237,7 +239,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Project detection utilities")
     parser.add_argument("--project-id", metavar="CWD", help="Get project ID for given directory")
-    parser.add_argument("--project-name", metavar="CWD", help="Get project name for given directory")
+    parser.add_argument(
+        "--project-name", metavar="CWD", help="Get project name for given directory"
+    )
     parser.add_argument(
         "--register",
         nargs=3,

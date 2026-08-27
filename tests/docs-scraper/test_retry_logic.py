@@ -5,10 +5,8 @@ Test IDs: RB-01 through RB-07
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests.exceptions
-
-from fixtures import TEST_PAGE_URL, SERVER_ERROR_RESPONSE, SUCCESS_RESPONSE
+from fixtures import TEST_PAGE_URL
 
 
 class TestRetryLogic:
@@ -72,9 +70,7 @@ class TestRetryLogic:
                     content=b"Internal Server Error",
                     headers={},
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("500 Error", response=response)
                 )
                 return response
@@ -132,9 +128,7 @@ class TestRetryLogic:
                     content=b"Internal Server Error",
                     headers={},
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("500 Error", response=response)
                 )
                 return response
@@ -192,9 +186,7 @@ class TestRetryLogic:
                 content=b"Internal Server Error",
                 headers={},
             )
-            response.raise_for_status = lambda: (
-                _ for _ in ()
-            ).throw(
+            response.raise_for_status = lambda: (_ for _ in ()).throw(
                 requests.exceptions.HTTPError("500 Error", response=response)
             )
             return response

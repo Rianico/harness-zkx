@@ -6,14 +6,11 @@ from pathlib import Path
 import pytest
 
 # Add the scripts directory to the import path
-scripts_path = (
-    Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts"
-).resolve()
+scripts_path = (Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts").resolve()
 if str(scripts_path) not in sys.path:
     sys.path.insert(0, str(scripts_path))
 
 from render import KamiRenderer
-
 
 SAMPLE_MD = """---
 title: Test Architecture Review

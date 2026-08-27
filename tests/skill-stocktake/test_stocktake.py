@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for stocktake.py utility functions."""
+
 from __future__ import annotations
 
 import json
@@ -11,17 +12,18 @@ import pytest
 
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
-from tz import TZ_CST
-
 # Import from global skills directory
 import sys
+
+from tz import TZ_CST
+
 sys.path.insert(0, str(Path.home() / ".claude" / "skills" / "skill-stocktake" / "scripts"))
 from stocktake import (
+    _format_path_with_tilde,
     extract_frontmatter,
     get_mtime_utc,
-    _format_path_with_tilde,
-    normalize_skills,
     get_skill_name,
+    normalize_skills,
     truncate_text,
 )
 
@@ -66,7 +68,7 @@ class TestExtractFrontmatter:
 
     def test_value_with_colon(self) -> None:
         """Values containing colons are handled."""
-        content = "---\ndescription: \"URL: https://example.com\"\n---\n# Content"
+        content = '---\ndescription: "URL: https://example.com"\n---\n# Content'
         assert extract_frontmatter(content) == {
             "description": "URL: https://example.com",
         }
@@ -252,7 +254,7 @@ class TestObservationCounting:
 
         # Create timestamps for different windows
         ts_1d = now.isoformat()
-        ts_7d = (now.replace(day=now.day - 5)).isoformat() if now.day > 5 else now.isoformat()
+        (now.replace(day=now.day - 5)).isoformat() if now.day > 5 else now.isoformat()
 
         lines = [
             json.dumps({"tool": "Read", "timestamp": ts_1d, "input": {"file_path": "/recent.md"}}),
@@ -277,11 +279,15 @@ def temp_skills_dir(tmp_path: Path) -> Path:
     # Create test skill
     skill_a = skills_dir / "skill-a"
     skill_a.mkdir()
-    (skill_a / "SKILL.md").write_text("---\nname: skill-a\ndescription: Test skill A\n---\n# Content")
+    (skill_a / "SKILL.md").write_text(
+        "---\nname: skill-a\ndescription: Test skill A\n---\n# Content"
+    )
 
     # Create another skill
     skill_b = skills_dir / "skill-b"
     skill_b.mkdir()
-    (skill_b / "SKILL.md").write_text("---\nname: skill-b\ndescription: Test skill B\n---\n# Content")
+    (skill_b / "SKILL.md").write_text(
+        "---\nname: skill-b\ndescription: Test skill B\n---\n# Content"
+    )
 
     return skills_dir

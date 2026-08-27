@@ -69,9 +69,7 @@ Examples:
                 continue
 
             if section["level"] == 0:
-                chapter_name = self.sanitize_filename(
-                    section["title"], section["section_num"]
-                )
+                chapter_name = self.sanitize_filename(section["title"], section["section_num"])
                 current_chapter_dir = self.output_dir / chapter_name
                 current_chapter_dir.mkdir(parents=True, exist_ok=True)
                 print(f"\nChapter: {section['title']}")

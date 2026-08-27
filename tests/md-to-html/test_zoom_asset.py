@@ -2,14 +2,7 @@
 
 from pathlib import Path
 
-
-ZOOM_JS = (
-    Path(__file__).parent.parent.parent
-    / "skills"
-    / "md-to-html"
-    / "assets"
-    / "zoom.js"
-)
+ZOOM_JS = Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "assets" / "zoom.js"
 
 
 def test_zoom_asset_supports_cursor_zoom_and_drag_pan():

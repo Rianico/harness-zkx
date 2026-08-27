@@ -21,6 +21,7 @@ Commands:
     save          Merge evaluation results into results.json
     merge-chunks  Merge chunked evaluation files from .tmp/ directory
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,18 +30,17 @@ import os
 import sys
 from collections import defaultdict
 from collections.abc import Generator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
-from tz import local_tz, to_local_display
-
 from rich.box import HORIZONTALS, ROUNDED
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from tz import local_tz, to_local_display
 
 # Defaults - cache Path.home() to avoid repeated syscalls
 HOME = Path.home()
@@ -57,6 +57,7 @@ console = Console()
 # Verdict enum for type-safe verdict strings
 class Verdict(StrEnum):
     """Verdict categories for skill evaluations."""
+
     KEEP = "Keep"
     IMPROVE = "Improve"
     UPDATE = "Update"
@@ -66,6 +67,7 @@ class Verdict(StrEnum):
 
 class OutputFormat(StrEnum):
     """Output format options for CLI commands."""
+
     JSON = "json"
     RICH = "rich"
     MARKDOWN = "markdown"
@@ -73,6 +75,7 @@ class OutputFormat(StrEnum):
 
 class GroupBy(StrEnum):
     """Grouping options for summary output."""
+
     VERDICT = "verdict"
     SKILL = "skill"
 
@@ -123,7 +126,7 @@ def extract_frontmatter(content: str) -> dict[str, str]:
 def get_mtime_utc(path: Path) -> str:
     """Get file modification time as ISO 8601 UTC string."""
     mtime = path.stat().st_mtime
-    dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+    dt = datetime.fromtimestamp(mtime, tz=UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -236,13 +239,11 @@ def _format_path_with_tilde(path: Path | str) -> str:
     """Format path with tilde prefix if under home directory."""
     path_str = str(path) if isinstance(path, str) else str(path)
     if path_str.startswith(HOME_STR):
-        return "~" + path_str[len(HOME_STR):]
+        return "~" + path_str[len(HOME_STR) :]
     return path_str
 
 
-def _walk_skills_dir(
-    skills_dir: Path, followlinks: bool = True
-) -> Generator[Path, None, None]:
+def _walk_skills_dir(skills_dir: Path, followlinks: bool = True) -> Generator[Path, None, None]:
     """Walk skills directory and yield all .md files."""
     for root, _, files in os.walk(skills_dir, followlinks=followlinks):
         root_path = Path(root)
@@ -280,15 +281,17 @@ def scan_skills_dir(
         file_path_7d = use_7d.get(key, use_7d.get(alt_key, 0) if alt_key else 0)
         file_path_30d = use_30d.get(key, use_30d.get(alt_key, 0) if alt_key else 0)
 
-        skills.append({
-            "path": path_str,
-            "name": frontmatter.get("name", ""),
-            "description": frontmatter.get("description", ""),
-            "use_1d": file_path_1d,
-            "use_7d": file_path_7d,
-            "use_30d": file_path_30d,
-            "mtime": get_mtime_utc(md_file),
-        })
+        skills.append(
+            {
+                "path": path_str,
+                "name": frontmatter.get("name", ""),
+                "description": frontmatter.get("description", ""),
+                "use_1d": file_path_1d,
+                "use_7d": file_path_7d,
+                "use_30d": file_path_30d,
+                "mtime": get_mtime_utc(md_file),
+            }
+        )
 
     skills.sort(key=lambda s: s["path"])
     return skills
@@ -312,7 +315,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     # Scan directories
     global_skills = scan_skills_dir(global_dir, use_1d, use_7d, use_30d)
-    project_skills = scan_skills_dir(project_dir, use_1d, use_7d, use_30d) if project_dir.exists() else []
+    project_skills = (
+        scan_skills_dir(project_dir, use_1d, use_7d, use_30d) if project_dir.exists() else []
+    )
 
     all_skills = global_skills + project_skills
 
@@ -385,15 +390,21 @@ def render_scan_rich(data: dict, render_console: Console | None = None) -> None:
     # Scan summary panel
     project_status = "green" if summary["project"]["found"] else "red"
     project_check = "✓" if summary["project"]["found"] else "✗"
-    con.print(Panel.fit(
-        f"[green]✓[/green] ~/.claude/skills/ ({summary['global']['count']} files)\n"
-        f"[{project_status}]{project_check}[/] "
-        f"{summary['project']['path'] or 'project skills'} ({summary['project']['count']} files)",
-        title="[bold]Scanning[/bold]",
-    ))
+    con.print(
+        Panel.fit(
+            f"[green]✓[/green] ~/.claude/skills/ ({summary['global']['count']} files)\n"
+            f"[{project_status}]{project_check}[/] "
+            f"{summary['project']['path'] or 'project skills'} ({summary['project']['count']} files)",
+            title="[bold]Scanning[/bold]",
+        )
+    )
 
     # Skills table with HORIZONTALS style and row separators
-    table = Table(title=f"[bold]Inventory[/bold] ({len(data['skills'])} skills)", box=HORIZONTALS, show_lines=True)
+    table = Table(
+        title=f"[bold]Inventory[/bold] ({len(data['skills'])} skills)",
+        box=HORIZONTALS,
+        show_lines=True,
+    )
     table.add_column("Skill", style="cyan", no_wrap=True, width=15)
     table.add_column("7d", justify="right", style="green", no_wrap=True, width=4)
     table.add_column("30d", justify="right", style="yellow", no_wrap=True, width=5)
@@ -467,12 +478,14 @@ def find_changed_skills(skills_dir: Path, evaluated_at: str, known_paths: set[st
         is_new = skill_name not in known_paths
 
         if is_new or mtime > evaluated_at:
-            changed.append({
-                "path": path_str,
-                "name": skill_name,
-                "mtime": mtime,
-                "is_new": is_new,
-            })
+            changed.append(
+                {
+                    "path": path_str,
+                    "name": skill_name,
+                    "mtime": mtime,
+                    "is_new": is_new,
+                }
+            )
 
     return changed
 
@@ -480,16 +493,20 @@ def find_changed_skills(skills_dir: Path, evaluated_at: str, known_paths: set[st
 def render_diff_rich(changed: list[dict], evaluated_at: str) -> None:
     """Render diff results with rich."""
     if not changed:
-        console.print(Panel.fit(
-            f"No changes since {to_local_display(evaluated_at)}",
-            title="Quick Scan",
-        ))
+        console.print(
+            Panel.fit(
+                f"No changes since {to_local_display(evaluated_at)}",
+                title="Quick Scan",
+            )
+        )
         return
 
-    console.print(Panel.fit(
-        f"Last evaluated: {to_local_display(evaluated_at)}",
-        title="Quick Scan",
-    ))
+    console.print(
+        Panel.fit(
+            f"Last evaluated: {to_local_display(evaluated_at)}",
+            title="Quick Scan",
+        )
+    )
 
     table = Table(title=f"Changed Skills ({len(changed)})", box=HORIZONTALS, show_lines=True)
     table.add_column("Skill", no_wrap=True)
@@ -519,12 +536,16 @@ def cmd_overview(args: argparse.Namespace) -> int:
 
     # Scan directories
     global_skills = scan_skills_dir(global_dir, use_1d, use_7d, use_30d)
-    project_skills = scan_skills_dir(project_dir, use_1d, use_7d, use_30d) if project_dir.exists() else []
+    project_skills = (
+        scan_skills_dir(project_dir, use_1d, use_7d, use_30d) if project_dir.exists() else []
+    )
 
     # Filter to only main SKILL.md files (not references)
     all_skills = [s for s in global_skills + project_skills if s["path"].endswith("/SKILL.md")]
     # Sort by 7d usage descending, then by name for ties
-    all_skills.sort(key=lambda s: (-s.get("use_7d", 0), s.get("name") or Path(s.get("path", "")).stem))
+    all_skills.sort(
+        key=lambda s: (-s.get("use_7d", 0), s.get("name") or Path(s.get("path", "")).stem)
+    )
 
     render_console = Console(width=args.width) if args.width else console
     render_overview_rich(all_skills, render_console)
@@ -550,7 +571,7 @@ def render_overview_rich(skills: list[dict], render_console: Console | None = No
     con.print(summary_table)
 
     # Main table
-    table = Table(title=f"[bold]Skills Overview[/bold]", box=HORIZONTALS, show_lines=True)
+    table = Table(title="[bold]Skills Overview[/bold]", box=HORIZONTALS, show_lines=True)
     table.add_column("Skill", style="cyan", no_wrap=True, width=20)
     table.add_column("1d", justify="right", style="green", no_wrap=True, width=4)
     table.add_column("7d", justify="right", style="green", no_wrap=True, width=4)
@@ -565,7 +586,7 @@ def render_overview_rich(skills: list[dict], render_console: Console | None = No
             str(skill.get("use_1d", 0)),
             str(skill.get("use_7d", 0)),
             str(skill.get("use_30d", 0)),
-            desc
+            desc,
         )
 
     con.print(table)
@@ -679,12 +700,14 @@ def format_summary_json(data: dict) -> str:
 
     for skill in sorted(skills, key=lambda x: get_skill_name(x)):
         name = get_skill_name(skill)
-        summary["skills"].append({
-            "name": name,
-            "verdict": skill.get("verdict"),
-            "use_7d": skill.get("use_7d", 0),
-            "reason": skill.get("reason", "")[:100],
-        })
+        summary["skills"].append(
+            {
+                "name": name,
+                "verdict": skill.get("verdict"),
+                "use_7d": skill.get("use_7d", 0),
+                "reason": skill.get("reason", "")[:100],
+            }
+        )
         summary["by_verdict"][skill.get("verdict", "Unknown")].append(name)
 
     summary["by_verdict"] = dict(summary["by_verdict"])
@@ -702,12 +725,14 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
     progress = data.get("batch_progress", {})
     status = progress.get("status", "unknown")
 
-    con.print(Panel.fit(
-        f"Evaluated: [dim]{evaluated_at}[/dim]\n"
-        f"Mode: [dim]{mode}[/dim]\n"
-        f"Status: [dim]{status}[/dim]",
-        title="[bold]Stocktake Results[/bold]",
-    ))
+    con.print(
+        Panel.fit(
+            f"Evaluated: [dim]{evaluated_at}[/dim]\n"
+            f"Mode: [dim]{mode}[/dim]\n"
+            f"Status: [dim]{status}[/dim]",
+            title="[bold]Stocktake Results[/bold]",
+        )
+    )
 
     skills = normalize_skills(data.get("skills", []))
 
@@ -740,7 +765,11 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
             items = by_verdict[verdict.value]
             color = VERDICT_COLORS.get(verdict, "white")
 
-            table = Table(title=f"[bold {color}]{verdict.value}[/bold {color}] ({len(items)})", box=HORIZONTALS, show_lines=True)
+            table = Table(
+                title=f"[bold {color}]{verdict.value}[/bold {color}] ({len(items)})",
+                box=HORIZONTALS,
+                show_lines=True,
+            )
             table.add_column("Skill", style="cyan", no_wrap=True, width=15)
             table.add_column("7d", justify="right", style="green", no_wrap=True, width=4)
             table.add_column("30d", justify="right", style="yellow", no_wrap=True, width=5)
@@ -775,7 +804,9 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
                 color = VERDICT_COLORS.get(verdict_enum, "white")
             except ValueError:
                 color = "white"
-            table.add_row(name, str(use_7d), str(use_30d), f"[{color}]{verdict_str}[/{color}]", reason)
+            table.add_row(
+                name, str(use_7d), str(use_30d), f"[{color}]{verdict_str}[/{color}]", reason
+            )
 
         con.print(table)
 
@@ -990,8 +1021,12 @@ def main(argv: list[str] | None = None) -> int:
     overview_parser = subparsers.add_parser("overview", help="Quick overview with usage stats")
     overview_parser.add_argument("--global-dir", type=Path, help="Override global skills dir")
     overview_parser.add_argument("--project-dir", type=Path, help="Override project skills dir")
-    overview_parser.add_argument("--observations-dir", type=Path, help="Override observations directory")
-    overview_parser.add_argument("--width", type=int, help="Override terminal width for rich output")
+    overview_parser.add_argument(
+        "--observations-dir", type=Path, help="Override observations directory"
+    )
+    overview_parser.add_argument(
+        "--width", type=int, help="Override terminal width for rich output"
+    )
 
     # summary command
     summary_parser = subparsers.add_parser("summary", help="Phase 3: Display results table")
@@ -1005,16 +1040,10 @@ def main(argv: list[str] | None = None) -> int:
     save_parser.add_argument("--results", type=Path, help="Path to results.json")
 
     # merge-chunks command
-    merge_parser = subparsers.add_parser(
-        "merge-chunks", help="Merge chunked evaluation results"
-    )
+    merge_parser = subparsers.add_parser("merge-chunks", help="Merge chunked evaluation results")
     merge_parser.add_argument("--results", type=Path, help="Path to results.json")
-    merge_parser.add_argument(
-        "--inventory", type=Path, help="Path to inventory JSON from scan"
-    )
-    merge_parser.add_argument(
-        "--clean", action="store_true", help="Remove temp files after merge"
-    )
+    merge_parser.add_argument("--inventory", type=Path, help="Path to inventory JSON from scan")
+    merge_parser.add_argument("--clean", action="store_true", help="Remove temp files after merge")
 
     args = parser.parse_args(argv)
 

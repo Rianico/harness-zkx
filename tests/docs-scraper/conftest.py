@@ -2,13 +2,15 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 # Add the scraper scripts directory to the path for imports
 # When running from project root: skills/docs-scraper/scripts/scrapers
-scraper_path = Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts" / "scrapers"
+scraper_path = (
+    Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts" / "scrapers"
+)
 scraper_path = scraper_path.resolve()
 if str(scraper_path) not in sys.path:
     sys.path.insert(0, str(scraper_path))
@@ -19,20 +21,8 @@ if str(tests_path) not in sys.path:
     sys.path.insert(0, str(tests_path))
 
 from fixtures import (
-    MockResponse,
     SUCCESS_RESPONSE,
-    NOT_FOUND_RESPONSE,
-    RATE_LIMIT_RESPONSE,
-    SERVER_ERROR_RESPONSE,
-    SERVICE_UNAVAILABLE,
-    TIMEOUT_ERROR,
-    CONNECTION_ERROR,
-    ALLOW_ALL_ROBOTS,
-    BLOCK_ALL_ROBOTS,
-    CRAWL_DELAY_ROBOTS,
     TEST_BASE_URL,
-    TEST_PAGE_URL,
-    USER_AGENT_POOL,
 )
 
 

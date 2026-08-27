@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+
 @dataclass(frozen=True)
 class ObservationEvent:
     timestamp: str
@@ -17,11 +18,13 @@ class ObservationEvent:
     input: str
     output: str
 
+
 @dataclass(frozen=True)
 class Detector:
     description: str
     after_step: str | None = None
     before_step: str | None = None
+
 
 @dataclass(frozen=True)
 class Step:
@@ -29,6 +32,7 @@ class Step:
     description: str
     required: bool
     detector: Detector
+
 
 @dataclass(frozen=True)
 class ComplianceSpec:
@@ -38,6 +42,7 @@ class ComplianceSpec:
     version: str
     steps: tuple[Step, ...]
     threshold_promote_to_hook: float
+
 
 def parse_trace(path: Path) -> list[ObservationEvent]:
     """Parse a JSONL observation trace file into sorted events."""
@@ -55,18 +60,21 @@ def parse_trace(path: Path) -> list[ObservationEvent]:
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON at line {i}: {e}") from e
         try:
-            events.append(ObservationEvent(
-                timestamp=raw["timestamp"],
-                event=raw["event"],
-                tool=raw["tool"],
-                session=raw["session"],
-                input=raw.get("input", ""),
-                output=raw.get("output", ""),
-            ))
+            events.append(
+                ObservationEvent(
+                    timestamp=raw["timestamp"],
+                    event=raw["event"],
+                    tool=raw["tool"],
+                    session=raw["session"],
+                    input=raw.get("input", ""),
+                    output=raw.get("output", ""),
+                )
+            )
         except KeyError as e:
             raise ValueError(f"Missing required field {e} at line {i}") from e
 
     return sorted(events, key=lambda e: e.timestamp)
+
 
 def parse_spec(path: Path) -> ComplianceSpec:
     """Parse a YAML compliance spec file."""
@@ -77,16 +85,18 @@ def parse_spec(path: Path) -> ComplianceSpec:
     steps: list[Step] = []
     for s in raw["steps"]:
         d = s["detector"]
-        steps.append(Step(
-            id=s["id"],
-            description=s["description"],
-            required=s["required"],
-            detector=Detector(
-                description=d["description"],
-                after_step=d.get("after_step"),
-                before_step=d.get("before_step"),
-            ),
-        ))
+        steps.append(
+            Step(
+                id=s["id"],
+                description=s["description"],
+                required=s["required"],
+                detector=Detector(
+                    description=d["description"],
+                    after_step=d.get("after_step"),
+                    before_step=d.get("before_step"),
+                ),
+            )
+        )
 
     if "scoring" not in raw:
         raise KeyError("Missing 'scoring' section in compliance spec")

@@ -27,7 +27,7 @@ def parse_required_classes(contract_path):
         print("ERROR: Machine-readable class manifest not found in contract.")
         sys.exit(1)
 
-    manifest = text[start + len("<!-- required-classes:start -->"):end]
+    manifest = text[start + len("<!-- required-classes:start -->") : end]
     items = []
     for line in manifest.splitlines():
         line = line.strip()
@@ -44,10 +44,10 @@ def check_flavor(flavor_dir, required):
         sys.exit(1)
 
     css = style_path.read_text()
-    comments_stripped = re.sub(r'/\*.*?\*/', '', css, flags=re.DOTALL)
+    comments_stripped = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
 
     # Extract :root block for token checking
-    root_match = re.search(r':root\s*\{(.*?)\}', css, re.DOTALL)
+    root_match = re.search(r":root\s*\{(.*?)\}", css, re.DOTALL)
     root_vars = root_match.group(1) if root_match else ""
 
     missing = []
@@ -82,10 +82,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Validate a flavor's style.css against the rendering contract"
     )
-    parser.add_argument("flavor", nargs="?", default=None,
-                        help="Flavor name or path to flavor directory")
-    parser.add_argument("--list", action="store_true",
-                        help="List all required classes and exit")
+    parser.add_argument(
+        "flavor", nargs="?", default=None, help="Flavor name or path to flavor directory"
+    )
+    parser.add_argument("--list", action="store_true", help="List all required classes and exit")
     args = parser.parse_args()
 
     required = parse_required_classes(CONTRACT_PATH)

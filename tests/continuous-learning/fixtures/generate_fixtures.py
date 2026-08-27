@@ -36,17 +36,17 @@ def generate_observations(count: int = 1500) -> list[dict]:
             "tool": tool,
             "input": {
                 "file_path": f"/path/to/file_{i % 20}.py",
-                "content": f"sample content {i}"[:100]
-            } if tool in ["Read", "Edit", "Write"] else {
-                "command": f"echo 'test {i}'"
-            } if tool == "Bash" else {
-                "pattern": "test"
-            },
+                "content": f"sample content {i}"[:100],
+            }
+            if tool in ["Read", "Edit", "Write"]
+            else {"command": f"echo 'test {i}'"}
+            if tool == "Bash"
+            else {"pattern": "test"},
             "output": f"Result of {tool} operation {i}"[:200] if event == "tool_complete" else None,
             "session": session,
             "project_id": "test123abc456",
             "project_name": "test-project",
-            "tool_use_id": f"toolu_{i:06d}"
+            "tool_use_id": f"toolu_{i:06d}",
         }
         observations.append(obs)
 
@@ -59,12 +59,44 @@ def generate_sessions() -> dict[str, list[dict]]:
 
     # Session with user correction pattern
     sessions["user_correction"] = [
-        {"timestamp": "2026-04-30T10:00:00Z", "event": "tool_start", "tool": "Edit", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:05Z", "event": "tool_complete", "tool": "Edit", "session": "correction-1", "output": "user_rejected: true"},
-        {"timestamp": "2026-04-30T10:00:10Z", "event": "tool_start", "tool": "Read", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:15Z", "event": "tool_complete", "tool": "Read", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:20Z", "event": "tool_start", "tool": "Edit", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:25Z", "event": "tool_complete", "tool": "Edit", "session": "correction-1", "output": "success"},
+        {
+            "timestamp": "2026-04-30T10:00:00Z",
+            "event": "tool_start",
+            "tool": "Edit",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:05Z",
+            "event": "tool_complete",
+            "tool": "Edit",
+            "session": "correction-1",
+            "output": "user_rejected: true",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:10Z",
+            "event": "tool_start",
+            "tool": "Read",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:15Z",
+            "event": "tool_complete",
+            "tool": "Read",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:20Z",
+            "event": "tool_start",
+            "tool": "Edit",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:25Z",
+            "event": "tool_complete",
+            "tool": "Edit",
+            "session": "correction-1",
+            "output": "success",
+        },
     ]
 
     # Session with repeated workflow pattern
@@ -72,21 +104,76 @@ def generate_sessions() -> dict[str, list[dict]]:
     base = datetime(2026, 4, 30, 11, 0, 0)
     for i in range(4):  # 4 repetitions (exceeds minimum of 3)
         t = base + timedelta(minutes=i * 5)
-        sessions["repeated_workflow"].extend([
-            {"timestamp": t.isoformat() + "Z", "event": "tool_start", "tool": "Read", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=5)).isoformat() + "Z", "event": "tool_complete", "tool": "Read", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=10)).isoformat() + "Z", "event": "tool_start", "tool": "Edit", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=15)).isoformat() + "Z", "event": "tool_complete", "tool": "Edit", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=20)).isoformat() + "Z", "event": "tool_start", "tool": "Bash", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=25)).isoformat() + "Z", "event": "tool_complete", "tool": "Bash", "session": "workflow-1"},
-        ])
+        sessions["repeated_workflow"].extend(
+            [
+                {
+                    "timestamp": t.isoformat() + "Z",
+                    "event": "tool_start",
+                    "tool": "Read",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=5)).isoformat() + "Z",
+                    "event": "tool_complete",
+                    "tool": "Read",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=10)).isoformat() + "Z",
+                    "event": "tool_start",
+                    "tool": "Edit",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=15)).isoformat() + "Z",
+                    "event": "tool_complete",
+                    "tool": "Edit",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=20)).isoformat() + "Z",
+                    "event": "tool_start",
+                    "tool": "Bash",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=25)).isoformat() + "Z",
+                    "event": "tool_complete",
+                    "tool": "Bash",
+                    "session": "workflow-1",
+                },
+            ]
+        )
 
     # Session with error resolution pattern
     sessions["error_resolution"] = [
-        {"timestamp": "2026-04-30T12:00:00Z", "event": "tool_start", "tool": "Bash", "session": "resolution-1"},
-        {"timestamp": "2026-04-30T12:00:05Z", "event": "tool_complete", "tool": "Bash", "session": "resolution-1", "output": "error: command not found"},
-        {"timestamp": "2026-04-30T12:00:10Z", "event": "tool_start", "tool": "Bash", "session": "resolution-1", "input": {"command": "modified command"}},
-        {"timestamp": "2026-04-30T12:00:15Z", "event": "tool_complete", "tool": "Bash", "session": "resolution-1", "output": "success"},
+        {
+            "timestamp": "2026-04-30T12:00:00Z",
+            "event": "tool_start",
+            "tool": "Bash",
+            "session": "resolution-1",
+        },
+        {
+            "timestamp": "2026-04-30T12:00:05Z",
+            "event": "tool_complete",
+            "tool": "Bash",
+            "session": "resolution-1",
+            "output": "error: command not found",
+        },
+        {
+            "timestamp": "2026-04-30T12:00:10Z",
+            "event": "tool_start",
+            "tool": "Bash",
+            "session": "resolution-1",
+            "input": {"command": "modified command"},
+        },
+        {
+            "timestamp": "2026-04-30T12:00:15Z",
+            "event": "tool_complete",
+            "tool": "Bash",
+            "session": "resolution-1",
+            "output": "success",
+        },
     ]
 
     return sessions
@@ -105,10 +192,7 @@ def main():
     print(f"Created {obs_file} with {len(observations)} lines")
 
     # Generate cursor.json
-    cursor = {
-        "line": 500,
-        "updated_at": "2026-04-30T10:30:00Z"
-    }
+    cursor = {"line": 500, "updated_at": "2026-04-30T10:30:00Z"}
     cursor_file = FIXTURES_DIR / "cursor.json"
     with open(cursor_file, "w") as f:
         json.dump(cursor, f, indent=2)

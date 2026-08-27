@@ -16,13 +16,13 @@ Phase 4 GREEN: Implementation for TDD.
 
 from __future__ import annotations
 
+# Add lib to path for tz import
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-# Add lib to path for tz import
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 from tz import now_cst_compact
 
@@ -49,10 +49,7 @@ class InstinctManager:
         self.base_dir = base_dir
 
     def create_instinct(
-        self,
-        instinct: InstinctCreated,
-        project_id: str | None = None,
-        scope: str = "project"
+        self, instinct: InstinctCreated, project_id: str | None = None, scope: str = "project"
     ) -> Path | None:
         """
         Create a new instinct YAML file.
@@ -96,7 +93,7 @@ class InstinctManager:
             "project_id": effective_project_id,
             "created_at": now,
             "updated_at": now,
-            "evidence_count": len(evidence_list)
+            "evidence_count": len(evidence_list),
         }
 
         # Build content
@@ -126,11 +123,7 @@ class InstinctManager:
         """Convert an instinct ID to a title."""
         return instinct_id.replace("-", " ").title()
 
-    def update_instinct(
-        self,
-        update: InstinctUpdated,
-        project_id: str
-    ) -> Path | None:
+    def update_instinct(self, update: InstinctUpdated, project_id: str) -> Path | None:
         """
         Update an existing instinct with new evidence and confidence.
 
@@ -175,10 +168,7 @@ class InstinctManager:
                     pass
 
         new_evidence = update.evidence_appended or []
-        unique_new_evidence = [
-            ev for ev in new_evidence
-            if ev.session_id not in existing_sessions
-        ]
+        unique_new_evidence = [ev for ev in new_evidence if ev.session_id not in existing_sessions]
 
         # Update evidence count
         frontmatter["evidence_count"] = existing_count + len(unique_new_evidence)
@@ -188,7 +178,7 @@ class InstinctManager:
             "---",
             yaml.dump(frontmatter, default_flow_style=False, sort_keys=False).strip(),
             "---",
-            body.rstrip()
+            body.rstrip(),
         ]
 
         # Append new evidence
@@ -203,7 +193,14 @@ class InstinctManager:
     def _find_instinct_path(self, instinct_id: str, project_id: str) -> Path | None:
         """Find the path to an instinct file."""
         # Check project-specific location
-        project_path = self.base_dir / "projects" / project_id / "instincts" / "personal" / f"{instinct_id}.yaml"
+        project_path = (
+            self.base_dir
+            / "projects"
+            / project_id
+            / "instincts"
+            / "personal"
+            / f"{instinct_id}.yaml"
+        )
         if project_path.exists():
             return project_path
 
@@ -214,11 +211,7 @@ class InstinctManager:
 
         return None
 
-    def promote_instinct(
-        self,
-        promotion: Promotion,
-        force: bool = False
-    ) -> Path | None:
+    def promote_instinct(self, promotion: Promotion, force: bool = False) -> Path | None:
         """
         Promote a project-scoped instinct to global scope.
 
@@ -291,7 +284,7 @@ class InstinctManager:
             "## Promotion",
             f"- Reason: {promotion.reason}",
             f"- Promoted at: {now}",
-            f"- Source projects: {', '.join(source_projects)}"
+            f"- Source projects: {', '.join(source_projects)}",
         ]
 
         global_path.write_text("\n".join(lines) + "\n")
@@ -321,11 +314,7 @@ class InstinctManager:
 
         return instances
 
-    def process_result(
-        self,
-        result: AgentResult,
-        project_id: str
-    ) -> list[Path]:
+    def process_result(self, result: AgentResult, project_id: str) -> list[Path]:
         """
         Process an AgentResult, creating/updating/promoting instincts.
 
@@ -359,9 +348,7 @@ class InstinctManager:
         return affected_paths
 
     def load_instinct(
-        self,
-        instinct_id: str,
-        project_id: str | None = None
+        self, instinct_id: str, project_id: str | None = None
     ) -> dict[str, Any] | None:
         """
         Load an instinct file and parse its content.
@@ -395,16 +382,10 @@ class InstinctManager:
         frontmatter = yaml.safe_load(parts[1])
         body = "---".join(parts[2:])
 
-        return {
-            "frontmatter": frontmatter,
-            "body": body.strip(),
-            "path": str(file_path)
-        }
+        return {"frontmatter": frontmatter, "body": body.strip(), "path": str(file_path)}
 
     def list_instincts(
-        self,
-        project_id: str | None = None,
-        scope: str | None = None
+        self, project_id: str | None = None, scope: str | None = None
     ) -> list[dict[str, Any]]:
         """
         List all instincts, optionally filtered by project and scope.
@@ -452,10 +433,7 @@ class InstinctManager:
 
         return instincts
 
-    def check_promotion_eligibility(
-        self,
-        instinct_id: str
-    ) -> tuple[bool, str]:
+    def check_promotion_eligibility(self, instinct_id: str) -> tuple[bool, str]:
         """
         Check if an instinct qualifies for promotion.
 
@@ -488,4 +466,7 @@ class InstinctManager:
         if avg_confidence < 0.8:
             return (False, f"Average confidence {avg_confidence:.2f} is below 0.8 threshold")
 
-        return (True, f"Eligible: found in {len(instances)} projects with average confidence {avg_confidence:.2f}")
+        return (
+            True,
+            f"Eligible: found in {len(instances)} projects with average confidence {avg_confidence:.2f}",
+        )

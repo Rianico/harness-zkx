@@ -91,10 +91,7 @@ def process_project_observations(
             sessions[session_id] = []
         sessions[session_id].append(obs)
 
-    session_payloads = [
-        {"session_id": sid, "events": events}
-        for sid, events in sessions.items()
-    ]
+    session_payloads = [{"session_id": sid, "events": events} for sid, events in sessions.items()]
 
     # Run agent
     payload = {
@@ -183,9 +180,11 @@ def main() -> int:
         }
         print(json.dumps(output, indent=2))
     else:
-        print(f"Processed {total_processed} observation(s) across {len(projects_to_process)} project(s).")
+        print(
+            f"Processed {total_processed} observation(s) across {len(projects_to_process)} project(s)."
+        )
         for r in results:
-            msg = r.get('message') or f"{r.get('processed_count', 0)} observations"
+            msg = r.get("message") or f"{r.get('processed_count', 0)} observations"
             print(f"  Project {r['project_id']}: {msg}")
 
     return 0

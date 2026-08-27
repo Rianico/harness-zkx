@@ -42,7 +42,7 @@ import sys
 from pathlib import Path
 
 # Import scrapers
-from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper, SiteScraper, SkillshScraper
+from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper, SiteScraper, SkillsScraper
 
 # Registry of available scrapers
 SCRAPERS = {
@@ -89,11 +89,11 @@ SCRAPERS = {
         "is_site": True,
     },
     "skills": {
-        "class": SkillshScraper,
+        "class": SkillsScraper,  # pyright: ignore[reportUnknownMemberType]
         "default_output": ".lsz/tmp/skill-compose",
         "is_rust": False,
         "is_site": False,
-        "is_skillsh": True,
+        "is_skills": True,
     },
 }
 
@@ -140,47 +140,84 @@ For detailed help on a specific scraper:
                 name,
                 help="Scrape Rust crate documentation",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "target",
                 help="Crate name, GitHub URL, docs.rs URL, or local path",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--output-dir",
                 type=Path,
                 help=f"Output directory (default: {config['default_output']})",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--force",
                 action="store_true",
                 help="Re-clone repository and regenerate",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--primary-crate",
                 help="Primary crate name for workspaces",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--include-deps",
                 action="store_true",
                 help="Include dependency documentation (default: workspace only)",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--include-examples",
                 action="store_true",
                 help="Include example crates from workspace (default: library crates only)",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--full-method-docs",
                 action="store_true",
                 default=True,
                 help="Include full method documentation (default: True)",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--exclude-private",
                 action="store_true",
                 default=True,
                 help="Exclude private items (default: True)",
+            )
+        elif config.get("is_skills"):
+            sub = subparsers.add_parser(  # pyright: ignore[reportUnknownMemberType]
+                name,
+                help="Fetch skills from skill.sh via npx skills mature client for LLM composition",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+            )
+            _ = sub.add_argument(
+                "inputs",
+                nargs="+",
+                help="Skill sources: skill.sh URL, owner/collection/skill, or GitHub repo URL",
+            )
+            _ = sub.add_argument(
+                "--staging",
+                type=Path,
+                help="Staging root (default: .lsz/tmp/skill-compose)",
+            )
+            _ = sub.add_argument(
+                "--output-dir",
+                type=Path,
+                help="Alias for --staging",
+            )
+            _ = sub.add_argument(
+                "--run",
+                help="Run slug for multi-run isolation (default: single run at staging root)",
+            )
+            _ = sub.add_argument(
+                "--method",
+                choices=["auto", "raw", "clone", "npx"],
+                default="auto",
+                help="Fetch method (default: auto -> npx; raw/clone deprecated, map to npx)",
+            )
+            _ = sub.add_argument(
+                "--force",
+                action="store_true",
+                help="Clear cache and re-fetch from network",
             )
         elif config.get("is_site"):
             # Site scraper has base_url and urls arguments
@@ -188,56 +225,23 @@ For detailed help on a specific scraper:
                 name,
                 help="Scrape generic site via llms.txt/sitemap.xml",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "urls",
                 nargs="*",
                 help="URLs to fetch (fetch mode). If omitted, uses discovery mode.",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--base-url",
                 help="Base URL for discovery mode (finds URLs via llms.txt/sitemap.xml)",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--output-dir",
                 type=Path,
                 help=f"Output directory (default: {config['default_output']})",
             )
-            sub.add_argument(
-                "--force",
-                action="store_true",
-                help="Clear cache and re-fetch from network",
-            )
-        elif config.get("is_skillsh"):
-            # Skill.sh / GitHub skill fetcher (complementary skills for LLM composition)
-            sub = subparsers.add_parser(
-                name,
-                help="Fetch complementary agent skills from skill.sh/GitHub for LLM composition",
-                formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,
-            )
-            sub.add_argument(
-                "sources",
-                nargs="+",
-                help="Skill.sh URL, owner/collection[/skill], or GitHub repo URL (one or many)",
-            )
-            sub.add_argument(
-                "--output-dir",
-                type=Path,
-                help=f"Staging root (default: {config['default_output']})",
-            )
-            sub.add_argument(
-                "--run",
-                help="Run slug for this composition (default: auto-derived)",
-            )
-            sub.add_argument(
-                "--method",
-                choices=["auto", "raw", "clone", "npx"],
-                default="auto",
-                help="Fetch method: raw (contents API), clone (git), npx (opt-in), auto",
-            )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--force",
                 action="store_true",
                 help="Clear cache and re-fetch from network",
@@ -248,14 +252,14 @@ For detailed help on a specific scraper:
                 name,
                 help=f"Scrape {name.upper()} documentation",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--output-dir",
                 type=Path,
                 help=f"Output directory (default: {config['default_output']})",
             )
-            sub.add_argument(
+            _ = sub.add_argument(
                 "--force",
                 action="store_true",
                 help="Clear cache and re-fetch from network",
@@ -284,10 +288,24 @@ def main() -> None:
     config = SCRAPERS[args.doc_type]
 
     # Set default output directory
-    output_dir = args.output_dir or Path(config["default_output"])
+    output_dir = args.output_dir or Path(config["default_output"])  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
 
     # Create scraper instance
-    if config["is_rust"]:
+    if config.get("is_skills"):
+        staging = (
+            getattr(args, "staging", None)
+            or getattr(args, "output_dir", None)
+            or Path(config["default_output"])
+        )  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+        scraper = config["class"](  # pyright: ignore[reportUnknownMemberType, reportCallIssue]
+            inputs=getattr(args, "inputs", None),
+            staging=staging,
+            run=getattr(args, "run", None),
+            output_dir=getattr(args, "output_dir", None),
+            method=getattr(args, "method", "auto"),
+            force=args.force,
+        )
+    elif config["is_rust"]:
         scraper = config["class"](
             target=args.target,
             output_dir=output_dir,
@@ -303,14 +321,6 @@ def main() -> None:
             base_url=getattr(args, "base_url", None) or "",
             urls=getattr(args, "urls", None),
             output_dir=output_dir,
-            force=args.force,
-        )
-    elif config.get("is_skillsh"):
-        scraper = config["class"](
-            sources=args.sources,
-            output_dir=output_dir,
-            run=getattr(args, "run", None),
-            method=getattr(args, "method", "auto"),
             force=args.force,
         )
     elif config.get("requires_api_type"):

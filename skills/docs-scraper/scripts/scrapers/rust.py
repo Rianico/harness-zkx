@@ -49,16 +49,15 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 console = Console()
 
 # Markdown link pattern shared by _rewrite_links and _verify_links
-MD_LINK_PATTERN = re.compile(r'\]\(([^)]+\.md[^)]*)\)')
+MD_LINK_PATTERN = re.compile(r"\]\(([^)]+\.md[^)]*)\)")
 
 
 def _get_crate_dirs(output_dir: Path) -> set[str]:
@@ -68,17 +67,18 @@ def _get_crate_dirs(output_dir: Path) -> set[str]:
 
 def _split_link(link: str) -> tuple[str, str] | None:
     """Split a markdown link into (path, anchor). Returns None for external URLs."""
-    if link.startswith(('http://', 'https://')):
+    if link.startswith(("http://", "https://")):
         return None
-    if '#' in link:
-        path, anchor = link.split('#', 1)
-        return path, f'#{anchor}'
-    return link, ''
+    if "#" in link:
+        path, anchor = link.split("#", 1)
+        return path, f"#{anchor}"
+    return link, ""
 
 
 @dataclass
 class LinkContext:
     """Per-file context for link rewriting, computed once before processing links."""
+
     md_file: Path
     was_flattened: bool
     is_crate_child: bool
@@ -95,29 +95,29 @@ class LinkContext:
     def try_rewrite(self, candidate: str, anchor: str) -> str | None:
         """If candidate path resolves, return formatted markdown link; else None."""
         if self.path_exists(self.md_file.parent / candidate):
-            return f']({candidate}{anchor})'
+            return f"]({candidate}{anchor})"
         return None
 
 
 def _strip_leading_dotdot(path: str) -> str:
     """Remove one leading ../ from a path."""
-    return path[3:] if path.startswith('../') else path
+    return path[3:] if path.startswith("../") else path
 
 
 def _fix_flatten_index(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
     """Fix 1: Convert /index.md -> .md with depth adjustment."""
-    if '/index.md' not in link_path:
+    if "/index.md" not in link_path:
         return None
 
-    new_path = link_path.replace('/index.md', '.md')
-    if ctx.was_flattened and new_path.startswith('../'):
+    new_path = link_path.replace("/index.md", ".md")
+    if ctx.was_flattened and new_path.startswith("../"):
         new_path = _strip_leading_dotdot(new_path)
-        if not new_path.startswith(('./', '../')):
-            new_path = './' + new_path
-    elif ctx.is_crate_child and new_path.startswith('../'):
+        if not new_path.startswith(("./", "../")):
+            new_path = "./" + new_path
+    elif ctx.is_crate_child and new_path.startswith("../"):
         bare = _strip_leading_dotdot(new_path)
-        if bare.replace('.md', '') not in ctx.crate_dirs:
-            new_path = './' + bare
+        if bare.replace(".md", "") not in ctx.crate_dirs:
+            new_path = "./" + bare
 
     result = ctx.try_rewrite(new_path, anchor)
     if result:
@@ -127,100 +127,106 @@ def _fix_flatten_index(ctx: LinkContext, link_path: str, anchor: str) -> str | N
     module_name = ctx.md_file.stem
     module_dir = ctx.md_file.parent / module_name
     if ctx.dir_exists(module_dir):
-        candidate = f'./{module_name}/{new_path}' if not new_path.startswith('./') else f'./{module_name}/{new_path[2:]}'
+        candidate = (
+            f"./{module_name}/{new_path}"
+            if not new_path.startswith("./")
+            else f"./{module_name}/{new_path[2:]}"
+        )
         result = ctx.try_rewrite(candidate, anchor)
         if result:
             return result
 
     # Fallback: /index.md -> .md without depth change
-    alt_path = link_path.replace('/index.md', '.md')
+    alt_path = link_path.replace("/index.md", ".md")
     return ctx.try_rewrite(alt_path, anchor)
 
 
 def _fix_reduce_depth(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
     """Fix 2: Reduce ../ count for flattened/crate-child files."""
-    dotdot_count = link_path.count('../')
-    remainder = link_path.replace('../', '')
+    dotdot_count = link_path.count("../")
+    remainder = link_path.replace("../", "")
 
-    needs_reduction = (ctx.was_flattened and dotdot_count >= 1) or (ctx.is_crate_child and dotdot_count >= 2)
+    needs_reduction = (ctx.was_flattened and dotdot_count >= 1) or (
+        ctx.is_crate_child and dotdot_count >= 2
+    )
     if not needs_reduction:
         return None
 
-    reduced = '../' * (dotdot_count - 1) + remainder
-    if not reduced.startswith(('./', '../')):
-        reduced = './' + reduced
+    reduced = "../" * (dotdot_count - 1) + remainder
+    if not reduced.startswith(("./", "../")):
+        reduced = "./" + reduced
     return ctx.try_rewrite(reduced, anchor)
 
 
 def _fix_parent_module(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
     """Fix 3: ../index.md -> ../parentname.md when parent was flattened."""
-    if not link_path.endswith('index.md'):
+    if not link_path.endswith("index.md"):
         return None
 
-    dotdot_count = link_path.count('../')
+    dotdot_count = link_path.count("../")
     current = ctx.md_file.parent
     for _ in range(dotdot_count):
         current = current.parent
 
     dir_name = current.name
-    if not dir_name or not ctx.path_exists(current.parent / f'{dir_name}.md'):
+    if not dir_name or not ctx.path_exists(current.parent / f"{dir_name}.md"):
         return None
 
     if dotdot_count <= 1:
-        new_path = f'./{dir_name}.md'
+        new_path = f"./{dir_name}.md"
     else:
-        new_path = f'{"../" * max(0, dotdot_count - 1)}{dir_name}.md'
+        new_path = f"{'../' * max(0, dotdot_count - 1)}{dir_name}.md"
     return ctx.try_rewrite(new_path, anchor)
 
 
 def _fix_subdir_lookup(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
     """Fix 4: Bare filename.md or module/index.md -> ./module/filename.md."""
-    has_slash = '/' in link_path
-    is_module_index = link_path.count('/') == 1 and link_path.endswith('/index.md')
+    has_slash = "/" in link_path
+    is_module_index = link_path.count("/") == 1 and link_path.endswith("/index.md")
     if has_slash and not is_module_index:
         return None
 
     module_name = ctx.md_file.stem
     module_dir = ctx.md_file.parent / module_name
-    lookup_name = link_path.replace('/index.md', '.md') if '/index.md' in link_path else link_path
+    lookup_name = link_path.replace("/index.md", ".md") if "/index.md" in link_path else link_path
     if ctx.dir_exists(module_dir) and ctx.path_exists(module_dir / lookup_name):
-        return f'](./{module_name}/{lookup_name}{anchor})'
+        return f"](./{module_name}/{lookup_name}{anchor})"
     return None
 
 
 def _fix_parent_index(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
     """Fix 4c+4d: index.md or ../index.md -> ../parentname.md."""
-    if link_path not in ('index.md', '../index.md'):
+    if link_path not in ("index.md", "../index.md"):
         return None
     # index.md from flattened/crate-child already handled by self-reference check
-    if link_path == 'index.md' and (ctx.was_flattened or ctx.is_crate_child):
+    if link_path == "index.md" and (ctx.was_flattened or ctx.is_crate_child):
         return None
 
     parent_name = ctx.md_file.parent.name
-    parent_md = ctx.md_file.parent.parent / f'{parent_name}.md'
+    parent_md = ctx.md_file.parent.parent / f"{parent_name}.md"
     if ctx.path_exists(parent_md):
-        return f'](../{parent_name}.md{anchor})'
+        return f"](../{parent_name}.md{anchor})"
     return None
 
 
 def _fix_sibling(ctx: LinkContext, link_path: str, anchor: str) -> str | None:
     """Fix 5+6: ../module.md or ../dir/file.md -> ./module.md or ./dir/file.md for crate children."""
-    if not ctx.is_crate_child or not link_path.startswith('../'):
+    if not ctx.is_crate_child or not link_path.startswith("../"):
         return None
 
     parts_after = _strip_leading_dotdot(link_path)
 
     # Fix 5: ../module.md (sibling file)
-    if '/' not in parts_after:
-        bare_name = parts_after.replace('.md', '')
+    if "/" not in parts_after:
+        bare_name = parts_after.replace(".md", "")
         if bare_name not in ctx.crate_dirs and ctx.path_exists(ctx.md_file.parent / parts_after):
-            return f'](./{parts_after}{anchor})'
+            return f"](./{parts_after}{anchor})"
         return None
 
     # Fix 6: ../dir/file.md (sibling directory)
-    dir_name = parts_after.split('/')[0]
+    dir_name = parts_after.split("/")[0]
     if dir_name not in ctx.crate_dirs:
-        return ctx.try_rewrite('./' + parts_after, anchor)
+        return ctx.try_rewrite("./" + parts_after, anchor)
     return None
 
 
@@ -235,7 +241,6 @@ _LINK_FIX_STRATEGIES = [
 ]
 
 
-
 RUST_URL_PATTERNS = [
     r"^https?://docs\.rs/[^/]+",  # docs.rs/crate_name
     r"^https?://crates\.io/crates/[^/]+",  # crates.io/crates/crate_name
@@ -245,10 +250,24 @@ RUST_URL_PATTERNS = [
 
 # Known Rust TUI/framework crates for auto-detection
 KNOWN_RUST_CRATES = {
-    "ratatui", "tui-rs", "crossterm", "termion", "termwiz",
-    "tokio", "async-std", "actix", "warp", "axum",
-    "serde", "clap", "anyhow", "thiserror",
-    "bevy", "egui", "iced", "druid",
+    "ratatui",
+    "tui-rs",
+    "crossterm",
+    "termion",
+    "termwiz",
+    "tokio",
+    "async-std",
+    "actix",
+    "warp",
+    "axum",
+    "serde",
+    "clap",
+    "anyhow",
+    "thiserror",
+    "bevy",
+    "egui",
+    "iced",
+    "druid",
 }
 
 
@@ -305,8 +324,7 @@ def check_prerequisites() -> tuple[bool, str]:
     )
     if result.returncode != 0:
         return False, (
-            "cargo-docs-md not installed. Install with:\n"
-            "  cargo install cargo-docs-md --locked"
+            "cargo-docs-md not installed. Install with:\n  cargo install cargo-docs-md --locked"
         )
 
     # Check nightly toolchain
@@ -526,7 +544,9 @@ class RustScraper:
         # Build command - always build all to get workspace members
         # We filter to workspace crates afterwards
         cmd = [
-            "cargo", "+nightly", "doc",
+            "cargo",
+            "+nightly",
+            "doc",
         ]
 
         # Set environment for unstable JSON output
@@ -596,7 +616,7 @@ class RustScraper:
                     is_example = "example" in member.lower()
 
                     # Handle glob patterns like 'ratatui-*' or 'examples/*'
-                    if '*' in member:
+                    if "*" in member:
                         # Use glob to expand pattern
                         pattern = str(source_dir / member / "Cargo.toml")
                         for member_cargo in glob_module.glob(pattern):
@@ -605,7 +625,9 @@ class RustScraper:
                                 # Check if path contains 'examples'
                                 is_example_path = "examples" in member_cargo_path.parts
                                 member_content = member_cargo_path.read_text()
-                                member_names = re.findall(r'^name\s*=\s*"([^"]+)"', member_content, re.MULTILINE)
+                                member_names = re.findall(
+                                    r'^name\s*=\s*"([^"]+)"', member_content, re.MULTILINE
+                                )
                                 for name in member_names:
                                     workspace_crates.add(name)
                                     if is_example or is_example_path:
@@ -616,7 +638,9 @@ class RustScraper:
                         member_cargo = member_path / "Cargo.toml"
                         if member_cargo.exists():
                             member_content = member_cargo.read_text()
-                            member_names = re.findall(r'^name\s*=\s*"([^"]+)"', member_content, re.MULTILINE)
+                            member_names = re.findall(
+                                r'^name\s*=\s*"([^"]+)"', member_content, re.MULTILINE
+                            )
                             workspace_crates.update(member_names)
                             if is_example:
                                 example_crates.update(member_names)
@@ -661,9 +685,12 @@ class RustScraper:
         console.print("[cyan]Generating markdown with cargo-docs-md...[/]")
 
         cmd = [
-            "cargo", "docs-md",
-            "--dir", str(json_dir),
-            "--output", str(output_dir),
+            "cargo",
+            "docs-md",
+            "--dir",
+            str(json_dir),
+            "--output",
+            str(output_dir),
         ]
 
         if self.primary_crate:
@@ -711,7 +738,7 @@ class RustScraper:
             # Empty div elements: <div id="foo"></div>
             (r'<div id="[^"]+"></div>\n?', ""),
             # Multiple consecutive blank lines (reduce to max 2)
-            (r'\n{3,}', "\n\n"),
+            (r"\n{3,}", "\n\n"),
         ]
 
         cleaned_count = 0
@@ -749,7 +776,7 @@ class RustScraper:
         files_to_move = []
         flattened_modules: set[str] = set()
 
-        crate_dirs = _get_crate_dirs(output_dir)
+        _get_crate_dirs(output_dir)
 
         # Collect all files to move
         for index_file in list(output_dir.glob("**/index.md")):
@@ -770,7 +797,9 @@ class RustScraper:
         # Move files
         for index_file, flattened_path, parent_dir in files_to_move:
             if flattened_path.exists():
-                console.print(f"[yellow]Skipping:[/] {index_file} (target exists: {flattened_path.name})")
+                console.print(
+                    f"[yellow]Skipping:[/] {index_file} (target exists: {flattened_path.name})"
+                )
                 continue
 
             # Track this flattened module
@@ -791,7 +820,9 @@ class RustScraper:
                 pass
 
         if flattened_count > 0:
-            console.print(f"[dim]Flattened {flattened_count} files, removed {removed_dirs} empty directories[/]")
+            console.print(
+                f"[dim]Flattened {flattened_count} files, removed {removed_dirs} empty directories[/]"
+            )
 
         return flattened_modules
 
@@ -831,14 +862,22 @@ class RustScraper:
             file_rel = md_file.relative_to(output_dir)
             file_parts = file_rel.parts
 
-            containing_crate = file_parts[0] if len(file_parts) > 1 and file_parts[0] in crate_dirs else None
-            is_crate_root = md_file.name == 'index.md' and containing_crate and len(file_parts) == 2
-            is_summary = md_file.name == 'SUMMARY.md' and md_file.parent == output_dir
+            containing_crate = (
+                file_parts[0] if len(file_parts) > 1 and file_parts[0] in crate_dirs else None
+            )
+            is_crate_root = md_file.name == "index.md" and containing_crate and len(file_parts) == 2
+            is_summary = md_file.name == "SUMMARY.md" and md_file.parent == output_dir
 
             file_parent = str(file_rel.parent)
             file_stem = md_file.stem
-            was_flattened = f"{file_parent}/{file_stem}" in flattened_modules if file_parent != '.' else file_stem in flattened_modules
-            is_crate_child = containing_crate is not None and len(file_parts) == 2 and md_file.name != 'index.md'
+            was_flattened = (
+                f"{file_parent}/{file_stem}" in flattened_modules
+                if file_parent != "."
+                else file_stem in flattened_modules
+            )
+            is_crate_child = (
+                containing_crate is not None and len(file_parts) == 2 and md_file.name != "index.md"
+            )
 
             ctx = LinkContext(
                 md_file=md_file,
@@ -857,12 +896,12 @@ class RustScraper:
                     return match.group(0)
 
                 link_path, anchor = split
-                if not link_path.endswith('.md'):
+                if not link_path.endswith(".md"):
                     return match.group(0)
 
                 # Self-reference: for flattened files, bare index.md -> #
-                if link_path == 'index.md' and ctx.was_flattened:
-                    return f']({anchor})' if anchor else '](#)'
+                if link_path == "index.md" and ctx.was_flattened:
+                    return f"]({anchor})" if anchor else "](#)"
 
                 # If link resolves as-is, no fix needed
                 if ctx.path_exists(ctx.md_file.parent / link_path):
@@ -881,16 +920,16 @@ class RustScraper:
             # Fix SUMMARY.md crate links
             if is_summary:
                 for crate_name in crate_dirs:
-                    pattern = rf'\]\({crate_name}\.md(\#[^)]*)?\)'
-                    replacement = rf']({crate_name}/index.md\1)'
+                    pattern = rf"\]\({crate_name}\.md(\#[^)]*)?\)"
+                    replacement = rf"]({crate_name}/index.md\1)"
                     content = re.sub(pattern, replacement, content)
 
             # Fix crate root cross-crate links
             if is_crate_root:
                 for crate_name in crate_dirs:
                     if crate_name != md_file.parent.name:
-                        pattern = rf'\]\(\.\./{crate_name}\.md(\#[^)]*)?\)'
-                        replacement = rf'](../{crate_name}/index.md\1)'
+                        pattern = rf"\]\(\.\./{crate_name}\.md(\#[^)]*)?\)"
+                        replacement = rf"](../{crate_name}/index.md\1)"
                         content = re.sub(pattern, replacement, content)
 
             if content != original_content:
@@ -900,7 +939,9 @@ class RustScraper:
         if rewritten_count > 0:
             console.print(f"[dim]Rewrote links in {rewritten_count} files[/]")
 
-    def _verify_links(self, output_dir: Path, file_set: set[Path] | None = None) -> list[tuple[Path, str]]:
+    def _verify_links(
+        self, output_dir: Path, file_set: set[Path] | None = None
+    ) -> list[tuple[Path, str]]:
         """Verify all internal links resolve correctly."""
         console.print("[dim]Verifying internal links...[/]")
 
@@ -924,7 +965,7 @@ class RustScraper:
                     continue
 
                 link_path, _ = split
-                if link_path in ('CONTRIBUTING.md', '../CONTRIBUTING.md', '../../CONTRIBUTING.md'):
+                if link_path in ("CONTRIBUTING.md", "../CONTRIBUTING.md", "../../CONTRIBUTING.md"):
                     continue
 
                 target_path = (md_file.parent / link_path).resolve()
@@ -969,7 +1010,7 @@ class RustScraper:
         """
         readme_path = output_dir / "README.md"
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         date_str = now.strftime("%Y-%m-%d")
         date_display = now.strftime("%Y-%m-%d %H:%M UTC")
 
@@ -994,38 +1035,44 @@ class RustScraper:
             for key, value in extra_metadata.items():
                 lines.append(f"- **{key}:** {value}")
 
-        lines.extend([
-            "",
-            "## Usage",
-            "",
-            "This documentation was generated from Rust crate source code using `cargo-docs-md`. ",
-            "The content is optimized for AI assistant consumption with:",
-            "",
-            "- Clean markdown formatting",
-            "- Module structure preserved",
-            "- Cross-crate links resolved",
-            "",
-            "### Caveats",
-            "",
-            "- **Freshness:** This snapshot was taken on a specific date. Check crates.io or GitHub for updates.",
-            "- **Accuracy:** Some formatting may differ from docs.rs. Refer to official docs for canonical content.",
-            "- **Generated:** This documentation is auto-generated. The original doc comments are in the source code.",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Usage",
+                "",
+                "This documentation was generated from Rust crate source code using `cargo-docs-md`. ",
+                "The content is optimized for AI assistant consumption with:",
+                "",
+                "- Clean markdown formatting",
+                "- Module structure preserved",
+                "- Cross-crate links resolved",
+                "",
+                "### Caveats",
+                "",
+                "- **Freshness:** This snapshot was taken on a specific date. Check crates.io or GitHub for updates.",
+                "- **Accuracy:** Some formatting may differ from docs.rs. Refer to official docs for canonical content.",
+                "- **Generated:** This documentation is auto-generated. The original doc comments are in the source code.",
+            ]
+        )
 
         if source_url:
-            lines.extend([
-                "",
-                "### Version Check",
-                "",
-                f"To get the latest version, check [crates.io](https://crates.io/crates/{crate_name}) ",
-                f"or the [source repository]({source_url}).",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "### Version Check",
+                    "",
+                    f"To get the latest version, check [crates.io](https://crates.io/crates/{crate_name}) ",
+                    f"or the [source repository]({source_url}).",
+                ]
+            )
 
-        lines.extend([
-            "",
-            "---",
-            f"*Generated by scraper skill on {date_str}*",
-        ])
+        lines.extend(
+            [
+                "",
+                "---",
+                f"*Generated by scraper skill on {date_str}*",
+            ]
+        )
 
         readme_path.write_text("\n".join(lines), encoding="utf-8")
         console.print(f"[green]Generated:[/] {readme_path}")
@@ -1072,7 +1119,7 @@ class RustScraper:
 
             # Verify all links work (reuse file_set from rewrite step)
             file_set = {p.resolve() for p in self.output_dir.glob("**/*") if p.is_file()}
-            broken_links = self._verify_links(self.output_dir, file_set)
+            self._verify_links(self.output_dir, file_set)
 
             # Report results
             md_files = list(self.output_dir.glob("**/*.md"))
@@ -1121,7 +1168,7 @@ class RustScraper:
             )
 
             # Show structure
-            console.print(f"\n[dim]Structure:[/]")
+            console.print("\n[dim]Structure:[/]")
             for item in sorted(self.output_dir.iterdir())[:10]:
                 if item.is_dir():
                     count = len(list(item.glob("**/*.md")))

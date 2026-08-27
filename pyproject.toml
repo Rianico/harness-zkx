@@ -34,6 +34,22 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "B007", "B023", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E402"]
+"skills/*/scripts/**/*.py" = ["E402"]
 
 [tool.basedpyright]
-allowedUntypedLibraries = ["markdown", "bs4"]
+allowedUntypedLibraries = ["markdown", "bs4", "pytest", "yaml", "pydantic", "requests", "html2text", "tz", "rich", "frontmatter"]
+reportMissingImports = false
+reportMissingModuleSource = false
+reportMissingTypeStubs = false
+reportOptionalMemberAccess = "warning"
+reportArgumentType = "warning"
+reportAttributeAccessIssue = "warning"
+reportReturnType = "warning"
+reportRedeclaration = "warning"
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false

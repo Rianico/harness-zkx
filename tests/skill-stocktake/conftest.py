@@ -1,8 +1,7 @@
 """Pytest configuration for skill-stocktake tests."""
+
 import sys
 from pathlib import Path
-
-import pytest
 
 # Add scripts directory to Python path for imports
 # tests/skill-stocktake/ -> skills/skill-stocktake/scripts/

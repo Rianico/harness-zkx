@@ -5,11 +5,7 @@ flattening and link rewriting) without requiring cargo-docs-md or Rust.
 They build fixture filesystems and call the strategy functions directly.
 """
 
-import re
-import tempfile
 from pathlib import Path
-
-import pytest
 
 # Import from the rust scraper module
 from scrapers.rust import (
@@ -26,8 +22,8 @@ from scrapers.rust import (
     _strip_leading_dotdot,
 )
 
-
 # --- _split_link tests ---
+
 
 class TestSplitLink:
     def test_plain_path(self):
@@ -54,6 +50,7 @@ class TestSplitLink:
 
 # --- _get_crate_dirs tests ---
 
+
 class TestGetCrateDirs:
     def test_finds_crate_dirs(self, tmp_path):
         (tmp_path / "ratatui").mkdir()
@@ -67,6 +64,7 @@ class TestGetCrateDirs:
 
 # --- _strip_leading_dotdot tests ---
 
+
 class TestStripLeadingDotdot:
     def test_removes_dotdot(self):
         assert _strip_leading_dotdot("../module.md") == "module.md"
@@ -79,6 +77,7 @@ class TestStripLeadingDotdot:
 
 
 # --- LinkContext helpers ---
+
 
 def _make_ctx(tmp_path: Path, file_structure: dict, **overrides) -> LinkContext:
     """Build a LinkContext from a file structure dict.
@@ -123,14 +122,20 @@ def _make_ctx(tmp_path: Path, file_structure: dict, **overrides) -> LinkContext:
 
 # --- Strategy function tests ---
 
+
 class TestFixFlattenIndex:
     def test_converts_index_md_to_dot_md(self, tmp_path):
         # File at ratatui/prelude.md (crate child) linking to ../backend/index.md
         # After flattening, backend.md is at ratatui/backend.md
-        ctx = _make_ctx(tmp_path, {
-            "ratatui/prelude.md": "",
-            "ratatui/backend.md": "",
-        }, crate_dirs={"ratatui"}, is_crate_child=True)
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui/prelude.md": "",
+                "ratatui/backend.md": "",
+            },
+            crate_dirs={"ratatui"},
+            is_crate_child=True,
+        )
         result = _fix_flatten_index(ctx, "../backend/index.md", "")
         assert result == "](./backend.md)"
 
@@ -142,15 +147,23 @@ class TestFixFlattenIndex:
     def test_depth_adjustment_for_flattened(self, tmp_path):
         # File at ratatui_core/style/palette.md (flattened) linking to ../style/index.md
         # After flattening, style.md is at ratatui_core/style.md
-        ctx = _make_ctx(tmp_path, {
-            "ratatui_core/style.md": "",
-            "ratatui_core/style/palette.md": "",
-        }, was_flattened=True)
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui_core/style.md": "",
+                "ratatui_core/style/palette.md": "",
+            },
+            was_flattened=True,
+        )
         # md_file is ratatui_core/style.md by default (first .md) - need to override
-        ctx = _make_ctx(tmp_path, {
-            "ratatui_core/style.md": "",
-            "ratatui_core/style/palette.md": "",
-        }, was_flattened=True)
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui_core/style.md": "",
+                "ratatui_core/style/palette.md": "",
+            },
+            was_flattened=True,
+        )
         # Set md_file to the flattened file inside the style directory
         ctx.md_file = tmp_path / "ratatui_core" / "style" / "palette.md"
         result = _fix_flatten_index(ctx, "../style/index.md", "")
@@ -166,10 +179,14 @@ class TestFixReduceDepth:
     def test_reduces_dotdot_for_flattened(self, tmp_path):
         # A flattened file at ratatui/prelude.md linking to ../../symbols/bar.md
         # With was_flattened, reduce ../ count by 1: ../symbols/bar.md -> ./symbols/bar.md
-        ctx = _make_ctx(tmp_path, {
-            "ratatui/prelude.md": "",
-            "ratatui/symbols/bar.md": "",
-        }, was_flattened=True)
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui/prelude.md": "",
+                "ratatui/symbols/bar.md": "",
+            },
+            was_flattened=True,
+        )
         result = _fix_reduce_depth(ctx, "../symbols/bar.md", "")
         assert result is not None
 
@@ -187,10 +204,13 @@ class TestFixParentModule:
         # But if the walk-up lands in style/ and style.md exists as a flattened file...
         # Actually: ../index.md from palette/material.md walks up 1 to style/
         # dir_name = "style", check style.md at ratatui_core/style.md -> exists
-        ctx = _make_ctx(tmp_path, {
-            "ratatui_core/style.md": "",
-            "ratatui_core/style/palette/material.md": "",
-        })
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui_core/style.md": "",
+                "ratatui_core/style/palette/material.md": "",
+            },
+        )
         ctx.md_file = tmp_path / "ratatui_core" / "style" / "palette" / "material.md"
         result = _fix_parent_module(ctx, "../index.md", "")
         # Walks up from palette/ to style/, dir_name="style", style.md exists
@@ -204,10 +224,13 @@ class TestFixParentModule:
     def test_resolves_grandparent_flattened_module(self, tmp_path):
         # File deep in a subdirectory linking to ../../index.md
         # The walk-up lands on a directory whose name has a flattened .md
-        ctx = _make_ctx(tmp_path, {
-            "ratatui_core/style.md": "",
-            "ratatui_core/style/palette/material.md": "",
-        })
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui_core/style.md": "",
+                "ratatui_core/style/palette/material.md": "",
+            },
+        )
         ctx.md_file = tmp_path / "ratatui_core" / "style" / "palette" / "material.md"
         # ../../index.md walks up 2: palette/ -> style/
         # dir_name = "style", check style.md -> exists
@@ -228,10 +251,13 @@ class TestFixParentModule:
 
 class TestFixSubdirLookup:
     def test_finds_submodule_file(self, tmp_path):
-        ctx = _make_ctx(tmp_path, {
-            "ratatui/symbols.md": "",
-            "ratatui/symbols/bar.md": "",
-        })
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui/symbols.md": "",
+                "ratatui/symbols/bar.md": "",
+            },
+        )
         result = _fix_subdir_lookup(ctx, "bar.md", "")
         assert result == "](./symbols/bar.md)"
 
@@ -243,45 +269,65 @@ class TestFixSubdirLookup:
 
 class TestFixParentIndex:
     def test_bare_index_md_to_parent(self, tmp_path):
-        ctx = _make_ctx(tmp_path, {
-            "ratatui_core/symbols/bar.md": "",
-            "ratatui_core/symbols.md": "",
-        })
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui_core/symbols/bar.md": "",
+                "ratatui_core/symbols.md": "",
+            },
+        )
         result = _fix_parent_index(ctx, "index.md", "")
         assert result is not None
         assert "symbols.md" in result
 
     def test_dotdot_index_md_to_parent(self, tmp_path):
-        ctx = _make_ctx(tmp_path, {
-            "ratatui_core/style/palette/material.md": "",
-            "ratatui_core/style/palette.md": "",
-        })
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui_core/style/palette/material.md": "",
+                "ratatui_core/style/palette.md": "",
+            },
+        )
         result = _fix_parent_index(ctx, "../index.md", "")
         assert result is not None
         assert "palette.md" in result
 
     def test_skips_flattened_self_ref(self, tmp_path):
-        ctx = _make_ctx(tmp_path, {
-            "ratatui/prelude.md": "",
-        }, was_flattened=True)
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui/prelude.md": "",
+            },
+            was_flattened=True,
+        )
         result = _fix_parent_index(ctx, "index.md", "")
         assert result is None
 
 
 class TestFixSibling:
     def test_sibling_module_for_crate_child(self, tmp_path):
-        ctx = _make_ctx(tmp_path, {
-            "ratatui/prelude.md": "",
-            "ratatui/backend.md": "",
-        }, is_crate_child=True, crate_dirs={"ratatui"})
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui/prelude.md": "",
+                "ratatui/backend.md": "",
+            },
+            is_crate_child=True,
+            crate_dirs={"ratatui"},
+        )
         result = _fix_sibling(ctx, "../backend.md", "")
         assert result == "](./backend.md)"
 
     def test_sibling_directory_for_crate_child(self, tmp_path):
-        ctx = _make_ctx(tmp_path, {
-            "ratatui/prelude.md": "",
-            "ratatui/symbols/bar.md": "",
-        }, is_crate_child=True, crate_dirs={"ratatui"})
+        ctx = _make_ctx(
+            tmp_path,
+            {
+                "ratatui/prelude.md": "",
+                "ratatui/symbols/bar.md": "",
+            },
+            is_crate_child=True,
+            crate_dirs={"ratatui"},
+        )
         result = _fix_sibling(ctx, "../symbols/bar.md", "")
         assert result == "](./symbols/bar.md)"
 
@@ -292,6 +338,7 @@ class TestFixSibling:
 
 
 # --- MD_LINK_PATTERN tests ---
+
 
 class TestMDLinkPattern:
     def test_matches_md_link(self):
@@ -315,11 +362,13 @@ class TestMDLinkPattern:
 
 # --- Integration: flatten + rewrite + verify pipeline ---
 
+
 class TestFlattenRewritePipeline:
     """Integration tests using RustScraper methods on fixture filesystems."""
 
     def _make_scraper(self, tmp_path):
         from scrapers.rust import RustScraper
+
         return RustScraper(target="dummy", output_dir=tmp_path)
 
     def test_flatten_simple_crate(self, tmp_path):
@@ -370,7 +419,7 @@ class TestFlattenRewritePipeline:
 
         # The self-reference check is done inline in rewrite_link, not in strategies
         # Verify that index.md with was_flattened=True triggers the self-reference path
-        link_path, anchor = "index.md", ""
+        link_path, _anchor = "index.md", ""
         assert link_path == "index.md" and ctx.was_flattened
 
     def test_verify_links_clean(self, tmp_path):
@@ -401,18 +450,15 @@ class TestFlattenRewritePipeline:
         # that go outside the output dir — those are workspace-level links)
         (tmp_path / "ratatui").mkdir()
         (tmp_path / "ratatui" / "index.md").write_text(
-            "# ratatui\n\n"
-            "See [backend](backend/index.md) and [prelude](prelude/index.md)"
+            "# ratatui\n\nSee [backend](backend/index.md) and [prelude](prelude/index.md)"
         )
         (tmp_path / "ratatui" / "backend").mkdir()
         (tmp_path / "ratatui" / "backend" / "index.md").write_text(
-            "# backend\n\n"
-            "Back to [ratatui](../index.md)"
+            "# backend\n\nBack to [ratatui](../index.md)"
         )
         (tmp_path / "ratatui" / "prelude").mkdir()
         (tmp_path / "ratatui" / "prelude" / "index.md").write_text(
-            "# prelude\n\n"
-            "Back to [ratatui](../index.md)"
+            "# prelude\n\nBack to [ratatui](../index.md)"
         )
 
         scraper = self._make_scraper(tmp_path)
@@ -435,7 +481,9 @@ class TestFlattenRewritePipeline:
     def test_full_pipeline_nested(self, tmp_path):
         """Pipeline with nested modules (depth 3+)."""
         (tmp_path / "ratatui_core").mkdir()
-        (tmp_path / "ratatui_core" / "index.md").write_text("# ratatui_core\n\nSee [style](style/index.md)")
+        (tmp_path / "ratatui_core" / "index.md").write_text(
+            "# ratatui_core\n\nSee [style](style/index.md)"
+        )
         (tmp_path / "ratatui_core" / "style").mkdir()
         (tmp_path / "ratatui_core" / "style" / "index.md").write_text(
             "# style\n\nSee [palette](palette/index.md)\n\n* [style](index.md)"

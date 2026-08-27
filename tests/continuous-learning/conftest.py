@@ -3,14 +3,11 @@ Pytest fixtures for continuous learning system tests.
 """
 
 import hashlib
-import json
 import os
-import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
-
 
 # Base directories
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -119,7 +116,7 @@ def sample_observation() -> dict:
         "session": "test-session-123",
         "project_id": "a1b2c3d4e5f6",
         "project_name": "my-project",
-        "tool_use_id": "toolu_abc123"
+        "tool_use_id": "toolu_abc123",
     }
 
 
@@ -131,7 +128,7 @@ def sample_tool_event_pre() -> dict:
         "tool_input": {"file_path": "/path/to/file.py"},
         "cwd": "/Users/test/my-project",
         "session_id": "test-session-123",
-        "project_id": "a1b2c3d4e5f6"
+        "project_id": "a1b2c3d4e5f6",
     }
 
 
@@ -144,7 +141,7 @@ def sample_tool_event_post() -> dict:
         "tool_result": "file contents here",
         "cwd": "/Users/test/my-project",
         "session_id": "test-session-123",
-        "project_id": "a1b2c3d4e5f6"
+        "project_id": "a1b2c3d4e5f6",
     }
 
 
@@ -168,7 +165,7 @@ def sample_observation_with_secrets() -> dict:
         "session": "test-session-456",
         "project_id": "a1b2c3d4e5f6",
         "project_name": "my-project",
-        "tool_use_id": "toolu_xyz789"
+        "tool_use_id": "toolu_xyz789",
     }
 
 
@@ -230,6 +227,7 @@ def project_observations_dir(homunculus_dir: Path) -> Generator[Path, None, None
 # Phase 2 Fixtures - Observer Daemon
 # =============================================================================
 
+
 @pytest.fixture
 def sample_observations_file() -> Path:
     """Return path to sample observations.jsonl fixture (1500 lines)."""
@@ -256,12 +254,44 @@ def sample_cursor_data() -> dict:
 def sample_session_user_correction() -> list[dict]:
     """Return sample session with user correction pattern."""
     return [
-        {"timestamp": "2026-04-30T10:00:00Z", "event": "tool_start", "tool": "Edit", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:05Z", "event": "tool_complete", "tool": "Edit", "session": "correction-1", "output": "user_rejected: true"},
-        {"timestamp": "2026-04-30T10:00:10Z", "event": "tool_start", "tool": "Read", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:15Z", "event": "tool_complete", "tool": "Read", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:20Z", "event": "tool_start", "tool": "Edit", "session": "correction-1"},
-        {"timestamp": "2026-04-30T10:00:25Z", "event": "tool_complete", "tool": "Edit", "session": "correction-1", "output": "success"},
+        {
+            "timestamp": "2026-04-30T10:00:00Z",
+            "event": "tool_start",
+            "tool": "Edit",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:05Z",
+            "event": "tool_complete",
+            "tool": "Edit",
+            "session": "correction-1",
+            "output": "user_rejected: true",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:10Z",
+            "event": "tool_start",
+            "tool": "Read",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:15Z",
+            "event": "tool_complete",
+            "tool": "Read",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:20Z",
+            "event": "tool_start",
+            "tool": "Edit",
+            "session": "correction-1",
+        },
+        {
+            "timestamp": "2026-04-30T10:00:25Z",
+            "event": "tool_complete",
+            "tool": "Edit",
+            "session": "correction-1",
+            "output": "success",
+        },
     ]
 
 
@@ -269,18 +299,51 @@ def sample_session_user_correction() -> list[dict]:
 def sample_session_repeated_workflow() -> list[dict]:
     """Return sample session with repeated workflow pattern."""
     from datetime import datetime, timedelta
+
     events = []
     base = datetime(2026, 4, 30, 11, 0, 0)
     for i in range(4):
         t = base + timedelta(minutes=i * 5)
-        events.extend([
-            {"timestamp": t.isoformat() + "Z", "event": "tool_start", "tool": "Read", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=5)).isoformat() + "Z", "event": "tool_complete", "tool": "Read", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=10)).isoformat() + "Z", "event": "tool_start", "tool": "Edit", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=15)).isoformat() + "Z", "event": "tool_complete", "tool": "Edit", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=20)).isoformat() + "Z", "event": "tool_start", "tool": "Bash", "session": "workflow-1"},
-            {"timestamp": (t + timedelta(seconds=25)).isoformat() + "Z", "event": "tool_complete", "tool": "Bash", "session": "workflow-1"},
-        ])
+        events.extend(
+            [
+                {
+                    "timestamp": t.isoformat() + "Z",
+                    "event": "tool_start",
+                    "tool": "Read",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=5)).isoformat() + "Z",
+                    "event": "tool_complete",
+                    "tool": "Read",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=10)).isoformat() + "Z",
+                    "event": "tool_start",
+                    "tool": "Edit",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=15)).isoformat() + "Z",
+                    "event": "tool_complete",
+                    "tool": "Edit",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=20)).isoformat() + "Z",
+                    "event": "tool_start",
+                    "tool": "Bash",
+                    "session": "workflow-1",
+                },
+                {
+                    "timestamp": (t + timedelta(seconds=25)).isoformat() + "Z",
+                    "event": "tool_complete",
+                    "tool": "Bash",
+                    "session": "workflow-1",
+                },
+            ]
+        )
     return events
 
 
@@ -288,10 +351,33 @@ def sample_session_repeated_workflow() -> list[dict]:
 def sample_session_error_resolution() -> list[dict]:
     """Return sample session with error resolution pattern."""
     return [
-        {"timestamp": "2026-04-30T12:00:00Z", "event": "tool_start", "tool": "Bash", "session": "resolution-1"},
-        {"timestamp": "2026-04-30T12:00:05Z", "event": "tool_complete", "tool": "Bash", "session": "resolution-1", "output": "error: command not found"},
-        {"timestamp": "2026-04-30T12:00:10Z", "event": "tool_start", "tool": "Bash", "session": "resolution-1", "input": {"command": "modified command"}},
-        {"timestamp": "2026-04-30T12:00:15Z", "event": "tool_complete", "tool": "Bash", "session": "resolution-1", "output": "success"},
+        {
+            "timestamp": "2026-04-30T12:00:00Z",
+            "event": "tool_start",
+            "tool": "Bash",
+            "session": "resolution-1",
+        },
+        {
+            "timestamp": "2026-04-30T12:00:05Z",
+            "event": "tool_complete",
+            "tool": "Bash",
+            "session": "resolution-1",
+            "output": "error: command not found",
+        },
+        {
+            "timestamp": "2026-04-30T12:00:10Z",
+            "event": "tool_start",
+            "tool": "Bash",
+            "session": "resolution-1",
+            "input": {"command": "modified command"},
+        },
+        {
+            "timestamp": "2026-04-30T12:00:15Z",
+            "event": "tool_complete",
+            "tool": "Bash",
+            "session": "resolution-1",
+            "output": "success",
+        },
     ]
 
 
@@ -340,18 +426,21 @@ observer_model=haiku
 # Phase 2 Fixtures - Daemon State Reset
 # =============================================================================
 
+
 @pytest.fixture(autouse=True)
 def reset_daemon_state():
     """Reset daemon state before each test."""
     # Import here to avoid circular imports
     try:
         from hooks.observe import observer_daemon
+
         observer_daemon.reset_daemon_state()
     except ImportError:
         pass
     yield
     try:
         from hooks.observe import observer_daemon
+
         observer_daemon.reset_daemon_state()
     except ImportError:
         pass

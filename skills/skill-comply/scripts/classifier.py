@@ -16,11 +16,9 @@ PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 # JSON schema for classifier output
 CLASSIFIER_SCHEMA = {
     "type": "object",
-    "additionalProperties": {
-        "type": "array",
-        "items": {"type": "integer"}
-    }
+    "additionalProperties": {"type": "array", "items": {"type": "integer"}},
 }
+
 
 def classify_events(
     spec: ComplianceSpec,
@@ -35,10 +33,7 @@ def classify_events(
     if not trace:
         return {}
 
-    steps_desc = "\n".join(
-        f"- {step.id}: {step.detector.description}"
-        for step in spec.steps
-    )
+    steps_desc = "\n".join(f"- {step.id}: {step.detector.description}" for step in spec.steps)
 
     tool_calls = "\n".join(
         f"[{i}] {event.tool}: input={event.input[:500]} output={event.output[:200]}"
@@ -46,18 +41,21 @@ def classify_events(
     )
 
     prompt_template = (PROMPTS_DIR / "classifier.md").read_text()
-    prompt = (
-        prompt_template
-        .replace("{steps_description}", steps_desc)
-        .replace("{tool_calls}", tool_calls)
+    prompt = prompt_template.replace("{steps_description}", steps_desc).replace(
+        "{tool_calls}", tool_calls
     )
 
     result = subprocess.run(
         [
-            "claude", "-p", prompt,
-            "--model", model,
-            "--output-format", "json",
-            "--json-schema", json.dumps(CLASSIFIER_SCHEMA),
+            "claude",
+            "-p",
+            prompt,
+            "--model",
+            model,
+            "--output-format",
+            "json",
+            "--json-schema",
+            json.dumps(CLASSIFIER_SCHEMA),
         ],
         capture_output=True,
         text=True,
@@ -66,11 +64,11 @@ def classify_events(
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"classifier subprocess failed (rc={result.returncode}): "
-            f"{result.stderr[:500]}"
+            f"classifier subprocess failed (rc={result.returncode}): {result.stderr[:500]}"
         )
 
     return _parse_classification(result.stdout)
+
 
 def _parse_classification(text: str) -> dict[str, list[int]]:
     """Parse LLM classification output into {step_id: [event_indices]}.
@@ -101,11 +99,7 @@ def _parse_classification(text: str) -> dict[str, list[int]]:
 
         # Handle direct dict output
         if isinstance(parsed, dict):
-            return {
-                k: [int(i) for i in v]
-                for k, v in parsed.items()
-                if isinstance(v, list)
-            }
+            return {k: [int(i) for i in v] for k, v in parsed.items() if isinstance(v, list)}
 
         logger.warning("Classifier returned unexpected JSON type: %s", type(parsed).__name__)
         return {}

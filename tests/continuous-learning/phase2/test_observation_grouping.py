@@ -11,18 +11,14 @@ Eval 2.2: Observation Grouping
 """
 
 import json
-from pathlib import Path
 from datetime import datetime, timedelta
-
-import pytest
+from pathlib import Path
 
 
 class TestGroupBySession:
     """Tests for grouping observations by session."""
 
-    def test_group_by_session_id(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_group_by_session_id(self, project_observations_dir: Path) -> None:
         """
         Should group observations by session_id.
 
@@ -41,7 +37,7 @@ class TestGroupBySession:
                     "tool": "Read",
                     "session": session,
                     "project_id": "test123",
-                    "tool_use_id": f"toolu_{i}_{j}"
+                    "tool_use_id": f"toolu_{i}_{j}",
                 }
                 with open(observations_file, "a") as f:
                     f.write(json.dumps(obs) + "\n")
@@ -53,13 +49,9 @@ class TestGroupBySession:
         assert len(groups) == 3, f"Expected 3 session groups, got {len(groups)}"
         for session_id in sessions:
             assert session_id in groups, f"Session {session_id} should be in groups"
-            assert len(groups[session_id]) == 5, (
-                f"Session {session_id} should have 5 observations"
-            )
+            assert len(groups[session_id]) == 5, f"Session {session_id} should have 5 observations"
 
-    def test_empty_session_handling(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_empty_session_handling(self, project_observations_dir: Path) -> None:
         """
         Should handle observations with missing session_id.
         """
@@ -69,7 +61,7 @@ class TestGroupBySession:
             "event": "tool_start",
             "tool": "Read",
             # No session field
-            "project_id": "test123"
+            "project_id": "test123",
         }
         with open(observations_file, "a") as f:
             f.write(json.dumps(obs_no_session) + "\n")
@@ -80,13 +72,9 @@ class TestGroupBySession:
 
         # Should either skip or use a default session
         # Implementation decision: use "unknown" as default
-        assert "unknown" in groups or len(groups) == 0, (
-            "Should handle missing session_id"
-        )
+        assert "unknown" in groups or len(groups) == 0, "Should handle missing session_id"
 
-    def test_session_payload_schema(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_session_payload_schema(self, project_observations_dir: Path) -> None:
         """
         Output payload should match expected schema.
 
@@ -99,7 +87,7 @@ class TestGroupBySession:
             "tool": "Read",
             "session": "session-1",
             "project_id": "test123",
-            "tool_use_id": "toolu_001"
+            "tool_use_id": "toolu_001",
         }
         with open(observations_file, "a") as f:
             f.write(json.dumps(obs) + "\n")
@@ -121,9 +109,7 @@ class TestGroupBySession:
 class TestOrderWithinSession:
     """Tests for ordering events within a session."""
 
-    def test_order_by_timestamp(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_order_by_timestamp(self, project_observations_dir: Path) -> None:
         """
         Events should be ordered by timestamp within session.
 
@@ -140,7 +126,7 @@ class TestOrderWithinSession:
                 "tool": "Read",
                 "session": "session-1",
                 "project_id": "test123",
-                "tool_use_id": f"toolu_{i}"
+                "tool_use_id": f"toolu_{i}",
             }
             with open(observations_file, "a") as f:
                 f.write(json.dumps(obs) + "\n")
@@ -151,13 +137,9 @@ class TestOrderWithinSession:
 
         timestamps = [e["timestamp"] for e in groups["session-1"]]
 
-        assert timestamps == sorted(timestamps), (
-            "Events should be sorted by timestamp"
-        )
+        assert timestamps == sorted(timestamps), "Events should be sorted by timestamp"
 
-    def test_preserve_tool_start_before_complete(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_preserve_tool_start_before_complete(self, project_observations_dir: Path) -> None:
         """
         Tool start should come before complete when timestamps are equal.
         """
@@ -173,7 +155,7 @@ class TestOrderWithinSession:
             "tool": "Read",
             "session": "session-1",
             "project_id": "test123",
-            "tool_use_id": "toolu_001"
+            "tool_use_id": "toolu_001",
         }
         obs_start = {
             "timestamp": ts,
@@ -181,7 +163,7 @@ class TestOrderWithinSession:
             "tool": "Read",
             "session": "session-1",
             "project_id": "test123",
-            "tool_use_id": "toolu_001"
+            "tool_use_id": "toolu_001",
         }
 
         with open(observations_file, "a") as f:
@@ -194,17 +176,13 @@ class TestOrderWithinSession:
 
         events = groups["session-1"]
         # Start should come before complete
-        assert events[0]["event"] == "tool_start", (
-            "tool_start should come before tool_complete"
-        )
+        assert events[0]["event"] == "tool_start", "tool_start should come before tool_complete"
 
 
 class TestTruncatedFields:
     """Tests for preserving truncated fields."""
 
-    def test_truncated_input_preserved(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_truncated_input_preserved(self, project_observations_dir: Path) -> None:
         """
         Truncated input should be preserved in grouping.
 
@@ -219,7 +197,7 @@ class TestTruncatedFields:
             "tool": "Edit",
             "input": "x" * 5000 + "...[TRUNCATED]",
             "session": "session-1",
-            "project_id": "test123"
+            "project_id": "test123",
         }
         with open(observations_file, "a") as f:
             f.write(json.dumps(obs) + "\n")
@@ -230,13 +208,9 @@ class TestTruncatedFields:
 
         assert "session-1" in groups
         event = groups["session-1"][0]
-        assert "[TRUNCATED]" in event["input"], (
-            "Truncated input should be preserved"
-        )
+        assert "[TRUNCATED]" in event["input"], "Truncated input should be preserved"
 
-    def test_truncated_output_preserved(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_truncated_output_preserved(self, project_observations_dir: Path) -> None:
         """
         Truncated output should be preserved in grouping.
         """
@@ -248,7 +222,7 @@ class TestTruncatedFields:
             "tool": "Bash",
             "output": "y" * 5000 + "...[TRUNCATED]",
             "session": "session-1",
-            "project_id": "test123"
+            "project_id": "test123",
         }
         with open(observations_file, "a") as f:
             f.write(json.dumps(obs) + "\n")
@@ -258,17 +232,13 @@ class TestTruncatedFields:
         groups = observer_daemon.group_observations_by_session(observations_file)
 
         event = groups["session-1"][0]
-        assert "[TRUNCATED]" in event["output"], (
-            "Truncated output should be preserved"
-        )
+        assert "[TRUNCATED]" in event["output"], "Truncated output should be preserved"
 
 
 class TestPayloadStructure:
     """Tests for payload structure validation."""
 
-    def test_payload_includes_metadata(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_payload_includes_metadata(self, project_observations_dir: Path) -> None:
         """
         Payload should include processing metadata.
         """
@@ -279,7 +249,7 @@ class TestPayloadStructure:
                 "event": "tool_start",
                 "tool": "Read",
                 "session": f"session-{i % 3}",
-                "project_id": "test123"
+                "project_id": "test123",
             }
             with open(observations_file, "a") as f:
                 f.write(json.dumps(obs) + "\n")
@@ -289,16 +259,12 @@ class TestPayloadStructure:
         payload = observer_daemon.build_session_payload(observations_file)
 
         # Should include metadata
-        assert "processed_count" in payload, (
-            "Payload should include processed_count"
-        )
+        assert "processed_count" in payload, "Payload should include processed_count"
         assert payload["processed_count"] == 10, (
             "processed_count should match number of observations"
         )
 
-    def test_payload_includes_project_id(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_payload_includes_project_id(self, project_observations_dir: Path) -> None:
         """
         Payload should include project_id.
         """
@@ -308,7 +274,7 @@ class TestPayloadStructure:
             "event": "tool_start",
             "tool": "Read",
             "session": "session-1",
-            "project_id": "abc123def456"
+            "project_id": "abc123def456",
         }
         with open(observations_file, "a") as f:
             f.write(json.dumps(obs) + "\n")

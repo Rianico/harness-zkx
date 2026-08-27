@@ -3,12 +3,10 @@
 Test IDs: RA-01 through RA-05
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests.exceptions
-
 from fixtures import TEST_PAGE_URL
 
 
@@ -48,9 +46,7 @@ class TestRetryAfter:
                     content=b"Too Many Requests",
                     headers={"Retry-After": "5"},
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("429 Error", response=response)
                 )
                 return response
@@ -103,7 +99,7 @@ class TestRetryAfter:
         )
 
         # Create a future date 5 seconds from now (more buffer for timing)
-        future_time = datetime.now(timezone.utc) + timedelta(seconds=5)
+        future_time = datetime.now(UTC) + timedelta(seconds=5)
         http_date = future_time.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
         mock_session = MagicMock()
@@ -118,9 +114,7 @@ class TestRetryAfter:
                     content=b"Too Many Requests",
                     headers={"Retry-After": http_date},
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("429 Error", response=response)
                 )
                 return response
@@ -184,9 +178,7 @@ class TestRetryAfter:
                     content=b"Too Many Requests",
                     headers={},  # No Retry-After header
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("429 Error", response=response)
                 )
                 return response
@@ -250,9 +242,7 @@ class TestRetryAfter:
                     content=b"Service Unavailable",
                     headers={"Retry-After": "3"},
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("503 Error", response=response)
                 )
                 return response
@@ -316,9 +306,7 @@ class TestRetryAfter:
                     content=b"Too Many Requests",
                     headers={"Retry-After": "3600"},  # 1 hour - way too long
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("429 Error", response=response)
                 )
                 return response

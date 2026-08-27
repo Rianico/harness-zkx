@@ -64,17 +64,13 @@ class TestDefaultConfigPath:
 
         default_path = config.get_default_config_path()
 
-        assert default_path.exists(), (
-            f"Bundled default config should exist at {default_path}"
-        )
+        assert default_path.exists(), f"Bundled default config should exist at {default_path}"
 
 
 class TestEnsureUserConfig:
     """Tests for ensure_user_config() function."""
 
-    def test_ensure_user_config_creates_missing_config(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ensure_user_config_creates_missing_config(self, tmp_path: Path) -> None:
         """
         When user config doesn't exist, it should be created from bundled default.
 
@@ -91,9 +87,7 @@ class TestEnsureUserConfig:
         assert result_path.exists(), "Config file should be created"
         assert result_path == homunculus_dir / "config.properties"
 
-    def test_ensure_user_config_copies_default_content(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ensure_user_config_copies_default_content(self, tmp_path: Path) -> None:
         """
         Created config should have the same content as bundled default.
 
@@ -113,9 +107,7 @@ class TestEnsureUserConfig:
         assert "min_observations_to_analyze" in created_content
         assert "run_interval_minutes" in created_content
 
-    def test_ensure_user_config_preserves_existing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ensure_user_config_preserves_existing(self, tmp_path: Path) -> None:
         """
         When user config exists, it should NOT be overwritten.
 
@@ -135,13 +127,9 @@ class TestEnsureUserConfig:
 
         # Content should be preserved
         content = result_path.read_text()
-        assert "signal_every_n=99" in content, (
-            "User config should be preserved, not overwritten"
-        )
+        assert "signal_every_n=99" in content, "User config should be preserved, not overwritten"
 
-    def test_ensure_user_config_creates_directory(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ensure_user_config_creates_directory(self, tmp_path: Path) -> None:
         """
         When homunculus directory doesn't exist, it should be created.
 
@@ -159,9 +147,7 @@ class TestEnsureUserConfig:
         assert homunculus_dir.exists(), "Directory should be created"
         assert result_path.exists(), "Config file should be created"
 
-    def test_ensure_user_config_returns_correct_path(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ensure_user_config_returns_correct_path(self, tmp_path: Path) -> None:
         """
         ensure_user_config() should return the path to user config file.
         """
@@ -196,11 +182,7 @@ class TestLoadConfigWithNewPath:
         user_config.write_text("signal_every_n=123\n")
 
         # Monkeypatch get_homunculus_dir to return our temp dir
-        monkeypatch.setattr(
-            config,
-            "get_homunculus_dir",
-            lambda: homunculus_dir
-        )
+        monkeypatch.setattr(config, "get_homunculus_dir", lambda: homunculus_dir)
 
         loaded = config.load_config()
 
@@ -222,11 +204,7 @@ class TestLoadConfigWithNewPath:
         homunculus_dir.mkdir(parents=True, exist_ok=True)
         # Do NOT create user config
 
-        monkeypatch.setattr(
-            config,
-            "get_homunculus_dir",
-            lambda: homunculus_dir
-        )
+        monkeypatch.setattr(config, "get_homunculus_dir", lambda: homunculus_dir)
 
         loaded = config.load_config()
 
@@ -251,11 +229,7 @@ class TestLoadConfigWithNewPath:
         user_config = homunculus_dir / "config.properties"
         user_config.write_text("signal_every_n=77\n")
 
-        monkeypatch.setattr(
-            config,
-            "get_homunculus_dir",
-            lambda: homunculus_dir
-        )
+        monkeypatch.setattr(config, "get_homunculus_dir", lambda: homunculus_dir)
 
         loaded = config.load_config()
 
@@ -281,11 +255,7 @@ class TestLoadConfigWithNewPath:
         user_config = homunculus_dir / "config.properties"
         user_config.write_text("signal_every_n=42\nretention_days=14\n")
 
-        monkeypatch.setattr(
-            config,
-            "get_homunculus_dir",
-            lambda: homunculus_dir
-        )
+        monkeypatch.setattr(config, "get_homunculus_dir", lambda: homunculus_dir)
 
         loaded = config.load_config()
 
@@ -307,17 +277,13 @@ class TestLoadConfigWithNewPath:
         homunculus_dir = tmp_path / "homunculus"
         homunculus_dir.mkdir(parents=True, exist_ok=True)
 
-        monkeypatch.setattr(
-            config,
-            "get_homunculus_dir",
-            lambda: homunculus_dir
-        )
+        monkeypatch.setattr(config, "get_homunculus_dir", lambda: homunculus_dir)
 
         # Monkeypatch get_default_config_path to return a non-existent path
         monkeypatch.setattr(
             config,
             "get_default_config_path",
-            lambda: tmp_path / "nonexistent" / "config.properties"
+            lambda: tmp_path / "nonexistent" / "config.properties",
         )
 
         loaded = config.load_config()
@@ -364,7 +330,6 @@ class TestConfigContentValidation:
 
         S3.2: Config format - valid key=value pairs.
         """
-        from hooks.observe import config
 
         # Create a test config with various formats
         test_config = """
@@ -380,13 +345,14 @@ retention_days=30
 
         # Write to temp file and parse manually
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.properties', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".properties", delete=False) as f:
             f.write(test_config)
             temp_path = Path(f.name)
 
         try:
             # The loader should handle these formats
-            lines = temp_path.read_text().split('\n')
+            lines = temp_path.read_text().split("\n")
             parsed = {}
             for line in lines:
                 line = line.strip()

@@ -17,12 +17,12 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml
 
 from hooks.observe.instinct_manager import InstinctManager
 
-
-SCRIPTS_DIR = Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+SCRIPTS_DIR = (
+    Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+)
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
@@ -152,8 +152,7 @@ class TestStatusCommandFunctionality:
         instincts = instinct_manager.list_instincts(project_id="a1b2c3d4e5f6")
 
         project_instinct = next(
-            (i for i in instincts if i["frontmatter"]["id"] == "test-project-instinct"),
-            None
+            (i for i in instincts if i["frontmatter"]["id"] == "test-project-instinct"), None
         )
         assert project_instinct is not None
         assert project_instinct["frontmatter"]["confidence"] == 0.7
@@ -169,16 +168,13 @@ class TestStatusCommandFunctionality:
         instincts = instinct_manager.list_instincts(project_id="a1b2c3d4e5f6")
 
         project_instinct = next(
-            (i for i in instincts if i["frontmatter"]["id"] == "test-project-instinct"),
-            None
+            (i for i in instincts if i["frontmatter"]["id"] == "test-project-instinct"), None
         )
         assert project_instinct is not None
         assert project_instinct["frontmatter"]["domain"] == "workflow"
         assert "editing unfamiliar files" in project_instinct["frontmatter"]["trigger"]
 
-    def test_returns_empty_list_when_no_instincts(
-        self, instinct_manager: InstinctManager
-    ) -> None:
+    def test_returns_empty_list_when_no_instincts(self, instinct_manager: InstinctManager) -> None:
         """
         When no instincts exist, should return empty list.
         """
@@ -193,15 +189,14 @@ class TestStatusCommandFilters:
         self,
         instinct_manager: InstinctManager,
         sample_project_instinct: Path,
-        sample_global_instinct: Path
+        sample_global_instinct: Path,
     ) -> None:
         """
         Status command should support filtering by project.
         """
         # Filter by project should only show project instincts
         project_instincts = instinct_manager.list_instincts(
-            project_id="a1b2c3d4e5f6",
-            scope="project"
+            project_id="a1b2c3d4e5f6", scope="project"
         )
 
         found_ids = [i["frontmatter"]["id"] for i in project_instincts]
@@ -213,7 +208,7 @@ class TestStatusCommandFilters:
         self,
         instinct_manager: InstinctManager,
         sample_project_instinct: Path,
-        sample_global_instinct: Path
+        sample_global_instinct: Path,
     ) -> None:
         """
         Status command should support filtering by scope=global.
@@ -228,7 +223,7 @@ class TestStatusCommandFilters:
         self,
         instinct_manager: InstinctManager,
         sample_project_instinct: Path,
-        sample_global_instinct: Path
+        sample_global_instinct: Path,
     ) -> None:
         """
         Status command should support filtering by scope=project.
@@ -299,7 +294,7 @@ class TestStatusScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=30
+            timeout=30,
         )
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
@@ -321,11 +316,13 @@ class TestStatusScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=30
+            timeout=30,
         )
 
         # Should output the instinct ID
-        assert "test-project-instinct" in result.stdout, f"Expected instinct in output: {result.stdout}"
+        assert "test-project-instinct" in result.stdout, (
+            f"Expected instinct in output: {result.stdout}"
+        )
 
     def test_script_json_output(
         self, status_script: Path, sample_project_instinct: Path, temp_home: Path
@@ -345,7 +342,7 @@ class TestStatusScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=30
+            timeout=30,
         )
 
         # Should produce valid JSON

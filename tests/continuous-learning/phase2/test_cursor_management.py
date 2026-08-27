@@ -14,15 +14,11 @@ Eval 2.1: Cursor Management
 import json
 from pathlib import Path
 
-import pytest
-
 
 class TestCursorRead:
     """Tests for reading cursor position."""
 
-    def test_cursor_read_from_file(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_cursor_read_from_file(self, project_observations_dir: Path) -> None:
         """
         Should read cursor position from file.
 
@@ -40,9 +36,7 @@ class TestCursorRead:
         assert result["line"] == 500, f"Expected line 500, got {result['line']}"
         assert "updated_at" in result, "updated_at should be present"
 
-    def test_cursor_missing_returns_zero(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_cursor_missing_returns_zero(self, project_observations_dir: Path) -> None:
         """
         Should return line 0 when cursor file doesn't exist.
 
@@ -57,9 +51,7 @@ class TestCursorRead:
 
         assert result["line"] == 0, f"Expected line 0, got {result['line']}"
 
-    def test_cursor_malformed_returns_zero(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_cursor_malformed_returns_zero(self, project_observations_dir: Path) -> None:
         """
         Should return line 0 when cursor file is malformed.
         """
@@ -70,15 +62,13 @@ class TestCursorRead:
 
         result = observer_daemon.read_cursor(project_observations_dir)
 
-        assert result["line"] == 0, f"Expected line 0 for malformed JSON"
+        assert result["line"] == 0, "Expected line 0 for malformed JSON"
 
 
 class TestCursorUpdate:
     """Tests for updating cursor position."""
 
-    def test_cursor_update_after_processing(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_cursor_update_after_processing(self, project_observations_dir: Path) -> None:
         """
         Should update cursor after processing.
 
@@ -97,9 +87,7 @@ class TestCursorUpdate:
         assert data["line"] == 750, f"Expected line 750, got {data['line']}"
         assert "updated_at" in data, "updated_at should be set"
 
-    def test_cursor_update_overwrites_previous(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_cursor_update_overwrites_previous(self, project_observations_dir: Path) -> None:
         """
         Should overwrite previous cursor position.
         """
@@ -117,14 +105,13 @@ class TestCursorUpdate:
 
         assert data["line"] == 200, f"Expected line 200, got {data['line']}"
 
-    def test_cursor_timestamp_is_iso8601(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_cursor_timestamp_is_iso8601(self, project_observations_dir: Path) -> None:
         """
         Cursor timestamp should be ISO 8601 format.
         """
-        from hooks.observe import observer_daemon
         import re
+
+        from hooks.observe import observer_daemon
 
         observer_daemon.update_cursor(project_observations_dir, line=100)
 
@@ -142,9 +129,7 @@ class TestCursorUpdate:
 class TestCursorCreate:
     """Tests for cursor file creation."""
 
-    def test_cursor_create_if_missing(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_cursor_create_if_missing(self, project_observations_dir: Path) -> None:
         """
         Should create cursor file if it doesn't exist.
 
@@ -162,9 +147,7 @@ class TestCursorCreate:
             data = json.load(f)
         assert data["line"] == 0, f"Expected line 0, got {data['line']}"
 
-    def test_cursor_creates_parent_directory(
-        self, tmp_path: Path
-    ) -> None:
+    def test_cursor_creates_parent_directory(self, tmp_path: Path) -> None:
         """
         Should create parent directory if it doesn't exist.
         """
@@ -183,9 +166,7 @@ class TestCursorCreate:
 class TestObservationFiltering:
     """Tests for filtering observations based on cursor."""
 
-    def test_only_new_observations_processed(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_only_new_observations_processed(self, project_observations_dir: Path) -> None:
         """
         Should only process observations after cursor position.
 
@@ -211,9 +192,7 @@ class TestObservationFiltering:
 
         assert len(new_obs) == 50, f"Expected 50 new observations, got {len(new_obs)}"
 
-    def test_no_observations_when_at_end(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_no_observations_when_at_end(self, project_observations_dir: Path) -> None:
         """
         Should return empty list when cursor is at end of file.
         """
@@ -234,9 +213,7 @@ class TestObservationFiltering:
 
         assert len(new_obs) == 0, f"Expected 0 observations, got {len(new_obs)}"
 
-    def test_all_observations_when_no_cursor(
-        self, project_observations_dir: Path
-    ) -> None:
+    def test_all_observations_when_no_cursor(self, project_observations_dir: Path) -> None:
         """
         Should return all observations when cursor doesn't exist.
         """

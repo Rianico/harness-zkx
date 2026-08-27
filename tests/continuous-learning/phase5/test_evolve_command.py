@@ -17,12 +17,12 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml
 
 from hooks.observe.instinct_manager import InstinctManager
 
-
-SCRIPTS_DIR = Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+SCRIPTS_DIR = (
+    Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+)
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def multiple_workflow_instincts(homunculus_dir: Path) -> list[Path]:
         for inst_idx in range(3):
             instinct_content = f"""---
 id: workflow-pattern-{project_idx}-{inst_idx}
-trigger: "when working with {['files', 'tests', 'code'][inst_idx]}"
+trigger: "when working with {["files", "tests", "code"][inst_idx]}"
 confidence: {0.6 + inst_idx * 0.1}
 domain: "workflow"
 scope: "project"
@@ -87,7 +87,7 @@ def multiple_debugging_instincts(homunculus_dir: Path) -> list[Path]:
     for idx in range(2):
         instinct_content = f"""---
 id: debug-pattern-{idx}
-trigger: "when encountering {['errors', 'failures'][idx]}"
+trigger: "when encountering {["errors", "failures"][idx]}"
 confidence: 0.8
 domain: "debugging"
 scope: "global"
@@ -167,7 +167,7 @@ class TestEvolveCommandFunctionality:
         self,
         instinct_manager: InstinctManager,
         multiple_workflow_instincts: list[Path],
-        multiple_debugging_instincts: list[Path]
+        multiple_debugging_instincts: list[Path],
     ) -> None:
         """
         Eval 5.3: Groups instincts by domain.
@@ -191,9 +191,7 @@ class TestEvolveCommandFunctionality:
         assert len(by_domain["debugging"]) >= 2
 
     def test_identifies_related_patterns(
-        self,
-        instinct_manager: InstinctManager,
-        multiple_workflow_instincts: list[Path]
+        self, instinct_manager: InstinctManager, multiple_workflow_instincts: list[Path]
     ) -> None:
         """
         Eval 5.3: Identifies related patterns.
@@ -202,10 +200,7 @@ class TestEvolveCommandFunctionality:
         """
         # Get all workflow instincts
         all_instincts = instinct_manager.list_instincts()
-        workflow_instincts = [
-            i for i in all_instincts
-            if i["frontmatter"]["domain"] == "workflow"
-        ]
+        workflow_instincts = [i for i in all_instincts if i["frontmatter"]["domain"] == "workflow"]
 
         # Should have multiple workflow instincts to cluster
         assert len(workflow_instincts) >= 3
@@ -215,9 +210,7 @@ class TestEvolveCommandFunctionality:
         assert all("when" in t.lower() for t in triggers)
 
     def test_identifies_cross_project_patterns(
-        self,
-        instinct_manager: InstinctManager,
-        multiple_workflow_instincts: list[Path]
+        self, instinct_manager: InstinctManager, multiple_workflow_instincts: list[Path]
     ) -> None:
         """
         Evolve should identify patterns that span multiple projects.
@@ -234,24 +227,16 @@ class TestEvolveCommandFunctionality:
         assert len([p for p, c in by_project.items() if p != "global"]) >= 3
 
     def test_collects_evidence_for_proposals(
-        self,
-        instinct_manager: InstinctManager,
-        multiple_workflow_instincts: list[Path]
+        self, instinct_manager: InstinctManager, multiple_workflow_instincts: list[Path]
     ) -> None:
         """
         Evolve should collect evidence from all instincts in a cluster.
         """
         all_instincts = instinct_manager.list_instincts()
-        workflow_instincts = [
-            i for i in all_instincts
-            if i["frontmatter"]["domain"] == "workflow"
-        ]
+        workflow_instincts = [i for i in all_instincts if i["frontmatter"]["domain"] == "workflow"]
 
         # Calculate total evidence
-        total_evidence = sum(
-            i["frontmatter"].get("evidence_count", 0)
-            for i in workflow_instincts
-        )
+        total_evidence = sum(i["frontmatter"].get("evidence_count", 0) for i in workflow_instincts)
 
         assert total_evidence >= 9  # At least some evidence collected
 
@@ -260,54 +245,39 @@ class TestEvolveCommandProposals:
     """Tests for skill proposal generation."""
 
     def test_proposal_includes_domain(
-        self,
-        instinct_manager: InstinctManager,
-        multiple_workflow_instincts: list[Path]
+        self, instinct_manager: InstinctManager, multiple_workflow_instincts: list[Path]
     ) -> None:
         """
         Generated proposals should include the domain.
         """
         all_instincts = instinct_manager.list_instincts()
-        workflow_instincts = [
-            i for i in all_instincts
-            if i["frontmatter"]["domain"] == "workflow"
-        ]
+        workflow_instincts = [i for i in all_instincts if i["frontmatter"]["domain"] == "workflow"]
 
         # Domain should be consistent
         domains = set(i["frontmatter"]["domain"] for i in workflow_instincts)
         assert domains == {"workflow"}
 
     def test_proposal_includes_triggers(
-        self,
-        instinct_manager: InstinctManager,
-        multiple_workflow_instincts: list[Path]
+        self, instinct_manager: InstinctManager, multiple_workflow_instincts: list[Path]
     ) -> None:
         """
         Proposals should aggregate triggers from source instincts.
         """
         all_instincts = instinct_manager.list_instincts()
-        workflow_instincts = [
-            i for i in all_instincts
-            if i["frontmatter"]["domain"] == "workflow"
-        ]
+        workflow_instincts = [i for i in all_instincts if i["frontmatter"]["domain"] == "workflow"]
 
         triggers = [i["frontmatter"]["trigger"] for i in workflow_instincts]
         # All triggers should start with "when"
         assert all(t.startswith("when") for t in triggers)
 
     def test_proposal_calculates_average_confidence(
-        self,
-        instinct_manager: InstinctManager,
-        multiple_workflow_instincts: list[Path]
+        self, instinct_manager: InstinctManager, multiple_workflow_instincts: list[Path]
     ) -> None:
         """
         Proposals should calculate average confidence from source instincts.
         """
         all_instincts = instinct_manager.list_instincts()
-        workflow_instincts = [
-            i for i in all_instincts
-            if i["frontmatter"]["domain"] == "workflow"
-        ]
+        workflow_instincts = [i for i in all_instincts if i["frontmatter"]["domain"] == "workflow"]
 
         # Calculate average confidence
         confidences = [i["frontmatter"]["confidence"] for i in workflow_instincts]
@@ -323,9 +293,7 @@ class TestEvolveCommandFilters:
     """Tests for evolve command filtering options."""
 
     def test_filter_by_domain(
-        self,
-        instinct_manager: InstinctManager,
-        mixed_domain_instincts: list[Path]
+        self, instinct_manager: InstinctManager, mixed_domain_instincts: list[Path]
     ) -> None:
         """
         Evolve should support filtering by domain.
@@ -333,19 +301,14 @@ class TestEvolveCommandFilters:
         # Simulate filtering by domain
         all_instincts = instinct_manager.list_instincts(project_id="mixed-proj")
 
-        workflow_only = [
-            i for i in all_instincts
-            if i["frontmatter"]["domain"] == "workflow"
-        ]
+        workflow_only = [i for i in all_instincts if i["frontmatter"]["domain"] == "workflow"]
 
         # Should only have workflow instincts
         assert len(workflow_only) >= 1
         assert all(i["frontmatter"]["domain"] == "workflow" for i in workflow_only)
 
     def test_minimum_cluster_size(
-        self,
-        instinct_manager: InstinctManager,
-        mixed_domain_instincts: list[Path]
+        self, instinct_manager: InstinctManager, mixed_domain_instincts: list[Path]
     ) -> None:
         """
         Evolve should respect minimum cluster size.
@@ -393,7 +356,7 @@ class TestEvolveScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=60
+            timeout=60,
         )
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
@@ -415,10 +378,11 @@ class TestEvolveScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=60
+            timeout=60,
         )
 
         # Should mention clusters or domains
         output = result.stdout.lower()
-        assert "cluster" in output or "domain" in output or "workflow" in output, \
+        assert "cluster" in output or "domain" in output or "workflow" in output, (
             f"Expected cluster info in output: {result.stdout}"
+        )

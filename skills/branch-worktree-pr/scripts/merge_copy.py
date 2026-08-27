@@ -90,7 +90,10 @@ def main(argv: list[str] | None = None) -> None:
     ]
     has_rebase = any(m in status_text for m in rebase_markers)
     has_unmerged = any(
-        line.startswith("UU") or line.startswith("AA") or line.startswith("DU") or line.startswith("DD")
+        line.startswith("UU")
+        or line.startswith("AA")
+        or line.startswith("DU")
+        or line.startswith("DD")
         for line in porcelain
     )
     needs_fixer = has_rebase or has_unmerged

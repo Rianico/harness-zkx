@@ -119,7 +119,11 @@ def main() -> int:
 
     if not clusters:
         if args.json:
-            print(json.dumps({"clusters": [], "message": f"No clusters found with min_size={args.min_size}"}))
+            print(
+                json.dumps(
+                    {"clusters": [], "message": f"No clusters found with min_size={args.min_size}"}
+                )
+            )
         else:
             print(f"No clusters found with minimum size {args.min_size}.")
         return 0

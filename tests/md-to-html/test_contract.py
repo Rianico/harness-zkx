@@ -5,12 +5,9 @@ from pathlib import Path
 
 import pytest
 from bs4 import BeautifulSoup
-
 from conftest import SAMPLE_MD
 
-SCRIPTS_DIR = (
-    Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts"
-).resolve()
+SCRIPTS_DIR = (Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts").resolve()
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
@@ -23,37 +20,37 @@ CONTRACT_PATH = SKILL_DIR / "references" / "flavors" / "RENDERING-CONTRACT.md"
 # Classes that are dynamically generated and NOT expected to be in the contract
 # because they are data-driven and don't need flavor styling.
 DYNAMIC_CLASSES = {
-    "legend-tag-",          # prefix for data-driven legend colors
-    "flavor-",              # prefix for active flavor name
-    "language-",            # prefix from markdown library syntax highlighting
+    "legend-tag-",  # prefix for data-driven legend colors
+    "flavor-",  # prefix for active flavor name
+    "language-",  # prefix from markdown library syntax highlighting
 }
 
 # Classes that are part of the JS interaction layer and styled via parent
 JS_INTERACTION_CLASSES = {
-    "zoom-in",              # styled via .md-mermaid-zoom button
+    "zoom-in",  # styled via .md-mermaid-zoom button
     "zoom-out",
     "zoom-fullscreen",
 }
 
 # Classes that are semantic HTML element targets (styled by element, not class)
 ELEMENT_TARGETS = {
-    "mermaid",              # pre.mermaid in the HTML
+    "mermaid",  # pre.mermaid in the HTML
 }
 
 # Classes that apply to specific instances and are styled via context
 CONTEXT_CLASSES = {
-    "md-tabular",               # applied to numeric cells, styled via .md-tabular
-    "md-card-files",            # only when [!files] callout is used
-    "md-heading-level-3",       # renderer skips h3 inside card divs
-    "md-heading-level-4",       # renderer skips h4 inside card divs
-    "md-mermaid-viewport",      # only when mermaid diagram is present
-    "md-mermaid-wrap",          # only when mermaid diagram is present
-    "md-mermaid-zoom",          # only when mermaid diagram is present
-    "md-section-level-2",       # only for nested sub-sections
-    "md-section-level-3",       # only for deeper nested sub-sections
-    "md-tag-success",           # only for specific category tags
-    "md-tag-warn",              # only for specific category tags
-    "md-tag-info",              # fallback tag class for unmatched items
+    "md-tabular",  # applied to numeric cells, styled via .md-tabular
+    "md-card-files",  # only when [!files] callout is used
+    "md-heading-level-3",  # renderer skips h3 inside card divs
+    "md-heading-level-4",  # renderer skips h4 inside card divs
+    "md-mermaid-viewport",  # only when mermaid diagram is present
+    "md-mermaid-wrap",  # only when mermaid diagram is present
+    "md-mermaid-zoom",  # only when mermaid diagram is present
+    "md-section-level-2",  # only for nested sub-sections
+    "md-section-level-3",  # only for deeper nested sub-sections
+    "md-tag-success",  # only for specific category tags
+    "md-tag-warn",  # only for specific category tags
+    "md-tag-info",  # fallback tag class for unmatched items
 }
 
 

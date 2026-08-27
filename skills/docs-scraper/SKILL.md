@@ -1,13 +1,13 @@
 ---
 name: docs-scraper
 description: >-
-  Documentation scraper converting tech docs to LLM-friendly markdown.
-  Scrapes LSP specs, PTX ISA, CUDA APIs, Rust crates, or general
-  sites via llms.txt/sitemap. Uses cargo-docs-md for Rust. Handles
-  emoji clean, link resolution, caching. TRIGGER: scrape LSP, PTX,
-  CUDA, Rust, scrape site.
+  Docs scraper to LLM-friendly markdown: LSP/PTX/CUDA/Rust (cargo-docs-md),
+  site (llms.txt/sitemap), and skill.sh via npx skills CLI for LLM
+  composition. Handles emoji clean, link resolution, caching, multi-run.
+  TRIGGER: scrape LSP,
+  PTX, CUDA, Rust, scrape site, skill.sh, compose skills, fetch skill.
 argument-hint: |-
-  [lsp|ptx|runtime|driver|rust <target>|site|skills <url|owner/collection[/skill]>...] [--force] [--output-dir <path>] [--base-url <url>] [--run <slug>] [--method auto|raw|clone|npx]
+  [lsp|ptx|runtime|driver|rust <target>|site|skills <url|owner/collection[/skill]>...] [--force] [--output-dir <path>] [--base-url <url>] [--staging <path>] [--run <slug>] [--method auto|raw|clone|npx]
 ---
 
 # Documentation Scraper Skill
@@ -33,6 +33,10 @@ uv run $SKILL_DIR/scripts/scrape.py rust https://github.com/ratatui/ratatui
 uv run $SKILL_DIR/scripts/scrape.py site --base-url https://example.com  # Discovery mode
 uv run $SKILL_DIR/scripts/scrape.py site --output-dir ./docs url1 url2  # Fetch mode
 
+# Skill composition via skill.sh (fetch + stage for LLM compose)
+uv run $SKILL_DIR/scripts/scrape.py skills https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert
+uv run $SKILL_DIR/scripts/scrape.py skills https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert https://www.skills.sh/sickn33/agentic-awesome-skills/clean-code --run ts-quality
+
 # Force re-fetch (ignore cache)
 uv run $SKILL_DIR/scripts/scrape.py lsp --force
 ```
@@ -47,7 +51,7 @@ uv run $SKILL_DIR/scripts/scrape.py lsp --force
 | `driver`           | CUDA Driver API             | Multi-page API documentation                                                                                                           |
 | `rust`             | Rust Crates                 | Uses cargo-docs-md for clean output                                                                                                    |
 | `site`             | General Websites            | LLM-driven discovery via llms.txt/sitemap · handles CLI sites with global-options extraction (see CLI Scrape Standards)                |
-| `skills`           | skill.sh / GitHub           | Fetch complementary agent skills (SKILL.md + references/ + scripts/) for LLM composition — deterministic fetch/stage; compose per `references/skillsh-compose.md`               |
+| `skills`           | skill.sh (npx skills CLI)   | Fetch complementary skills via mature `npx skills` client, stage for LLM composition — deterministic fetch/stage; compose per `references/skillsh-compose.md`               |
 | `worktrunk` (`wt`) | Worktrunk CLI (`wt --help`) | CLI reference via `site` scraper — extracts Global Options (`-C`, `--yes`, etc.) + Automation per `references/cli-scrape-standards.md` |
 
 ## Rust Documentation
@@ -232,51 +236,60 @@ If a site requires unique cleaning rules:
 2. If rules are site-specific, not a common pattern, and may break other sites → create a curated module (e.g., `rust` module)
 3. This isolation prevents site-specific rules from affecting common sites
 
-## Skill Composition (skills.sh / GitHub)
+## Skill Composition (skill.sh)
 
-The `skills` scraper fetches complementary agent skills from skill.sh (a catalog)
-and their GitHub repos (the source of truth), then stages them so the LLM can
-compose them into **one new skill**. Fetching/staging is deterministic; all
-composition is LLM work guided by `ai-engineering-expert` (see
-`references/skillsh-compose.md`).
+Fetch complementary skills from skill.sh catalog via the mature `npx skills` CLI and stage them for **LLM composition under `ai-engineering-expert`** guidance. Phase A is deterministic (fetch+stage via `npx skills add`); Phases B/C are LLM (compose/reorganize into one skill with frontmatter `meta.sources` attribution). See `references/skillsh-compose.md` for the full wiring.
+
+### Quick Start
 
 ```bash
-# Fetch one or many complementary skills (URL, owner/collection[/skill], or repo)
+# Single skill — still reorganized by LLM (not raw copy)
+uv run $SKILL_DIR/scripts/scrape.py skills https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert
+
+# Complementary skills — multi-input, named run (isolated staging)
 uv run $SKILL_DIR/scripts/scrape.py skills \
   https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert \
-  sickn33/agentic-awesome-skills/nodejs-best-practices \
-  --run ts-monorepo
+  https://www.skills.sh/sickn33/agentic-awesome-skills/nodejs-best-practices \
+  sickn33/agentic-awesome-skills/clean-code \
+  --run ts-quality
 
-# Whole collection -> clone (or --method raw | npx opt-in)
-uv run $SKILL_DIR/scripts/scrape.py skills sickn33/agentic-awesome-skills --run coll
+# GitHub repo input (whole repo) or bare triple
+uv run $SKILL_DIR/scripts/scrape.py skills https://github.com/sickn33/agentic-awesome-skills --run full
+uv run $SKILL_DIR/scripts/scrape.py skills sickn33/agentic-awesome-skills/browser-automation --run browser
+
+# Isolated per-run via npx work dir, force re-fetch
+uv run $SKILL_DIR/scripts/scrape.py skills <inputs> --run my-compose --force
+# Method delegates to npx skills (raw/clone are deprecated aliases -> npx)
 ```
 
-### Fetch methods
-
-| Method | Behavior                                                        |
-| ------ | --------------------------------------------------------------- |
-| `raw` (default, explicit skills) | GitHub contents API walk + `raw.githubusercontent.com` — no side effects |
-| `clone` (default, whole collections) | `git clone --depth 1` then map `skills/<name>/` dirs |
-| `npx` (opt-in) | delegate to `npx skills` inside a temp project, then harvest |
-
-### Staging layout (multi-run)
+### Staging Layout (Multi-Run)
 
 ```
-.lsz/tmp/skill-compose/<run>/
-├── stage/SOURCES.md               # index: repo + verbatim frontmatter per source
-├── stage/<repo>/<skill>/SKILL.md  # + references/ + scripts/ (origin-attributed)
-└── out/<new-skill>/               # LLM compose target (empty until composed)
+.lsz/tmp/skill-compose/              # --staging (default)
+├── <run>/                           # --run slug (omit => single run at root)
+│   ├── README.md + manifest.json
+│   ├── stage/<owner>/<repo>/<skill>/SKILL.md, references/, scripts/
+│   └── out/<new-skill>/             # LLM writes composed skill here (includes sources/<owner>/<repo>/<skill>/ raw copy)
+└── .cache/skills/                   # npx clone cache (XDG) + staging cache reused across runs
 ```
 
-`--run` names the composition; omitted → auto-slug with a numeric suffix so repeated
-compositions coexist. Fetch is shared via the `.cache/`; each run's `stage/`/`out/` is isolated.
+Each `stage/<repo>/<skill>/` preserves the source layout and attribution (drop-in installable).
 
-### Compose (LLM step)
+### LLM Compose (Phases B/C)
 
-After staging, read `references/skillsh-compose.md` and load `ai-engineering-expert`
-(skill-authoring + writing). Merge/reorganize the staged sources into
-`out/<new-skill>/SKILL.md` + deduped `references/`/`scripts/` following skill
-frontmatter/description-budget conventions. Never edit `stage/` in place.
+> After staging, load `ai-engineering-expert` (`skill-authoring` + `writing`) and compose.
+
+- **Single skill:** reorganize under rigor (clearer triggers, pruned bloat, description ≤300 chars, progressive disclosure).
+- **Multiple skills:** merge & dedup — one concept one location, scripts renamed on clash, references consolidated.
+- **Attribution in frontmatter:** composed `SKILL.md` must include `meta: sources:` in frontmatter (list of skill.sh URLs) as authoritative attribution — body `> [!tip] Attribution` is supplementary. Copy URLs from `manifest.json` `skillsh_url` / `source`. Raw originals must be copied inside the composed skill at `sources/<owner>/<repo>/<skill>/` (not left only in `.lsz/tmp/.../stage/`).
+- Output: `out/<new-skill>/SKILL.md` + `references/` + `scripts/` + `sources/<owner>/<repo>/<skill>/` (raw originals), valid per `validate-deps.py context-check`.
+
+> [!note]
+> The LLM decides composition; the scraper only stages. The `references/skillsh-compose.md` is the workflow wiring.
+
+### Inputs
+
+`skill.sh` URL, bare `owner/collection/skill`, or GitHub repo URL (extra `skills/<name>` path understood). `--staging` aliases `--output-dir`; `--method auto|npx` (default `auto` -> `npx`; `raw`/`clone` deprecated -> `npx`). Delegates to `npx -y skills add <repo> [--skill <names>] -y` in isolated work dir under `run/_npx/` and emits `manifest.json` for frontmatter `meta.sources`. See `references/skillsh-compose.md`.
 
 ## Best Practices
 
@@ -614,6 +627,6 @@ Scraper-specific patterns and code examples:
 - `references/section-extraction.md` — Common patterns for splitting content
 - `references/cleanup-patterns.md` — Removing navigation, footers, duplicate content
 - `references/cli-scrape-standards.md` — CLI global-options + automation extraction (worktrunk `wt` canonical fix)
-- `references/skillsh-compose.md` — compose complementary skill.sh/GitHub sources into one skill (ai-engineering-expert guided)
+- `references/skillsh-compose.md` — skill.sh fetch+stage and LLM compose workflow wiring
 
 When adding a new scraper, check these references for similar document structures.

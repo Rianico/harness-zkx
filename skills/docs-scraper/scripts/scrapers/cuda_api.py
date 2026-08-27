@@ -95,17 +95,12 @@ Examples:
 
     def _discover_modules(self) -> list[dict[str, str]]:
         """Discover all module pages."""
-        soup = self._fetch_with_cache(
-            urljoin(self.base_url, "modules.html"),
-            "modules.html"
-        )
+        soup = self._fetch_with_cache(urljoin(self.base_url, "modules.html"), "modules.html")
         if not soup:
             return []
 
         pattern = (
-            r"group__CUDA__.*\.html"
-            if self.api_type == "driver"
-            else r"group__CUDART.*\.html"
+            r"group__CUDA__.*\.html" if self.api_type == "driver" else r"group__CUDART.*\.html"
         )
         modules = []
         seen = set()
@@ -128,18 +123,11 @@ Examples:
 
     def _discover_structures(self) -> list[dict[str, str]]:
         """Discover all data structure pages."""
-        soup = self._fetch_with_cache(
-            urljoin(self.base_url, "annotated.html"),
-            "annotated.html"
-        )
+        soup = self._fetch_with_cache(urljoin(self.base_url, "annotated.html"), "annotated.html")
         if not soup:
             return []
 
-        pattern = (
-            r"structCU.*\.html"
-            if self.api_type == "driver"
-            else r"(struct|union).*\.html"
-        )
+        pattern = r"structCU.*\.html" if self.api_type == "driver" else r"(struct|union).*\.html"
         structures = []
         seen = set()
 
@@ -309,7 +297,7 @@ Examples:
             if cached_count > 0:
                 print(f"\n⚡ Using cached HTML responses ({cached_count} files)")
                 print(f"   Cache: {self.cache_dir.relative_to(self.output_dir.parent)}")
-                print(f"   (Use --force to re-fetch, or delete .cache/ directory)")
+                print("   (Use --force to re-fetch, or delete .cache/ directory)")
 
         print("\n1. Discovering pages...")
         modules = self._discover_modules()
@@ -365,11 +353,7 @@ Examples:
             total_new += new_size
             files_cleaned += 1
 
-        reduction = (
-            (total_original - total_new) / total_original * 100
-            if total_original > 0
-            else 0
-        )
+        reduction = (total_original - total_new) / total_original * 100 if total_original > 0 else 0
         print(
             f"  Cleaned {files_cleaned} files: "
             f"{total_original:,} → {total_new:,} bytes ({reduction:.1f}% reduction)"
@@ -396,7 +380,7 @@ Examples:
         print("\n" + "=" * 70)
         print("COMPLETE")
         print("=" * 70)
-        print(f"Output: {self.output_dir} ({total_new/1024/1024:.1f} MB)")
+        print(f"Output: {self.output_dir} ({total_new / 1024 / 1024:.1f} MB)")
 
     def _create_index(self, modules_dir: Path, structures_dir: Path) -> None:
         """Create INDEX.md file."""

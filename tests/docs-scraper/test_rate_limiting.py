@@ -5,9 +5,7 @@ Test IDs: RL-01 through RL-04
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from fixtures import TEST_PAGE_URL, USER_AGENT_POOL
+from fixtures import TEST_PAGE_URL
 
 
 class TestRateLimiting:

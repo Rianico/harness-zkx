@@ -6,7 +6,7 @@ from .lsp import LSPScraper
 from .ptx import PTXScraper
 from .rust import RustScraper, detect_rust_project
 from .site import SiteScraper, parse_llms_txt, parse_sitemap_xml
-from .skillsh import SkillshScraper
+from .skillsh import SkillsScraper, parse_skillsh_input
 
 __all__ = [
     "DocumentationScraper",
@@ -15,8 +15,9 @@ __all__ = [
     "LSPScraper",
     "RustScraper",
     "SiteScraper",
-    "SkillshScraper",
+    "SkillsScraper",
     "detect_rust_project",
     "parse_llms_txt",
     "parse_sitemap_xml",
+    "parse_skillsh_input",
 ]

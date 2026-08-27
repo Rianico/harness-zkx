@@ -52,11 +52,16 @@ def main() -> int:
 
     if args.check:
         if args.json:
-            print(json.dumps({
-                "instinct_id": args.instinct_id,
-                "eligible": is_eligible,
-                "reason": reason,
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "instinct_id": args.instinct_id,
+                        "eligible": is_eligible,
+                        "reason": reason,
+                    },
+                    indent=2,
+                )
+            )
         else:
             status = "ELIGIBLE" if is_eligible else "NOT ELIGIBLE"
             print(f"Instinct '{args.instinct_id}': {status}")
@@ -65,11 +70,16 @@ def main() -> int:
 
     if not args.force and not is_eligible:
         if args.json:
-            print(json.dumps({
-                "instinct_id": args.instinct_id,
-                "promoted": False,
-                "reason": reason,
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "instinct_id": args.instinct_id,
+                        "promoted": False,
+                        "reason": reason,
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(f"Cannot promote '{args.instinct_id}': {reason}")
             print("Use --force to bypass eligibility checks.")
@@ -77,12 +87,17 @@ def main() -> int:
 
     if args.dry_run:
         if args.json:
-            print(json.dumps({
-                "instinct_id": args.instinct_id,
-                "promoted": False,
-                "dry_run": True,
-                "message": f"Would promote '{args.instinct_id}' to global scope",
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "instinct_id": args.instinct_id,
+                        "promoted": False,
+                        "dry_run": True,
+                        "message": f"Would promote '{args.instinct_id}' to global scope",
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(f"Dry run: Would promote '{args.instinct_id}' to global scope.")
             print(f"  Reason: {args.reason or 'User requested'}")
@@ -98,23 +113,33 @@ def main() -> int:
 
     if global_path:
         if args.json:
-            print(json.dumps({
-                "instinct_id": args.instinct_id,
-                "promoted": True,
-                "global_path": str(global_path),
-                "reason": promotion.reason,
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "instinct_id": args.instinct_id,
+                        "promoted": True,
+                        "global_path": str(global_path),
+                        "reason": promotion.reason,
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(f"Successfully promoted '{args.instinct_id}' to global scope.")
             print(f"  Path: {global_path}")
         return 0
     else:
         if args.json:
-            print(json.dumps({
-                "instinct_id": args.instinct_id,
-                "promoted": False,
-                "reason": "Promotion failed - instinct may not exist",
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "instinct_id": args.instinct_id,
+                        "promoted": False,
+                        "reason": "Promotion failed - instinct may not exist",
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(f"Failed to promote '{args.instinct_id}'. Instinct may not exist.")
         return 1

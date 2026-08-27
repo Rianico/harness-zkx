@@ -1,31 +1,31 @@
 """Fixtures package for scraper tests."""
 
 from .mock_responses import (
-    MockResponse,
-    SUCCESS_RESPONSE,
+    CONNECTION_ERROR,
     NOT_FOUND_RESPONSE,
-    RATE_LIMIT_RESPONSE,
     RATE_LIMIT_NO_HEADER,
+    RATE_LIMIT_RESPONSE,
     SERVER_ERROR_RESPONSE,
     SERVICE_UNAVAILABLE,
+    SUCCESS_RESPONSE,
     TIMEOUT_ERROR,
-    CONNECTION_ERROR,
+    MockResponse,
 )
 from .robots_txt import (
     ALLOW_ALL_ROBOTS,
     BLOCK_ALL_ROBOTS,
     CRAWL_DELAY_ROBOTS,
-    SPECIFIC_UA_ROBOTS,
     NO_ROBOTS_FILE,
+    SPECIFIC_UA_ROBOTS,
 )
-from .user_agents import USER_AGENT_POOL
 from .urls import (
+    ALLOWED_PATH,
+    BLOCKED_PATH,
     TEST_BASE_URL,
     TEST_PAGE_URL,
     TEST_ROBOTS_URL,
-    ALLOWED_PATH,
-    BLOCKED_PATH,
 )
+from .user_agents import USER_AGENT_POOL
 
 __all__ = [
     "MockResponse",

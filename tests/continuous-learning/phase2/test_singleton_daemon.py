@@ -17,15 +17,11 @@ import signal
 import time
 from pathlib import Path
 
-import pytest
-
 
 class TestSingleInstance:
     """Tests for ensuring only one daemon instance runs."""
 
-    def test_single_instance_enforcement(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_single_instance_enforcement(self, homunculus_dir: Path) -> None:
         """
         Only one daemon instance should run.
 
@@ -44,9 +40,7 @@ class TestSingleInstance:
         # Cleanup
         observer_daemon.release_lock(homunculus_dir)
 
-    def test_pid_file_contains_valid_pid(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_pid_file_contains_valid_pid(self, homunculus_dir: Path) -> None:
         """
         PID file should contain valid PID.
 
@@ -68,9 +62,7 @@ class TestSingleInstance:
 
         observer_daemon.release_lock(homunculus_dir)
 
-    def test_pid_file_removed_on_release(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_pid_file_removed_on_release(self, homunculus_dir: Path) -> None:
         """
         PID file should be removed when daemon releases lock.
         """
@@ -88,9 +80,7 @@ class TestSingleInstance:
 class TestStalePidCleanup:
     """Tests for cleaning up stale PID files."""
 
-    def test_stale_pid_cleanup(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_stale_pid_cleanup(self, homunculus_dir: Path) -> None:
         """
         Stale PID file should be cleaned up.
 
@@ -114,9 +104,7 @@ class TestStalePidCleanup:
 
         observer_daemon.release_lock(homunculus_dir)
 
-    def test_stale_pid_with_running_process(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_stale_pid_with_running_process(self, homunculus_dir: Path) -> None:
         """
         Should not remove PID file if process is still running.
         """
@@ -135,9 +123,7 @@ class TestStalePidCleanup:
 class TestLockPreventsRace:
     """Tests for lock-based race condition prevention."""
 
-    def test_lock_file_created(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_lock_file_created(self, homunculus_dir: Path) -> None:
         """
         Lock file should be created.
 
@@ -152,9 +138,7 @@ class TestLockPreventsRace:
 
         observer_daemon.release_lock(homunculus_dir)
 
-    def test_lock_file_removed_on_release(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_lock_file_removed_on_release(self, homunculus_dir: Path) -> None:
         """
         Lock file should be removed on release.
         """
@@ -167,14 +151,13 @@ class TestLockPreventsRace:
 
         assert not lock_file.exists(), "Lock file should be removed"
 
-    def test_lock_is_atomic(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_lock_is_atomic(self, homunculus_dir: Path) -> None:
         """
         Lock acquisition should be atomic (no race condition).
         """
-        from hooks.observe import observer_daemon
         import threading
+
+        from hooks.observe import observer_daemon
 
         results = []
         lock = threading.Lock()
@@ -188,10 +171,7 @@ class TestLockPreventsRace:
                 observer_daemon.release_lock(homunculus_dir)
 
         # Start multiple threads trying to acquire
-        threads = [
-            threading.Thread(target=try_acquire)
-            for _ in range(5)
-        ]
+        threads = [threading.Thread(target=try_acquire) for _ in range(5)]
         for t in threads:
             t.start()
         for t in threads:
@@ -199,17 +179,13 @@ class TestLockPreventsRace:
 
         # Only one should have succeeded
         success_count = sum(1 for r in results if r is True)
-        assert success_count == 1, (
-            f"Only one thread should acquire lock, got {success_count}"
-        )
+        assert success_count == 1, f"Only one thread should acquire lock, got {success_count}"
 
 
 class TestGracefulShutdown:
     """Tests for graceful daemon shutdown."""
 
-    def test_graceful_shutdown_on_sigterm(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_graceful_shutdown_on_sigterm(self, homunculus_dir: Path) -> None:
         """
         Daemon should shut down gracefully on SIGTERM.
 
@@ -226,9 +202,7 @@ class TestGracefulShutdown:
         # PID file should be cleaned up
         assert not pid_file.exists(), "PID file should be removed on shutdown"
 
-    def test_shutdown_state_preserved(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_shutdown_state_preserved(self, homunculus_dir: Path) -> None:
         """
         Daemon should preserve state during shutdown.
         """
@@ -249,9 +223,7 @@ class TestGracefulShutdown:
                 state = json.load(f)
             assert state.get("last_processed") == 500
 
-    def test_shutdown_timeout(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_shutdown_timeout(self, homunculus_dir: Path) -> None:
         """
         Daemon should force shutdown after timeout.
         """

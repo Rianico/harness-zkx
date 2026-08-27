@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from bs4 import BeautifulSoup
-
 from render import AssetBundler, BodyRenderer, FrontmatterParser, ParsedDocument
 
 

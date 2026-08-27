@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
@@ -23,8 +23,7 @@ from urllib.robotparser import RobotFileParser
 
 import html2text
 import requests
-from bs4 import BeautifulSoup, Tag
-
+from bs4 import BeautifulSoup
 
 # Default User-Agent pool for rotation
 DEFAULT_USER_AGENT_POOL: list[dict[str, str]] = [
@@ -257,7 +256,7 @@ class DocumentationScraper(ABC):
                         # Try parsing as HTTP date
                         try:
                             dt = parsedate_to_datetime(retry_after)
-                            delay = (dt.timestamp() - time.time())
+                            delay = dt.timestamp() - time.time()
                             if delay > 0:
                                 return min(delay, MAX_RETRY_AFTER)
                         except (ValueError, TypeError):
@@ -265,7 +264,7 @@ class DocumentationScraper(ABC):
 
         # Exponential backoff: 1s, 2s, 4s, ...
         # attempt is 0-indexed, so first retry (attempt=0) gets 1s
-        base_delay = 1.0 * (2 ** attempt)
+        base_delay = 1.0 * (2**attempt)
         return min(base_delay, MAX_RETRY_AFTER)
 
     def _rate_limited_get(self, url: str, **kwargs: Any) -> requests.Response | None:
@@ -399,7 +398,7 @@ class DocumentationScraper(ABC):
             if response is not None and response.status_code == 200:
                 content_type = response.headers.get("content-type", "")
                 if "markdown" in content_type or "text/plain" in content_type:
-                    print(f"   Found markdown at .md extension")
+                    print("   Found markdown at .md extension")
                     return response.text, "markdown"
         except requests.exceptions.RequestException:
             pass
@@ -424,7 +423,7 @@ class DocumentationScraper(ABC):
             # Use direct request to Jina (not rate-limited against target site)
             response = requests.get(jina_url, timeout=self.timeout)
             if response.status_code == 200:
-                print(f"   Fetched via Jina Reader proxy")
+                print("   Fetched via Jina Reader proxy")
                 return response.text, "markdown"
         except requests.exceptions.RequestException:
             pass
@@ -451,13 +450,13 @@ class DocumentationScraper(ABC):
                 timeout=self.timeout,
             )
             if result.returncode == 0 and result.stdout.strip():
-                print(f"   Fetched via defuddle")
+                print("   Fetched via defuddle")
                 return result.stdout, "markdown"
         except FileNotFoundError:
             # defuddle not installed, skip silently
             pass
         except subprocess.TimeoutExpired:
-            print(f"   Warning: defuddle timed out")
+            print("   Warning: defuddle timed out")
         except Exception as e:
             print(f"   Warning: defuddle error: {e}")
 
@@ -478,7 +477,7 @@ class DocumentationScraper(ABC):
         # Use cache if available and not forcing refresh
         if cache_path.exists() and not self.force:
             print(f"Using cached response: {cache_path.relative_to(self.cache_base.parent)}")
-            print(f"   (Use --force to re-fetch, or delete .cache/ directory)")
+            print("   (Use --force to re-fetch, or delete .cache/ directory)")
             try:
                 content = cache_path.read_text(encoding="utf-8")
                 self._last_request_time = time.time()
@@ -637,9 +636,7 @@ class DocumentationScraper(ABC):
         for textblock in content.find_all("div", class_="textblock"):
             links = textblock.find_all("a", href=True)
             if len(links) > 10:
-                html_links = [
-                    link for link in links if link.get("href", "").endswith(".html")
-                ]
+                html_links = [link for link in links if link.get("href", "").endswith(".html")]
                 if len(html_links) > 10:
                     textblock.decompose()
 
@@ -674,17 +671,11 @@ class DocumentationScraper(ABC):
         found_header = False
 
         for line in lines:
-            if (
-                "NVIDIA" in line
-                and "Toolkit Documentation" in line
-                and not found_header
-            ):
+            if "NVIDIA" in line and "Toolkit Documentation" in line and not found_header:
                 in_nav = True
                 continue
 
-            if line.startswith("###") or (
-                line.startswith("##") and "Public Members" in line
-            ):
+            if line.startswith("###") or (line.startswith("##") and "Public Members" in line):
                 in_nav = False
                 found_header = True
 
@@ -723,7 +714,7 @@ class DocumentationScraper(ABC):
         readme_path = output_dir / "README.md"
 
         # Get current date in UTC
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         date_str = now.strftime("%Y-%m-%d")
         date_display = now.strftime("%Y-%m-%d %H:%M UTC")
 
@@ -745,37 +736,43 @@ class DocumentationScraper(ABC):
             for key, value in extra_metadata.items():
                 lines.append(f"- **{key}:** {value}")
 
-        lines.extend([
-            "",
-            "## Usage",
-            "",
-            "This documentation was scraped and converted to LLM-friendly markdown format. ",
-            "The content is optimized for AI assistant consumption with:",
-            "",
-            "- Clean markdown formatting",
-            "- Resolved internal links",
-            "- Removed navigation cruft and duplicate content",
-            "",
-            "### Caveats",
-            "",
-            "- **Freshness:** This snapshot was taken on a specific date. Check the source URL for updates.",
-            "- **Accuracy:** Some formatting may differ from the original. Refer to source for canonical content.",
-            "- **Links:** External links point to original URLs; internal links reference local `.md` files.",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Usage",
+                "",
+                "This documentation was scraped and converted to LLM-friendly markdown format. ",
+                "The content is optimized for AI assistant consumption with:",
+                "",
+                "- Clean markdown formatting",
+                "- Resolved internal links",
+                "- Removed navigation cruft and duplicate content",
+                "",
+                "### Caveats",
+                "",
+                "- **Freshness:** This snapshot was taken on a specific date. Check the source URL for updates.",
+                "- **Accuracy:** Some formatting may differ from the original. Refer to source for canonical content.",
+                "- **Links:** External links point to original URLs; internal links reference local `.md` files.",
+            ]
+        )
 
         if version:
-            lines.extend([
-                "",
-                "### Version Check",
-                "",
-                f"If you need a different version, re-run the scraper with `--force` or check the source URL directly.",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "### Version Check",
+                    "",
+                    "If you need a different version, re-run the scraper with `--force` or check the source URL directly.",
+                ]
+            )
 
-        lines.extend([
-            "",
-            "---",
-            f"*Generated by [scraper skill]({source_url}) on {date_str}*",
-        ])
+        lines.extend(
+            [
+                "",
+                "---",
+                f"*Generated by [scraper skill]({source_url}) on {date_str}*",
+            ]
+        )
 
         readme_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"Generated: {readme_path}")

@@ -22,8 +22,9 @@ import pytest
 from hooks.observe.instinct_manager import InstinctManager
 from hooks.observe.observer_daemon import read_cursor, update_cursor
 
-
-SCRIPTS_DIR = Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+SCRIPTS_DIR = (
+    Path(__file__).parent.parent.parent.parent / "skills" / "continuous-learning" / "scripts"
+)
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
@@ -56,7 +57,7 @@ def observations_with_unprocessed(homunculus_dir: Path) -> Path:
             "tool": "Edit",
             "input": {"file_path": "/path/to/file.py"},
             "session": "analyze-test-1",
-            "project_id": project_id
+            "project_id": project_id,
         },
         {
             "timestamp": "2026-04-30T10:00:05Z",
@@ -64,7 +65,7 @@ def observations_with_unprocessed(homunculus_dir: Path) -> Path:
             "tool": "Edit",
             "output": "user_rejected: true",
             "session": "analyze-test-1",
-            "project_id": project_id
+            "project_id": project_id,
         },
         {
             "timestamp": "2026-04-30T10:00:10Z",
@@ -72,14 +73,14 @@ def observations_with_unprocessed(homunculus_dir: Path) -> Path:
             "tool": "Read",
             "input": {"file_path": "/path/to/file.py"},
             "session": "analyze-test-1",
-            "project_id": project_id
+            "project_id": project_id,
         },
         {
             "timestamp": "2026-04-30T10:00:15Z",
             "event": "tool_complete",
             "tool": "Read",
             "session": "analyze-test-1",
-            "project_id": project_id
+            "project_id": project_id,
         },
         {
             "timestamp": "2026-04-30T10:00:20Z",
@@ -87,7 +88,7 @@ def observations_with_unprocessed(homunculus_dir: Path) -> Path:
             "tool": "Edit",
             "input": {"file_path": "/path/to/file.py"},
             "session": "analyze-test-1",
-            "project_id": project_id
+            "project_id": project_id,
         },
         {
             "timestamp": "2026-04-30T10:00:25Z",
@@ -95,7 +96,7 @@ def observations_with_unprocessed(homunculus_dir: Path) -> Path:
             "tool": "Edit",
             "output": "success",
             "session": "analyze-test-1",
-            "project_id": project_id
+            "project_id": project_id,
         },
     ]
 
@@ -202,12 +203,10 @@ class TestAnalyzeCommandFunctionality:
         with open(observations_file) as f:
             lines = f.readlines()
 
-        remaining = lines[cursor["line"]:]
+        remaining = lines[cursor["line"] :]
         assert len(remaining) == 3, f"Expected 3 remaining observations, got {len(remaining)}"
 
-    def test_handles_missing_observations_file(
-        self, homunculus_dir: Path
-    ) -> None:
+    def test_handles_missing_observations_file(self, homunculus_dir: Path) -> None:
         """
         Should handle missing observations file gracefully.
         """
@@ -287,7 +286,10 @@ class TestAnalyzeCommandResults:
     """Tests for analyze command result handling."""
 
     def test_reports_processed_count(
-        self, homunculus_dir: Path, observations_with_unprocessed: Path, instinct_manager: InstinctManager
+        self,
+        homunculus_dir: Path,
+        observations_with_unprocessed: Path,
+        instinct_manager: InstinctManager,
     ) -> None:
         """
         Analyze should report the number of observations processed.
@@ -346,7 +348,7 @@ class TestAnalyzeScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=60
+            timeout=60,
         )
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
@@ -368,9 +370,10 @@ class TestAnalyzeScriptExecution:
             capture_output=True,
             text=True,
             env=env,
-            timeout=60
+            timeout=60,
         )
 
         # Should mention observations processed
-        assert "observation" in result.stdout.lower() or "processed" in result.stdout.lower(), \
+        assert "observation" in result.stdout.lower() or "processed" in result.stdout.lower(), (
             f"Expected processed count in output: {result.stdout}"
+        )

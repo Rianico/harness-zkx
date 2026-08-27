@@ -7,6 +7,7 @@ Observer daemon for continuous learning system.
 Sleeps until signaled or interval elapsed, processes observations,
 and spawns observer agent with structured payload.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,12 +22,11 @@ from pathlib import Path
 from typing import Any
 
 # Add lib to path for tz import
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 from tz import now_cst_iso
 
 # Support both standalone script execution and module import
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
@@ -64,6 +64,7 @@ def log_exception(context: str) -> None:
     """Log exception with full traceback."""
     log_error(f"{context}: {traceback.format_exc()}")
 
+
 # Global state for daemon
 _wake_callback: Callable[[], None] | None = None
 _state_callback: Callable[[str], None] | None = None
@@ -90,6 +91,7 @@ def _install_signal_handlers_if_main() -> None:
 
 def _install_signal_handlers() -> None:
     """Actually install the signal handlers."""
+
     def handle_sigusr1(_signum: int, _frame: Any) -> None:
         """Handle SIGUSR1 - wake up daemon."""
         log_info("SIGUSR1 received - waking up")
@@ -277,10 +279,12 @@ def build_session_payload(observations_file: Path) -> dict[str, Any]:
         if events and not project_id:
             project_id = events[0].get("project_id", "")
 
-        sessions.append({
-            "session_id": session_id,
-            "events": events,
-        })
+        sessions.append(
+            {
+                "session_id": session_id,
+                "events": events,
+            }
+        )
 
     return {
         "sessions": sessions,
@@ -772,7 +776,7 @@ def start_processing_cycle(homunculus_dir: Path) -> None:
     try:
         process_all_projects(homunculus_dir)
         log_info("Processing cycle completed")
-    except Exception as e:
+    except Exception:
         log_exception("Error in processing cycle")
 
     if _state_callback:
@@ -837,7 +841,7 @@ def run_daemon(
                 log_info(f"Found {len(projects)} projects with observations")
                 process_all_projects(homunculus_dir)
                 log_info(f"Processing cycle #{cycle_count} completed")
-            except Exception as e:
+            except Exception:
                 log_exception(f"Error in processing cycle #{cycle_count}")
 
     finally:

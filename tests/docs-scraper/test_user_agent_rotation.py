@@ -5,8 +5,6 @@ Test IDs: UA-01 through UA-05
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from fixtures import TEST_PAGE_URL, USER_AGENT_POOL
 
 

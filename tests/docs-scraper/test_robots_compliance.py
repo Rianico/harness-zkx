@@ -7,14 +7,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests.exceptions
-
 from fixtures import (
-    TEST_PAGE_URL,
-    TEST_BASE_URL,
     ALLOW_ALL_ROBOTS,
     BLOCK_ALL_ROBOTS,
     CRAWL_DELAY_ROBOTS,
     SPECIFIC_UA_ROBOTS,
+    TEST_BASE_URL,
+    TEST_PAGE_URL,
 )
 
 
@@ -146,9 +145,9 @@ class TestRobotsCompliance:
             content=b"Not Found",
             headers={},
         )
-        robots_response.raise_for_status = lambda: (
-            _ for _ in ()
-        ).throw(requests.exceptions.HTTPError("404 Not Found", response=robots_response))
+        robots_response.raise_for_status = lambda: (_ for _ in ()).throw(
+            requests.exceptions.HTTPError("404 Not Found", response=robots_response)
+        )
 
         # Mock page response (should succeed since no robots.txt)
         page_response = MagicMock(

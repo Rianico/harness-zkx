@@ -4,6 +4,7 @@
 The observe hook captures PreToolUse and PostToolUse events for the
 continuous learning system, writing observations to project-scoped files.
 """
+
 import json
 import shutil
 import sys
@@ -13,29 +14,28 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tool_checker import run_tool_check
 
-
-TARGET_HOOK_RELATIVE_PATH = Path('hooks/observe/observe.py')
-SOURCE_HOOK_NAME = 'observe.py'
+TARGET_HOOK_RELATIVE_PATH = Path("hooks/observe/observe.py")
+SOURCE_HOOK_NAME = "observe.py"
 
 # Additional modules required by observe.py
 REQUIRED_MODULES = [
-    '__init__.py',
-    'config.py',
-    'detect_project.py',
-    'secrets.py',
+    "__init__.py",
+    "config.py",
+    "detect_project.py",
+    "secrets.py",
 ]
 
 # Hook event types to register for
-HOOK_EVENTS = ('PreToolUse', 'PostToolUse')
+HOOK_EVENTS = ("PreToolUse", "PostToolUse")
 
 
 def show_help() -> None:
     print(
-        'Usage:\n'
-        '  uv run install-hooks.py observe install <settings.json>\n'
-        '  uv run install-hooks.py observe uninstall <settings.json>\n'
-        '  uv run install-hooks.py --help\n\n'
-        'This module is installed through the root install-hooks.py entrypoint.\n'
+        "Usage:\n"
+        "  uv run install-hooks.py observe install <settings.json>\n"
+        "  uv run install-hooks.py observe uninstall <settings.json>\n"
+        "  uv run install-hooks.py --help\n\n"
+        "This module is installed through the root install-hooks.py entrypoint.\n"
     )
 
 
@@ -46,7 +46,7 @@ def load_settings(path: Path) -> dict:
 
 
 def save_settings(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, indent=2) + '\n')
+    path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 def target_hook_path(settings_path: Path) -> Path:
@@ -83,13 +83,13 @@ def build_hook_entry(target_hook: Path, event_type: str) -> dict:
         Hook entry dict for settings.json
     """
     # Determine the argument based on event type
-    arg = 'pre' if event_type == 'PreToolUse' else 'post'
+    arg = "pre" if event_type == "PreToolUse" else "post"
     return {
-        'matcher': '*',
-        'hooks': [
+        "matcher": "*",
+        "hooks": [
             {
-                'type': 'command',
-                'command': f'uv run "{target_hook}" {arg}',
+                "type": "command",
+                "command": f'uv run "{target_hook}" {arg}',
             }
         ],
     }
@@ -106,7 +106,7 @@ def ensure_observe_hook(data: dict, hook_entry: dict, event_type: str) -> bool:
     Returns:
         True if changes were made, False otherwise
     """
-    hooks = data.setdefault('hooks', {})
+    hooks = data.setdefault("hooks", {})
     event_hooks = hooks.setdefault(event_type, [])
 
     for entry in event_hooks:
@@ -128,7 +128,7 @@ def remove_observe_hook(data: dict, hook_entry: dict, event_type: str) -> bool:
     Returns:
         True if changes were made, False otherwise
     """
-    hooks = data.get('hooks')
+    hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return False
 
@@ -145,7 +145,7 @@ def remove_observe_hook(data: dict, hook_entry: dict, event_type: str) -> bool:
     else:
         hooks.pop(event_type, None)
         if not hooks:
-            data.pop('hooks', None)
+            data.pop("hooks", None)
 
     return True
 
@@ -156,8 +156,8 @@ def install_family(settings_path: Path) -> int:
     Registers the observe.py script for both PreToolUse and PostToolUse events.
     """
     # Check required tools
-    required = ['uv']
-    if not run_tool_check('observe', required):
+    required = ["uv"]
+    if not run_tool_check("observe", required):
         return 1
 
     target_hook = install_hook_script(settings_path)
@@ -171,9 +171,9 @@ def install_family(settings_path: Path) -> int:
 
     save_settings(settings_path, data)
 
-    print(f'Updated {settings_path}' if changed else f'No changes needed for {settings_path}')
-    print(f'Installed hook script at {target_hook}')
-    print(f'Registered for events: {", ".join(HOOK_EVENTS)}')
+    print(f"Updated {settings_path}" if changed else f"No changes needed for {settings_path}")
+    print(f"Installed hook script at {target_hook}")
+    print(f"Registered for events: {', '.join(HOOK_EVENTS)}")
     return 0
 
 
@@ -208,18 +208,18 @@ def uninstall_family(settings_path: Path) -> int:
                 target_module.unlink()
                 removed_files.append(str(target_module))
 
-    print(f'Updated {settings_path}' if changed else f'No changes needed for {settings_path}')
+    print(f"Updated {settings_path}" if changed else f"No changes needed for {settings_path}")
     if removed_files:
-        print('Removed files:')
+        print("Removed files:")
         for f in removed_files:
-            print(f'  {f}')
+            print(f"  {f}")
     else:
-        print(f'No hook scripts found at {target_hook.parent}')
+        print(f"No hook scripts found at {target_hook.parent}")
     return 0
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) == 2 and argv[1] in {'--help', '-h'}:
+    if len(argv) == 2 and argv[1] in {"--help", "-h"}:
         show_help()
         return 0
 
@@ -227,5 +227,5 @@ def main(argv: list[str]) -> int:
     return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main(sys.argv))

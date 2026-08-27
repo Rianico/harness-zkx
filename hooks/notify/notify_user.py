@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 import json
-from pathlib import Path
 import platform
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 
 def escape_applescript(value: str) -> str:
-    return value.replace('\\', '\\\\').replace('"', '\\"')
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def project_name_from_cwd(cwd: str) -> str:
     if not cwd:
-        return 'unknown-project'
-    return Path(cwd).name or 'unknown-project'
+        return "unknown-project"
+    return Path(cwd).name or "unknown-project"
 
 
 def notify_macos(message: str, project_name: str) -> None:
@@ -22,8 +22,8 @@ def notify_macos(message: str, project_name: str) -> None:
     safe_project_name = escape_applescript(project_name)
     subprocess.run(
         [
-            'osascript',
-            '-e',
+            "osascript",
+            "-e",
             f'display notification "{safe_message}" with title "Claude Code" subtitle "{safe_project_name}" sound name "Heroine"',
         ],
         check=False,
@@ -40,15 +40,15 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Claude Code').Show($toast)
 """.strip()
     subprocess.run(
-        ['powershell', '-NoProfile', '-Command', script],
+        ["powershell", "-NoProfile", "-Command", script],
         check=False,
     )
 
 
 def notify_linux(title: str, message: str) -> None:
-    if shutil.which('notify-send') is None:
+    if shutil.which("notify-send") is None:
         return
-    subprocess.run(['notify-send', title, message], check=False)
+    subprocess.run(["notify-send", title, message], check=False)
 
 
 def main() -> int:
@@ -57,21 +57,26 @@ def main() -> int:
     except json.JSONDecodeError:
         return 0
 
-    title = payload.get('title') or 'Claude Code'
-    message = payload.get('message') or 'Claude Code notification'
-    notification_type = payload.get('notification_type') or payload.get('hook_event_name') or payload.get('event_name') or 'unknown'
-    project_name = project_name_from_cwd(payload.get('cwd') or '')
+    title = payload.get("title") or "Claude Code"
+    message = payload.get("message") or "Claude Code notification"
+    notification_type = (
+        payload.get("notification_type")
+        or payload.get("hook_event_name")
+        or payload.get("event_name")
+        or "unknown"
+    )
+    project_name = project_name_from_cwd(payload.get("cwd") or "")
     system = platform.system()
 
-    if system == 'Darwin':
+    if system == "Darwin":
         notify_macos(message, project_name)
-    elif system == 'Windows':
-        notify_windows(title, f'[{project_name}] {message} ({notification_type})')
+    elif system == "Windows":
+        notify_windows(title, f"[{project_name}] {message} ({notification_type})")
     else:
-        notify_linux(title, f'[{project_name}] {message} ({notification_type})')
+        notify_linux(title, f"[{project_name}] {message} ({notification_type})")
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

@@ -20,6 +20,7 @@ from scripts.parser import (
 # Fixtures are in the skill directory
 FIXTURES = SKILL_DIR / "fixtures"
 
+
 class TestParseTrace:
     def test_parses_compliant_trace(self) -> None:
         events = parse_trace(FIXTURES / "compliant_trace.jsonl")
@@ -53,6 +54,7 @@ class TestParseTrace:
     def test_nonexistent_file_raises(self) -> None:
         with pytest.raises(FileNotFoundError):
             parse_trace(Path("/nonexistent/trace.jsonl"))
+
 
 class TestParseSpec:
     def test_parses_tdd_spec(self) -> None:

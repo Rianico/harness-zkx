@@ -13,7 +13,6 @@ Commands:
 """
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
@@ -73,9 +72,7 @@ def validate_triggers(triggers_data: dict) -> dict[str, Any]:
 
             for trigger in category_triggers:
                 if not isinstance(trigger, str):
-                    result["issues"].append(
-                        f"Module '{module}' has non-string trigger: {trigger}"
-                    )
+                    result["issues"].append(f"Module '{module}' has non-string trigger: {trigger}")
                     result["valid"] = False
                     continue
 
@@ -273,7 +270,9 @@ def validate_skill_directory(skill_dir: Path) -> dict[str, Any]:
             result["stats"]["raw_docs_files"] = len(raw_files)
             result["stats"]["raw_docs_dir"] = raw_dir.name
         else:
-            result["warnings"].append("No raw docs found (expected references/<skill-name>-raw/ or references/raw/)")
+            result["warnings"].append(
+                "No raw docs found (expected references/<skill-name>-raw/ or references/raw/)"
+            )
 
         # Check reference file metadata headers and quality
         for ref_file in merged_refs:
@@ -301,7 +300,9 @@ def validate_skill_directory(skill_dir: Path) -> dict[str, Any]:
     # Check for $SKILL_DIR path usage
     main_content = main_skill.read_text() if main_skill.exists() else ""
     if "../../references/" in main_content or "../references/" in main_content:
-        result["warnings"].append("Found relative paths like '../../references/'. Use '$SKILL_DIR/references/' instead.")
+        result["warnings"].append(
+            "Found relative paths like '../../references/'. Use '$SKILL_DIR/references/' instead."
+        )
 
     return result
 
@@ -355,7 +356,11 @@ def print_validation_result(result: dict[str, Any], title: str):
     """Print validation result as a table."""
     console.print(f"\n[bold]{title}[/bold]")
 
-    status = "[green]VALID[/green]" if result.get("valid", result.get("success")) else "[red]INVALID[/red]"
+    status = (
+        "[green]VALID[/green]"
+        if result.get("valid", result.get("success"))
+        else "[red]INVALID[/red]"
+    )
     console.print(f"Status: {status}")
 
     if result.get("stats"):
@@ -416,7 +421,7 @@ def main():
 
     elif args.command == "curate-refs":
         result = curate_references(args.doc_dir, args.output)
-        console.print(f"\n[bold]Reference Curation[/bold]")
+        console.print("\n[bold]Reference Curation[/bold]")
         console.print(f"Files processed: {result['files_processed']}")
         console.print(f"Files created: {result['files_created']}")
 

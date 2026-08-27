@@ -15,11 +15,13 @@ from scripts.scenario_generator import Scenario
 SANDBOX_BASE = Path("/tmp/skill-comply-sandbox")
 ALLOWED_MODELS = frozenset({"haiku", "sonnet", "opus"})
 
+
 @dataclass(frozen=True)
 class ScenarioRun:
     scenario: Scenario
     observations: tuple[ObservationEvent, ...]
     sandbox_dir: Path
+
 
 def run_scenario(
     scenario: Scenario,
@@ -36,12 +38,19 @@ def run_scenario(
 
     result = subprocess.run(
         [
-            "claude", "-p", scenario.prompt,
-            "--model", model,
-            "--max-turns", str(max_turns),
-            "--add-dir", str(sandbox_dir),
-            "--allowedTools", "Read,Write,Edit,Bash,Glob,Grep",
-            "--output-format", "stream-json",
+            "claude",
+            "-p",
+            scenario.prompt,
+            "--model",
+            model,
+            "--max-turns",
+            str(max_turns),
+            "--add-dir",
+            str(sandbox_dir),
+            "--allowedTools",
+            "Read,Write,Edit,Bash,Glob,Grep",
+            "--output-format",
+            "stream-json",
             "--verbose",
         ],
         capture_output=True,
@@ -53,9 +62,7 @@ def run_scenario(
     if result.returncode != 0:
         # Try to extract error from stderr or stdout (stream-json may put errors in stdout)
         error_msg = result.stderr[:500] if result.stderr else result.stdout[:500]
-        raise RuntimeError(
-            f"claude -p failed (rc={result.returncode}): {error_msg}"
-        )
+        raise RuntimeError(f"claude -p failed (rc={result.returncode}): {error_msg}")
 
     observations = _parse_stream_json(result.stdout)
 
@@ -65,6 +72,7 @@ def run_scenario(
         sandbox_dir=sandbox_dir,
     )
 
+
 def _safe_sandbox_dir(scenario_id: str) -> Path:
     """Sanitize scenario ID and ensure path stays within sandbox base."""
     safe_id = re.sub(r"[^a-zA-Z0-9\-_]", "_", scenario_id)
@@ -72,6 +80,7 @@ def _safe_sandbox_dir(scenario_id: str) -> Path:
     # Validate path stays within sandbox base (raises ValueError on traversal)
     path.resolve().relative_to(SANDBOX_BASE.resolve())
     return path
+
 
 def _setup_sandbox(sandbox_dir: Path, scenario: Scenario) -> None:
     """Create sandbox directory and run setup commands."""
@@ -83,6 +92,7 @@ def _setup_sandbox(sandbox_dir: Path, scenario: Scenario) -> None:
 
     for cmd in scenario.setup_commands:
         subprocess.run(cmd, cwd=sandbox_dir, shell=True, capture_output=True)
+
 
 def _parse_stream_json(stdout: str) -> list[ObservationEvent]:
     """Parse claude -p stream-json output into ObservationEvents.
@@ -134,23 +144,27 @@ def _parse_stream_json(stdout: str) -> list[ObservationEvent]:
                         else:
                             output_str = str(output_content)[:5000]
 
-                        events.append(ObservationEvent(
-                            timestamp=f"T{info['order']:04d}",
-                            event="tool_complete",
-                            tool=info["tool"],
-                            session=msg.get("session_id", "unknown"),
-                            input=info["input"],
-                            output=output_str,
-                        ))
+                        events.append(
+                            ObservationEvent(
+                                timestamp=f"T{info['order']:04d}",
+                                event="tool_complete",
+                                tool=info["tool"],
+                                session=msg.get("session_id", "unknown"),
+                                input=info["input"],
+                                output=output_str,
+                            )
+                        )
 
     for _tool_use_id, info in pending.items():
-        events.append(ObservationEvent(
-            timestamp=f"T{info['order']:04d}",
-            event="tool_complete",
-            tool=info["tool"],
-            session="unknown",
-            input=info["input"],
-            output="",
-        ))
+        events.append(
+            ObservationEvent(
+                timestamp=f"T{info['order']:04d}",
+                event="tool_complete",
+                tool=info["tool"],
+                session="unknown",
+                input=info["input"],
+                output="",
+            )
+        )
 
     return sorted(events, key=lambda e: e.timestamp)

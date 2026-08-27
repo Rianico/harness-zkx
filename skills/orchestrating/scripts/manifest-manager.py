@@ -6,7 +6,7 @@
 import hashlib
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -18,7 +18,7 @@ def get_file_hash(path: str) -> str:
 
 
 def get_utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _build_artifacts(artifact_paths: list[str]) -> list[dict]:
@@ -45,7 +45,7 @@ def main():
         "status": "in_progress",
         "intent_hash": "",
         "artifacts": [],
-        "phases": []
+        "phases": [],
     }
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
@@ -59,7 +59,9 @@ def main():
     elif command == "get-next-run":
         _require_args(args, 1, "get-next-run")
         phase_id = args[0]
-        runs = [int(p["run_id"].split("-")[1]) for p in manifest["phases"] if p["phase_id"] == phase_id]
+        runs = [
+            int(p["run_id"].split("-")[1]) for p in manifest["phases"] if p["phase_id"] == phase_id
+        ]
         next_run = max(runs, default=0) + 1
         print(f"run-{next_run}")
         return
@@ -83,16 +85,18 @@ def main():
                 break
         else:
             now = get_utc_now()
-            manifest["phases"].append({
-                "phase_id": phase_id,
-                "run_id": run_id,
-                "status": status,
-                "created_at": now,
-                "finished_at": now if status == "completed" else None,
-                "artifacts": artifacts,
-                "provenance": provenance,
-                "units": [],
-            })
+            manifest["phases"].append(
+                {
+                    "phase_id": phase_id,
+                    "run_id": run_id,
+                    "status": status,
+                    "created_at": now,
+                    "finished_at": now if status == "completed" else None,
+                    "artifacts": artifacts,
+                    "provenance": provenance,
+                    "units": [],
+                }
+            )
 
     elif command == "add-unit":
         _require_args(args, 4, "add-unit")
@@ -103,7 +107,10 @@ def main():
         artifacts = _build_artifacts(artifact_paths)
         provenance = {"agent_id": agent_id}
 
-        phase = next((p for p in manifest["phases"] if p["phase_id"] == phase_id and p["run_id"] == run_id), None)
+        phase = next(
+            (p for p in manifest["phases"] if p["phase_id"] == phase_id and p["run_id"] == run_id),
+            None,
+        )
         if not phase:
             now = get_utc_now()
             phase = {
@@ -128,14 +135,16 @@ def main():
                 break
         else:
             now = get_utc_now()
-            phase["units"].append({
-                "unit_id": unit_id,
-                "status": status,
-                "created_at": now,
-                "finished_at": now if status == "completed" else None,
-                "artifacts": artifacts,
-                "provenance": provenance,
-            })
+            phase["units"].append(
+                {
+                    "unit_id": unit_id,
+                    "status": status,
+                    "created_at": now,
+                    "finished_at": now if status == "completed" else None,
+                    "artifacts": artifacts,
+                    "provenance": provenance,
+                }
+            )
 
     elif command == "set-status":
         _require_args(args, 1, "set-status")

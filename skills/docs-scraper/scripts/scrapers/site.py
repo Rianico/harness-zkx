@@ -17,7 +17,7 @@ Supports dual-mode operation:
 import json
 import re
 import warnings
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -126,7 +126,7 @@ def parse_llms_txt(content: str) -> dict[str, Any]:
             stripped = stripped[2:]
 
         # Match markdown links: [Title](URL): Description or [Title](URL)
-        md_link_pattern = r'\[([^\]]+)\]\(([^)]+)\)(?::\s*(.*))?'
+        md_link_pattern = r"\[([^\]]+)\]\(([^)]+)\)(?::\s*(.*))?"
         match = re.match(md_link_pattern, stripped)
         if match:
             title = match.group(1).strip()
@@ -339,10 +339,12 @@ Output includes README.md (with page index) and pages/ directory with numbered m
                 # Convert to structured entries
                 url_entries: list[dict[str, Any]] = []
                 for url in all_urls:
-                    url_entries.append({
-                        "url": url,
-                        "title": self._extract_title_from_url(url),
-                    })
+                    url_entries.append(
+                        {
+                            "url": url,
+                            "title": self._extract_title_from_url(url),
+                        }
+                    )
 
                 return {
                     "urls": url_entries,
@@ -436,13 +438,24 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         # Try gh CLI first
         try:
             result = subprocess.run(
-                ["gh", "release", "list", "--repo", f"{owner}/{repo}", "--limit", "1", "--json", "tagName"],
+                [
+                    "gh",
+                    "release",
+                    "list",
+                    "--repo",
+                    f"{owner}/{repo}",
+                    "--limit",
+                    "1",
+                    "--json",
+                    "tagName",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
             if result.returncode == 0 and result.stdout.strip():
                 import json
+
                 data = json.loads(result.stdout)
                 if data and len(data) > 0:
                     return data[0].get("tagName")
@@ -451,6 +464,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
 
         # Fall back to GitHub API
         import requests
+
         releases_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
         try:
             response = requests.get(releases_url, timeout=10)
@@ -483,17 +497,17 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             print(f"Fetching [{idx}/{len(unique_urls)}]: {url}")
 
             try:
-                content, fmt = self.fetch_page_llm_friendly(
-                    url, cache_file=f"page_{idx}"
-                )
+                content, fmt = self.fetch_page_llm_friendly(url, cache_file=f"page_{idx}")
 
                 if content is None:
                     print(f"  Warning: Failed to fetch {url}")
-                    results.append({
-                        "url": url,
-                        "status": "error",
-                        "error": "Failed to fetch",
-                    })
+                    results.append(
+                        {
+                            "url": url,
+                            "status": "error",
+                            "error": "Failed to fetch",
+                        }
+                    )
                     continue
 
                 # Generate filename
@@ -505,27 +519,33 @@ Output includes README.md (with page index) and pages/ directory with numbered m
                 output_file.write_text(content, encoding="utf-8")
                 print(f"  Written: {output_file.name}")
 
-                results.append({
-                    "url": url,
-                    "status": "success",
-                    "title": title,
-                    "filename": output_file.name,
-                })
+                results.append(
+                    {
+                        "url": url,
+                        "status": "success",
+                        "title": title,
+                        "filename": output_file.name,
+                    }
+                )
 
             except PermissionError as e:
                 print(f"  Error: {e}")
-                results.append({
-                    "url": url,
-                    "status": "blocked",
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "url": url,
+                        "status": "blocked",
+                        "error": str(e),
+                    }
+                )
             except Exception as e:
                 print(f"  Error: {e}")
-                results.append({
-                    "url": url,
-                    "status": "error",
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "url": url,
+                        "status": "error",
+                        "error": str(e),
+                    }
+                )
 
         # Generate README.md (includes page index)
         self._generate_readme(results)
@@ -534,7 +554,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         """Generate README.md with template placeholders for LLM to fill."""
         readme_path = self.output_dir / "README.md"
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         date_str = now.strftime("%Y-%m-%d")
 
         # Build page index
@@ -571,12 +591,14 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             "",
         ]
         lines.extend(page_lines)
-        lines.extend([
-            "",
-            "---",
-            f"*Generated by scraper skill on {date_str}*",
-            "*Author: Rianico, Email: zhxuankun@163.com*",
-        ])
+        lines.extend(
+            [
+                "",
+                "---",
+                f"*Generated by scraper skill on {date_str}*",
+                "*Author: Rianico, Email: zhxuankun@163.com*",
+            ]
+        )
 
         readme_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"Generated: {readme_path}")

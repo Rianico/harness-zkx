@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from scripts.classifier import classify_events
 from scripts.parser import ComplianceSpec, ObservationEvent, Step
 
+
 @dataclass(frozen=True)
 class StepResult:
     step_id: str
     detected: bool
     evidence: tuple[ObservationEvent, ...]
     failure_reason: str | None
+
 
 @dataclass(frozen=True)
 class ComplianceResult:
@@ -21,6 +23,7 @@ class ComplianceResult:
     compliance_rate: float
     recommend_hook_promotion: bool
     classification: dict[str, list[int]]
+
 
 def _check_temporal_order(
     step: Step,
@@ -54,6 +57,7 @@ def _check_temporal_order(
                 )
 
     return None
+
 
 def grade(
     spec: ComplianceSpec,
@@ -98,12 +102,14 @@ def grade(
         elif failure_reason is None:
             failure_reason = f"no matching event classified for step '{step.id}'"
 
-        step_results.append(StepResult(
-            step_id=step.id,
-            detected=detected,
-            evidence=tuple(matched),
-            failure_reason=failure_reason if not detected else None,
-        ))
+        step_results.append(
+            StepResult(
+                step_id=step.id,
+                detected=detected,
+                evidence=tuple(matched),
+                failure_reason=failure_reason if not detected else None,
+            )
+        )
 
     required_ids = {s.id for s in spec.steps if s.required}
     required_steps = [s for s in step_results if s.step_id in required_ids]

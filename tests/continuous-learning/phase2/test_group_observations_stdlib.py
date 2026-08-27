@@ -7,17 +7,12 @@ output to the pandas implementation for all specified edge cases.
 
 import json
 from pathlib import Path
-from datetime import datetime, timedelta
-
-import pytest
 
 
 class TestEmptyAndMissingFiles:
     """Tests for T1-T2: Empty and missing file handling."""
 
-    def test_t1_empty_file_returns_empty_dict(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t1_empty_file_returns_empty_dict(self, tmp_path: Path) -> None:
         """T1: Empty file (zero bytes) should return empty dict."""
         from hooks.observe import observer_daemon
 
@@ -28,9 +23,7 @@ class TestEmptyAndMissingFiles:
 
         assert result == {}, f"Expected empty dict for empty file, got {result}"
 
-    def test_t1_whitespace_only_returns_empty_dict(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t1_whitespace_only_returns_empty_dict(self, tmp_path: Path) -> None:
         """T1: File with only whitespace/newlines should return empty dict."""
         from hooks.observe import observer_daemon
 
@@ -41,9 +34,7 @@ class TestEmptyAndMissingFiles:
 
         assert result == {}, f"Expected empty dict for whitespace-only file, got {result}"
 
-    def test_t2_file_not_found_returns_empty_dict(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t2_file_not_found_returns_empty_dict(self, tmp_path: Path) -> None:
         """T2: Non-existent file should return empty dict."""
         from hooks.observe import observer_daemon
 
@@ -57,9 +48,7 @@ class TestEmptyAndMissingFiles:
 class TestBasicGrouping:
     """Tests for T3-T4: Basic grouping functionality."""
 
-    def test_t3_single_observation_single_session(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t3_single_observation_single_session(self, tmp_path: Path) -> None:
         """T3: Single observation should be in its session."""
         from hooks.observe import observer_daemon
 
@@ -73,9 +62,7 @@ class TestBasicGrouping:
         assert len(result["sess-1"]) == 1
         assert result["sess-1"][0] == obs
 
-    def test_t4_multiple_observations_same_session(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t4_multiple_observations_same_session(self, tmp_path: Path) -> None:
         """T4: Multiple observations in same session should be grouped together."""
         from hooks.observe import observer_daemon
 
@@ -99,9 +86,7 @@ class TestBasicGrouping:
 class TestSortingBehavior:
     """Tests for T5-T6: Sorting by timestamp and event order."""
 
-    def test_t5_observations_sorted_by_timestamp(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t5_observations_sorted_by_timestamp(self, tmp_path: Path) -> None:
         """T5: Observations should be sorted by timestamp ascending."""
         from hooks.observe import observer_daemon
 
@@ -120,11 +105,13 @@ class TestSortingBehavior:
         result = observer_daemon.group_observations_by_session(observations_file)
 
         timestamps = [o["timestamp"] for o in result["s1"]]
-        assert timestamps == ["2024-01-15T10:00:00Z", "2024-01-15T10:00:01Z", "2024-01-15T10:00:02Z"]
+        assert timestamps == [
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:01Z",
+            "2024-01-15T10:00:02Z",
+        ]
 
-    def test_t6_secondary_sort_by_event_order(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t6_secondary_sort_by_event_order(self, tmp_path: Path) -> None:
         """T6: When timestamps equal, tool_start < tool_complete < other."""
         from hooks.observe import observer_daemon
 
@@ -149,9 +136,7 @@ class TestSortingBehavior:
 class TestMissingFields:
     """Tests for T7-T10: Missing field handling."""
 
-    def test_t7_missing_session_defaults_to_unknown(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t7_missing_session_defaults_to_unknown(self, tmp_path: Path) -> None:
         """T7: Observation without session field should go to 'unknown'."""
         from hooks.observe import observer_daemon
 
@@ -166,9 +151,7 @@ class TestMissingFields:
         # Observation should be preserved as-is
         assert "session" not in result["unknown"][0]
 
-    def test_t8_null_session_becomes_unknown(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t8_null_session_becomes_unknown(self, tmp_path: Path) -> None:
         """T8: Observation with null session should go to 'unknown'."""
         from hooks.observe import observer_daemon
 
@@ -180,9 +163,7 @@ class TestMissingFields:
 
         assert "unknown" in result
 
-    def test_t9_missing_timestamp_preserved(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t9_missing_timestamp_preserved(self, tmp_path: Path) -> None:
         """T9: Observation without timestamp should be preserved."""
         from hooks.observe import observer_daemon
 
@@ -197,9 +178,7 @@ class TestMissingFields:
         # timestamp should be absent in the result
         assert "timestamp" not in result["s1"][0]
 
-    def test_t10_missing_event_preserved(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t10_missing_event_preserved(self, tmp_path: Path) -> None:
         """T10: Observation without event should be preserved."""
         from hooks.observe import observer_daemon
 
@@ -218,9 +197,7 @@ class TestMissingFields:
 class TestMultipleSessions:
     """Tests for T11: Multiple session grouping."""
 
-    def test_t11_multiple_sessions_grouped_correctly(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t11_multiple_sessions_grouped_correctly(self, tmp_path: Path) -> None:
         """T11: Observations should be correctly grouped by session."""
         from hooks.observe import observer_daemon
 
@@ -250,9 +227,7 @@ class TestMultipleSessions:
 class TestMalformedInput:
     """Tests for T12, T16: Malformed input handling."""
 
-    def test_t12_malformed_json_lines_skipped(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t12_malformed_json_lines_skipped(self, tmp_path: Path) -> None:
         """T12: Invalid JSON lines should be skipped, valid ones preserved."""
         from hooks.observe import observer_daemon
 
@@ -268,9 +243,7 @@ this is not json
         assert "s1" in result
         assert len(result["s1"]) == 2
 
-    def test_t16_whitespace_lines_ignored(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t16_whitespace_lines_ignored(self, tmp_path: Path) -> None:
         """T16: Blank/whitespace lines should be ignored."""
         from hooks.observe import observer_daemon
 
@@ -290,9 +263,7 @@ this is not json
 class TestSessionIdTypes:
     """Tests for T13-T15: Session ID type handling."""
 
-    def test_t13_empty_string_session_preserved(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t13_empty_string_session_preserved(self, tmp_path: Path) -> None:
         """T13: Empty string session should be preserved as-is."""
         from hooks.observe import observer_daemon
 
@@ -304,9 +275,7 @@ class TestSessionIdTypes:
 
         assert "" in result
 
-    def test_t14_numeric_session_converted_to_string(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t14_numeric_session_converted_to_string(self, tmp_path: Path) -> None:
         """T14: Numeric session should be converted to string for dict key."""
         from hooks.observe import observer_daemon
 
@@ -318,9 +287,7 @@ class TestSessionIdTypes:
 
         assert "123" in result
 
-    def test_t15_unicode_session_supported(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t15_unicode_session_supported(self, tmp_path: Path) -> None:
         """T15: Unicode session IDs should be preserved."""
         from hooks.observe import observer_daemon
 
@@ -336,9 +303,7 @@ class TestSessionIdTypes:
 class TestComplexScenarios:
     """Tests for T17: Complex mixed scenarios."""
 
-    def test_t17_complex_mixed_scenario(
-        self, tmp_path: Path
-    ) -> None:
+    def test_t17_complex_mixed_scenario(self, tmp_path: Path) -> None:
         """T17: Complex scenario with multiple edge cases."""
         from hooks.observe import observer_daemon
 
@@ -375,9 +340,7 @@ invalid line
 class TestNoModification:
     """Verify observations are not modified except for grouping/sorting."""
 
-    def test_observation_dicts_not_modified(
-        self, tmp_path: Path
-    ) -> None:
+    def test_observation_dicts_not_modified(self, tmp_path: Path) -> None:
         """Observation dicts should be preserved as-is (no modification)."""
         from hooks.observe import observer_daemon
 

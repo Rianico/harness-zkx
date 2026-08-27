@@ -3,6 +3,7 @@
 These tests define the expected behavior after refactoring.
 They are designed to FAIL against the current implementation.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,6 @@ import pytest
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 from tz import TZ_CST
-
 
 # =============================================================================
 # Test 1: Single-Pass Observation Counting
@@ -33,38 +33,46 @@ def observations_file(tmp_path: Path) -> Path:
     # 10 entries in last 7 days
     for i in range(10):
         ts = now - timedelta(days=i)
-        entries.append({
-            "tool": "Read",
-            "timestamp": ts.isoformat(),
-            "input": {"file_path": f"/path/to/skill_{i % 3}.md"},
-        })
+        entries.append(
+            {
+                "tool": "Read",
+                "timestamp": ts.isoformat(),
+                "input": {"file_path": f"/path/to/skill_{i % 3}.md"},
+            }
+        )
 
     # 15 entries in 8-30 days
     for i in range(15):
         ts = now - timedelta(days=8 + i)
-        entries.append({
-            "tool": "Read",
-            "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "input": {"file_path": f"/path/to/old_skill_{i % 2}.md"},
-        })
+        entries.append(
+            {
+                "tool": "Read",
+                "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "input": {"file_path": f"/path/to/old_skill_{i % 2}.md"},
+            }
+        )
 
     # 10 entries in 31-45 days (outside 30d window)
     for i in range(10):
         ts = now - timedelta(days=31 + i)
-        entries.append({
-            "tool": "Read",
-            "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "input": {"file_path": "/path/to/ancient.md"},
-        })
+        entries.append(
+            {
+                "tool": "Read",
+                "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "input": {"file_path": "/path/to/ancient.md"},
+            }
+        )
 
     # 5 non-Read tool entries (should be filtered)
     for i in range(5):
         ts = now - timedelta(days=1)
-        entries.append({
-            "tool": "Write",
-            "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "input": {"file_path": "/path/to/other.md"},
-        })
+        entries.append(
+            {
+                "tool": "Write",
+                "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "input": {"file_path": "/path/to/other.md"},
+            }
+        )
 
     with open(obs_file, "w") as f:
         for entry in entries:
@@ -91,9 +99,7 @@ class TestSinglePassObservationCounting:
         )
         assert len(result) == 3
 
-    def test_count_read_observations_7d_counts(
-        self, observations_file: Path
-    ) -> None:
+    def test_count_read_observations_7d_counts(self, observations_file: Path) -> None:
         """7d dict should contain only entries from last 7 days."""
         from stocktake import count_read_observations
 
@@ -113,9 +119,7 @@ class TestSinglePassObservationCounting:
         # Ancient should not be in 7d
         assert "/path/to/ancient.md" not in counts_7d
 
-    def test_count_read_observations_30d_superset(
-        self, observations_file: Path
-    ) -> None:
+    def test_count_read_observations_30d_superset(self, observations_file: Path) -> None:
         """30d dict should be superset of 7d (includes 7d + 8-30d)."""
         from stocktake import count_read_observations
 
@@ -138,7 +142,6 @@ class TestSinglePassObservationCounting:
     ) -> None:
         """File should be opened only once (single-pass implementation)."""
         from stocktake import count_read_observations
-        import stocktake
 
         # Track open calls
         open_call_count = [0]
@@ -157,8 +160,7 @@ class TestSinglePassObservationCounting:
         if isinstance(result, tuple):
             # File should be opened exactly once for single-pass
             assert open_call_count[0] == 1, (
-                f"File opened {open_call_count[0]} times. "
-                "Single-pass should open file only once."
+                f"File opened {open_call_count[0]} times. Single-pass should open file only once."
             )
 
     def test_empty_observations_file(self, tmp_path: Path) -> None:
@@ -185,17 +187,21 @@ class TestSinglePassObservationCounting:
 
         lines = [
             "this is not json",
-            json.dumps({
-                "tool": "Read",
-                "timestamp": now.isoformat(),
-                "input": {"file_path": "/valid/path.md"},
-            }),
+            json.dumps(
+                {
+                    "tool": "Read",
+                    "timestamp": now.isoformat(),
+                    "input": {"file_path": "/valid/path.md"},
+                }
+            ),
             "{broken json",
-            json.dumps({
-                "tool": "Read",
-                "timestamp": now.isoformat(),
-                "input": {"file_path": "/another/valid.md"},
-            }),
+            json.dumps(
+                {
+                    "tool": "Read",
+                    "timestamp": now.isoformat(),
+                    "input": {"file_path": "/another/valid.md"},
+                }
+            ),
         ]
         obs_file.write_text("\n".join(lines))
 
@@ -226,9 +232,7 @@ class TestVerdictEnum:
         """Verdict should be instance of StrEnum."""
         from stocktake import Verdict
 
-        assert issubclass(Verdict, StrEnum), (
-            f"Verdict should be a StrEnum, got {type(Verdict)}"
-        )
+        assert issubclass(Verdict, StrEnum), f"Verdict should be a StrEnum, got {type(Verdict)}"
 
     def test_verdict_enum_values(self) -> None:
         """Verdict enum should have correct string values."""
@@ -291,9 +295,7 @@ class TestFormatPathWithTilde:
 
         monkeypatch.setattr(stocktake, "HOME_STR", "/home/testuser")
 
-        result = _format_path_with_tilde(
-            Path("/home/testuser/.claude/skills/foo/bar.md")
-        )
+        result = _format_path_with_tilde(Path("/home/testuser/.claude/skills/foo/bar.md"))
         assert result == "~/.claude/skills/foo/bar.md"
 
     def test_format_path_with_tilde_non_home_path(self, monkeypatch) -> None:
@@ -466,8 +468,9 @@ class TestNoDecorativeComments:
 
     def test_no_decorative_dividers(self) -> None:
         """Source should not contain decorative === dividers."""
-        import stocktake
         import inspect
+
+        import stocktake
 
         source = inspect.getsource(stocktake)
         lines = source.split("\n")
@@ -478,14 +481,13 @@ class TestNoDecorativeComments:
                 # Allow if it's a comment with actual content
                 content = line.strip().lstrip("#").strip()
                 if not content or set(content) == {"="}:
-                    pytest.fail(
-                        f"Decorative comment block at line {i}: {line!r}"
-                    )
+                    pytest.fail(f"Decorative comment block at line {i}: {line!r}")
 
     def test_no_empty_comment_blocks(self) -> None:
         """Source should not contain empty comment-only blocks."""
-        import stocktake
         import inspect
+
+        import stocktake
 
         source = inspect.getsource(stocktake)
         lines = source.split("\n")
@@ -499,6 +501,4 @@ class TestNoDecorativeComments:
                 consecutive_empty_comments = 0
 
             if consecutive_empty_comments > 1:
-                pytest.fail(
-                    f"Found empty comment block (consecutive # lines)"
-                )
+                pytest.fail("Found empty comment block (consecutive # lines)")

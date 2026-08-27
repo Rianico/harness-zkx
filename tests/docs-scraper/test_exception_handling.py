@@ -5,9 +5,7 @@ Test IDs: EX-01 through EX-07
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests.exceptions
-
 from fixtures import TEST_PAGE_URL
 
 
@@ -145,9 +143,7 @@ class TestExceptionHandling:
                     content=b"Internal Server Error",
                     headers={},
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("500 Error", response=response)
                 )
                 return response
@@ -205,9 +201,7 @@ class TestExceptionHandling:
                     content=b"Too Many Requests",
                     headers={"Retry-After": "2"},
                 )
-                response.raise_for_status = lambda: (
-                    _ for _ in ()
-                ).throw(
+                response.raise_for_status = lambda: (_ for _ in ()).throw(
                     requests.exceptions.HTTPError("429 Error", response=response)
                 )
                 return response
@@ -270,9 +264,7 @@ class TestExceptionHandling:
                 content=b"Not Found",
                 headers={},
             )
-            response.raise_for_status = lambda: (
-                _ for _ in ()
-            ).throw(
+            response.raise_for_status = lambda: (_ for _ in ()).throw(
                 requests.exceptions.HTTPError("404 Not Found", response=response)
             )
             return response
@@ -319,9 +311,7 @@ class TestExceptionHandling:
                 content=b"Forbidden",
                 headers={},
             )
-            response.raise_for_status = lambda: (
-                _ for _ in ()
-            ).throw(
+            response.raise_for_status = lambda: (_ for _ in ()).throw(
                 requests.exceptions.HTTPError("403 Forbidden", response=response)
             )
             return response
@@ -377,7 +367,7 @@ class TestExceptionHandling:
         scraper.session = mock_session
 
         # Even if parsing fails, should not retry HTTP
-        result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         # Should have made only one HTTP call (no retry)
         assert call_count[0] == 1

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Shared utility for checking required tools during hook installation."""
+
 import shutil
 import sys
 
@@ -94,34 +95,34 @@ def run_tool_check(
     return all_found
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # CLI for standalone tool checking
     if len(sys.argv) < 2:
         print("Usage: tool_checker.py <tool1> [tool2] ...")
         print("       tool_checker.py --required uv,jq --optional notify-send")
         sys.exit(1)
 
-    if sys.argv[1].startswith('--'):
+    if sys.argv[1].startswith("--"):
         # Parse --required and --optional flags
         required = []
         optional = []
         i = 1
         while i < len(sys.argv):
-            if sys.argv[i] == '--required' and i + 1 < len(sys.argv):
-                required = [t.strip() for t in sys.argv[i + 1].split(',') if t.strip()]
+            if sys.argv[i] == "--required" and i + 1 < len(sys.argv):
+                required = [t.strip() for t in sys.argv[i + 1].split(",") if t.strip()]
                 i += 2
-            elif sys.argv[i] == '--optional' and i + 1 < len(sys.argv):
-                optional = [t.strip() for t in sys.argv[i + 1].split(',') if t.strip()]
+            elif sys.argv[i] == "--optional" and i + 1 < len(sys.argv):
+                optional = [t.strip() for t in sys.argv[i + 1].split(",") if t.strip()]
                 i += 2
             else:
                 i += 1
 
         all_found, messages = check_tools(required, optional)
-        print_check_report('CLI', all_found, messages)
+        print_check_report("CLI", all_found, messages)
         sys.exit(0 if all_found else 1)
     else:
         # Simple tool list check
         tools = sys.argv[1:]
         all_found, messages = check_tools(tools)
-        print_check_report('CLI', all_found, messages)
+        print_check_report("CLI", all_found, messages)
         sys.exit(0 if all_found else 1)

@@ -6,6 +6,7 @@ Observation capture functionality for the hook.
 
 Captures tool events and writes them to project-scoped files.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,7 +16,6 @@ import uuid
 from pathlib import Path
 
 # Add lib to path for tz import
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 from tz import now_cst_iso
 
@@ -41,13 +41,14 @@ def log_exception(context: str) -> None:
 
 # Support both standalone script execution and module import
 # When run standalone, add script directory to path for local imports
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
+    import secrets
+
     import config
     import detect_project
-    import secrets
 except ImportError:
     from hooks.observe import config, detect_project, secrets
 
@@ -230,7 +231,7 @@ def _write_observation(observation: dict) -> None:
         # Append observation as JSON line
         with open(observations_file, "a") as f:
             f.write(json.dumps(observation) + "\n")
-    except Exception as e:
+    except Exception:
         log_exception("Failed to write observation")
         raise
 
@@ -343,7 +344,7 @@ def main() -> int:
             handle_pre_tool_use(event)
         else:
             handle_post_tool_use(event)
-    except Exception as e:
+    except Exception:
         log_exception(f"Error in {phase} handler")
         # Return 0 to avoid blocking the tool use (soft fail)
         return 0

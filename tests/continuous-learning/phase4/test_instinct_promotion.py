@@ -22,12 +22,11 @@ import pytest
 
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
-from tz import TZ_CST
 import yaml
+from tz import TZ_CST
 
-from hooks.observe.agent_runner import AgentResult, Promotion, InstinctCreated, Evidence
+from hooks.observe.agent_runner import AgentResult, Promotion
 from hooks.observe.instinct_manager import InstinctManager
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 INSTINCTS_DIR = FIXTURES_DIR / "instincts"
@@ -57,9 +56,7 @@ def multi_project_setup(homunculus_dir: Path) -> dict[str, Path]:
     """
     projects = {}
     for project_id in ["project-alpha", "project-beta", "project-gamma"]:
-        instincts_dir = (
-            homunculus_dir / "projects" / project_id / "instincts" / "personal"
-        )
+        instincts_dir = homunculus_dir / "projects" / project_id / "instincts" / "personal"
         instincts_dir.mkdir(parents=True, exist_ok=True)
 
         instinct_content = f"""---
@@ -105,8 +102,7 @@ class TestInstinctPromotion:
         to the global instincts/personal directory.
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -126,8 +122,7 @@ class TestInstinctPromotion:
         The promoted instinct's scope field should be updated to "global".
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -146,8 +141,7 @@ class TestInstinctPromotion:
         The promoted instinct's project_id should be changed to "global".
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -166,8 +160,7 @@ class TestInstinctPromotion:
         The reason for promotion should be recorded in the instinct file.
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -185,14 +178,13 @@ class TestInstinctPromotion:
         This prevents duplicate instincts at different scopes.
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         instinct_manager.promote_instinct(promotion)
 
         # Check that project-specific copies are removed
-        for project_id, instincts_dir in multi_project_setup.items():
+        for _project_id, instincts_dir in multi_project_setup.items():
             project_instinct = instincts_dir / "common-pattern.yaml"
             assert not project_instinct.exists(), (
                 f"Project instinct should be removed: {project_instinct}"
@@ -204,10 +196,7 @@ class TestInstinctPromotion:
         """
         Promoting a non-existent instinct should return None.
         """
-        promotion = Promotion(
-            id="nonexistent-instinct",
-            reason="Should not work"
-        )
+        promotion = Promotion(id="nonexistent-instinct", reason="Should not work")
 
         result = instinct_manager.promote_instinct(promotion)
         assert result is None
@@ -223,12 +212,11 @@ class TestInstinctPromotion:
             instincts_updated=[],
             promotions=[
                 Promotion(
-                    id="common-pattern",
-                    reason="Seen in 3 projects with average confidence 0.85"
+                    id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
                 )
             ],
             processed_count=100,
-            cursor_position=100
+            cursor_position=100,
         )
 
         promoted_paths = instinct_manager.process_result(result, project_id="any")
@@ -273,10 +261,7 @@ Test action.
 """
         (instincts_dir / "single-project-instinct.yaml").write_text(instinct_content)
 
-        promotion = Promotion(
-            id="single-project-instinct",
-            reason="Only in one project"
-        )
+        promotion = Promotion(id="single-project-instinct", reason="Only in one project")
 
         result = instinct_manager.promote_instinct(promotion)
         assert result is None, "Should not promote instinct from single project"
@@ -315,10 +300,7 @@ Test action.
 """
             (instincts_dir / "low-confidence-instinct.yaml").write_text(instinct_content)
 
-        promotion = Promotion(
-            id="low-confidence-instinct",
-            reason="Low confidence"
-        )
+        promotion = Promotion(id="low-confidence-instinct", reason="Low confidence")
 
         result = instinct_manager.promote_instinct(promotion)
         assert result is None, "Should not promote instinct with low confidence"
@@ -334,8 +316,7 @@ class TestPromotionAudit:
         Promotion should record when it occurred.
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         before = datetime.now(TZ_CST)
@@ -364,8 +345,7 @@ class TestPromotionAudit:
         Promotion should record which projects the instinct came from.
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -381,8 +361,7 @@ class TestPromotionAudit:
         Promoted instinct should preserve evidence from all source projects.
         """
         promotion = Promotion(
-            id="common-pattern",
-            reason="Seen in 3 projects with average confidence 0.85"
+            id="common-pattern", reason="Seen in 3 projects with average confidence 0.85"
         )
 
         global_path = instinct_manager.promote_instinct(promotion)
@@ -435,7 +414,7 @@ Test action.
         # Manually promote with explicit flag
         global_path = instinct_manager.promote_instinct(
             Promotion(id="manual-promote-instinct", reason="User requested"),
-            force=True  # Bypass multi-project requirement
+            force=True,  # Bypass multi-project requirement
         )
 
         assert global_path is not None

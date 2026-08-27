@@ -8,22 +8,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tool_checker import run_tool_check
 
-
 TARGET_HOOK_RELATIVE_PATHS = {
-    'Stop': Path('hooks/ensure_todo/ensure_todo_stop.py'),
-    'PostToolUse': Path('hooks/ensure_todo/ensure_todo_post_tool_use.py'),
+    "Stop": Path("hooks/ensure_todo/ensure_todo_stop.py"),
+    "PostToolUse": Path("hooks/ensure_todo/ensure_todo_post_tool_use.py"),
 }
 LEGACY_TARGET_HOOK_RELATIVE_PATHS = {
-    'Stop': (Path('hooks/ensure_todo_stop.py'),),
-    'PostToolUse': (Path('hooks/ensure_todo_post_tool_use.py'),),
+    "Stop": (Path("hooks/ensure_todo_stop.py"),),
+    "PostToolUse": (Path("hooks/ensure_todo_post_tool_use.py"),),
 }
 SOURCE_HOOK_NAMES = {
-    'Stop': 'ensure_todo_stop.py',
-    'PostToolUse': 'ensure_todo_post_tool_use.py',
+    "Stop": "ensure_todo_stop.py",
+    "PostToolUse": "ensure_todo_post_tool_use.py",
 }
 MATCHERS = {
-    'Stop': '*',
-    'PostToolUse': 'Edit|Write|MultiEdit',
+    "Stop": "*",
+    "PostToolUse": "Edit|Write|MultiEdit",
 }
 
 
@@ -34,7 +33,7 @@ def load_settings(path: Path) -> dict:
 
 
 def save_settings(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, indent=2) + '\n')
+    path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 def target_hook_path(settings_path: Path, event_name: str) -> Path:
@@ -42,7 +41,10 @@ def target_hook_path(settings_path: Path, event_name: str) -> Path:
 
 
 def legacy_target_hook_paths(settings_path: Path, event_name: str) -> tuple[Path, ...]:
-    return tuple((settings_path.parent / relative_path).resolve() for relative_path in LEGACY_TARGET_HOOK_RELATIVE_PATHS[event_name])
+    return tuple(
+        (settings_path.parent / relative_path).resolve()
+        for relative_path in LEGACY_TARGET_HOOK_RELATIVE_PATHS[event_name]
+    )
 
 
 def install_hook_script(settings_path: Path, event_name: str) -> Path:
@@ -55,18 +57,18 @@ def install_hook_script(settings_path: Path, event_name: str) -> Path:
 
 def build_hook_entry(target_hook: Path, event_name: str) -> dict:
     return {
-        'matcher': MATCHERS[event_name],
-        'hooks': [
+        "matcher": MATCHERS[event_name],
+        "hooks": [
             {
-                'type': 'command',
-                'command': f'uv run "{target_hook}"',
+                "type": "command",
+                "command": f'uv run "{target_hook}"',
             }
         ],
     }
 
 
 def ensure_hook(data: dict, event_name: str, hook_entry: dict) -> bool:
-    hooks = data.setdefault('hooks', {})
+    hooks = data.setdefault("hooks", {})
     event_hooks = hooks.setdefault(event_name, [])
 
     for entry in event_hooks:
@@ -78,7 +80,7 @@ def ensure_hook(data: dict, event_name: str, hook_entry: dict) -> bool:
 
 
 def remove_hook(data: dict, event_name: str, hook_entry: dict) -> bool:
-    hooks = data.get('hooks')
+    hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return False
 
@@ -95,15 +97,15 @@ def remove_hook(data: dict, event_name: str, hook_entry: dict) -> bool:
     else:
         hooks.pop(event_name, None)
         if not hooks:
-            data.pop('hooks', None)
+            data.pop("hooks", None)
 
     return True
 
 
 def install_family(settings_path: Path) -> int:
     # Check required tools
-    required = ['uv']
-    if not run_tool_check('ensure_todo', required):
+    required = ["uv"]
+    if not run_tool_check("ensure_todo", required):
         return 1
 
     data = load_settings(settings_path)
@@ -115,7 +117,9 @@ def install_family(settings_path: Path) -> int:
         changed = ensure_hook(data, event_name, hook_entry)
         removed_legacy_paths = []
         for legacy_path in legacy_target_hook_paths(settings_path, event_name):
-            legacy_changed = remove_hook(data, event_name, build_hook_entry(legacy_path, event_name))
+            legacy_changed = remove_hook(
+                data, event_name, build_hook_entry(legacy_path, event_name)
+            )
             changed = changed or legacy_changed
             if legacy_changed and legacy_path.exists():
                 legacy_path.unlink()
@@ -123,12 +127,12 @@ def install_family(settings_path: Path) -> int:
         changes.append((event_name, changed, target_hook, removed_legacy_paths))
 
     save_settings(settings_path, data)
-    print(f'Updated {settings_path}')
+    print(f"Updated {settings_path}")
     for event_name, changed, target_hook, removed_legacy_paths in changes:
-        status = 'Installed' if changed else 'Already installed'
-        print(f'{status} {event_name} hook at {target_hook}')
+        status = "Installed" if changed else "Already installed"
+        print(f"{status} {event_name} hook at {target_hook}")
         for legacy_path in removed_legacy_paths:
-            print(f'Removed legacy hook script at {legacy_path}')
+            print(f"Removed legacy hook script at {legacy_path}")
     return 0
 
 
@@ -147,7 +151,9 @@ def uninstall_family(settings_path: Path) -> int:
             removed_script = True
         removed_legacy_paths = []
         for legacy_path in legacy_target_hook_paths(settings_path, event_name):
-            legacy_changed = remove_hook(data, event_name, build_hook_entry(legacy_path, event_name))
+            legacy_changed = remove_hook(
+                data, event_name, build_hook_entry(legacy_path, event_name)
+            )
             changed = changed or legacy_changed
             if legacy_changed and legacy_path.exists():
                 legacy_path.unlink()
@@ -155,29 +161,29 @@ def uninstall_family(settings_path: Path) -> int:
         changes.append((event_name, changed, target_hook, removed_script, removed_legacy_paths))
 
     save_settings(settings_path, data)
-    print(f'Updated {settings_path}')
+    print(f"Updated {settings_path}")
     for event_name, changed, target_hook, removed_script, removed_legacy_paths in changes:
-        status = 'Removed' if changed else 'No changes needed for'
-        print(f'{status} {event_name} hook entry at {target_hook}')
+        status = "Removed" if changed else "No changes needed for"
+        print(f"{status} {event_name} hook entry at {target_hook}")
         if removed_script:
-            print(f'Removed hook script at {target_hook}')
+            print(f"Removed hook script at {target_hook}")
         for legacy_path in removed_legacy_paths:
-            print(f'Removed legacy hook script at {legacy_path}')
+            print(f"Removed legacy hook script at {legacy_path}")
     return 0
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) == 2 and argv[1] in {'--help', '-h'}:
+    if len(argv) == 2 and argv[1] in {"--help", "-h"}:
         print(
-            'Usage:\n'
-            '  uv run install-hooks.py ensure_todo install <settings.json>\n'
-            '  uv run install-hooks.py ensure_todo uninstall <settings.json>\n'
-            '  uv run install-hooks.py --help\n'
+            "Usage:\n"
+            "  uv run install-hooks.py ensure_todo install <settings.json>\n"
+            "  uv run install-hooks.py ensure_todo uninstall <settings.json>\n"
+            "  uv run install-hooks.py --help\n"
         )
         return 0
 
     return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main(sys.argv))

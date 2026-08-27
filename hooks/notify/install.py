@@ -9,19 +9,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tool_checker import run_tool_check
 
-
-TARGET_HOOK_RELATIVE_PATH = Path('hooks/notify/notify_user.py')
-LEGACY_TARGET_HOOK_RELATIVE_PATHS = (Path('hooks/notify_user.py'),)
-SOURCE_HOOK_NAME = 'notify_user.py'
+TARGET_HOOK_RELATIVE_PATH = Path("hooks/notify/notify_user.py")
+LEGACY_TARGET_HOOK_RELATIVE_PATHS = (Path("hooks/notify_user.py"),)
+SOURCE_HOOK_NAME = "notify_user.py"
 
 
 def show_help() -> None:
     print(
-        'Usage:\n'
-        '  uv run install-hooks.py notify install <settings.json>\n'
-        '  uv run install-hooks.py notify uninstall <settings.json>\n'
-        '  uv run install-hooks.py --help\n\n'
-        'This module is installed through the root install-hooks.py entrypoint.\n'
+        "Usage:\n"
+        "  uv run install-hooks.py notify install <settings.json>\n"
+        "  uv run install-hooks.py notify uninstall <settings.json>\n"
+        "  uv run install-hooks.py --help\n\n"
+        "This module is installed through the root install-hooks.py entrypoint.\n"
     )
 
 
@@ -32,7 +31,7 @@ def load_settings(path: Path) -> dict:
 
 
 def save_settings(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, indent=2) + '\n')
+    path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 def target_hook_path(settings_path: Path) -> Path:
@@ -40,7 +39,10 @@ def target_hook_path(settings_path: Path) -> Path:
 
 
 def legacy_target_hook_paths(settings_path: Path) -> tuple[Path, ...]:
-    return tuple((settings_path.parent / relative_path).resolve() for relative_path in LEGACY_TARGET_HOOK_RELATIVE_PATHS)
+    return tuple(
+        (settings_path.parent / relative_path).resolve()
+        for relative_path in LEGACY_TARGET_HOOK_RELATIVE_PATHS
+    )
 
 
 def install_hook_script(settings_path: Path) -> Path:
@@ -53,19 +55,19 @@ def install_hook_script(settings_path: Path) -> Path:
 
 def build_hook_entry(target_hook: Path) -> dict:
     return {
-        'matcher': '*',
-        'hooks': [
+        "matcher": "*",
+        "hooks": [
             {
-                'type': 'command',
-                'command': f'uv run "{target_hook}"',
+                "type": "command",
+                "command": f'uv run "{target_hook}"',
             }
         ],
     }
 
 
 def ensure_notification_hook(data: dict, hook_entry: dict) -> bool:
-    hooks = data.setdefault('hooks', {})
-    notification_hooks = hooks.setdefault('Notification', [])
+    hooks = data.setdefault("hooks", {})
+    notification_hooks = hooks.setdefault("Notification", [])
 
     for entry in notification_hooks:
         if entry == hook_entry:
@@ -76,11 +78,11 @@ def ensure_notification_hook(data: dict, hook_entry: dict) -> bool:
 
 
 def remove_notification_hook(data: dict, hook_entry: dict) -> bool:
-    hooks = data.get('hooks')
+    hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return False
 
-    notification_hooks = hooks.get('Notification')
+    notification_hooks = hooks.get("Notification")
     if not isinstance(notification_hooks, list):
         return False
 
@@ -89,28 +91,28 @@ def remove_notification_hook(data: dict, hook_entry: dict) -> bool:
         return False
 
     if remaining_hooks:
-        hooks['Notification'] = remaining_hooks
+        hooks["Notification"] = remaining_hooks
     else:
-        hooks.pop('Notification', None)
+        hooks.pop("Notification", None)
         if not hooks:
-            data.pop('hooks', None)
+            data.pop("hooks", None)
 
     return True
 
 
 def install_family(settings_path: Path) -> int:
     # Check required tools
-    required = ['uv']
+    required = ["uv"]
     # Platform-specific optional tools
     system = platform.system()
-    if system == 'Darwin':
-        optional = ['osascript']  # macOS notifications
-    elif system == 'Windows':
-        optional = ['powershell']  # Windows toast notifications
+    if system == "Darwin":
+        optional = ["osascript"]  # macOS notifications
+    elif system == "Windows":
+        optional = ["powershell"]  # Windows toast notifications
     else:
-        optional = ['notify-send']  # Linux desktop notifications
+        optional = ["notify-send"]  # Linux desktop notifications
 
-    if not run_tool_check('notify', required, optional):
+    if not run_tool_check("notify", required, optional):
         return 1
 
     target_hook = install_hook_script(settings_path)
@@ -126,10 +128,10 @@ def install_family(settings_path: Path) -> int:
             removed_legacy_paths.append(legacy_path)
     save_settings(settings_path, data)
 
-    print(f'Updated {settings_path}' if changed else f'No changes needed for {settings_path}')
-    print(f'Installed hook script at {target_hook}')
+    print(f"Updated {settings_path}" if changed else f"No changes needed for {settings_path}")
+    print(f"Installed hook script at {target_hook}")
     for legacy_path in removed_legacy_paths:
-        print(f'Removed legacy hook script at {legacy_path}')
+        print(f"Removed legacy hook script at {legacy_path}")
     return 0
 
 
@@ -153,15 +155,19 @@ def uninstall_family(settings_path: Path) -> int:
         target_hook.unlink()
         removed_script = True
 
-    print(f'Updated {settings_path}' if changed else f'No changes needed for {settings_path}')
-    print(f'Removed hook script at {target_hook}' if removed_script else f'No hook script found at {target_hook}')
+    print(f"Updated {settings_path}" if changed else f"No changes needed for {settings_path}")
+    print(
+        f"Removed hook script at {target_hook}"
+        if removed_script
+        else f"No hook script found at {target_hook}"
+    )
     for legacy_path in removed_legacy_paths:
-        print(f'Removed legacy hook script at {legacy_path}')
+        print(f"Removed legacy hook script at {legacy_path}")
     return 0
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) == 2 and argv[1] in {'--help', '-h'}:
+    if len(argv) == 2 and argv[1] in {"--help", "-h"}:
         show_help()
         return 0
 
@@ -169,5 +175,5 @@ def main(argv: list[str]) -> int:
     return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main(sys.argv))

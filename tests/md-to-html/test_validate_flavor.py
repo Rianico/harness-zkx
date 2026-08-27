@@ -5,9 +5,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPTS_DIR = (
-    Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts"
-).resolve()
+SCRIPTS_DIR = (Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts").resolve()
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
@@ -56,7 +54,12 @@ class TestCheckFlavor:
     @pytest.fixture
     def kami_dir(self):
         return str(
-            Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "references" / "flavors" / "kami"
+            Path(__file__).parent.parent.parent
+            / "skills"
+            / "md-to-html"
+            / "references"
+            / "flavors"
+            / "kami"
         )
 
     def test_kami_passes_all_checks(self, kami_dir):
@@ -77,9 +80,7 @@ class TestCheckFlavor:
     def test_finds_missing_token(self, tmp_path):
         """Validator reports CSS custom properties missing from :root."""
         css = tmp_path / "style.css"
-        css.write_text(
-            ":root { --fg: black; }\n.md-paragraph { color: var(--fg); }"
-        )
+        css.write_text(":root { --fg: black; }\n.md-paragraph { color: var(--fg); }")
         required = ["--fg", "--nonexistent"]
         missing, _ = check_flavor(str(tmp_path), required)
         assert "--nonexistent" in missing

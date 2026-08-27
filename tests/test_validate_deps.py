@@ -62,7 +62,8 @@ def test_lint_detects_missing_required_field(tmp_path: Path) -> None:
 def test_lint_detects_inline_description(tmp_path: Path) -> None:
     """lint exits 1 when 'description' uses inline value instead of block scalar."""
     write_raw_skill(
-        tmp_path, "inline-desc",
+        tmp_path,
+        "inline-desc",
         "name: inline-desc\ndescription: some inline string\n",
     )
 
@@ -76,11 +77,13 @@ def test_lint_detects_inline_description(tmp_path: Path) -> None:
 def test_lint_detects_duplicate_skill_name(tmp_path: Path) -> None:
     """lint exits 1 when two SKILL.md files declare the same name."""
     write_raw_skill(
-        tmp_path, "dup-a",
+        tmp_path,
+        "dup-a",
         "name: duplicate-name\ndescription: >-\n  first copy\n",
     )
     write_raw_skill(
-        tmp_path, "dup-b",
+        tmp_path,
+        "dup-b",
         "name: duplicate-name\ndescription: >-\n  second copy\n",
     )
 
@@ -95,7 +98,8 @@ def test_lint_detects_duplicate_skill_name(tmp_path: Path) -> None:
 def test_lint_passes_clean_skills(tmp_path: Path) -> None:
     """lint exits 0 for a valid skill with proper block scalar."""
     write_raw_skill(
-        tmp_path, "valid",
+        tmp_path,
+        "valid",
         "name: valid-skill\ndescription: >-\n  A valid skill for testing.\n",
     )
 
@@ -108,9 +112,9 @@ def test_lint_passes_clean_skills(tmp_path: Path) -> None:
 def test_check_detects_missing_dependency(tmp_path: Path) -> None:
     """check exits 1 when a skill depends on a nonexistent skill."""
     write_raw_skill(
-        tmp_path, "consumer",
-        "name: consumer\ndescription: >-\n  A consumer.\n"
-        "metadata:\n  depends-on: [nonexistent]\n",
+        tmp_path,
+        "consumer",
+        "name: consumer\ndescription: >-\n  A consumer.\nmetadata:\n  depends-on: [nonexistent]\n",
     )
 
     result = run_validate_deps("--project-root", str(tmp_path), "check")
@@ -122,13 +126,14 @@ def test_check_detects_missing_dependency(tmp_path: Path) -> None:
 def test_check_passes_valid_dependencies(tmp_path: Path) -> None:
     """check exits 0 when all depends-on references exist."""
     write_raw_skill(
-        tmp_path, "provider",
+        tmp_path,
+        "provider",
         "name: provider\ndescription: >-\n  A provider.\n",
     )
     write_raw_skill(
-        tmp_path, "consumer",
-        "name: consumer\ndescription: >-\n  A consumer.\n"
-        "metadata:\n  depends-on: [provider]\n",
+        tmp_path,
+        "consumer",
+        "name: consumer\ndescription: >-\n  A consumer.\nmetadata:\n  depends-on: [provider]\n",
     )
 
     result = run_validate_deps("--project-root", str(tmp_path), "check")
@@ -152,7 +157,8 @@ def test_context_check_fails_over_budget(tmp_path: Path) -> None:
     """context-check exits 1 when description exceeds 300 chars."""
     long_text = "x" * 350
     write_raw_skill(
-        tmp_path, "over-budget",
+        tmp_path,
+        "over-budget",
         f"name: over-budget\ndescription: >-\n  {long_text}\n",
     )
 
@@ -167,7 +173,8 @@ def test_context_check_fails_over_budget(tmp_path: Path) -> None:
 def test_context_check_warns_missing_triggers(tmp_path: Path) -> None:
     """context-check warns when a valid skill description lacks trigger vocabulary."""
     write_raw_skill(
-        tmp_path, "no-trigger",
+        tmp_path,
+        "no-trigger",
         "name: no-trigger\ndescription: >-\n  A plain description that does not have any of the key phrases.\n",
     )
 
@@ -181,7 +188,8 @@ def test_context_check_warns_missing_triggers(tmp_path: Path) -> None:
 def test_context_check_passes_clean(tmp_path: Path) -> None:
     """context-check passes a skill with proper description and trigger words."""
     write_raw_skill(
-        tmp_path, "good-skill",
+        tmp_path,
+        "good-skill",
         "name: good-skill\ndescription: >-\n  Use this skill when you need to validate stuff.\n",
     )
 
@@ -194,7 +202,8 @@ def test_context_check_passes_clean(tmp_path: Path) -> None:
 def test_fix_actually_modifies(tmp_path: Path) -> None:
     """fix without --dry-run changes the file on disk."""
     write_raw_skill(
-        tmp_path, "inline-desc",
+        tmp_path,
+        "inline-desc",
         "name: inline-desc\ndescription: some inline value\n",
     )
 
@@ -214,22 +223,28 @@ def test_fix_actually_modifies(tmp_path: Path) -> None:
 def test_rename_dry_run_reports_without_modifying(tmp_path: Path) -> None:
     """rename --dry-run prints what would change without modifying disk."""
     write_raw_skill(
-        tmp_path, "old-name",
+        tmp_path,
+        "old-name",
         "name: old-name\ndescription: >-\n  A skill to rename.\n",
     )
     write_raw_skill(
-        tmp_path, "caller",
-        "name: caller\ndescription: >-\n  A caller.\n"
-        "metadata:\n  depends-on: [old-name]\n",
+        tmp_path,
+        "caller",
+        "name: caller\ndescription: >-\n  A caller.\nmetadata:\n  depends-on: [old-name]\n",
     )
 
     old_dir = tmp_path / "skills" / "old-name"
-    caller_content_before = (
-        tmp_path / "skills" / "caller" / "SKILL.md"
-    ).read_text(encoding="utf-8")
+    caller_content_before = (tmp_path / "skills" / "caller" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
 
     result = run_validate_deps(
-        "--project-root", str(tmp_path), "rename", "--dry-run", "old-name", "new-name",
+        "--project-root",
+        str(tmp_path),
+        "rename",
+        "--dry-run",
+        "old-name",
+        "new-name",
     )
 
     assert result.returncode == 0
@@ -238,25 +253,30 @@ def test_rename_dry_run_reports_without_modifying(tmp_path: Path) -> None:
     # Directory must remain named old-name
     assert old_dir.is_dir()
     # Caller must remain unchanged
-    assert (
-        tmp_path / "skills" / "caller" / "SKILL.md"
-    ).read_text(encoding="utf-8") == caller_content_before
+    assert (tmp_path / "skills" / "caller" / "SKILL.md").read_text(
+        encoding="utf-8"
+    ) == caller_content_before
 
 
 def test_rename_runs_check_after_mutation(tmp_path: Path) -> None:
     """rename re-runs check after renaming and reports verification."""
     write_raw_skill(
-        tmp_path, "old-name",
+        tmp_path,
+        "old-name",
         "name: old-name\ndescription: >-\n  A skill to rename.\n",
     )
     write_raw_skill(
-        tmp_path, "caller",
-        "name: caller\ndescription: >-\n  A caller.\n"
-        "metadata:\n  depends-on: [old-name]\n",
+        tmp_path,
+        "caller",
+        "name: caller\ndescription: >-\n  A caller.\nmetadata:\n  depends-on: [old-name]\n",
     )
 
     result = run_validate_deps(
-        "--project-root", str(tmp_path), "rename", "old-name", "new-name",
+        "--project-root",
+        str(tmp_path),
+        "rename",
+        "old-name",
+        "new-name",
     )
 
     assert result.returncode == 0
@@ -267,17 +287,22 @@ def test_rename_runs_check_after_mutation(tmp_path: Path) -> None:
 def test_rename_cascades_updates(tmp_path: Path) -> None:
     """rename changes directory name and updates references."""
     write_raw_skill(
-        tmp_path, "old-name",
+        tmp_path,
+        "old-name",
         "name: old-name\ndescription: >-\n  A skill to rename.\n",
     )
     write_raw_skill(
-        tmp_path, "caller",
-        "name: caller\ndescription: >-\n  A caller.\n"
-        "metadata:\n  depends-on: [old-name]\n",
+        tmp_path,
+        "caller",
+        "name: caller\ndescription: >-\n  A caller.\nmetadata:\n  depends-on: [old-name]\n",
     )
 
     result = run_validate_deps(
-        "--project-root", str(tmp_path), "rename", "old-name", "new-name",
+        "--project-root",
+        str(tmp_path),
+        "rename",
+        "old-name",
+        "new-name",
     )
 
     assert result.returncode == 0
@@ -288,9 +313,7 @@ def test_rename_cascades_updates(tmp_path: Path) -> None:
     assert (tmp_path / "skills" / "new-name").is_dir()
     assert not (tmp_path / "skills" / "old-name").is_dir()
     # Caller references new name
-    caller_content = (
-        tmp_path / "skills" / "caller" / "SKILL.md"
-    ).read_text(encoding="utf-8")
+    caller_content = (tmp_path / "skills" / "caller" / "SKILL.md").read_text(encoding="utf-8")
     assert "new-name" in caller_content
     assert "old-name" not in caller_content
 
@@ -299,14 +322,17 @@ def test_make_validate_deps_runs_check(tmp_path: Path) -> None:
     """make validate-deps executes check against PROJECT_ROOT."""
     # Give the temp project a valid skill so check passes
     write_raw_skill(
-        tmp_path, "skill-a",
+        tmp_path,
+        "skill-a",
         "name: skill-a\ndescription: >-\n  A valid skill.\n",
     )
 
     project_root = Path(__file__).parent.parent
     result = subprocess.run(
         ["make", "validate-deps", f"PROJECT_ROOT={tmp_path}"],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True,
+        text=True,
+        timeout=60,
         cwd=str(project_root),
     )
     assert result.returncode == 0
@@ -316,14 +342,17 @@ def test_make_validate_deps_runs_check(tmp_path: Path) -> None:
 def test_make_validate_deps_fix_dry_run_default(tmp_path: Path) -> None:
     """make validate-deps-fix defaults to --dry-run (safe mode)."""
     write_raw_skill(
-        tmp_path, "fixme",
+        tmp_path,
+        "fixme",
         "name: fixme\ndescription: inline value\n",
     )
 
     project_root = Path(__file__).parent.parent
     result = subprocess.run(
         ["make", "validate-deps-fix", f"PROJECT_ROOT={tmp_path}"],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True,
+        text=True,
+        timeout=60,
         cwd=str(project_root),
     )
     assert result.returncode == 0
@@ -335,8 +364,12 @@ def test_make_validate_deps_fix_dry_run_default(tmp_path: Path) -> None:
 def test_rename_dry_run_detects_missing_skill(tmp_path: Path) -> None:
     """rename --dry-run exits 1 if the source skill does not exist."""
     result = run_validate_deps(
-        "--project-root", str(tmp_path), "rename", "--dry-run",
-        "nonexistent", "newname",
+        "--project-root",
+        str(tmp_path),
+        "rename",
+        "--dry-run",
+        "nonexistent",
+        "newname",
     )
 
     assert result.returncode == 1
@@ -346,7 +379,8 @@ def test_rename_dry_run_detects_missing_skill(tmp_path: Path) -> None:
 def test_fix_runs_lint_after_mutation(tmp_path: Path) -> None:
     """fix re-runs lint after fixing and reports verification."""
     write_raw_skill(
-        tmp_path, "fixme",
+        tmp_path,
+        "fixme",
         "name: fixme\ndescription: inline description here\n",
     )
 
@@ -361,11 +395,13 @@ def test_fix_reports_post_lint_failure(tmp_path: Path) -> None:
     """fix exits 1 when post-fix lint still detects issues."""
     # Two skills with the same name (duplicate) — fix can't correct that
     write_raw_skill(
-        tmp_path, "first",
+        tmp_path,
+        "first",
         "name: duplicate\ndescription: inline val one\n",
     )
     write_raw_skill(
-        tmp_path, "second",
+        tmp_path,
+        "second",
         "name: duplicate\ndescription: inline val two\n",
     )
 
@@ -379,7 +415,8 @@ def test_fix_reports_post_lint_failure(tmp_path: Path) -> None:
 def test_fix_dry_run_skips_verification(tmp_path: Path) -> None:
     """fix --dry-run does not run post-mutation verification."""
     write_raw_skill(
-        tmp_path, "inline-desc",
+        tmp_path,
+        "inline-desc",
         "name: inline-desc\ndescription: some inline value\n",
     )
 
@@ -393,7 +430,8 @@ def test_fix_dry_run_skips_verification(tmp_path: Path) -> None:
 def test_fix_dry_run_reports_without_modifying(tmp_path: Path) -> None:
     """fix --dry-run prints what would change without writing to disk."""
     write_raw_skill(
-        tmp_path, "inline-desc",
+        tmp_path,
+        "inline-desc",
         "name: inline-desc\ndescription: some inline value\n",
     )
 
@@ -413,7 +451,8 @@ def test_frontmatter_is_hard_dependency() -> None:
     base_python = Path(sys.base_exec_prefix) / "bin" / "python3"
     result = subprocess.run(
         [str(base_python), "-I", str(SCRIPT_PATH), "--help"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 1
     assert "python-frontmatter" in result.stderr or "python-frontmatter" in result.stdout

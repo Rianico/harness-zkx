@@ -61,7 +61,9 @@ def verify() -> bool:
 
     all_ok = True
     expected_files = set(manifest.keys())
-    actual_files = {f.name for f in ASSETS_DIR.iterdir() if f.is_file() and f.name != "MANIFEST.json"}
+    actual_files = {
+        f.name for f in ASSETS_DIR.iterdir() if f.is_file() and f.name != "MANIFEST.json"
+    }
 
     for name in sorted(expected_files - actual_files):
         print(f"MISSING: {name} (in manifest but not on disk)")
@@ -100,7 +102,8 @@ def update() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Verify md-to-html asset integrity")
     parser.add_argument(
-        "--update", action="store_true",
+        "--update",
+        action="store_true",
         help="Regenerate MANIFEST.json from current asset files",
     )
     args = parser.parse_args()

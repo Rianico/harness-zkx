@@ -18,8 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from hooks.observe.agent_runner import AgentRunner, AgentResult
-
+from hooks.observe.agent_runner import AgentResult, AgentRunner
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 SESSIONS_DIR = FIXTURES_DIR / "sessions"
@@ -59,8 +58,7 @@ class TestUserCorrectionPattern:
         This indicates the user wanted to read context first.
         """
         result = agent_runner.analyze_session(
-            session_id="correction-1",
-            events=user_correction_session
+            session_id="correction-1", events=user_correction_session
         )
 
         assert result is not None
@@ -79,14 +77,14 @@ class TestUserCorrectionPattern:
         User corrections start at confidence 0.5.
         """
         result = agent_runner.analyze_session(
-            session_id="correction-1",
-            events=user_correction_session
+            session_id="correction-1", events=user_correction_session
         )
 
         assert result is not None
         instinct = result.instincts_created[0]
-        assert 0.3 <= instinct.confidence <= 0.9, \
+        assert 0.3 <= instinct.confidence <= 0.9, (
             f"Confidence {instinct.confidence} not in valid range [0.3, 0.9]"
+        )
 
     def test_records_evidence(
         self, agent_runner: AgentRunner, user_correction_session: list[dict]
@@ -95,8 +93,7 @@ class TestUserCorrectionPattern:
         Eval 3.1: Evidence should be recorded with the instinct.
         """
         result = agent_runner.analyze_session(
-            session_id="correction-1",
-            events=user_correction_session
+            session_id="correction-1", events=user_correction_session
         )
 
         assert result is not None
@@ -112,34 +109,38 @@ class TestUserCorrectionPattern:
         Eval 3.1: User correction patterns should be in 'workflow' domain.
         """
         result = agent_runner.analyze_session(
-            session_id="correction-1",
-            events=user_correction_session
+            session_id="correction-1", events=user_correction_session
         )
 
         assert result is not None
         instinct = result.instincts_created[0]
         assert instinct.domain == "workflow"
 
-    def test_no_false_positives_on_normal_edit(
-        self, agent_runner: AgentRunner
-    ) -> None:
+    def test_no_false_positives_on_normal_edit(self, agent_runner: AgentRunner) -> None:
         """
         Normal edit sequence without rejection should not create correction instinct.
         """
         normal_session = [
-            {"timestamp": "2026-04-30T10:00:00Z", "event": "tool_start", "tool": "Edit", "session": "normal-1"},
-            {"timestamp": "2026-04-30T10:00:05Z", "event": "tool_complete", "tool": "Edit", "session": "normal-1", "output": "success"},
+            {
+                "timestamp": "2026-04-30T10:00:00Z",
+                "event": "tool_start",
+                "tool": "Edit",
+                "session": "normal-1",
+            },
+            {
+                "timestamp": "2026-04-30T10:00:05Z",
+                "event": "tool_complete",
+                "tool": "Edit",
+                "session": "normal-1",
+                "output": "success",
+            },
         ]
 
-        result = agent_runner.analyze_session(
-            session_id="normal-1",
-            events=normal_session
-        )
+        result = agent_runner.analyze_session(session_id="normal-1", events=normal_session)
 
         # Should not create a correction instinct for normal successful edits
         correction_instincts = [
-            i for i in (result.instincts_created or [])
-            if "reject" in i.trigger.lower()
+            i for i in (result.instincts_created or []) if "reject" in i.trigger.lower()
         ]
         assert len(correction_instincts) == 0
 
@@ -154,14 +155,9 @@ class TestAgentRunnerIntegration:
         Full payload should be processed and return valid AgentResult.
         """
         payload = {
-            "sessions": [
-                {
-                    "session_id": "correction-1",
-                    "events": user_correction_session
-                }
-            ],
+            "sessions": [{"session_id": "correction-1", "events": user_correction_session}],
             "project_id": "test-project",
-            "project_name": "Test Project"
+            "project_name": "Test Project",
         }
 
         result = agent_runner.run(payload)
@@ -171,28 +167,25 @@ class TestAgentRunnerIntegration:
         assert result.cursor_position == len(user_correction_session)
 
     def test_result_matches_expected_schema(
-        self, agent_runner: AgentRunner, user_correction_session: list[dict],
-        expected_user_correction_output: dict
+        self,
+        agent_runner: AgentRunner,
+        user_correction_session: list[dict],
+        expected_user_correction_output: dict,
     ) -> None:
         """
         Result should match the expected output schema.
         """
         payload = {
-            "sessions": [
-                {
-                    "session_id": "correction-1",
-                    "events": user_correction_session
-                }
-            ],
+            "sessions": [{"session_id": "correction-1", "events": user_correction_session}],
             "project_id": "test-project",
-            "project_name": "Test Project"
+            "project_name": "Test Project",
         }
 
         result = agent_runner.run(payload)
 
         # Validate schema
-        assert hasattr(result, 'instincts_created')
-        assert hasattr(result, 'instincts_updated')
-        assert hasattr(result, 'promotions')
-        assert hasattr(result, 'processed_count')
-        assert hasattr(result, 'cursor_position')
+        assert hasattr(result, "instincts_created")
+        assert hasattr(result, "instincts_updated")
+        assert hasattr(result, "promotions")
+        assert hasattr(result, "processed_count")
+        assert hasattr(result, "cursor_position")
