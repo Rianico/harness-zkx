@@ -36,7 +36,7 @@ We will keep the phase-mapped shape but replace bash with Python:
 ## Consequences
 
 - Polyglot projects declare gate once in `wt.toml`; `merge_copy.py` now calls `wt step pre-merge` / `read_gate()` instead of hardcoded `npm`, fixing drift across three prior sites.
-- Fresh repo bootstrap is one call: first shim auto-scaffolds correct gate for rust/python/ts; unknown stack fails with actionable hint instead of silent `npm` mis-gate.
+- Fresh repo bootstrap is one call: first shim auto-scaffolds correct gate for rust/python/ts; unknown stack fails with actionable hint instead of silent `npm` wrong gate.
 - Phase diffs stay isolated (atomic commits per skill), but shared helpers are typed and testable (`tests/branch-worktree-pr/test_*.py` per `tests/<skill>/test_<component>.py` convention, `uv run pytest`).
 - `wt` remains the deterministic pre-merge blocker; scripts are pure delegates — no duplication of `copy-ignored`/`hash_port` logic.
 - Bash deletion is a breaking change for cached `scripts/*.sh` strings in prompts — mitigated by dispatcher alias and `SKILL.md` pointer update.

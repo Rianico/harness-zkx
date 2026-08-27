@@ -7,7 +7,7 @@ description: >-
   emoji clean, link resolution, caching. TRIGGER: scrape LSP, PTX,
   CUDA, Rust, scrape site.
 argument-hint: |-
-  [lsp|ptx|runtime|driver|rust <target>|site] [--force] [--output-dir <path>] [--base-url <url>]
+  [lsp|ptx|runtime|driver|rust <target>|site|skills <url|owner/collection[/skill]>...] [--force] [--output-dir <path>] [--base-url <url>] [--run <slug>] [--method auto|raw|clone|npx]
 ---
 
 # Documentation Scraper Skill
@@ -39,14 +39,16 @@ uv run $SKILL_DIR/scripts/scrape.py lsp --force
 
 ## Available Scrapers
 
-| Scraper | Source | Description |
-|---------|--------|-------------|
-| `lsp` | LSP 3.17 Specification | Single-page spec with emoji anchors |
-| `ptx` | PTX ISA Documentation | Single-page ISA reference |
-| `runtime` | CUDA Runtime API | Multi-page API documentation |
-| `driver` | CUDA Driver API | Multi-page API documentation |
-| `rust` | Rust Crates | Uses cargo-docs-md for clean output |
-| `site` | General Websites | LLM-driven discovery via llms.txt/sitemap |
+| Scraper            | Source                      | Description                                                                                                                            |
+| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `lsp`              | LSP 3.17 Specification      | Single-page spec with emoji anchors                                                                                                    |
+| `ptx`              | PTX ISA Documentation       | Single-page ISA reference                                                                                                              |
+| `runtime`          | CUDA Runtime API            | Multi-page API documentation                                                                                                           |
+| `driver`           | CUDA Driver API             | Multi-page API documentation                                                                                                           |
+| `rust`             | Rust Crates                 | Uses cargo-docs-md for clean output                                                                                                    |
+| `site`             | General Websites            | LLM-driven discovery via llms.txt/sitemap · handles CLI sites with global-options extraction (see CLI Scrape Standards)                |
+| `skills`           | skill.sh / GitHub           | Fetch complementary agent skills (SKILL.md + references/ + scripts/) for LLM composition — deterministic fetch/stage; compose per `references/skillsh-compose.md`               |
+| `worktrunk` (`wt`) | Worktrunk CLI (`wt --help`) | CLI reference via `site` scraper — extracts Global Options (`-C`, `--yes`, etc.) + Automation per `references/cli-scrape-standards.md` |
 
 ## Rust Documentation
 
@@ -95,6 +97,7 @@ uv run $SKILL_DIR/scripts/scrape.py rust ratatui --include-deps
 ### Output Quality
 
 The `cargo-docs-md` output includes:
+
 - Nested directory structure mirroring module hierarchy
 - Quick Reference tables per module
 - Method signatures with deep-link anchors
@@ -192,19 +195,19 @@ The scraper generates README.md with placeholders for LLM to fill:
 ## Pages
 
 - [Title](001-title.md) — https://example.com/page
-...
+  ...
 ```
 
-| Placeholder | Filled By | Description |
-|-------------|-----------|-------------|
-| `{PROJECT_NAME}` | LLM | Extract from content |
-| `{BRIEF_INTRODUCTION}` | LLM | Synthesize from pages |
-| `{VERSION}` | Script | Fetch via `gh release list` CLI, fallback to GitHub API |
-| `{GITHUB_URL}` | LLM | Link to source repo |
-| `{TECH_STACK}` | LLM | Infer from content |
-| `Scraped` | Script | Deterministic date |
-| `Source` | Script | Base URL |
-| `Pages` | Script | File index |
+| Placeholder            | Filled By | Description                                             |
+| ---------------------- | --------- | ------------------------------------------------------- |
+| `{PROJECT_NAME}`       | LLM       | Extract from content                                    |
+| `{BRIEF_INTRODUCTION}` | LLM       | Synthesize from pages                                   |
+| `{VERSION}`            | Script    | Fetch via `gh release list` CLI, fallback to GitHub API |
+| `{GITHUB_URL}`         | LLM       | Link to source repo                                     |
+| `{TECH_STACK}`         | LLM       | Infer from content                                      |
+| `Scraped`              | Script    | Deterministic date                                      |
+| `Source`               | Script    | Base URL                                                |
+| `Pages`                | Script    | File index                                              |
 
 After scraping, LLM should read the scraped pages and fill the placeholders. If `{GITHUB_URL}` is filled, the script can fetch `{VERSION}` via:
 
@@ -224,9 +227,56 @@ All generated READMEs include author attribution:
 ### Site-Specific Modules
 
 If a site requires unique cleaning rules:
+
 1. First try adding to `references/cleanup-patterns.md` as a common pattern
 2. If rules are site-specific, not a common pattern, and may break other sites → create a curated module (e.g., `rust` module)
 3. This isolation prevents site-specific rules from affecting common sites
+
+## Skill Composition (skills.sh / GitHub)
+
+The `skills` scraper fetches complementary agent skills from skill.sh (a catalog)
+and their GitHub repos (the source of truth), then stages them so the LLM can
+compose them into **one new skill**. Fetching/staging is deterministic; all
+composition is LLM work guided by `ai-engineering-expert` (see
+`references/skillsh-compose.md`).
+
+```bash
+# Fetch one or many complementary skills (URL, owner/collection[/skill], or repo)
+uv run $SKILL_DIR/scripts/scrape.py skills \
+  https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert \
+  sickn33/agentic-awesome-skills/nodejs-best-practices \
+  --run ts-monorepo
+
+# Whole collection -> clone (or --method raw | npx opt-in)
+uv run $SKILL_DIR/scripts/scrape.py skills sickn33/agentic-awesome-skills --run coll
+```
+
+### Fetch methods
+
+| Method | Behavior                                                        |
+| ------ | --------------------------------------------------------------- |
+| `raw` (default, explicit skills) | GitHub contents API walk + `raw.githubusercontent.com` — no side effects |
+| `clone` (default, whole collections) | `git clone --depth 1` then map `skills/<name>/` dirs |
+| `npx` (opt-in) | delegate to `npx skills` inside a temp project, then harvest |
+
+### Staging layout (multi-run)
+
+```
+.lsz/tmp/skill-compose/<run>/
+├── stage/SOURCES.md               # index: repo + verbatim frontmatter per source
+├── stage/<repo>/<skill>/SKILL.md  # + references/ + scripts/ (origin-attributed)
+└── out/<new-skill>/               # LLM compose target (empty until composed)
+```
+
+`--run` names the composition; omitted → auto-slug with a numeric suffix so repeated
+compositions coexist. Fetch is shared via the `.cache/`; each run's `stage/`/`out/` is isolated.
+
+### Compose (LLM step)
+
+After staging, read `references/skillsh-compose.md` and load `ai-engineering-expert`
+(skill-authoring + writing). Merge/reorganize the staged sources into
+`out/<new-skill>/SKILL.md` + deduped `references/`/`scripts/` following skill
+frontmatter/description-budget conventions. Never edit `stage/` in place.
 
 ## Best Practices
 
@@ -325,6 +375,21 @@ Before considering a scrape complete, verify:
 - [ ] **Section splits are sensible** — Not too granular, not too monolithic
 - [ ] **Code blocks preserved** — Syntax highlighting markers intact
 - [ ] **Tables are readable** — Markdown tables render correctly
+- [ ] **Global options captured** — For CLI docs, every command page includes Global Options (`-C`, `--yes`, etc.) or links to central table
+- [ ] **Basic automation flags present** — `--format`, `--no-hooks`, `-C` not omitted (spot-check `wt merge -C` exists)
+
+## CLI Scrape Standards
+
+> [!tip] CLI globals are not optional — dropping `-C`/`--yes` breaks automation. Full spec in `references/cli-scrape-standards.md`.
+
+For any CLI-shaped `doc_type` (`wt`, `gh`, `cargo`, etc.):
+
+- **Parse globals once** from top-level `wt --help` (`-C`, `--config`, `--config-set`, `-v/--verbose` + `WORKTRUNK_VERBOSE`, `-y/--yes`, `-h/--help`).
+- **Merge per-command** `Options` + `Arguments` + `Automation` (`--no-hooks`, `--format`) with globals for every subcommand.
+- **Render** as `### Flags` + `#### Automation` + `#### Global Options — apply to every <tool> command` (full table on first command, link thereafter) — use verbatim `-C` sentence: "Working directory for this command — run `wt -C <path> merge` from any cwd without `cd`".
+- **Detect CLI shape** by `Usage: wt.*[OPTIONS]` + `Global Options:`/`Options:` headers or HTML `id="global-options"`.
+
+Validate with `uv run $SKILL_DIR/scripts/verify_cli_globals.py <output_dir>` — see `references/cli-scrape-standards.md` for before/after and canonical `worktrunk-guide` fix.
 
 ## Common Issues & Fixes
 
@@ -375,6 +440,7 @@ curl -s <doc-url> | grep -E 'class=".*content|role="main"'
 ```
 
 Identify:
+
 - Content container (div with class/id)
 - Heading levels used
 - Anchor ID format
@@ -406,6 +472,7 @@ cat /tmp/test-scrape/0001-*.md
 ### 4. Identify Patterns
 
 Common patterns to handle:
+
 - Emoji/special characters in anchors → `references/lsp-patterns.md`
 - Multi-page discovery → `references/cuda-patterns.md`
 - Section number extraction → `references/section-extraction.md`
@@ -463,6 +530,7 @@ fd -e md . /path/to/output/some_dir | shuf -n 3 | xargs less
 ```
 
 Look for:
+
 - Empty HTML elements (`<span></span>`, `<div></div>`)
 - Duplicate content (navigation, footers)
 - Excessive whitespace (3+ consecutive blank lines)
@@ -474,6 +542,7 @@ Look for:
 When new meaningless elements are discovered:
 
 1. **Add pattern to scraper's `_cleanup_markdown()` method:**
+
    ```python
    patterns = [
        (r'<span id="[^"]+"></span>\n?', ""),  # Empty anchor spans
@@ -483,6 +552,7 @@ When new meaningless elements are discovered:
    ```
 
 2. **Re-run scraper and verify reduction:**
+
    ```bash
    # Before adding pattern
    rg -c '<span id=' /path/to/output | awk -F: '{sum+=$2} END {print sum}'
@@ -496,13 +566,13 @@ When new meaningless elements are discovered:
 
 ### Common Meaningless Elements
 
-| Element | Pattern | Source |
-|---------|---------|--------|
+| Element            | Pattern                  | Source                  |
+| ------------------ | ------------------------ | ----------------------- |
 | Empty anchor spans | `<span id="..."></span>` | rustdoc (cargo-docs-md) |
-| Empty divs | `<div id="..."></div>` | Web scrapers |
-| Excess blank lines | `\n{3,}` | All scrapers |
-| Empty anchor links | `[](#...)` | Link conversion |
-| HTML comments | `<!-- ... -->` | Source HTML |
+| Empty divs         | `<div id="..."></div>`   | Web scrapers            |
+| Excess blank lines | `\n{3,}`                 | All scrapers            |
+| Empty anchor links | `[](#...)`               | Link conversion         |
+| HTML comments      | `<!-- ... -->`           | Source HTML             |
 
 ## LLM-Friendly Fetching (New)
 
@@ -517,12 +587,12 @@ Modern websites increasingly support direct markdown delivery:
 
 ### Quick Comparison
 
-| Method | Cost | Best For |
-|--------|------|----------|
-| Jina Reader | Free | Quick lookups, development |
+| Method         | Cost    | Best For                       |
+| -------------- | ------- | ------------------------------ |
+| Jina Reader    | Free    | Quick lookups, development     |
 | Tavily Extract | Metered | Batch (20 URLs), query-focused |
-| Accept header | Free | Cloudflare sites |
-| llms.txt | Free | Curated documentation |
+| Accept header  | Free    | Cloudflare sites               |
+| llms.txt       | Free    | Curated documentation          |
 
 ### When to Use What
 
@@ -543,5 +613,7 @@ Scraper-specific patterns and code examples:
 - `references/cuda-patterns.md` — Multi-page discovery, cleanup pipeline for CUDA docs
 - `references/section-extraction.md` — Common patterns for splitting content
 - `references/cleanup-patterns.md` — Removing navigation, footers, duplicate content
+- `references/cli-scrape-standards.md` — CLI global-options + automation extraction (worktrunk `wt` canonical fix)
+- `references/skillsh-compose.md` — compose complementary skill.sh/GitHub sources into one skill (ai-engineering-expert guided)
 
 When adding a new scraper, check these references for similar document structures.

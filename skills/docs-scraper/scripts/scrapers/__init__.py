@@ -2,10 +2,11 @@
 
 from .base import DocumentationScraper
 from .cuda_api import APIScraper
-from .ptx import PTXScraper
 from .lsp import LSPScraper
+from .ptx import PTXScraper
 from .rust import RustScraper, detect_rust_project
 from .site import SiteScraper, parse_llms_txt, parse_sitemap_xml
+from .skillsh import SkillshScraper
 
 __all__ = [
     "DocumentationScraper",
@@ -14,6 +15,7 @@ __all__ = [
     "LSPScraper",
     "RustScraper",
     "SiteScraper",
+    "SkillshScraper",
     "detect_rust_project",
     "parse_llms_txt",
     "parse_sitemap_xml",

@@ -94,6 +94,26 @@ content = re.sub(r"\n{4,}", "\n\n\n", content)
 content = content.strip()
 ```
 
+## Preserve CLI Global Options
+
+> [!warning] Do NOT strip Global Options — they are load-bearing
+> `Global Options` / `Automation` sections (`-C`, `--config`, `--config-set`, `-v/--verbose`, `-y/--yes`, `--no-hooks`, `--format`) look like boilerplate but are required for automation (`wt -C <path> merge` fails without `-C`). The cleaner must keep them. See `references/cli-scrape-standards.md`.
+
+```python
+# KEEP — do not remove Global Options blocks
+# These headers/IDs signal CLI globals, not nav cruft:
+KEEP_MARKERS = [
+    "Global Options",
+    "id=\"global-options\"",
+    "Automation",  # --no-hooks, --format for wt merge
+]
+# During cleanup, skip decomposing elements that contain these markers
+for elem in soup.find_all(["h2", "h3", "h4"]):
+    if any(m in elem.get_text() for m in KEEP_MARKERS):
+        continue  # preserve entire section
+    # ... normal cleanup
+```
+
 ## Verification Commands
 
 ```bash

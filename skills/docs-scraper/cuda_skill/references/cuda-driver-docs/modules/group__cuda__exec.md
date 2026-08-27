@@ -2,15 +2,13 @@
 
 **Source:** group__CUDA__EXEC.html#group__CUDA__EXEC
 
-
 ### Functions
 
 CUresult cuFuncGetAttribute ( int* pi, CUfunction_attribute attrib, CUfunction hfunc )
 
-
 Returns information about a function.
 
-######  Parameters
+###### Parameters
 
 `pi`
     \- Returned attribute value
@@ -27,54 +25,51 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Returns in `*pi` the integer value of the attribute `attrib` on the kernel given by `hfunc`. The supported attributes are:
 
-  * CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK: The maximum number of threads per block, beyond which a launch of the function would fail. This number depends on both the function and the device on which the function is currently loaded.
+* CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK: The maximum number of threads per block, beyond which a launch of the function would fail. This number depends on both the function and the device on which the function is currently loaded.
 
-  * CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES: The size in bytes of statically-allocated shared memory per block required by this function. This does not include dynamically-allocated shared memory requested by the user at runtime.
+* CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES: The size in bytes of statically-allocated shared memory per block required by this function. This does not include dynamically-allocated shared memory requested by the user at runtime.
 
-  * CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES: The size in bytes of user-allocated constant memory required by this function.
+* CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES: The size in bytes of user-allocated constant memory required by this function.
 
-  * CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES: The size in bytes of local memory used by each thread of this function.
+* CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES: The size in bytes of local memory used by each thread of this function.
 
-  * CU_FUNC_ATTRIBUTE_NUM_REGS: The number of registers used by each thread of this function.
+* CU_FUNC_ATTRIBUTE_NUM_REGS: The number of registers used by each thread of this function.
 
-  * CU_FUNC_ATTRIBUTE_PTX_VERSION: The PTX virtual architecture version for which the function was compiled. This value is the major PTX version * 10 + the minor PTX version, so a PTX version 1.3 function would return the value 13. Note that this may return the undefined value of 0 for cubins compiled prior to CUDA 3.0.
+* CU_FUNC_ATTRIBUTE_PTX_VERSION: The PTX virtual architecture version for which the function was compiled. This value is the major PTX version * 10 + the minor PTX version, so a PTX version 1.3 function would return the value 13. Note that this may return the undefined value of 0 for cubins compiled prior to CUDA 3.0.
 
-  * CU_FUNC_ATTRIBUTE_BINARY_VERSION: The binary architecture version for which the function was compiled. This value is the major binary version * 10 + the minor binary version, so a binary version 1.3 function would return the value 13. Note that this will return a value of 10 for legacy cubins that do not have a properly-encoded binary architecture version.
+* CU_FUNC_ATTRIBUTE_BINARY_VERSION: The binary architecture version for which the function was compiled. This value is the major binary version * 10 + the minor binary version, so a binary version 1.3 function would return the value 13. Note that this will return a value of 10 for legacy cubins that do not have a properly-encoded binary architecture version.
 
-  * CU_FUNC_CACHE_MODE_CA: The attribute to indicate whether the function has been compiled with user specified option "-Xptxas \--dlcm=ca" set .
+* CU_FUNC_CACHE_MODE_CA: The attribute to indicate whether the function has been compiled with user specified option "-Xptxas \--dlcm=ca" set .
 
-  * CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES: The maximum size in bytes of dynamically-allocated shared memory.
+* CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES: The maximum size in bytes of dynamically-allocated shared memory.
 
-  * CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT: Preferred shared memory-L1 cache split ratio in percent of total shared memory.
+* CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT: Preferred shared memory-L1 cache split ratio in percent of total shared memory.
 
-  * CU_FUNC_ATTRIBUTE_CLUSTER_SIZE_MUST_BE_SET: If this attribute is set, the kernel must launch with a valid cluster size specified.
+* CU_FUNC_ATTRIBUTE_CLUSTER_SIZE_MUST_BE_SET: If this attribute is set, the kernel must launch with a valid cluster size specified.
 
-  * CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH: The required cluster width in blocks.
+* CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH: The required cluster width in blocks.
 
-  * CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT: The required cluster height in blocks.
+* CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT: The required cluster height in blocks.
 
-  * CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH: The required cluster depth in blocks.
+* CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH: The required cluster depth in blocks.
 
-  * CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed. A non-portable cluster size may only function on the specific SKUs the program is tested on. The launch might fail if the program is run on a different hardware platform. CUDA API provides cudaOccupancyMaxActiveClusters to assist with checking whether the desired size can be launched on the current device. A portable cluster size is guaranteed to be functional on all compute capabilities higher than the target compute capability. The portable cluster size for sm_90 is 8 blocks per cluster. This value may increase for future compute capabilities. The specific hardware unit may support higher cluster sizes that’s not guaranteed to be portable.
+* CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed. A non-portable cluster size may only function on the specific SKUs the program is tested on. The launch might fail if the program is run on a different hardware platform. CUDA API provides cudaOccupancyMaxActiveClusters to assist with checking whether the desired size can be launched on the current device. A portable cluster size is guaranteed to be functional on all compute capabilities higher than the target compute capability. The portable cluster size for sm_90 is 8 blocks per cluster. This value may increase for future compute capabilities. The specific hardware unit may support higher cluster sizes that’s not guaranteed to be portable.
 
-  * CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE: The block scheduling policy of a function. The value type is CUclusterSchedulingPolicy.
+* CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE: The block scheduling policy of a function. The value type is CUclusterSchedulingPolicy.
 
+With a few exceptions, function attributes may also be queried on unloaded function handles returned from cuModuleEnumerateFunctions. CUDA_ERROR_FUNCTION_NOT_LOADED is returned if the attribute requires a fully loaded function but the function is not loaded. The loading state of a function may be queried using cuFuncIsloaded. cuFuncLoad may be called to explicitly load a function before querying the following attributes that require the function to be loaded:
 
-With a few execeptions, function attributes may also be queried on unloaded function handles returned from cuModuleEnumerateFunctions. CUDA_ERROR_FUNCTION_NOT_LOADED is returned if the attribute requires a fully loaded function but the function is not loaded. The loading state of a function may be queried using cuFuncIsloaded. cuFuncLoad may be called to explicitly load a function before querying the following attributes that require the function to be loaded:
+* CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK
 
-  * CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK
+* CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES
 
-  * CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES
-
-  * CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
-
+* CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
 
 CUresult cuFuncGetModule ( CUmodule* hmod, CUfunction hfunc )
 
-
 Returns a module handle.
 
-######  Parameters
+###### Parameters
 
 `hmod`
     \- Returned module handle
@@ -91,14 +86,11 @@ Returns in `*hmod` the handle of the module that function `hfunc` is located in.
 
 The CUDA runtime manages its own modules loaded into the primary context. If the handle returned by this API refers to a module loaded by the CUDA runtime, calling cuModuleUnload() on that module will result in undefined behavior.
 
-
-
 CUresult cuFuncGetName ( const char** name, CUfunction hfunc )
-
 
 Returns the function name for a CUfunction handle.
 
-######  Parameters
+###### Parameters
 
 `name`
     \- The returned name of the function
@@ -113,14 +105,11 @@ CUDA_SUCCESS, CUDA_ERROR_INVALID_VALUE
 
 Returns in `**name` the function name associated with the function handle `hfunc` . The function name is returned as a null-terminated string. The returned name is only valid when the function handle is valid. If the module is unloaded or reloaded, one must call the API again to get the updated name. This API may return a mangled name if the function is not declared as having C linkage. If either `**name` or `hfunc` is NULL, CUDA_ERROR_INVALID_VALUE is returned.
 
-
-
-CUresult cuFuncGetParamInfo ( CUfunction func, size_t paramIndex, size_t* paramOffset, size_t* paramSize )
-
+CUresult cuFuncGetParamInfo ( CUfunction func, size_t paramIndex, size_t*paramOffset, size_t* paramSize )
 
 Returns the offset and size of a kernel parameter in the device-side parameter layout.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- The function to query
@@ -141,10 +130,9 @@ Queries the kernel parameter at `paramIndex` into `func's` list of parameters, a
 
 CUresult cuFuncIsLoaded ( CUfunctionLoadingState* state, CUfunction function )
 
-
 Returns if the function is loaded.
 
-######  Parameters
+###### Parameters
 
 `state`
     \- returned loading state
@@ -161,10 +149,9 @@ Returns in `state` the loading state of `function`.
 
 CUresult cuFuncLoad ( CUfunction function )
 
-
 Loads a function.
 
-######  Parameters
+###### Parameters
 
 `function`
     \- the function to load
@@ -179,10 +166,9 @@ Finalizes function loading for `function`. Calling this API with a fully loaded 
 
 CUresult cuFuncSetAttribute ( CUfunction hfunc, CUfunction_attribute attrib, int  value )
 
-
 Sets information about a function.
 
-######  Parameters
+###### Parameters
 
 `hfunc`
     \- Function to query attribute of
@@ -201,27 +187,25 @@ This call sets the value of a specified attribute `attrib` on the kernel given b
 
 Supported attributes for the cuFuncSetAttribute call are:
 
-  * CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES: This maximum size in bytes of dynamically-allocated shared memory. The value should contain the requested maximum size of dynamically-allocated shared memory. The sum of this value and the function attribute CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES cannot exceed the device attribute CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN. The maximal size of requestable dynamic shared memory may differ by GPU architecture.
+* CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES: This maximum size in bytes of dynamically-allocated shared memory. The value should contain the requested maximum size of dynamically-allocated shared memory. The sum of this value and the function attribute CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES cannot exceed the device attribute CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN. The maximal size of requestable dynamic shared memory may differ by GPU architecture.
 
-  * CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT: On devices where the L1 cache and shared memory use the same hardware resources, this sets the shared memory carveout preference, in percent of the total shared memory. See CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR This is only a hint, and the driver can choose a different ratio if required to execute the function.
+* CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT: On devices where the L1 cache and shared memory use the same hardware resources, this sets the shared memory carveout preference, in percent of the total shared memory. See CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR This is only a hint, and the driver can choose a different ratio if required to execute the function.
 
-  * CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH: The required cluster width in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return CUDA_ERROR_NOT_PERMITTED.
+* CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH: The required cluster width in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return CUDA_ERROR_NOT_PERMITTED.
 
-  * CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT: The required cluster height in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return CUDA_ERROR_NOT_PERMITTED.
+* CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT: The required cluster height in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return CUDA_ERROR_NOT_PERMITTED.
 
-  * CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH: The required cluster depth in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return CUDA_ERROR_NOT_PERMITTED.
+* CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH: The required cluster depth in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return CUDA_ERROR_NOT_PERMITTED.
 
-  * CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed.
+* CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed.
 
-  * CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE: The block scheduling policy of a function. The value type is CUclusterSchedulingPolicy.
-
+* CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE: The block scheduling policy of a function. The value type is CUclusterSchedulingPolicy.
 
 CUresult cuFuncSetCacheConfig ( CUfunction hfunc, CUfunc_cache config )
 
-
 Sets the preferred cache configuration for a device function.
 
-######  Parameters
+###### Parameters
 
 `hfunc`
     \- Kernel to configure cache for
@@ -242,21 +226,19 @@ Launching a kernel with a different preference than the most recent preference s
 
 The supported cache configurations are:
 
-  * CU_FUNC_CACHE_PREFER_NONE: no preference for shared memory or L1 (default)
+* CU_FUNC_CACHE_PREFER_NONE: no preference for shared memory or L1 (default)
 
-  * CU_FUNC_CACHE_PREFER_SHARED: prefer larger shared memory and smaller L1 cache
+* CU_FUNC_CACHE_PREFER_SHARED: prefer larger shared memory and smaller L1 cache
 
-  * CU_FUNC_CACHE_PREFER_L1: prefer larger L1 cache and smaller shared memory
+* CU_FUNC_CACHE_PREFER_L1: prefer larger L1 cache and smaller shared memory
 
-  * CU_FUNC_CACHE_PREFER_EQUAL: prefer equal sized L1 cache and shared memory
-
+* CU_FUNC_CACHE_PREFER_EQUAL: prefer equal sized L1 cache and shared memory
 
 CUresult cuLaunchCooperativeKernel ( CUfunction f, unsigned int  gridDimX, unsigned int  gridDimY, unsigned int  gridDimZ, unsigned int  blockDimX, unsigned int  blockDimY, unsigned int  blockDimZ, unsigned int  sharedMemBytes, CUstream hStream, void** kernelParams )
 
-
 Launches a CUDA function CUfunction or a CUDA kernel CUkernel where thread blocks can cooperate and synchronize as they execute.
 
-######  Parameters
+###### Parameters
 
 `f`
     \- Function CUfunction or Kernel CUkernel to launch
@@ -305,15 +287,14 @@ Note that to use cuLaunchCooperativeKernel(), the kernel `f` must either have be
 
 Note that the API can also be used to launch context-less kernel CUkernel by querying the handle using cuLibraryGetKernel() and then passing it to the API by casting to CUfunction. Here, the context to launch the kernel on will either be taken from the specified stream `hStream` or the current context in case of NULL stream.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  *
+*
 CUresult cuLaunchCooperativeKernelMultiDevice ( CUDA_LAUNCH_PARAMS* launchParamsList, unsigned int  numDevices, unsigned int  flags )
-
 
 Launches CUDA functions on multiple devices where thread blocks can cooperate and synchronize as they execute.
 
-######  Parameters
+###### Parameters
 
 `launchParamsList`
     \- List of launch parameters, one per device
@@ -336,7 +317,7 @@ Invokes kernels as specified in the `launchParamsList` array where each element 
 
 No two kernels can be launched on the same device. All the devices targeted by this multi-device launch must be identical. All devices must have a non-zero value for the device attribute CU_DEVICE_ATTRIBUTE_COOPERATIVE_MULTI_DEVICE_LAUNCH.
 
-All kernels launched must be identical with respect to the compiled code. Note that any __device__, __constant__ or __managed__ variables present in the module that owns the kernel launched on each device, are independently instantiated on every device. It is the application's responsibility to ensure these variables are initialized and used appropriately.
+All kernels launched must be identical with respect to the compiled code. Note that any **device**, **constant** or **managed** variables present in the module that owns the kernel launched on each device, are independently instantiated on every device. It is the application's responsibility to ensure these variables are initialized and used appropriately.
 
 The size of the grids as specified in blocks, the size of the blocks themselves and the amount of shared memory used by each thread block must also match across all launched kernels.
 
@@ -347,7 +328,6 @@ The total number of blocks launched per kernel cannot exceed the maximum number 
 The kernels cannot make use of CUDA dynamic parallelism.
 
 The CUDA_LAUNCH_PARAMS structure is defined as:
-
 
     ‎        typedef struct CUDA_LAUNCH_PARAMS_st
                   {
@@ -365,26 +345,25 @@ The CUDA_LAUNCH_PARAMS structure is defined as:
 
 where:
 
-  * CUDA_LAUNCH_PARAMS::function specifies the kernel to be launched. All functions must be identical with respect to the compiled code. Note that you can also specify context-less kernel CUkernel by querying the handle using cuLibraryGetKernel() and then casting to CUfunction. In this case, the context to launch the kernel on be taken from the specified stream CUDA_LAUNCH_PARAMS::hStream.
+* CUDA_LAUNCH_PARAMS::function specifies the kernel to be launched. All functions must be identical with respect to the compiled code. Note that you can also specify context-less kernel CUkernel by querying the handle using cuLibraryGetKernel() and then casting to CUfunction. In this case, the context to launch the kernel on be taken from the specified stream CUDA_LAUNCH_PARAMS::hStream.
 
-  * CUDA_LAUNCH_PARAMS::gridDimX is the width of the grid in blocks. This must match across all kernels launched.
+* CUDA_LAUNCH_PARAMS::gridDimX is the width of the grid in blocks. This must match across all kernels launched.
 
-  * CUDA_LAUNCH_PARAMS::gridDimY is the height of the grid in blocks. This must match across all kernels launched.
+* CUDA_LAUNCH_PARAMS::gridDimY is the height of the grid in blocks. This must match across all kernels launched.
 
-  * CUDA_LAUNCH_PARAMS::gridDimZ is the depth of the grid in blocks. This must match across all kernels launched.
+* CUDA_LAUNCH_PARAMS::gridDimZ is the depth of the grid in blocks. This must match across all kernels launched.
 
-  * CUDA_LAUNCH_PARAMS::blockDimX is the X dimension of each thread block. This must match across all kernels launched.
+* CUDA_LAUNCH_PARAMS::blockDimX is the X dimension of each thread block. This must match across all kernels launched.
 
-  * CUDA_LAUNCH_PARAMS::blockDimX is the Y dimension of each thread block. This must match across all kernels launched.
+* CUDA_LAUNCH_PARAMS::blockDimX is the Y dimension of each thread block. This must match across all kernels launched.
 
-  * CUDA_LAUNCH_PARAMS::blockDimZ is the Z dimension of each thread block. This must match across all kernels launched.
+* CUDA_LAUNCH_PARAMS::blockDimZ is the Z dimension of each thread block. This must match across all kernels launched.
 
-  * CUDA_LAUNCH_PARAMS::sharedMemBytes is the dynamic shared-memory size per thread block in bytes. This must match across all kernels launched.
+* CUDA_LAUNCH_PARAMS::sharedMemBytes is the dynamic shared-memory size per thread block in bytes. This must match across all kernels launched.
 
-  * CUDA_LAUNCH_PARAMS::hStream is the handle to the stream to perform the launch in. This cannot be the NULL stream or CU_STREAM_LEGACY or CU_STREAM_PER_THREAD. The CUDA context associated with this stream must match that associated with CUDA_LAUNCH_PARAMS::function.
+* CUDA_LAUNCH_PARAMS::hStream is the handle to the stream to perform the launch in. This cannot be the NULL stream or CU_STREAM_LEGACY or CU_STREAM_PER_THREAD. The CUDA context associated with this stream must match that associated with CUDA_LAUNCH_PARAMS::function.
 
-  * CUDA_LAUNCH_PARAMS::kernelParams is an array of pointers to kernel parameters. If CUDA_LAUNCH_PARAMS::function has N parameters, then CUDA_LAUNCH_PARAMS::kernelParams needs to be an array of N pointers. Each of CUDA_LAUNCH_PARAMS::kernelParams[0] through CUDA_LAUNCH_PARAMS::kernelParams[N-1] must point to a region of memory from which the actual kernel parameter will be copied. The number of kernel parameters and their offsets and sizes do not need to be specified as that information is retrieved directly from the kernel's image.
-
+* CUDA_LAUNCH_PARAMS::kernelParams is an array of pointers to kernel parameters. If CUDA_LAUNCH_PARAMS::function has N parameters, then CUDA_LAUNCH_PARAMS::kernelParams needs to be an array of N pointers. Each of CUDA_LAUNCH_PARAMS::kernelParams[0] through CUDA_LAUNCH_PARAMS::kernelParams[N-1] must point to a region of memory from which the actual kernel parameter will be copied. The number of kernel parameters and their offsets and sizes do not need to be specified as that information is retrieved directly from the kernel's image.
 
 By default, the kernel won't begin execution on any GPU until all prior work in all the specified streams has completed. This behavior can be overridden by specifying the flag CUDA_COOPERATIVE_LAUNCH_MULTI_DEVICE_NO_PRE_LAUNCH_SYNC. When this flag is specified, each kernel will only wait for prior work in the stream corresponding to that GPU to complete before it begins execution.
 
@@ -396,15 +375,14 @@ When kernels are launched via cuLaunchCooperativeKernelMultiDevice(), the previo
 
 Note that to use cuLaunchCooperativeKernelMultiDevice(), the kernels must either have been compiled with toolchain version 3.2 or later so that it will contain kernel parameter information, or have no kernel parameters. If either of these conditions is not met, then cuLaunchCooperativeKernelMultiDevice() will return CUDA_ERROR_INVALID_IMAGE.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  *
+*
 CUresult cuLaunchHostFunc ( CUstream hStream, CUhostFn fn, void* userData )
-
 
 Enqueues a host function call in a stream.
 
-######  Parameters
+###### Parameters
 
 `hStream`
     \- Stream to enqueue function call in
@@ -425,26 +403,24 @@ The host function must not make any CUDA API calls. Attempting to use a CUDA API
 
 For the purposes of Unified Memory, execution makes a number of guarantees:
 
-  * The stream is considered idle for the duration of the function's execution. Thus, for example, the function may always use memory attached to the stream it was enqueued in.
+* The stream is considered idle for the duration of the function's execution. Thus, for example, the function may always use memory attached to the stream it was enqueued in.
 
-  * The start of execution of the function has the same effect as synchronizing an event recorded in the same stream immediately prior to the function. It thus synchronizes streams which have been "joined" prior to the function.
+* The start of execution of the function has the same effect as synchronizing an event recorded in the same stream immediately prior to the function. It thus synchronizes streams which have been "joined" prior to the function.
 
-  * Adding device work to any stream does not have the effect of making the stream active until all preceding host functions and stream callbacks have executed. Thus, for example, a function might use global attached memory even if work has been added to another stream, if the work has been ordered behind the function call with an event.
+* Adding device work to any stream does not have the effect of making the stream active until all preceding host functions and stream callbacks have executed. Thus, for example, a function might use global attached memory even if work has been added to another stream, if the work has been ordered behind the function call with an event.
 
-  * Completion of the function does not cause a stream to become active except as described above. The stream will remain idle if no device work follows the function, and will remain idle across consecutive host functions or stream callbacks without device work in between. Thus, for example, stream synchronization can be done by signaling from a host function at the end of the stream.
-
+* Completion of the function does not cause a stream to become active except as described above. The stream will remain idle if no device work follows the function, and will remain idle across consecutive host functions or stream callbacks without device work in between. Thus, for example, stream synchronization can be done by signaling from a host function at the end of the stream.
 
 Note that, in contrast to cuStreamAddCallback, the function will not be called in the event of an error in the CUDA context.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  *
-CUresult cuLaunchKernel ( CUfunction f, unsigned int  gridDimX, unsigned int  gridDimY, unsigned int  gridDimZ, unsigned int  blockDimX, unsigned int  blockDimY, unsigned int  blockDimZ, unsigned int  sharedMemBytes, CUstream hStream, void** kernelParams, void** extra )
-
+*
+CUresult cuLaunchKernel ( CUfunction f, unsigned int  gridDimX, unsigned int  gridDimY, unsigned int  gridDimZ, unsigned int  blockDimX, unsigned int  blockDimY, unsigned int  blockDimZ, unsigned int  sharedMemBytes, CUstream hStream, void**kernelParams, void** extra )
 
 Launches a CUDA function CUfunction or a CUDA kernel CUkernel.
 
-######  Parameters
+###### Parameters
 
 `f`
     \- Function CUfunction or Kernel CUkernel to launch
@@ -485,7 +461,6 @@ Kernel parameters to `f` can be specified in one of two ways:
 
 2) Kernel parameters can also be packaged by the application into a single buffer that is passed in via the `extra` parameter. This places the burden on the application of knowing each kernel parameter's size and alignment/padding within the buffer. Here is an example of using the `extra` parameter in this manner:
 
-
     ‎    size_t argBufferSize;
               char argBuffer[256];
 
@@ -500,12 +475,11 @@ Kernel parameters to `f` can be specified in one of two ways:
 
 The `extra` parameter exists to allow cuLaunchKernel to take additional less commonly used arguments. `extra` specifies a list of names of extra settings and their corresponding values. Each extra setting name is immediately followed by the corresponding value. The list must be terminated with either NULL or CU_LAUNCH_PARAM_END.
 
-  * CU_LAUNCH_PARAM_END, which indicates the end of the `extra` array;
+* CU_LAUNCH_PARAM_END, which indicates the end of the `extra` array;
 
-  * CU_LAUNCH_PARAM_BUFFER_POINTER, which specifies that the next value in `extra` will be a pointer to a buffer containing all the kernel parameters for launching kernel `f`;
+* CU_LAUNCH_PARAM_BUFFER_POINTER, which specifies that the next value in `extra` will be a pointer to a buffer containing all the kernel parameters for launching kernel `f`;
 
-  * CU_LAUNCH_PARAM_BUFFER_SIZE, which specifies that the next value in `extra` will be a pointer to a size_t containing the size of the buffer specified with CU_LAUNCH_PARAM_BUFFER_POINTER;
-
+* CU_LAUNCH_PARAM_BUFFER_SIZE, which specifies that the next value in `extra` will be a pointer to a size_t containing the size of the buffer specified with CU_LAUNCH_PARAM_BUFFER_POINTER;
 
 The error CUDA_ERROR_INVALID_VALUE will be returned if kernel parameters are specified with both `kernelParams` and `extra` (i.e. both `kernelParams` and `extra` are non-NULL).
 
@@ -515,15 +489,14 @@ Note that to use cuLaunchKernel(), the kernel `f` must either have been compiled
 
 Note that the API can also be used to launch context-less kernel CUkernel by querying the handle using cuLibraryGetKernel() and then passing it to the API by casting to CUfunction. Here, the context to launch the kernel on will either be taken from the specified stream `hStream` or the current context in case of NULL stream.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  *
-CUresult cuLaunchKernelEx ( const CUlaunchConfig* config, CUfunction f, void** kernelParams, void** extra )
-
+*
+CUresult cuLaunchKernelEx ( const CUlaunchConfig* config, CUfunction f, void**kernelParams, void** extra )
 
 Launches a CUDA function CUfunction or a CUDA kernel CUkernel with launch-time configuration.
 
-######  Parameters
+###### Parameters
 
 `config`
     \- Config to launch
@@ -544,7 +517,6 @@ Invokes the function CUfunction or the kernel CUkernel`f` with the specified lau
 
 The CUlaunchConfig structure is defined as:
 
-
     ‎       typedef struct CUlaunchConfig_st {
                unsigned int gridDimX;
                unsigned int gridDimY;
@@ -560,31 +532,29 @@ The CUlaunchConfig structure is defined as:
 
 where:
 
-  * CUlaunchConfig::gridDimX is the width of the grid in blocks.
+* CUlaunchConfig::gridDimX is the width of the grid in blocks.
 
-  * CUlaunchConfig::gridDimY is the height of the grid in blocks.
+* CUlaunchConfig::gridDimY is the height of the grid in blocks.
 
-  * CUlaunchConfig::gridDimZ is the depth of the grid in blocks.
+* CUlaunchConfig::gridDimZ is the depth of the grid in blocks.
 
-  * CUlaunchConfig::blockDimX is the X dimension of each thread block.
+* CUlaunchConfig::blockDimX is the X dimension of each thread block.
 
-  * CUlaunchConfig::blockDimX is the Y dimension of each thread block.
+* CUlaunchConfig::blockDimX is the Y dimension of each thread block.
 
-  * CUlaunchConfig::blockDimZ is the Z dimension of each thread block.
+* CUlaunchConfig::blockDimZ is the Z dimension of each thread block.
 
-  * CUlaunchConfig::sharedMemBytes is the dynamic shared-memory size per thread block in bytes.
+* CUlaunchConfig::sharedMemBytes is the dynamic shared-memory size per thread block in bytes.
 
-  * CUlaunchConfig::hStream is the handle to the stream to perform the launch in. The CUDA context associated with this stream must match that associated with function f.
+* CUlaunchConfig::hStream is the handle to the stream to perform the launch in. The CUDA context associated with this stream must match that associated with function f.
 
-  * CUlaunchConfig::attrs is an array of CUlaunchConfig::numAttrs continguous CUlaunchAttribute elements. The value of this pointer is not considered if CUlaunchConfig::numAttrs is zero. However, in that case, it is recommended to set the pointer to NULL.
+* CUlaunchConfig::attrs is an array of CUlaunchConfig::numAttrs contiguous CUlaunchAttribute elements. The value of this pointer is not considered if CUlaunchConfig::numAttrs is zero. However, in that case, it is recommended to set the pointer to NULL.
 
-  * CUlaunchConfig::numAttrs is the number of attributes populating the first CUlaunchConfig::numAttrs positions of the CUlaunchConfig::attrs array.
-
+* CUlaunchConfig::numAttrs is the number of attributes populating the first CUlaunchConfig::numAttrs positions of the CUlaunchConfig::attrs array.
 
 Launch-time configuration is specified by adding entries to CUlaunchConfig::attrs. Each entry is an attribute ID and a corresponding attribute value.
 
 The CUlaunchAttribute structure is defined as:
-
 
     ‎       typedef struct CUlaunchAttribute_st {
                CUlaunchAttributeID id;
@@ -593,13 +563,11 @@ The CUlaunchAttribute structure is defined as:
 
 where:
 
-  * CUlaunchAttribute::id is a unique enum identifying the attribute.
+* CUlaunchAttribute::id is a unique enum identifying the attribute.
 
-  * CUlaunchAttribute::value is a union that hold the attribute value.
-
+* CUlaunchAttribute::value is a union that hold the attribute value.
 
 An example of using the `config` parameter:
-
 
     ‎       CUlaunchAttribute coopAttr = {.id = CU_LAUNCH_ATTRIBUTE_COOPERATIVE
                                          .value = 1};
@@ -610,7 +578,6 @@ An example of using the `config` parameter:
            cuLaunchKernelEx(&config, kernel, NULL, NULL);
 
 The CUlaunchAttributeID enum is defined as:
-
 
     ‎       typedef enum CUlaunchAttributeID_enum {
                CU_LAUNCH_ATTRIBUTE_IGNORE = 0
@@ -630,7 +597,6 @@ The CUlaunchAttributeID enum is defined as:
            } CUlaunchAttributeID;
 
 and the corresponding CUlaunchAttributeValue union as :
-
 
     ‎       typedef union CUlaunchAttributeValue_union {
                CUaccessPolicyWindow accessPolicyWindow;
@@ -674,10 +640,9 @@ CU_LAUNCH_ATTRIBUTE_PROGRAMMATIC_EVENT records an event along with the kernel la
 
 CU_LAUNCH_ATTRIBUTE_LAUNCH_COMPLETION_EVENT records an event along with the kernel launch. Nominally, the event is triggered once all blocks of the kernel have begun execution. Currently this is a best effort. If a kernel B has a launch completion dependency on a kernel A, B may wait until A is complete. Alternatively, blocks of B may begin before all blocks of A have begun, for example:
 
-  * If B can claim execution resources unavailable to A, for example if they run on different GPUs.
+* If B can claim execution resources unavailable to A, for example if they run on different GPUs.
 
-  * If B is a higher priority than A.
-
+* If B is a higher priority than A.
 
 Exercise caution if such an ordering inversion could lead to deadlock. The event supplied must not be an interprocess or interop event. The event must disable timing (i.e. must be created with the CU_EVENT_DISABLE_TIMING flag set).
 
@@ -697,22 +662,20 @@ The effect of other attributes is consistent with their effect when set via pers
 
 See cuStreamSetAttribute for
 
-  * CU_LAUNCH_ATTRIBUTE_ACCESS_POLICY_WINDOW
+* CU_LAUNCH_ATTRIBUTE_ACCESS_POLICY_WINDOW
 
-  * CU_LAUNCH_ATTRIBUTE_SYNCHRONIZATION_POLICY
-
+* CU_LAUNCH_ATTRIBUTE_SYNCHRONIZATION_POLICY
 
 See cuFuncSetAttribute for
 
-  * CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION
+* CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION
 
-  * CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE
-
+* CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE
 
 Kernel parameters to `f` can be specified in the same ways that they can be using cuLaunchKernel.
 
 Note that the API can also be used to launch context-less kernel CUkernel by querying the handle using cuLibraryGetKernel() and then passing it to the API by casting to CUfunction. Here, the context to launch the kernel on will either be taken from the specified stream CUlaunchConfig::hStream or the current context in case of NULL stream.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  *
+*

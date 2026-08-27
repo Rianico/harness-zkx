@@ -2,15 +2,13 @@
 
 **Source:** group__CUDART__DRIVER__ENTRY__POINT.html#group__CUDART__DRIVER__ENTRY__POINT
 
-
 ### Functions
 
-__host__ cudaError_t cudaGetDriverEntryPoint ( const char* symbol, void** funcPtr, unsigned long long flags, cudaDriverEntryPointQueryResult ** driverStatus = NULL )
-
+**host** cudaError_t cudaGetDriverEntryPoint ( const char* symbol, void**funcPtr, unsigned long long flags, cudaDriverEntryPointQueryResult** driverStatus = NULL )
 
 Returns the requested driver API function pointer.
 
-######  Parameters
+###### Parameters
 
 `symbol`
     \- The base name of the driver API function to look for. As an example, for the driver API cuMemAlloc_v2, `symbol` would be cuMemAlloc. Note that the API will use the CUDA runtime version to return the address to the most recent ABI compatible driver symbol, cuMemAlloc or cuMemAlloc_v2.
@@ -43,39 +41,35 @@ The API will return cudaSuccess and set the returned `funcPtr` to NULL if the re
 
 It will also set the optional `driverStatus` to one of the values in cudaDriverEntryPointQueryResult with the following meanings:
 
-  * cudaDriverEntryPointSuccess \- The requested symbol was succesfully found based on input arguments and `pfn` is valid
+* cudaDriverEntryPointSuccess \- The requested symbol was successfully found based on input arguments and `pfn` is valid
 
-  * cudaDriverEntryPointSymbolNotFound \- The requested symbol was not found
+* cudaDriverEntryPointSymbolNotFound \- The requested symbol was not found
 
-  * cudaDriverEntryPointVersionNotSufficent \- The requested symbol was found but is not supported by the current runtime version (CUDART_VERSION)
-
+* cudaDriverEntryPointVersionNotSufficent \- The requested symbol was found but is not supported by the current runtime version (CUDART_VERSION)
 
 The requested flags can be:
 
-  * cudaEnableDefault: This is the default mode. This is equivalent to cudaEnablePerThreadDefaultStream if the code is compiled with --default-stream per-thread compilation flag or the macro CUDA_API_PER_THREAD_DEFAULT_STREAM is defined; cudaEnableLegacyStream otherwise.
+* cudaEnableDefault: This is the default mode. This is equivalent to cudaEnablePerThreadDefaultStream if the code is compiled with --default-stream per-thread compilation flag or the macro CUDA_API_PER_THREAD_DEFAULT_STREAM is defined; cudaEnableLegacyStream otherwise.
 
-  * cudaEnableLegacyStream: This will enable the search for all driver symbols that match the requested driver symbol name except the corresponding per-thread versions.
+* cudaEnableLegacyStream: This will enable the search for all driver symbols that match the requested driver symbol name except the corresponding per-thread versions.
 
-  * cudaEnablePerThreadDefaultStream: This will enable the search for all driver symbols that match the requested driver symbol name including the per-thread versions. If a per-thread version is not found, the API will return the legacy version of the driver function.
-
+* cudaEnablePerThreadDefaultStream: This will enable the search for all driver symbols that match the requested driver symbol name including the per-thread versions. If a per-thread version is not found, the API will return the legacy version of the driver function.
 
 This API is deprecated and cudaGetDriverEntryPointByVersion (with a hardcoded cudaVersion) should be used instead.
 
-  * Version mixing among CUDA-defined types and driver API versions is strongly discouraged and doing so can result in an undefined behavior. More here.
+* Version mixing among CUDA-defined types and driver API versions is strongly discouraged and doing so can result in an undefined behavior. More here.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
 cuGetProcAddress
 
-__host__ cudaError_t cudaGetDriverEntryPointByVersion ( const char* symbol, void** funcPtr, unsigned int  cudaVersion, unsigned long long flags, cudaDriverEntryPointQueryResult ** driverStatus = NULL )
-
+**host** cudaError_t cudaGetDriverEntryPointByVersion ( const char* symbol, void**funcPtr, unsigned int  cudaVersion, unsigned long long flags, cudaDriverEntryPointQueryResult** driverStatus = NULL )
 
 Returns the requested driver API function pointer by CUDA version.
 
-######  Parameters
+###### Parameters
 
 `symbol`
     \- The base name of the driver API function to look for. As an example, for the driver API cuMemAlloc_v2, `symbol` would be cuMemAlloc.
@@ -96,7 +90,7 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorNotSupported
 
 Returns in `**funcPtr` the address of the CUDA driver function for the requested flags and CUDA driver version.
 
-The CUDA version is specified as (1000 * major + 10 * minor), so CUDA 11.2 should be specified as 11020. For a requested driver symbol, if the specified CUDA version is greater than or equal to the CUDA version in which the driver symbol was introduced, this API will return the function pointer to the corresponding versioned function. If the specified CUDA version is greater than the driver version, the API will return cudaErrorInvalidValue.
+The CUDA version is specified as (1000 *major + 10* minor), so CUDA 11.2 should be specified as 11020. For a requested driver symbol, if the specified CUDA version is greater than or equal to the CUDA version in which the driver symbol was introduced, this API will return the function pointer to the corresponding versioned function. If the specified CUDA version is greater than the driver version, the API will return cudaErrorInvalidValue.
 
 The pointer returned by the API should be cast to a function pointer matching the requested driver function's definition in the API header file. The function pointer typedef can be picked up from the corresponding typedefs header file. For example, cudaTypedefs.h consists of function pointer typedefs for driver APIs defined in cuda.h.
 
@@ -108,26 +102,23 @@ The API will return cudaSuccess and set the returned `funcPtr` to NULL if the re
 
 It will also set the optional `driverStatus` to one of the values in cudaDriverEntryPointQueryResult with the following meanings:
 
-  * cudaDriverEntryPointSuccess \- The requested symbol was succesfully found based on input arguments and `pfn` is valid
+* cudaDriverEntryPointSuccess \- The requested symbol was successfully found based on input arguments and `pfn` is valid
 
-  * cudaDriverEntryPointSymbolNotFound \- The requested symbol was not found
+* cudaDriverEntryPointSymbolNotFound \- The requested symbol was not found
 
-  * cudaDriverEntryPointVersionNotSufficent \- The requested symbol was found but is not supported by the specified version `cudaVersion`
-
+* cudaDriverEntryPointVersionNotSufficent \- The requested symbol was found but is not supported by the specified version `cudaVersion`
 
 The requested flags can be:
 
-  * cudaEnableDefault: This is the default mode. This is equivalent to cudaEnablePerThreadDefaultStream if the code is compiled with --default-stream per-thread compilation flag or the macro CUDA_API_PER_THREAD_DEFAULT_STREAM is defined; cudaEnableLegacyStream otherwise.
+* cudaEnableDefault: This is the default mode. This is equivalent to cudaEnablePerThreadDefaultStream if the code is compiled with --default-stream per-thread compilation flag or the macro CUDA_API_PER_THREAD_DEFAULT_STREAM is defined; cudaEnableLegacyStream otherwise.
 
-  * cudaEnableLegacyStream: This will enable the search for all driver symbols that match the requested driver symbol name except the corresponding per-thread versions.
+* cudaEnableLegacyStream: This will enable the search for all driver symbols that match the requested driver symbol name except the corresponding per-thread versions.
 
-  * cudaEnablePerThreadDefaultStream: This will enable the search for all driver symbols that match the requested driver symbol name including the per-thread versions. If a per-thread version is not found, the API will return the legacy version of the driver function.
+* cudaEnablePerThreadDefaultStream: This will enable the search for all driver symbols that match the requested driver symbol name including the per-thread versions. If a per-thread version is not found, the API will return the legacy version of the driver function.
 
+* Version mixing among CUDA-defined types and driver API versions is strongly discouraged and doing so can result in an undefined behavior. More here.
 
-  * Version mixing among CUDA-defined types and driver API versions is strongly discouraged and doing so can result in an undefined behavior. More here.
-
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
@@ -136,5 +127,3 @@ cuGetProcAddress
 * * *
 
 !
-
-

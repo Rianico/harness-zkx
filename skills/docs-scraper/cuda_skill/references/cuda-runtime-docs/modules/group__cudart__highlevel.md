@@ -2,20 +2,17 @@
 
 **Source:** group__CUDART__HIGHLEVEL.html#group__CUDART__HIGHLEVEL
 
-
 ### Classes
 
 class
 
 __cudaOccupancyB2DHelper
 
-
 ### Functions
 
 template < class T >
 
-__host__ cudaChannelFormatDesc cudaCreateChannelDesc ( void ) [inline]
-
+**host** cudaChannelFormatDesc cudaCreateChannelDesc ( void ) [inline]
 
 [C++ API] Returns a channel descriptor using the specified format
 
@@ -26,7 +23,6 @@ Channel descriptor with format `f`
 ###### Description
 
 Returns a channel descriptor with format `f` and number of bits of each component `x`, `y`, `z`, and `w`. The cudaChannelFormatDesc is defined as:
-
 
     ‎  struct cudaChannelFormatDesc {
               int x, y, z, w;
@@ -46,12 +42,11 @@ Invoking the function on a type without a specialization defaults to creating a 
 
 cudaCreateChannelDesc ( Low level), cudaGetChannelDesc
 
-__host__ cudaError_t cudaEventCreate ( cudaEvent_t* event, unsigned int  flags )
-
+**host** cudaError_t cudaEventCreate ( cudaEvent_t* event, unsigned int  flags )
 
 [C++ API] Creates an event object with the specified flags
 
-######  Parameters
+###### Parameters
 
 `event`
     \- Newly created event
@@ -66,12 +61,11 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorLaunchFailure, cudaErrorMemoryAlloc
 
 Creates an event object with the specified flags. Valid flags include:
 
-  * cudaEventDefault: Default event creation flag.
+* cudaEventDefault: Default event creation flag.
 
-  * cudaEventBlockingSync: Specifies that event should use blocking synchronization. A host thread that uses cudaEventSynchronize() to wait on an event created with this flag will block until the event actually completes.
+* cudaEventBlockingSync: Specifies that event should use blocking synchronization. A host thread that uses cudaEventSynchronize() to wait on an event created with this flag will block until the event actually completes.
 
-  * cudaEventDisableTiming: Specifies that the created event does not need to record timing data. Events created with this flag specified and the cudaEventBlockingSync flag not specified will provide the best performance when used with cudaStreamWaitEvent() and cudaEventQuery().
-
+* cudaEventDisableTiming: Specifies that the created event does not need to record timing data. Events created with this flag specified and the cudaEventBlockingSync flag not specified will provide the best performance when used with cudaStreamWaitEvent() and cudaEventQuery().
 
 **See also:**
 
@@ -79,12 +73,11 @@ cudaEventCreate ( C API), cudaEventCreateWithFlags, cudaEventRecord, cudaEventQu
 
 template < class T >
 
-__host__ cudaError_t cudaFuncGetAttributes ( cudaFuncAttributes* attr, T* entry ) [inline]
-
+**host** cudaError_t cudaFuncGetAttributes ( cudaFuncAttributes*attr, T* entry ) [inline]
 
 [C++ API] Find out attributes for a given function
 
-######  Parameters
+###### Parameters
 
 `attr`
     \- Return pointer to function's attributes
@@ -101,21 +94,19 @@ This function obtains the attributes of a function specified via `entry`. The pa
 
 Note that some function attributes such as maxThreadsPerBlock may vary based on the device that is currently being used.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 cudaLaunchKernel ( C++ API), cudaFuncSetCacheConfig ( C++ API), cudaFuncGetAttributes ( C API), cudaSetDoubleForDevice, cudaSetDoubleForHost
 
 template < class T >
 
-__host__ cudaError_t cudaFuncGetName ( const char** name, T* func ) [inline]
-
+**host** cudaError_t cudaFuncGetName ( const char** name, T* func ) [inline]
 
 Returns the function name for a device entry function pointer.
 
-######  Parameters
+###### Parameters
 
 `name`
     \- The returned name of the function
@@ -130,21 +121,19 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorInvalidDeviceFunction
 
 Returns in `**name` the function name associated with the symbol `func` . The function name is returned as a null-terminated string. This API may return a mangled name if the function is not declared as having C linkage. If `**name` is NULL, cudaErrorInvalidValue is returned. If `func` is not a device entry function, cudaErrorInvalidDeviceFunction is returned.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 cudaFuncGetName ( C API)
 
 template < class T >
 
-__host__ cudaError_t cudaFuncSetAttribute ( T* func, cudaFuncAttribute attr, int  value ) [inline]
-
+**host** cudaError_t cudaFuncSetAttribute ( T* func, cudaFuncAttribute attr, int  value ) [inline]
 
 [C++ API] Set attributes for a given function
 
-######  Parameters
+###### Parameters
 
 `func`
 
@@ -163,36 +152,33 @@ This function sets the attributes of a function specified via `entry`. The param
 
 Valid values for `attr` are:
 
-  * cudaFuncAttributeMaxDynamicSharedMemorySize \- The requested maximum size in bytes of dynamically-allocated shared memory. The sum of this value and the function attribute sharedSizeBytes cannot exceed the device attribute cudaDevAttrMaxSharedMemoryPerBlockOptin. The maximal size of requestable dynamic shared memory may differ by GPU architecture.
+* cudaFuncAttributeMaxDynamicSharedMemorySize \- The requested maximum size in bytes of dynamically-allocated shared memory. The sum of this value and the function attribute sharedSizeBytes cannot exceed the device attribute cudaDevAttrMaxSharedMemoryPerBlockOptin. The maximal size of requestable dynamic shared memory may differ by GPU architecture.
 
-  * cudaFuncAttributePreferredSharedMemoryCarveout \- On devices where the L1 cache and shared memory use the same hardware resources, this sets the shared memory carveout preference, in percent of the total shared memory. See cudaDevAttrMaxSharedMemoryPerMultiprocessor. This is only a hint, and the driver can choose a different ratio if required to execute the function.
+* cudaFuncAttributePreferredSharedMemoryCarveout \- On devices where the L1 cache and shared memory use the same hardware resources, this sets the shared memory carveout preference, in percent of the total shared memory. See cudaDevAttrMaxSharedMemoryPerMultiprocessor. This is only a hint, and the driver can choose a different ratio if required to execute the function.
 
-  * cudaFuncAttributeRequiredClusterWidth: The required cluster width in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
+* cudaFuncAttributeRequiredClusterWidth: The required cluster width in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
 
-  * cudaFuncAttributeRequiredClusterHeight: The required cluster height in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
+* cudaFuncAttributeRequiredClusterHeight: The required cluster height in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
 
-  * cudaFuncAttributeRequiredClusterDepth: The required cluster depth in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
+* cudaFuncAttributeRequiredClusterDepth: The required cluster depth in blocks. The width, height, and depth values must either all be 0 or all be positive. The validity of the cluster dimensions is checked at launch time. If the value is set during compile time, it cannot be set at runtime. Setting it at runtime will return cudaErrorNotPermitted.
 
-  * cudaFuncAttributeNonPortableClusterSizeAllowed: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed.
+* cudaFuncAttributeNonPortableClusterSizeAllowed: Indicates whether the function can be launched with non-portable cluster size. 1 is allowed, 0 is disallowed.
 
-  * cudaFuncAttributeClusterSchedulingPolicyPreference: The block scheduling policy of a function. The value type is cudaClusterSchedulingPolicy.
+* cudaFuncAttributeClusterSchedulingPolicyPreference: The block scheduling policy of a function. The value type is cudaClusterSchedulingPolicy.
 
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
-
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 cudaLaunchKernel ( C++ API), cudaFuncSetCacheConfig ( C++ API), cudaFuncGetAttributes ( C API), cudaSetDoubleForDevice, cudaSetDoubleForHost
 
 template < class T >
 
-__host__ cudaError_t cudaFuncSetCacheConfig ( T* func, cudaFuncCache cacheConfig ) [inline]
-
+**host** cudaError_t cudaFuncSetCacheConfig ( T* func, cudaFuncCache cacheConfig ) [inline]
 
 [C++ API] Sets the preferred cache configuration for a device function
 
-######  Parameters
+###### Parameters
 
 `func`
     \- device function pointer
@@ -215,28 +201,25 @@ Launching a kernel with a different preference than the most recent preference s
 
 The supported cache configurations are:
 
-  * cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
+* cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
 
-  * cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
+* cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
 
-  * cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
-
+* cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
 
 cudaLaunchKernel ( C++ API), cudaFuncSetCacheConfig ( C API), cudaFuncGetAttributes ( C++ API), cudaSetDoubleForDevice, cudaSetDoubleForHost, cudaThreadGetCacheConfig, cudaThreadSetCacheConfig
 
 template < class T >
 
-__host__ cudaError_t cudaGetKernel ( cudaKernel_t* kernelPtr, T* func ) [inline]
-
+**host** cudaError_t cudaGetKernel ( cudaKernel_t*kernelPtr, T* func ) [inline]
 
 Get pointer to device kernel that matches entry function `entryFuncAddr`.
 
-######  Parameters
+###### Parameters
 
 `kernelPtr`
     \- Returns the device kernel
 `func`
-
 
 ###### Returns
 
@@ -252,12 +235,11 @@ cudaGetKernel ( C API)
 
 template < class T >
 
-__host__ cudaError_t cudaGetSymbolAddress ( void** devPtr, const T& symbol ) [inline]
-
+**host** cudaError_t cudaGetSymbolAddress ( void** devPtr, const T& symbol ) [inline]
 
 [C++ API] Finds the address associated with a CUDA symbol
 
-######  Parameters
+###### Parameters
 
 `devPtr`
     \- Return device pointer associated with symbol
@@ -272,19 +254,17 @@ cudaSuccess, cudaErrorInvalidSymbol, cudaErrorNoKernelImageForDevice
 
 Returns in `*devPtr` the address of symbol `symbol` on the device. `symbol` can either be a variable that resides in global or constant memory space. If `symbol` cannot be found, or if `symbol` is not declared in the global or constant memory space, `*devPtr` is unchanged and the error cudaErrorInvalidSymbol is returned.
 
-
 **See also:**
 
 cudaGetSymbolAddress ( C API), cudaGetSymbolSize ( C++ API)
 
 template < class T >
 
-__host__ cudaError_t cudaGetSymbolSize ( size_t* size, const T& symbol ) [inline]
-
+**host** cudaError_t cudaGetSymbolSize ( size_t* size, const T& symbol ) [inline]
 
 [C++ API] Finds the size of the object associated with a CUDA symbol
 
-######  Parameters
+###### Parameters
 
 `size`
     \- Size of object associated with symbol
@@ -299,19 +279,17 @@ cudaSuccess, cudaErrorInvalidSymbol, cudaErrorNoKernelImageForDevice
 
 Returns in `*size` the size of symbol `symbol`. `symbol` must be a variable that resides in global or constant memory space. If `symbol` cannot be found, or if `symbol` is not declared in global or constant memory space, `*size` is unchanged and the error cudaErrorInvalidSymbol is returned.
 
-
 **See also:**
 
 cudaGetSymbolAddress ( C++ API), cudaGetSymbolSize ( C API)
 
 template < class T >
 
-__host__ cudaError_t cudaGraphAddMemcpyNodeFromSymbol ( cudaGraphNode_t* pGraphNode, cudaGraph_t graph, const cudaGraphNode_t* pDependencies, size_t numDependencies, void* dst, const T& symbol, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
-
+**host** cudaError_t cudaGraphAddMemcpyNodeFromSymbol ( cudaGraphNode_t*pGraphNode, cudaGraph_t graph, const cudaGraphNode_t* pDependencies, size_t numDependencies, void* dst, const T& symbol, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
 
 Creates a memcpy node to copy from a symbol on the device and adds it to a graph.
 
-######  Parameters
+###### Parameters
 
 `pGraphNode`
     \- Returns newly created node
@@ -344,8 +322,7 @@ When the graph is launched, the node will copy `count` bytes from the memory are
 
 Memcpy nodes have some additional restrictions with regards to managed memory, if the system contains at least one device which has a zero value for the device attribute cudaDevAttrConcurrentManagedAccess.
 
-  * Graph objects are not threadsafe. More here.
-
+* Graph objects are not threadsafe. More here.
 
 **See also:**
 
@@ -353,12 +330,11 @@ cudaMemcpyFromSymbol, cudaGraphAddMemcpyNode, cudaGraphAddMemcpyNodeToSymbol, cu
 
 template < class T >
 
-__host__ cudaError_t cudaGraphAddMemcpyNodeToSymbol ( cudaGraphNode_t* pGraphNode, cudaGraph_t graph, const cudaGraphNode_t* pDependencies, size_t numDependencies, const T& symbol, const void* src, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
-
+**host** cudaError_t cudaGraphAddMemcpyNodeToSymbol ( cudaGraphNode_t*pGraphNode, cudaGraph_t graph, const cudaGraphNode_t* pDependencies, size_t numDependencies, const T& symbol, const void* src, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
 
 Creates a memcpy node to copy to a symbol on the device and adds it to a graph.
 
-######  Parameters
+###### Parameters
 
 `pGraphNode`
     \- Returns newly created node
@@ -391,8 +367,7 @@ When the graph is launched, the node will copy `count` bytes from the memory are
 
 Memcpy nodes have some additional restrictions with regards to managed memory, if the system contains at least one device which has a zero value for the device attribute cudaDevAttrConcurrentManagedAccess.
 
-  * Graph objects are not threadsafe. More here.
-
+* Graph objects are not threadsafe. More here.
 
 **See also:**
 
@@ -400,12 +375,11 @@ cudaMemcpyToSymbol, cudaGraphAddMemcpyNode, cudaGraphAddMemcpyNodeFromSymbol, cu
 
 template < class T >
 
-__host__ cudaError_t cudaGraphExecMemcpyNodeSetParamsFromSymbol ( cudaGraphExec_t hGraphExec, cudaGraphNode_t node, void* dst, const T& symbol, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
-
+**host** cudaError_t cudaGraphExecMemcpyNodeSetParamsFromSymbol ( cudaGraphExec_t hGraphExec, cudaGraphNode_t node, void* dst, const T& symbol, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
 
 Sets the parameters for a memcpy node in the given graphExec to copy from a symbol on the device.
 
-######  Parameters
+###### Parameters
 
 `hGraphExec`
     \- The executable graph in which to set the specified node
@@ -436,8 +410,7 @@ The modifications only affect future launches of `hGraphExec`. Already enqueued 
 
 Returns cudaErrorInvalidValue if the memory operands' mappings changed or the original memory operands are multidimensional.
 
-  * Graph objects are not threadsafe. More here.
-
+* Graph objects are not threadsafe. More here.
 
 **See also:**
 
@@ -445,12 +418,11 @@ cudaGraphAddMemcpyNode, cudaGraphAddMemcpyNodeFromSymbol, cudaGraphMemcpyNodeSet
 
 template < class T >
 
-__host__ cudaError_t cudaGraphExecMemcpyNodeSetParamsToSymbol ( cudaGraphExec_t hGraphExec, cudaGraphNode_t node, const T& symbol, const void* src, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
-
+**host** cudaError_t cudaGraphExecMemcpyNodeSetParamsToSymbol ( cudaGraphExec_t hGraphExec, cudaGraphNode_t node, const T& symbol, const void* src, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
 
 Sets the parameters for a memcpy node in the given graphExec to copy to a symbol on the device.
 
-######  Parameters
+###### Parameters
 
 `hGraphExec`
     \- The executable graph in which to set the specified node
@@ -481,19 +453,17 @@ The modifications only affect future launches of `hGraphExec`. Already enqueued 
 
 Returns cudaErrorInvalidValue if the memory operands' mappings changed or the original memory operands are multidimensional.
 
-  * Graph objects are not threadsafe. More here.
-
+* Graph objects are not threadsafe. More here.
 
 **See also:**
 
 cudaGraphAddMemcpyNode, cudaGraphAddMemcpyNodeToSymbol, cudaGraphMemcpyNodeSetParams, cudaGraphMemcpyNodeSetParamsToSymbol, cudaGraphInstantiate, cudaGraphExecMemcpyNodeSetParams, cudaGraphExecMemcpyNodeSetParamsFromSymbol, cudaGraphExecKernelNodeSetParams, cudaGraphExecMemsetNodeSetParams, cudaGraphExecHostNodeSetParams
 
-__host__ cudaError_t cudaGraphInstantiate ( cudaGraphExec_t* pGraphExec, cudaGraph_t graph, cudaGraphNode_t* pErrorNode, char* pLogBuffer, size_t bufferSize )
-
+**host** cudaError_t cudaGraphInstantiate ( cudaGraphExec_t*pGraphExec, cudaGraph_t graph, cudaGraphNode_t* pErrorNode, char* pLogBuffer, size_t bufferSize )
 
 Creates an executable graph from a graph.
 
-######  Parameters
+###### Parameters
 
 `pGraphExec`
     \- Returns instantiated graph
@@ -516,8 +486,7 @@ Instantiates `graph` as an executable graph. The graph is validated for any stru
 
 If there are any errors, diagnostic information may be returned in `pErrorNode` and `pLogBuffer`. This is the primary way to inspect instantiation errors. The output will be null terminated unless the diagnostics overflow the buffer. In this case, they will be truncated, and the last byte can be inspected to determine if truncation occurred.
 
-  * Graph objects are not threadsafe. More here.
-
+* Graph objects are not threadsafe. More here.
 
 **See also:**
 
@@ -525,12 +494,11 @@ cudaGraphInstantiateWithFlags, cudaGraphCreate, cudaGraphUpload, cudaGraphLaunch
 
 template < class T >
 
-__host__ cudaError_t cudaGraphMemcpyNodeSetParamsFromSymbol ( cudaGraphNode_t node, void* dst, const T& symbol, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
-
+**host** cudaError_t cudaGraphMemcpyNodeSetParamsFromSymbol ( cudaGraphNode_t node, void* dst, const T& symbol, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
 
 Sets a memcpy node's parameters to copy from a symbol on the device.
 
-######  Parameters
+###### Parameters
 
 `node`
     \- Node to set the parameters for
@@ -555,8 +523,7 @@ Sets the parameters of memcpy node `node` to the copy described by the provided 
 
 When the graph is launched, the node will copy `count` bytes from the memory area pointed to by `offset` bytes from the start of symbol `symbol` to the memory area pointed to by `dst`. The memory areas may not overlap. `symbol` is a variable that resides in global or constant memory space. `kind` can be either cudaMemcpyDeviceToHost, cudaMemcpyDeviceToDevice, or cudaMemcpyDefault. Passing cudaMemcpyDefault is recommended, in which case the type of transfer is inferred from the pointer values. However, cudaMemcpyDefault is only allowed on systems that support unified virtual addressing.
 
-  * Graph objects are not threadsafe. More here.
-
+* Graph objects are not threadsafe. More here.
 
 **See also:**
 
@@ -564,12 +531,11 @@ cudaMemcpyFromSymbol, cudaGraphMemcpyNodeSetParams, cudaGraphMemcpyNodeSetParams
 
 template < class T >
 
-__host__ cudaError_t cudaGraphMemcpyNodeSetParamsToSymbol ( cudaGraphNode_t node, const T& symbol, const void* src, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
-
+**host** cudaError_t cudaGraphMemcpyNodeSetParamsToSymbol ( cudaGraphNode_t node, const T& symbol, const void* src, size_t count, size_t offset, cudaMemcpyKind kind ) [inline]
 
 Sets a memcpy node's parameters to copy to a symbol on the device.
 
-######  Parameters
+###### Parameters
 
 `node`
     \- Node to set the parameters for
@@ -594,8 +560,7 @@ Sets the parameters of memcpy node `node` to the copy described by the provided 
 
 When the graph is launched, the node will copy `count` bytes from the memory area pointed to by `src` to the memory area pointed to by `offset` bytes from the start of symbol `symbol`. The memory areas may not overlap. `symbol` is a variable that resides in global or constant memory space. `kind` can be either cudaMemcpyHostToDevice, cudaMemcpyDeviceToDevice, or cudaMemcpyDefault. Passing cudaMemcpyDefault is recommended, in which case the type of transfer is inferred from the pointer values. However, cudaMemcpyDefault is only allowed on systems that support unified virtual addressing.
 
-  * Graph objects are not threadsafe. More here.
-
+* Graph objects are not threadsafe. More here.
 
 **See also:**
 
@@ -603,19 +568,18 @@ cudaMemcpyToSymbol, cudaGraphMemcpyNodeSetParams, cudaGraphMemcpyNodeSetParamsFr
 
 template < class T >
 
-__host__ cudaError_t cudaLaunchCooperativeKernel ( T* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem = 0, cudaStream_t stream = 0 ) [inline]
-
+**host** cudaError_t cudaLaunchCooperativeKernel ( T* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem = 0, cudaStream_t stream = 0 ) [inline]
 
 Launches a device function.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- Device function symbol
 `gridDim`
-    \- Grid dimentions
+    \- Grid dimensions
 `blockDim`
-    \- Block dimentions
+    \- Block dimensions
 `args`
     \- Arguments
 `sharedMem`
@@ -643,34 +607,32 @@ If the kernel has N parameters the `args` should point to array of N pointers. E
 
 `stream` specifies a stream the invocation is associated to.
 
-  *   * This function exhibits asynchronous behavior for most use cases.
+* * This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 cudaLaunchCooperativeKernel ( C API)
 
 template < class T >
 
-__host__ cudaError_t cudaLaunchKernel ( T* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem = 0, cudaStream_t stream = 0 ) [inline]
-
+**host** cudaError_t cudaLaunchKernel ( T* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem = 0, cudaStream_t stream = 0 ) [inline]
 
 Launches a device function.
 
-######  Parameters
+###### Parameters
 
 `func`
     \- Device function symbol
 `gridDim`
-    \- Grid dimentions
+    \- Grid dimensions
 `blockDim`
-    \- Block dimentions
+    \- Block dimensions
 `args`
     \- Arguments
 `sharedMem`
@@ -692,27 +654,25 @@ If the kernel has N parameters the `args` should point to array of N pointers. E
 
 `stream` specifies a stream the invocation is associated to.
 
-  *   * This function exhibits asynchronous behavior for most use cases.
+* * This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 cudaLaunchKernel ( C API)
 
 template < typename... ActTypes >
 
-__host__ cudaError_t cudaLaunchKernelEx ( const cudaLaunchConfig_t* config, const cudaKernel_t kernel, ActTypes &&... args ) [inline]
-
+**host** cudaError_t cudaLaunchKernelEx ( const cudaLaunchConfig_t* config, const cudaKernel_t kernel, ActTypes &&... args ) [inline]
 
 Launches a CUDA function with launch-time configuration.
 
-######  Parameters
+###### Parameters
 
 `config`
     \- Launch configuration
@@ -741,8 +701,7 @@ The kernel arguments should be passed as arguments to this function via the `arg
 
 The C API version of this function, `cudaLaunchKernelExC`, is also available for pre-C++11 compilers and for use cases where the ability to pass kernel parameters via void* array is preferable.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 **See also:**
 
@@ -750,12 +709,11 @@ cudaLaunchKernelEx ( C API), cuLaunchKernelEx
 
 template < typename... ExpTypes, typename... ActTypes >
 
-__host__ cudaError_t cudaLaunchKernelEx ( const cudaLaunchConfig_t* config, void(*)(ExpTypes...) kernel, ActTypes &&... args ) [inline]
-
+**host** cudaError_t cudaLaunchKernelEx ( const cudaLaunchConfig_t*config, void(*)(ExpTypes...) kernel, ActTypes &&... args ) [inline]
 
 Launches a CUDA function with launch-time configuration.
 
-######  Parameters
+###### Parameters
 
 `config`
     \- Launch configuration
@@ -784,12 +742,11 @@ The kernel arguments should be passed as arguments to this function via the `arg
 
 The C API version of this function, `cudaLaunchKernelExC`, is also available for pre-C++11 compilers and for use cases where the ability to pass kernel parameters via void* array is preferable.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
@@ -797,12 +754,11 @@ cudaLaunchKernelEx ( C API), cuLaunchKernelEx
 
 template < class T >
 
-__host__ cudaError_t cudaLibraryGetGlobal ( T** dptr, size_t* bytes, cudaLibrary_t library, const char* name ) [inline]
-
+**host** cudaError_t cudaLibraryGetGlobal ( T** dptr, size_t*bytes, cudaLibrary_t library, const char* name ) [inline]
 
 Returns a global device pointer.
 
-######  Parameters
+###### Parameters
 
 `dptr`
     \- Returned global device pointer for the requested library
@@ -827,12 +783,11 @@ cudaLibraryLoadData, cudaLibraryLoadFromFile, cudaLibraryUnload, cudaLibraryGetM
 
 template < class T >
 
-__host__ cudaError_t cudaLibraryGetManaged ( T** dptr, size_t* bytes, cudaLibrary_t library, const char* name ) [inline]
-
+**host** cudaError_t cudaLibraryGetManaged ( T** dptr, size_t*bytes, cudaLibrary_t library, const char* name ) [inline]
 
 Returns a pointer to managed memory.
 
-######  Parameters
+###### Parameters
 
 `dptr`
     \- Returned pointer to the managed memory
@@ -857,12 +812,11 @@ cudaLibraryLoadData, cudaLibraryLoadFromFile, cudaLibraryUnload, cudaLibraryGetG
 
 template < class T >
 
-__host__ cudaError_t cudaLibraryGetUnifiedFunction ( T** fptr, cudaLibrary_t library, const char* symbol ) [inline]
-
+**host** cudaError_t cudaLibraryGetUnifiedFunction ( T** fptr, cudaLibrary_t library, const char* symbol ) [inline]
 
 Returns a pointer to a unified function.
 
-######  Parameters
+###### Parameters
 
 `fptr`
     \- Returned pointer to a unified function
@@ -883,8 +837,7 @@ Returns in `*fptr` the function pointer to a unified function denoted by `symbol
 
 cudaLibraryLoadData, cudaLibraryLoadFromFile, cudaLibraryUnload
 
-__host__ cudaError_t cudaMallocAsync ( void** ptr, size_t size, cudaMemPool_t memPool, cudaStream_t stream )
-
+**host** cudaError_t cudaMallocAsync ( void** ptr, size_t size, cudaMemPool_t memPool, cudaStream_t stream )
 
 Allocate from a pool.
 
@@ -896,12 +849,11 @@ This is an alternate spelling for cudaMallocFromPoolAsync made available through
 
 cudaMallocFromPoolAsync, cudaMallocAsync ( C API)
 
-__host__ cudaError_t cudaMallocHost ( void** ptr, size_t size, unsigned int  flags )
-
+**host** cudaError_t cudaMallocHost ( void** ptr, size_t size, unsigned int  flags )
 
 [C++ API] Allocates page-locked memory on the host
 
-######  Parameters
+###### Parameters
 
 `ptr`
     \- Device pointer to allocated memory
@@ -920,14 +872,13 @@ Allocates `size` bytes of host memory that is page-locked and accessible to the 
 
 The `flags` parameter enables different options to be specified that affect the allocation, as follows.
 
-  * cudaHostAllocDefault: This flag's value is defined to be 0.
+* cudaHostAllocDefault: This flag's value is defined to be 0.
 
-  * cudaHostAllocPortable: The memory returned by this call will be considered as pinned memory by all CUDA contexts, not just the one that performed the allocation.
+* cudaHostAllocPortable: The memory returned by this call will be considered as pinned memory by all CUDA contexts, not just the one that performed the allocation.
 
-  * cudaHostAllocMapped: Maps the allocation into the CUDA address space. The device pointer to the memory may be obtained by calling cudaHostGetDevicePointer().
+* cudaHostAllocMapped: Maps the allocation into the CUDA address space. The device pointer to the memory may be obtained by calling cudaHostGetDevicePointer().
 
-  * cudaHostAllocWriteCombined: Allocates the memory as write-combined (WC). WC memory can be transferred across the PCI Express bus more quickly on some system configurations, but cannot be read efficiently by most CPUs. WC memory is a good option for buffers that will be written by the CPU and read by the device via mapped pinned memory or host->device transfers.
-
+* cudaHostAllocWriteCombined: Allocates the memory as write-combined (WC). WC memory can be transferred across the PCI Express bus more quickly on some system configurations, but cannot be read efficiently by most CPUs. WC memory is a good option for buffers that will be written by the CPU and read by the device via mapped pinned memory or host->device transfers.
 
 All of these flags are orthogonal to one another: a developer may allocate memory that is portable, mapped and/or write-combined with no restrictions.
 
@@ -937,19 +888,17 @@ The cudaHostAllocMapped flag may be specified on CUDA contexts for devices that 
 
 Memory allocated by this function must be freed with cudaFreeHost().
 
-
 **See also:**
 
 cudaSetDeviceFlags, cudaMallocHost ( C API), cudaFreeHost, cudaHostAlloc
 
 template < class T >
 
-__host__ cudaError_t cudaMallocManaged ( T** devPtr, size_t size, unsigned int  flags = cudaMemAttachGlobal ) [inline]
-
+**host** cudaError_t cudaMallocManaged ( T** devPtr, size_t size, unsigned int  flags = cudaMemAttachGlobal ) [inline]
 
 Allocates memory that will be automatically managed by the Unified Memory system.
 
-######  Parameters
+###### Parameters
 
 `devPtr`
     \- Pointer to allocated device memory
@@ -968,7 +917,7 @@ Allocates `size` bytes of managed memory on the device and returns in `*devPtr` 
 
 `flags` specifies the default stream association for this allocation. `flags` must be one of cudaMemAttachGlobal or cudaMemAttachHost. The default value for `flags` is cudaMemAttachGlobal. If cudaMemAttachGlobal is specified, then this memory is accessible from any stream on any device. If cudaMemAttachHost is specified, then the allocation should not be accessed from devices that have a zero value for the device attribute cudaDevAttrConcurrentManagedAccess; an explicit call to cudaStreamAttachMemAsync will be required to enable access on such devices.
 
-If the association is later changed via cudaStreamAttachMemAsync to a single stream, the default association, as specifed during cudaMallocManaged, is restored when that stream is destroyed. For __managed__ variables, the default association is always cudaMemAttachGlobal. Note that destroying a stream is an asynchronous operation, and as a result, the change to default association won't happen until all work in the stream has completed.
+If the association is later changed via cudaStreamAttachMemAsync to a single stream, the default association, as specified during cudaMallocManaged, is restored when that stream is destroyed. For **managed** variables, the default association is always cudaMemAttachGlobal. Note that destroying a stream is an asynchronous operation, and as a result, the change to default association won't happen until all work in the stream has completed.
 
 Memory allocated with cudaMallocManaged should be released with cudaFree.
 
@@ -980,15 +929,13 @@ In a multi-GPU system where all of the GPUs have a zero value for the device att
 
 In a multi-GPU system where not all GPUs have peer-to-peer support with each other and where the value of the device attribute cudaDevAttrConcurrentManagedAccess is zero for at least one of those GPUs, the location chosen for physical storage of managed memory is system-dependent.
 
-  * On Linux, the location chosen will be device memory as long as the current set of active contexts are on devices that either have peer-to-peer support with each other or have a non-zero value for the device attribute cudaDevAttrConcurrentManagedAccess. If there is an active context on a GPU that does not have a non-zero value for that device attribute and it does not have peer-to-peer support with the other devices that have active contexts on them, then the location for physical storage will be 'zero-copy' or host memory. Note that this means that managed memory that is located in device memory is migrated to host memory if a new context is created on a GPU that doesn't have a non-zero value for the device attribute and does not support peer-to-peer with at least one of the other devices that has an active context. This in turn implies that context creation may fail if there is insufficient host memory to migrate all managed allocations.
+* On Linux, the location chosen will be device memory as long as the current set of active contexts are on devices that either have peer-to-peer support with each other or have a non-zero value for the device attribute cudaDevAttrConcurrentManagedAccess. If there is an active context on a GPU that does not have a non-zero value for that device attribute and it does not have peer-to-peer support with the other devices that have active contexts on them, then the location for physical storage will be 'zero-copy' or host memory. Note that this means that managed memory that is located in device memory is migrated to host memory if a new context is created on a GPU that doesn't have a non-zero value for the device attribute and does not support peer-to-peer with at least one of the other devices that has an active context. This in turn implies that context creation may fail if there is insufficient host memory to migrate all managed allocations.
 
-  * On Windows, the physical storage is always created in 'zero-copy' or host memory. All GPUs will reference the data at reduced bandwidth over the PCIe bus. In these circumstances, use of the environment variable CUDA_VISIBLE_DEVICES is recommended to restrict CUDA to only use those GPUs that have peer-to-peer support. Alternatively, users can also set CUDA_MANAGED_FORCE_DEVICE_ALLOC to a non-zero value to force the driver to always use device memory for physical storage. When this environment variable is set to a non-zero value, all devices used in that process that support managed memory have to be peer-to-peer compatible with each other. The error cudaErrorInvalidDevice will be returned if a device that supports managed memory is used and it is not peer-to-peer compatible with any of the other managed memory supporting devices that were previously used in that process, even if cudaDeviceReset has been called on those devices. These environment variables are described in the CUDA programming guide under the "CUDA environment variables" section.
+* On Windows, the physical storage is always created in 'zero-copy' or host memory. All GPUs will reference the data at reduced bandwidth over the PCIe bus. In these circumstances, use of the environment variable CUDA_VISIBLE_DEVICES is recommended to restrict CUDA to only use those GPUs that have peer-to-peer support. Alternatively, users can also set CUDA_MANAGED_FORCE_DEVICE_ALLOC to a non-zero value to force the driver to always use device memory for physical storage. When this environment variable is set to a non-zero value, all devices used in that process that support managed memory have to be peer-to-peer compatible with each other. The error cudaErrorInvalidDevice will be returned if a device that supports managed memory is used and it is not peer-to-peer compatible with any of the other managed memory supporting devices that were previously used in that process, even if cudaDeviceReset has been called on those devices. These environment variables are described in the CUDA programming guide under the "CUDA environment variables" section.
 
-  * On ARM, managed memory is not available on discrete gpu with Drive PX-2.
+* On ARM, managed memory is not available on discrete gpu with Drive PX-2.
 
-
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
@@ -996,8 +943,7 @@ cudaMallocPitch, cudaFree, cudaMallocArray, cudaFreeArray, cudaMalloc3D, cudaMal
 
 template < typename T >
 
-__host__ cudaError_t cudaMemDiscardAndPrefetchBatchAsync ( T** dptrs, size_t* sizes, size_t count, cudaMemLocation prefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
-
+**host** cudaError_t cudaMemDiscardAndPrefetchBatchAsync ( T** dptrs, size_t* sizes, size_t count, cudaMemLocation prefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
 
 Performs a batch of memory discard and prefetches asynchronously.
 
@@ -1013,8 +959,7 @@ cudaMemDiscardAndPrefetchBatchAsync
 
 template < typename T >
 
-__host__ cudaError_t cudaMemDiscardAndPrefetchBatchAsync ( T** dptrs, size_t* sizes, size_t count, cudaMemLocation* prefetchLocs, size_t* prefetchLocIdxs, size_t numPrefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
-
+**host** cudaError_t cudaMemDiscardAndPrefetchBatchAsync ( T** dptrs, size_t*sizes, size_t count, cudaMemLocation* prefetchLocs, size_t* prefetchLocIdxs, size_t numPrefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
 
 Performs a batch of memory discard and prefetches asynchronously.
 
@@ -1028,8 +973,7 @@ cudaMemDiscardAndPrefetchBatchAsync
 
 template < typename T >
 
-__host__ cudaError_t cudaMemPrefetchBatchAsync ( T** dptrs, size_t* sizes, size_t count, cudaMemLocation prefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
-
+**host** cudaError_t cudaMemPrefetchBatchAsync ( T** dptrs, size_t* sizes, size_t count, cudaMemLocation prefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
 
 Performs a batch of memory prefetches asynchronously.
 
@@ -1045,8 +989,7 @@ cudaMemPrefetchBatchAsync
 
 template < typename T >
 
-__host__ cudaError_t cudaMemPrefetchBatchAsync ( T** dptrs, size_t* sizes, size_t count, cudaMemLocation* prefetchLocs, size_t* prefetchLocIdxs, size_t numPrefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
-
+**host** cudaError_t cudaMemPrefetchBatchAsync ( T** dptrs, size_t*sizes, size_t count, cudaMemLocation* prefetchLocs, size_t* prefetchLocIdxs, size_t numPrefetchLocs, unsigned long long flags, cudaStream_t stream ) [inline]
 
 Performs a batch of memory prefetches asynchronously.
 
@@ -1060,8 +1003,7 @@ cudaMemPrefetchBatchAsync
 
 template < typename T, typename U >
 
-__host__ cudaError_t cudaMemcpyBatchAsync ( const T** dsts, const U** srcs, const size_t* sizes, size_t count, cudaMemcpyAttributes attr, cudaStream_t hStream ) [inline]
-
+**host** cudaError_t cudaMemcpyBatchAsync ( const T**dsts, const U** srcs, const size_t* sizes, size_t count, cudaMemcpyAttributes attr, cudaStream_t hStream ) [inline]
 
 Performs a batch of memory copies asynchronously.
 
@@ -1077,8 +1019,7 @@ cudaMemcpyBatchAsync
 
 template < typename T, typename U >
 
-__host__ cudaError_t cudaMemcpyBatchAsync ( const T** dsts, const U** srcs, const size_t* sizes, size_t count, cudaMemcpyAttributes* attrs, size_t* attrsIdxs, size_t numAttrs, cudaStream_t hStream ) [inline]
-
+**host** cudaError_t cudaMemcpyBatchAsync ( const T**dsts, const U** srcs, const size_t*sizes, size_t count, cudaMemcpyAttributes* attrs, size_t* attrsIdxs, size_t numAttrs, cudaStream_t hStream ) [inline]
 
 Performs a batch of memory copies asynchronously.
 
@@ -1092,12 +1033,11 @@ cudaMemcpyBatchAsync
 
 template < class T >
 
-__host__ cudaError_t cudaMemcpyFromSymbol ( void* dst, const T& symbol, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyDeviceToHost ) [inline]
-
+**host** cudaError_t cudaMemcpyFromSymbol ( void* dst, const T& symbol, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyDeviceToHost ) [inline]
 
 [C++ API] Copies data from the given symbol on the device
 
-######  Parameters
+###### Parameters
 
 `dst`
     \- Destination memory address
@@ -1118,12 +1058,11 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorInvalidSymbol, cudaErrorInvalidMemc
 
 Copies `count` bytes from the memory area `offset` bytes from the start of symbol `symbol` to the memory area pointed to by `dst`. The memory areas may not overlap. `symbol` is a variable that resides in global or constant memory space. `kind` can be either cudaMemcpyDeviceToHost or cudaMemcpyDeviceToDevice.
 
-  *   * This function exhibits synchronous behavior for most use cases.
+* * This function exhibits synchronous behavior for most use cases.
 
-  * Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
+* Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
@@ -1131,12 +1070,11 @@ cudaMemcpy, cudaMemcpy2D, cudaMemcpy2DToArray, cudaMemcpy2DFromArray, cudaMemcpy
 
 template < class T >
 
-__host__ cudaError_t cudaMemcpyFromSymbolAsync ( void* dst, const T& symbol, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyDeviceToHost, cudaStream_t stream = 0 ) [inline]
-
+**host** cudaError_t cudaMemcpyFromSymbolAsync ( void* dst, const T& symbol, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyDeviceToHost, cudaStream_t stream = 0 ) [inline]
 
 [C++ API] Copies data from the given symbol on the device
 
-######  Parameters
+###### Parameters
 
 `dst`
     \- Destination memory address
@@ -1161,12 +1099,11 @@ Copies `count` bytes from the memory area `offset` bytes from the start of symbo
 
 cudaMemcpyFromSymbolAsync() is asynchronous with respect to the host, so the call may return before the copy is complete. The copy can optionally be associated to a stream by passing a non-zero `stream` argument. If `kind` is cudaMemcpyDeviceToHost and `stream` is non-zero, the copy may overlap with operations in other streams.
 
-  *   * This function exhibits asynchronous behavior for most use cases.
+* * This function exhibits asynchronous behavior for most use cases.
 
-  * Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
+* Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
@@ -1174,12 +1111,11 @@ cudaMemcpy, cudaMemcpy2D, cudaMemcpy2DToArray, cudaMemcpy2DFromArray, cudaMemcpy
 
 template < class T >
 
-__host__ cudaError_t cudaMemcpyToSymbol ( const T& symbol, const void* src, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyHostToDevice ) [inline]
-
+**host** cudaError_t cudaMemcpyToSymbol ( const T& symbol, const void* src, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyHostToDevice ) [inline]
 
 [C++ API] Copies data to the given symbol on the device
 
-######  Parameters
+###### Parameters
 
 `symbol`
     \- Device symbol reference
@@ -1200,12 +1136,11 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorInvalidSymbol, cudaErrorInvalidMemc
 
 Copies `count` bytes from the memory area pointed to by `src` to the memory area `offset` bytes from the start of symbol `symbol`. The memory areas may not overlap. `symbol` is a variable that resides in global or constant memory space. `kind` can be either cudaMemcpyHostToDevice or cudaMemcpyDeviceToDevice.
 
-  *   * This function exhibits synchronous behavior for most use cases.
+* * This function exhibits synchronous behavior for most use cases.
 
-  * Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
+* Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
@@ -1213,12 +1148,11 @@ cudaMemcpy, cudaMemcpy2D, cudaMemcpy2DToArray, cudaMemcpy2DFromArray, cudaMemcpy
 
 template < class T >
 
-__host__ cudaError_t cudaMemcpyToSymbolAsync ( const T& symbol, const void* src, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyHostToDevice, cudaStream_t stream = 0 ) [inline]
-
+**host** cudaError_t cudaMemcpyToSymbolAsync ( const T& symbol, const void* src, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyHostToDevice, cudaStream_t stream = 0 ) [inline]
 
 [C++ API] Copies data to the given symbol on the device
 
-######  Parameters
+###### Parameters
 
 `symbol`
     \- Device symbol reference
@@ -1243,12 +1177,11 @@ Copies `count` bytes from the memory area pointed to by `src` to the memory area
 
 cudaMemcpyToSymbolAsync() is asynchronous with respect to the host, so the call may return before the copy is complete. The copy can optionally be associated to a stream by passing a non-zero `stream` argument. If `kind` is cudaMemcpyHostToDevice and `stream` is non-zero, the copy may overlap with operations in other streams.
 
-  *   * This function exhibits asynchronous behavior for most use cases.
+* * This function exhibits asynchronous behavior for most use cases.
 
-  * Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
+* Use of a string naming a variable as the `symbol` parameter was deprecated in CUDA 4.1 and removed in CUDA 5.0.
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
@@ -1256,12 +1189,11 @@ cudaMemcpy, cudaMemcpy2D, cudaMemcpy2DToArray, cudaMemcpy2DFromArray, cudaMemcpy
 
 template < class T >
 
-__host__ cudaError_t cudaOccupancyAvailableDynamicSMemPerBlock ( size_t* dynamicSmemSize, T* func, int  numBlocks, int  blockSize ) [inline]
-
+**host** cudaError_t cudaOccupancyAvailableDynamicSMemPerBlock ( size_t*dynamicSmemSize, T* func, int  numBlocks, int  blockSize ) [inline]
 
 Returns dynamic shared memory available per block when launching `numBlocks` blocks on SM.
 
-######  Parameters
+###### Parameters
 
 `dynamicSmemSize`
     \- Returned maximum dynamic shared memory
@@ -1280,10 +1212,9 @@ cudaSuccess, cudaErrorInvalidDevice, cudaErrorInvalidDeviceFunction, cudaErrorIn
 
 Returns in `*dynamicSmemSize` the maximum size of dynamic shared memory to allow `numBlocks` blocks per SM.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
@@ -1301,17 +1232,16 @@ cudaOccupancyMaxPotentialBlockSizeVariableSMemWithFlags
 
 template < class T >
 
-__host__ cudaError_t cudaOccupancyMaxActiveBlocksPerMultiprocessor ( int* numBlocks, T func, int  blockSize, size_t dynamicSMemSize ) [inline]
-
+**host** cudaError_t cudaOccupancyMaxActiveBlocksPerMultiprocessor ( int* numBlocks, T func, int  blockSize, size_t dynamicSMemSize ) [inline]
 
 Returns occupancy for a device function.
 
-######  Parameters
+###### Parameters
 
 `numBlocks`
     \- Returned occupancy
 `func`
-    \- Kernel function for which occupancy is calulated
+    \- Kernel function for which occupancy is calculated
 `blockSize`
     \- Block size the kernel is intended to be launched with
 `dynamicSMemSize`
@@ -1325,10 +1255,9 @@ cudaSuccess, cudaErrorInvalidDevice, cudaErrorInvalidDeviceFunction, cudaErrorIn
 
 Returns in `*numBlocks` the maximum number of active blocks per streaming multiprocessor for the device function.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
@@ -1346,17 +1275,16 @@ cudaOccupancyAvailableDynamicSMemPerBlock
 
 template < class T >
 
-__host__ cudaError_t cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags ( int* numBlocks, T func, int  blockSize, size_t dynamicSMemSize, unsigned int  flags ) [inline]
-
+**host** cudaError_t cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags ( int* numBlocks, T func, int  blockSize, size_t dynamicSMemSize, unsigned int  flags ) [inline]
 
 Returns occupancy for a device function with the specified flags.
 
-######  Parameters
+###### Parameters
 
 `numBlocks`
     \- Returned occupancy
 `func`
-    \- Kernel function for which occupancy is calulated
+    \- Kernel function for which occupancy is calculated
 `blockSize`
     \- Block size the kernel is intended to be launched with
 `dynamicSMemSize`
@@ -1374,16 +1302,13 @@ Returns in `*numBlocks` the maximum number of active blocks per streaming multip
 
 The `flags` parameter controls how special cases are handled. Valid flags include:
 
-  * cudaOccupancyDefault: keeps the default behavior as cudaOccupancyMaxActiveBlocksPerMultiprocessor
+* cudaOccupancyDefault: keeps the default behavior as cudaOccupancyMaxActiveBlocksPerMultiprocessor
 
+* cudaOccupancyDisableCachingOverride: suppresses the default behavior on platform where global caching affects occupancy. On such platforms, if caching is enabled, but per-block SM resource usage would result in zero occupancy, the occupancy calculator will calculate the occupancy as if caching is disabled. Setting this flag makes the occupancy calculator to return 0 in such cases. More information can be found about this feature in the "Unified L1/Texture Cache" section of the Maxwell tuning guide.
 
-  * cudaOccupancyDisableCachingOverride: suppresses the default behavior on platform where global caching affects occupancy. On such platforms, if caching is enabled, but per-block SM resource usage would result in zero occupancy, the occupancy calculator will calculate the occupancy as if caching is disabled. Setting this flag makes the occupancy calculator to return 0 in such cases. More information can be found about this feature in the "Unified L1/Texture Cache" section of the Maxwell tuning guide.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
-
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
@@ -1401,12 +1326,11 @@ cudaOccupancyAvailableDynamicSMemPerBlock
 
 template < class T >
 
-__host__ cudaError_t cudaOccupancyMaxActiveClusters ( int* numClusters, T* func, const cudaLaunchConfig_t* config ) [inline]
-
+**host** cudaError_t cudaOccupancyMaxActiveClusters ( int*numClusters, T* func, const cudaLaunchConfig_t* config ) [inline]
 
 Given the kernel function (`func`) and launch configuration (`config`), return the maximum number of clusters that could co-exist on the target device in `*numClusters`.
 
-######  Parameters
+###### Parameters
 
 `numClusters`
     \- Returned maximum number of clusters that could co-exist on the target device
@@ -1425,10 +1349,9 @@ If the function has required cluster size already set (see cudaFuncGetAttributes
 
 Note that various attributes of the kernel function may affect occupancy calculation. Runtime environment may affect how the hardware schedules the clusters, so the calculated occupancy is not guaranteed to be achievable.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
@@ -1436,12 +1359,11 @@ cudaFuncGetAttributes
 
 template < class T >
 
-__host__ cudaError_t cudaOccupancyMaxPotentialBlockSize ( int* minGridSize, int* blockSize, T func, size_t dynamicSMemSize = 0, int  blockSizeLimit = 0 ) [inline]
-
+**host** cudaError_t cudaOccupancyMaxPotentialBlockSize ( int*minGridSize, int* blockSize, T func, size_t dynamicSMemSize = 0, int  blockSizeLimit = 0 ) [inline]
 
 Returns grid and block size that achieves maximum potential occupancy for a device function.
 
-######  Parameters
+###### Parameters
 
 `minGridSize`
     \- Returned minimum grid size needed to achieve the best potential occupancy
@@ -1468,7 +1390,6 @@ Use
 
 cudaOccupancyMaxPotentialBlockSizeVariableSMem if the amount of per-block dynamic shared memory changes with different block sizes.
 
-
 **See also:**
 
 cudaOccupancyMaxPotentialBlockSizeWithFlags
@@ -1485,12 +1406,11 @@ cudaOccupancyAvailableDynamicSMemPerBlock
 
 template < typename UnaryFunction, class T >
 
-__host__ cudaError_t cudaOccupancyMaxPotentialBlockSizeVariableSMem ( int* minGridSize, int* blockSize, T func, UnaryFunction blockSizeToDynamicSMemSize, int  blockSizeLimit = 0 ) [inline]
-
+**host** cudaError_t cudaOccupancyMaxPotentialBlockSizeVariableSMem ( int*minGridSize, int* blockSize, T func, UnaryFunction blockSizeToDynamicSMemSize, int  blockSizeLimit = 0 ) [inline]
 
 Returns grid and block size that achieves maximum potential occupancy for a device function.
 
-######  Parameters
+###### Parameters
 
 `minGridSize`
     \- Returned minimum grid size needed to achieve the best potential occupancy
@@ -1511,7 +1431,6 @@ cudaSuccess, cudaErrorInvalidDevice, cudaErrorInvalidDeviceFunction, cudaErrorIn
 
 Returns in `*minGridSize` and `*blocksize` a suggested grid / block size pair that achieves the best potential occupancy (i.e. the maximum number of active warps with the smallest number of blocks).
 
-
 **See also:**
 
 cudaOccupancyMaxPotentialBlockSizeVariableSMemWithFlags
@@ -1528,12 +1447,11 @@ cudaOccupancyAvailableDynamicSMemPerBlock
 
 template < typename UnaryFunction, class T >
 
-__host__ cudaError_t cudaOccupancyMaxPotentialBlockSizeVariableSMemWithFlags ( int* minGridSize, int* blockSize, T func, UnaryFunction blockSizeToDynamicSMemSize, int  blockSizeLimit = 0, unsigned int  flags = 0 ) [inline]
-
+**host** cudaError_t cudaOccupancyMaxPotentialBlockSizeVariableSMemWithFlags ( int*minGridSize, int* blockSize, T func, UnaryFunction blockSizeToDynamicSMemSize, int  blockSizeLimit = 0, unsigned int  flags = 0 ) [inline]
 
 Returns grid and block size that achieves maximum potential occupancy for a device function.
 
-######  Parameters
+###### Parameters
 
 `minGridSize`
     \- Returned minimum grid size needed to achieve the best potential occupancy
@@ -1558,11 +1476,9 @@ Returns in `*minGridSize` and `*blocksize` a suggested grid / block size pair th
 
 The `flags` parameter controls how special cases are handled. Valid flags include:
 
-  * cudaOccupancyDefault: keeps the default behavior as cudaOccupancyMaxPotentialBlockSizeVariableSMemWithFlags
+* cudaOccupancyDefault: keeps the default behavior as cudaOccupancyMaxPotentialBlockSizeVariableSMemWithFlags
 
-
-  * cudaOccupancyDisableCachingOverride: This flag suppresses the default behavior on platform where global caching affects occupancy. On such platforms, if caching is enabled, but per-block SM resource usage would result in zero occupancy, the occupancy calculator will calculate the occupancy as if caching is disabled. Setting this flag makes the occupancy calculator to return 0 in such cases. More information can be found about this feature in the "Unified L1/Texture Cache" section of the Maxwell tuning guide.
-
+* cudaOccupancyDisableCachingOverride: This flag suppresses the default behavior on platform where global caching affects occupancy. On such platforms, if caching is enabled, but per-block SM resource usage would result in zero occupancy, the occupancy calculator will calculate the occupancy as if caching is disabled. Setting this flag makes the occupancy calculator to return 0 in such cases. More information can be found about this feature in the "Unified L1/Texture Cache" section of the Maxwell tuning guide.
 
 **See also:**
 
@@ -1580,12 +1496,11 @@ cudaOccupancyAvailableDynamicSMemPerBlock
 
 template < class T >
 
-__host__ cudaError_t cudaOccupancyMaxPotentialBlockSizeWithFlags ( int* minGridSize, int* blockSize, T func, size_t dynamicSMemSize = 0, int  blockSizeLimit = 0, unsigned int  flags = 0 ) [inline]
+**host** cudaError_t cudaOccupancyMaxPotentialBlockSizeWithFlags ( int*minGridSize, int* blockSize, T func, size_t dynamicSMemSize = 0, int  blockSizeLimit = 0, unsigned int  flags = 0 ) [inline]
 
+Returns grid and block size that achieved maximum potential occupancy for a device function with the specified flags.
 
-Returns grid and block size that achived maximum potential occupancy for a device function with the specified flags.
-
-######  Parameters
+###### Parameters
 
 `minGridSize`
     \- Returned minimum grid size needed to achieve the best potential occupancy
@@ -1610,18 +1525,15 @@ Returns in `*minGridSize` and `*blocksize` a suggested grid / block size pair th
 
 The `flags` parameter controls how special cases are handle. Valid flags include:
 
-  * cudaOccupancyDefault: keeps the default behavior as cudaOccupancyMaxPotentialBlockSize
+* cudaOccupancyDefault: keeps the default behavior as cudaOccupancyMaxPotentialBlockSize
 
-
-  * cudaOccupancyDisableCachingOverride: This flag suppresses the default behavior on platform where global caching affects occupancy. On such platforms, if caching is enabled, but per-block SM resource usage would result in zero occupancy, the occupancy calculator will calculate the occupancy as if caching is disabled. Setting this flag makes the occupancy calculator to return 0 in such cases. More information can be found about this feature in the "Unified L1/Texture Cache" section of the Maxwell tuning guide.
-
+* cudaOccupancyDisableCachingOverride: This flag suppresses the default behavior on platform where global caching affects occupancy. On such platforms, if caching is enabled, but per-block SM resource usage would result in zero occupancy, the occupancy calculator will calculate the occupancy as if caching is disabled. Setting this flag makes the occupancy calculator to return 0 in such cases. More information can be found about this feature in the "Unified L1/Texture Cache" section of the Maxwell tuning guide.
 
 Use
 
 **See also:**
 
 cudaOccupancyMaxPotentialBlockSizeVariableSMem if the amount of per-block dynamic shared memory changes with different block sizes.
-
 
 **See also:**
 
@@ -1639,12 +1551,11 @@ cudaOccupancyAvailableDynamicSMemPerBlock
 
 template < class T >
 
-__host__ cudaError_t cudaOccupancyMaxPotentialClusterSize ( int* clusterSize, T* func, const cudaLaunchConfig_t* config ) [inline]
-
+**host** cudaError_t cudaOccupancyMaxPotentialClusterSize ( int*clusterSize, T* func, const cudaLaunchConfig_t* config ) [inline]
 
 Given the kernel function (`func`) and launch configuration (`config`), return the maximum cluster size in `*clusterSize`.
 
-######  Parameters
+###### Parameters
 
 `clusterSize`
     \- Returned maximum cluster size that can be launched for the given kernel function and launch configuration
@@ -1665,10 +1576,9 @@ By default this function will always return a value that's portable on future ha
 
 This function will respect the compile time launch bounds.
 
-  * The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
+* The API can also be used with a kernel cudaKernel_t by querying the handle using cudaLibraryGetKernel() or cudaGetKernel and then passing it to the API by casting to void*. The symbol `entryFuncAddr` passed to cudaGetKernel should be a symbol that is registered with the same CUDA Runtime instance.
 
-  * Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
-
+* Passing a symbol that belongs that belongs to a different runtime instance will result in undefined behavior. The only type that can be reliably passed to a different runtime instance is cudaKernel_t
 
 **See also:**
 
@@ -1676,12 +1586,11 @@ cudaFuncGetAttributes
 
 template < class T >
 
-__host__ cudaError_t cudaStreamAttachMemAsync ( cudaStream_t stream, T* devPtr, size_t length = 0, unsigned int  flags = cudaMemAttachSingle ) [inline]
-
+**host** cudaError_t cudaStreamAttachMemAsync ( cudaStream_t stream, T* devPtr, size_t length = 0, unsigned int  flags = cudaMemAttachSingle ) [inline]
 
 Attach memory to a stream asynchronously.
 
-######  Parameters
+###### Parameters
 
 `stream`
     \- Stream in which to enqueue the attach operation
@@ -1702,10 +1611,9 @@ Enqueues an operation in `stream` to specify stream association of `length` byte
 
 `devPtr` must point to an one of the following types of memories:
 
-  * managed memory declared using the __managed__ keyword or allocated with cudaMallocManaged.
+* managed memory declared using the **managed** keyword or allocated with cudaMallocManaged.
 
-  * a valid host-accessible region of system-allocated pageable memory. This type of memory may only be specified if the device associated with the stream reports a non-zero value for the device attribute cudaDevAttrPageableMemoryAccess.
-
+* a valid host-accessible region of system-allocated pageable memory. This type of memory may only be specified if the device associated with the stream reports a non-zero value for the device attribute cudaDevAttrPageableMemoryAccess.
 
 For managed allocations, `length` must be either zero or the entire allocation's size. Both indicate that the entire allocation's stream association is being changed. Currently, it is not possible to change stream association for a portion of a managed allocation.
 
@@ -1719,8 +1627,7 @@ Accessing memory on the device from streams that are not associated with it will
 
 It is a program's responsibility to order calls to cudaStreamAttachMemAsync via events, synchronization or other means to ensure legal access to memory at all times. Data visibility and coherency will be changed appropriately for all kernels which follow a stream-association change.
 
-If `stream` is destroyed while data is associated with it, the association is removed and the association reverts to the default visibility of the allocation as specified at cudaMallocManaged. For __managed__ variables, the default association is always cudaMemAttachGlobal. Note that destroying a stream is an asynchronous operation, and as a result, the change to default association won't happen until all work in the stream has completed.
-
+If `stream` is destroyed while data is associated with it, the association is removed and the association reverts to the default visibility of the allocation as specified at cudaMallocManaged. For **managed** variables, the default association is always cudaMemAttachGlobal. Note that destroying a stream is an asynchronous operation, and as a result, the change to default association won't happen until all work in the stream has completed.
 
 **See also:**
 
@@ -1729,5 +1636,3 @@ cudaStreamCreate, cudaStreamCreateWithFlags, cudaStreamWaitEvent, cudaStreamSync
 * * *
 
 !
-
-

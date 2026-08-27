@@ -2,463 +2,395 @@
 
 **Source:** group__CUDART__TYPES.html
 
-
 ### Classes
 
 struct
 
 CUuuid_st
 
-
 struct
 
 cudaAccessPolicyWindow
-
 
 struct
 
 cudaArrayMemoryRequirements
 
-
 struct
 
 cudaArraySparseProperties
-
 
 struct
 
 cudaAsyncNotificationInfo_t
 
-
 struct
 
 cudaChannelFormatDesc
-
 
 struct
 
 cudaChildGraphNodeParams
 
-
 struct
 
 cudaConditionalNodeParams
-
 
 struct
 
 cudaDevResource
 
-
 struct
 
 cudaDevSmResource
-
 
 struct
 
 cudaDevSmResourceGroupParams
 
-
 struct
 
 cudaDevWorkqueueConfigResource
-
 
 struct
 
 cudaDevWorkqueueResource
 
-
 struct
 
 cudaDeviceProp
-
 
 struct
 
 cudaEglFrame
 
-
 struct
 
 cudaEglPlaneDesc
-
 
 struct
 
 cudaEventRecordNodeParams
 
-
 struct
 
 cudaEventWaitNodeParams
-
 
 struct
 
 cudaExtent
 
-
 struct
 
 cudaExternalMemoryBufferDesc
-
 
 struct
 
 cudaExternalMemoryHandleDesc
 
-
 struct
 
 cudaExternalMemoryMipmappedArrayDesc
-
 
 struct
 
 cudaExternalSemaphoreHandleDesc
 
-
 struct
 
 cudaExternalSemaphoreSignalNodeParams
-
 
 struct
 
 cudaExternalSemaphoreSignalNodeParamsV2
 
-
 struct
 
 cudaExternalSemaphoreSignalParams
-
 
 struct
 
 cudaExternalSemaphoreWaitNodeParams
 
-
 struct
 
 cudaExternalSemaphoreWaitNodeParamsV2
-
 
 struct
 
 cudaExternalSemaphoreWaitParams
 
-
 struct
 
 cudaFuncAttributes
-
 
 struct
 
 cudaGraphEdgeData
 
-
 struct
 
 cudaGraphExecUpdateResultInfo
-
 
 struct
 
 cudaGraphInstantiateParams
 
-
 struct
 
 cudaGraphKernelNodeUpdate
-
 
 struct
 
 cudaGraphNodeParams
 
-
 struct
 
 cudaHostNodeParams
-
 
 struct
 
 cudaHostNodeParamsV2
 
-
 struct
 
 cudaIpcEventHandle_t
-
 
 struct
 
 cudaIpcMemHandle_t
 
-
 struct
 
 cudaKernelNodeParams
-
 
 struct
 
 cudaKernelNodeParamsV2
 
-
 struct
 
 cudaLaunchAttribute
-
 
 union
 
 cudaLaunchAttributeValue
 
-
 struct
 
 cudaLaunchConfig_t
-
 
 struct
 
 cudaLaunchMemSyncDomainMap
 
-
 struct
 
 cudaMemAccessDesc
-
 
 struct
 
 cudaMemAllocNodeParams
 
-
 struct
 
 cudaMemAllocNodeParamsV2
-
 
 struct
 
 cudaMemFreeNodeParams
 
-
 struct
 
 cudaMemLocation
-
 
 struct
 
 cudaMemPoolProps
 
-
 struct
 
 cudaMemPoolPtrExportData
-
 
 struct
 
 cudaMemcpy3DOperand
 
-
 struct
 
 cudaMemcpy3DParms
-
 
 struct
 
 cudaMemcpy3DPeerParms
 
-
 struct
 
 cudaMemcpyAttributes
-
 
 struct
 
 cudaMemcpyNodeParams
 
-
 struct
 
 cudaMemsetParams
-
 
 struct
 
 cudaMemsetParamsV2
 
-
 struct
 
 cudaOffset3D
-
 
 struct
 
 cudaPitchedPtr
 
-
 struct
 
 cudaPointerAttributes
-
 
 struct
 
 cudaPos
 
-
 struct
 
 cudaResourceDesc
-
 
 struct
 
 cudaResourceViewDesc
 
-
 struct
 
 cudaTextureDesc
 
-
 ### Defines
 
-#define CUDA_EGL_MAX_PLANES 3
+# define CUDA_EGL_MAX_PLANES 3
 
-#define CUDA_IPC_HANDLE_SIZE 64
+# define CUDA_IPC_HANDLE_SIZE 64
 
-#define cudaArrayColorAttachment 0x20
+# define cudaArrayColorAttachment 0x20
 
-#define cudaArrayCubemap 0x04
+# define cudaArrayCubemap 0x04
 
-#define cudaArrayDefault 0x00
+# define cudaArrayDefault 0x00
 
-#define cudaArrayDeferredMapping 0x80
+# define cudaArrayDeferredMapping 0x80
 
-#define cudaArrayLayered 0x01
+# define cudaArrayLayered 0x01
 
-#define cudaArraySparse 0x40
+# define cudaArraySparse 0x40
 
-#define cudaArraySparsePropertiesSingleMipTail 0x1
+# define cudaArraySparsePropertiesSingleMipTail 0x1
 
-#define cudaArraySurfaceLoadStore 0x02
+# define cudaArraySurfaceLoadStore 0x02
 
-#define cudaArrayTextureGather 0x08
+# define cudaArrayTextureGather 0x08
 
-#define cudaCpuDeviceId ((int)-1)
+# define cudaCpuDeviceId ((int)-1)
 
-#define cudaDeviceBlockingSync 0x04
+# define cudaDeviceBlockingSync 0x04
 
-#define cudaDeviceLmemResizeToMax 0x10
+# define cudaDeviceLmemResizeToMax 0x10
 
-#define cudaDeviceMapHost 0x08
+# define cudaDeviceMapHost 0x08
 
-#define cudaDeviceMask 0xff
+# define cudaDeviceMask 0xff
 
-#define cudaDeviceScheduleAuto 0x00
+# define cudaDeviceScheduleAuto 0x00
 
-#define cudaDeviceScheduleBlockingSync 0x04
+# define cudaDeviceScheduleBlockingSync 0x04
 
-#define cudaDeviceScheduleMask 0x07
+# define cudaDeviceScheduleMask 0x07
 
-#define cudaDeviceScheduleSpin 0x01
+# define cudaDeviceScheduleSpin 0x01
 
-#define cudaDeviceScheduleYield 0x02
+# define cudaDeviceScheduleYield 0x02
 
-#define cudaDeviceSyncMemops 0x80
+# define cudaDeviceSyncMemops 0x80
 
-#define cudaEventBlockingSync 0x01
+# define cudaEventBlockingSync 0x01
 
-#define cudaEventDefault 0x00
+# define cudaEventDefault 0x00
 
-#define cudaEventDisableTiming 0x02
+# define cudaEventDisableTiming 0x02
 
-#define cudaEventInterprocess 0x04
+# define cudaEventInterprocess 0x04
 
-#define cudaEventRecordDefault 0x00
+# define cudaEventRecordDefault 0x00
 
-#define cudaEventRecordExternal 0x01
+# define cudaEventRecordExternal 0x01
 
-#define cudaEventWaitDefault 0x00
+# define cudaEventWaitDefault 0x00
 
-#define cudaEventWaitExternal 0x01
+# define cudaEventWaitExternal 0x01
 
-#define cudaExternalMemoryDedicated 0x1
+# define cudaExternalMemoryDedicated 0x1
 
-#define cudaExternalSemaphoreSignalSkipNvSciBufMemSync 0x01
+# define cudaExternalSemaphoreSignalSkipNvSciBufMemSync 0x01
 
-#define cudaExternalSemaphoreWaitSkipNvSciBufMemSync 0x02
+# define cudaExternalSemaphoreWaitSkipNvSciBufMemSync 0x02
 
-#define cudaGraphKernelNodePortDefault 0
+# define cudaGraphKernelNodePortDefault 0
 
-#define cudaGraphKernelNodePortLaunchCompletion 2
+# define cudaGraphKernelNodePortLaunchCompletion 2
 
-#define cudaGraphKernelNodePortProgrammatic 1
+# define cudaGraphKernelNodePortProgrammatic 1
 
-#define cudaHostAllocDefault 0x00
+# define cudaHostAllocDefault 0x00
 
-#define cudaHostAllocMapped 0x02
+# define cudaHostAllocMapped 0x02
 
-#define cudaHostAllocPortable 0x01
+# define cudaHostAllocPortable 0x01
 
-#define cudaHostAllocWriteCombined 0x04
+# define cudaHostAllocWriteCombined 0x04
 
-#define cudaHostRegisterDefault 0x00
+# define cudaHostRegisterDefault 0x00
 
-#define cudaHostRegisterIoMemory 0x04
+# define cudaHostRegisterIoMemory 0x04
 
-#define cudaHostRegisterMapped 0x02
+# define cudaHostRegisterMapped 0x02
 
-#define cudaHostRegisterPortable 0x01
+# define cudaHostRegisterPortable 0x01
 
-#define cudaHostRegisterReadOnly 0x08
+# define cudaHostRegisterReadOnly 0x08
 
-#define cudaInitDeviceFlagsAreValid 0x01
+# define cudaInitDeviceFlagsAreValid 0x01
 
-#define cudaInvalidDeviceId ((int)-2)
+# define cudaInvalidDeviceId ((int)-2)
 
-#define cudaIpcMemLazyEnablePeerAccess 0x01
+# define cudaIpcMemLazyEnablePeerAccess 0x01
 
-#define cudaMemAttachGlobal 0x01
+# define cudaMemAttachGlobal 0x01
 
-#define cudaMemAttachHost 0x02
+# define cudaMemAttachHost 0x02
 
-#define cudaMemAttachSingle 0x04
+# define cudaMemAttachSingle 0x04
 
-#define cudaMemPoolCreateUsageHwDecompress 0x2
+# define cudaMemPoolCreateUsageHwDecompress 0x2
 
-#define cudaNvSciSyncAttrSignal 0x1
+# define cudaNvSciSyncAttrSignal 0x1
 
-#define cudaNvSciSyncAttrWait 0x2
+# define cudaNvSciSyncAttrWait 0x2
 
-#define cudaOccupancyDefault 0x00
+# define cudaOccupancyDefault 0x00
 
-#define cudaOccupancyDisableCachingOverride 0x01
+# define cudaOccupancyDisableCachingOverride 0x01
 
-#define cudaPeerAccessDefault 0x00
+# define cudaPeerAccessDefault 0x00
 
-#define cudaStreamDefault 0x00
+# define cudaStreamDefault 0x00
 
-#define cudaStreamLegacy ((cudaStream_t)0x1)
+# define cudaStreamLegacy ((cudaStream_t)0x1)
 
-#define cudaStreamNonBlocking 0x01
+# define cudaStreamNonBlocking 0x01
 
-#define cudaStreamPerThread ((cudaStream_t)0x2)
-
+# define cudaStreamPerThread ((cudaStream_t)0x2)
 
 ### Typedefs
 
@@ -496,7 +428,7 @@ typedef CUgraph_st * cudaGraph_t
 
 typedef cudaGraphicsResource * cudaGraphicsResource_t
 
-typedef void(CUDART_CB* cudaHostFn_t )( void*  userData )
+typedef void(CUDART_CB*cudaHostFn_t )( void*  userData )
 
 typedef CUkern_st * cudaKernel_t
 
@@ -515,7 +447,6 @@ typedef unsigned long long cudaSurfaceObject_t
 typedef unsigned long long cudaTextureObject_t
 
 typedef CUuserObject_st * cudaUserObject_t
-
 
 ### Enumerations
 
@@ -663,71 +594,57 @@ enum cudaUserObjectFlags
 
 enum cudaUserObjectRetainFlags
 
-
 ### Defines
 
-#define CUDA_EGL_MAX_PLANES 3
-
+# define CUDA_EGL_MAX_PLANES 3
 
 Maximum number of planes per frame
 
-#define CUDA_IPC_HANDLE_SIZE 64
-
+# define CUDA_IPC_HANDLE_SIZE 64
 
 CUDA IPC Handle Size
 
-#define cudaArrayColorAttachment 0x20
-
+# define cudaArrayColorAttachment 0x20
 
 Must be set in cudaExternalMemoryGetMappedMipmappedArray if the mipmapped array is used as a color target in a graphics API
 
-#define cudaArrayCubemap 0x04
-
+# define cudaArrayCubemap 0x04
 
 Must be set in cudaMalloc3DArray to create a cubemap CUDA array
 
-#define cudaArrayDefault 0x00
-
+# define cudaArrayDefault 0x00
 
 Default CUDA array allocation flag
 
-#define cudaArrayDeferredMapping 0x80
-
+# define cudaArrayDeferredMapping 0x80
 
 Must be set in cudaMallocArray, cudaMalloc3DArray or cudaMallocMipmappedArray in order to create a deferred mapping CUDA array or CUDA mipmapped array
 
-#define cudaArrayLayered 0x01
-
+# define cudaArrayLayered 0x01
 
 Must be set in cudaMalloc3DArray to create a layered CUDA array
 
-#define cudaArraySparse 0x40
-
+# define cudaArraySparse 0x40
 
 Must be set in cudaMallocArray, cudaMalloc3DArray or cudaMallocMipmappedArray in order to create a sparse CUDA array or CUDA mipmapped array
 
-#define cudaArraySparsePropertiesSingleMipTail 0x1
-
+# define cudaArraySparsePropertiesSingleMipTail 0x1
 
 Indicates that the layered sparse CUDA array or CUDA mipmapped array has a single mip tail region for all layers
 
-#define cudaArraySurfaceLoadStore 0x02
-
+# define cudaArraySurfaceLoadStore 0x02
 
 Must be set in cudaMallocArray or cudaMalloc3DArray in order to bind surfaces to the CUDA array
 
-#define cudaArrayTextureGather 0x08
-
+# define cudaArrayTextureGather 0x08
 
 Must be set in cudaMallocArray or cudaMalloc3DArray in order to perform texture gather operations on the CUDA array
 
-#define cudaCpuDeviceId ((int)-1)
-
+# define cudaCpuDeviceId ((int)-1)
 
 Device id that represents the CPU
 
-#define cudaDeviceBlockingSync 0x04
-
+# define cudaDeviceBlockingSync 0x04
 
 ###### Deprecated
 
@@ -735,233 +652,187 @@ This flag was deprecated as of CUDA 4.0 and replaced with cudaDeviceScheduleBloc
 
 Device flag - Use blocking synchronization
 
-#define cudaDeviceLmemResizeToMax 0x10
-
+# define cudaDeviceLmemResizeToMax 0x10
 
 Device flag - Keep local memory allocation after launch
 
-#define cudaDeviceMapHost 0x08
-
+# define cudaDeviceMapHost 0x08
 
 Device flag - Support mapped pinned allocations
 
-#define cudaDeviceMask 0xff
-
+# define cudaDeviceMask 0xff
 
 Device flags mask
 
-#define cudaDeviceScheduleAuto 0x00
-
+# define cudaDeviceScheduleAuto 0x00
 
 Device flag - Automatic scheduling
 
-#define cudaDeviceScheduleBlockingSync 0x04
-
+# define cudaDeviceScheduleBlockingSync 0x04
 
 Device flag - Use blocking synchronization
 
-#define cudaDeviceScheduleMask 0x07
-
+# define cudaDeviceScheduleMask 0x07
 
 Device schedule flags mask
 
-#define cudaDeviceScheduleSpin 0x01
-
+# define cudaDeviceScheduleSpin 0x01
 
 Device flag - Spin default scheduling
 
-#define cudaDeviceScheduleYield 0x02
-
+# define cudaDeviceScheduleYield 0x02
 
 Device flag - Yield default scheduling
 
-#define cudaDeviceSyncMemops 0x80
-
+# define cudaDeviceSyncMemops 0x80
 
 Device flag - Ensure synchronous memory operations on this context will synchronize
 
-#define cudaEventBlockingSync 0x01
-
+# define cudaEventBlockingSync 0x01
 
 Event uses blocking synchronization
 
-#define cudaEventDefault 0x00
-
+# define cudaEventDefault 0x00
 
 Default event flag
 
-#define cudaEventDisableTiming 0x02
-
+# define cudaEventDisableTiming 0x02
 
 Event will not record timing data
 
-#define cudaEventInterprocess 0x04
-
+# define cudaEventInterprocess 0x04
 
 Event is suitable for interprocess use. cudaEventDisableTiming must be set
 
-#define cudaEventRecordDefault 0x00
-
+# define cudaEventRecordDefault 0x00
 
 Default event record flag
 
-#define cudaEventRecordExternal 0x01
-
+# define cudaEventRecordExternal 0x01
 
 Event is captured in the graph as an external event node when performing stream capture
 
-#define cudaEventWaitDefault 0x00
-
+# define cudaEventWaitDefault 0x00
 
 Default event wait flag
 
-#define cudaEventWaitExternal 0x01
-
+# define cudaEventWaitExternal 0x01
 
 Event is captured in the graph as an external event node when performing stream capture
 
-#define cudaExternalMemoryDedicated 0x1
-
+# define cudaExternalMemoryDedicated 0x1
 
 Indicates that the external memory object is a dedicated resource
 
-#define cudaExternalSemaphoreSignalSkipNvSciBufMemSync 0x01
-
+# define cudaExternalSemaphoreSignalSkipNvSciBufMemSync 0x01
 
 When the /p flags parameter of cudaExternalSemaphoreSignalParams contains this flag, it indicates that signaling an external semaphore object should skip performing appropriate memory synchronization operations over all the external memory objects that are imported as cudaExternalMemoryHandleTypeNvSciBuf, which otherwise are performed by default to ensure data coherency with other importers of the same NvSciBuf memory objects.
 
-#define cudaExternalSemaphoreWaitSkipNvSciBufMemSync 0x02
-
+# define cudaExternalSemaphoreWaitSkipNvSciBufMemSync 0x02
 
 When the /p flags parameter of cudaExternalSemaphoreWaitParams contains this flag, it indicates that waiting an external semaphore object should skip performing appropriate memory synchronization operations over all the external memory objects that are imported as cudaExternalMemoryHandleTypeNvSciBuf, which otherwise are performed by default to ensure data coherency with other importers of the same NvSciBuf memory objects.
 
-#define cudaGraphKernelNodePortDefault 0
-
+# define cudaGraphKernelNodePortDefault 0
 
 This port activates when the kernel has finished executing.
 
-#define cudaGraphKernelNodePortLaunchCompletion 2
-
+# define cudaGraphKernelNodePortLaunchCompletion 2
 
 This port activates when all blocks of the kernel have begun execution. See also cudaLaunchAttributeLaunchCompletionEvent.
 
-#define cudaGraphKernelNodePortProgrammatic 1
-
+# define cudaGraphKernelNodePortProgrammatic 1
 
 This port activates when all blocks of the kernel have performed cudaTriggerProgrammaticLaunchCompletion() or have terminated. It must be used with edge type cudaGraphDependencyTypeProgrammatic. See also cudaLaunchAttributeProgrammaticEvent.
 
-#define cudaHostAllocDefault 0x00
-
+# define cudaHostAllocDefault 0x00
 
 Default page-locked allocation flag
 
-#define cudaHostAllocMapped 0x02
-
+# define cudaHostAllocMapped 0x02
 
 Map allocation into device space
 
-#define cudaHostAllocPortable 0x01
-
+# define cudaHostAllocPortable 0x01
 
 Pinned memory accessible by all CUDA contexts
 
-#define cudaHostAllocWriteCombined 0x04
-
+# define cudaHostAllocWriteCombined 0x04
 
 Write-combined memory
 
-#define cudaHostRegisterDefault 0x00
-
+# define cudaHostRegisterDefault 0x00
 
 Default host memory registration flag
 
-#define cudaHostRegisterIoMemory 0x04
-
+# define cudaHostRegisterIoMemory 0x04
 
 Memory-mapped I/O space
 
-#define cudaHostRegisterMapped 0x02
-
+# define cudaHostRegisterMapped 0x02
 
 Map registered memory into device space
 
-#define cudaHostRegisterPortable 0x01
-
+# define cudaHostRegisterPortable 0x01
 
 Pinned memory accessible by all CUDA contexts
 
-#define cudaHostRegisterReadOnly 0x08
-
+# define cudaHostRegisterReadOnly 0x08
 
 Memory-mapped read-only
 
-#define cudaInitDeviceFlagsAreValid 0x01
-
+# define cudaInitDeviceFlagsAreValid 0x01
 
 Tell the CUDA runtime that DeviceFlags is being set in cudaInitDevice call
 
-#define cudaInvalidDeviceId ((int)-2)
-
+# define cudaInvalidDeviceId ((int)-2)
 
 Device id that represents an invalid device
 
-#define cudaIpcMemLazyEnablePeerAccess 0x01
-
+# define cudaIpcMemLazyEnablePeerAccess 0x01
 
 Automatically enable peer access between remote devices as needed
 
-#define cudaMemAttachGlobal 0x01
-
+# define cudaMemAttachGlobal 0x01
 
 Memory can be accessed by any stream on any device
 
-#define cudaMemAttachHost 0x02
-
+# define cudaMemAttachHost 0x02
 
 Memory cannot be accessed by any stream on any device
 
-#define cudaMemAttachSingle 0x04
-
+# define cudaMemAttachSingle 0x04
 
 Memory can only be accessed by a single stream on the associated device
 
-#define cudaMemPoolCreateUsageHwDecompress 0x2
-
+# define cudaMemPoolCreateUsageHwDecompress 0x2
 
 This flag, if set, indicates that the memory will be used as a buffer for hardware accelerated decompression.
 
-#define cudaNvSciSyncAttrSignal 0x1
-
+# define cudaNvSciSyncAttrSignal 0x1
 
 When /p flags of cudaDeviceGetNvSciSyncAttributes is set to this, it indicates that application need signaler specific NvSciSyncAttr to be filled by cudaDeviceGetNvSciSyncAttributes.
 
-#define cudaNvSciSyncAttrWait 0x2
-
+# define cudaNvSciSyncAttrWait 0x2
 
 When /p flags of cudaDeviceGetNvSciSyncAttributes is set to this, it indicates that application need waiter specific NvSciSyncAttr to be filled by cudaDeviceGetNvSciSyncAttributes.
 
-#define cudaOccupancyDefault 0x00
-
+# define cudaOccupancyDefault 0x00
 
 Default behavior
 
-#define cudaOccupancyDisableCachingOverride 0x01
-
+# define cudaOccupancyDisableCachingOverride 0x01
 
 Assume global caching is enabled and cannot be automatically turned off
 
-#define cudaPeerAccessDefault 0x00
-
+# define cudaPeerAccessDefault 0x00
 
 Default peer addressing enable flag
 
-#define cudaStreamDefault 0x00
-
+# define cudaStreamDefault 0x00
 
 Default stream flag
 
-#define cudaStreamLegacy ((cudaStream_t)0x1)
-
+# define cudaStreamLegacy ((cudaStream_t)0x1)
 
 Legacy stream handle
 
@@ -969,13 +840,11 @@ Stream handle that can be passed as a cudaStream_t to use an implicit stream wit
 
 See details of the synchronization behavior.
 
-#define cudaStreamNonBlocking 0x01
-
+# define cudaStreamNonBlocking 0x01
 
 Stream does not synchronize with stream 0 (the NULL stream)
 
-#define cudaStreamPerThread ((cudaStream_t)0x2)
-
+# define cudaStreamPerThread ((cudaStream_t)0x2)
 
 Per-thread stream handle
 
@@ -987,141 +856,114 @@ See details of the synchronization behavior.
 
 typedef cudaArray * cudaArray_const_t
 
-
 CUDA array (as source copy argument)
 
 typedef cudaArray * cudaArray_t
-
 
 CUDA array
 
 typedef cudaAsyncCallbackEntry * cudaAsyncCallbackHandle_t
 
-
 CUDA async callback handle
 
 typedef CUdevResourceDesc_st * cudaDevResourceDesc_t
-
 
 An opaque descriptor handle. The descriptor encapsulates multiple created and configured resources. Created via cudaDeviceResourceGenerateDesc
 
 typedef CUeglStreamConnection_st * cudaEglStreamConnection
 
-
 CUDA EGLSream Connection
 
 typedef enumcudaError cudaError_t
-
 
 CUDA Error types
 
 typedef CUevent_st * cudaEvent_t
 
-
 CUDA event types
 
 typedef cudaExecutionContext_st * cudaExecutionContext_t
-
 
 An opaque handle to a CUDA execution context. It represents an execution context created via CUDA Runtime APIs such as cudaGreenCtxCreate.
 
 typedef CUexternalMemory_st * cudaExternalMemory_t
 
-
 CUDA external memory
 
 typedef CUexternalSemaphore_st * cudaExternalSemaphore_t
-
 
 CUDA external semaphore
 
 typedef CUfunc_st * cudaFunction_t
 
-
 CUDA function
 
 typedef unsigned long long cudaGraphConditionalHandle
-
 
 CUDA handle for conditional graph nodes
 
 typedef CUgraphDeviceUpdatableNode_st * cudaGraphDeviceNode_t
 
-
 CUDA device node handle for device-side node update
 
 typedef CUgraphExec_st * cudaGraphExec_t
-
 
 CUDA executable (launchable) graph
 
 typedef CUgraphNode_st * cudaGraphNode_t
 
-
 CUDA graph node.
 
 typedef CUgraph_st * cudaGraph_t
-
 
 CUDA graph
 
 typedef cudaGraphicsResource * cudaGraphicsResource_t
 
-
 CUDA graphics resource types
 
-void(CUDART_CB* cudaHostFn_t )( void*  userData )
-
+void(CUDART_CB*cudaHostFn_t )( void*  userData )
 
 CUDA host function
 
-######  Parameters
+###### Parameters
 
 `userData`
     Argument value passed to the function
 
 typedef CUkern_st * cudaKernel_t
 
-
 CUDA kernel
 
 typedef CUlib_st * cudaLibrary_t
-
 
 CUDA library
 
 typedef CUmemPoolHandle_st * cudaMemPool_t
 
-
 CUDA memory pool
 
 typedef cudaMipmappedArray * cudaMipmappedArray_const_t
-
 
 CUDA mipmapped array (as source argument)
 
 typedef cudaMipmappedArray * cudaMipmappedArray_t
 
-
 CUDA mipmapped array
 
 typedef CUstream_st * cudaStream_t
-
 
 CUDA stream
 
 typedef unsigned long long cudaSurfaceObject_t
 
-
 An opaque value that represents a CUDA Surface object
 
 typedef unsigned long long cudaTextureObject_t
 
-
 An opaque value that represents a CUDA texture object
 
 typedef CUuserObject_st * cudaUserObject_t
-
 
 CUDA user object for graphs
 
@@ -1129,34 +971,31 @@ CUDA user object for graphs
 
 enum cudaAccessProperty
 
-
 Specifies performance hint with cudaAccessPolicyWindow for hitProp and missProp members.
 
-######  Values
+###### Values
 
 cudaAccessPropertyNormal = 0
     Normal cache persistence.
 cudaAccessPropertyStreaming = 1
-    Streaming access is less likely to persit from cache.
+    Streaming access is less likely to persist from cache.
 cudaAccessPropertyPersisting = 2
     Persisting access is more likely to persist in cache.
 
 enum cudaAsyncNotificationType
 
-
 Types of async notification that can occur
 
-######  Values
+###### Values
 
 cudaAsyncNotificationTypeOverBudget = 0x1
     Sent when the process has exceeded its device memory budget
 
 enum cudaAtomicOperation
 
-
 CUDA-valid Atomic Operations
 
-######  Values
+###### Values
 
 cudaAtomicOperationIntegerAdd = 0
 
@@ -1184,13 +1023,11 @@ cudaAtomicOperationFloatMin = 11
 
 cudaAtomicOperationFloatMax = 12
 
-
 enum cudaAtomicOperationCapability
-
 
 CUDA-valid Atomic Operation capabilities
 
-######  Values
+###### Values
 
 cudaAtomicCapabilitySigned = 1u<<0
 
@@ -1206,13 +1043,11 @@ cudaAtomicCapabilityScalar128 = 1u<<5
 
 cudaAtomicCapabilityVector32x4 = 1u<<6
 
-
 enum cudaCGScope
-
 
 CUDA cooperative group scope
 
-######  Values
+###### Values
 
 cudaCGScopeInvalid = 0
     Invalid cooperative group scope
@@ -1223,10 +1058,9 @@ cudaCGScopeReserved = 2
 
 enum cudaChannelFormatKind
 
-
 Channel format kind
 
-######  Values
+###### Values
 
 cudaChannelFormatKindSigned = 0
     Signed channel format
@@ -1295,10 +1129,9 @@ cudaChannelFormatKindUnsignedNormalized1010102 = 31
 
 enum cudaClusterSchedulingPolicy
 
-
 Cluster scheduling policies. These may be passed to cudaFuncSetAttribute
 
-######  Values
+###### Values
 
 cudaClusterSchedulingPolicyDefault = 0
     the default policy
@@ -1309,10 +1142,9 @@ cudaClusterSchedulingPolicyLoadBalancing = 2
 
 enum cudaComputeMode
 
-
 CUDA device compute modes
 
-######  Values
+###### Values
 
 cudaComputeModeDefault = 0
     Default compute mode (Multiple threads can use cudaSetDevice() with this device)
@@ -1325,10 +1157,9 @@ cudaComputeModeExclusiveProcess = 3
 
 enum cudaDevResourceType
 
-
 Type of resource
 
-######  Values
+###### Values
 
 cudaDevResourceTypeInvalid = 0
 
@@ -1341,10 +1172,9 @@ cudaDevResourceTypeWorkqueue = 10000
 
 enum cudaDevWorkqueueConfigScope
 
-
 Sharing scope for workqueues
 
-######  Values
+###### Values
 
 cudaDevWorkqueueConfigScopeDeviceCtx = 0
     Use all shared workqueue resources on the device. Default driver behaviour.
@@ -1353,10 +1183,9 @@ cudaDevWorkqueueConfigScopeGreenCtxBalanced = 1
 
 enum cudaDeviceAttr
 
-
 CUDA device attributes
 
-######  Values
+###### Values
 
 cudaDevAttrMaxThreadsPerBlock = 1
     Maximum number of threads per block
@@ -1375,7 +1204,7 @@ cudaDevAttrMaxGridDimZ = 7
 cudaDevAttrMaxSharedMemoryPerBlock = 8
     Maximum shared memory available per block in bytes
 cudaDevAttrTotalConstantMemory = 9
-    Memory available on device for __constant__ variables in a CUDA C kernel in bytes
+    Memory available on device for **constant** variables in a CUDA C kernel in bytes
 cudaDevAttrWarpSize = 10
     Warp size in threads
 cudaDevAttrMaxPitch = 11
@@ -1627,20 +1456,18 @@ cudaDevAttrHostNumaMemoryPoolsSupported = 142
 cudaDevAttrHostNumaMultinodeIpcSupported = 143
     Device supports HostNuma location IPC between nodes in a multi-node system.
 cudaDevAttrHostMemoryPoolsSupported = 144
-    Device suports HOST location with the cuMemAllocAsync and cuMemPool family of APIs
+    Device supports HOST location with the cuMemAllocAsync and cuMemPool family of APIs
 cudaDevAttrReserved145 = 145
 
 cudaDevAttrOnlyPartialHostNativeAtomicSupported = 147
     Link between the device and the host supports only some native atomic operations
 cudaDevAttrMax
 
-
 enum cudaDeviceNumaConfig
-
 
 CUDA device NUMA config
 
-######  Values
+###### Values
 
 cudaDeviceNumaConfigNone = 0
     The GPU is not a NUMA node
@@ -1649,10 +1476,9 @@ cudaDeviceNumaConfigNumaNode
 
 enum cudaDeviceP2PAttr
 
-
 CUDA device P2P attributes
 
-######  Values
+###### Values
 
 cudaDevP2PAttrPerformanceRank = 1
     A relative value indicating the performance of the link between two devices
@@ -1667,10 +1493,9 @@ cudaDevP2PAttrOnlyPartialNativeAtomicSupported = 5
 
 enum cudaDriverEntryPointQueryResult
 
-
 Enum for status from obtaining driver entry points, used with cudaApiGetDriverEntryPoint
 
-######  Values
+###### Values
 
 cudaDriverEntryPointSuccess = 0
     Search for symbol found a match
@@ -1681,10 +1506,9 @@ cudaDriverEntryPointVersionNotSufficent = 2
 
 enum cudaEglColorFormat
 
-
 CUDA EGL Color Format - The different planar and multiplanar formats currently supported for CUDA_EGL interops.
 
-######  Values
+###### Values
 
 cudaEglColorFormatYUV420Planar = 0
     Y, U, V in three surfaces, each in a separate surface, U/V width = 1/2 Y width, U/V height = 1/2 Y height.
@@ -1915,10 +1739,9 @@ cudaEglColorFormatUYVY2020 = 116
 
 enum cudaEglFrameType
 
-
 CUDA EglFrame type - array or pointer
 
-######  Values
+###### Values
 
 cudaEglFrameTypeArray = 0
     Frame type CUDA array
@@ -1926,7 +1749,6 @@ cudaEglFrameTypePitch = 1
     Frame type CUDA pointer
 
 enum cudaEglResourceLocationFlags
-
 
 Resource location flags- sysmem or vidmem
 
@@ -1940,7 +1762,7 @@ cudaEglResourceLocationVidmem \- the frame data is made resident on the dedicate
 
 There may be an additional latency due to new allocation and data migration, if the frame is produced on a different memory.
 
-######  Values
+###### Values
 
 cudaEglResourceLocationSysmem = 0x00
     Resource location sysmem
@@ -1949,10 +1771,9 @@ cudaEglResourceLocationVidmem = 0x01
 
 enum cudaError
 
-
 CUDA error types
 
-######  Values
+###### Values
 
 cudaSuccess = 0
     The API call returned with no errors. In the case of query calls, this also means that the operation being queried is complete (see cudaEventQuery() and cudaStreamQuery()).
@@ -1968,20 +1789,17 @@ cudaErrorProfilerDisabled = 5
     This indicates profiler is not initialized for this run. This can happen when the application is running with external profiling tools like visual profiler.
 cudaErrorProfilerNotInitialized = 6
 
-
 ###### Deprecated
 
 This error return is deprecated as of CUDA 5.0. It is no longer an error to attempt to enable/disable the profiling via cudaProfilerStart or cudaProfilerStop without initialization.
 
 cudaErrorProfilerAlreadyStarted = 7
 
-
 ###### Deprecated
 
 This error return is deprecated as of CUDA 5.0. It is no longer an error to call cudaProfilerStart() when profiling is already enabled.
 
 cudaErrorProfilerAlreadyStopped = 8
-
 
 ###### Deprecated
 
@@ -1995,7 +1813,6 @@ cudaErrorInvalidSymbol = 13
     This indicates that the symbol name/identifier passed to the API call is not a valid name or identifier.
 cudaErrorInvalidHostPointer = 16
 
-
 ###### Deprecated
 
 This error return is deprecated as of CUDA 10.1.
@@ -2003,7 +1820,6 @@ This error return is deprecated as of CUDA 10.1.
 This indicates that at least one host pointer passed to the API call is not a valid host pointer.
 
 cudaErrorInvalidDevicePointer = 17
-
 
 ###### Deprecated
 
@@ -2021,7 +1837,6 @@ cudaErrorInvalidMemcpyDirection = 21
     This indicates that the direction of the memcpy passed to the API call is not one of the types specified by cudaMemcpyKind.
 cudaErrorAddressOfConstant = 22
 
-
 ###### Deprecated
 
 This error return is deprecated as of CUDA 3.1. Variables in constant memory may now have their address taken by the runtime via cudaGetSymbolAddress().
@@ -2029,7 +1844,6 @@ This error return is deprecated as of CUDA 3.1. Variables in constant memory may
 This indicated that the user has taken the address of a constant variable, which was forbidden up until the CUDA 3.1 release.
 
 cudaErrorTextureFetchFailed = 23
-
 
 ###### Deprecated
 
@@ -2039,7 +1853,6 @@ This indicated that a texture fetch was not able to be performed. This was previ
 
 cudaErrorTextureNotBound = 24
 
-
 ###### Deprecated
 
 This error return is deprecated as of CUDA 3.1. Device emulation mode was removed with the CUDA 3.1 release.
@@ -2047,7 +1860,6 @@ This error return is deprecated as of CUDA 3.1. Device emulation mode was remove
 This indicated that a texture was not bound for access. This was previously used for device emulation of texture operations.
 
 cudaErrorSynchronizationError = 25
-
 
 ###### Deprecated
 
@@ -2061,7 +1873,6 @@ cudaErrorInvalidNormSetting = 27
     This indicates that an attempt was made to read an unsupported data type as a normalized float. This is not supported by CUDA.
 cudaErrorMixedDeviceExecution = 28
 
-
 ###### Deprecated
 
 This error return is deprecated as of CUDA 3.1. Device emulation mode was removed with the CUDA 3.1 release.
@@ -2070,7 +1881,6 @@ Mixing of device and device emulation code was not allowed.
 
 cudaErrorNotYetImplemented = 31
 
-
 ###### Deprecated
 
 This error return is deprecated as of CUDA 4.1.
@@ -2078,7 +1888,6 @@ This error return is deprecated as of CUDA 4.1.
 This indicates that the API call is not yet implemented. Production releases of CUDA will never return this error.
 
 cudaErrorMemoryValueTooLarge = 32
-
 
 ###### Deprecated
 
@@ -2107,7 +1916,6 @@ cudaErrorIncompatibleDriverContext = 49
 cudaErrorMissingConfiguration = 52
     The device function being invoked (usually via cudaLaunchKernel()) was not previously configured via the cudaConfigureCall() function.
 cudaErrorPriorLaunchFailure = 53
-
 
 ###### Deprecated
 
@@ -2200,7 +2008,7 @@ cudaErrorInvalidResourceHandle = 400
 cudaErrorIllegalState = 401
     This indicates that a resource required by the API call is not in a valid state to perform the requested operation.
 cudaErrorLossyQuery = 402
-    This indicates an attempt was made to introspect an object in a way that would discard semantically important information. This is either due to the object using funtionality newer than the API version used to introspect it or omission of optional return arguments.
+    This indicates an attempt was made to introspect an object in a way that would discard semantically important information. This is either due to the object using functionality newer than the API version used to introspect it or omission of optional return arguments.
 cudaErrorSymbolNotFound = 500
     This indicates that a named symbol was not found. Examples of symbols are global/constant variable names, driver function names, texture names, and surface names.
 cudaErrorNotReady = 600
@@ -2298,7 +2106,7 @@ cudaErrorExternalDevice = 911
 cudaErrorInvalidClusterSize = 912
     This indicates that a kernel launch error has occurred due to cluster misconfiguration.
 cudaErrorFunctionNotLoaded = 913
-    Indiciates a function handle is not loaded when calling an API that requires a loaded function.
+    Indicates a function handle is not loaded when calling an API that requires a loaded function.
 cudaErrorInvalidResourceType = 914
     This error indicates one or more resources passed in are not valid resource types for the operation.
 cudaErrorInvalidResourceConfiguration = 915
@@ -2309,13 +2117,11 @@ cudaErrorUnknown = 999
     This indicates that an unknown internal error has occurred.
 cudaErrorApiFailureBase = 10000
 
-
 enum cudaExternalMemoryHandleType
-
 
 External memory handle types
 
-######  Values
+###### Values
 
 cudaExternalMemoryHandleTypeOpaqueFd = 1
     Handle is an opaque file descriptor
@@ -2336,10 +2142,9 @@ cudaExternalMemoryHandleTypeNvSciBuf = 8
 
 enum cudaExternalSemaphoreHandleType
 
-
 External semaphore handle types
 
-######  Values
+###### Values
 
 cudaExternalSemaphoreHandleTypeOpaqueFd = 1
     Handle is an opaque file descriptor
@@ -2364,10 +2169,9 @@ cudaExternalSemaphoreHandleTypeTimelineSemaphoreWin32 = 10
 
 enum cudaFlushGPUDirectRDMAWritesOptions
 
-
 CUDA GPUDirect RDMA flush writes APIs supported on the device
 
-######  Values
+###### Values
 
 cudaFlushGPUDirectRDMAWritesOptionHost = 1<<0
      cudaDeviceFlushGPUDirectRDMAWrites() and its CUDA Driver API counterpart are supported on the device.
@@ -2376,10 +2180,9 @@ cudaFlushGPUDirectRDMAWritesOptionMemOps = 1<<1
 
 enum cudaFlushGPUDirectRDMAWritesScope
 
-
 CUDA GPUDirect RDMA flush writes scopes
 
-######  Values
+###### Values
 
 cudaFlushGPUDirectRDMAWritesToOwner = 100
     Blocks until remote writes are visible to the CUDA device context owning the data.
@@ -2388,20 +2191,18 @@ cudaFlushGPUDirectRDMAWritesToAllDevices = 200
 
 enum cudaFlushGPUDirectRDMAWritesTarget
 
-
 CUDA GPUDirect RDMA flush writes targets
 
-######  Values
+###### Values
 
 cudaFlushGPUDirectRDMAWritesTargetCurrentDevice
     Sets the target for cudaDeviceFlushGPUDirectRDMAWrites() to the currently active CUDA device context.
 
 enum cudaFuncAttribute
 
-
 CUDA function attributes that can be set using cudaFuncSetAttribute
 
-######  Values
+###### Values
 
 cudaFuncAttributeMaxDynamicSharedMemorySize = 8
     Maximum dynamic shared memory size
@@ -2421,13 +2222,11 @@ cudaFuncAttributeClusterSchedulingPolicyPreference = 15
     Required cluster scheduling policy preference
 cudaFuncAttributeMax
 
-
 enum cudaFuncCache
-
 
 CUDA function cache configurations
 
-######  Values
+###### Values
 
 cudaFuncCachePreferNone = 0
     Default function cache configuration, no preference
@@ -2440,10 +2239,9 @@ cudaFuncCachePreferEqual = 3
 
 enum cudaGPUDirectRDMAWritesOrdering
 
-
 CUDA GPUDirect RDMA flush writes ordering features of the device
 
-######  Values
+###### Values
 
 cudaGPUDirectRDMAWritesOrderingNone = 0
     The device does not natively support ordering of GPUDirect RDMA writes. cudaFlushGPUDirectRDMAWrites() can be leveraged if supported.
@@ -2454,10 +2252,9 @@ cudaGPUDirectRDMAWritesOrderingAllDevices = 200
 
 enum cudaGetDriverEntryPointFlags
 
-
 Flags to specify search options to be used with cudaGetDriverEntryPoint For more details see cuGetProcAddress
 
-######  Values
+###### Values
 
 cudaEnableDefault = 0x0
     Default search mode for driver symbols.
@@ -2468,10 +2265,9 @@ cudaEnablePerThreadDefaultStream = 0x2
 
 enum cudaGraphChildGraphNodeOwnership
 
-
 Child graph node ownership
 
-######  Values
+###### Values
 
 cudaGraphChildGraphOwnershipClone = 0
     Default behavior for a child graph node. Child graph is cloned into the parent and memory allocation/free nodes can't be present in the child graph.
@@ -2480,10 +2276,9 @@ cudaGraphChildGraphOwnershipMove = 1
 
 enum cudaGraphConditionalNodeType
 
-
 CUDA conditional node types
 
-######  Values
+###### Values
 
 cudaGraphCondTypeIf = 0
     Conditional 'if/else' Node. Body[0] executed if condition is non-zero. If `size` == 2, an optional ELSE graph is created and this is executed if the condition is zero.
@@ -2494,10 +2289,9 @@ cudaGraphCondTypeSwitch = 2
 
 enum cudaGraphDebugDotFlags
 
-
 CUDA Graph debug write options
 
-######  Values
+###### Values
 
 cudaGraphDebugDotFlagsVerbose = 1<<0
     Output all debug data as if every debug flag is enabled
@@ -2524,10 +2318,9 @@ cudaGraphDebugDotFlagsConditionalNodeParams = 1<<15
 
 enum cudaGraphDependencyType
 
-
 Type annotations that can be applied to graph edges as part of cudaGraphEdgeData.
 
-######  Values
+###### Values
 
 cudaGraphDependencyTypeDefault = 0
     This is an ordinary dependency.
@@ -2536,10 +2329,9 @@ cudaGraphDependencyTypeProgrammatic = 1
 
 enum cudaGraphExecUpdateResult
 
-
 CUDA Graph Update error types
 
-######  Values
+###### Values
 
 cudaGraphExecUpdateSuccess = 0x0
     The update succeeded
@@ -2562,10 +2354,9 @@ cudaGraphExecUpdateErrorAttributesChanged = 0x8
 
 enum cudaGraphInstantiateFlags
 
-
 Flags for instantiating a graph
 
-######  Values
+###### Values
 
 cudaGraphInstantiateFlagAutoFreeOnLaunch = 1
     Automatically free memory allocated in a graph before relaunching.
@@ -2578,10 +2369,9 @@ cudaGraphInstantiateFlagUseNodePriority = 8
 
 enum cudaGraphInstantiateResult
 
-
 Graph instantiation results
 
-######  Values
+###### Values
 
 cudaGraphInstantiateSuccess = 0
     Instantiation succeeded
@@ -2598,10 +2388,9 @@ cudaGraphInstantiateConditionalHandleUnused = 5
 
 enum cudaGraphKernelNodeField
 
-
 Specifies the field to update when performing multiple node updates from the device
 
-######  Values
+###### Values
 
 cudaGraphKernelNodeFieldInvalid = 0
     Invalid field
@@ -2614,10 +2403,9 @@ cudaGraphKernelNodeFieldEnabled
 
 enum cudaGraphMemAttributeType
 
-
 Graph memory attributes
 
-######  Values
+###### Values
 
 cudaGraphMemAttrUsedMemCurrent = 0x0
     (value type = cuuint64_t) Amount of memory, in bytes, currently associated with graphs.
@@ -2630,10 +2418,9 @@ cudaGraphMemAttrReservedMemHigh = 0x3
 
 enum cudaGraphNodeType
 
-
 CUDA Graph node types
 
-######  Values
+###### Values
 
 cudaGraphNodeTypeKernel = 0x00
     GPU kernel node
@@ -2663,13 +2450,11 @@ cudaGraphNodeTypeConditional = 0x0d
     Conditional nodeMay be used to implement a conditional execution path or loop inside of a graph. The graph(s) contained within the body of the conditional node can be selectively executed or iterated upon based on the value of a conditional variable.Handles must be created in advance of creating the node using cudaGraphConditionalHandleCreate.The following restrictions apply to graphs which contain conditional nodes: The graph cannot be used in a child node. Only one instantiation of the graph may exist at any point in time. The graph cannot be cloned.To set the control value, supply a default value when creating the handle and/or call cudaGraphSetConditional from device code.
 cudaGraphNodeTypeCount
 
-
 enum cudaGraphicsCubeFace
-
 
 CUDA graphics interop array indices for cube maps
 
-######  Values
+###### Values
 
 cudaGraphicsCubeFacePositiveX = 0x00
     Positive X face of cubemap
@@ -2686,10 +2471,9 @@ cudaGraphicsCubeFaceNegativeZ = 0x05
 
 enum cudaGraphicsMapFlags
 
-
 CUDA graphics interop map flags
 
-######  Values
+###### Values
 
 cudaGraphicsMapFlagsNone = 0
     Default; Assume resource can be read/written
@@ -2700,10 +2484,9 @@ cudaGraphicsMapFlagsWriteDiscard = 2
 
 enum cudaGraphicsRegisterFlags
 
-
 CUDA graphics interop register flags
 
-######  Values
+###### Values
 
 cudaGraphicsRegisterFlagsNone = 0
     Default
@@ -2718,10 +2501,9 @@ cudaGraphicsRegisterFlagsTextureGather = 8
 
 enum cudaJitOption
 
-
 Online compiler and linker options
 
-######  Values
+###### Values
 
 cudaJitMaxRegisters = 0
     Max number of registers that a thread may use. Option type: unsigned int Applies to: compiler only
@@ -2730,11 +2512,11 @@ cudaJitThreadsPerBlock = 1
 cudaJitWallTime = 2
     Overwrites the option value with the total wall clock time, in milliseconds, spent in the compiler and linker Option type: float Applies to: compiler and linker
 cudaJitInfoLogBuffer = 3
-    Pointer to a buffer in which to print any log messages that are informational in nature (the buffer size is specified via option cudaJitInfoLogBufferSizeBytes) Option type: char * Applies to: compiler and linker
+    Pointer to a buffer in which to print any log messages that are informational in nature (the buffer size is specified via option cudaJitInfoLogBufferSizeBytes) Option type: char *Applies to: compiler and linker
 cudaJitInfoLogBufferSizeBytes = 4
     IN: Log buffer size in bytes. Log messages will be capped at this size (including null terminator) OUT: Amount of log buffer filled with messages Option type: unsigned int Applies to: compiler and linker
 cudaJitErrorLogBuffer = 5
-    Pointer to a buffer in which to print any log messages that reflect errors (the buffer size is specified via option cudaJitErrorLogBufferSizeBytes) Option type: char * Applies to: compiler and linker
+    Pointer to a buffer in which to print any log messages that reflect errors (the buffer size is specified via option cudaJitErrorLogBufferSizeBytes) Option type: char* Applies to: compiler and linker
 cudaJitErrorLogBufferSizeBytes = 6
     IN: Log buffer size in bytes. Log messages will be capped at this size (including null terminator) OUT: Amount of log buffer filled with messages Option type: unsigned int Applies to: compiler and linker
 cudaJitOptimizationLevel = 7
@@ -2754,16 +2536,15 @@ cudaJitPositionIndependentCode = 30
 cudaJitMinCtaPerSm = 31
     This option hints to the JIT compiler the minimum number of CTAs from the kernel’s grid to be mapped to a SM. This option is ignored when used together with cudaJitMaxRegisters or cudaJitThreadsPerBlock. Optimizations based on this option need cudaJitMaxThreadsPerBlock to be specified as well. For kernels already using PTX directive .minnctapersm, this option will be ignored by default. Use cudaJitOverrideDirectiveValues to let this option take precedence over the PTX directive. Option type: unsigned int Applies to: compiler only
 cudaJitMaxThreadsPerBlock = 32
-    Maximum number threads in a thread block, computed as the product of the maximum extent specifed for each dimension of the block. This limit is guaranteed not to be exeeded in any invocation of the kernel. Exceeding the the maximum number of threads results in runtime error or kernel launch failure. For kernels already using PTX directive .maxntid, this option will be ignored by default. Use cudaJitOverrideDirectiveValues to let this option take precedence over the PTX directive. Option type: int Applies to: compiler only
+    Maximum number threads in a thread block, computed as the product of the maximum extent specified for each dimension of the block. This limit is guaranteed not to be exceeded in any invocation of the kernel. Exceeding the the maximum number of threads results in runtime error or kernel launch failure. For kernels already using PTX directive .maxntid, this option will be ignored by default. Use cudaJitOverrideDirectiveValues to let this option take precedence over the PTX directive. Option type: int Applies to: compiler only
 cudaJitOverrideDirectiveValues = 33
     This option lets the values specified using cudaJitMaxRegisters, cudaJitThreadsPerBlock, cudaJitMaxThreadsPerBlock and cudaJitMinCtaPerSm take precedence over any PTX directives. (0: Disable, default; 1: Enable) Option type: int Applies to: compiler only
 
 enum cudaJit_CacheMode
 
-
 Caching modes for dlcm
 
-######  Values
+###### Values
 
 cudaJitCacheOptionNone = 0
     Compile with no -dlcm flag specified
@@ -2774,10 +2555,9 @@ cudaJitCacheOptionCA
 
 enum cudaJit_Fallback
 
-
 Cubin matching fallback strategies
 
-######  Values
+###### Values
 
 cudaPreferPtx = 0
     Prefer to compile ptx if exact binary match not found
@@ -2786,10 +2566,9 @@ cudaPreferBinary
 
 enum cudaLaunchAttributeID
 
-
 Launch attributes enum; used as id field of cudaLaunchAttribute
 
-######  Values
+###### Values
 
 cudaLaunchAttributeIgnore = 0
     Ignored entry, for convenient composition
@@ -2826,7 +2605,6 @@ cudaLaunchAttributeNvlinkUtilCentricScheduling = 16
 
 enum cudaLaunchMemSyncDomain
 
-
 Memory Synchronization Domain
 
 A kernel can be launched in a specified memory synchronization domain that affects all memory operations issued by that kernel. A memory barrier issued in one domain will only order memory operations in that domain, thus eliminating latency increase from memory barriers ordering unrelated traffic.
@@ -2835,7 +2613,7 @@ By default, kernels are launched in domain 0. Kernel launched with cudaLaunchMem
 
 Memory operations done in kernels launched in different domains are considered system-scope distanced. In other words, a GPU scoped memory synchronization is not sufficient for memory order to be observed by kernels in another memory synchronization domain even if they are on the same GPU.
 
-######  Values
+###### Values
 
 cudaLaunchMemSyncDomainDefault = 0
     Launch kernels in the default domain
@@ -2844,22 +2622,20 @@ cudaLaunchMemSyncDomainRemote = 1
 
 enum cudaLibraryOption
 
-
 Library options to be specified with cudaLibraryLoadData() or cudaLibraryLoadFromFile()
 
-######  Values
+###### Values
 
 cudaLibraryHostUniversalFunctionAndDataTable = 0
 
 cudaLibraryBinaryIsPreserved = 1
-    Specifes that the argument `code` passed to cudaLibraryLoadData() will be preserved. Specifying this option will let the driver know that `code` can be accessed at any point until cudaLibraryUnload(). The default behavior is for the driver to allocate and maintain its own copy of `code`. Note that this is only a memory usage optimization hint and the driver can choose to ignore it if required. Specifying this option with cudaLibraryLoadFromFile() is invalid and will return cudaErrorInvalidValue.
+    Specifies that the argument `code` passed to cudaLibraryLoadData() will be preserved. Specifying this option will let the driver know that `code` can be accessed at any point until cudaLibraryUnload(). The default behavior is for the driver to allocate and maintain its own copy of `code`. Note that this is only a memory usage optimization hint and the driver can choose to ignore it if required. Specifying this option with cudaLibraryLoadFromFile() is invalid and will return cudaErrorInvalidValue.
 
 enum cudaLimit
 
-
 CUDA Limits
 
-######  Values
+###### Values
 
 cudaLimitStackSize = 0x00
     GPU thread stack size
@@ -2878,10 +2654,9 @@ cudaLimitPersistingL2CacheSize = 0x06
 
 enum cudaMemAccessFlags
 
-
 Specifies the memory protection flags for mapping.
 
-######  Values
+###### Values
 
 cudaMemAccessFlagsProtNone = 0
     Default, make the address range not accessible
@@ -2892,10 +2667,9 @@ cudaMemAccessFlagsProtReadWrite = 3
 
 enum cudaMemAllocationHandleType
 
-
 Flags for specifying particular handle types
 
-######  Values
+###### Values
 
 cudaMemHandleTypeNone = 0x0
     Does not allow any export mechanism. >
@@ -2910,10 +2684,9 @@ cudaMemHandleTypeFabric = 0x8
 
 enum cudaMemAllocationType
 
-
 Defines the allocation types available
 
-######  Values
+###### Values
 
 cudaMemAllocationTypeInvalid = 0x0
 
@@ -2923,13 +2696,11 @@ cudaMemAllocationTypeManaged = 0x2
     This allocation type is managed memory
 cudaMemAllocationTypeMax = 0x7FFFFFFF
 
-
 enum cudaMemLocationType
-
 
 Specifies the type of location
 
-######  Values
+###### Values
 
 cudaMemLocationTypeInvalid = 0
 
@@ -2946,10 +2717,9 @@ cudaMemLocationTypeHostNumaCurrent = 4
 
 enum cudaMemPoolAttr
 
-
 CUDA memory pool attributes
 
-######  Values
+###### Values
 
 cudaMemPoolReuseFollowEventDependencies = 0x1
     (value type = int) Allow cuMemAllocAsync to use memory asynchronously freed in another streams as long as a stream ordering dependency of the allocating stream on the free action exists. Cuda events and null stream interactions can create the required stream ordered dependencies. (default enabled)
@@ -2970,13 +2740,12 @@ cudaMemPoolAttrUsedMemHigh = 0x8
 
 enum cudaMemRangeAttribute
 
-
 CUDA range attributes
 
-######  Values
+###### Values
 
 cudaMemRangeAttributeReadMostly = 1
-    Whether the range will mostly be read and only occassionally be written to
+    Whether the range will mostly be read and only occasionally be written to
 cudaMemRangeAttributePreferredLocation = 2
     The preferred location of the range
 cudaMemRangeAttributeAccessedBy = 3
@@ -2994,10 +2763,9 @@ cudaMemRangeAttributeLastPrefetchLocationId = 8
 
 enum cudaMemcpy3DOperandType
 
-
 These flags allow applications to convey the operand type for individual copies specified in cudaMemcpy3DBatchAsync.
 
-######  Values
+###### Values
 
 cudaMemcpyOperandTypePointer = 0x1
     Memcpy operand is a valid pointer.
@@ -3005,13 +2773,11 @@ cudaMemcpyOperandTypeArray = 0x2
     Memcpy operand is a CUarray.
 cudaMemcpyOperandTypeMax = 0x7FFFFFFF
 
-
 enum cudaMemcpyFlags
-
 
 Flags to specify for copies within a batch. For more details see cudaMemcpyBatchAsync.
 
-######  Values
+###### Values
 
 cudaMemcpyFlagDefault = 0x0
 
@@ -3020,10 +2786,9 @@ cudaMemcpyFlagPreferOverlapWithCompute = 0x1
 
 enum cudaMemcpyKind
 
-
 CUDA memory copy types
 
-######  Values
+###### Values
 
 cudaMemcpyHostToHost = 0
     Host -> Host
@@ -3038,13 +2803,12 @@ cudaMemcpyDefault = 4
 
 enum cudaMemoryAdvise
 
-
 CUDA Memory Advise values
 
-######  Values
+###### Values
 
 cudaMemAdviseSetReadMostly = 1
-    Data will mostly be read and only occassionally be written to
+    Data will mostly be read and only occasionally be written to
 cudaMemAdviseUnsetReadMostly = 2
     Undo the effect of cudaMemAdviseSetReadMostly
 cudaMemAdviseSetPreferredLocation = 3
@@ -3058,10 +2822,9 @@ cudaMemAdviseUnsetAccessedBy = 6
 
 enum cudaMemoryType
 
-
 CUDA memory types
 
-######  Values
+###### Values
 
 cudaMemoryTypeUnregistered = 0
     Unregistered memory
@@ -3074,10 +2837,9 @@ cudaMemoryTypeManaged = 3
 
 enum cudaResourceType
 
-
 CUDA resource types
 
-######  Values
+###### Values
 
 cudaResourceTypeArray = 0x00
     Array resource
@@ -3090,10 +2852,9 @@ cudaResourceTypePitch2D = 0x03
 
 enum cudaResourceViewFormat
 
-
 CUDA texture resource view formats
 
-######  Values
+###### Values
 
 cudaResViewFormatNone = 0x00
     No resource view format (use underlying resource format)
@@ -3168,10 +2929,9 @@ cudaResViewFormatUnsignedBlockCompressed7 = 0x22
 
 enum cudaSharedCarveout
 
-
 Shared memory carveout configurations. These may be passed to cudaFuncSetAttribute
 
-######  Values
+###### Values
 
 cudaSharedmemCarveoutDefault = -1
     No preference for shared memory or L1 (default)
@@ -3182,12 +2942,11 @@ cudaSharedmemCarveoutMaxL1 = 0
 
 enum cudaSharedMemConfig
 
-
 ###### Deprecated
 
 CUDA shared memory configuration
 
-######  Values
+###### Values
 
 cudaSharedMemBankSizeDefault = 0
 
@@ -3195,13 +2954,11 @@ cudaSharedMemBankSizeFourByte = 1
 
 cudaSharedMemBankSizeEightByte = 2
 
-
 enum cudaStreamCaptureMode
-
 
 Possible modes for stream capture thread interactions. For more details see cudaStreamBeginCapture and cudaThreadExchangeStreamCaptureMode
 
-######  Values
+###### Values
 
 cudaStreamCaptureModeGlobal = 0
 
@@ -3209,13 +2966,11 @@ cudaStreamCaptureModeThreadLocal = 1
 
 cudaStreamCaptureModeRelaxed = 2
 
-
 enum cudaStreamCaptureStatus
-
 
 Possible stream capture statuses returned by cudaStreamIsCapturing
 
-######  Values
+###### Values
 
 cudaStreamCaptureStatusNone = 0
     Stream is not capturing
@@ -3226,10 +2981,9 @@ cudaStreamCaptureStatusInvalidated = 2
 
 enum cudaStreamUpdateCaptureDependenciesFlags
 
-
 Flags for cudaStreamUpdateCaptureDependencies
 
-######  Values
+###### Values
 
 cudaStreamAddCaptureDependencies = 0x0
     Add new nodes to the dependency set
@@ -3238,10 +2992,9 @@ cudaStreamSetCaptureDependencies = 0x1
 
 enum cudaSurfaceBoundaryMode
 
-
 CUDA Surface boundary modes
 
-######  Values
+###### Values
 
 cudaBoundaryModeZero = 0
     Zero boundary mode
@@ -3252,10 +3005,9 @@ cudaBoundaryModeTrap = 2
 
 enum cudaSurfaceFormatMode
 
-
 CUDA Surface format modes
 
-######  Values
+###### Values
 
 cudaFormatModeForced = 0
     Forced format mode
@@ -3264,10 +3016,9 @@ cudaFormatModeAuto = 1
 
 enum cudaTextureAddressMode
 
-
 CUDA texture address modes
 
-######  Values
+###### Values
 
 cudaAddressModeWrap = 0
     Wrapping address mode
@@ -3280,10 +3031,9 @@ cudaAddressModeBorder = 3
 
 enum cudaTextureFilterMode
 
-
 CUDA texture filter modes
 
-######  Values
+###### Values
 
 cudaFilterModePoint = 0
     Point filter mode
@@ -3292,10 +3042,9 @@ cudaFilterModeLinear = 1
 
 enum cudaTextureReadMode
 
-
 CUDA texture read modes
 
-######  Values
+###### Values
 
 cudaReadModeElementType = 0
     Read texture as specified element type
@@ -3304,20 +3053,18 @@ cudaReadModeNormalizedFloat = 1
 
 enum cudaUserObjectFlags
 
-
 Flags for user objects for graphs
 
-######  Values
+###### Values
 
 cudaUserObjectNoDestructorSync = 0x1
     Indicates the destructor execution is not synchronized by any CUDA handle.
 
 enum cudaUserObjectRetainFlags
 
-
 Flags for retaining user object references for graphs
 
-######  Values
+###### Values
 
 cudaGraphUserObjectMove = 0x1
     Transfer references from the caller rather than creating new references.
@@ -3325,5 +3072,3 @@ cudaGraphUserObjectMove = 0x1
 * * *
 
 !
-
-

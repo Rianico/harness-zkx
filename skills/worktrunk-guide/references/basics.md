@@ -186,6 +186,26 @@ wt merge [OPTIONS] [TARGET]
 | `--no-ff`                      | Create merge commit (semi-linear) |
 | `--stage <all\|tracked\|none>` | What to stage (default: all)      |
 
+#### Automation
+
+| Flag                    | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| `--no-hooks`            | Skip hooks                                                   |
+| `--format <text\|json>` | Output format (default: text; json prints structured result) |
+
+#### Global Options — apply to **every** `wt` command (from `wt --help`)
+
+| Flag                  | Description                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `-C <path>`           | Working directory for this command — run `wt -C <path> merge` from any cwd without `cd`                             |
+| `--config <path>`     | User config file path                                                                                               |
+| `--config-set <toml>` | Override config with inline TOML, e.g. `--config-set list.full=true` (repeatable)                                   |
+| `-v, --verbose`       | Verbose output (`-v`: info + hook vars on stderr; `-vv`: also debug + `.git/wt/logs/`). `WORKTRUNK_VERBOSE=0\|1\|2` |
+| `-y, --yes`           | Skip approval prompts (use in agents/CI)                                                                            |
+| `-h, --help`          | Print help (`-h` summary, `--help` full)                                                                            |
+
+> [!tip] `-C` is the primary workaround when shell integration is missing or cwd resets between calls — always use absolute `-C <worktree-path>` in scripts/automation instead of `cd`.
+
 ### Examples
 
 ```bash

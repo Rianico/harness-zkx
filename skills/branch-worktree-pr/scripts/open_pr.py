@@ -46,8 +46,8 @@ def gh_pr_exists(branch: str) -> tuple[bool, str, str]:
                     num: str = str(num_raw) if num_raw is not None else ""
                     body: str = str(body_raw) if isinstance(body_raw, str) else ""
                     return (True, num, body)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as _exc:
+            print_err(f"gh pr list JSON decode failed: {_exc}")
     # Fallback via gh pr view <branch>
     result2 = run(["gh", "pr", "view", branch, "--json", "number,body"])
     if result2.returncode == 0 and result2.stdout.strip():
@@ -60,8 +60,8 @@ def gh_pr_exists(branch: str) -> tuple[bool, str, str]:
                 body2: str = str(body_raw2) if isinstance(body_raw2, str) else ""
                 if num2:
                     return (True, num2, body2)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as _exc:
+            print_err(f"gh pr view JSON decode failed: {_exc}")
     return (False, "", "")
 
 
@@ -173,8 +173,8 @@ def main(argv: list[str] | None = None) -> None:
                 vbody: object = vdata.get("body")
                 if isinstance(vbody, str) and f"Closes #{issue}" not in vbody:
                     print_err(f"warning: PR body still missing Closes #{issue}")
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as _exc:
+            print_err(f"gh pr view JSON decode failed: {_exc}")
     else:
         # Try list fallback
         lst = run(["gh", "pr", "list", "--head", branch, "--json", "number,baseRefName,body"])

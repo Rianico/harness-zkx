@@ -5,7 +5,7 @@
 ## Sections
 
 - [Topics](0001-topics.md)
-- [Whats New In 3.17](0002-whats-new-in-3.17.md)
+- [What's New In 3.17](0002-whats-new-in-3.17.md)
 - [Base Protocol](0003-base-protocol.md)
 - [Header Part](0004-header-part.md)
 - [Content Part](0005-content-part.md)

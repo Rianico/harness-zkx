@@ -2,7 +2,6 @@
 
 **Source:** group__CUDA__MEM.html#group__CUDA__MEM
 
-
 ### Classes
 
 struct
@@ -18,12 +17,11 @@ enum CUmemDecompressAlgorithm
 
 ### Functions
 
-CUresult cuArray3DCreate ( CUarray* pHandle, const CUDA_ARRAY3D_DESCRIPTOR* pAllocateArray )
-
+CUresult cuArray3DCreate ( CUarray*pHandle, const CUDA_ARRAY3D_DESCRIPTOR* pAllocateArray )
 
 Creates a 3D CUDA array.
 
-######  Parameters
+###### Parameters
 
 `pHandle`
     \- Returned array
@@ -38,7 +36,6 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Creates a CUDA array according to the CUDA_ARRAY3D_DESCRIPTOR structure `pAllocateArray` and returns a handle to the new CUDA array in `*pHandle`. The CUDA_ARRAY3D_DESCRIPTOR is defined as:
 
-
     ‎    typedef struct {
                   unsigned int Width;
                   unsigned int Height;
@@ -50,23 +47,22 @@ Creates a CUDA array according to the CUDA_ARRAY3D_DESCRIPTOR structure `pAlloca
 
 where:
 
-  * `Width`, `Height`, and `Depth` are the width, height, and depth of the CUDA array (in elements); the following types of CUDA arrays can be allocated:
-    * A 1D array is allocated if `Height` and `Depth` extents are both zero.
+* `Width`, `Height`, and `Depth` are the width, height, and depth of the CUDA array (in elements); the following types of CUDA arrays can be allocated:
+  * A 1D array is allocated if `Height` and `Depth` extents are both zero.
 
-    * A 2D array is allocated if only `Depth` extent is zero.
+  * A 2D array is allocated if only `Depth` extent is zero.
 
-    * A 3D array is allocated if all three extents are non-zero.
+  * A 3D array is allocated if all three extents are non-zero.
 
-    * A 1D layered CUDA array is allocated if only `Height` is zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 1D array. The number of layers is determined by the depth extent.
+  * A 1D layered CUDA array is allocated if only `Height` is zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 1D array. The number of layers is determined by the depth extent.
 
-    * A 2D layered CUDA array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 2D array. The number of layers is determined by the depth extent.
+  * A 2D layered CUDA array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 2D array. The number of layers is determined by the depth extent.
 
-    * A cubemap CUDA array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_CUBEMAP flag is set. `Width` must be equal to `Height`, and `Depth` must be six. A cubemap is a special type of 2D layered CUDA array, where the six layers represent the six faces of a cube. The order of the six layers in memory is the same as that listed in CUarray_cubemap_face.
+  * A cubemap CUDA array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_CUBEMAP flag is set. `Width` must be equal to `Height`, and `Depth` must be six. A cubemap is a special type of 2D layered CUDA array, where the six layers represent the six faces of a cube. The order of the six layers in memory is the same as that listed in CUarray_cubemap_face.
 
-    * A cubemap layered CUDA array is allocated if all three extents are non-zero, and both, CUDA_ARRAY3D_CUBEMAP and CUDA_ARRAY3D_LAYERED flags are set. `Width` must be equal to `Height`, and `Depth` must be a multiple of six. A cubemap layered CUDA array is a special type of 2D layered CUDA array that consists of a collection of cubemaps. The first six layers represent the first cubemap, the next six layers form the second cubemap, and so on.
+  * A cubemap layered CUDA array is allocated if all three extents are non-zero, and both, CUDA_ARRAY3D_CUBEMAP and CUDA_ARRAY3D_LAYERED flags are set. `Width` must be equal to `Height`, and `Depth` must be a multiple of six. A cubemap layered CUDA array is a special type of 2D layered CUDA array that consists of a collection of cubemaps. The first six layers represent the first cubemap, the next six layers form the second cubemap, and so on.
 
-
-  * Format specifies the format of the elements; CUarray_format is defined as:
+* Format specifies the format of the elements; CUarray_format is defined as:
 
         ‎    typedef enum CUarray_format_enum {
                       CU_AD_FORMAT_UNSIGNED_INT8 = 0x01
@@ -122,19 +118,16 @@ where:
                       CU_AD_FORMAT_UNORM_INT_101010_2 = 0x50
                   } CUarray_format;
 
+* `NumChannels` specifies the number of packed components per CUDA array element; it may be 1, 2, or 4;
 
-  * `NumChannels` specifies the number of packed components per CUDA array element; it may be 1, 2, or 4;
+* Flags may be set to
+  * CUDA_ARRAY3D_LAYERED to enable creation of layered CUDA arrays. If this flag is set, `Depth` specifies the number of layers, not the depth of a 3D array.
 
+  * CUDA_ARRAY3D_SURFACE_LDST to enable surface references to be bound to the CUDA array. If this flag is not set, cuSurfRefSetArray will fail when attempting to bind the CUDA array to a surface reference.
 
-  * Flags may be set to
-    * CUDA_ARRAY3D_LAYERED to enable creation of layered CUDA arrays. If this flag is set, `Depth` specifies the number of layers, not the depth of a 3D array.
+  * CUDA_ARRAY3D_CUBEMAP to enable creation of cubemaps. If this flag is set, `Width` must be equal to `Height`, and `Depth` must be six. If the CUDA_ARRAY3D_LAYERED flag is also set, then `Depth` must be a multiple of six.
 
-    * CUDA_ARRAY3D_SURFACE_LDST to enable surface references to be bound to the CUDA array. If this flag is not set, cuSurfRefSetArray will fail when attempting to bind the CUDA array to a surface reference.
-
-    * CUDA_ARRAY3D_CUBEMAP to enable creation of cubemaps. If this flag is set, `Width` must be equal to `Height`, and `Depth` must be six. If the CUDA_ARRAY3D_LAYERED flag is also set, then `Depth` must be a multiple of six.
-
-    * CUDA_ARRAY3D_TEXTURE_GATHER to indicate that the CUDA array will be used for texture gather. Texture gather can only be performed on 2D CUDA arrays.
-
+  * CUDA_ARRAY3D_TEXTURE_GATHER to indicate that the CUDA array will be used for texture gather. Texture gather can only be performed on 2D CUDA arrays.
 
 `Width`, `Height` and `Depth` must meet certain size requirements as listed in the following table. All values are specified in elements. Note that for brevity's sake, the full name of the device attribute is not specified. For ex., TEXTURE1D_WIDTH refers to the device attribute CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_WIDTH.
 
@@ -154,7 +147,6 @@ Here are examples of CUDA array descriptions:
 
 Description for a CUDA array of 2048 floats:
 
-
     ‎    CUDA_ARRAY3D_DESCRIPTOR desc;
               desc.Format = CU_AD_FORMAT_FLOAT;
               desc.NumChannels = 1;
@@ -163,7 +155,6 @@ Description for a CUDA array of 2048 floats:
               desc.Depth = 0;
 
 Description for a 64 x 64 CUDA array of floats:
-
 
     ‎    CUDA_ARRAY3D_DESCRIPTOR desc;
               desc.Format = CU_AD_FORMAT_FLOAT;
@@ -174,7 +165,6 @@ Description for a 64 x 64 CUDA array of floats:
 
 Description for a `width` x `height` x `depth` CUDA array of 64-bit, 4x16-bit float16's:
 
-
     ‎    CUDA_ARRAY3D_DESCRIPTOR desc;
               desc.Format = CU_AD_FORMAT_HALF;
               desc.NumChannels = 4;
@@ -184,10 +174,9 @@ Description for a `width` x `height` x `depth` CUDA array of 64-bit, 4x16-bit fl
 
 CUresult cuArray3DGetDescriptor ( CUDA_ARRAY3D_DESCRIPTOR* pArrayDescriptor, CUarray hArray )
 
-
 Get a 3D CUDA array descriptor.
 
-######  Parameters
+###### Parameters
 
 `pArrayDescriptor`
     \- Returned 3D array descriptor
@@ -204,12 +193,11 @@ Returns in `*pArrayDescriptor` a descriptor containing information on the format
 
 This function may be called on 1D and 2D arrays, in which case the `Height` and/or `Depth` members of the descriptor struct will be set to 0.
 
-CUresult cuArrayCreate ( CUarray* pHandle, const CUDA_ARRAY_DESCRIPTOR* pAllocateArray )
-
+CUresult cuArrayCreate ( CUarray*pHandle, const CUDA_ARRAY_DESCRIPTOR* pAllocateArray )
 
 Creates a 1D or 2D CUDA array.
 
-######  Parameters
+###### Parameters
 
 `pHandle`
     \- Returned array
@@ -224,7 +212,6 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Creates a CUDA array according to the CUDA_ARRAY_DESCRIPTOR structure `pAllocateArray` and returns a handle to the new CUDA array in `*pHandle`. The CUDA_ARRAY_DESCRIPTOR is defined as:
 
-
     ‎    typedef struct {
                   unsigned int Width;
                   unsigned int Height;
@@ -234,9 +221,9 @@ Creates a CUDA array according to the CUDA_ARRAY_DESCRIPTOR structure `pAllocate
 
 where:
 
-  * `Width`, and `Height` are the width, and height of the CUDA array (in elements); the CUDA array is one-dimensional if height is 0, two-dimensional otherwise;
+* `Width`, and `Height` are the width, and height of the CUDA array (in elements); the CUDA array is one-dimensional if height is 0, two-dimensional otherwise;
 
-  * Format specifies the format of the elements; CUarray_format is defined as:
+* Format specifies the format of the elements; CUarray_format is defined as:
 
         ‎    typedef enum CUarray_format_enum {
                       CU_AD_FORMAT_UNSIGNED_INT8 = 0x01
@@ -306,13 +293,11 @@ where:
                       CU_AD_FORMAT_UINT16_PLANAR_444 = 0x5e
                  } CUarray_format;
 
-  * `NumChannels` specifies the number of packed components per CUDA array element; it may be 1, 2, or 4;
-
+* `NumChannels` specifies the number of packed components per CUDA array element; it may be 1, 2, or 4;
 
 Here are examples of CUDA array descriptions:
 
 Description for a CUDA array of 2048 floats:
-
 
     ‎    CUDA_ARRAY_DESCRIPTOR desc;
               desc.Format = CU_AD_FORMAT_FLOAT;
@@ -322,7 +307,6 @@ Description for a CUDA array of 2048 floats:
 
 Description for a 64 x 64 CUDA array of floats:
 
-
     ‎    CUDA_ARRAY_DESCRIPTOR desc;
               desc.Format = CU_AD_FORMAT_FLOAT;
               desc.NumChannels = 1;
@@ -330,7 +314,6 @@ Description for a 64 x 64 CUDA array of floats:
               desc.Height = 64;
 
 Description for a `width` x `height` CUDA array of 64-bit, 4x16-bit float16's:
-
 
     ‎    CUDA_ARRAY_DESCRIPTOR desc;
               desc.Format = CU_AD_FORMAT_HALF;
@@ -340,7 +323,6 @@ Description for a `width` x `height` CUDA array of 64-bit, 4x16-bit float16's:
 
 Description for a `width` x `height` CUDA array of 16-bit elements, each of which is two 8-bit unsigned chars:
 
-
     ‎    CUDA_ARRAY_DESCRIPTOR arrayDesc;
               desc.Format = CU_AD_FORMAT_UNSIGNED_INT8;
               desc.NumChannels = 2;
@@ -349,10 +331,9 @@ Description for a `width` x `height` CUDA array of 16-bit elements, each of whic
 
 CUresult cuArrayDestroy ( CUarray hArray )
 
-
 Destroys a CUDA array.
 
-######  Parameters
+###### Parameters
 
 `hArray`
     \- Array to destroy
@@ -367,10 +348,9 @@ Destroys the CUDA array `hArray`.
 
 CUresult cuArrayGetDescriptor ( CUDA_ARRAY_DESCRIPTOR* pArrayDescriptor, CUarray hArray )
 
-
 Get a 1D or 2D CUDA array descriptor.
 
-######  Parameters
+###### Parameters
 
 `pArrayDescriptor`
     \- Returned array descriptor
@@ -387,10 +367,9 @@ Returns in `*pArrayDescriptor` a descriptor containing information on the format
 
 CUresult cuArrayGetMemoryRequirements ( CUDA_ARRAY_MEMORY_REQUIREMENTS* memoryRequirements, CUarray array, CUdevice device )
 
-
 Returns the memory requirements of a CUDA array.
 
-######  Parameters
+###### Parameters
 
 `memoryRequirements`
     \- Pointer to CUDA_ARRAY_MEMORY_REQUIREMENTS
@@ -411,10 +390,9 @@ The returned value in CUDA_ARRAY_MEMORY_REQUIREMENTS::size represents the total 
 
 CUresult cuArrayGetPlane ( CUarray* pPlaneArray, CUarray hArray, unsigned int  planeIdx )
 
-
 Gets a CUDA array plane from a CUDA array.
 
-######  Parameters
+###### Parameters
 
 `pPlaneArray`
     \- Returned CUDA array referenced by the `planeIdx`
@@ -437,10 +415,9 @@ Note that if the `hArray` has format CU_AD_FORMAT_NV12, then passing in 0 for `p
 
 CUresult cuArrayGetSparseProperties ( CUDA_ARRAY_SPARSE_PROPERTIES* sparseProperties, CUarray array )
 
-
 Returns the layout properties of a sparse CUDA array.
 
-######  Parameters
+###### Parameters
 
 `sparseProperties`
     \- Pointer to CUDA_ARRAY_SPARSE_PROPERTIES
@@ -457,12 +434,11 @@ Returns the layout properties of a sparse CUDA array in `sparseProperties` If th
 
 If the returned value in CUDA_ARRAY_SPARSE_PROPERTIES::flags contains CU_ARRAY_SPARSE_PROPERTIES_SINGLE_MIPTAIL, then CUDA_ARRAY_SPARSE_PROPERTIES::miptailSize represents the total size of the array. Otherwise, it will be zero. Also, the returned value in CUDA_ARRAY_SPARSE_PROPERTIES::miptailFirstLevel is always zero. Note that the `array` must have been allocated using cuArrayCreate or cuArray3DCreate. For CUDA arrays obtained using cuMipmappedArrayGetLevel, CUDA_ERROR_INVALID_VALUE will be returned. Instead, cuMipmappedArrayGetSparseProperties must be used to obtain the sparse properties of the entire CUDA mipmapped array to which `array` belongs to.
 
-CUresult cuDeviceGetByPCIBusId ( CUdevice* dev, const char* pciBusId )
-
+CUresult cuDeviceGetByPCIBusId ( CUdevice*dev, const char* pciBusId )
 
 Returns a handle to a compute device.
 
-######  Parameters
+###### Parameters
 
 `dev`
     \- Returned device handle
@@ -479,10 +455,9 @@ Returns in `*device` a device handle given a PCI bus ID string.
 
 CUresult cuDeviceGetPCIBusId ( char* pciBusId, int  len, CUdevice dev )
 
-
 Returns a PCI Bus Id string for the device.
 
-######  Parameters
+###### Parameters
 
 `pciBusId`
     \- Returned identifier string for the device in the following format [domain]:[bus]:[device].[function] where `domain`, `bus`, `device`, and `function` are all hexadecimal values. pciBusId should be large enough to store 13 characters including the NULL-terminator.
@@ -499,12 +474,11 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Returns an ASCII string identifying the device `dev` in the NULL-terminated string pointed to by `pciBusId`. `len` specifies the maximum length of the string that may be returned.
 
-CUresult cuDeviceRegisterAsyncNotification ( CUdevice device, CUasyncCallback callbackFunc, void* userData, CUasyncCallbackHandle* callback )
-
+CUresult cuDeviceRegisterAsyncNotification ( CUdevice device, CUasyncCallback callbackFunc, void*userData, CUasyncCallbackHandle* callback )
 
 Registers a callback function to receive async notifications.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- The device on which to register the callback
@@ -533,10 +507,9 @@ Returns in `*callback` a handle representing the registered callback instance.
 
 CUresult cuDeviceUnregisterAsyncNotification ( CUdevice device, CUasyncCallbackHandle callback )
 
-
 Unregisters an async notification callback.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- The device from which to remove `callback`.
@@ -553,10 +526,9 @@ Unregisters `callback` so that the corresponding callback function will stop rec
 
 CUresult cuIpcCloseMemHandle ( CUdeviceptr dptr )
 
-
 Attempts to close memory mapped with cuIpcOpenMemHandle.
 
-######  Parameters
+###### Parameters
 
 `dptr`
     \- Device pointer returned by cuIpcOpenMemHandle
@@ -575,10 +547,9 @@ IPC functionality is restricted to devices with support for unified addressing o
 
 CUresult cuIpcGetEventHandle ( CUipcEventHandle* pHandle, CUevent event )
 
-
 Gets an interprocess handle for a previously allocated event.
 
-######  Parameters
+###### Parameters
 
 `pHandle`
     \- Pointer to a user allocated CUipcEventHandle in which to return the opaque event handle
@@ -599,10 +570,9 @@ IPC functionality is restricted to devices with support for unified addressing o
 
 CUresult cuIpcGetMemHandle ( CUipcMemHandle* pHandle, CUdeviceptr dptr )
 
-
 Gets an interprocess memory handle for an existing device memory allocation.
 
-######  Parameters
+###### Parameters
 
 `pHandle`
     \- Pointer to user allocated CUipcMemHandle to return the handle in.
@@ -623,10 +593,9 @@ IPC functionality is restricted to devices with support for unified addressing o
 
 CUresult cuIpcOpenEventHandle ( CUevent* phEvent, CUipcEventHandle handle )
 
-
 Opens an interprocess event handle for use in the current process.
 
-######  Parameters
+###### Parameters
 
 `phEvent`
     \- Returns the imported event
@@ -647,10 +616,9 @@ IPC functionality is restricted to devices with support for unified addressing o
 
 CUresult cuIpcOpenMemHandle ( CUdeviceptr* pdptr, CUipcMemHandle handle, unsigned int  Flags )
 
-
 Opens an interprocess memory handle exported from another process and returns a device pointer usable in the local process.
 
-######  Parameters
+###### Parameters
 
 `pdptr`
     \- Returned device pointer
@@ -681,10 +649,9 @@ No guarantees are made about the address returned in `*pdptr`. In particular, mu
 
 CUresult cuMemAlloc ( CUdeviceptr* dptr, size_t bytesize )
 
-
 Allocates device memory.
 
-######  Parameters
+###### Parameters
 
 `dptr`
     \- Returned device pointer
@@ -701,10 +668,9 @@ Allocates `bytesize` bytes of linear memory on the device and returns in `*dptr`
 
 CUresult cuMemAllocHost ( void** pp, size_t bytesize )
 
-
 Allocates page-locked host memory.
 
-######  Parameters
+###### Parameters
 
 `pp`
     \- Returned pointer to host memory
@@ -727,10 +693,9 @@ Note all host memory allocated using cuMemAllocHost() will automatically be imme
 
 CUresult cuMemAllocManaged ( CUdeviceptr* dptr, size_t bytesize, unsigned int  flags )
 
-
 Allocates memory that will be automatically managed by the Unified Memory system.
 
-######  Parameters
+###### Parameters
 
 `dptr`
     \- Returned device pointer
@@ -749,7 +714,7 @@ Allocates `bytesize` bytes of managed memory on the device and returns in `*dptr
 
 `flags` specifies the default stream association for this allocation. `flags` must be one of CU_MEM_ATTACH_GLOBAL or CU_MEM_ATTACH_HOST. If CU_MEM_ATTACH_GLOBAL is specified, then this memory is accessible from any stream on any device. If CU_MEM_ATTACH_HOST is specified, then the allocation should not be accessed from devices that have a zero value for the device attribute CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS; an explicit call to cuStreamAttachMemAsync will be required to enable access on such devices.
 
-If the association is later changed via cuStreamAttachMemAsync to a single stream, the default association as specified during cuMemAllocManaged is restored when that stream is destroyed. For __managed__ variables, the default association is always CU_MEM_ATTACH_GLOBAL. Note that destroying a stream is an asynchronous operation, and as a result, the change to default association won't happen until all work in the stream has completed.
+If the association is later changed via cuStreamAttachMemAsync to a single stream, the default association as specified during cuMemAllocManaged is restored when that stream is destroyed. For **managed** variables, the default association is always CU_MEM_ATTACH_GLOBAL. Note that destroying a stream is an asynchronous operation, and as a result, the change to default association won't happen until all work in the stream has completed.
 
 Memory allocated with cuMemAllocManaged should be released with cuMemFree.
 
@@ -761,19 +726,17 @@ In a multi-GPU system where all of the GPUs have a zero value for the device att
 
 In a multi-GPU system where not all GPUs have peer-to-peer support with each other and where the value of the device attribute CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS is zero for at least one of those GPUs, the location chosen for physical storage of managed memory is system-dependent.
 
-  * On Linux, the location chosen will be device memory as long as the current set of active contexts are on devices that either have peer-to-peer support with each other or have a non-zero value for the device attribute CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS. If there is an active context on a GPU that does not have a non-zero value for that device attribute and it does not have peer-to-peer support with the other devices that have active contexts on them, then the location for physical storage will be 'zero-copy' or host memory. Note that this means that managed memory that is located in device memory is migrated to host memory if a new context is created on a GPU that doesn't have a non-zero value for the device attribute and does not support peer-to-peer with at least one of the other devices that has an active context. This in turn implies that context creation may fail if there is insufficient host memory to migrate all managed allocations.
+* On Linux, the location chosen will be device memory as long as the current set of active contexts are on devices that either have peer-to-peer support with each other or have a non-zero value for the device attribute CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS. If there is an active context on a GPU that does not have a non-zero value for that device attribute and it does not have peer-to-peer support with the other devices that have active contexts on them, then the location for physical storage will be 'zero-copy' or host memory. Note that this means that managed memory that is located in device memory is migrated to host memory if a new context is created on a GPU that doesn't have a non-zero value for the device attribute and does not support peer-to-peer with at least one of the other devices that has an active context. This in turn implies that context creation may fail if there is insufficient host memory to migrate all managed allocations.
 
-  * On Windows, the physical storage is always created in 'zero-copy' or host memory. All GPUs will reference the data at reduced bandwidth over the PCIe bus. In these circumstances, use of the environment variable CUDA_VISIBLE_DEVICES is recommended to restrict CUDA to only use those GPUs that have peer-to-peer support. Alternatively, users can also set CUDA_MANAGED_FORCE_DEVICE_ALLOC to a non-zero value to force the driver to always use device memory for physical storage. When this environment variable is set to a non-zero value, all contexts created in that process on devices that support managed memory have to be peer-to-peer compatible with each other. Context creation will fail if a context is created on a device that supports managed memory and is not peer-to-peer compatible with any of the other managed memory supporting devices on which contexts were previously created, even if those contexts have been destroyed. These environment variables are described in the CUDA programming guide under the "CUDA environment variables" section.
+* On Windows, the physical storage is always created in 'zero-copy' or host memory. All GPUs will reference the data at reduced bandwidth over the PCIe bus. In these circumstances, use of the environment variable CUDA_VISIBLE_DEVICES is recommended to restrict CUDA to only use those GPUs that have peer-to-peer support. Alternatively, users can also set CUDA_MANAGED_FORCE_DEVICE_ALLOC to a non-zero value to force the driver to always use device memory for physical storage. When this environment variable is set to a non-zero value, all contexts created in that process on devices that support managed memory have to be peer-to-peer compatible with each other. Context creation will fail if a context is created on a device that supports managed memory and is not peer-to-peer compatible with any of the other managed memory supporting devices on which contexts were previously created, even if those contexts have been destroyed. These environment variables are described in the CUDA programming guide under the "CUDA environment variables" section.
 
-  * On ARM, managed memory is not available on discrete gpu with Drive PX-2.
+* On ARM, managed memory is not available on discrete gpu with Drive PX-2.
 
-
-CUresult cuMemAllocPitch ( CUdeviceptr* dptr, size_t* pPitch, size_t WidthInBytes, size_t Height, unsigned int  ElementSizeBytes )
-
+CUresult cuMemAllocPitch ( CUdeviceptr*dptr, size_t* pPitch, size_t WidthInBytes, size_t Height, unsigned int  ElementSizeBytes )
 
 Allocates pitched device memory.
 
-######  Parameters
+###### Parameters
 
 `dptr`
     \- Returned device pointer
@@ -794,19 +757,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Allocates at least `WidthInBytes` * `Height` bytes of linear memory on the device and returns in `*dptr` a pointer to the allocated memory. The function may pad the allocation to ensure that corresponding pointers in any given row will continue to meet the alignment requirements for coalescing as the address is updated from row to row. `ElementSizeBytes` specifies the size of the largest reads and writes that will be performed on the memory range. `ElementSizeBytes` may be 4, 8 or 16 (since coalesced memory transactions are not possible on other data sizes). If `ElementSizeBytes` is smaller than the actual read/write size of a kernel, the kernel will run correctly, but possibly at reduced speed. The pitch returned in `*pPitch` by cuMemAllocPitch() is the width in bytes of the allocation. The intended usage of pitch is as a separate parameter of the allocation, used to compute addresses within the 2D array. Given the row and column of an array element of type **T** , the address is computed as:
 
-
     ‎   T* pElement = (T*)((char*)BaseAddress + Row * Pitch) + Column;
 
 The pitch returned by cuMemAllocPitch() is guaranteed to work with cuMemcpy2D() under all circumstances. For allocations of 2D arrays, it is recommended that programmers consider performing pitch allocations using cuMemAllocPitch(). Due to alignment restrictions in the hardware, this is especially true if the application will be performing 2D memory copies between different regions of device memory (whether linear memory or CUDA arrays).
 
 The byte alignment of the pitch returned by cuMemAllocPitch() is guaranteed to match or exceed the alignment requirement for texture binding with cuTexRefSetAddress2D().
 
-CUresult cuMemBatchDecompressAsync ( CUmemDecompressParams* paramsArray, size_t count, unsigned int  flags, size_t* errorIndex, CUstream stream )
-
+CUresult cuMemBatchDecompressAsync ( CUmemDecompressParams*paramsArray, size_t count, unsigned int  flags, size_t* errorIndex, CUstream stream )
 
 Submit a batch of `count` independent decompression operations.
 
-######  Parameters
+###### Parameters
 
 `paramsArray`
     The array of structures describing the independent decompression operations.
@@ -827,21 +788,19 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Each of the `count` decompression operations is described by a single entry in the `paramsArray` array. Once the batch has been submitted, the function will return, and decompression will happen asynchronously w.r.t. the CPU. To the work completion tracking mechanisms in the CUDA driver, the batch will be considered a single unit of work and processed according to stream semantics, i.e., it is not possible to query the completion of individual decompression operations within a batch.
 
-The memory pointed to by each of CUmemDecompressParams.src, CUmemDecompressParams.dst, and CUmemDecompressParams.dstActBytes, must be capable of usage with the hardware decompress feature. That is, for each of said pointers, the pointer attribute CU_POINTER_ATTRIBUTE_IS_HW_DECOMPRESS_CAPABLE should give a non-zero value. To ensure this, the memory backing the pointers should have been allocated using one of the following CUDA memory allocators: * cuMemAlloc() * cuMemCreate() with the usage flag CU_MEM_CREATE_USAGE_HW_DECOMPRESS * cuMemAllocFromPoolAsync() from a pool that was created with the usage flag CU_MEM_POOL_CREATE_USAGE_HW_DECOMPRESS Additionally, CUmemDecompressParams.src, CUmemDecompressParams.dst, and CUmemDecompressParams.dstActBytes, must all be accessible from the device associated with the context where `stream` was created. For information on how to ensure this, see the documentation for the allocator of interest.
+The memory pointed to by each of CUmemDecompressParams.src, CUmemDecompressParams.dst, and CUmemDecompressParams.dstActBytes, must be capable of usage with the hardware decompress feature. That is, for each of said pointers, the pointer attribute CU_POINTER_ATTRIBUTE_IS_HW_DECOMPRESS_CAPABLE should give a non-zero value. To ensure this, the memory backing the pointers should have been allocated using one of the following CUDA memory allocators: *cuMemAlloc()* cuMemCreate() with the usage flag CU_MEM_CREATE_USAGE_HW_DECOMPRESS * cuMemAllocFromPoolAsync() from a pool that was created with the usage flag CU_MEM_POOL_CREATE_USAGE_HW_DECOMPRESS Additionally, CUmemDecompressParams.src, CUmemDecompressParams.dst, and CUmemDecompressParams.dstActBytes, must all be accessible from the device associated with the context where `stream` was created. For information on how to ensure this, see the documentation for the allocator of interest.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemFree ( CUdeviceptr dptr )
 
-
 Frees device memory.
 
-######  Parameters
+###### Parameters
 
 `dptr`
     \- Pointer to memory to free
@@ -854,14 +813,13 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Frees the memory space pointed to by `dptr`, which must have been returned by a previous call to one of the following memory allocation APIs - cuMemAlloc(), cuMemAllocPitch(), cuMemAllocManaged(), cuMemAllocAsync(), cuMemAllocFromPoolAsync()
 
-Note - This API will not perform any implict synchronization when the pointer was allocated with cuMemAllocAsync or cuMemAllocFromPoolAsync. Callers must ensure that all accesses to these pointer have completed before invoking cuMemFree. For best performance and memory reuse, users should use cuMemFreeAsync to free memory allocated via the stream ordered memory allocator. For all other pointers, this API may perform implicit synchronization.
+Note - This API will not perform any implicit synchronization when the pointer was allocated with cuMemAllocAsync or cuMemAllocFromPoolAsync. Callers must ensure that all accesses to these pointer have completed before invoking cuMemFree. For best performance and memory reuse, users should use cuMemFreeAsync to free memory allocated via the stream ordered memory allocator. For all other pointers, this API may perform implicit synchronization.
 
 CUresult cuMemFreeHost ( void* p )
 
-
 Frees page-locked host memory.
 
-######  Parameters
+###### Parameters
 
 `p`
     \- Pointer to memory to free
@@ -874,12 +832,11 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Frees the memory space pointed to by `p`, which must have been returned by a previous call to cuMemAllocHost().
 
-CUresult cuMemGetAddressRange ( CUdeviceptr* pbase, size_t* psize, CUdeviceptr dptr )
-
+CUresult cuMemGetAddressRange ( CUdeviceptr*pbase, size_t* psize, CUdeviceptr dptr )
 
 Get information on memory allocations.
 
-######  Parameters
+###### Parameters
 
 `pbase`
     \- Returned base address
@@ -898,10 +855,9 @@ Returns the base address in `*pbase` and size in `*psize` of the allocation that
 
 CUresult cuMemGetHandleForAddressRange ( void* handle, CUdeviceptr dptr, size_t size, CUmemRangeHandleType handleType, unsigned long long flags )
 
-
 Retrieve handle for an address range.
 
-######  Parameters
+###### Parameters
 
 `handle`
     \- Pointer to the location where the returned handle will be stored.
@@ -930,12 +886,11 @@ The `handle` will be interpreted as a pointer to an integer to store the dma_buf
 
 For CUmemRangeHandleType::CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, users may set flags to CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE. Which when set on a supported platform, will give a DMA_BUF handle mapped via PCIE BAR1 or will return an error otherwise.
 
-CUresult cuMemGetInfo ( size_t* free, size_t* total )
-
+CUresult cuMemGetInfo ( size_t*free, size_t* total )
 
 Gets free and total memory.
 
-######  Parameters
+###### Parameters
 
 `free`
     \- Returned free memory in bytes
@@ -954,10 +909,9 @@ The integrated GPU on Tegra shares memory with CPU and other component of the So
 
 CUresult cuMemHostAlloc ( void** pp, size_t bytesize, unsigned int  Flags )
 
-
 Allocates page-locked host memory.
 
-######  Parameters
+###### Parameters
 
 `pp`
     \- Returned pointer to host memory
@@ -980,14 +934,11 @@ Page-locking excessive amounts of memory may degrade system performance, since i
 
 The `Flags` parameter enables different options to be specified that affect the allocation, as follows.
 
-  * CU_MEMHOSTALLOC_PORTABLE: The memory returned by this call will be considered as pinned memory by all CUDA contexts, not just the one that performed the allocation.
+* CU_MEMHOSTALLOC_PORTABLE: The memory returned by this call will be considered as pinned memory by all CUDA contexts, not just the one that performed the allocation.
 
+* CU_MEMHOSTALLOC_DEVICEMAP: Maps the allocation into the CUDA address space. The device pointer to the memory may be obtained by calling cuMemHostGetDevicePointer().
 
-  * CU_MEMHOSTALLOC_DEVICEMAP: Maps the allocation into the CUDA address space. The device pointer to the memory may be obtained by calling cuMemHostGetDevicePointer().
-
-
-  * CU_MEMHOSTALLOC_WRITECOMBINED: Allocates the memory as write-combined (WC). WC memory can be transferred across the PCI Express bus more quickly on some system configurations, but cannot be read efficiently by most CPUs. WC memory is a good option for buffers that will be written by the CPU and read by the GPU via mapped pinned memory or host->device transfers.
-
+* CU_MEMHOSTALLOC_WRITECOMBINED: Allocates the memory as write-combined (WC). WC memory can be transferred across the PCI Express bus more quickly on some system configurations, but cannot be read efficiently by most CPUs. WC memory is a good option for buffers that will be written by the CPU and read by the GPU via mapped pinned memory or host->device transfers.
 
 All of these flags are orthogonal to one another: a developer may allocate memory that is portable, mapped and/or write-combined with no restrictions.
 
@@ -997,12 +948,11 @@ The memory allocated by this function must be freed with cuMemFreeHost().
 
 Note all host memory allocated using cuMemHostAlloc() will automatically be immediately accessible to all contexts on all devices which support unified addressing (as may be queried using CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING). Unless the flag CU_MEMHOSTALLOC_WRITECOMBINED is specified, the device pointer that may be used to access this host memory from those contexts is always equal to the returned host pointer `*pp`. If the flag CU_MEMHOSTALLOC_WRITECOMBINED is specified, then the function cuMemHostGetDevicePointer() must be used to query the device pointer, even if the context supports unified addressing. See Unified Addressing for additional details.
 
-CUresult cuMemHostGetDevicePointer ( CUdeviceptr* pdptr, void* p, unsigned int  Flags )
-
+CUresult cuMemHostGetDevicePointer ( CUdeviceptr*pdptr, void* p, unsigned int  Flags )
 
 Passes back device pointer of mapped pinned memory.
 
-######  Parameters
+###### Parameters
 
 `pdptr`
     \- Returned device pointer
@@ -1025,12 +975,11 @@ For devices that have a non-zero value for the device attribute CU_DEVICE_ATTRIB
 
 `Flags` provides for future releases. For now, it must be set to 0.
 
-CUresult cuMemHostGetFlags ( unsigned int* pFlags, void* p )
-
+CUresult cuMemHostGetFlags ( unsigned int*pFlags, void* p )
 
 Passes back flags that were used for a pinned allocation.
 
-######  Parameters
+###### Parameters
 
 `pFlags`
     \- Returned flags word
@@ -1049,10 +998,9 @@ cuMemHostGetFlags() will fail if the pointer does not reside in an allocation pe
 
 CUresult cuMemHostRegister ( void* p, size_t bytesize, unsigned int  Flags )
 
-
 Registers an existing host memory range for use by CUDA.
 
-######  Parameters
+###### Parameters
 
 `p`
     \- Host pointer to memory to page-lock
@@ -1073,17 +1021,13 @@ On systems where CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLE
 
 The `Flags` parameter enables different options to be specified that affect the allocation, as follows.
 
-  * CU_MEMHOSTREGISTER_PORTABLE: The memory returned by this call will be considered as pinned memory by all CUDA contexts, not just the one that performed the allocation.
+* CU_MEMHOSTREGISTER_PORTABLE: The memory returned by this call will be considered as pinned memory by all CUDA contexts, not just the one that performed the allocation.
 
+* CU_MEMHOSTREGISTER_DEVICEMAP: Maps the allocation into the CUDA address space. The device pointer to the memory may be obtained by calling cuMemHostGetDevicePointer().
 
-  * CU_MEMHOSTREGISTER_DEVICEMAP: Maps the allocation into the CUDA address space. The device pointer to the memory may be obtained by calling cuMemHostGetDevicePointer().
+* CU_MEMHOSTREGISTER_IOMEMORY: The pointer is treated as pointing to some I/O memory space, e.g. the PCI Express resource of a 3rd party device.
 
-
-  * CU_MEMHOSTREGISTER_IOMEMORY: The pointer is treated as pointing to some I/O memory space, e.g. the PCI Express resource of a 3rd party device.
-
-
-  * CU_MEMHOSTREGISTER_READ_ONLY: The pointer is treated as pointing to memory that is considered read-only by the device. On platforms without CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, this flag is required in order to register memory mapped to the CPU as read-only. Support for the use of this flag can be queried from the device attribute CU_DEVICE_ATTRIBUTE_READ_ONLY_HOST_REGISTER_SUPPORTED. Using this flag with a current context associated with a device that does not have this attribute set will cause cuMemHostRegister to error with CUDA_ERROR_NOT_SUPPORTED.
-
+* CU_MEMHOSTREGISTER_READ_ONLY: The pointer is treated as pointing to memory that is considered read-only by the device. On platforms without CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, this flag is required in order to register memory mapped to the CPU as read-only. Support for the use of this flag can be queried from the device attribute CU_DEVICE_ATTRIBUTE_READ_ONLY_HOST_REGISTER_SUPPORTED. Using this flag with a current context associated with a device that does not have this attribute set will cause cuMemHostRegister to error with CUDA_ERROR_NOT_SUPPORTED.
 
 All of these flags are orthogonal to one another: a developer may page-lock memory that is portable or mapped with no restrictions.
 
@@ -1095,10 +1039,9 @@ The memory page-locked by this function must be unregistered with cuMemHostUnreg
 
 CUresult cuMemHostUnregister ( void* p )
 
-
 Unregisters a memory range that was registered with cuMemHostRegister.
 
-######  Parameters
+###### Parameters
 
 `p`
     \- Host pointer to memory to unregister
@@ -1115,10 +1058,9 @@ The base address must be the same one specified to cuMemHostRegister().
 
 CUresult cuMemcpy ( CUdeviceptr dst, CUdeviceptr src, size_t ByteCount )
 
-
 Copies memory.
 
-######  Parameters
+###### Parameters
 
 `dst`
     \- Destination unified virtual address space pointer
@@ -1135,19 +1077,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies data between two pointers. `dst` and `src` are base pointers of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy. Note that this function infers the type of the transfer (host to host, host to device, device to device, or device to host) from the pointer values. This function is only allowed in contexts which support unified addressing.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
+* This function exhibits synchronous behavior for most use cases.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpy2D ( const CUDA_MEMCPY2D* pCopy )
 
-
 Copies memory for 2D arrays.
 
-######  Parameters
+###### Parameters
 
 `pCopy`
     \- Parameters for the memory copy
@@ -1159,7 +1099,6 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 ###### Description
 
 Perform a 2D memory copy according to the parameters specified in `pCopy`. The CUDA_MEMCPY2D structure is defined as:
-
 
     ‎   typedef struct CUDA_MEMCPY2D_st {
                 unsigned int srcXInBytes, srcY;
@@ -1182,10 +1121,7 @@ Perform a 2D memory copy according to the parameters specified in `pCopy`. The C
 
 where:
 
-  * srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
-
-
-
+* srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
 
     ‎   typedef enum CUmemorytype_enum {
                 CU_MEMORYTYPE_HOST = 0x01
@@ -1210,54 +1146,45 @@ If dstMemoryType is CU_MEMORYTYPE_DEVICE, dstDevice and dstPitch specify the (de
 
 If dstMemoryType is CU_MEMORYTYPE_ARRAY, dstArray specifies the handle of the destination data. dstHost, dstDevice and dstPitch are ignored.
 
-  * srcXInBytes and srcY specify the base address of the source data for the copy.
-
+* srcXInBytes and srcY specify the base address of the source data for the copy.
 
 For host pointers, the starting address is
-
 
     ‎  void* Start = (void*)((char*)srcHost+srcY*srcPitch + srcXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr Start = srcDevice+srcY*srcPitch+srcXInBytes;
 
 For CUDA arrays, srcXInBytes must be evenly divisible by the array element size.
 
-  * dstXInBytes and dstY specify the base address of the destination data for the copy.
-
+* dstXInBytes and dstY specify the base address of the destination data for the copy.
 
 For host pointers, the base address is
-
 
     ‎  void* dstStart = (void*)((char*)dstHost+dstY*dstPitch + dstXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr dstStart = dstDevice+dstY*dstPitch+dstXInBytes;
 
 For CUDA arrays, dstXInBytes must be evenly divisible by the array element size.
 
-  * WidthInBytes and Height specify the width (in bytes) and height of the 2D copy being performed.
+* WidthInBytes and Height specify the width (in bytes) and height of the 2D copy being performed.
 
-  * If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
-
+* If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
 
 cuMemcpy2D() returns an error if any pitch is greater than the maximum allowed (CU_DEVICE_ATTRIBUTE_MAX_PITCH). cuMemAllocPitch() passes back pitches that always work with cuMemcpy2D(). On intra-device memory copies (device to device, CUDA array to device, CUDA array to CUDA array), cuMemcpy2D() may fail for pitches not computed by cuMemAllocPitch(). cuMemcpy2DUnaligned() does not have this restriction, but may run significantly slower in the cases where cuMemcpy2D() would have returned an error code.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpy2DAsync ( const CUDA_MEMCPY2D* pCopy, CUstream hStream )
 
-
 Copies memory for 2D arrays.
 
-######  Parameters
+###### Parameters
 
 `pCopy`
     \- Parameters for the memory copy
@@ -1272,7 +1199,6 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Perform a 2D memory copy according to the parameters specified in `pCopy`. The CUDA_MEMCPY2D structure is defined as:
 
-
     ‎   typedef struct CUDA_MEMCPY2D_st {
                 unsigned int srcXInBytes, srcY;
                 CUmemorytype srcMemoryType;
@@ -1292,10 +1218,7 @@ Perform a 2D memory copy according to the parameters specified in `pCopy`. The C
 
 where:
 
-  * srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
-
-
-
+* srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
 
     ‎   typedef enum CUmemorytype_enum {
                 CU_MEMORYTYPE_HOST = 0x01
@@ -1320,60 +1243,51 @@ If dstMemoryType is CU_MEMORYTYPE_DEVICE, dstDevice and dstPitch specify the (de
 
 If dstMemoryType is CU_MEMORYTYPE_ARRAY, dstArray specifies the handle of the destination data. dstHost, dstDevice and dstPitch are ignored.
 
-  * srcXInBytes and srcY specify the base address of the source data for the copy.
-
+* srcXInBytes and srcY specify the base address of the source data for the copy.
 
 For host pointers, the starting address is
-
 
     ‎  void* Start = (void*)((char*)srcHost+srcY*srcPitch + srcXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr Start = srcDevice+srcY*srcPitch+srcXInBytes;
 
 For CUDA arrays, srcXInBytes must be evenly divisible by the array element size.
 
-  * dstXInBytes and dstY specify the base address of the destination data for the copy.
-
+* dstXInBytes and dstY specify the base address of the destination data for the copy.
 
 For host pointers, the base address is
-
 
     ‎  void* dstStart = (void*)((char*)dstHost+dstY*dstPitch + dstXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr dstStart = dstDevice+dstY*dstPitch+dstXInBytes;
 
 For CUDA arrays, dstXInBytes must be evenly divisible by the array element size.
 
-  * WidthInBytes and Height specify the width (in bytes) and height of the 2D copy being performed.
+* WidthInBytes and Height specify the width (in bytes) and height of the 2D copy being performed.
 
-  * If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
+* If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
 
-  * If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
+* If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
 
-  * If specified, srcHeight must be greater than or equal to Height + srcY, and dstHeight must be greater than or equal to Height \+ dstY.
-
+* If specified, srcHeight must be greater than or equal to Height + srcY, and dstHeight must be greater than or equal to Height \+ dstY.
 
 cuMemcpy2DAsync() returns an error if any pitch is greater than the maximum allowed (CU_DEVICE_ATTRIBUTE_MAX_PITCH). cuMemAllocPitch() passes back pitches that always work with cuMemcpy2D(). On intra-device memory copies (device to device, CUDA array to device, CUDA array to CUDA array), cuMemcpy2DAsync() may fail for pitches not computed by cuMemAllocPitch().
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemcpy2DUnaligned ( const CUDA_MEMCPY2D* pCopy )
 
-
 Copies memory for 2D arrays.
 
-######  Parameters
+###### Parameters
 
 `pCopy`
     \- Parameters for the memory copy
@@ -1386,7 +1300,6 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Perform a 2D memory copy according to the parameters specified in `pCopy`. The CUDA_MEMCPY2D structure is defined as:
 
-
     ‎   typedef struct CUDA_MEMCPY2D_st {
                 unsigned int srcXInBytes, srcY;
                 CUmemorytype srcMemoryType;
@@ -1406,10 +1319,7 @@ Perform a 2D memory copy according to the parameters specified in `pCopy`. The C
 
 where:
 
-  * srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
-
-
-
+* srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
 
     ‎   typedef enum CUmemorytype_enum {
                 CU_MEMORYTYPE_HOST = 0x01
@@ -1434,54 +1344,45 @@ If dstMemoryType is CU_MEMORYTYPE_DEVICE, dstDevice and dstPitch specify the (de
 
 If dstMemoryType is CU_MEMORYTYPE_ARRAY, dstArray specifies the handle of the destination data. dstHost, dstDevice and dstPitch are ignored.
 
-  * srcXInBytes and srcY specify the base address of the source data for the copy.
-
+* srcXInBytes and srcY specify the base address of the source data for the copy.
 
 For host pointers, the starting address is
-
 
     ‎  void* Start = (void*)((char*)srcHost+srcY*srcPitch + srcXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr Start = srcDevice+srcY*srcPitch+srcXInBytes;
 
 For CUDA arrays, srcXInBytes must be evenly divisible by the array element size.
 
-  * dstXInBytes and dstY specify the base address of the destination data for the copy.
-
+* dstXInBytes and dstY specify the base address of the destination data for the copy.
 
 For host pointers, the base address is
-
 
     ‎  void* dstStart = (void*)((char*)dstHost+dstY*dstPitch + dstXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr dstStart = dstDevice+dstY*dstPitch+dstXInBytes;
 
 For CUDA arrays, dstXInBytes must be evenly divisible by the array element size.
 
-  * WidthInBytes and Height specify the width (in bytes) and height of the 2D copy being performed.
+* WidthInBytes and Height specify the width (in bytes) and height of the 2D copy being performed.
 
-  * If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
-
+* If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
 
 cuMemcpy2D() returns an error if any pitch is greater than the maximum allowed (CU_DEVICE_ATTRIBUTE_MAX_PITCH). cuMemAllocPitch() passes back pitches that always work with cuMemcpy2D(). On intra-device memory copies (device to device, CUDA array to device, CUDA array to CUDA array), cuMemcpy2D() may fail for pitches not computed by cuMemAllocPitch(). cuMemcpy2DUnaligned() does not have this restriction, but may run significantly slower in the cases where cuMemcpy2D() would have returned an error code.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpy3D ( const CUDA_MEMCPY3D* pCopy )
 
-
 Copies memory for 3D arrays.
 
-######  Parameters
+###### Parameters
 
 `pCopy`
     \- Parameters for the memory copy
@@ -1493,7 +1394,6 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 ###### Description
 
 Perform a 3D memory copy according to the parameters specified in `pCopy`. The CUDA_MEMCPY3D structure is defined as:
-
 
     ‎        typedef struct CUDA_MEMCPY3D_st {
 
@@ -1522,10 +1422,7 @@ Perform a 3D memory copy according to the parameters specified in `pCopy`. The C
 
 where:
 
-  * srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
-
-
-
+* srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
 
     ‎   typedef enum CUmemorytype_enum {
                 CU_MEMORYTYPE_HOST = 0x01
@@ -1550,58 +1447,49 @@ If dstMemoryType is CU_MEMORYTYPE_DEVICE, dstDevice and dstPitch specify the (de
 
 If dstMemoryType is CU_MEMORYTYPE_ARRAY, dstArray specifies the handle of the destination data. dstHost, dstDevice, dstPitch and dstHeight are ignored.
 
-  * srcXInBytes, srcY and srcZ specify the base address of the source data for the copy.
-
+* srcXInBytes, srcY and srcZ specify the base address of the source data for the copy.
 
 For host pointers, the starting address is
-
 
     ‎  void* Start = (void*)((char*)srcHost+(srcZ*srcHeight+srcY)*srcPitch + srcXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr Start = srcDevice+(srcZ*srcHeight+srcY)*srcPitch+srcXInBytes;
 
 For CUDA arrays, srcXInBytes must be evenly divisible by the array element size.
 
-  * dstXInBytes, dstY and dstZ specify the base address of the destination data for the copy.
-
+* dstXInBytes, dstY and dstZ specify the base address of the destination data for the copy.
 
 For host pointers, the base address is
-
 
     ‎  void* dstStart = (void*)((char*)dstHost+(dstZ*dstHeight+dstY)*dstPitch + dstXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr dstStart = dstDevice+(dstZ*dstHeight+dstY)*dstPitch+dstXInBytes;
 
 For CUDA arrays, dstXInBytes must be evenly divisible by the array element size.
 
-  * WidthInBytes, Height and Depth specify the width (in bytes), height and depth of the 3D copy being performed.
+* WidthInBytes, Height and Depth specify the width (in bytes), height and depth of the 3D copy being performed.
 
-  * If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
+* If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
 
-  * If specified, srcHeight must be greater than or equal to Height + srcY, and dstHeight must be greater than or equal to Height \+ dstY.
-
+* If specified, srcHeight must be greater than or equal to Height + srcY, and dstHeight must be greater than or equal to Height \+ dstY.
 
 cuMemcpy3D() returns an error if any pitch is greater than the maximum allowed (CU_DEVICE_ATTRIBUTE_MAX_PITCH).
 
 The srcLOD and dstLOD members of the CUDA_MEMCPY3D structure must be set to 0.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpy3DAsync ( const CUDA_MEMCPY3D* pCopy, CUstream hStream )
 
-
 Copies memory for 3D arrays.
 
-######  Parameters
+###### Parameters
 
 `pCopy`
     \- Parameters for the memory copy
@@ -1615,7 +1503,6 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 ###### Description
 
 Perform a 3D memory copy according to the parameters specified in `pCopy`. The CUDA_MEMCPY3D structure is defined as:
-
 
     ‎        typedef struct CUDA_MEMCPY3D_st {
 
@@ -1644,10 +1531,7 @@ Perform a 3D memory copy according to the parameters specified in `pCopy`. The C
 
 where:
 
-  * srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
-
-
-
+* srcMemoryType and dstMemoryType specify the type of memory of the source and destination, respectively; CUmemorytype_enum is defined as:
 
     ‎   typedef enum CUmemorytype_enum {
                 CU_MEMORYTYPE_HOST = 0x01
@@ -1672,60 +1556,51 @@ If dstMemoryType is CU_MEMORYTYPE_DEVICE, dstDevice and dstPitch specify the (de
 
 If dstMemoryType is CU_MEMORYTYPE_ARRAY, dstArray specifies the handle of the destination data. dstHost, dstDevice, dstPitch and dstHeight are ignored.
 
-  * srcXInBytes, srcY and srcZ specify the base address of the source data for the copy.
-
+* srcXInBytes, srcY and srcZ specify the base address of the source data for the copy.
 
 For host pointers, the starting address is
-
 
     ‎  void* Start = (void*)((char*)srcHost+(srcZ*srcHeight+srcY)*srcPitch + srcXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr Start = srcDevice+(srcZ*srcHeight+srcY)*srcPitch+srcXInBytes;
 
 For CUDA arrays, srcXInBytes must be evenly divisible by the array element size.
 
-  * dstXInBytes, dstY and dstZ specify the base address of the destination data for the copy.
-
+* dstXInBytes, dstY and dstZ specify the base address of the destination data for the copy.
 
 For host pointers, the base address is
-
 
     ‎  void* dstStart = (void*)((char*)dstHost+(dstZ*dstHeight+dstY)*dstPitch + dstXInBytes);
 
 For device pointers, the starting address is
 
-
     ‎  CUdeviceptr dstStart = dstDevice+(dstZ*dstHeight+dstY)*dstPitch+dstXInBytes;
 
 For CUDA arrays, dstXInBytes must be evenly divisible by the array element size.
 
-  * WidthInBytes, Height and Depth specify the width (in bytes), height and depth of the 3D copy being performed.
+* WidthInBytes, Height and Depth specify the width (in bytes), height and depth of the 3D copy being performed.
 
-  * If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
+* If specified, srcPitch must be greater than or equal to WidthInBytes + srcXInBytes, and dstPitch must be greater than or equal to WidthInBytes + dstXInBytes.
 
-  * If specified, srcHeight must be greater than or equal to Height + srcY, and dstHeight must be greater than or equal to Height \+ dstY.
-
+* If specified, srcHeight must be greater than or equal to Height + srcY, and dstHeight must be greater than or equal to Height \+ dstY.
 
 cuMemcpy3DAsync() returns an error if any pitch is greater than the maximum allowed (CU_DEVICE_ATTRIBUTE_MAX_PITCH).
 
 The srcLOD and dstLOD members of the CUDA_MEMCPY3D structure must be set to 0.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemcpy3DBatchAsync ( size_t numOps, CUDA_MEMCPY3D_BATCH_OP* opList, unsigned long long flags, CUstream hStream )
 
-
 Performs a batch of 3D memory copies asynchronously.
 
-######  Parameters
+###### Parameters
 
 `numOps`
     \- Total number of memcpy operations.
@@ -1754,19 +1629,17 @@ The CUmemcpyAttributes::srcAccessOrder indicates the source access ordering to b
 
 The CUmemcpyAttributes::flags field can be used to specify certain flags for copies. Setting the CU_MEMCPY_FLAG_PREFER_OVERLAP_WITH_COMPUTE flag indicates that the associated copies should preferably overlap with any compute work. Note that this flag is a hint and can be ignored depending on the platform and other parameters of the copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpy3DPeer ( const CUDA_MEMCPY3D_PEER* pCopy )
 
-
 Copies memory between contexts.
 
-######  Parameters
+###### Parameters
 
 `pCopy`
     \- Parameters for the memory copy
@@ -1779,17 +1652,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Perform a 3D memory copy according to the parameters specified in `pCopy`. See the definition of the CUDA_MEMCPY3D_PEER structure for documentation of its parameters.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpy3DPeerAsync ( const CUDA_MEMCPY3D_PEER* pCopy, CUstream hStream )
 
-
 Copies memory between contexts asynchronously.
 
-######  Parameters
+###### Parameters
 
 `pCopy`
     \- Parameters for the memory copy
@@ -1804,19 +1675,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Perform a 3D memory copy according to the parameters specified in `pCopy`. See the definition of the CUDA_MEMCPY3D_PEER structure for documentation of its parameters.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemcpyAsync ( CUdeviceptr dst, CUdeviceptr src, size_t ByteCount, CUstream hStream )
 
-
 Copies memory asynchronously.
 
-######  Parameters
+###### Parameters
 
 `dst`
     \- Destination unified virtual address space pointer
@@ -1835,21 +1704,19 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies data between two pointers. `dst` and `src` are base pointers of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy. Note that this function infers the type of the transfer (host to host, host to device, device to device, or device to host) from the pointer values. This function is only allowed in contexts which support unified addressing.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyAtoA ( CUarray dstArray, size_t dstOffset, CUarray srcArray, size_t srcOffset, size_t ByteCount )
 
-
 Copies memory from Array to Array.
 
-######  Parameters
+###### Parameters
 
 `dstArray`
     \- Destination array
@@ -1870,17 +1737,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from one 1D CUDA array to another. `dstArray` and `srcArray` specify the handles of the destination and source CUDA arrays for the copy, respectively. `dstOffset` and `srcOffset` specify the destination and source offsets in bytes into the CUDA arrays. `ByteCount` is the number of bytes to be copied. The size of the elements in the CUDA arrays need not be the same format, but the elements must be the same size; and count must be evenly divisible by that size.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpyAtoD ( CUdeviceptr dstDevice, CUarray srcArray, size_t srcOffset, size_t ByteCount )
 
-
 Copies memory from Array to Device.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -1899,17 +1764,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from one 1D CUDA array to device memory. `dstDevice` specifies the base pointer of the destination and must be naturally aligned with the CUDA array elements. `srcArray` and `srcOffset` specify the CUDA array handle and the offset in bytes into the array where the copy is to begin. `ByteCount` specifies the number of bytes to copy and must be evenly divisible by the array element size.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpyAtoH ( void* dstHost, CUarray srcArray, size_t srcOffset, size_t ByteCount )
 
-
 Copies memory from Array to Host.
 
-######  Parameters
+###### Parameters
 
 `dstHost`
     \- Destination device pointer
@@ -1928,19 +1791,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from one 1D CUDA array to host memory. `dstHost` specifies the base pointer of the destination. `srcArray` and `srcOffset` specify the CUDA array handle and starting offset in bytes of the source data. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
+* This function exhibits synchronous behavior for most use cases.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyAtoHAsync ( void* dstHost, CUarray srcArray, size_t srcOffset, size_t ByteCount, CUstream hStream )
 
-
 Copies memory from Array to Host.
 
-######  Parameters
+###### Parameters
 
 `dstHost`
     \- Destination pointer
@@ -1961,21 +1822,19 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from one 1D CUDA array to host memory. `dstHost` specifies the base pointer of the destination. `srcArray` and `srcOffset` specify the CUDA array handle and starting offset in bytes of the source data. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
-
-CUresult cuMemcpyBatchAsync ( CUdeviceptr* dsts, CUdeviceptr* srcs, size_t* sizes, size_t count, CUmemcpyAttributes* attrs, size_t* attrsIdxs, size_t numAttrs, CUstream hStream )
-
+CUresult cuMemcpyBatchAsync ( CUdeviceptr*dsts, CUdeviceptr* srcs, size_t*sizes, size_t count, CUmemcpyAttributes* attrs, size_t* attrsIdxs, size_t numAttrs, CUstream hStream )
 
 Performs a batch of memory copies asynchronously.
 
-######  Parameters
+###### Parameters
 
 `dsts`
     \- Array of destination pointers.
@@ -2012,19 +1871,17 @@ The CUmemcpyAttributes::srcLocHint and CUmemcpyAttributes::dstLocHint allows app
 
 The CUmemcpyAttributes::flags field can be used to specify certain flags for copies. Setting the CU_MEMCPY_FLAG_PREFER_OVERLAP_WITH_COMPUTE flag indicates that the associated copies should preferably overlap with any compute work. Note that this flag is a hint and can be ignored depending on the platform and other parameters of the copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyDtoA ( CUarray dstArray, size_t dstOffset, CUdeviceptr srcDevice, size_t ByteCount )
 
-
 Copies memory from Device to Array.
 
-######  Parameters
+###### Parameters
 
 `dstArray`
     \- Destination array
@@ -2043,17 +1900,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from device memory to a 1D CUDA array. `dstArray` and `dstOffset` specify the CUDA array handle and starting index of the destination data. `srcDevice` specifies the base pointer of the source. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpyDtoD ( CUdeviceptr dstDevice, CUdeviceptr srcDevice, size_t ByteCount )
 
-
 Copies memory from Device to Device.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2070,17 +1925,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from device memory to device memory. `dstDevice` and `srcDevice` are the base pointers of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpyDtoDAsync ( CUdeviceptr dstDevice, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream )
 
-
 Copies memory from Device to Device.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2099,19 +1952,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from device memory to device memory. `dstDevice` and `srcDevice` are the base pointers of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemcpyDtoH ( void* dstHost, CUdeviceptr srcDevice, size_t ByteCount )
 
-
 Copies memory from Device to Host.
 
-######  Parameters
+###### Parameters
 
 `dstHost`
     \- Destination host pointer
@@ -2128,19 +1979,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from device to host memory. `dstHost` and `srcDevice` specify the base pointers of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
+* This function exhibits synchronous behavior for most use cases.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyDtoHAsync ( void* dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream )
 
-
 Copies memory from Device to Host.
 
-######  Parameters
+###### Parameters
 
 `dstHost`
     \- Destination host pointer
@@ -2159,21 +2008,19 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from device to host memory. `dstHost` and `srcDevice` specify the base pointers of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyHtoA ( CUarray dstArray, size_t dstOffset, const void* srcHost, size_t ByteCount )
 
-
 Copies memory from Host to Array.
 
-######  Parameters
+###### Parameters
 
 `dstArray`
     \- Destination array
@@ -2192,19 +2039,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from host memory to a 1D CUDA array. `dstArray` and `dstOffset` specify the CUDA array handle and starting offset in bytes of the destination data. `pSrc` specifies the base address of the source. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
+* This function exhibits synchronous behavior for most use cases.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyHtoAAsync ( CUarray dstArray, size_t dstOffset, const void* srcHost, size_t ByteCount, CUstream hStream )
 
-
 Copies memory from Host to Array.
 
-######  Parameters
+###### Parameters
 
 `dstArray`
     \- Destination array
@@ -2225,21 +2070,19 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from host memory to a 1D CUDA array. `dstArray` and `dstOffset` specify the CUDA array handle and starting offset in bytes of the destination data. `srcHost` specifies the base address of the source. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyHtoD ( CUdeviceptr dstDevice, const void* srcHost, size_t ByteCount )
 
-
 Copies memory from Host to Device.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2256,19 +2099,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from host memory to device memory. `dstDevice` and `srcHost` are the base addresses of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
+* This function exhibits synchronous behavior for most use cases.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyHtoDAsync ( CUdeviceptr dstDevice, const void* srcHost, size_t ByteCount, CUstream hStream )
 
-
 Copies memory from Host to Device.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2287,21 +2128,19 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from host memory to device memory. `dstDevice` and `srcHost` are the base addresses of the destination and source, respectively. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-  * Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
-
+* Memory regions requested must be either entirely registered with CUDA, or in the case of host pageable transfers, not registered at all. Memory regions spanning over allocations that are both registered and not registered with CUDA are not supported and will return CUDA_ERROR_INVALID_VALUE.
 
 CUresult cuMemcpyPeer ( CUdeviceptr dstDevice, CUcontext dstContext, CUdeviceptr srcDevice, CUcontext srcContext, size_t ByteCount )
 
-
 Copies device memory between two contexts.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2322,17 +2161,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from device memory in one context to device memory in another context. `dstDevice` is the base device pointer of the destination memory and `dstContext` is the destination context. `srcDevice` is the base device pointer of the source memory and `srcContext` is the source pointer. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits synchronous behavior for most use cases.
-
+* This function exhibits synchronous behavior for most use cases.
 
 CUresult cuMemcpyPeerAsync ( CUdeviceptr dstDevice, CUcontext dstContext, CUdeviceptr srcDevice, CUcontext srcContext, size_t ByteCount, CUstream hStream )
 
-
 Copies device memory between two contexts asynchronously.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2355,19 +2192,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Copies from device memory in one context to device memory in another context. `dstDevice` is the base device pointer of the destination memory and `dstContext` is the destination context. `srcDevice` is the base device pointer of the source memory and `srcContext` is the source pointer. `ByteCount` specifies the number of bytes to copy.
 
-  *
+*
 
-  * This function exhibits asynchronous behavior for most use cases.
+* This function exhibits asynchronous behavior for most use cases.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemsetD16 ( CUdeviceptr dstDevice, unsigned short us, size_t N )
 
-
 Initializes device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2384,17 +2219,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the memory range of `N` 16-bit values to the specified value `us`. The `dstDevice` pointer must be two byte aligned.
 
-  *
+*
 
-  * See also memset synchronization details.
-
+* See also memset synchronization details.
 
 CUresult cuMemsetD16Async ( CUdeviceptr dstDevice, unsigned short us, size_t N, CUstream hStream )
 
-
 Sets device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2413,19 +2246,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the memory range of `N` 16-bit values to the specified value `us`. The `dstDevice` pointer must be two byte aligned.
 
-  *
+*
 
-  * See also memset synchronization details.
+* See also memset synchronization details.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemsetD2D16 ( CUdeviceptr dstDevice, size_t dstPitch, unsigned short us, size_t Width, size_t Height )
 
-
 Initializes device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2446,17 +2277,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the 2D memory range of `Width` 16-bit values to the specified value `us`. `Height` specifies the number of rows to set, and `dstPitch` specifies the number of bytes between each row. The `dstDevice` pointer and `dstPitch` offset must be two byte aligned. This function performs fastest when the pitch is one that has been passed back by cuMemAllocPitch().
 
-  *
+*
 
-  * See also memset synchronization details.
-
+* See also memset synchronization details.
 
 CUresult cuMemsetD2D16Async ( CUdeviceptr dstDevice, size_t dstPitch, unsigned short us, size_t Width, size_t Height, CUstream hStream )
 
-
 Sets device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2479,19 +2308,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the 2D memory range of `Width` 16-bit values to the specified value `us`. `Height` specifies the number of rows to set, and `dstPitch` specifies the number of bytes between each row. The `dstDevice` pointer and `dstPitch` offset must be two byte aligned. This function performs fastest when the pitch is one that has been passed back by cuMemAllocPitch().
 
-  *
+*
 
-  * See also memset synchronization details.
+* See also memset synchronization details.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemsetD2D32 ( CUdeviceptr dstDevice, size_t dstPitch, unsigned int  ui, size_t Width, size_t Height )
 
-
 Initializes device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2512,17 +2339,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the 2D memory range of `Width` 32-bit values to the specified value `ui`. `Height` specifies the number of rows to set, and `dstPitch` specifies the number of bytes between each row. The `dstDevice` pointer and `dstPitch` offset must be four byte aligned. This function performs fastest when the pitch is one that has been passed back by cuMemAllocPitch().
 
-  *
+*
 
-  * See also memset synchronization details.
-
+* See also memset synchronization details.
 
 CUresult cuMemsetD2D32Async ( CUdeviceptr dstDevice, size_t dstPitch, unsigned int  ui, size_t Width, size_t Height, CUstream hStream )
 
-
 Sets device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2545,19 +2370,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the 2D memory range of `Width` 32-bit values to the specified value `ui`. `Height` specifies the number of rows to set, and `dstPitch` specifies the number of bytes between each row. The `dstDevice` pointer and `dstPitch` offset must be four byte aligned. This function performs fastest when the pitch is one that has been passed back by cuMemAllocPitch().
 
-  *
+*
 
-  * See also memset synchronization details.
+* See also memset synchronization details.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemsetD2D8 ( CUdeviceptr dstDevice, size_t dstPitch, unsigned char  uc, size_t Width, size_t Height )
 
-
 Initializes device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2578,17 +2401,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the 2D memory range of `Width` 8-bit values to the specified value `uc`. `Height` specifies the number of rows to set, and `dstPitch` specifies the number of bytes between each row. This function performs fastest when the pitch is one that has been passed back by cuMemAllocPitch().
 
-  *
+*
 
-  * See also memset synchronization details.
-
+* See also memset synchronization details.
 
 CUresult cuMemsetD2D8Async ( CUdeviceptr dstDevice, size_t dstPitch, unsigned char  uc, size_t Width, size_t Height, CUstream hStream )
 
-
 Sets device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2611,19 +2432,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the 2D memory range of `Width` 8-bit values to the specified value `uc`. `Height` specifies the number of rows to set, and `dstPitch` specifies the number of bytes between each row. This function performs fastest when the pitch is one that has been passed back by cuMemAllocPitch().
 
-  *
+*
 
-  * See also memset synchronization details.
+* See also memset synchronization details.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemsetD32 ( CUdeviceptr dstDevice, unsigned int  ui, size_t N )
 
-
 Initializes device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2640,17 +2459,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the memory range of `N` 32-bit values to the specified value `ui`. The `dstDevice` pointer must be four byte aligned.
 
-  *
+*
 
-  * See also memset synchronization details.
-
+* See also memset synchronization details.
 
 CUresult cuMemsetD32Async ( CUdeviceptr dstDevice, unsigned int  ui, size_t N, CUstream hStream )
 
-
 Sets device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2669,19 +2486,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the memory range of `N` 32-bit values to the specified value `ui`. The `dstDevice` pointer must be four byte aligned.
 
-  *
+*
 
-  * See also memset synchronization details.
+* See also memset synchronization details.
 
-  * This function uses standard default stream semantics.
-
+* This function uses standard default stream semantics.
 
 CUresult cuMemsetD8 ( CUdeviceptr dstDevice, unsigned char  uc, size_t N )
 
-
 Initializes device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2698,17 +2513,15 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the memory range of `N` 8-bit values to the specified value `uc`.
 
-  *
+*
 
-  * See also memset synchronization details.
-
+* See also memset synchronization details.
 
 CUresult cuMemsetD8Async ( CUdeviceptr dstDevice, unsigned char  uc, size_t N, CUstream hStream )
 
-
 Sets device memory.
 
-######  Parameters
+###### Parameters
 
 `dstDevice`
     \- Destination device pointer
@@ -2727,19 +2540,17 @@ CUDA_SUCCESS, CUDA_ERROR_DEINITIALIZED, CUDA_ERROR_NOT_INITIALIZED, CUDA_ERROR_I
 
 Sets the memory range of `N` 8-bit values to the specified value `uc`.
 
-  *
+*
 
-  * See also memset synchronization details.
+* See also memset synchronization details.
 
-  * This function uses standard default stream semantics.
+* This function uses standard default stream semantics.
 
-
-CUresult cuMipmappedArrayCreate ( CUmipmappedArray* pHandle, const CUDA_ARRAY3D_DESCRIPTOR* pMipmappedArrayDesc, unsigned int  numMipmapLevels )
-
+CUresult cuMipmappedArrayCreate ( CUmipmappedArray*pHandle, const CUDA_ARRAY3D_DESCRIPTOR* pMipmappedArrayDesc, unsigned int  numMipmapLevels )
 
 Creates a CUDA mipmapped array.
 
-######  Parameters
+###### Parameters
 
 `pHandle`
     \- Returned mipmapped array
@@ -2758,7 +2569,6 @@ Creates a CUDA mipmapped array according to the CUDA_ARRAY3D_DESCRIPTOR structur
 
 The CUDA_ARRAY3D_DESCRIPTOR is defined as:
 
-
     ‎    typedef struct {
                   unsigned int Width;
                   unsigned int Height;
@@ -2770,23 +2580,22 @@ The CUDA_ARRAY3D_DESCRIPTOR is defined as:
 
 where:
 
-  * `Width`, `Height`, and `Depth` are the width, height, and depth of the CUDA array (in elements); the following types of CUDA arrays can be allocated:
-    * A 1D mipmapped array is allocated if `Height` and `Depth` extents are both zero.
+* `Width`, `Height`, and `Depth` are the width, height, and depth of the CUDA array (in elements); the following types of CUDA arrays can be allocated:
+  * A 1D mipmapped array is allocated if `Height` and `Depth` extents are both zero.
 
-    * A 2D mipmapped array is allocated if only `Depth` extent is zero.
+  * A 2D mipmapped array is allocated if only `Depth` extent is zero.
 
-    * A 3D mipmapped array is allocated if all three extents are non-zero.
+  * A 3D mipmapped array is allocated if all three extents are non-zero.
 
-    * A 1D layered CUDA mipmapped array is allocated if only `Height` is zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 1D array. The number of layers is determined by the depth extent.
+  * A 1D layered CUDA mipmapped array is allocated if only `Height` is zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 1D array. The number of layers is determined by the depth extent.
 
-    * A 2D layered CUDA mipmapped array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 2D array. The number of layers is determined by the depth extent.
+  * A 2D layered CUDA mipmapped array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_LAYERED flag is set. Each layer is a 2D array. The number of layers is determined by the depth extent.
 
-    * A cubemap CUDA mipmapped array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_CUBEMAP flag is set. `Width` must be equal to `Height`, and `Depth` must be six. A cubemap is a special type of 2D layered CUDA array, where the six layers represent the six faces of a cube. The order of the six layers in memory is the same as that listed in CUarray_cubemap_face.
+  * A cubemap CUDA mipmapped array is allocated if all three extents are non-zero and the CUDA_ARRAY3D_CUBEMAP flag is set. `Width` must be equal to `Height`, and `Depth` must be six. A cubemap is a special type of 2D layered CUDA array, where the six layers represent the six faces of a cube. The order of the six layers in memory is the same as that listed in CUarray_cubemap_face.
 
-    * A cubemap layered CUDA mipmapped array is allocated if all three extents are non-zero, and both, CUDA_ARRAY3D_CUBEMAP and CUDA_ARRAY3D_LAYERED flags are set. `Width` must be equal to `Height`, and `Depth` must be a multiple of six. A cubemap layered CUDA array is a special type of 2D layered CUDA array that consists of a collection of cubemaps. The first six layers represent the first cubemap, the next six layers form the second cubemap, and so on.
+  * A cubemap layered CUDA mipmapped array is allocated if all three extents are non-zero, and both, CUDA_ARRAY3D_CUBEMAP and CUDA_ARRAY3D_LAYERED flags are set. `Width` must be equal to `Height`, and `Depth` must be a multiple of six. A cubemap layered CUDA array is a special type of 2D layered CUDA array that consists of a collection of cubemaps. The first six layers represent the first cubemap, the next six layers form the second cubemap, and so on.
 
-
-  * Format specifies the format of the elements; CUarray_format is defined as:
+* Format specifies the format of the elements; CUarray_format is defined as:
 
         ‎    typedef enum CUarray_format_enum {
                       CU_AD_FORMAT_UNSIGNED_INT8 = 0x01
@@ -2856,19 +2665,16 @@ where:
                       CU_AD_FORMAT_UINT16_PLANAR_444 = 0x5e
                   } CUarray_format;
 
+* `NumChannels` specifies the number of packed components per CUDA array element; it may be 1, 2, or 4;
 
-  * `NumChannels` specifies the number of packed components per CUDA array element; it may be 1, 2, or 4;
+* Flags may be set to
+  * CUDA_ARRAY3D_LAYERED to enable creation of layered CUDA mipmapped arrays. If this flag is set, `Depth` specifies the number of layers, not the depth of a 3D array.
 
+  * CUDA_ARRAY3D_SURFACE_LDST to enable surface references to be bound to individual mipmap levels of the CUDA mipmapped array. If this flag is not set, cuSurfRefSetArray will fail when attempting to bind a mipmap level of the CUDA mipmapped array to a surface reference.
 
-  * Flags may be set to
-    * CUDA_ARRAY3D_LAYERED to enable creation of layered CUDA mipmapped arrays. If this flag is set, `Depth` specifies the number of layers, not the depth of a 3D array.
+  * CUDA_ARRAY3D_CUBEMAP to enable creation of mipmapped cubemaps. If this flag is set, `Width` must be equal to `Height`, and `Depth` must be six. If the CUDA_ARRAY3D_LAYERED flag is also set, then `Depth` must be a multiple of six.
 
-    * CUDA_ARRAY3D_SURFACE_LDST to enable surface references to be bound to individual mipmap levels of the CUDA mipmapped array. If this flag is not set, cuSurfRefSetArray will fail when attempting to bind a mipmap level of the CUDA mipmapped array to a surface reference.
-
-    * CUDA_ARRAY3D_CUBEMAP to enable creation of mipmapped cubemaps. If this flag is set, `Width` must be equal to `Height`, and `Depth` must be six. If the CUDA_ARRAY3D_LAYERED flag is also set, then `Depth` must be a multiple of six.
-
-    * CUDA_ARRAY3D_TEXTURE_GATHER to indicate that the CUDA mipmapped array will be used for texture gather. Texture gather can only be performed on 2D CUDA mipmapped arrays.
-
+  * CUDA_ARRAY3D_TEXTURE_GATHER to indicate that the CUDA mipmapped array will be used for texture gather. Texture gather can only be performed on 2D CUDA mipmapped arrays.
 
 `Width`, `Height` and `Depth` must meet certain size requirements as listed in the following table. All values are specified in elements. Note that for brevity's sake, the full name of the device attribute is not specified. For ex., TEXTURE1D_MIPMAPPED_WIDTH refers to the device attribute CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_MIPMAPPED_WIDTH.
 
@@ -2884,10 +2690,9 @@ Cubemap Layered  |  { (1,TEXTURECUBEMAP_LAYERED_WIDTH), (1,TEXTURECUBEMAP_LAYERE
 
 CUresult cuMipmappedArrayDestroy ( CUmipmappedArray hMipmappedArray )
 
-
 Destroys a CUDA mipmapped array.
 
-######  Parameters
+###### Parameters
 
 `hMipmappedArray`
     \- Mipmapped array to destroy
@@ -2902,10 +2707,9 @@ Destroys the CUDA mipmapped array `hMipmappedArray`.
 
 CUresult cuMipmappedArrayGetLevel ( CUarray* pLevelArray, CUmipmappedArray hMipmappedArray, unsigned int  level )
 
-
 Gets a mipmap level of a CUDA mipmapped array.
 
-######  Parameters
+###### Parameters
 
 `pLevelArray`
     \- Returned mipmap level CUDA array
@@ -2926,10 +2730,9 @@ If `level` is greater than the maximum number of levels in this mipmapped array,
 
 CUresult cuMipmappedArrayGetMemoryRequirements ( CUDA_ARRAY_MEMORY_REQUIREMENTS* memoryRequirements, CUmipmappedArray mipmap, CUdevice device )
 
-
 Returns the memory requirements of a CUDA mipmapped array.
 
-######  Parameters
+###### Parameters
 
 `memoryRequirements`
     \- Pointer to CUDA_ARRAY_MEMORY_REQUIREMENTS
@@ -2950,10 +2753,9 @@ The returned value in CUDA_ARRAY_MEMORY_REQUIREMENTS::size represents the total 
 
 CUresult cuMipmappedArrayGetSparseProperties ( CUDA_ARRAY_SPARSE_PROPERTIES* sparseProperties, CUmipmappedArray mipmap )
 
-
 Returns the layout properties of a sparse CUDA mipmapped array.
 
-######  Parameters
+###### Parameters
 
 `sparseProperties`
     \- Pointer to CUDA_ARRAY_SPARSE_PROPERTIES

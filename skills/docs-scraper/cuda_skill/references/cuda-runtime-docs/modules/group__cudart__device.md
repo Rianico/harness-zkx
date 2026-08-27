@@ -2,15 +2,13 @@
 
 **Source:** group__CUDART__DEVICE.html
 
-
 ### Functions
 
-__host__ cudaError_t cudaChooseDevice ( int* device, const cudaDeviceProp* prop )
-
+**host** cudaError_t cudaChooseDevice ( int*device, const cudaDeviceProp* prop )
 
 Select compute-device which best matches criteria.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- Device with best match
@@ -25,17 +23,15 @@ cudaSuccess, cudaErrorInvalidValue
 
 Returns in `*device` the device which has properties that best match `*prop`.
 
-
 **See also:**
 
 cudaGetDeviceCount, cudaGetDevice, cudaSetDevice, cudaGetDeviceProperties, cudaInitDevice
 
-__host__ cudaError_t cudaDeviceFlushGPUDirectRDMAWrites ( cudaFlushGPUDirectRDMAWritesTarget target, cudaFlushGPUDirectRDMAWritesScope scope )
-
+**host** cudaError_t cudaDeviceFlushGPUDirectRDMAWrites ( cudaFlushGPUDirectRDMAWritesTarget target, cudaFlushGPUDirectRDMAWritesScope scope )
 
 Blocks until remote writes are visible to the specified scope.
 
-######  Parameters
+###### Parameters
 
 `target`
     \- The target of the operation, see cudaFlushGPUDirectRDMAWritesTarget
@@ -54,17 +50,15 @@ If the scope equals or lies within the scope indicated by cudaDevAttrGPUDirectRD
 
 Users may query support for this API via cudaDevAttrGPUDirectRDMAFlushWritesOptions.
 
-
 **See also:**
 
 cuFlushGPUDirectRDMAWrites
 
-__host__  __device__ cudaError_t cudaDeviceGetAttribute ( int* value, cudaDeviceAttr attr, int  device )
-
+**host**  **device** cudaError_t cudaDeviceGetAttribute ( int* value, cudaDeviceAttr attr, int  device )
 
 Returns information about the device.
 
-######  Parameters
+###### Parameters
 
 `value`
     \- Returned device attribute value
@@ -81,17 +75,15 @@ cudaSuccess, cudaErrorInvalidDevice, cudaErrorInvalidValue
 
 Returns in `*value` the integer value of the attribute `attr` on device `device`.
 
-
 **See also:**
 
 cudaGetDeviceCount, cudaGetDevice, cudaSetDevice, cudaChooseDevice, cudaGetDeviceProperties, cudaInitDevice, cuDeviceGetAttribute
 
-__host__ cudaError_t cudaDeviceGetByPCIBusId ( int* device, const char* pciBusId )
-
+**host** cudaError_t cudaDeviceGetByPCIBusId ( int*device, const char* pciBusId )
 
 Returns a handle to a compute device.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- Returned device ordinal
@@ -106,17 +98,15 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorInvalidDevice
 
 Returns in `*device` a device ordinal given a PCI bus ID string.
 
-
 **See also:**
 
 cudaDeviceGetPCIBusId, cuDeviceGetByPCIBusId
 
-__host__  __device__ cudaError_t cudaDeviceGetCacheConfig ( cudaFuncCache ** pCacheConfig )
-
+**host**  **device** cudaError_t cudaDeviceGetCacheConfig ( cudaFuncCache ** pCacheConfig )
 
 Returns the preferred cache configuration for the current device.
 
-######  Parameters
+###### Parameters
 
 `pCacheConfig`
     \- Returned cache configuration
@@ -133,21 +123,19 @@ This will return a `pCacheConfig` of cudaFuncCachePreferNone on devices where th
 
 The supported cache configurations are:
 
-  * cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
+* cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
 
-  * cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
+* cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
 
-  * cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
+* cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
 
-  * cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
-
+* cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 
 **See also:**
 
 cudaDeviceSetCacheConfig, cudaFuncSetCacheConfig ( C API), cudaFuncSetCacheConfig ( C++ API), cuCtxGetCacheConfig
 
-__host__ cudaError_t cudaDeviceGetDefaultMemPool ( cudaMemPool_t* memPool, int  device )
-
+**host** cudaError_t cudaDeviceGetDefaultMemPool ( cudaMemPool_t* memPool, int  device )
 
 Returns the default mempool of a device.
 
@@ -159,17 +147,15 @@ cudaSuccess, cudaErrorInvalidDevice, cudaErrorInvalidValuecudaErrorNotSupported
 
 The default mempool of a device contains device memory from that device.
 
-
 **See also:**
 
 cuDeviceGetDefaultMemPool, cudaMallocAsync, cudaMemPoolTrimTo, cudaMemPoolGetAttribute, cudaDeviceSetMemPool, cudaMemPoolSetAttribute, cudaMemPoolSetAccess
 
-__host__ cudaError_t cudaDeviceGetHostAtomicCapabilities ( unsigned int* capabilities, const cudaAtomicOperation ** operations, unsigned int  count, int  device )
-
+**host** cudaError_t cudaDeviceGetHostAtomicCapabilities ( unsigned int* capabilities, const cudaAtomicOperation ** operations, unsigned int  count, int  device )
 
 Queries details about atomic operations supported between the device and host.
 
-######  Parameters
+###### Parameters
 
 `capabilities`
     \- Returned capability details of each requested operation
@@ -178,7 +164,6 @@ Queries details about atomic operations supported between the device and host.
 `count`
     \- Count of requested operations and size of capabilities
 `device`
-
 
 ###### Returns
 
@@ -198,12 +183,11 @@ Returns cudaErrorInvalidValue if `*capabilities` or `*operations` is NULL, if `c
 
 cudaDeviceGetAttribute, cudaDeviceGetP2PAtomicCapabilities, cuDeviceGeHostAtomicCapabilities
 
-__host__  __device__ cudaError_t cudaDeviceGetLimit ( size_t* pValue, cudaLimit limit )
-
+**host**  **device** cudaError_t cudaDeviceGetLimit ( size_t* pValue, cudaLimit limit )
 
 Return resource limits.
 
-######  Parameters
+###### Parameters
 
 `pValue`
     \- Returned size of the limit
@@ -218,27 +202,25 @@ cudaSuccess, cudaErrorUnsupportedLimit, cudaErrorInvalidValue
 
 Returns in `*pValue` the current size of `limit`. The following cudaLimit values are supported.
 
-  * cudaLimitStackSize is the stack size in bytes of each GPU thread.
+* cudaLimitStackSize is the stack size in bytes of each GPU thread.
 
-  * cudaLimitPrintfFifoSize is the size in bytes of the shared FIFO used by the printf() device system call.
+* cudaLimitPrintfFifoSize is the size in bytes of the shared FIFO used by the printf() device system call.
 
-  * cudaLimitMallocHeapSize is the size in bytes of the heap used by the malloc() and free() device system calls.
+* cudaLimitMallocHeapSize is the size in bytes of the heap used by the malloc() and free() device system calls.
 
-  * cudaLimitDevRuntimeSyncDepth is the maximum grid depth at which a thread can isssue the device runtime call cudaDeviceSynchronize() to wait on child grid launches to complete. This functionality is removed for devices of compute capability >= 9.0, and hence will return error cudaErrorUnsupportedLimit on such devices.
+* cudaLimitDevRuntimeSyncDepth is the maximum grid depth at which a thread can issue the device runtime call cudaDeviceSynchronize() to wait on child grid launches to complete. This functionality is removed for devices of compute capability >= 9.0, and hence will return error cudaErrorUnsupportedLimit on such devices.
 
-  * cudaLimitDevRuntimePendingLaunchCount is the maximum number of outstanding device runtime launches.
+* cudaLimitDevRuntimePendingLaunchCount is the maximum number of outstanding device runtime launches.
 
-  * cudaLimitMaxL2FetchGranularity is the L2 cache fetch granularity.
+* cudaLimitMaxL2FetchGranularity is the L2 cache fetch granularity.
 
-  * cudaLimitPersistingL2CacheSize is the persisting L2 cache size in bytes.
-
+* cudaLimitPersistingL2CacheSize is the persisting L2 cache size in bytes.
 
 **See also:**
 
 cudaDeviceSetLimit, cuCtxGetLimit
 
-__host__ cudaError_t cudaDeviceGetMemPool ( cudaMemPool_t* memPool, int  device )
-
+**host** cudaError_t cudaDeviceGetMemPool ( cudaMemPool_t* memPool, int  device )
 
 Gets the current mempool for a device.
 
@@ -250,17 +232,15 @@ cudaSuccess, cudaErrorInvalidValuecudaErrorNotSupported
 
 Returns the last pool provided to cudaDeviceSetMemPool for this device or the device's default memory pool if cudaDeviceSetMemPool has never been called. By default the current mempool is the default mempool for a device, otherwise the returned pool must have been set with cuDeviceSetMemPool or cudaDeviceSetMemPool.
 
-
 **See also:**
 
 cuDeviceGetMemPool, cudaDeviceGetDefaultMemPool, cudaDeviceSetMemPool
 
-__host__ cudaError_t cudaDeviceGetNvSciSyncAttributes ( void* nvSciSyncAttrList, int  device, int  flags )
-
+**host** cudaError_t cudaDeviceGetNvSciSyncAttributes ( void* nvSciSyncAttrList, int  device, int  flags )
 
 Return NvSciSync attributes that this device can support.
 
-######  Parameters
+###### Parameters
 
 `nvSciSyncAttrList`
     \- Return NvSciSync attributes supported.
@@ -279,27 +259,25 @@ The applications should set `nvSciSyncAttrList` to a valid NvSciSyncAttrList fai
 
 The `flags` controls how applications intends to use the NvSciSync created from the `nvSciSyncAttrList`. The valid flags are:
 
-  * cudaNvSciSyncAttrSignal, specifies that the applications intends to signal an NvSciSync on this CUDA device.
+* cudaNvSciSyncAttrSignal, specifies that the applications intends to signal an NvSciSync on this CUDA device.
 
-  * cudaNvSciSyncAttrWait, specifies that the applications intends to wait on an NvSciSync on this CUDA device.
-
+* cudaNvSciSyncAttrWait, specifies that the applications intends to wait on an NvSciSync on this CUDA device.
 
 At least one of these flags must be set, failing which the API returns cudaErrorInvalidValue. Both the flags are orthogonal to one another: a developer may set both these flags that allows to set both wait and signal specific attributes in the same `nvSciSyncAttrList`.
 
 Note that this API updates the input `nvSciSyncAttrList` with values equivalent to the following public attribute key-values: NvSciSyncAttrKey_RequiredPerm is set to
 
-  * NvSciSyncAccessPerm_SignalOnly if cudaNvSciSyncAttrSignal is set in `flags`.
+* NvSciSyncAccessPerm_SignalOnly if cudaNvSciSyncAttrSignal is set in `flags`.
 
-  * NvSciSyncAccessPerm_WaitOnly if cudaNvSciSyncAttrWait is set in `flags`.
+* NvSciSyncAccessPerm_WaitOnly if cudaNvSciSyncAttrWait is set in `flags`.
 
-  * NvSciSyncAccessPerm_WaitSignal if both cudaNvSciSyncAttrWait and cudaNvSciSyncAttrSignal are set in `flags`. NvSciSyncAttrKey_PrimitiveInfo is set to
+* NvSciSyncAccessPerm_WaitSignal if both cudaNvSciSyncAttrWait and cudaNvSciSyncAttrSignal are set in `flags`. NvSciSyncAttrKey_PrimitiveInfo is set to
 
-  * NvSciSyncAttrValPrimitiveType_SysmemSemaphore on any valid `device`.
+* NvSciSyncAttrValPrimitiveType_SysmemSemaphore on any valid `device`.
 
-  * NvSciSyncAttrValPrimitiveType_Syncpoint if `device` is a Tegra device.
+* NvSciSyncAttrValPrimitiveType_Syncpoint if `device` is a Tegra device.
 
-  * NvSciSyncAttrValPrimitiveType_SysmemSemaphorePayload64b if `device` is GA10X+. NvSciSyncAttrKey_GpuId is set to the same UUID that is returned in `cudaDeviceProp.uuid` from cudaDeviceGetProperties for this `device`.
-
+* NvSciSyncAttrValPrimitiveType_SysmemSemaphorePayload64b if `device` is GA10X+. NvSciSyncAttrKey_GpuId is set to the same UUID that is returned in `cudaDeviceProp.uuid` from cudaDeviceGetProperties for this `device`.
 
 cudaSuccess, cudaErrorDeviceUninitialized, cudaErrorInvalidValue, cudaErrorInvalidHandle, cudaErrorInvalidDevice, cudaErrorNotSupported, cudaErrorMemoryAllocation
 
@@ -307,12 +285,11 @@ cudaSuccess, cudaErrorDeviceUninitialized, cudaErrorInvalidValue, cudaErrorInval
 
 cudaImportExternalSemaphore, cudaDestroyExternalSemaphore, cudaSignalExternalSemaphoresAsync, cudaWaitExternalSemaphoresAsync
 
-__host__ cudaError_t cudaDeviceGetP2PAtomicCapabilities ( unsigned int* capabilities, const cudaAtomicOperation ** operations, unsigned int  count, int  srcDevice, int  dstDevice )
-
+**host** cudaError_t cudaDeviceGetP2PAtomicCapabilities ( unsigned int* capabilities, const cudaAtomicOperation ** operations, unsigned int  count, int  srcDevice, int  dstDevice )
 
 Queries details about atomic operations supported between two devices.
 
-######  Parameters
+###### Parameters
 
 `capabilities`
     \- Returned capability details of each requested operation
@@ -343,12 +320,11 @@ Returns cudaErrorInvalidValue if `*capabilities` or `*operations` is NULL, if `c
 
 cudaDeviceGetP2PAttribute, cuDeviceGetP2PAttribute, cuDeviceGetP2PAtomicCapabilities
 
-__host__ cudaError_t cudaDeviceGetP2PAttribute ( int* value, cudaDeviceP2PAttr attr, int  srcDevice, int  dstDevice )
-
+**host** cudaError_t cudaDeviceGetP2PAttribute ( int* value, cudaDeviceP2PAttr attr, int  srcDevice, int  dstDevice )
 
 Queries attributes of the link between two devices.
 
-######  Parameters
+###### Parameters
 
 `value`
     \- Returned value of the requested attribute
@@ -367,32 +343,29 @@ cudaSuccess, cudaErrorInvalidDevice, cudaErrorInvalidValue
 
 Returns in `*value` the value of the requested attribute `attrib` of the link between `srcDevice` and `dstDevice`. The supported attributes are:
 
-  * cudaDevP2PAttrPerformanceRank: A relative value indicating the performance of the link between two devices. Lower value means better performance (0 being the value used for most performant link).
+* cudaDevP2PAttrPerformanceRank: A relative value indicating the performance of the link between two devices. Lower value means better performance (0 being the value used for most performant link).
 
-  * cudaDevP2PAttrAccessSupported: 1 if peer access is enabled.
+* cudaDevP2PAttrAccessSupported: 1 if peer access is enabled.
 
-  * cudaDevP2PAttrNativeAtomicSupported: 1 if all native atomic operations over the link are supported.
+* cudaDevP2PAttrNativeAtomicSupported: 1 if all native atomic operations over the link are supported.
 
-  * cudaDevP2PAttrCudaArrayAccessSupported: 1 if accessing CUDA arrays over the link is supported.
+* cudaDevP2PAttrCudaArrayAccessSupported: 1 if accessing CUDA arrays over the link is supported.
 
-  * cudaDevP2PAttrOnlyPartialNativeAtomicSupported: 1 if some CUDA-valid atomic operations over the link are supported. Information about specific operations can be retrieved with cudaDeviceGetP2PAtomicCapabilities.
-
+* cudaDevP2PAttrOnlyPartialNativeAtomicSupported: 1 if some CUDA-valid atomic operations over the link are supported. Information about specific operations can be retrieved with cudaDeviceGetP2PAtomicCapabilities.
 
 Returns cudaErrorInvalidDevice if `srcDevice` or `dstDevice` are not valid or if they represent the same device.
 
 Returns cudaErrorInvalidValue if `attrib` is not valid or if `value` is a null pointer.
 
-
 **See also:**
 
 cudaDeviceEnablePeerAccess, cudaDeviceDisablePeerAccess, cudaDeviceCanAccessPeer, cuDeviceGetP2PAttributecudaDeviceGetP2PAtomicCapabilities
 
-__host__ cudaError_t cudaDeviceGetPCIBusId ( char* pciBusId, int  len, int  device )
-
+**host** cudaError_t cudaDeviceGetPCIBusId ( char* pciBusId, int  len, int  device )
 
 Returns a PCI Bus Id string for the device.
 
-######  Parameters
+###### Parameters
 
 `pciBusId`
     \- Returned identifier string for the device in the following format [domain]:[bus]:[device].[function] where `domain`, `bus`, `device`, and `function` are all hexadecimal values. pciBusId should be large enough to store 13 characters including the NULL-terminator.
@@ -409,17 +382,15 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorInvalidDevice
 
 Returns an ASCII string identifying the device `dev` in the NULL-terminated string pointed to by `pciBusId`. `len` specifies the maximum length of the string that may be returned.
 
-
 **See also:**
 
 cudaDeviceGetByPCIBusId, cuDeviceGetPCIBusId
 
-__host__ cudaError_t cudaDeviceGetStreamPriorityRange ( int* leastPriority, int* greatestPriority )
-
+**host** cudaError_t cudaDeviceGetStreamPriorityRange ( int*leastPriority, int* greatestPriority )
 
 Returns numerical values that correspond to the least and greatest stream priorities.
 
-######  Parameters
+###### Parameters
 
 `leastPriority`
     \- Pointer to an int in which the numerical value for least stream priority is returned
@@ -436,24 +407,21 @@ Returns in `*leastPriority` and `*greatestPriority` the numerical values that co
 
 This function will return '0' in both `*leastPriority` and `*greatestPriority` if the current context's device does not support stream priorities (see cudaDeviceGetAttribute).
 
-
 **See also:**
 
 cudaStreamCreateWithPriority, cudaStreamGetPriority, cuCtxGetStreamPriorityRange
 
-__host__ cudaError_t cudaDeviceGetTexture1DLinearMaxWidth ( size_t* maxWidthInElements, const cudaChannelFormatDesc* fmtDesc, int  device )
-
+**host** cudaError_t cudaDeviceGetTexture1DLinearMaxWidth ( size_t*maxWidthInElements, const cudaChannelFormatDesc* fmtDesc, int  device )
 
 Returns the maximum number of elements allocatable in a 1D linear texture for a given element size.
 
-######  Parameters
+###### Parameters
 
 `maxWidthInElements`
     \- Returns maximum number of texture elements allocatable for given `fmtDesc`.
 `fmtDesc`
     \- Texture format description.
 `device`
-
 
 ###### Returns
 
@@ -463,17 +431,15 @@ cudaSuccess, cudaErrorUnsupportedLimit, cudaErrorInvalidValue
 
 Returns in `maxWidthInElements` the maximum number of elements allocatable in a 1D linear texture for given format descriptor `fmtDesc`.
 
-
 **See also:**
 
 cuDeviceGetTexture1DLinearMaxWidth
 
-__host__ cudaError_t cudaDeviceRegisterAsyncNotification ( int  device, cudaAsyncCallback callbackFunc, void* userData, cudaAsyncCallbackHandle_t* callback )
-
+**host** cudaError_t cudaDeviceRegisterAsyncNotification ( int  device, cudaAsyncCallback callbackFunc, void*userData, cudaAsyncCallbackHandle_t* callback )
 
 Registers a callback function to receive async notifications.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- The device on which to register the callback
@@ -504,8 +470,7 @@ Returns in `*callback` a handle representing the registered callback instance.
 
 cudaDeviceUnregisterAsyncNotification
 
-__host__ cudaError_t cudaDeviceReset ( void )
-
+**host** cudaError_t cudaDeviceReset ( void )
 
 Destroy all allocations and reset all state on the current device in the current process.
 
@@ -519,21 +484,19 @@ Explicitly destroys and cleans up all resources associated with the current devi
 
 Note that this function will reset the device immediately. It is the caller's responsibility to ensure that the device is not being accessed by any other host threads from the process when this function is called.
 
-  * cudaDeviceReset() will not destroy memory allocations by cudaMallocAsync() and cudaMallocFromPoolAsync(). These memory allocations need to be destroyed explicitly.
+* cudaDeviceReset() will not destroy memory allocations by cudaMallocAsync() and cudaMallocFromPoolAsync(). These memory allocations need to be destroyed explicitly.
 
-  * If a non-primary CUcontext is current to the thread, cudaDeviceReset() will destroy only the internal CUDA RT state for that CUcontext.
-
+* If a non-primary CUcontext is current to the thread, cudaDeviceReset() will destroy only the internal CUDA RT state for that CUcontext.
 
 **See also:**
 
 cudaDeviceSynchronize
 
-__host__ cudaError_t cudaDeviceSetCacheConfig ( cudaFuncCache cacheConfig )
-
+**host** cudaError_t cudaDeviceSetCacheConfig ( cudaFuncCache cacheConfig )
 
 Sets the preferred cache configuration for the current device.
 
-######  Parameters
+###### Parameters
 
 `cacheConfig`
     \- Requested cache configuration
@@ -552,25 +515,23 @@ Launching a kernel with a different preference than the most recent preference s
 
 The supported cache configurations are:
 
-  * cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
+* cudaFuncCachePreferNone: no preference for shared memory or L1 (default)
 
-  * cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
+* cudaFuncCachePreferShared: prefer larger shared memory and smaller L1 cache
 
-  * cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
+* cudaFuncCachePreferL1: prefer larger L1 cache and smaller shared memory
 
-  * cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
-
+* cudaFuncCachePreferEqual: prefer equal size L1 cache and shared memory
 
 **See also:**
 
 cudaDeviceGetCacheConfig, cudaFuncSetCacheConfig ( C API), cudaFuncSetCacheConfig ( C++ API), cuCtxSetCacheConfig
 
-__host__ cudaError_t cudaDeviceSetLimit ( cudaLimit limit, size_t value )
-
+**host** cudaError_t cudaDeviceSetLimit ( cudaLimit limit, size_t value )
 
 Set resource limits.
 
-######  Parameters
+###### Parameters
 
 `limit`
     \- Limit to set
@@ -587,33 +548,25 @@ Setting `limit` to `value` is a request by the application to update the current
 
 Setting each cudaLimit has its own specific restrictions, so each is discussed here.
 
-  * cudaLimitStackSize controls the stack size in bytes of each GPU thread.
+* cudaLimitStackSize controls the stack size in bytes of each GPU thread.
 
+* cudaLimitPrintfFifoSize controls the size in bytes of the shared FIFO used by the printf() device system call. Setting cudaLimitPrintfFifoSize must not be performed after launching any kernel that uses the printf() device system call - in such case cudaErrorInvalidValue will be returned.
 
-  * cudaLimitPrintfFifoSize controls the size in bytes of the shared FIFO used by the printf() device system call. Setting cudaLimitPrintfFifoSize must not be performed after launching any kernel that uses the printf() device system call - in such case cudaErrorInvalidValue will be returned.
+* cudaLimitMallocHeapSize controls the size in bytes of the heap used by the malloc() and free() device system calls. Setting cudaLimitMallocHeapSize must not be performed after launching any kernel that uses the malloc() or free() device system calls - in such case cudaErrorInvalidValue will be returned.
 
+* cudaLimitDevRuntimeSyncDepth controls the maximum nesting depth of a grid at which a thread can safely call cudaDeviceSynchronize(). Setting this limit must be performed before any launch of a kernel that uses the device runtime and calls cudaDeviceSynchronize() above the default sync depth, two levels of grids. Calls to cudaDeviceSynchronize() will fail with error code cudaErrorSyncDepthExceeded if the limitation is violated. This limit can be set smaller than the default or up the maximum launch depth of 24. When setting this limit, keep in mind that additional levels of sync depth require the runtime to reserve large amounts of device memory which can no longer be used for user allocations. If these reservations of device memory fail, cudaDeviceSetLimit will return cudaErrorMemoryAllocation, and the limit can be reset to a lower value. This limit is only applicable to devices of compute capability < 9.0. Attempting to set this limit on devices of other compute capability will results in error cudaErrorUnsupportedLimit being returned.
 
-  * cudaLimitMallocHeapSize controls the size in bytes of the heap used by the malloc() and free() device system calls. Setting cudaLimitMallocHeapSize must not be performed after launching any kernel that uses the malloc() or free() device system calls - in such case cudaErrorInvalidValue will be returned.
+* cudaLimitDevRuntimePendingLaunchCount controls the maximum number of outstanding device runtime launches that can be made from the current device. A grid is outstanding from the point of launch up until the grid is known to have been completed. Device runtime launches which violate this limitation fail and return cudaErrorLaunchPendingCountExceeded when cudaGetLastError() is called after launch. If more pending launches than the default (2048 launches) are needed for a module using the device runtime, this limit can be increased. Keep in mind that being able to sustain additional pending launches will require the runtime to reserve larger amounts of device memory upfront which can no longer be used for allocations. If these reservations fail, cudaDeviceSetLimit will return cudaErrorMemoryAllocation, and the limit can be reset to a lower value. This limit is only applicable to devices of compute capability 3.5 and higher. Attempting to set this limit on devices of compute capability less than 3.5 will result in the error cudaErrorUnsupportedLimit being returned.
 
+* cudaLimitMaxL2FetchGranularity controls the L2 cache fetch granularity. Values can range from 0B to 128B. This is purely a performance hint and it can be ignored or clamped depending on the platform.
 
-  * cudaLimitDevRuntimeSyncDepth controls the maximum nesting depth of a grid at which a thread can safely call cudaDeviceSynchronize(). Setting this limit must be performed before any launch of a kernel that uses the device runtime and calls cudaDeviceSynchronize() above the default sync depth, two levels of grids. Calls to cudaDeviceSynchronize() will fail with error code cudaErrorSyncDepthExceeded if the limitation is violated. This limit can be set smaller than the default or up the maximum launch depth of 24. When setting this limit, keep in mind that additional levels of sync depth require the runtime to reserve large amounts of device memory which can no longer be used for user allocations. If these reservations of device memory fail, cudaDeviceSetLimit will return cudaErrorMemoryAllocation, and the limit can be reset to a lower value. This limit is only applicable to devices of compute capability < 9.0. Attempting to set this limit on devices of other compute capability will results in error cudaErrorUnsupportedLimit being returned.
-
-
-  * cudaLimitDevRuntimePendingLaunchCount controls the maximum number of outstanding device runtime launches that can be made from the current device. A grid is outstanding from the point of launch up until the grid is known to have been completed. Device runtime launches which violate this limitation fail and return cudaErrorLaunchPendingCountExceeded when cudaGetLastError() is called after launch. If more pending launches than the default (2048 launches) are needed for a module using the device runtime, this limit can be increased. Keep in mind that being able to sustain additional pending launches will require the runtime to reserve larger amounts of device memory upfront which can no longer be used for allocations. If these reservations fail, cudaDeviceSetLimit will return cudaErrorMemoryAllocation, and the limit can be reset to a lower value. This limit is only applicable to devices of compute capability 3.5 and higher. Attempting to set this limit on devices of compute capability less than 3.5 will result in the error cudaErrorUnsupportedLimit being returned.
-
-
-  * cudaLimitMaxL2FetchGranularity controls the L2 cache fetch granularity. Values can range from 0B to 128B. This is purely a performance hint and it can be ignored or clamped depending on the platform.
-
-
-  * cudaLimitPersistingL2CacheSize controls size in bytes available for persisting L2 cache. This is purely a performance hint and it can be ignored or clamped depending on the platform.
-
+* cudaLimitPersistingL2CacheSize controls size in bytes available for persisting L2 cache. This is purely a performance hint and it can be ignored or clamped depending on the platform.
 
 **See also:**
 
 cudaDeviceGetLimit, cuCtxSetLimit
 
-__host__ cudaError_t cudaDeviceSetMemPool ( int  device, cudaMemPool_t memPool )
-
+**host** cudaError_t cudaDeviceSetMemPool ( int  device, cudaMemPool_t memPool )
 
 Sets the current memory pool of a device.
 
@@ -627,13 +580,12 @@ The memory pool must be local to the specified device. Unless a mempool is speci
 
 Use cudaMallocFromPoolAsync to specify asynchronous allocations from a device different than the one the stream runs on.
 
-  *
+*
 **See also:**
 
 cuDeviceSetMemPool, cudaDeviceGetMemPool, cudaDeviceGetDefaultMemPool, cudaMemPoolCreate, cudaMemPoolDestroy, cudaMallocFromPoolAsync
 
-__host__  __device__ cudaError_t cudaDeviceSynchronize ( void )
-
+**host**  **device** cudaError_t cudaDeviceSynchronize ( void )
 
 Wait for compute device to finish.
 
@@ -645,19 +597,17 @@ cudaSuccess, cudaErrorStreamCaptureUnsupported
 
 Blocks until the device has completed all preceding requested tasks. cudaDeviceSynchronize() returns an error if one of the preceding tasks has failed. If the cudaDeviceScheduleBlockingSync flag was set for this device, the host thread will block until the device has finished its work.
 
-  * Use of cudaDeviceSynchronize in device code was deprecated in CUDA 11.6 and removed for compute_90+ compilation. For compute capability < 9.0, compile-time opt-in by specifying -D CUDA_FORCE_CDP1_IF_SUPPORTED is required to continue using cudaDeviceSynchronize() in device code for now. Note that this is different from host-side cudaDeviceSynchronize, which is still supported.
-
+* Use of cudaDeviceSynchronize in device code was deprecated in CUDA 11.6 and removed for compute_90+ compilation. For compute capability < 9.0, compile-time opt-in by specifying -D CUDA_FORCE_CDP1_IF_SUPPORTED is required to continue using cudaDeviceSynchronize() in device code for now. Note that this is different from host-side cudaDeviceSynchronize, which is still supported.
 
 **See also:**
 
 cudaDeviceReset, cuCtxSynchronize
 
-__host__ cudaError_t cudaDeviceUnregisterAsyncNotification ( int  device, cudaAsyncCallbackHandle_t callback )
-
+**host** cudaError_t cudaDeviceUnregisterAsyncNotification ( int  device, cudaAsyncCallbackHandle_t callback )
 
 Unregisters an async notification callback.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- The device from which to remove `callback`.
@@ -676,12 +626,11 @@ Unregisters `callback` so that the corresponding callback function will stop rec
 
 cudaDeviceRegisterAsyncNotification
 
-__host__  __device__ cudaError_t cudaGetDevice ( int* device )
-
+**host**  **device** cudaError_t cudaGetDevice ( int* device )
 
 Returns which device is currently being used.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- Returns the device on which the active host thread executes the device code.
@@ -694,17 +643,15 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorDeviceUnavailable
 
 Returns in `*device` the current device for the calling host thread.
 
-
 **See also:**
 
 cudaGetDeviceCount, cudaSetDevice, cudaGetDeviceProperties, cudaChooseDevice, cuCtxGetCurrent
 
-__host__  __device__ cudaError_t cudaGetDeviceCount ( int* count )
-
+**host**  **device** cudaError_t cudaGetDeviceCount ( int* count )
 
 Returns the number of compute-capable devices.
 
-######  Parameters
+###### Parameters
 
 `count`
     \- Returns the number of devices with compute capability greater or equal to 2.0
@@ -717,17 +664,15 @@ cudaSuccess
 
 Returns in `*count` the number of devices with compute capability greater or equal to 2.0 that are available for execution.
 
-
 **See also:**
 
 cudaGetDevice, cudaSetDevice, cudaGetDeviceProperties, cudaChooseDevice, cudaInitDevice, cuDeviceGetCount
 
-__host__ cudaError_t cudaGetDeviceFlags ( unsigned int* flags )
-
+**host** cudaError_t cudaGetDeviceFlags ( unsigned int* flags )
 
 Gets the flags for the current device.
 
-######  Parameters
+###### Parameters
 
 `flags`
     \- Pointer to store the device flags
@@ -746,17 +691,15 @@ If a context has been created via the driver API and is current to the calling t
 
 Flags returned by this function may specifically include cudaDeviceMapHost even though it is not accepted by cudaSetDeviceFlags because it is implicit in runtime API flags. The reason for this is that the current context may have been created via the driver API in which case the flag is not implicit and may be unset.
 
-
 **See also:**
 
 cudaGetDevice, cudaGetDeviceProperties, cudaSetDevice, cudaSetDeviceFlags, cudaInitDevice, cuCtxGetFlags, cuDevicePrimaryCtxGetState
 
-__host__ cudaError_t cudaGetDeviceProperties ( cudaDeviceProp* prop, int  device )
-
+**host** cudaError_t cudaGetDeviceProperties ( cudaDeviceProp* prop, int  device )
 
 Returns information about the compute-device.
 
-######  Parameters
+###### Parameters
 
 `prop`
     \- Properties for the specified device
@@ -771,17 +714,15 @@ cudaSuccess, cudaErrorInvalidDevice
 
 Returns in `*prop` the properties of device `dev`.
 
-
 **See also:**
 
 cudaGetDeviceCount, cudaGetDevice, cudaSetDevice, cudaChooseDevice, cudaDeviceGetAttribute, cudaInitDevice, cuDeviceGetAttribute, cuDeviceGetName
 
-__host__ cudaError_t cudaInitDevice ( int  device, unsigned int  deviceFlags, unsigned int  flags )
-
+**host** cudaError_t cudaInitDevice ( int  device, unsigned int  deviceFlags, unsigned int  flags )
 
 Initialize device to be used for GPU executions.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- Device on which the runtime will initialize itself.
@@ -802,17 +743,15 @@ When cudaInitDeviceFlagsAreValid is set in `flags`, deviceFlags are applied to t
 
 This function will return an error if the device is in cudaComputeModeExclusiveProcess and is occupied by another process or if the device is in cudaComputeModeProhibited.
 
-
 **See also:**
 
 cudaGetDeviceCount, cudaGetDevice, cudaGetDeviceProperties, cudaChooseDevice, cudaSetDevicecuCtxSetCurrent
 
-__host__ cudaError_t cudaIpcCloseMemHandle ( void* devPtr )
-
+**host** cudaError_t cudaIpcCloseMemHandle ( void* devPtr )
 
 Attempts to close memory mapped with cudaIpcOpenMemHandle.
 
-######  Parameters
+###### Parameters
 
 `devPtr`
     \- Device pointer returned by cudaIpcOpenMemHandle
@@ -823,25 +762,23 @@ cudaSuccess, cudaErrorMapBufferObjectFailed, cudaErrorNotSupported, cudaErrorInv
 
 ###### Description
 
-Decrements the reference count of the memory returnd by cudaIpcOpenMemHandle by 1. When the reference count reaches 0, this API unmaps the memory. The original allocation in the exporting process as well as imported mappings in other processes will be unaffected.
+Decrements the reference count of the memory returned by cudaIpcOpenMemHandle by 1. When the reference count reaches 0, this API unmaps the memory. The original allocation in the exporting process as well as imported mappings in other processes will be unaffected.
 
 Any resources used to enable peer access will be freed if this is the last mapping using them.
 
 IPC functionality is restricted to devices with support for unified addressing on Linux and Windows operating systems. IPC functionality on Windows is supported for compatibility purposes but not recommended as it comes with performance cost. Users can test their device for IPC functionality by calling cudaDeviceGetAttribute with cudaDevAttrIpcEventSupport
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
 cudaMalloc, cudaFree, cudaIpcGetEventHandle, cudaIpcOpenEventHandle, cudaIpcGetMemHandle, cudaIpcOpenMemHandle, cuIpcCloseMemHandle
 
-__host__ cudaError_t cudaIpcGetEventHandle ( cudaIpcEventHandle_t* handle, cudaEvent_t event )
-
+**host** cudaError_t cudaIpcGetEventHandle ( cudaIpcEventHandle_t* handle, cudaEvent_t event )
 
 Gets an interprocess handle for a previously allocated event.
 
-######  Parameters
+###### Parameters
 
 `handle`
     \- Pointer to a user allocated cudaIpcEventHandle in which to return the opaque event handle
@@ -860,19 +797,17 @@ After the event has been been opened in the importing process, cudaEventRecord, 
 
 IPC functionality is restricted to devices with support for unified addressing on Linux and Windows operating systems. IPC functionality on Windows is supported for compatibility purposes but not recommended as it comes with performance cost. Users can test their device for IPC functionality by calling cudaDeviceGetAttribute with cudaDevAttrIpcEventSupport
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
 cudaEventCreate, cudaEventDestroy, cudaEventSynchronize, cudaEventQuery, cudaStreamWaitEvent, cudaIpcOpenEventHandle, cudaIpcGetMemHandle, cudaIpcOpenMemHandle, cudaIpcCloseMemHandle, cuIpcGetEventHandle
 
-__host__ cudaError_t cudaIpcGetMemHandle ( cudaIpcMemHandle_t* handle, void* devPtr )
-
+**host** cudaError_t cudaIpcGetMemHandle ( cudaIpcMemHandle_t*handle, void* devPtr )
 
 Gets an interprocess memory handle for an existing device memory allocation.
 
-######  Parameters
+###### Parameters
 
 `handle`
     \- Pointer to user allocated cudaIpcMemHandle to return the handle in.
@@ -891,19 +826,17 @@ If a region of memory is freed with cudaFree and a subsequent call to cudaMalloc
 
 IPC functionality is restricted to devices with support for unified addressing on Linux and Windows operating systems. IPC functionality on Windows is supported for compatibility purposes but not recommended as it comes with performance cost. Users can test their device for IPC functionality by calling cudaDeviceGetAttribute with cudaDevAttrIpcEventSupport
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
 cudaMalloc, cudaFree, cudaIpcGetEventHandle, cudaIpcOpenEventHandle, cudaIpcOpenMemHandle, cudaIpcCloseMemHandle, cuIpcGetMemHandle
 
-__host__ cudaError_t cudaIpcOpenEventHandle ( cudaEvent_t* event, cudaIpcEventHandle_t handle )
-
+**host** cudaError_t cudaIpcOpenEventHandle ( cudaEvent_t* event, cudaIpcEventHandle_t handle )
 
 Opens an interprocess event handle for use in the current process.
 
-######  Parameters
+###### Parameters
 
 `event`
     \- Returns the imported event
@@ -922,19 +855,17 @@ Performing operations on the imported event after the exported event has been fr
 
 IPC functionality is restricted to devices with support for unified addressing on Linux and Windows operating systems. IPC functionality on Windows is supported for compatibility purposes but not recommended as it comes with performance cost. Users can test their device for IPC functionality by calling cudaDeviceGetAttribute with cudaDevAttrIpcEventSupport
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
-
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
 **See also:**
 
 cudaEventCreate, cudaEventDestroy, cudaEventSynchronize, cudaEventQuery, cudaStreamWaitEvent, cudaIpcGetEventHandle, cudaIpcGetMemHandle, cudaIpcOpenMemHandle, cudaIpcCloseMemHandle, cuIpcOpenEventHandle
 
-__host__ cudaError_t cudaIpcOpenMemHandle ( void** devPtr, cudaIpcMemHandle_t handle, unsigned int  flags )
-
+**host** cudaError_t cudaIpcOpenMemHandle ( void** devPtr, cudaIpcMemHandle_t handle, unsigned int  flags )
 
 Opens an interprocess memory handle exported from another process and returns a device pointer usable in the local process.
 
-######  Parameters
+###### Parameters
 
 `devPtr`
     \- Returned device pointer
@@ -963,21 +894,19 @@ Calling cudaFree on an exported memory region before calling cudaIpcCloseMemHand
 
 IPC functionality is restricted to devices with support for unified addressing on Linux and Windows operating systems. IPC functionality on Windows is supported for compatibility purposes but not recommended as it comes with performance cost. Users can test their device for IPC functionality by calling cudaDeviceGetAttribute with cudaDevAttrIpcEventSupport
 
-  * Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
+* Note that this function may also return cudaErrorInitializationError, cudaErrorInsufficientDriver or cudaErrorNoDevice if this call tries to initialize internal CUDA RT state.
 
-  * No guarantees are made about the address returned in `*devPtr`. In particular, multiple processes may not receive the same address for the same `handle`.
-
+* No guarantees are made about the address returned in `*devPtr`. In particular, multiple processes may not receive the same address for the same `handle`.
 
 **See also:**
 
 cudaMalloc, cudaFree, cudaIpcGetEventHandle, cudaIpcOpenEventHandle, cudaIpcGetMemHandle, cudaIpcCloseMemHandle, cudaDeviceEnablePeerAccess, cudaDeviceCanAccessPeer, cuIpcOpenMemHandle
 
-__host__ cudaError_t cudaSetDevice ( int  device )
-
+**host** cudaError_t cudaSetDevice ( int  device )
 
 Set device to be used for GPU executions.
 
-######  Parameters
+###### Parameters
 
 `device`
     \- Device on which the active host thread should execute the device code.
@@ -996,17 +925,15 @@ This call may be made from any host thread, to any device, and at any time. This
 
 It is not required to call cudaInitDevice before using this function.
 
-
 **See also:**
 
 cudaGetDeviceCount, cudaGetDevice, cudaGetDeviceProperties, cudaChooseDevice, cudaInitDevice, cuCtxSetCurrent
 
-__host__ cudaError_t cudaSetDeviceFlags ( unsigned int  flags )
-
+**host** cudaError_t cudaSetDeviceFlags ( unsigned int  flags )
 
 Sets flags to be used for device executions.
 
-######  Parameters
+###### Parameters
 
 `flags`
     \- Parameters for device operation
@@ -1021,37 +948,35 @@ Records `flags` as the flags for the current device. If the current device has b
 
 The three LSBs of the `flags` parameter can be used to control how the CPU thread interacts with the OS scheduler when waiting for results from the device.
 
-  * cudaDeviceScheduleAuto: The default value if the `flags` parameter is zero, uses a heuristic based on the number of active CUDA contexts in the process `C` and the number of logical processors in the system `P`. If `C` > `P`, then CUDA will yield to other OS threads when waiting for the device, otherwise CUDA will not yield while waiting for results and actively spin on the processor. Additionally, on Tegra devices, cudaDeviceScheduleAuto uses a heuristic based on the power profile of the platform and may choose cudaDeviceScheduleBlockingSync for low-powered devices.
+* cudaDeviceScheduleAuto: The default value if the `flags` parameter is zero, uses a heuristic based on the number of active CUDA contexts in the process `C` and the number of logical processors in the system `P`. If `C` > `P`, then CUDA will yield to other OS threads when waiting for the device, otherwise CUDA will not yield while waiting for results and actively spin on the processor. Additionally, on Tegra devices, cudaDeviceScheduleAuto uses a heuristic based on the power profile of the platform and may choose cudaDeviceScheduleBlockingSync for low-powered devices.
 
-  * cudaDeviceScheduleSpin: Instruct CUDA to actively spin when waiting for results from the device. This can decrease latency when waiting for the device, but may lower the performance of CPU threads if they are performing work in parallel with the CUDA thread.
+* cudaDeviceScheduleSpin: Instruct CUDA to actively spin when waiting for results from the device. This can decrease latency when waiting for the device, but may lower the performance of CPU threads if they are performing work in parallel with the CUDA thread.
 
-  * cudaDeviceScheduleYield: Instruct CUDA to yield its thread when waiting for results from the device. This can increase latency when waiting for the device, but can increase the performance of CPU threads performing work in parallel with the device.
+* cudaDeviceScheduleYield: Instruct CUDA to yield its thread when waiting for results from the device. This can increase latency when waiting for the device, but can increase the performance of CPU threads performing work in parallel with the device.
 
-  * cudaDeviceScheduleBlockingSync: Instruct CUDA to block the CPU thread on a synchronization primitive when waiting for the device to finish work.
+* cudaDeviceScheduleBlockingSync: Instruct CUDA to block the CPU thread on a synchronization primitive when waiting for the device to finish work.
 
-  * cudaDeviceBlockingSync: Instruct CUDA to block the CPU thread on a synchronization primitive when waiting for the device to finish work.
+* cudaDeviceBlockingSync: Instruct CUDA to block the CPU thread on a synchronization primitive when waiting for the device to finish work.
 
 Deprecated: This flag was deprecated as of CUDA 4.0 and replaced with cudaDeviceScheduleBlockingSync.
 
-  * cudaDeviceMapHost: This flag enables allocating pinned host memory that is accessible to the device. It is implicit for the runtime but may be absent if a context is created using the driver API. If this flag is not set, cudaHostGetDevicePointer() will always return a failure code.
+* cudaDeviceMapHost: This flag enables allocating pinned host memory that is accessible to the device. It is implicit for the runtime but may be absent if a context is created using the driver API. If this flag is not set, cudaHostGetDevicePointer() will always return a failure code.
 
-  * cudaDeviceLmemResizeToMax: Instruct CUDA to not reduce local memory after resizing local memory for a kernel. This can prevent thrashing by local memory allocations when launching many kernels with high local memory usage at the cost of potentially increased memory usage.
+* cudaDeviceLmemResizeToMax: Instruct CUDA to not reduce local memory after resizing local memory for a kernel. This can prevent thrashing by local memory allocations when launching many kernels with high local memory usage at the cost of potentially increased memory usage.
 
 Deprecated: This flag is deprecated and the behavior enabled by this flag is now the default and cannot be disabled.
 
-  * cudaDeviceSyncMemops: Ensures that synchronous memory operations initiated on this context will always synchronize. See further documentation in the section titled "API Synchronization behavior" to learn more about cases when synchronous memory operations can exhibit asynchronous behavior.
-
+* cudaDeviceSyncMemops: Ensures that synchronous memory operations initiated on this context will always synchronize. See further documentation in the section titled "API Synchronization behavior" to learn more about cases when synchronous memory operations can exhibit asynchronous behavior.
 
 **See also:**
 
 cudaGetDeviceFlags, cudaGetDeviceCount, cudaGetDevice, cudaGetDeviceProperties, cudaSetDevice, cudaSetValidDevices, cudaInitDevice, cudaChooseDevice, cuDevicePrimaryCtxSetFlags
 
-__host__ cudaError_t cudaSetValidDevices ( int* device_arr, int  len )
-
+**host** cudaError_t cudaSetValidDevices ( int* device_arr, int  len )
 
 Set a list of devices that can be used for CUDA.
 
-######  Parameters
+###### Parameters
 
 `device_arr`
     \- List of devices to try
@@ -1066,7 +991,6 @@ cudaSuccess, cudaErrorInvalidValue, cudaErrorInvalidDevice
 
 Sets a list of devices for CUDA execution in priority order using `device_arr`. The parameter `len` specifies the number of elements in the list. CUDA will try devices from the list sequentially until it finds one that works. If this function is not called, or if it is called with a `len` of 0, then CUDA will go back to its default behavior of trying devices sequentially from a default list containing all of the available CUDA devices in the system. If a specified device ID in the list does not exist, this function will return cudaErrorInvalidDevice. If `len` is not 0 and `device_arr` is NULL or if `len` exceeds the number of devices in the system, then cudaErrorInvalidValue is returned.
 
-
 **See also:**
 
 cudaGetDeviceCount, cudaSetDevice, cudaGetDeviceProperties, cudaSetDeviceFlags, cudaChooseDevice
@@ -1074,5 +998,3 @@ cudaGetDeviceCount, cudaSetDevice, cudaGetDeviceProperties, cudaSetDeviceFlags, 
 * * *
 
 !
-
-

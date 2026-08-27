@@ -50,12 +50,12 @@ Every piece of extracted data MUST carry a source reference. If a quote appears 
 
 Label extracted data based on facts, not interpretations:
 
-| Good Tag | Bad Tag |
-|----------|---------|
-| `[CLI_Command]` | `[Useful_Feature]` |
+| Good Tag             | Bad Tag               |
+| -------------------- | --------------------- |
+| `[CLI_Command]`      | `[Useful_Feature]`    |
 | `[Config_Parameter]` | `[Important_Setting]` |
-| `[Hook_Type]` | `[Cool_Automation]` |
-| `[Error_State]` | `[Bad_Thing]` |
+| `[Hook_Type]`        | `[Cool_Automation]`   |
+| `[Error_State]`      | `[Bad_Thing]`         |
 
 ### Schema First
 
@@ -80,9 +80,11 @@ Group extracted atomic notes into themes first, then write summaries based on th
 Each paragraph covers exactly one point. Keep sentences under 25 words.
 
 **Bad:**
+
 > The switch command allows you to switch between worktrees and it supports several shortcuts like ^ for the default branch, @ for current, and - for previous, plus you can create new worktrees with --create.
 
 **Good:**
+
 > `wt switch` changes the active worktree by branch name. Shortcuts: `^` (default branch), `@` (current), `-` (previous).
 
 ### Signal Phrases
@@ -115,8 +117,8 @@ The SKILL.md references table serves as the master index. Each reference file's 
 ```markdown
 ## References
 
-| Module | File | Source | Topics |
-|--------|------|--------|--------|
+| Module   | File                                | Source                                     | Topics                      |
+| -------- | ----------------------------------- | ------------------------------------------ | --------------------------- |
 | commands | `$SKILL_DIR/references/commands.md` | `references/worktrunk-guide-raw/switch.md` | switch, list, remove, merge |
 ```
 
@@ -144,33 +146,40 @@ For hardware specs, system overviews, or complex software deployments.
 
 ```markdown
 ## [System/Component Name]
+
 - **Status:** (Draft/Active/Deprecated)
 - **Version/Release:**
 - **Owner/Maintainer:**
 
 ### Overview
+
 > 2-sentence summary of what this system does and its primary goal.
 
 ### Specifications & Requirements
+
 - **Prerequisites:** (What must be true before using this?)
 - **Dependencies:** (What other systems does this rely on?)
 - **Constraints:** (Hardware limits, time limits, or budget constraints.)
 
 ### Architecture/Logic
+
 - **Input:**
 - **Processing Logic:**
 - **Output:**
 
 ### Configuration Parameters
-| Parameter | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `Key` | String/Int | Value | Explanation |
+
+| Parameter | Type       | Default | Description |
+| :-------- | :--------- | :------ | :---------- |
+| `Key`     | String/Int | Value   | Explanation |
 
 ### Troubleshooting & Error States
+
 - **Common Failure 1:** [Symptom] -> [Resolution]
 - **Verification:** (How to prove it is working correctly?)
 
 ### References
+
 - [Ref 01]: (Link to raw data source)
 ```
 
@@ -178,35 +187,44 @@ For hardware specs, system overviews, or complex software deployments.
 
 For capturing syntax, library functions, or terminal commands.
 
-```markdown
+````markdown
 ## Command/Function: `name`
+
 - **Library/Package:**
 - **Language/Shell:**
 
 ### Syntax
+
 ```[language]
 command [flags] [arguments]
 ```
+````
 
 ### Description
+
 - Purpose of the command.
 - Side effects (e.g., "This deletes files permanently").
 
 ### Parameters & Flags
+
 - `-f, --flag`: Description (Required/Optional)
 - `-v, --verbose`: Description
 
 ### Practical Examples
+
 1. **Basic Use:** `command argument`
 2. **Advanced Chain:** `command | grep 'x'`
 3. **Recovery/Undo:** How to reverse this action.
 
 ### Common Pitfalls
+
 - [Source Ref]: Note on why this fails in certain environments.
 
 ### Related Commands
+
 - [[See Also]]
-```
+
+````
 
 ### 3. Life Principles & Philosophical Guidelines
 
@@ -235,35 +253,41 @@ For extracting wisdom from books, podcasts, or personal reflections.
 ### Traceability
 - **Source:** [Ref ID] - Page/Timestamp
 - **Cross-Link:** [[Related Principle]]
-```
+````
 
-### 4. Productivity & Workflow Optimization
+### 4. Productivity & Workflow Optimisation
 
 For documenting a new "way of working" or a specific app setup.
 
 ```markdown
 ## Workflow: [Name of Process]
+
 - **Objective:** (e.g., "Reach Inbox Zero" or "Process Research Notes")
 - **Frequency:** (Daily / Weekly / As Needed)
 
 ### Tooling Stack
+
 - **Primary Tool:**
 - **Secondary/Integration Tool:**
 
 ### The Process Map
+
 1. **Trigger:** (What starts this workflow?)
 2. **Action 1:**
 3. **Action 2:**
 4. **Conclusion:** (What is the "Definition of Done"?)
 
-### Optimization Rules
+### Optimisation Rules
+
 - **The "Rule of [X]":** (e.g., "If it takes < 2 mins, do it now.")
 - **Batching:** How to group tasks to save energy.
 
 ### Maintenance
+
 - How to review this workflow for efficiency once a month.
 
 ### References
+
 - Derived from: [Book Title/Article URL]
 ```
 
@@ -273,25 +297,31 @@ For reading through many papers/articles to find a specific answer.
 
 ```markdown
 ## Source: [Title/Author]
+
 - **ID:** (e.g., REF-001)
 - **Topic Tags:** #tag1 #tag2
 
 ### Key Claims/Findings
+
 - **Claim A:** The central argument.
 - **Claim B:** Supporting argument.
 
 ### Methodology/Data
+
 - **Method:** How did they find this out? (Survey, Experiment, Meta-analysis)
 - **Sample Size/Scope:**
 
 ### Quotes & Citations
+
 > "Direct quote from the raw material that is particularly impactful." (Page #)
 
 ### Critique/Limitations
+
 - What did the author miss?
 - Are there biases present in the source?
 
 ### Relation to Project
+
 - How does this specific source change my current understanding?
 ```
 
@@ -301,25 +331,25 @@ For reading through many papers/articles to find a specific answer.
 
 Before finalizing any reference file, verify:
 
-| Signal | Check |
-|--------|-------|
-| Metadata header | Version, date, source, author, generated by, brief present |
-| Schema compliance | File follows a template schema from this document |
-| Source linking | Key claims link back to raw docs |
-| Atomic extraction | Individual API signatures, not wall-of-text summaries |
-| Code examples intact | Never split code blocks across files |
-| Context for API docs | "When to use" and "Common patterns" sections included |
+| Signal               | Check                                                      |
+| -------------------- | ---------------------------------------------------------- |
+| Metadata header      | Version, date, source, author, generated by, brief present |
+| Schema compliance    | File follows a template schema from this document          |
+| Source linking       | Key claims link back to raw docs                           |
+| Atomic extraction    | Individual API signatures, not wall-of-text summaries      |
+| Code examples intact | Never split code blocks across files                       |
+| Context for API docs | "When to use" and "Common patterns" sections included      |
 
 ## Schema Selection Guide
 
-| Doc Type | Schema | Typical Skills |
-|----------|--------|---------------|
-| CLI tools | Programming & CLI Reference | worktrunk-guide, git-flow |
-| Libraries/Frameworks | Programming & CLI Reference | ui-framework-guide, async-runtime-guide |
-| System Architecture | Technical Documentation | deployment-patterns, infra-guides |
-| Methodology/Process | Productivity & Workflow Optimization | tdd-cycle, eval-gate |
-| Research/Analysis | Research & Literature Review | deep-research |
-| Principles/Wisdom | Life Principles & Philosophical Guidelines | kaizen-why |
+| Doc Type             | Schema                                     | Typical Skills                          |
+| -------------------- | ------------------------------------------ | --------------------------------------- |
+| CLI tools            | Programming & CLI Reference                | worktrunk-guide, git-flow               |
+| Libraries/Frameworks | Programming & CLI Reference                | ui-framework-guide, async-runtime-guide |
+| System Architecture  | Technical Documentation                    | deployment-patterns, infra-guides       |
+| Methodology/Process  | Productivity & Workflow Optimisation       | tdd-cycle, eval-gate                    |
+| Research/Analysis    | Research & Literature Review               | deep-research                           |
+| Principles/Wisdom    | Life Principles & Philosophical Guidelines | kaizen-why                              |
 
 Most technical skills will use schemas 1 and 2. Schema 3-5 apply to knowledge-work skills.
 
