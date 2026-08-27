@@ -25,6 +25,14 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs 
 2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model *says* it did; we only trust what the *environment says* it did. **Environmental Truth is the Supreme Authority.**
 3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Deterministic work is measured by non-LLM tools (compilers, linters, property tests). Semantic work is verified by Adversarial Orchestration (a "Skeptic" agent).
 
+## Information Boundary Design
+
+- Tool owns what it can deterministically verify; model owns intent. Never require the model to supply verification data or to re-read just to keep a check honest.
+- Expose minimal anchors/handles for the model to reference; hide verbose content and persistence details behind the tool. The model copies the handle, the tool resolves and verifies.
+- Grade the boundary by determinism: hard checks (content, type, existence) → tool; qualitative choices (what to change, wording) → model.
+
+> Reference: [Information boundary pattern](references/information-boundary.md)
+
 ---
 
 ## Core Mental Model
