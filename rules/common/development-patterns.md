@@ -4,128 +4,68 @@ Portable code and type conventions. Consult on every change that touches state, 
 
 ## 1. Spine — State, Boundaries, Surfaces
 
-### Immutable state
+**Immutable state** — new values from inputs; origins read-only. `updated = evolve(original, patch)` over mutation. Mutation stays at owning boundary with recovery.
+_Check:_ no function mutates caller-owned object; tests assert `original` unchanged.
 
-Create new values from inputs; treat origins as read-only. Prefer pure functions that return updated copies (`updated = evolve(original, patch)`) over in-place mutation. Mutation narrows to the owning boundary that declares it and owns recovery.
+**Typed boundaries** — validate once at admission, trust inside.
 
-_Check:_ no function mutates a caller-owned object; tests assert `original` unchanged after the call.
-
-### Typed boundaries
-
-Validate once at admission, trust types inside.
-
-- **Admission (input boundary):** API endpoints, message handlers, file parsers, config loaders — validate with a typed schema (Pydantic, Zod, serde) and reject invalid data there.
-- **Inside:** trust the typed model. Avoid repeated defensive checks and ad-hoc `Any`/`object`/`dict.get` fallbacks.
-- **Emission (output boundary):** serialize (`model_dump()`, `toJSON()`) only at transport, IPC, file writers, and API responses. Application logic stays on typed models.
+- **Admission:** API/message/file/config — schema (Pydantic/Zod/serde), reject invalid.
+- **Inside:** trust typed model; no `Any`/`object`/`dict.get` fallbacks.
+- **Emission:** serialize (`model_dump`/`toJSON`) only at transport/IPC/file/API. Logic stays typed.
 
 ```python
-# stays typed — preferred
-for name, conf in config.languages.items():
-    ...
-
-# loses type — move to boundary or remove
+# trust typed model — preferred
+for name, conf in config.languages.items(): ...
+# loses type — move to boundary
 data = config.model_dump(); langs = data.get("languages")
 ```
 
-When type narrowing feels tangled, ask: why does this serialization exist here? Move it to the boundary.
+When narrowing tangles, ask: why does this serialization exist here? Move it to the boundary. Prefer TypeScript over JS, Pydantic over `object`/`Any`.
 
-Prefer type-safe libraries that shift errors to build/validation time: TypeScript over plain JS for frontend, Pydantic over `object`/`Any` for Python models.
+**Graded surfaces** — narrowest promise that satisfies use.
 
-### Graded surfaces
-
-Grade every exported surface by the promise it carries. Choose the narrowest visibility that satisfies actual use.
-
-- Used across modules → make public and treat as contract (needs compatibility/cutover plan to change).
-- Truly internal → keep private and enforce encapsulation; do not widen to silence a warning — move the caller or the surface to the correct seam.
-
-Apply SOLID at module seams (single responsibility per module, depend on seam abstractions) — not as a per-line incantation.
+- Cross-module → public contract (needs cutover plan).
+- Internal → private; don't widen to silence warning — move caller or seam.
+  SOLID at module seams, not per-line.
 
 ## 2. Guards — Errors, Security, Suppressions
 
-### Errors fail loud
+**Errors fail loud** — every path has explicit branch: handle, map to typed error, or propagate. Log cause, no secrets. Fail-fast at invariant boundary.
+_Check:_ no empty `except`/`catch`; every catch re-raises, returns `Result`/`Err`, or logs with context.
 
-Every error path has an explicit branch: handle, map to a typed error, or propagate. Log or surface the cause; keep sensitive data out of messages. Prefer fail-fast at the boundary where the invariant is known.
+**Security — negative path designed**
 
-_Check:_ no empty `except`/`catch`; every catch either re-raises, returns `Result`/`Err`, or logs with context.
+- Secrets from env/secret manager, never in code/logs/errors.
+- Validate inputs at admission; auth/rate-limit/injection/XSS/CSRF at owning boundary.
+- On finding: stop → `security-reviewer` agent, fix CRITICAL first, rotate exposed secret. Classify reversible/compensable/irreversible.
 
-### Security — negative path designed
-
-- Read secrets from environment or secret manager; keep them out of code, logs, and error payloads.
-- Validate all inputs at admission; enforce auth, rate limits, and injection/XSS/CSRF controls at the boundary that owns the effect.
-- On finding an issue: stop, use the `security-reviewer` agent, fix CRITICAL first, rotate any exposed secret. Classify effects as reversible / compensable / irreversible and scale controls accordingly.
-
-### Suppressions — shrink-only, scoped to the smallest seam
-
-Fix the code first. When suppression is the right call, scope it as narrowly as possible and document why.
-
-**Scope ladder (most to least precise):**
-
-1. Fix the code — preferred
-2. Line-level `ignore` with reason — single instance
-3. File-level suppression with reason — pattern confined to one file
-4. Targeted config (e.g., `allowedUntypedLibraries` for internal packages) — one category, 50+ hits
-5. Project-level disable — signals architectural drift; record authority and review trigger
-6. Global rule disable — boundary decision only; record authority, invariant preserved, and removal condition
-
-Document every suppression at the suppression site:
+**Suppressions — shrink-only, smallest seam** — fix code first; when suppression is right, scope narrowly and document why.
+Ladder: 1 Fix code → 2 line `ignore` + reason → 3 file suppression + reason → 4 targeted config (one category, 50+ hits) → 5 project-level (drift signal, needs authority + review trigger) → 6 global disable (boundary decision, authority + invariant + removal condition).
 
 ```python
 # <tool>: ignore[<rule>]
-# Reason: <one-line why this is legitimate and what invariant still holds>
+# Reason: <why legitimate, what invariant still holds>
 ```
 
-_Guard rule:_ baselines shrink-only. Growth needs decision authority, narrow scope, owner, and a review trigger. Moving code outside a guard's scope is a boundary change.
+_Guard rule:_ baselines shrink-only. Growth needs authority, narrow scope, owner, review trigger. Moving code outside guard scope is a boundary change.
 
 ## 3. Runtime and Verification
 
-### Declared runtimes
+**Declared runtimes** — native tool that owns version+deps; commit version file.
 
-Use the language-native tool that owns version + deps; commit the version file.
+- Single: `uv`+`.python-version` (default 3.14), `cargo`+`rust-toolchain.toml`, `corepack`/`nvm`+`.nvmrc`.
+- Multi (2+ runtimes): `asdf`+`.tool-versions`; `asdf install` syncs all.
 
-- **Single-language:** `uv` + `.python-version` for Python (default 3.14 for new projects), `cargo` + `rust-toolchain.toml` for Rust, `corepack`/`nvm` + `.nvmrc` for Node. Native tooling gives faster, idiomatic integration.
-- **Multi-language (2+ active runtimes, e.g., Python + Node):** `asdf` + committed `.tool-versions`; `asdf install` syncs all. Other tools (including `uv`) respect `.tool-versions` when present.
-
-### Verification closes the loop
-
-Every fix ends with evidence of closure, not just a green run on a stale cache.
-
-- Restart/refresh the daemon after type or config changes.
-- Clean-build after significant refactors.
-- Clear test cache when results look stale.
-- Attach numbers to any performance claim — benchmark on the real path before stating it.
-
-_Check:_ after a fix, re-run the failing signal (typecheck / tests / repro) from a fresh state and confirm the terminal invariant holds.
+**Verification closes the loop** — evidence, not stale green. Restart daemon after type/config changes; clean-build after refactors; clear test cache when stale; benchmark real path before performance claims.
+_Check:_ re-run failing signal from fresh state and confirm terminal invariant.
 
 ## 4. Context — Keep Lean
 
-Dispatch subtasks to subagents and keep the main session lean. When the main agent only needs the result, delegate:
+Dispatch when main only needs result: research → conclusions; sub-module → report+files; pipeline (`tdd→refactor→verify`) → one subagent per stage. Handoff via file pointer + dumped artifact, not bulk paste.
 
-1. Research → subagent returns conclusions.
-2. Sub-module implementation → subagent returns a report + changed files.
-3. Staged pipeline (`tdd → refactor → verify`) → one subagent per stage.
-
-Hand off across context gaps (agent↔subagent, compaction) by file pointer + dumped artifact, not by pasting bulk content into context. The pointer names the material and the branches that trigger loading it.
-
-### Subagent + Worktree Coordination
-
-Builtin `subagent` workers share the same git worktree/filesystem. Parallel subagents that will write files race and clobber each other. Isolate them with `worktree`.
-
-**When to use `worktree`:** Fan-out ≥2 that touches `src/`, `test/`, or any tracked files (architecture deepening, parallel refactors, multi-candidate reviews). Single subagent or read-only research → no worktree needed.
-
-**Pattern:**
-1. Main creates one worktree per task. Each worktree = own directory, own branch.
-2. Dispatch each `subagent` with that worktree's path as its `cwd`. Pass the branch/worktree path in the task: "You are in worktree at <path> on branch <branch> — only edit there."
-3. Subagents work isolated — no cross-worktree file writes.
-4. Main verifies each worktree (`typecheck`/`build`/`tests` in that path), then integrates.
-5. Clean up worktree.
-
-**Do not:** run ≥2 file-writing subagents in the same worktree. If you must stay in one worktree, run subtasks sequentially.
+Subagents share same worktree — parallel writers race. Fan-out ≥2 touching `src`/`test`/tracked files → isolate with `worktree`. Pattern: main creates one worktree per task; dispatch `subagent` with that `cwd` + branch instruction; isolated writes; verify each worktree; integrate; clean up. Single writer or read-only → no worktree. See `git-convention.md` + `branch-worktree-pr` skill.
 
 ## Ephemeral artifacts → `.lsz/tmp`
 
-Route temporary files, scratch outputs, and ad-hoc repros through `.lsz/tmp/` (gitignored). Keep the repo root and `tests/` clean — `tests/` holds only committed, reviewable tests.
-
-- Create on demand: `mkdir -p .lsz/tmp` before writing.
-- Example: `python -c "..." > .lsz/tmp/repro.json`, `pytest --tmp-path=.lsz/tmp/…`.
-
-_Check:_ `git status` shows no untracked temp files outside `.lsz/tmp`; transient artifacts do not survive review.
+Route scratch/repro through `.lsz/tmp` (gitignored). `mkdir -p .lsz/tmp`; `python -c "..." > .lsz/tmp/repro.json`. Keep root and `tests/` clean.
+_Check:_ `git status` shows no untracked temp outside `.lsz/tmp`.
