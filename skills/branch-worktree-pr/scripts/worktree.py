@@ -57,6 +57,14 @@ def build_parser() -> argparse.ArgumentParser:
     _ = p_copy.add_argument("child_branch", help="Child branch")
     _ = p_copy.add_argument("base_branch", help="Base branch")
 
+    p_check = sub.add_parser("self-check", help="Verify cwd is the expected worktree on the expected branch")
+    _ = p_check.add_argument("branch", help="Expected branch")
+    _ = p_check.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Expected absolute worktree path (default: cwd)",
+    )
     p_merge = sub.add_parser("merge-copy", help="Merge copy into target")
     _ = p_merge.add_argument("copy_path", help="Absolute path to copy")
     _ = p_merge.add_argument("target_branch", help="Target branch")
@@ -93,6 +101,12 @@ def main(argv: list[str] | None = None) -> None:
     elif cmd == "make-copy":
         mod = load_module("make_copy", "make_copy.py")
         mod.main([args.child_branch, args.base_branch])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+    elif cmd == "self-check":
+        mod = load_module("self_check", "self_check.py")
+        check_args: list[str] = [args.branch]
+        if args.path:
+            check_args.append(args.path)
+        mod.main(check_args)  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
     elif cmd == "merge-copy":
         mod = load_module("merge_copy", "merge_copy.py")
         mod.main([args.copy_path, args.target_branch])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]

@@ -64,6 +64,11 @@ Do not restate hook mechanics in docs beyond a pointer — `.config/wt.toml` is 
 > [!tip] Always `wt`, never raw
 > Use `wt switch`, `wt list`, `wt merge`, `wt remove`, `wt step copy-ignored`. Raw `git worktree add` / `git merge` bypass hooks, cold-start copy, and port allocation. Raw is fallback only.
 
+> [!warning] `wt list --format=json` emits its schema warning on **stderr** — never pipe with `2>&1 | jq`
+> `wt list --format=json 2>&1 | jq` mixes the `▲ JSON output is schema 1` warning into `jq`'s stdin and breaks parsing. Use `wt list --format=json | jq` (stderr stays separate) or `wt list --format=json 2>/dev/null | jq` to suppress.
+>
+> Schema matters — `json-schema = 1` (current default) is a top-level array: `jq '.[] | {branch, path, is_current}'` and `jq '.[] | select(.is_current)'`. `json-schema = 2` (future default, see `wt config update`) wraps in `{items:[...]}` with `worktree` nesting: `jq '.items[] | {branch, path: .worktree.path, is_current: .worktree.current}'` and `jq '.items[] | select(.worktree.current)'`. Pin with `[list] json-schema = 1` in `.config/wt.toml` until migrated, or handle both: `jq '.items // . | .[]? | {branch, path: (.worktree.path // .path), is_current: (.worktree.current // .is_current)}'`.
+
 ## Phases — do them in order. Each ends on `Done when`.
 
 ### Phase 0 — Claim ticket (admission)
@@ -106,7 +111,7 @@ Rules:
  git switch -c feat/<ticket-slug> origin/main   # or map/<slug> for integration
 # Verify
  git branch --show-current          # → feat/<ticket-slug> (or map/<slug>)
- wt list --format=json | jq '.[] | select(.is_current) | {branch, path}'
+ wt list --format=json 2>/dev/null | jq '.items // . | .[]? | select((.worktree.current // .is_current)) | {branch, path: (.worktree.path // .path)}'
 ```
 
 > [!tip] Shim — stays in cwd, validates via _lib.wt_list
@@ -121,7 +126,7 @@ Use `feat|fix|doc` per ticket type; `map/<slug>` for Wayfinder map — both via 
 > [!warning] `wt` only `cd`s with shell integration — Phase 1 stays in place by design
 > `git switch -c <target>` keeps you in the session dir (no `wt` side-effect). `wt switch --create <child> --no-cd` keeps children from leaving the target even when integration is active. Under automation (no integration) `wt switch` never `cd`s — verify with `wt list` / `git -C <worktree> branch --show-current` and dispatch subagents with absolute paths.
 
-**Done when** `git branch --show-current == feat/<slug>` (or `map/<slug>`) at the **session path** and `wt list --format=json | jq '.[] | select(.is_current)'` shows the same branch at that path (not a sibling).
+**Done when** `git branch --show-current == feat/<slug>` (or `map/<slug>`) at the **session path** and `wt list --format=json 2>/dev/null | jq '.items // . | .[]? | select((.worktree.current // .is_current))'` shows the same branch at that path (not a sibling).
 
 > [!warning] Single writer
 > Every phase below runs on this parent worktree. Never run ≥2 file-writing subagents in the same worktree — see Phase 2.
@@ -154,12 +159,12 @@ wt switch --create feat/<slug>--store --base feat/<slug> --no-cd  # module B / t
 
 #### Dispatch table — one copy per ticket (feat fans out to modules)
 
-| Copy suffix                 | When                                         | Subagent prompt (plain words)                                              |
-| --------------------------- | -------------------------------------------- | -------------------------------------------------------------------------- |
-| `--auth`, `--store`, `--ui` | feat dispatches parallel modules (your case) | `implement` — fix only that copy's files (may test inside copy)            |
-| `--tdd`                     | test-first phase (legacy)                    | `tdd` loop: check → fix → test → check                                      |
-| `--refactor`                | second pass / cleanup                        | `refactor` — fix shape, keep tests green                                    |
-| `--verify`                  | pre-merge gate                               | `check` — run gate in that copy only                                        |
+| Copy suffix                 | When                                         | Subagent prompt (plain words)                                                                                           |
+| --------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `--auth`, `--store`, `--ui` | feat dispatches parallel modules (your case) | `implement` — fix only that copy's files (may test inside copy)                                                         |
+| `--tdd`                     | test-first phase (legacy)                    | `tdd` loop: check → fix → test → check                                                                                  |
+| `--refactor`                | second pass / cleanup                        | `refactor` — fix shape, keep tests green                                                                                |
+| `--verify`                  | pre-merge gate                               | `check` — run gate in that copy only                                                                                    |
 | `conflict-fixer`            | merge hit conflict (Phase 3)                 | `fix` — inherit_context: true, plain words: branch, copy, merge, conflict, fix, test, check, file, folder (see Phase 3) |
 
 #### Subagent template (copy per dispatch)
@@ -173,7 +178,13 @@ Agent (worker):
     You are in copy at <absolute-copy-path> on branch <branch> — only fix there.
     Ticket: <absolute-path-to-spec> (or gh issue <N> body)
     Scope: files/folder for this copy
-    Steps: check files, fix, test, check
+    Steps:
+      0. Self-check (phase 0, run before touching any file):
+         uv run scripts/self_check.py <branch> <absolute-copy-path>
+         # or: uv run scripts/worktree.py self-check <branch> <absolute-copy-path>
+         # exit 0 → cwd is THIS copy on <branch>. Non-zero → wrong worktree
+         # (likely base branch dir) — edit nothing, return BLOCKED + hint.
+      1. check files, fix, test, check
     Return per handoff:
     ## Summary
     ## Artifacts (absolute paths)
@@ -181,11 +192,19 @@ Agent (worker):
     ## Issues
 ```
 
+> [!tip] Phase-0 self-check — admit before you touch a file
+> Every dispatched subagent runs the self-check as its **first action**:
+> `uv run scripts/self_check.py <branch> <absolute-copy-path>` (or dispatcher
+> `uv run scripts/worktree.py self-check <branch> <absolute-copy-path>`). It
+> verifies cwd is the copy worktree (never the base branch directory) and the
+> branch matches the worktree registry. Exit 1 → the agent landed in the wrong
+> directory; it edits nothing, returns `BLOCKED` with the script's hint, and the
+> base re-dispatches with the correct absolute path.
+
 Conflict-fixer variant uses `inherit_context: true` — it forks the main session intent +
 ticket + which files hit conflict. See Phase 3 template.
 
-**Done when** each worktree subagent returns `COMPLETED` and its `git status --porcelain` in that worktree is inspectable. Main never writes inside child worktrees.
-
+**Done when** each worktree subagent returns `COMPLETED` after passing its phase-0 self-check (`cwd == <absolute-copy-path>`, branch matches) and its `git status --porcelain` in that worktree is inspectable. Main never writes inside child worktrees.
 For BDD scenarios driving this phase see [bdd-scenarios.md](references/bdd-scenarios.md).
 
 ### Phase 3 — Merge back via script (fan-in)
@@ -204,7 +223,7 @@ uv run $SKILL_DIR/scripts/worktree.py merge-copy <copy-path> <target>
 # router does: wt merge -C <absolute-copy-path> --stage tracked <target> --yes
 # then detects: rebase incomplete / Unmerged paths → conflict (exit 2), else gate fail (exit 1)
 # check
-wt list --format=json | jq '.[] | {branch, path}'
+wt list --format=json 2>/dev/null | jq '.items // . | .[]? | {branch, path: (.worktree.path // .path), is_current: (.worktree.current // .is_current)}'
 git log --oneline <target> ^origin/main | head
 ```
 
@@ -226,11 +245,16 @@ Agent (conflict-fixer):
   prompt: |
     Resolve merge conflicts in copy at <path>
     You are in copy at <copy-path> on branch <copy-branch> — only fix there.
+    0. Self-check first: uv run scripts/self_check.py <copy-branch> <copy-path>
+       Non-zero → wrong worktree — edit nothing, return BLOCKED + hint.
     Target branch: <target> — merge hit conflict.
     Use plain words: branch, copy, merge, conflict, fix, test, check, file, folder.
 ```
 
 Fixer invokes `resolving-merge-conflicts` (trigger phrase above) and follows that skill inside the copy: check git status, fix each file, add, test, check, then `GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C <copy-path> rebase --continue` loop and retry `uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>` until exit 0. Main waits, checks router exits 0, then moves on. If router reported gate (no conflict markers, exit 1) → same fixer shape but fix test/typecheck, no rebase step.
+
+> [!warning] Never bypass — the guard is the point
+> If `merge_copy.py` exits non-zero for _any_ reason (conflict `exit 2`, gate `exit 1`, or leftover untracked `??` like `node_modules` / new test file not yet staged), the orchestrator's **only** move is to dispatch the fixer subagent **in that copy** (`inherit_context: true`, `cwd: <copy-path>`). Never `git -C <copy> add` / `commit` / `wt remove --force` / `git branch -D` from the orchestrator — that bypasses the `pre-merge` gate that `wt` exists to enforce. The fixer owns `git status --porcelain` in the copy, cleans stray untracked, stages tracked (`--stage tracked`), commits, and retries `merge_copy.py` until `exit 0`. Main only verifies `wt list` shows copy gone and `git log <target> ^origin/main` contains the change.
 
 ### Phase 4 — Verify parent gate (heavy)
 
@@ -239,11 +263,12 @@ Gate is environment, not this doc. Default recommendation (override in `.config/
 ```bash
 # Gate is .config/wt.toml [pre-merge].gate — auto-scaffolded once via _lib.read_gate
 # (sniffs Cargo.toml > pyproject.toml > package.json); unknown stack fails loud
+# Now includes commitlint for Conventional Commits history (pre-merge blocking, not post-merge background)
 uv run scripts/verify_parent.py  # or: uv run scripts/worktree.py verify
-# delegates to wt.toml gate, then git diff --check and git status clean (allows .lsz/tmp)
+# delegates to wt.toml gate (typecheck + test + commitlint --from=origin/{{ default_branch }} --to=HEAD), then git diff --check and git status clean (allows .lsz/tmp)
 ```
 
-But authoritative gate is `.config/wt.toml [pre-merge]` — skill demands _that_ gate passes, not a hard-coded `npm` string.
+But authoritative gate is `.config/wt.toml [pre-merge]` — skill demands _that_ gate passes, not a hard-coded `npm` string. Current template is `gate = "npm run typecheck && npm test && npx commitlint --from=origin/{{ default_branch }} --to=HEAD --verbose"` (pipeline form: `[pre-merge]` table = concurrent, `[[pre-merge]]` serial — see `worktrunk-guide` automation.md). `commitlint` uses `{{ default_branch }}` / `{{ target }}` vars and `wt hook pre-merge --yes` to test; hook approval frozen at `~/.config/worktrunk/approvals.toml`.
 
 **Done when** parent worktree's pre-merge hook exits 0 and `git status --porcelain` is clean or only intended untracked under `.lsz/tmp`.
 
@@ -265,7 +290,7 @@ git reset HEAD && git add <code> && git commit && git add <docs> && git commit
 > # checks atomic commits and CHANGELOG ## [Unreleased] bullet with (#issue) or by @
 > ```
 
-Never `git reset --hard` — See `[[git-workflow-conventions]]`:
+Never `git reset --hard` — See `[[git-convention]]`:
 
 ```bash
 git reset HEAD~N          # keep staged
@@ -336,7 +361,7 @@ Do you want to:
 ⚠️  I will not run merge/tag/release/publish until you reply. Which option?
 ```
 
-Rules from `[[git-workflow-conventions#Tag, Release, And Publish]]`:
+Rules from `[[git-convention]] + `/release` prompt`:
 
 - Release demands clean worktree, newer version than current, `vX.Y.Z` not exists, `npm run typecheck && npm test && npm run build` green.
 - Release is headless-safe: `npm run release -- X.Y.Z` (or `--dry-run`), creates annotated tag, pushes branch+tag.
@@ -361,6 +386,6 @@ Rules from `[[git-workflow-conventions#Tag, Release, And Publish]]`:
 | Fork PR you can't push                               | `[[git-merge-pr]]` — `pr_prefix/<N>-<suffix>` + squash trailers   |
 | Upstream `pi-better-edit` sync                       | `CLAUDE.md:Upstream sync` — `absorb/tN-*` worktrees               |
 | Worktrunk mechanics (hooks, hash_port, copy-ignored) | `worktrunk-guide` skill, `$SKILL_DIR/references/wt-template.toml` |
-| Reset / atomic commits / changelog layout            | `[[git-workflow-conventions]]`                                    |
+| Reset / atomic commits / changelog layout            | `[[git-convention]]`                                    |
 
 For full BDD scenarios see [bdd-scenarios.md](references/bdd-scenarios.md).

@@ -46,6 +46,18 @@ Then  no child worktree is created
   And PR still follows squash hygiene
 ```
 
+## Error — subagent lands in base branch directory
+
+```gherkin
+Given copy worktree `feat/foo--auth` exists on branch `feat/foo--auth`
+  And base branch dir `/project` is on parent branch `feat/foo`
+When  subagent starts with cwd `/project` (base branch dir) instead of the copy
+Then  phase-0 self-check `self_check.py feat/foo--auth /project-feat-foo--auth` exits 1
+  And prints hint naming actual cwd+branch vs expected copy path+branch
+  And subagent edits nothing and returns BLOCKED
+  And base re-dispatches with the correct absolute copy path
+```
+
 ## Edge — tracker is local markdown (.scratch)
 
 ```gherkin
@@ -107,6 +119,7 @@ Run after each scenario:
 
 ```bash
 wt list --format=json | jq '.[].branch'
+uv run scripts/self_check.py feat/foo--auth "$COPY"  # inside copy — must exit 0
 git log --oneline --no-merges origin/main..HEAD | head
 gh pr view <N> --json number,baseRefName,body,state --jq .
 git show -s HEAD --format=%B | grep -q "Co-authored-by:" || echo "trailer check done"
@@ -119,4 +132,4 @@ git status --porcelain  # only .lsz/tmp allowed untracked
 - History is linear (squash boundary), one intent per atomic commit, no `fixup` noise in PR squash.
 - CHANGELOG subsection (Added/Changed/Fixed) correct, imperative, no prose padding.
 - PR body tells what was done, closes ticket/spec, and `by @<author>` when external — readable without opening ticket.
-- No doc duplication — `git-workflow-conventions` owns reset/changelog, `git-merge-pr` owns fork shape, `worktrunk-guide` owns `wt` mechanics.
+- No doc duplication — `git-convention` owns reset/changelog, `git-merge-pr` owns fork shape, `worktrunk-guide` owns `wt` mechanics.
