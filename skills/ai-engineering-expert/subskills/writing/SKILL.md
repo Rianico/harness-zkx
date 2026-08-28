@@ -23,6 +23,7 @@ A pointer does two jobs — state what the material is, and list the **branches*
 - **Front-load the leading word** — the pointer is where it does its triggering work.
 - **One trigger per branch.** Synonyms that rename a single branch are one branch written twice; collapse them and keep only genuinely distinct branches.
 - **Cut identity the body already carries.**
+- **Never point to an independent surface:** Prompt Templates (`/release`) and `disable-model-invocation: true` skills have zero model-visible `Metadata Cost` — the model never learns their name until the human invokes them. A pointer from an always-loaded doc cannot fire; it only adds `Context Load` with zero retrieval. Discovery is human-driven (slash menu, autocomplete), not pointer-driven. Never disclose an independent surface; keep its own command/description as the sole index.
 
 ## The two loads
 
@@ -43,7 +44,8 @@ A document is built from two content types — **steps** (the ordered actions th
 
 Push too little down and the top bloats; push too much and you hide material the agent actually needs. That tension is the whole decision.
 
-**Progressive disclosure** is the move down the ladder — out of the main file and behind a pointer — so the top stays legible. Not primarily a token optimisation: it is how the hierarchy is protected. Branching is the cleanest disclosure test: inline what every branch needs, and push behind a pointer what only some branches reach. When a document has steps, in-file reference that should be disclosed buries them and turns attending to them into a coin-flip — a variance lever, not just a legibility one.
+**Progressive disclosure** is the move down the ladder — out of the main file and behind a pointer — so the top stays legible. Not primarily a token optimisation: it is how the hierarchy is protected. Branching is the cleanest disclosure test: inline what every branch needs, and push behind a pointer what only some branches reach. When a document has steps, in-file reference that should be disclosed buries them and turns attending to them into a coin-flip — a variance lever, not just a legibility one. Think of three readers at once — first-time learner (every-run spine), reference lookup (second read, conditional), and completest/rules-lawyer (disclosed edge cases). The same ladder serves all three: learner pays only the spine, the others follow pointers.
+
 
 **Co-location** is the within-file companion: where the ladder decides _how far down_ a piece sits, co-location decides _what sits beside it_ once there. Keep a concept's definition, rules, and caveats under one heading rather than scattered, so reading one part brings its neighbours with it. The test: the document should read like documentation written for the agent — grouped material reads that way; scattered material does not. (Distinct from duplication: that repeats one meaning in two places; scattering fragments one meaning across many.)
 
@@ -80,14 +82,24 @@ You win twice: fewer tokens, and a sharper hook for the agent to hang its thinki
 
 **Negation** is the failure mode beside this lever: steering by prohibition drags the forbidden behaviour into context and makes it _more_ available, not less. _Don't think of an elephant_, and the elephant is all there is; the negation is a weak modifier the strongly-activated concept overruns, so the ban half-reads as an instruction to do the thing. Prompt the **positive** — state the target behaviour ("write one-line comments") so the banned one is never spoken. A prohibition earns its place only as a hard guardrail you cannot phrase positively; even then, pair it with the positive target so attention lands on what to do.
 
+**Voice — second-person imperative:** write as you would teach a player on their turn — `Validate once at admission` / `Create a topic branch`, not `Validation should be performed` / `Each player takes a branch`. Present, active, 2nd-person imperative is the model's shortest path to action; passive/3rd-person adds indirection and hedging.
+
 ## Pruning
 
 - Keep each meaning in a **single source of truth**: one authoritative place, so changing the behaviour is a one-place edit. **Duplication** — the same meaning in more than one place — costs maintenance and tokens, and inflates a meaning's prominence on the ladder past its real rank. (The accidental inverse of a leading word, which repeats a token on purpose, never the meaning.)
+- **Budget emphasis like context load:** bold/caps only on first definition; thereafter plain. Every bolded term spends attention on every re-read. The game-rules tip holds: capitalizing every term makes none stand out. Define once with emphasis, then let the leading word carry.
+- **Prefer chart/example over paragraph** when the material is a mapping, count, or variant: a table (`2p:5 / 3p:5 / 4p:4`) is one lookup; prose (`Deal 5 cards for 2 or 3 players, 4 for 4 players`) is a parse. An example next to the rule teaches faster than a sentence restating it. If the prose is a cache of what a chart could show, replace it.
 - The **environment** is a source of truth too — `package.json` scripts, config files, the directory layout, `--help` output — and a document that restates it is a **cache**: a copy of a lookup, earning its load only when the lookup is expensive. Cache what the agent cannot find by looking: the unwritten convention, the reason behind a choice, the gotcha no config confesses. Leave the one-file, one-command lookups to the environment, where they cannot go stale.
+
 - Check every line for **relevance**: does it still bear on what the document does? A line loses relevance by never bearing on the task (mere exposition, or a branch that should be disclosed) or by going stale as the behaviour or world it describes changes. Shorter documents are easier to keep relevant. Without a pruning discipline the default fate is **sediment**: stale layers that settle because adding feels safe and removing feels risky, until you must core down through them to find what is still live.
 - Hunt **no-ops** sentence by sentence: an instruction the model already obeys by default pays load to say nothing. The test — does it change behaviour versus the default? — is model-relative, not reader-relative: two people disagreeing about a no-op disagree about the default, and settle it by running the document, not by debate. When a sentence fails, delete the whole sentence rather than trim words from it. The test also grades leading words: a word too weak to beat the default (_be thorough_ when the agent is already thorough-ish) is a no-op, and the fix is a stronger word (_relentless_), not a different technique.
 
+## Correct, complete, and teach in order
+
+Rules must be *correct* and *approachable* or they are unfollowed — the game-rules tension. Keep invariants exact (falsifiable `_Check:`), but teach them in the order the agent acts: theme → components+setup (co-located) → overview → steps → end. An undefined edge case is model improvisation — close every decision the agent can hit, even untested branches (keel #5 negative path). Proofread like playtesting: read backwards, run the doc, and via a second reader — Skeptic subagent. Full transfer table lives in [game-rules-writing.md](references/game-rules-writing.md).
+
 ## Harness Wiring
+
 
 - **When to load:** `ai-engineering-expert` dispatch for `skill-authoring` or any task that creates/edits an agent-consumed doc must also read this sub-skill via `Read` at `$SKILL_DIR/subskills/writing/SKILL.md` (parent) — subskills hidden from `Skill` discovery.
 - **Skill-authoring integration:** Apply hierarchy, pointer wording, completion criteria, leading words, and pruning when drafting `SKILL.md` body. Keep body under 500 lines; push deep methodology to `references/` behind a pointer (see [skill-mechanics](references/skill-mechanics.md)).
