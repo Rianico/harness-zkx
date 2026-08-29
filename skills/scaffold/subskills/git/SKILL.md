@@ -22,10 +22,11 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name> --dry-r
 Pure-deterministic (no proofread, byte-identical):
 
 - `.releaserc.json` — conventional commits preset `conventionalcommits@8.0.0` (`writer@8.4.0`), `[skip ci]` message
-- `.github/workflows/release.yml` — pinned `actions/checkout@11d596...` + `setup-node@49933...` (v4), `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`)
+- `.github/workflows/release.yml` — pinned `actions/checkout@11d596...` + `setup-node@49933...` (v4), `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `release` job runs `scripts/changelog-unreleased.py clear` before `npx semantic-release` to hand off `## [Unreleased]`
+- `.github/workflows/changelog-preview.yml` — on `push` to `main` (`paths-ignore: CHANGELOG.md`), runs `scripts/changelog-unreleased.py update` and commits `## [Unreleased]` with `[skip ci]`
+- `scripts/changelog-unreleased.py` — manages `## [Unreleased]` (`update` stages notes from `git log <last-tag>..HEAD`, `clear` strips it before release)
 - `commitlint.config.js` — `export default { extends: ['@commitlint/config-conventional'] }`
 - `CHANGELOG.md` — initial `# Changelog` header
-- `.gitignore` additions — `.lsz/`, `.pi/`, `.agents/`, `coverage/` (dedup on append)
 
 Mixed (script writes skeleton + warns on stderr → model must proofread):
 
@@ -57,8 +58,21 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 ## Notes
 
 - On-demand via `repository_dispatch` + `workflow_dispatch` is the deterministic default — no `push: tags` or `push: [main]` auto-release. Tag is created by `semantic-release` on dispatch.
+- `CHANGELOG.md` has two writers: `changelog-preview.yml` (on `push` to `main`) stages notes under `## [Unreleased]` via `scripts/changelog-unreleased.py update`; `release.yml` (`release` job) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections (`@semantic-release/changelog` + `@semantic-release/git` with `[skip ci]`). Do not hand-edit versioned sections.
 - `@semantic-release/git` bumps `package.json` + `CHANGELOG.md` + commits + tags atomically; no manual `git tag` or manifest bump.
 - For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci/SKILL.md`.
+
+## References
+
+Reference index (all under `references/`, raw scrape in `references/semantic-release-raw/`):
+
+| File                                                           | Covers                                                                              | Load when                                                         |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [semantic-release](references/semantic-release.md)             | Intro, getting-started, commit → release-type mapping, requirements                 | Explaining the release contract or the `why` of `.releaserc.json` |
+| [configuration](references/configuration.md)                   | All options, git env vars, existing-tag repair                                      | Answering config questions or changing `.releaserc.json` shape    |
+| [release-steps](references/release-steps.md)                   | Nine release steps, lifecycle hooks, plugin roles/order                             | Tracing what happens during a release run                         |
+| [workflow-configuration](references/workflow-configuration.md) | Branch types/properties, supported models, channel/maintenance/pre-release recipes  | Branch hygiene, multi-channel or pre-release setups               |
+| [ci-configuration](references/ci-configuration.md)             | CI requirements, auth tokens, GitHub Actions recipe, npx running, Node/Git versions | Verifying CI wiring or release.yml shape                          |
 
 ## Grilling
 

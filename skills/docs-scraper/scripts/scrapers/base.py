@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import html2text
@@ -387,21 +387,25 @@ class DocumentationScraper(ABC):
         Returns:
             Tuple of (content, format) where format is "markdown" or "html"
         """
-        # Build .md URL
-        if url.endswith("/"):
-            md_url = url + "index.md"
+        # Build candidate .md URLs — some sites serve <page>.md, others <page>/index.md
+        path = urlparse(url).path.rstrip("/")
+        if path == "":
+            candidates = [url.rstrip("/") + "/index.md"]
+        elif url.endswith("/"):
+            candidates = [url.rstrip("/") + ".md", url + "index.md"]
         else:
-            md_url = url + ".md"
+            candidates = [url + ".md"]
 
-        try:
-            response = self._rate_limited_get(md_url)
-            if response is not None and response.status_code == 200:
-                content_type = response.headers.get("content-type", "")
-                if "markdown" in content_type or "text/plain" in content_type:
-                    print("   Found markdown at .md extension")
-                    return response.text, "markdown"
-        except requests.exceptions.RequestException:
-            pass
+        for md_url in candidates:
+            try:
+                response = self._rate_limited_get(md_url)
+                if response is not None and response.status_code == 200:
+                    content_type = response.headers.get("content-type", "")
+                    if "markdown" in content_type or "text/plain" in content_type:
+                        print(f"   Found markdown at .md extension: {md_url}")
+                        return response.text, "markdown"
+            except requests.exceptions.RequestException:
+                continue
 
         return None, "html"
 
@@ -489,8 +493,10 @@ class DocumentationScraper(ABC):
         # Force mode: clear cache
         if self.force and self.cache_dir.exists():
             print(f"Clearing cache: {self.cache_dir}")
-            shutil.rmtree(self.cache_dir)
-
+            try:
+                shutil.rmtree(self.cache_dir)
+            except OSError as e:
+                print(f"Warning: Could not clear cache: {e}")
         # Fetch from network with retry logic
         try:
             print(f"Fetching: {url}")
@@ -553,8 +559,10 @@ class DocumentationScraper(ABC):
         # Force mode: clear cache
         if self.force and self.cache_dir.exists():
             print(f"Clearing cache: {self.cache_dir}")
-            shutil.rmtree(self.cache_dir)
-
+            try:
+                shutil.rmtree(self.cache_dir)
+            except OSError as e:
+                print(f"Warning: Could not clear cache: {e}")
         print(f"Fetching (LLM-friendly): {url}")
 
         # Try markdown via content negotiation

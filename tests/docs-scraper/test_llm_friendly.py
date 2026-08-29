@@ -1,6 +1,6 @@
 """Tests for LLM-friendly fetching methods."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from fixtures import TEST_BASE_URL, TEST_PAGE_URL
 
@@ -123,8 +123,8 @@ class TestFetchMarkdownExtension:
             assert fmt == "markdown"
             mock_get.assert_called_once_with(f"{TEST_BASE_URL}/page.html.md")
 
-    def test_appends_index_md_for_trailing_slash(self, scraper_with_mock_session) -> None:
-        """Should append index.md for URLs ending with slash."""
+    def test_tries_md_then_index_md_for_trailing_slash(self, scraper_with_mock_session) -> None:
+        """Should try <page>.md first, then <page>/index.md for trailing-slash URLs."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "# Index"
@@ -139,7 +139,31 @@ class TestFetchMarkdownExtension:
 
             assert content == "# Index"
             assert fmt == "markdown"
-            mock_get.assert_called_once_with(f"{TEST_BASE_URL}/docs/index.md")
+            mock_get.assert_called_once_with(f"{TEST_BASE_URL}/docs.md")
+
+    def test_falls_back_to_index_md_when_md_missing(self, scraper_with_mock_session) -> None:
+        """Should fall back to <page>/index.md when <page>.md is not found."""
+        mock_404 = MagicMock()
+        mock_404.status_code = 404
+        mock_404.headers = {"content-type": "text/html"}
+        mock_ok = MagicMock()
+        mock_ok.status_code = 200
+        mock_ok.text = "# Index"
+        mock_ok.headers = {"content-type": "text/plain"}
+
+        with patch.object(scraper_with_mock_session, "_rate_limited_get") as mock_get:
+            mock_get.side_effect = [mock_404, mock_ok]
+
+            content, fmt = scraper_with_mock_session.fetch_markdown_extension(
+                f"{TEST_BASE_URL}/docs/"
+            )
+
+            assert content == "# Index"
+            assert fmt == "markdown"
+            assert mock_get.call_args_list == [
+                call(f"{TEST_BASE_URL}/docs.md"),
+                call(f"{TEST_BASE_URL}/docs/index.md"),
+            ]
 
     def test_returns_none_html_when_md_not_found(self, scraper_with_mock_session) -> None:
         """Should return (None, 'html') when .md URL doesn't exist."""

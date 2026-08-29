@@ -6,6 +6,7 @@
 #   "html2text",
 #   "requests",
 #   "rich>=13.0.0",
+#   "brotli",
 # ]
 # ///
 """
