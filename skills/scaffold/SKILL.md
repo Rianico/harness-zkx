@@ -1,0 +1,246 @@
+---
+name: scaffold
+description: >-
+  Deterministic project scaffolding for Git, Python, Rust, and CI — conventional commits, semantic-release, and runtime wiring. Use when initializing or retrofitting a repo, wiring release flow, or selecting a toolchain. TRIGGER: scaffold, init project, retrofit, semantic-release, conventional commits
+arguments: flavor
+argument-hint: |-
+  git -- loads conventional commits, semantic-release, changelog, and branch hygiene
+  python -- loads uv, .python-version, pyproject, and pytest wiring
+  rust -- loads Cargo, rust-toolchain, fmt/clippy/test wiring
+  ci -- loads GitHub Actions verify+release and on-demand dispatch
+  omitted -- loads the 80/20 spine, GDD wiring, and dispatch registry
+metadata:
+  manage: [git, python, rust, ci]
+---
+
+# Scaffold
+
+Deterministic project scaffolding — one spine, many projections. The 20% that solves 80%: every project that runs this scaffold gets the same byte-identical artifacts, so human intent (`feat`/`fix` → release) maps to one shared contract (BDD) and env truth (`commitlint`/`semantic-release`/CI) is the gate (EDD).
+
+## GDD Wiring
+
+- **BDD contract:** `Given` conventional commit `feat`/`fix`, `When` `repository_dispatch` `semantic-release` (or `workflow_dispatch`) fires on `main`, `Then` `semantic-release` cuts a version with `### Features`/`### Bug Fixes` and updates `CHANGELOG.md`. Shared contract is `CONTRIBUTING.md` + `.releaserc.json` (git) plus language toolchain files.
+- **EDD gate:** `commitlint` + `npm run lint/typecheck/test` (or `uv`/`cargo` equivalent) are deterministic. Tag push fails if commit not conventional. Env truth is `npm ls` / `uv lock --check` / `cargo --version` + `git tag -l`.
+- **Semantic vs deterministic split:** `feat`/`fix` intent → human/model; bump + notes + changelog → `commit-analyzer` / `release-notes-generator` / tool.
+
+## Keel Spine
+
+Keep the spine small. One load-bearing path: **declared runtime → deterministic artifacts → verification gate → on-demand release**. Language variants (Python/Rust/CI) are projections, not parallel spines. Adding a variant must not fork the git contract.
+
+Grade every surface:
+
+| Surface                                                                       | Promise                    | Change rule                                                         |
+| ----------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------- |
+| Router description + `argument-hint`                                          | Public contract            | Versioned, never silently broken                                    |
+| Subskill SKILL.md                                                             | Cross-module interface     | Consumer-found-by-tooling, cutover via docs                         |
+| `$SKILL_DIR/scripts/scaffold.py` (embedded templates)                         | Module internals           | Free churn behind BDD/EDD                                           |
+| Generated project files (`.releaserc.json`, `CHANGELOG.md`, `pyproject.toml`) | Projection (not authority) | Regenerate from scaffold, never hand-edit except `{{project_name}}` |
+
+Authority: scaffold skill owns scaffolding decisions; project owns files. Writers propose via explicit `/scaffold` invocation. Projections are regenerated from source.
+
+## Dispatch
+
+Read the subskill that matches the projection you need. Use `Read` (not `Skill` tool — subskills hidden from discovery).
+
+| Flavor   | Subskill                               | When to load                                                                                                       |
+| -------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `git`    | `$SKILL_DIR/subskills/git/SKILL.md`    | Conventional commits, semantic-release, changelog, `.gitignore`, `AGENTS.md` patch — [git](subskills/git/SKILL.md) |
+| `python` | `$SKILL_DIR/subskills/python/SKILL.md` | `uv` + `.python-version` + `pyproject.toml` wiring — [python](subskills/python/SKILL.md)                           |
+| `rust`   | `$SKILL_DIR/subskills/rust/SKILL.md`   | `rust-toolchain.toml` + `cargo fmt/clippy/test` wiring — [rust](subskills/rust/SKILL.md)                           |
+| `ci`     | `$SKILL_DIR/subskills/ci/SKILL.md`     | GitHub Actions verify+release + on-demand dispatch — [ci](subskills/ci/SKILL.md)                                   |
+
+Omitted flavor loads only the spine above. For interactive scaffolding, run **Grilling** below before dispatch — the chain selects optional leaves (coverage, formatter, linter, type, tests) without forking the spine.
+
+## Grilling — Chain Questions Then Scaffold
+
+Grilling is the selection projection. One truth: `scaffold.py` owns bytes; dialogs own selection. Ask sequentially — one question per dialog, 2–4 options + `Other`, header ≤20 chars — then map answers to the generator. Branch only on prior answer (see notes). Present each dialog as plain text per `dialog-contract.md`.
+
+### Dialog 1 — Project Shape
+
+```yaml
+Dialog:
+  header: 'Project Shape'
+  question: 'Which runtime owns this repo?'
+  multipleChoice: false
+  options:
+    - label: 'Python (uv)'
+      description: 'Single-runtime Python 3.14 — uv + .python-version + pyproject.toml; minimal seam'
+    - label: 'Rust (cargo)'
+      description: 'Single-runtime Rust — stable toolchain + rustfmt/clippy; minimal seam'
+    - label: 'Node (pnpm)'
+      description: 'Single-runtime Node 22 — semantic-release + npm audit; minimal seam'
+    - label: 'Polyglot (asdf)'
+      description: 'Two+ runtimes — asdf + .tool-versions syncs uv/cargo/pnpm; adds matrix'
+    - label: 'Other'
+      description: 'Custom/Go/Kotlin etc. — describe stack'
+```
+
+Plain-text render:
+
+```
+**Project Shape**
+
+Which runtime owns this repo?
+
+1. Python (uv) — Single-runtime Python 3.14 — uv + .python-version + pyproject.toml
+2. Rust (cargo) — Single-runtime Rust — stable toolchain + rustfmt/clippy
+3. Node (pnpm) — Single-runtime Node 22 — semantic-release + npm audit
+4. Polyglot (asdf) — Two+ runtimes — asdf + .tool-versions syncs uv/cargo/pnpm
+5. Other — Custom stack
+```
+
+### Dialog 2 — Verification Gate
+
+```yaml
+Dialog:
+  header: 'Verification Gate'
+  question: 'Which gates should the pre-merge check enforce?'
+  multipleChoice: true
+  options:
+    - label: 'Formatter'
+      description: 'Enforces style without debate — ruff format / cargo fmt / prettier'
+    - label: 'Linter'
+      description: 'Catches bugs/idioms — ruff check / clippy -D warnings / eslint'
+    - label: 'Type check'
+      description: 'Proves contracts — basedpyright strict / tsc --noEmit / cargo check'
+    - label: 'Tests'
+      description: 'Proves behavior — pytest / cargo test / npm test; required for coverage'
+    - label: 'Other'
+      description: 'Custom gate (e.g., audit, zizmor, actionlint)'
+```
+
+Plain-text render (multi-select):
+
+```
+**Verification Gate**
+
+Which gates should the pre-merge check enforce? (select any)
+
+1. Formatter — ruff format / cargo fmt
+2. Linter — ruff check / clippy -D warnings
+3. Type check — basedpyright strict / tsc --noEmit
+4. Tests — pytest / cargo test / npm test
+5. Other — Custom gate
+```
+
+> Branching: if Q1=Python, defaults map to ruff/basedpyright/pytest; if Rust, to fmt/clippy/test; if Node, to prettier/eslint/tsc/vitest — but user may skip any leaf; skipping does not remove the flavor file, only the gate step.
+
+### Dialog 3 — Coverage (conditional)
+
+Only ask if **Tests** selected in Dialog 2; otherwise skip.
+
+```yaml
+Dialog:
+  header: 'Coverage'
+  question: 'Enforce test coverage gate?'
+  multipleChoice: false
+  options:
+    - label: 'No coverage'
+      description: 'Tests run without gate — cheapest, no fail_under'
+    - label: '80% line (Recommended)'
+      description: 'Balances rigor and velocity — fail_under=80, lcov emitted'
+    - label: '90% strict'
+      description: 'High rigor — fail_under=90, may slow velocity'
+    - label: 'Other'
+      description: 'Custom threshold 0–100'
+```
+
+Plain-text render:
+
+```
+**Coverage**
+
+Enforce test coverage gate?
+
+1. No coverage — Tests without gate
+2. 80% line (Recommended) — fail_under=80, lcov emitted
+3. 90% strict — fail_under=90
+4. Other — Custom threshold
+```
+
+### Dialog 4 — CI Release
+
+```yaml
+Dialog:
+  header: 'CI Release'
+  question: 'Wire on-demand release + CI verify gate?'
+  multipleChoice: false
+  options:
+    - label: 'Yes (Recommended)'
+      description: 'repository_dispatch + workflow_dispatch, verify→release with pinned SHAs and minimal perms'
+    - label: 'No — local only'
+      description: 'No workflow; local commitlint + verify.sh only'
+    - label: 'Other'
+      description: 'Custom variant/matrix (e.g., python+rust)'
+```
+
+Plain-text render:
+
+```
+**CI Release**
+
+Wire on-demand release + CI verify gate?
+
+1. Yes (Recommended) — repository_dispatch + workflow_dispatch, verify→release
+2. No — local only
+3. Other — Custom variant/matrix
+```
+
+### Selection → Generator Mapping
+
+After the chain, map answers to the deterministic generator. Tool owns bytes; model proofreads mixed warnings on stderr.
+
+| Grilling answers                   | Generator invocation                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Python + Tests + 80% + Yes         | `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --with-coverage --coverage-threshold 80 --project-name <name>` then `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --with-coverage --coverage-threshold 80` + `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name>` |
+| Rust + Tests + 90% + Yes           | `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --with-coverage --coverage-threshold 90` + `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant rust --with-coverage --coverage-threshold 90`                                                                                                           |
+| Python + Tests + No coverage + Yes | `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>` (no flag) + `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --project-name <name>`                                                                                                                                 |
+| Any shape + No Tests + — + Yes     | Skip `--with-coverage` entirely — coverage flag is inert without tests; generator omits `pytest-cov`/`llvm-cov` wiring                                                                                                                                                                                                  |
+| Polyglot Python+Rust + 80% + Yes   | `uv run $SKILL_DIR/scripts/scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --with-coverage` and matrix note in `$SKILL_DIR/subskills/ci/SKILL.md`                                                                            |
+| Any + Formatter skipped            | Generator still writes file (formatter config is deterministic); CI verify step for that gate is omitted by the caller — file remains byte-identical, gate is optional leaf                                                                                                                                             |
+
+> Formatter/linter/type/test are always wired in the flavor file (one concept one location). Skipping a gate means not running it, not deleting its config — keeps the spine small. Coverage is the only leaf that changes file bytes (`pyproject.toml` `pytest-cov` + `[tool.coverage.*]`, Rust `llvm-cov` note, CI `*COVERAGE_YML`). All other leaves are verification choices, not artifact changes.
+
+Omitted grilling (direct dispatch) defaults to: Tests=on, Coverage=off, CI=Yes, threshold 80 — so `/scaffold python` without grilling still gets the current byte-identical output.
+
+## Trade-offs
+
+- Latency vs context efficiency: on-demand loading keeps router lean; deep templates disclosed behind subskill pointers.
+- Artifact hygiene: consolidate, don't accumulate; one concept one location. Cross-reference, don't copy-paste.
+- Tool preference: `uv run`, `cargo`, `pnpm`, `rg`, `fd` per `tool-preferences.md`; `asdf` + `.tool-versions` when multi-runtime.
+
+## Runtime Matrix — Declared Runtimes
+
+Per `development-patterns.md` §3 — native tool owns version+deps; commit version file.
+
+| Project shape       | Owner tool              | Version file(s)                                        | Install        |
+| ------------------- | ----------------------- | ------------------------------------------------------ | -------------- |
+| Python only         | `uv`                    | `.python-version` (3.14), `pyproject.toml` + `uv.lock` | `uv sync`      |
+| Rust only           | `cargo`                 | `rust-toolchain.toml`, `Cargo.toml`                    | `cargo fetch`  |
+| Node only           | `pnpm`/`corepack`/`nvm` | `.nvmrc` or `packageManager` in `package.json`         | `pnpm i`       |
+| Multi (2+ runtimes) | `asdf`                  | `.tool-versions` + each native version file            | `asdf install` |
+
+Native tool still owns deps — `asdf` syncs, it does not replace `uv`/`cargo`/`pnpm`.
+
+## Deterministic Generation — Tool Owns Bytes
+
+Do not hand-copy templates. Run the generator — it emits byte-identical artifacts and warns on mixed files:
+
+```bash
+uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name>      # git contract
+uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>   # + .python-version/pyproject
+uv run $SKILL_DIR/scripts/scaffold.py --flavor python --with-coverage --coverage-threshold 80  # + pytest-cov wiring
+uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --project-name <name>     # + rust-toolchain/Cargo
+uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --with-coverage --coverage-threshold 90   # + llvm-cov wiring
+uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python|rust|node
+uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --with-coverage --coverage-threshold 80
+uv run $SKILL_DIR/scripts/scaffold.py --flavor all --project-name <name>     # git+python+rust
+uv run $SKILL_DIR/scripts/scaffold.py --flavor all --with-coverage --coverage-threshold 80 --dry-run
+uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run                  # diff without writing
+```
+
+- **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`.
+- **Mixed** (script writes skeleton + warns on stderr → proofread): `CONTRIBUTING.md` (`{{project_name}}` + Before PR line), `pyproject.toml`/`Cargo.toml` (name/description/edition; with `--with-coverage` also `fail_under`), `AGENTS.md` patch (keep 3 sections, verify pointer wording).
+
+- `$SKILL_DIR/scripts/scaffold.py` — deterministic source of truth (tool owns bytes); preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor <git|python|rust|ci> --dry-run`
+- `$SKILL_DIR/scripts/verify.sh` — deterministic gate runner (`--dry-run` + `validate-deps` + `npm ls`/`cargo` checks)

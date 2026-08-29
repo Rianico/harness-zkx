@@ -20,6 +20,7 @@ Designing agent action spaces, tool definitions, and observation formatting for 
 ## Observation Design
 
 Every tool response should include:
+
 - `status`: success|warning|error
 - `summary`: one-line result
 - `next_actions`: actionable follow-ups
@@ -28,6 +29,7 @@ Every tool response should include:
 ## Error Recovery
 
 Every error path needs:
+
 - Root cause hint
 - Safe retry instruction
 - Explicit stop condition
@@ -38,6 +40,10 @@ Maximize context efficiency and reduce latency by launching independent subagent
 
 - **Anti-Pattern:** Running a security review agent, waiting for it to finish, then running a performance review agent
 - **LSZ Pattern:** Launching multiple subagents concurrently in a single tool call payload when their tasks do not depend on each other's outputs
+
+## Intent vs Execution
+
+Orchestrator owns intent; subagent owns execution. The orchestrator grills the user via Dialog Contracts (e.g., `Project Shape → Verification Gate → Coverage → CI Release`) to capture `flavor`, gates, `coverage threshold`, and `CI variant` as flags/pointers. The subagent executes generation and verification (`uv run $SKILL_DIR/scripts/scaffold.py --flavor python --with-coverage 80`, `pytest`, `lint`) and must not re-grill the user; it returns a structured result. Prevents hero-mode and preserves observation quality — intent is grilling, execution is tool-owned.
 
 ## Native Agent Orchestration Constraints
 
