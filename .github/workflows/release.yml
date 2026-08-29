@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: {fetch-depth: 0}
+        with: { fetch-depth: 0 }
       - uses: astral-sh/setup-uv@v5
-        with: {python-version: '3.14'}
+        with: { python-version: '3.14' }
       - run: uv sync --group dev
       - run: uv run ruff check .
       - run: uv run basedpyright
@@ -27,9 +27,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: {fetch-depth: 0}
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 22}
+        with: { node-version: 22 }
       - run: npm ci
       - run: npx semantic-release
-        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

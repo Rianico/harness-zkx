@@ -102,7 +102,8 @@ jobs:
       - run: npm ci
       - run: npm audit signatures
       - run: npx semantic-release
-        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 """
 
 COMMITLINT_JS = 'export default { extends: ["@commitlint/config-conventional"] };\n'
@@ -233,7 +234,8 @@ jobs:
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
-        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 """
 
 CI_PYTHON_COVERAGE_YML = """\
@@ -271,7 +273,8 @@ jobs:
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
-        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 """
 
 CI_RUST_VERIFY_YML = """\
@@ -307,7 +310,8 @@ jobs:
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
-        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 """
 
 CI_RUST_COVERAGE_YML = """\
@@ -344,7 +348,8 @@ jobs:
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
-        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 """
 
 
