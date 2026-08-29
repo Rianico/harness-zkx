@@ -6,10 +6,175 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Added
+### Features
 
-- Branch-worktree Python shims with `wt` gate delegation and auto-scaffold — replace bash shims with typed Python delegates (`_lib.py` typed boundary, `detect_stack_gate`, `read_gate`, `wt_list`), auto-scaffold `.config/wt.toml` once per stack (Rust/Python/TypeScript), gate single writer `wt.toml`, `wt merge` is final gate, dispatcher `worktree.py` (ADR 0013).
+- **scaffold:** add git semantic-release workflow
+- **scaffold:** add deterministic scaffold router with git/python/rust/ci flavors and taxonomy 4→3 redefinition
+- **skill:** wire commitlint into worktrunk pre-merge gate
+- **skill:** absorb game-rules writing principles into writing skill
+- add TypeScript rules (baseline + modern tooling)
+- add skill.sh scraper and typescript-expert
+- docs-scraper CLI standards for global args
+- branch-worktree python shims with wt gate delegation and auto-scaffold
+- **ai-engineering-expert:** absorb writing-for-agents as router subskill
+- **md-to-html:** add asset integrity verification with SHA-256 manifest
+- **skills:** implement md-to-html v2.3 for data-driven report rendering
+- **ai-engineering:** formalize Manifest Engineering patterns
+- **orchestrating:** enhance manifest granularity and timestamp tracking
+- **eval-gate:** consolidate evaluation script execution and reporting
+- **gdd:** implement Versioned Phase-Run Pattern (ADR-0010)
+- **gdd:** implement Second-Generation GDD patterns (ADR-0009)
+- **gdd:** implement Goal Locking and Aggregated Manifest Hierarchy (ADR-0008)
+- **gdd:** define Mission Manifest schema and update contract (ADR-0007)
+- **gdd:** codify GDD philosophy and streamline orchestration via ADRs
+- **gdd:** align orchestration and verification skills with GDD/BDD/EDD philosophy
+- **ai-expert:** establish GDD/BDD/EDD as foundational philosophy
+- **ai-expert:** consolidate and relocate skill validation tool
+- **ai-expert:** integrate High-Fidelity Handoff pattern as a core principle
+- **handoff:** refactor orchestrating skill for handoff-first context passing
+- **handoff:** integrate Context Aggregator into architect, plan, eval-gate, and code-review
+- **handoff:** implement Handoff as Context Aggregator to displace full documents
+- **handoff:** pivot methodology to focus on user intent, goals, and reasoning
+- **skills:** add toolchain detection to setup-lsz-skills
+- **skills:** add rename command to validate-deps.py
+- **skills:** consolidate codebase-onboarding and zoom-out into a single 'onboarding' skill
+- **skills:** merge callers and deps into a single 'related' command
+- **skills:** upgrade validate-deps.py to versatile skill management tool
+- **skills:** stabilize architecture with missing core skills and validation
+- **skills:** upgrade dependency scanner and fix invalid YAML frontmatter
+- **skills:** add deterministic skill dependency scanner
+- **metadata:** update depends-on metadata for handoff integration
+- **handoff:** integrate standard LSZ return format and cross-session handoffs
+- **handoff:** establish standard LSZ Handoff methodology with pointer passing
+- **bdd:** align architect agent and tdd-cycle with BDD behavioral specifications
+- **brainstorming:** integrate BDD (Given/When/Then) into design process and documentation
+- **tdd:** apply vertical slice pattern to tdd-cycle lightweight mode
+- **skills:** evolve TDD engine and Developer agent with AI Engineering principles
+- **skills:** add dependency caller scanner
+- **skills:** enhance brainstorming, ADR, and ai-engineering-expert hints
+- **skills:** absorb write-a-skill into skill authoring
+- **skills:** restructure ai-engineering-expert into parent-child with metadata.depends-on
+- **agents:** add Matt Pocock engineering skills configuration
+- **rules:** add git workflow conventions from history analysis
+- **skills:** convert ux-testing command to parent skill with sub-skills
+- **skills:** consolidate tavily and firecrawl into web-accessing parent skill
+- **skills:** introduce parent-skill-with-sub-skills pattern
+- **skills:** consolidate firecrawl and tavily into unified tool skills
+- **skills:** add arguments and argument-hint to hidden skills
+- **commands:** routing command pattern + argument-hint standardization
+- **commands:** add /ux-testing and /write entry points
+- **skills:** add basedpyright-expert domain knowledge skill
+- **python-expert:** add diagnostic resolution playbook
+- **obsidian-markdown:** add skill and default markdown flavour rule
+- **scraper:** integrate defuddle for cleaner markdown extraction
+- **scraper:** generate README.md with metadata for crawled docs
+- **docs-to-skill:** add meta skill for transforming docs to flat skills
+- **ratatui-guide:** add flat skill with curated references and raw docs
+- **conventions:** generalize $SKILL_DIR as universal resource path anchor
+- **python-expert:** add stub file (.pyi) authoring guidance
+- **rules:** add standard subagent response format template
+- **tdd-cycle:** add lightweight mode for eval remediation
+- **scraper:** add compact output with flatten/rewrite/verify pipeline
+- **skills:** add llm-lsp-cli-guide skill
+- **scraper:** add rust documentation scraper with cargo-docs-md
+- **python:** add type boundary enforcement pattern
+- **python:** adopt basedpyright as default LSP server and type checker
+- **skill-comply:** add structured JSON output for classifier and configurable timeouts
+- **timezone:** add timezone awareness rule and auto-detection utility
+- **brainstorming:** add mandatory design validation with examples step
+- **orchestrating:** add lightweight pipeline with complexity-based routing
+- **skill-stocktake:** sort overview by 7d usage descending
+- **skill-stocktake:** improve Rich terminal output with HORIZONTALS style
+- **hooks:** add CLI entry point to observer daemon
+- **skill-stocktake:** aggregate observations from all project files
+- **skill-stocktake:** adapt to continuous learning observation schema
+- **hooks:** add pre-install tool check phase for hook families
+- **hooks:** add observe family installer for continuous learning
+- **continuous-learning:** integrate observation hooks and pattern detection
+- **ai-engineering-expert:** add hook language selection guidance
+- **scraper:** add Jina Reader proxy for markdown fetching
+- **scraper:** add LLM-friendly fetching methods
+- **scraper:** add web scraping best practices to base scraper
+- **scraper:** create documentation scraper skill with LSP emoji handling
+- **orchestrate:** add eval-gated feature workflow
+- **architect:** align ADR workflows with adr-tools
+- **skill:** add lsp 3.17 specification skill
+- **hooks:** add unified installer and ensure todo hooks
+- **skills:** Add reference guide for modern CLI tools (fd, rg, eza)
+- **full-review:** Add comprehensive multi-dimensional code review orchestrator and PR enhancement skill from plugin comprehensive-review@wshobson/agents
+- **rule:** enchance python rules
+- **skill:** add a skill for iterating harness
+- **agent:** add a 4-step fallback discovery to explore a project so engage with rules better
 
-### Changed
+### Bug Fixes
 
-- `branch-worktree-pr` SKILL.md phases updated to `uv run scripts/...py` (`claim_gate`, `create_target`, `make_copy`, `merge_copy`, `verify_parent`, `check_history`, `open_pr`), fix `gh pr diff --check` → `git diff --check`, update topology and dispatch table for module fan-out.
+- **ci:** remove stale ci jobs and fix release env mapping, update scaffold template
+- resolve typos in docs-scraper and allowlist technical terms
+- harden CI and python shims, pin actions and fix gate
+- clarify worktrunk-guide markdown link example to avoid broken link
+- worktrunk-guide document global options for wt merge
+- **orchestrating:** clarify orchestrator must dispatch eval-gate, not run verification directly
+- **skill:** add missing opener for handoff skill's frontmatter
+- **handoff:** use phase-specific storage to prevent filename conflicts
+- **skills:** restore correct YAML block scalars for argument-hint
+- **commands:** improve argument-hint with concrete types and platforms
+- **commands:** apply routing pattern to /write command
+- **deps:** add rich to dependencies for stocktake script
+- **docs-to-skill:** use ROUNDED table style for summary output
+- **ai-engineering-expert:** use <skill-name>-raw/ path for raw docs
+- **hooks:** handle empty projects.json and add comprehensive logging
+- restore skill-stocktake Python scripts for token-saving
+- **skill-stocktake:** follow symlinks and fix awk syntax
+- **hooks/observe:** support standalone and module import patterns
+- **skill-comply:** update test assertions to match fixture spec id
+- **skill-comply:** use shell=True for setup commands with heredocs
+- **plan:** fix the mistake that planner can not write plan itself
+- **rules:** fix missing rules from git log
+
+### Documentation
+
+- add information boundary pattern to ai-engineering-expert
+- changelog for branch-worktree py shims and autofix formatting
+- define worktree workflow language and ADR 0013
+- **rules:** clarify branch+worktree target stays in session, children isolated
+- add Router Skill glossary and ADR 0012 for router injection
+- **adr:** adopt hybrid Nygard + Considered Options template
+- **skill-authoring:** document YAML scalar convention and name collision rule
+- **context-load:** add policy reference, glossary, and updated domain terms
+- **python:** codify diagnostic resolution rules
+- **adr:** link ADR-0009 to root philosophy and hierarchy
+- **adr:** link new ADRs to establish architectural lineage
+- modernize project instructions and mental model
+- formalize project glossary and tool feedback ADR
+- refine skill naming conventions by taxonomy
+- **skills:** align exploration narrative with environment-behavior rules
+- **handoff:** use recommendation language instead of directive language
+- **handoff:** generalize next directive example
+- **worktrunk:** expand merge workflow guidance and triggers
+- **ai-engineering-expert:** arguments and hints should reflect skill function
+- **rules:** refine Python type safety with nuanced suppression approach
+- **rules:** enhance Scoped Over Global with category-level thinking
+- **rules:** add language management best practices
+- **mental-model:** add critical thinking as primary thinking mode
+- **python-expert:** add serialization layering principle
+- **ai-engineering:** add subagent-first execution as core philosophy
+- **eval-gate:** add grader selection guidance
+- **python:** strengthen type safety principles and patterns
+- **ai-engineering:** add artifact hygiene as fifth core tenet
+- **environment:** add workspace-diagnostics to LSP commands
+- **python:** add keep-typed-models principle and trace-to-source methodology
+- **environment:** integrate llm-lsp-cli as first-class code intelligence tool
+- **quality:** add prefer type-safe libraries principle
+- **mental-model:** add knowledge gap as primary reason to ask
+- **skill-stocktake:** document required tools
+- **rules,skill:** add mandatory performance testing requirements
+- **skills:** add comprehensive skill authoring standards and fix 30 skills
+- **scraper:** add comprehensive Tavily Extract comparison
+- **skills:** rewrite search and orchestrate descriptions for trigger recall
+- **claude:** add hook design philosophy
+- **rules:** establish code quality, security, environment, and testing baselines
+- **rules:** update agents, coding style, workflow and security guidelines in common rules
+
+### Code Refactoring
+
+- **changelog:** adopt Option A PR guard + pre-push hook (BREAKING CHANGE)

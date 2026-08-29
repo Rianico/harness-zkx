@@ -110,42 +110,112 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 """
 
-CHANGELOG_PREVIEW_YML = """\
-name: Changelog Preview
+CHANGELOG_CHECK_YML = """\
+name: Changelog Check
 on:
-  push:
+  pull_request:
     branches: [main]
-    paths-ignore:
-      - "CHANGELOG.md"
 permissions:
   contents: read
+concurrency:
+  group: changelog-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
-  preview:
+  check:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
           fetch-depth: 0
-          persist-credentials: true
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: Update Unreleased section
-        run: python scripts/changelog-unreleased.py update
-      - name: Commit if changed
+      - name: Check Unreleased is up to date
         run: |
-          if git diff --quiet CHANGELOG.md; then
-            echo "no change"
+          # save committed version
+          cp CHANGELOG.md /tmp/before.md 2>/dev/null || touch /tmp/before.md
+          python scripts/changelog-unreleased.py update
+          if diff -q /tmp/before.md CHANGELOG.md >/dev/null; then
+            echo "CHANGELOG.md Unreleased ok"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "docs(changelog): update Unreleased [skip ci]"
-          git push
-QOg"""
+          echo "::error::CHANGELOG.md Unreleased stale"
+          echo ""
+          echo "Visible conventional commits in this PR require Unreleased update."
+          echo "Expected diff:"
+          diff -u /tmp/before.md CHANGELOG.md || true
+          echo ""
+          echo "Fix locally:"
+          echo "  uv run python scripts/changelog-unreleased.py update"
+          echo "  git add CHANGELOG.md && git commit --amend --no-edit --no-verify && git push --force-with-lease"
+          echo ""
+          echo "Hidden types (style/chore/refactor/test/build/ci) without BREAKING CHANGE don't need Unreleased."
+          # restore committed file so subsequent steps see original
+          cp /tmp/before.md CHANGELOG.md
+          exit 1
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const body = `> [!warning] CHANGELOG.md Unreleased stale
+            This PR contains visible conventional commits (\\`feat|fix|perf|revert|docs\\` or \\`!\\/BREAKING CHANGE\\`) but \\`## [Unreleased]\\` doesn't match \\`scripts/changelog-unreleased.py update\\`.
+
+            Fix:
+            \\`\\`\\`bash
+            uv run python scripts/changelog-unreleased.py update
+            git add CHANGELOG.md && git commit --amend --no-edit
+            git push --force-with-lease
+            \\`\\`\\`
+            Hidden types \\`style|chore|refactor|test|build|ci\\` only need update when breaking.`;
+            // avoid duplicate comments
+            const {data: comments} = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number
+            });
+            if (comments.some(c => c.body.includes('CHANGELOG.md Unreleased stale'))) return;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body
+            });
+"""
+
+GITHOOK_PRE_PUSH = """\
+#!/usr/bin/env bash
+set -e
+# pre-push hook: warn if CHANGELOG.md Unreleased stale
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  range="$remote_sha..$local_sha"
+  [ "$remote_sha" = "0000000000000000000000000000000000000000" ] && range="$local_sha"
+  if ! git log "$range" --pretty=%s --no-merges | grep -Eq '^(feat|fix|perf|revert|docs)(\\(.+\\))?!?: '; then
+    if ! git log "$range" --pretty=%B --no-merges | grep -q "BREAKING CHANGE:"; then
+      continue
+    fi
+  fi
+  tmp=$(mktemp)
+  cp CHANGELOG.md "$tmp" 2>/dev/null || touch "$tmp"
+  uv run python scripts/changelog-unreleased.py update >/dev/null
+  if ! diff -q CHANGELOG.md "$tmp" >/dev/null; then
+    cat >&2 <<'EOF'
+> [!warning] CHANGELOG.md [Unreleased] stale
+Visible conventional commit in push range but Unreleased not updated.
+Fix:
+  uv run python scripts/changelog-unreleased.py update
+  git add CHANGELOG.md
+  git commit --amend --no-edit   # feature branch ok
+  git push --force-with-lease
+Bypass (human): git push --no-verify
+EOF
+    cp "$tmp" CHANGELOG.md
+    rm "$tmp"
+    exit 1
+  fi
+  rm "$tmp"
+done
+"""
 
 COMMITLINT_JS = 'export default { extends: ["@commitlint/config-conventional"] };\n'
 
@@ -157,7 +227,7 @@ CONTRIBUTING_MD_TMPL = """\
 - Scope is noun, description imperative present, lowercase, no period, ≤72 chars
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
-`CHANGELOG.md` has two writers: `changelog-preview.yml` (on `push` to `main`) stages notes under `## [Unreleased]` via `scripts/changelog-unreleased.py update`; `release.yml` (on `repository_dispatch`/`workflow_dispatch`) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections.
+`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required, `diff -q` vs generated); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types `style|chore|refactor|test|build|ci` only appear when `!`/`BREAKING CHANGE`.
 ## Before PR
 `npm run lint && npm run typecheck && npm test` must pass. See `AGENTS.md` for agent rules.
 """
@@ -169,7 +239,7 @@ CONTRIBUTING_MD_TMPL_PYTHON = """\
 - Scope is noun, description imperative present, lowercase, no period, ≤72 chars
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
-Do not edit `CHANGELOG.md`. Changelog is generated by `semantic-release` on `repository_dispatch` (`gh api repos/.../dispatches -f event_type=semantic-release`) or `workflow_dispatch` — no manual `git tag`.
+`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types only appear when `!`/`BREAKING CHANGE`.
 ## Before PR
 `uv run ruff check . && uv run basedpyright && uv run pytest` must pass. See `AGENTS.md` for agent rules.
 """
@@ -530,9 +600,8 @@ def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
 def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
     write_file(cwd / ".releaserc.json", RELEASERC_JSON, dry_run)
     write_file(cwd / ".github" / "workflows" / "release.yml", RELEASE_YML, dry_run)
-    write_file(
-        cwd / ".github" / "workflows" / "changelog-preview.yml", CHANGELOG_PREVIEW_YML, dry_run
-    )
+    write_file(cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run)
+    write_file(cwd / ".githooks" / "pre-push", GITHOOK_PRE_PUSH, dry_run)
     write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
     write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     write_file(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run)

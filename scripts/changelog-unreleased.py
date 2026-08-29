@@ -52,18 +52,28 @@ def run(cmd: list[str]) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def _is_ancestor(tag: str) -> bool:
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", tag, "HEAD"], capture_output=True
+    )
+    return result.returncode == 0
+
+
 def get_last_tag() -> str:
     tag = run(["git", "describe", "--tags", "--abbrev=0"])
-    if tag:
+    if tag and _is_ancestor(tag):
         return tag
+    # orphaned-tag aware: find newest semver tag that is ancestor of HEAD
+    for t in run(["git", "tag", "--sort=-v:refname"]).splitlines():
+        t = t.strip()
+        if t and _is_ancestor(t):
+            return t
     # fallback: most recent tag merged into HEAD (handles branches ahead of tags)
     merged = run(["git", "tag", "--merged", "HEAD", "--sort=-v:refname"])
     if merged:
-        # first line is most recent
         first_line = merged.splitlines()[0].strip()
         if first_line:
             return first_line
-    # last resort: first commit
     first = run(["git", "rev-list", "--max-parents=0", "HEAD"])
     return first
 

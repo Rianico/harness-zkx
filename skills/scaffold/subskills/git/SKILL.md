@@ -23,7 +23,8 @@ Pure-deterministic (no proofread, byte-identical):
 
 - `.releaserc.json` — conventional commits preset `conventionalcommits@8.0.0` (`writer@8.4.0`), `[skip ci]` message
 - `.github/workflows/release.yml` — pinned `actions/checkout@11d596...` + `setup-node@49933...` (v4), `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `release` job runs `scripts/changelog-unreleased.py clear` before `npx semantic-release` to hand off `## [Unreleased]`
-- `.github/workflows/changelog-preview.yml` — on `push` to `main` (`paths-ignore: CHANGELOG.md`), runs `scripts/changelog-unreleased.py update` and commits `## [Unreleased]` with `[skip ci]`
+- `.github/workflows/changelog-check.yml` — on `pull_request` to `main` (required), `diff -q` vs `scripts/changelog-unreleased.py update`, `fail+comment` if stale
+- `.githooks/pre-push` — `warn+block`, `cp before + update + diff`, hint `uv run python scripts/changelog-unreleased.py update && git add && git commit --amend`
 - `scripts/changelog-unreleased.py` — manages `## [Unreleased]` (`update` stages notes from `git log <last-tag>..HEAD`, `clear` strips it before release)
 - `commitlint.config.js` — `export default { extends: ['@commitlint/config-conventional'] }`
 - `CHANGELOG.md` — initial `# Changelog` header
@@ -58,7 +59,7 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 ## Notes
 
 - On-demand via `repository_dispatch` + `workflow_dispatch` is the deterministic default — no `push: tags` or `push: [main]` auto-release. Tag is created by `semantic-release` on dispatch.
-- `CHANGELOG.md` has two writers: `changelog-preview.yml` (on `push` to `main`) stages notes under `## [Unreleased]` via `scripts/changelog-unreleased.py update`; `release.yml` (`release` job) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections (`@semantic-release/changelog` + `@semantic-release/git` with `[skip ci]`). Do not hand-edit versioned sections.
+- `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` (`release` job) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections (`@semantic-release/changelog` + `@semantic-release/git` with `[skip ci]`). Do not hand-edit versioned sections.
 - `@semantic-release/git` bumps `package.json` + `CHANGELOG.md` + commits + tags atomically; no manual `git tag` or manifest bump.
 - For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci/SKILL.md`.
 
