@@ -118,3 +118,4 @@ lsz2/target/
 .opencode/node_modules/
 assets/images/security/badrudi-exploit.mp4
 results.json
+.venv/

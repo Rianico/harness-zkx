@@ -6,32 +6,36 @@ Complete reference for authoring skills. Documents both the Agent Skills specifi
 
 ## Skill Taxonomy
 
-All LSZ skills are one of four primary types. Classification determines structure, dispatch pattern, and resource needs.
+All LSZ skills are one of three primary types. Classification determines structure, dispatch pattern, and resource needs. Budget scales with phases: Workflow (1-phase) ≤150 lines, Workflow (N-phase) ≤150×phases capped 500; Orchestration/Domain ≤500 (soft warning first).
 
 ### Orchestration Skills
 
-Use for multi-phase, multi-party, or fan-out/fan-in workflows.
+Use for multi-phase, multi-party, fan-out/fan-in workflows and router-projection pattern. Owns sequencing, branching, checkpoints across heterogeneous subskills; delegates all implementation via `Read` + `managed-by`; never writes artifacts itself.
 
 - May invoke multiple skills and agents
 - May define branching, checkpoints, and approval points
-- Own workflow sequencing and complex state transitions
 - Must not do implementation work directly
+- Router-Projection: parent dispatches via `Read`, not `Skill` tool, hidden `subskills/` — Scaffold router (`manage: [git,python,rust,ci]`) is canonical example
 
 **Structure:** Dispatch table mapping phases to subagent templates. No implementation logic in the skill body.
 
-**Example:** `orchestrating` -- dispatches architect, developer, code-reviewer, eval-gate across plan/implement/review cycles.
+**Example:** `orchestrating` — dispatches architect, developer, code-reviewer, eval-gate across plan/implement/review cycles. Scaffold — router over `git`/`python`/`rust`/`ci`.
 
-### Complex Workflow Skills
+### Workflow Skills
 
-Use for a substantial single-purpose workflow with multiple phases.
+Use for one or more phases with artifact contracts. 1-phase = formerly Action (compact, self-contained, low-ambiguity); N-phase = formerly Complex (owns transitions, may dispatch subagents).
 
-- May invoke agents
-- May generate artifacts and enforce phase transitions
+- May invoke agents (N-phase) or remain self-contained (1-phase)
+- Owns phase transitions and artifact contracts within a single flow
+- Budget: 1-phase ≤150 lines, N-phase ≤150×phases capped 500; lint soft warning first
 - Should prefer structured, schema-like execution instructions when dispatching agents
 
-**Structure:** Phase definitions with state transitions, artifact contracts, and phase-specific dispatch templates.
+**Structure:**
 
-**Example:** `tdd-cycle` -- RED/GREEN/REFACTOR phases with test-first enforcement and phase gates.
+- 1-phase: compact, focused, minimal sections — e.g., `skill-stocktake` (audit, single pass, no phases)
+- N-phase: phase definitions with state transitions, artifact contracts, and phase-specific dispatch templates — e.g., `tdd-cycle` (RED/GREEN/REFACTOR)
+
+> Former `Action` → `Workflow (phases==1)`; `Complex Workflow` → `Workflow (phases>1)`. Router-Projection (parent via `Read` + `managed-by`) is an Orchestration pattern, not a Workflow.
 
 ### Domain Knowledge Skills
 
@@ -44,18 +48,6 @@ Use for guides, patterns, expert methodology, and reusable domain constraints.
 **Structure:** Organized by topic. Patterns with examples. Gotchas for non-obvious pitfalls. No dispatch templates.
 
 **Example:** `ai-engineering-expert` -- loaded when designing skills/agents/workflows; provides methodology, not execution.
-
-### Action Skills
-
-Use for narrow, simple workflows and direct task execution.
-
-- Best fit for small, low-ambiguity tasks
-- Should usually be invoked directly as skills rather than exposed through command wrappers
-- Should remain simple and compact
-
-**Structure:** Compact, focused. Minimal sections. No subagent dispatch.
-
-**Example:** `skill-stocktake` -- audits skill inventory and reports status. Single pass, no phases.
 
 ### When to Embed Logic Directly in an Agent
 
@@ -71,10 +63,10 @@ If the workflow violates any of these constraints, it belongs in a skill.
 
 ## Required Fields
 
-| Field | Required | Constraints |
-|-------|----------|-------------|
-| `name` | **Required** | 1-64 chars, lowercase alphanumeric + hyphens, no leading/trailing hyphens, no `--`, must match directory name. |
-| `description` | **Required** | 1-1024 chars, third-person, what + when, trigger vocabulary. Truncated at 1,536 chars in skill listing. |
+| Field         | Required     | Constraints                                                                                                    |
+| ------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| `name`        | **Required** | 1-64 chars, lowercase alphanumeric + hyphens, no leading/trailing hyphens, no `--`, must match directory name. |
+| `description` | **Required** | 1-1024 chars, third-person, what + when, trigger vocabulary. Truncated at 1,536 chars in skill listing.        |
 
 ### `name` Constraints (All Rules)
 
@@ -88,31 +80,32 @@ If the workflow violates any of these constraints, it belongs in a skill.
 
 Select the naming pattern that matches the skill's taxonomy:
 
-- **Domain Knowledge (Expertise/Methodology)**: For skills that teach *how* to do things, standardize on the `[topic]-expert` suffix to keep domain knowledge naming universal.
-  - *Examples:* `python-expert`, `backend-expert`, `tdd-expert`.
-  - *Avoid:* `python-guide`, `backend-patterns`.
+- **Domain Knowledge (Expertise/Methodology)**: For skills that teach _how_ to do things, standardize on the `[topic]-expert` suffix to keep domain knowledge naming universal.
+  - _Examples:_ `python-expert`, `backend-expert`, `tdd-expert`.
+  - _Avoid:_ `python-guide`, `backend-patterns`.
 - **Domain Knowledge (Facts/Docs)**: For skills that are purely informational repositories, constraints, or vocabularies, use bare nouns or plural concepts without suffixes.
-  - *Examples:* `adr`, `triage-labels`, `design-system`.
-- **Actions & Workflows**: For executable tasks, use verbs, imperatives, or prepositional phrases like `[action]-[target]` or `to-[target]`.
-  - *Focus:* Names should flow naturally in a chat invocation.
-  - *Examples:* `handoff`, `to-prd`, `build-fix`, `update-docs`.
-  - *Usage:* "Let's `/handoff` the tasks" or "convert this `/to-prd`".
+  - _Examples:_ `adr`, `triage-labels`, `design-system`.
+- **Workflows**: For executable tasks (1-phase compact formerly Action, N-phase formerly Complex), use verbs, imperatives, or prepositional phrases like `[action]-[target]` or `to-[target]`.
+  - _Focus:_ Names should flow naturally in a chat invocation.
+  - _Examples:_ `handoff`, `to-prd`, `build-fix`, `update-docs`.
+  - _Usage:_ "Let's `/handoff` the tasks" or "convert this `/to-prd`".
 - **Orchestration**: For skills managing continuous multi-phase processes, use present participles (`[process]-ing`).
-  - *Examples:* `orchestrating`, `brainstorming`.
+  - _Examples:_ `orchestrating`, `brainstorming`.
+    **Valid:**
 
-**Valid:**
 ```yaml
-name: pdf-processing  # action (verb-noun)
-name: adr             # domain knowledge facts (noun)
-name: python-expert   # domain knowledge expertise (noun-expert)
+name: pdf-processing # action (verb-noun)
+name: adr # domain knowledge facts (noun)
+name: python-expert # domain knowledge expertise (noun-expert)
 ```
 
 **Invalid:**
+
 ```yaml
-name: PDF-Processing  # uppercase not allowed
-name: -pdf            # cannot start with hyphen
+name: PDF-Processing # uppercase not allowed
+name: -pdf # cannot start with hyphen
 name: pdf--processing # consecutive hyphens not allowed
-name: my-skill        # if directory is named "other-skill"
+name: my-skill # if directory is named "other-skill"
 ```
 
 ### `description` Requirements
@@ -126,27 +119,30 @@ name: my-skill        # if directory is named "other-skill"
 - Maximum 1024 characters
 
 **Good:**
+
 ```yaml
 description: >-
   Extracts text and tables from PDF files, fills PDF forms, merges documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
 ```
 
 **Poor:**
+
 ```yaml
-description: "Helps with documents"  # too vague
-description: "I can help you process PDFs"  # wrong POV
+description: 'Helps with documents' # too vague
+description: 'I can help you process PDFs' # wrong POV
 ```
 
 ### YAML Frontmatter Scalar Convention
 
 Always use YAML block scalars in frontmatter — never inline strings. This ensures consistent parsing and makes it easy to add multi-line values without changing format.
 
-| Field | Required Scalar | Rationale |
-|-------|----------------|-----------|
-| `description` | `>-` (folded, strip) | Folds accidental line wraps; desc is always a single paragraph |
-| `argument-hint` | `|-` (literal, strip) | May become multi-line; preserves intentional breaks, no trailing noise |
+| Field           | Required Scalar      | Rationale                                                      |
+| --------------- | -------------------- | -------------------------------------------------------------- |
+| `description`   | `>-` (folded, strip) | Folds accidental line wraps; desc is always a single paragraph |
+| `argument-hint` | `                    | -` (literal, strip)                                            | May become multi-line; preserves intentional breaks, no trailing noise |
 
 **Correct:**
+
 ```yaml
 description: >-
   Single paragraph that can wrap at any editor width — newlines fold to spaces.
@@ -155,6 +151,7 @@ argument-hint: |-
 ```
 
 **Incorrect:**
+
 ```yaml
 description: "Inline string — harder to script-check"  # wrong: no block scalar
 argument-hint: <library> <question>  # wrong: no block scalar
@@ -169,34 +166,36 @@ This convention is enforced by the `validate-deps.py lint` command.
 
 These fields are part of the Agent Skills specification and provide portability across compliant agents.
 
-| Field | Required | Constraints | Purpose |
-|-------|----------|-------------|---------|
-| `license` | Optional | License name or reference | Specifies skill license |
-| `compatibility` | Optional | Max 500 chars | Environment requirements |
-| `metadata` | Optional | Key-value mapping | Arbitrary additional properties |
+| Field           | Required | Constraints               | Purpose                         |
+| --------------- | -------- | ------------------------- | ------------------------------- |
+| `license`       | Optional | License name or reference | Specifies skill license         |
+| `compatibility` | Optional | Max 500 chars             | Environment requirements        |
+| `metadata`      | Optional | Key-value mapping         | Arbitrary additional properties |
 
 **Examples:**
+
 ```yaml
 license: Apache-2.0
 compatibility: Requires git, docker, jq, and access to the internet
 metadata:
   author: example-org
-  version: "1.0"
+  version: '1.0'
 ```
 
 ### Metadata Conventions
 
 The `metadata` field supports project-specific structural declarations. The LSZ architecture defines these conventions:
 
-| Key | Type | Purpose |
-|-----|------|---------|
-| `manage` | list | Parent skill: names of sub-skills this parent manages |
-| `managed-by` | string | Sub-skill: name of the parent skill |
-| `depends-on` | list | Hard dependencies on other skills (must exist in `skills/` or `skills-lock.json`) |
-| `author` | string | Attribution for third-party skills |
-| `version` | string | Version for third-party skills |
+| Key          | Type   | Purpose                                                                           |
+| ------------ | ------ | --------------------------------------------------------------------------------- |
+| `manage`     | list   | Parent skill: names of sub-skills this parent manages                             |
+| `managed-by` | string | Sub-skill: name of the parent skill                                               |
+| `depends-on` | list   | Hard dependencies on other skills (must exist in `skills/` or `skills-lock.json`) |
+| `author`     | string | Attribution for third-party skills                                                |
+| `version`    | string | Version for third-party skills                                                    |
 
 **`depends-on` rules:**
+
 - Hard dependencies only -- list skills whose absence breaks this skill's behavior
 - Simple list of skill names, no arguments
 - Sub-skills declare their own `depends-on` independently
@@ -211,20 +210,20 @@ The `metadata` field supports project-specific structural declarations. The LSZ 
 
 These fields extend the Agent Skills spec for Claude Code specifically.
 
-| Field | Required | Type | Purpose |
-|-------|----------|------|---------|
-| `argument-hint` | Optional | string | Autocomplete hint for arguments |
-| `arguments` | Optional | string or array | Named positional arguments for `$name` substitution |
-| `allowed-tools` | Optional | string or array | Tools allowed without permission prompts |
-| `disable-model-invocation` | Optional | boolean | Prevent automatic skill loading (default: false) |
-| `user-invocable` | Optional | boolean | Show in `/` menu (default: true) |
-| `model` | Optional | string | Override model (`opus`, `sonnet`, `haiku`, `inherit`) |
-| `effort` | Optional | string | Thinking level (`low`, `medium`, `high`, `xhigh`, `max`) |
-| `context` | Optional | string | Set to `fork` for subagent isolation |
-| `agent` | Optional | string | Subagent type when `context: fork` |
-| `hooks` | Optional | object | Skill-scoped lifecycle hooks |
-| `paths` | Optional | string or array | Glob patterns limiting skill activation |
-| `shell` | Optional | string | Shell for inline commands (`bash` default, `powershell`) |
+| Field                      | Required | Type            | Purpose                                                  |
+| -------------------------- | -------- | --------------- | -------------------------------------------------------- |
+| `argument-hint`            | Optional | string          | Autocomplete hint for arguments                          |
+| `arguments`                | Optional | string or array | Named positional arguments for `$name` substitution      |
+| `allowed-tools`            | Optional | string or array | Tools allowed without permission prompts                 |
+| `disable-model-invocation` | Optional | boolean         | Prevent automatic skill loading (default: false)         |
+| `user-invocable`           | Optional | boolean         | Show in `/` menu (default: true)                         |
+| `model`                    | Optional | string          | Override model (`opus`, `sonnet`, `haiku`, `inherit`)    |
+| `effort`                   | Optional | string          | Thinking level (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `context`                  | Optional | string          | Set to `fork` for subagent isolation                     |
+| `agent`                    | Optional | string          | Subagent type when `context: fork`                       |
+| `hooks`                    | Optional | object          | Skill-scoped lifecycle hooks                             |
+| `paths`                    | Optional | string or array | Glob patterns limiting skill activation                  |
+| `shell`                    | Optional | string          | Shell for inline commands (`bash` default, `powershell`) |
 
 #### `arguments`
 
@@ -239,6 +238,7 @@ arguments:
 ```
 
 **Good semantic names:**
+
 - `content_type` not `arg1` — describes what kind of content
 - `platform` not `target` — specifies where to publish
 - `scope` not `area` — defines audit boundary
@@ -272,6 +272,7 @@ argument-hint: |
 #### `allowed-tools`
 
 Accepts **both formats**:
+
 ```yaml
 # Space-separated string
 allowed-tools: Bash(git *) Read Write
@@ -284,49 +285,52 @@ allowed-tools:
 ```
 
 #### `model` Override
+
 ```yaml
-model: opus      # Force Claude Opus
-model: sonnet    # Force Claude Sonnet
-model: haiku     # Force Claude Haiku
-model: inherit   # Keep current model (default)
+model: opus # Force Claude Opus
+model: sonnet # Force Claude Sonnet
+model: haiku # Force Claude Haiku
+model: inherit # Keep current model (default)
 ```
 
 #### `effort` Levels
 
-| Level | Use Case |
-|-------|----------|
-| `low` | Quick, simple tasks |
-| `medium` | Standard complexity |
-| `high` | Complex reasoning |
-| `xhigh` | Very complex analysis |
-| `max` | Maximum effort for critical tasks |
+| Level    | Use Case                          |
+| -------- | --------------------------------- |
+| `low`    | Quick, simple tasks               |
+| `medium` | Standard complexity               |
+| `high`   | Complex reasoning                 |
+| `xhigh`  | Very complex analysis             |
+| `max`    | Maximum effort for critical tasks |
 
 #### `context: fork` Isolation
+
 ```yaml
 context: fork
 agent: developer
 ```
 
 #### `paths` Activation Limiting
+
 ```yaml
 paths:
-  - "src/**/*.ts"
-  - "tests/**/*.ts"
+  - 'src/**/*.ts'
+  - 'tests/**/*.ts'
 ```
 
 ## String Substitutions
 
 Skills support string substitution for dynamic values in the skill content:
 
-| Variable | Description |
-|----------|-------------|
-| `$ARGUMENTS` | All arguments passed when invoking the skill |
-| `$ARGUMENTS[N]` | Access specific argument by 0-based index |
-| `$N` | Shorthand for `$ARGUMENTS[N]` (e.g., `$0`, `$1`) |
-| `$name` | Named argument declared in `arguments` frontmatter |
-| `${CLAUDE_SESSION_ID}` | Current session ID |
-| `${CLAUDE_EFFORT}` | Current effort level |
-| `$SKILL_DIR` | Skill directory path (for referencing bundled files). **Official substitution:** `${CLAUDE_SKILL_DIR}` |
+| Variable               | Description                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `$ARGUMENTS`           | All arguments passed when invoking the skill                                                           |
+| `$ARGUMENTS[N]`        | Access specific argument by 0-based index                                                              |
+| `$N`                   | Shorthand for `$ARGUMENTS[N]` (e.g., `$0`, `$1`)                                                       |
+| `$name`                | Named argument declared in `arguments` frontmatter                                                     |
+| `${CLAUDE_SESSION_ID}` | Current session ID                                                                                     |
+| `${CLAUDE_EFFORT}`     | Current effort level                                                                                   |
+| `$SKILL_DIR`           | Skill directory path (for referencing bundled files). **Official substitution:** `${CLAUDE_SKILL_DIR}` |
 
 ### `$SKILL_DIR` Path Convention
 
@@ -337,20 +341,23 @@ Skills support string substitution for dynamic values in the skill content:
 **Why:** Prose references like `Read $SKILL_DIR/references/layout.md` are consumed by an LLM whose cwd is unknown — relative paths would resolve against the wrong directory. Markdown links like `[layout](references/layout.md)` follow the standard relative-to-file convention and work correctly.
 
 **Applies to:**
-| Resource | Prose Path | Markdown Link |
-|----------|-----------|---------------|
-| Scripts | `$SKILL_DIR/scripts/<name>.py` | — |
-| References | `$SKILL_DIR/references/<module>.md` | `[text](references/<module>.md)` |
-| Raw docs | `$SKILL_DIR/references/<skill-name>-raw/` | `[text](references/<skill-name>-raw/<file>.md)` |
-| Config | `$SKILL_DIR/config/<file>` | — |
+
+| Resource   | Prose Path                                | Markdown Link                                   |
+| ---------- | ----------------------------------------- | ----------------------------------------------- |
+| Scripts    | `$SKILL_DIR/scripts/<name>.py`            | —                                               |
+| References | `$SKILL_DIR/references/<module>.md`       | `[text](references/<module>.md)`                |
+| Raw docs   | `$SKILL_DIR/references/<skill-name>-raw/` | `[text](references/<skill-name>-raw/<file>.md)` |
+| Config     | `$SKILL_DIR/config/<file>`                | —                                               |
 
 **Anti-patterns:**
+
 - `../../references/<module>/<file>.md` in prose — brittle, breaks on file moves
 - `./references/<file>.md` in prose — assumes cwd is the skill directory
 - Absolute paths like `/Users/x/skills/my-skill/references/` — not portable
 - `$SKILL_DIR/references/<file>.md` in markdown links — unnecessary, relative-to-file is standard
 
 **Example:**
+
 ```yaml
 ---
 name: session-logger
@@ -373,15 +380,16 @@ $SKILL_DIR/references/format-spec.md
 
 For methodology and domain-knowledge skills, descriptions MUST cover all natural trigger patterns:
 
-| Pattern | Example Phrases | Why It Matters |
-|---------|-----------------|----------------|
-| **Direct domain** | "design the architecture", "implement authentication" | Explicit request for the domain |
-| **Problem framing** | "this code is a mess", "need to scale", "too many bugs" | User describes symptom, not domain |
-| **Decision language** | "should we use X or Y", "which approach", "trade-off between" | User needs guidance, not action |
+| Pattern               | Example Phrases                                               | Why It Matters                     |
+| --------------------- | ------------------------------------------------------------- | ---------------------------------- |
+| **Direct domain**     | "design the architecture", "implement authentication"         | Explicit request for the domain    |
+| **Problem framing**   | "this code is a mess", "need to scale", "too many bugs"       | User describes symptom, not domain |
+| **Decision language** | "should we use X or Y", "which approach", "trade-off between" | User needs guidance, not action    |
 
 ### TRIGGER Clause Pattern
 
 For methodology skills, use an explicit TRIGGER clause:
+
 ```yaml
 description: "Architecture expertise for system design. TRIGGER when: designing architecture, defining boundaries, evaluating approaches; OR user mentions scaling problems, messy code, coupling issues; OR user asks 'should we', 'which approach', 'is this the right pattern'."
 ```
@@ -391,18 +399,24 @@ description: "Architecture expertise for system design. TRIGGER when: designing 
 Match specificity to task fragility.
 
 ### High Freedom (Text-based instructions)
+
 Use when: multiple approaches valid, decisions depend on context.
+
 ```markdown
 ## Code review process
+
 1. Analyze the code structure
 2. Check for potential bugs
 3. Suggest improvements
 ```
 
 ### Low Freedom (Specific scripts)
+
 Use when: operations are fragile, consistency is critical.
+
 ```markdown
 ## Database migration
+
 Run exactly:
 \`\`\`bash
 python scripts/migrate.py --verify --backup
@@ -413,11 +427,13 @@ Do not modify or add flags.
 ### Provide Defaults, Not Menus
 
 **Good:**
+
 ```markdown
 Use pdfplumber for text extraction. For scanned PDFs, use pdf2image with pytesseract.
 ```
 
 **Bad:**
+
 ```markdown
 You can use pypdf, or pdfplumber, or PyMuPDF, or pdf2image...
 ```
@@ -428,12 +444,12 @@ Rules and skills serve fundamentally different purposes in the architecture. Und
 
 ### The Core Distinction
 
-| Dimension | Rules | Skills |
-|-----------|-------|--------|
-| **Loading** | Always-on | On-demand |
-| **Token cost** | Every conversation | Only when invoked |
-| **Purpose** | Defaults & consistency | Deep expertise |
-| **Content** | WHAT to use | HOW to implement |
+| Dimension          | Rules                    | Skills                    |
+| ------------------ | ------------------------ | ------------------------- |
+| **Loading**        | Always-on                | On-demand                 |
+| **Token cost**     | Every conversation       | Only when invoked         |
+| **Purpose**        | Defaults & consistency   | Deep expertise            |
+| **Content**        | WHAT to use              | HOW to implement          |
 | **Knowledge type** | Personal taste, baseline | Non-obvious, experiential |
 
 ### Rules Design Principles
@@ -446,9 +462,11 @@ Rules must justify their token cost every conversation.
 
 ```markdown
 # GOOD: One line, high value
+
 - **`pytest`**: Run with `uv run pytest -q`
 
 # BAD: Verbose explanation
+
 - **`pytest`**: You should use pytest for testing because it has great fixture support and a rich plugin ecosystem. Run it with `uv run pytest -q` to keep output quiet unless you need verbose mode...
 ```
 
@@ -458,9 +476,11 @@ Rules declare preferences. They don't justify them.
 
 ```markdown
 # GOOD: Just the preference
+
 Use FastAPI for new APIs.
 
 # BAD: Explaining why
+
 Use FastAPI for new APIs because it provides automatic OpenAPI documentation, async support out of the box, and type safety through Pydantic integration...
 ```
 
@@ -470,11 +490,11 @@ The LLM already knows FastAPI's benefits. The rule sets YOUR default.
 
 Rules capture what the LLM already knows but might forget or choose differently.
 
-| LLM Knows | Rule Purpose |
-|-----------|--------------|
-| "Use pytest" | "Use pytest, not unittest" (preference) |
+| LLM Knows             | Rule Purpose                                 |
+| --------------------- | -------------------------------------------- |
+| "Use pytest"          | "Use pytest, not unittest" (preference)      |
 | "Type hints are good" | "Type hints on all signatures" (consistency) |
-| "PEP 8 exists" | "PEP 8, snake_case" (reminder) |
+| "PEP 8 exists"        | "PEP 8, snake_case" (reminder)               |
 
 Rules don't teach. They crystallize defaults.
 
@@ -484,11 +504,13 @@ Rules encode decisions you don't want to revisit.
 
 ```markdown
 # Tool choices
+
 - `uv` over `pip`
 - `ruff` over `black`
 - `basedpyright` over `pyright`
 
 # Style choices
+
 - `pytest -q` by default
 - File-level suppressions, never global
 ```
@@ -510,18 +532,20 @@ Skills are **loaded on-demand**. They can be longer, include examples, and expla
 
 Skills contain what the LLM might NOT know or might get WRONG.
 
-```markdown
+````markdown
 # SKILL: python-expert
 
 ## Async & Concurrency
 
 **Blocking the Event Loop:**
 Never put blocking I/O inside `async def`. It blocks the entire event loop.
+
 ```python
 # BAD
 async def fetch():
     response = requests.get(url)  # Blocks!
 ```
+````
 
 The LLM knows `requests` is blocking, but might not realize the severity in async context. This is experiential knowledge.
 
@@ -529,10 +553,11 @@ The LLM knows `requests` is blocking, but might not realize the severity in asyn
 
 Skills show HOW, not just WHAT.
 
-```markdown
+````markdown
 # SKILL: django-expert
 
 **N+1 Query Audit:**
+
 ```python
 # BAD: N+1 queries
 for post in Post.objects.all():
@@ -542,7 +567,9 @@ for post in Post.objects.all():
 for post in Post.objects.select_related('author'):
     print(post.author.name)
 ```
-```
+````
+
+````
 
 This requires code to understand. It's not a one-liner rule.
 
@@ -559,8 +586,9 @@ optimizer.zero_grad()  # Before backprop
 
 with torch.no_grad():  # Evaluation
     outputs = model(inputs)
-```
-```
+````
+
+````
 
 The LLM might forget `zero_grad()` or use `no_grad()` incorrectly. This is about correctness, not preference.
 
@@ -573,7 +601,7 @@ Skills explain trade-offs and constraints.
 
 **Fat Models, Skinny Views:**
 Views handle HTTP routing and permissions. Business logic belongs in models or service layer.
-```
+````
 
 This is a design philosophy, not a syntax rule. It requires understanding WHY.
 
@@ -581,15 +609,15 @@ This is a design philosophy, not a syntax rule. It requires understanding WHY.
 
 Ask these questions to determine placement:
 
-| Question | Rule | Skill |
-|----------|------|-------|
-| Should this apply EVERY conversation? | ✓ | ✗ |
-| Is it a one-liner preference? | ✓ | ✗ |
-| Does the LLM already know this? | ✓ | ✗ |
-| Does it need code examples? | ✗ | ✓ |
-| Is it framework/domain-specific? | ✗ | ✓ |
-| Might the LLM get this WRONG? | ✗ | ✓ |
-| Does it explain WHY? | ✗ | ✓ |
+| Question                              | Rule | Skill |
+| ------------------------------------- | ---- | ----- |
+| Should this apply EVERY conversation? | ✓    | ✗     |
+| Is it a one-liner preference?         | ✓    | ✗     |
+| Does the LLM already know this?       | ✓    | ✗     |
+| Does it need code examples?           | ✗    | ✓     |
+| Is it framework/domain-specific?      | ✗    | ✓     |
+| Might the LLM get this WRONG?         | ✗    | ✓     |
+| Does it explain WHY?                  | ✗    | ✓     |
 
 ### The Routing Pattern
 
@@ -600,8 +628,11 @@ Rules can delegate to skills for complex scenarios:
 
 For complex patterns and domain gotchas, invoke the expert skill:
 ```
+
 Skill(skill="python-expert", args="[async|testing|django|pytorch]")
+
 ```
+
 ```
 
 This keeps rules lean while ensuring deep knowledge is available when needed.
@@ -609,41 +640,51 @@ This keeps rules lean while ensuring deep knowledge is available when needed.
 ### Anti-Patterns
 
 **Bad Rules (verbose, explanation-heavy):**
+
 ```markdown
 # BAD: Explaining WHY
+
 Use pytest because it has fixture support and a plugin ecosystem. Fixtures are better than setUp/tearDown because they provide better isolation and composability...
 
 # BAD: Domain-specific knowledge always loaded
+
 Django models should use select_related for foreign keys to avoid N+1 queries. This is critical for performance because...
 ```
 
 **Bad Skills (obvious, preference-only):**
+
 ```markdown
 # BAD: Just a preference
+
 Use pytest for testing.
 
 # BAD: Generic advice
+
 Write clean code and add comments.
 ```
 
 ### Layered Example: Python Testing
 
 **Rule (always-on, preference):**
+
 ```markdown
 - **`pytest`**: Run with `uv run pytest -q` (quiet by default)
 - Default to pytest, not unittest
 ```
 
 **Skill (on-demand, deep knowledge):**
+
 ```markdown
 ## Testing Strategy
 
 **Pytest over unittest:**
+
 - Fixtures over `setUp`/`tearDown`
 - `pytest-asyncio` for async tests
 
 **Mock Philosophy:**
 Minimize `unittest.mock`. Prefer:
+
 - Containerized dependencies (test databases)
 - `responses` or VCR for HTTP
 - Real implementations when fast enough
@@ -659,14 +700,14 @@ The orchestrator NEVER does implementation work directly. All code writing, file
 
 ### Orchestrator Role
 
-| Orchestrator DOES | Orchestrator NEVER DOES |
-|-------------------|------------------------|
-| Route tasks to appropriate subagents | Write code directly |
-| Dispatch with structured prompts | Edit files directly |
-| Monitor for completion/failure | Run tests directly |
-| Receive and synthesize summaries | Read full artifact contents into context |
+| Orchestrator DOES                     | Orchestrator NEVER DOES                   |
+| ------------------------------------- | ----------------------------------------- |
+| Route tasks to appropriate subagents  | Write code directly                       |
+| Dispatch with structured prompts      | Edit files directly                       |
+| Monitor for completion/failure        | Run tests directly                        |
+| Receive and synthesize summaries      | Read full artifact contents into context  |
 | Handle user interaction and approvals | Execute shell commands for implementation |
-| Pass pointers between phases | Re-process subagent outputs |
+| Pass pointers between phases          | Re-process subagent outputs               |
 
 ### Pointer-Based State Passing
 
@@ -674,17 +715,18 @@ Subagents exchange state through **file paths**, not content. The orchestrator p
 
 ```markdown
 Agent tool (developer):
-  prompt: |
-    Plan file: /path/to/.lsz/.../plan/plan_v1.md
-    
+prompt: |
+Plan file: /path/to/.lsz/.../plan/plan_v1.md
+
     Implement the feature described in the plan.
-    
+
     Return: Summary (≤100 words) + paths to modified files.
 ```
 
 ### Subagent Summary Contract
 
 Every subagent MUST return a brief summary following BurntSushi's PR style:
+
 - Complete, coherent, reviewable unit
 - State approach and reasoning, not just "what was done"
 - Deliver a position that can be critiqued
@@ -693,12 +735,15 @@ Every subagent MUST return a brief summary following BurntSushi's PR style:
 
 ```markdown
 ## Summary
+
 <approach taken, reasoning behind key decisions, and outcome>
 
 ## Artifacts
+
 - <path to primary output>
 
 ## Trade-offs (optional)
+
 - <key trade-off or constraint for next phase>
 ```
 
@@ -708,14 +753,14 @@ Skills at any taxonomy level may delegate to subagents. Complex workflow skills 
 
 ```markdown
 Agent tool (<subagent_type>):
-  description: "<short task summary>"
-  prompt: |
-    Mode: $MODE
+description: "<short task summary>"
+prompt: |
+Mode: $MODE
     Feature: $FEATURE
-    Source docs: $SOURCE_DOCS
-    
+Source docs: $SOURCE_DOCS
+
     [execution instructions...]
-    
+
     Return: Summary (approach + reasoning) + artifact paths.
 ```
 
@@ -729,12 +774,12 @@ Complex workflow skills MUST define their dispatch pattern internally:
 ## Dispatch Template
 
 Agent tool (general-purpose):
-  description: "Run feature validation"
-  prompt: |
-    Mode: $MODE
+description: "Run feature validation"
+prompt: |
+Mode: $MODE
     Feature: $FEATURE
-    Source docs: $SOURCE_DOCS
-    
+Source docs: $SOURCE_DOCS
+
     [execution instructions...]
 ```
 
@@ -745,16 +790,19 @@ The caller injects parameters (`$MODE`, `$FEATURE`), the skill owns the dispatch
 ### Assume Baseline Competence
 
 Only add context the LLM wouldn't already know:
+
 - Project-specific conventions
 - Domain-specific procedures
 - Non-obvious edge cases
 
 **Bad (explaining common knowledge):**
+
 ```markdown
 PDF files are a common format that contains text and images...
 ```
 
 **Good (jumps to specifics):**
+
 ```markdown
 Use pdfplumber for text extraction. For scanned documents, fall back to pdf2image.
 ```
@@ -762,16 +810,20 @@ Use pdfplumber for text extraction. For scanned documents, fall back to pdf2imag
 ### Avoid Time-Sensitive Information
 
 **Bad:**
+
 ```markdown
 If you're doing this before August 2025, use the old API.
 ```
 
 **Good:**
+
 ```markdown
 ## Current method
+
 Use the v2 API endpoint.
 
 ## Old patterns
+
 <details>
 <summary>Legacy v1 API (deprecated 2025-08)</summary>
 The v1 API is no longer supported.
@@ -792,12 +844,14 @@ When a skill manages multiple related capabilities, use the **parent skill with 
 ### When to Use
 
 Use this pattern when:
+
 - Multiple related skills share a common domain (e.g., `write-article` and `write-publish` under `write`)
 - You want discoverability: sub-skills are visibly nested under their parent
 - You need explicit relationships: metadata fields express parent-child connections
 - Each sub-skill may have its own references, scripts, or resources
 
 **Do NOT use for:**
+
 - Single-purpose skills (no sub-skills needed)
 - Skills with no shared domain or relationship
 - Cases where a single skill file is sufficient
@@ -819,6 +873,7 @@ skills/<parent-name>/
 ```
 
 **Example:**
+
 ```
 skills/write/
   SKILL.md              # Parent: routes to article or publish
@@ -834,12 +889,14 @@ skills/write/
 Express parent-child relationships via `metadata` frontmatter:
 
 **Parent skill:**
+
 ```yaml
 metadata:
   manage: [article, publish]
 ```
 
 **Sub-skill:**
+
 ```yaml
 metadata:
   managed-by: write
@@ -853,12 +910,13 @@ For example, if `skills/ux-testing/subskills/browser-qa/SKILL.md` has `name: bro
 
 Enforced by `validate-deps.py lint`.
 
-| Field | Location | Purpose |
-|-------|----------|---------|
-| `manage` | Parent | List of sub-skill names this parent manages |
-| `managed-by` | Sub-skill | Back-reference to parent skill name |
+| Field        | Location  | Purpose                                     |
+| ------------ | --------- | ------------------------------------------- |
+| `manage`     | Parent    | List of sub-skill names this parent manages |
+| `managed-by` | Sub-skill | Back-reference to parent skill name         |
 
 **Why these fields:**
+
 - Discoverable via grep/search
 - Enables tooling to identify relationships
 - Natural verb phrases (`manage`, `managed-by`)
@@ -868,7 +926,7 @@ Enforced by `validate-deps.py lint`.
 
 Parent skill includes a formal YAML registry:
 
-```yaml
+````yaml
 ---
 name: write
 description: Content creation and distribution cluster...
@@ -885,12 +943,13 @@ metadata:
 subskills:
   article: $SKILL_DIR/subskills/article/SKILL.md
   publish: $SKILL_DIR/subskills/publish/SKILL.md
-```
+````
 
 ## Dispatch
 
 Parse `$ARGUMENTS` to determine mode...
-```
+
+````
 
 **Minimal registry:** Just paths. Sub-skill frontmatter already contains descriptions and arguments. Avoid duplication.
 
@@ -907,13 +966,14 @@ Parse `$ARGUMENTS` to determine mode...
 |-----------|--------|
 | `article` | Read `$SKILL_DIR/subskills/article/SKILL.md` and follow its instructions |
 | `publish` | Read `$SKILL_DIR/subskills/publish/SKILL.md` and follow its instructions |
-```
+````
 
 **Anti-pattern:** Using `Skill` tool to invoke sub-skills — it returns "Unknown skill" for nested paths.
 
 ### Sub-Skill Identity
 
 Sub-skills are **full skills**:
+
 - Complete frontmatter (`name`, `description`, `arguments`, `argument-hint`)
 - Can have `references/` and `scripts/`
 - Are hidden from direct invocation (nested path, not discovered)
@@ -923,6 +983,7 @@ Sub-skills are **full skills**:
 ### Migration from Routing Commands
 
 **Old pattern (routing command):**
+
 ```
 commands/write.md           → routing command (forwards to skills)
 skills/write-article/SKILL.md  → hidden skill (user-invocable: false)
@@ -930,11 +991,13 @@ skills/write-publish/SKILL.md  → hidden skill (user-invocable: false)
 ```
 
 **Problems:**
+
 - Sub-skills have no back-reference to their manager
 - Relationship only visible in command file, not skills
 - Requires reading command to understand skill relationships
 
 **Migration steps:**
+
 1. Create `skills/<name>/` directory
 2. Convert `commands/<name>.md` → `skills/<name>/SKILL.md`
    - Add frontmatter with `metadata.manage`
@@ -947,16 +1010,17 @@ skills/write-publish/SKILL.md  → hidden skill (user-invocable: false)
 
 ### Benefits Over Routing Commands
 
-| Aspect | Routing Command | Parent Skill with Sub-Skills |
-|--------|-----------------|------------------------------|
-| Discoverability | Sub-skills invisible in directory | Sub-skills visibly nested |
-| Relationship | Only in command file | In metadata + directory structure |
-| Maintenance | Scattered (command + skills) | Consolidated (one parent skill) |
-| Resources | Sub-skills can't have scripts/references | Each sub-skill has full capabilities |
+| Aspect          | Routing Command                          | Parent Skill with Sub-Skills         |
+| --------------- | ---------------------------------------- | ------------------------------------ |
+| Discoverability | Sub-skills invisible in directory        | Sub-skills visibly nested            |
+| Relationship    | Only in command file                     | In metadata + directory structure    |
+| Maintenance     | Scattered (command + skills)             | Consolidated (one parent skill)      |
+| Resources       | Sub-skills can't have scripts/references | Each sub-skill has full capabilities |
 
 ### Checklist
 
 Before using this pattern:
+
 - [ ] Multiple related capabilities share a domain
 - [ ] Each sub-skill may need its own references or scripts
 - [ ] Parent skill has clear dispatch logic

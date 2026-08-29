@@ -12,14 +12,15 @@ Designing and building skills in the LSZ architecture.
 
 ## Skill Taxonomy
 
-Every LSZ skill falls into one of four types:
+Every LSZ skill falls into one of three types:
 
-| Type                 | When to Use                                                | Key Trait                                                             |
-| -------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- |
-| **Orchestration**    | Multi-phase, multi-party, fan-out/fan-in workflows         | Owns sequencing, branching, checkpoints; delegates all implementation |
-| **Complex Workflow** | Substantial single-purpose workflow with multiple phases   | May invoke agents; owns phase transitions and artifact generation     |
-| **Domain Knowledge** | Guides, patterns, expert methodology, reusable constraints | Retrieval-time expertise; does not own orchestration                  |
-| **Action**           | Narrow, simple workflows and direct task execution         | Low-ambiguity; compact and self-contained                             |
+| Type                 | When to Use                                                                                                                                                           | Key Trait                                                                                                                                                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Orchestration**    | Multi-phase, multi-party, fan-out/fan-in, router-projection pattern                                                                                                   | Owns sequencing, branching, checkpoints across heterogeneous subskills; delegates all implementation via Read + managed-by; never writes artifacts itself. Scaffold router (`manage: [git,python,rust,ci]`) is canonical example |
+| **Workflow**         | One or more phases with artifact contract; 1-phase = formerly Action (compact, self-contained), N-phase = formerly Complex (owns transitions, may dispatch subagents) | Owns phase transitions and artifact generation within single flow; `phases==1` is compact Action, `phases>1` is Complex                                                                                                          |
+| **Domain Knowledge** | Guides, patterns, expert methodology, reusable constraints                                                                                                            | Retrieval-time expertise; does not own orchestration                                                                                                                                                                             |
+
+> Former `Action` → `Workflow (phases==1)`. Router-Projection pattern: parent dispatches via `Read`, not `Skill` tool, hidden `subskills/` — see `scaffold`.
 
 **When to embed logic directly in an Agent** instead of creating a skill: only when the workflow is Atomic (one specific thing, no loops), Universal (doesn't vary by language/framework), and Short (< 300 words). Example: the `planner` agent.
 
@@ -34,11 +35,10 @@ Ask the user about:
 1. **Task and domain** -- What does the skill do? What specific use cases must it handle?
 2. **Success Criteria (GDD/EDD)** -- How do we know the goal is achieved? What are the measurable, deterministic outputs? What are the qualitative, semantic goals?
 3. **Behavioral Scenarios (BDD)** -- What are the key Given/When/Then scenarios the skill must satisfy?
-4. **Taxonomy classification** -- Which of the four types above fits? If unsure, ask: "Does this need multiple phases or parties?" (orchestration), "Is there a single multi-step workflow?" (complex workflow), "Is this expertise to load on demand?" (domain knowledge), or "Is this a narrow, self-contained task?" (action).
-5. **Skill identity** -- What `name` fits the directory? (Noun for domain knowledge, verb for actions; see [Taxonomy-Based Naming Conventions](references/skill-authoring.md#taxonomy-based-naming-conventions)). What `description` triggers cover the use cases?
-6. **Resources needed** -- Does it need executable scripts (deterministic operations), reference files (deep content beyond 500 lines), or just instructions?
-7. **Dependencies** -- Does it depend on other skills? If so, declare `metadata.depends-on`.
-8. **Parent-skill relationship** -- Is this part of a cluster? Should it be a sub-skill under a parent, or a standalone skill?
+4. **Taxonomy classification** -- Which of the three types above fits? If unsure, ask: "Does this govern across skills / need multiple parties / fan-out or a router-projection?" (orchestration), "Is it one flow with 1-to-N phases and artifact contracts?" (workflow — `phases==1` compact formerly Action, `phases>1` formerly Complex), or "Is this expertise to load on demand?" (domain knowledge).
+5. **Resources needed** -- Does it need executable scripts (deterministic operations), reference files (deep content beyond 500 lines), or just instructions?
+6. **Dependencies** -- Does it depend on other skills? If so, declare `metadata.depends-on`.
+7. **Parent-skill relationship** -- Is this part of a cluster? Should it be a sub-skill under a parent, or a standalone skill?
 
 ### Phase 2: Draft
 
@@ -57,10 +57,10 @@ Create the skill following LSZ conventions:
 6. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
 7. **Scripts** -- Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally, don't punt to the LLM
 8. **Taxonomy-specific structure:**
-   - Orchestration: dispatch table + subagent templates, no implementation logic
-   - Complex workflow: phase definitions with state transitions, artifact contracts
-   - Domain knowledge: organized by topic, patterns with examples, gotchas
-   - Action: compact, focused, minimal structure
+   - Orchestration: dispatch table + subagent templates, router-projection pattern (`Read` + `managed-by`, hidden `subskills/`), no implementation logic — budget ≤500 lines
+   - Workflow (1-phase): compact, focused, minimal structure (formerly Action) — budget ≤150 lines
+   - Workflow (N-phase): phase definitions with state transitions, artifact contracts (formerly Complex) — budget ≤150×phases capped 500; lint soft warning first (e.g., "Workflow with 2 phases is 340 lines but budget 300 — consider splitting")
+   - Domain knowledge: organized by topic, patterns with examples, gotchas — budget ≤500 lines
 
 ### Phase 3: Review
 

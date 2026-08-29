@@ -35,3 +35,9 @@ Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, 
 ### Domain docs
 
 Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
+
+### Contribution
+Conventional commits & changelog: see CONTRIBUTING.md
+
+### Runtime
+Python: uv + .python-version (3.14), run via uv run; see pyproject.toml
