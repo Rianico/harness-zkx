@@ -6,7 +6,7 @@ description: >-
 
 # branch-worktree-pr — ==tight worktree== orchestration
 
-> **Type:** Orchestration — owns sequencing, checkpoints, and fan-out/fan-in. Delegates ==all== implementation to subagents. The orchestrator never writes code.
+> **Type:** Orchestration — owns sequencing, checkpoints, and fan-out/fan-in. Delegates ==all== implementation to subagents. The orchestrator never writes code. All code-writing subagents MUST use `tdd` (`tdd-cycle` skill) — red → green → refactor — tests live in `tests/` per `AGENTS.md`.
 
 ## When to use
 
@@ -161,8 +161,8 @@ wt switch --create feat/<slug>--store --base feat/<slug> --no-cd  # module B / t
 
 | Copy suffix                 | When                                         | Subagent prompt (plain words)                                                                                           |
 | --------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `--auth`, `--store`, `--ui` | feat dispatches parallel modules (your case) | `implement` — fix only that copy's files (may test inside copy)                                                         |
-| `--tdd`                     | test-first phase (legacy)                    | `tdd` loop: check → fix → test → check                                                                                  |
+| `--auth`, `--store`, `--ui` | feat dispatches parallel modules (your case) | `implement` via `tdd` — red → green → refactor, tests in `tests/` (see `tdd` skill)                                     |
+| `--tdd`                     | mandatory for all code (was legacy)          | `tdd-cycle` (full: design → implement → verify) — each ticket subagent runs `tdd`                                       |
 | `--refactor`                | second pass / cleanup                        | `refactor` — fix shape, keep tests green                                                                                |
 | `--verify`                  | pre-merge gate                               | `check` — run gate in that copy only                                                                                    |
 | `conflict-fixer`            | merge hit conflict (Phase 3)                 | `fix` — inherit_context: true, plain words: branch, copy, merge, conflict, fix, test, check, file, folder (see Phase 3) |
@@ -184,7 +184,7 @@ Agent (worker):
          # or: uv run scripts/worktree.py self-check <branch> <absolute-copy-path>
          # exit 0 → cwd is THIS copy on <branch>. Non-zero → wrong worktree
          # (likely base branch dir) — edit nothing, return BLOCKED + hint.
-      1. check files, fix, test, check
+      1. tdd (mandatory): use `tdd` skill — red (failing test in `tests/`) → green (minimal code) → refactor, keep `uv run ruff check . && uv run pytest -q` green
     Return per handoff:
     ## Summary
     ## Artifacts (absolute paths)
@@ -343,31 +343,17 @@ uv run scripts/open_pr.py feat/<ticket-slug> main <issue-number>
 
 **Done when** PR is `OPEN` and `git diff --check` is clean. Merge is a **user decision**, not a model transition.
 
-### Phase 7 — Tag / Release / Publish (never proactive)
+### Phase 7 — Tag / Release / Publish — delegated
 
-> [!warning] NEVER tag, release, or publish proactively
-> At workflow end, **confirm with the user** — present options, wait for explicit approval. Tag-first loop is `develop → release → publish`; tag must exist before registry publish.
+> [!warning] NEVER tag, release, or publish proactively — delegated
+> This skill stops at PR `OPEN`. Tag → release → publish lifecycle is owned by `scaffold` (`release.yml`) and `release` skill. At workflow end confirm with user, then delegate to `release` skill if requested.
 
-Show this dialog and wait:
+Delegation:
 
-```text
-PR #<N> is open and green.
-Do you want to:
-  [a] merge PR to <base> now?
-  [b] tag/release vX.Y.Z after merge? (npm run release -- X.Y.Z — bumps manifest+lock, moves CHANGELOG Unreleased→[X.Y.Z], commits chore: release, annotated tag, pushes tag to trigger release.yml)
-  [c] publish to registry? (interactive_shell only — needs browser OTP; guard asserts tag exists)
-  [d] hold — keep PR open for further verification
+- `release` skill: `npm run release -- X.Y.Z` (`--dry-run` supported) — bumps manifest, moves `CHANGELOG` `Unreleased` → `[X.Y.Z]`, commits `chore: release`, annotated tag, pushes tag to trigger `release.yml`
+- Publish via `release` skill only (interactive, OTP)
 
-⚠️  I will not run merge/tag/release/publish until you reply. Which option?
-```
-
-Rules from `[[git-convention]] + `/release` prompt`:
-
-- Release demands clean worktree, newer version than current, `vX.Y.Z` not exists, `npm run typecheck && npm test && npm run build` green.
-- Release is headless-safe: `npm run release -- X.Y.Z` (or `--dry-run`), creates annotated tag, pushes branch+tag.
-- Publish is **interactive only**: `npm login`/`npm publish --registry https://registry.npmjs.org` via `interactive_shell` — hand browser OTP to user. `prepublishOnly` asserts tag exists; verify `npm whoami` + `curl -s https://registry.npmjs.org/<pkg> | jq .["dist-tags"]`.
-
-**Done when** user explicitly replies `no release` or after approved merge/tag/publish gates all pass.
+**Done when** PR is `OPEN` and user confirms next step or defers to `release` skill.
 
 ## Completion checklist
 
@@ -386,6 +372,6 @@ Rules from `[[git-convention]] + `/release` prompt`:
 | Fork PR you can't push                               | `[[git-merge-pr]]` — `pr_prefix/<N>-<suffix>` + squash trailers   |
 | Upstream `pi-better-edit` sync                       | `CLAUDE.md:Upstream sync` — `absorb/tN-*` worktrees               |
 | Worktrunk mechanics (hooks, hash_port, copy-ignored) | `worktrunk-guide` skill, `$SKILL_DIR/references/wt-template.toml` |
-| Reset / atomic commits / changelog layout            | `[[git-convention]]`                                    |
+| Reset / atomic commits / changelog layout            | `[[git-convention]]`                                              |
 
 For full BDD scenarios see [bdd-scenarios.md](references/bdd-scenarios.md).

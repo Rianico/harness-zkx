@@ -25,6 +25,7 @@ Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `che
 
 - On-demand dispatch is the default: `repository_dispatch` (`semantic-release`) + `workflow_dispatch` only — no `push: tags` auto-release.
 - Language-specific verify steps live in the variant; multi-runtime uses matrix (`needs: [verify-node, verify-python]`). See `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` for byte view.
+- **Version sync is automatic, neural.** `semantic-release` `prepare` (`@semantic-release/git` `assets: ["CHANGELOG.md","package.json","package-lock.json"]` for Node, `"Cargo.toml"`/`"pyproject.toml"` for Rust/Python via scaffold's `RELEASE_YML` variant) bumps the deterministic artifact and pushes `vX.Y.Z`; no manual `npm version` / `cargo set-version` in the release prompt. `verify` is read-only — if `package.json:version` vs `git describe --tags` is behind, `BLOCK` and let the next `release` job fix it; don't hand-edit the version file in `Verification`.
 
 ### Language-Specific Verify Steps
 
@@ -35,6 +36,7 @@ Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `che
 Matrix preview: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` (tool owns bytes).
 
 ## Steps — Tool Owns Determinism
+
 
 1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant <node|python|rust>` (or `--dry-run`), optionally `--cwd`.
 2. Ensure `verify` precedes `release` via `needs: verify`; `release` holds only `write`/`id-token` perms (enforced by script template).
