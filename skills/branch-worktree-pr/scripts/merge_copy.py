@@ -73,9 +73,21 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     # Non-zero — print wt output, then classify gate vs conflict
-    print(result.stdout[-2000:] if result.stdout else "", file=sys.stderr)
-    print(result.stderr[-2000:] if result.stderr else "", file=sys.stderr)
-
+    wt_out: str = (result.stdout or "") + "\n" + (result.stderr or "")
+    # print full wt output (cap 8000 to avoid flood, but keep tail where hook prints)
+    if wt_out.strip():
+        tail = wt_out[-8000:] if len(wt_out) > 8000 else wt_out
+        print(tail, file=sys.stderr)
+    # changelog / pre-push hook hint
+    changelog_hit = any(
+        k in wt_out
+        for k in ("CHANGELOG", "[Unreleased]", "changelog-unreleased", "pre-push", "pre_push")
+    )
+    if changelog_hit:
+        print_err("hint: CHANGELOG guard blocked — run inside copy:")
+        print_err("  uv run python scripts/changelog-unreleased.py update")
+        print_err("  git add CHANGELOG.md && git commit --amend --no-edit  # or new commit")
+        print_err("  then retry: uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>")
     status_text: str = git_status_text(copy_path)
     porcelain: list[str] = git_porcelain(copy_path)
 

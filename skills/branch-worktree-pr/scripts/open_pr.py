@@ -108,7 +108,17 @@ def main(argv: list[str] | None = None) -> None:
     print(f"-> git push -u origin {branch}")
     push = run(["git", "push", "-u", "origin", branch])
     if push.returncode != 0:
-        print_err(f"git push failed: {push.stderr or push.stdout}")
+        push_out: str = (push.stdout or "") + "\n" + (push.stderr or "")
+        print_err(push_out[-8000:] if len(push_out) > 8000 else push_out)
+        if any(
+            k in push_out for k in ("CHANGELOG", "[Unreleased]", "changelog-unreleased", "pre-push")
+        ):
+            print_err("hint: pre-push CHANGELOG guard blocked — run:")
+            print_err("  uv run python scripts/changelog-unreleased.py update")
+            print_err("  git add CHANGELOG.md && git commit --amend --no-edit")
+            print_err("  git push -u origin " + branch + "  # retry")
+        else:
+            print_err(f"git push failed (exit {push.returncode})")
         sys.exit(1)
 
     # Check if PR already exists
