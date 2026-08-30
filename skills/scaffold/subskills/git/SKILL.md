@@ -24,7 +24,7 @@ Pure-deterministic (no proofread, byte-identical):
 - `.releaserc.json` — conventional commits preset `conventionalcommits@8.0.0` (`writer@8.4.0`), `[skip ci]` message
 - `.github/workflows/release.yml` — pinned `actions/checkout@11d596...` + `setup-node@49933...` (v4), `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `release` job runs `scripts/changelog-unreleased.py clear` before `npx semantic-release` to hand off `## [Unreleased]`
 - `.github/workflows/changelog-check.yml` — on `pull_request` to `main` (required), `diff -q` vs `scripts/changelog-unreleased.py update`, `fail+comment` if stale
-- `.githooks/pre-push` — `warn+block`, `cp before + update + diff`, hint `uv run python scripts/changelog-unreleased.py update && git add && git commit --amend`
+- `.githooks/pre-push` (deterministic source) + `.husky/pre-push` (delegation `exec .githooks/pre-push "$@"`) — `warn+block`, `cp before + update + diff`, hint `uv run python scripts/changelog-unreleased.py update && git add && git commit --amend` (both chmod 755; husky sets `core.hooksPath=.husky` so delegation keeps guard live)
 - `scripts/changelog-unreleased.py` — manages `## [Unreleased]` (`update` stages notes from `git log <last-tag>..HEAD`, `clear` strips it before release)
 - `commitlint.config.js` — `export default { extends: ['@commitlint/config-conventional'] }`
 - `CHANGELOG.md` — initial `# Changelog` header
@@ -32,7 +32,8 @@ Pure-deterministic (no proofread, byte-identical):
 Mixed (script writes skeleton + warns on stderr → model must proofread):
 
 - `CONTRIBUTING.md` — `{{project_name}}` + `Before PR` toolchain line (`npm run lint && npm run typecheck && npm test`); script warns: proofread name + lint commands
-- `AGENTS.md` patch — appends `### Contribution` pointer, keeps existing 3 sections; script warns: verify pointer wording
+- `AGENTS.md` patch — appends `### Contribution` pointer + `Git hooks: git config core.hooksPath .githooks (or npm install with husky → .husky delegates)` , keeps existing 3 sections; script warns: verify pointer wording
+- `.config/wt.toml` — if present, patches `[post-start] setup-hooks = "git config core.hooksPath .githooks"` (idempotent, `wt switch --create` auto-activates guard)
 
 Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run` (tool owns bytes). Pin check: `conventional-changelog-conventionalcommits@8.0.0` via `npm ls conventional-changelog-writer` → `8.4.0`.
 
@@ -59,7 +60,8 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 ## Notes
 
 - On-demand via `repository_dispatch` + `workflow_dispatch` is the deterministic default — no `push: tags` or `push: [main]` auto-release. Tag is created by `semantic-release` on dispatch.
-- `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` (`release` job) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections (`@semantic-release/changelog` + `@semantic-release/git` with `[skip ci]`). Do not hand-edit versioned sections.
+- `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update` via `.githooks/pre-push` + `.husky/pre-push` delegation) and `changelog-check.yml` (`pull_request` required); `release.yml` (`release` job) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections (`@semantic-release/changelog` + `@semantic-release/git` with `[skip ci]`). Do not hand-edit versioned sections.
+- `wt` worktrees: if `.config/wt.toml` exists, `scaffold` ensures `[post-start] setup-hooks = "git config core.hooksPath .githooks"` so `wt switch --create` clones get live pre-push without manual `git config`.
 - `@semantic-release/git` bumps `package.json` + `CHANGELOG.md` + commits + tags atomically; no manual `git tag` or manifest bump.
 - For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci/SKILL.md`.
 

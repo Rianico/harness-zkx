@@ -38,6 +38,7 @@ Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents
 
 ### Contribution
 Conventional commits & changelog: see CONTRIBUTING.md
+Git hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.
 
 ### Runtime
 Python: uv + .python-version (3.14), run via uv run; see pyproject.toml

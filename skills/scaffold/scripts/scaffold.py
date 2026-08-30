@@ -217,6 +217,14 @@ EOF
 done
 """
 
+HUSKY_PRE_PUSH = """\
+#!/bin/sh
+# husky delegation — exec deterministic hook in .githooks
+# Keeps single source of truth in .githooks/pre-push; husky sets core.hooksPath=.husky
+# so this delegation ensures the changelog guard remains live under husky.
+exec .githooks/pre-push "$@"
+"""
+
 COMMITLINT_JS = 'export default { extends: ["@commitlint/config-conventional"] };\n'
 
 CONTRIBUTING_MD_TMPL = """\
@@ -597,11 +605,53 @@ def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
     )
 
 
+def patch_wt_hooks(cwd: pathlib.Path, dry_run: bool) -> None:
+    wt = cwd / ".config/wt.toml"
+    if not wt.exists():
+        return
+    text = wt.read_text(encoding="utf-8")
+    if "core.hooksPath" in text:
+        if dry_run:
+            print(f"unchanged  {wt} (hooksPath present)", file=sys.stderr)
+        else:
+            print(f"unchanged  {wt} (hooksPath present)", file=sys.stderr)
+        return
+    hook_line = 'setup-hooks = "git config core.hooksPath .githooks"'
+    if dry_run:
+        print(f"would patch {wt} with {hook_line}", file=sys.stdout)
+        return
+    if "[post-start]" in text:
+        lines = text.splitlines()
+        out: list[str] = []
+        inserted = False
+        for line in lines:
+            out.append(line)
+            if not inserted and line.strip() == "[post-start]":
+                out.append(hook_line)
+                inserted = True
+        if not inserted:
+            out.append("[post-start]")
+            out.append(hook_line)
+        new_text = "\n".join(out) + "\n"
+        new_text = new_text.replace("\n\n\n", "\n\n")
+    else:
+        new_text = text.rstrip() + "\n\n[post-start]\n" + hook_line + "\n"
+    wt.write_text(new_text, encoding="utf-8")
+    print(f"patched {wt} with hooksPath", file=sys.stderr)
+
+
 def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
     write_file(cwd / ".releaserc.json", RELEASERC_JSON, dry_run)
     write_file(cwd / ".github" / "workflows" / "release.yml", RELEASE_YML, dry_run)
     write_file(cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run)
     write_file(cwd / ".githooks" / "pre-push", GITHOOK_PRE_PUSH, dry_run)
+    write_file(cwd / ".husky" / "pre-push", HUSKY_PRE_PUSH, dry_run)
+    if not dry_run:
+        for _hook in (cwd / ".githooks" / "pre-push", cwd / ".husky" / "pre-push"):
+            try:
+                _hook.chmod(0o755)
+            except OSError:  # best-effort chmod, ignore on read-only FS
+                pass
     write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
     write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     write_file(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run)
@@ -615,9 +665,10 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
-        "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\n",
+        "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
         dry_run,
     )
+    patch_wt_hooks(cwd, dry_run)
 
 
 def do_python(

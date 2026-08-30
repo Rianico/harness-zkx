@@ -6,6 +6,7 @@
 [post-start]
 # Copy gitignored artifacts (node_modules, target, .cache) between worktrees — avoids cold start.
 copy = "wt step copy-ignored"
+setup-hooks = "git config core.hooksPath .githooks"
 
 [pre-merge]
 # Blocking gate — wt merge runs this before merging worktree into parent/main.
