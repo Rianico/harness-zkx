@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
 import pathlib
+import re
 import sys
 
 # ------------------------------------------------------------------ templates (pure-deterministic except {{project_name}})
@@ -767,12 +769,195 @@ def do_ci(
     write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
 
 
+def detect_project(cwd: pathlib.Path) -> dict[str, object]:
+    """Deterministic cheap detection: file existence + content sniff (no guessing)."""
+
+    def exists(p: str) -> bool:
+        return (cwd / p).exists()
+
+    def read_text(p: str, limit: int = 4000) -> str:
+        try:
+            return (cwd / p).read_text(encoding="utf-8")[:limit]
+        except Exception:
+            return ""
+
+    def has_content(p: str, pattern: str) -> bool:
+        txt = read_text(p)
+        return bool(re.search(pattern, txt, re.IGNORECASE)) if txt else False
+
+    files: dict[str, bool] = {
+        ".python-version": exists(".python-version"),
+        "pyproject.toml": exists("pyproject.toml"),
+        "uv.lock": exists("uv.lock"),
+        "Cargo.toml": exists("Cargo.toml"),
+        "rust-toolchain.toml": exists("rust-toolchain.toml"),
+        "package.json": exists("package.json"),
+        "package-lock.json": exists("package-lock.json"),
+        "pnpm-lock.yaml": exists("pnpm-lock.yaml"),
+        ".tool-versions": exists(".tool-versions"),
+        ".releaserc.json": exists(".releaserc.json"),
+        ".releaserc.js": exists(".releaserc.js"),
+        ".github/workflows/release.yml": exists(".github/workflows/release.yml"),
+        ".github/workflows/changelog-check.yml": exists(".github/workflows/changelog-check.yml"),
+        "CHANGELOG.md": exists("CHANGELOG.md"),
+        "commitlint.config.js": exists("commitlint.config.js"),
+        ".githooks/pre-push": exists(".githooks/pre-push"),
+        ".husky/pre-push": exists(".husky/pre-push"),
+        ".gitignore": exists(".gitignore"),
+        "CONTRIBUTING.md": exists("CONTRIBUTING.md"),
+        "AGENTS.md": exists("AGENTS.md"),
+    }
+
+    pyproject = read_text("pyproject.toml")
+    release_yml = read_text(".github/workflows/release.yml")
+    changelog = read_text("CHANGELOG.md")
+    tool_versions = read_text(".tool-versions")
+    pkg_json = read_text("package.json")
+
+    python_present = files["pyproject.toml"] or files[".python-version"]
+    rust_present = files["Cargo.toml"] or files["rust-toolchain.toml"]
+    node_present = files["package.json"]
+    polyglot = (
+        files[".tool-versions"]
+        or (python_present and rust_present)
+        or (python_present and node_present)
+        or (rust_present and node_present)
+    )
+
+    python_coverage = bool(re.search(r"pytest-cov|tool\.coverage|fail_under", pyproject))
+    python_coverage_threshold: int | None = None
+    m = re.search(r"fail_under\s*=\s*(\d+)", pyproject)
+    if m:
+        try:
+            python_coverage_threshold = int(m.group(1))
+        except ValueError:
+            python_coverage_threshold = None
+    rust_coverage = "llvm-cov" in release_yml or has_content("Cargo.toml", r"llvm-cov")
+    ci_coverage = "--cov" in release_yml or "llvm-cov" in release_yml or "fail-under" in release_yml
+
+    ci_variant: str | None = None
+    if files[".github/workflows/release.yml"]:
+        if "setup-uv" in release_yml or "astral-sh/setup-uv" in release_yml:
+            ci_variant = "python"
+        elif "dtolnay/rust-toolchain" in release_yml:
+            if "setup-uv" in release_yml and "dtolnay" in release_yml:
+                ci_variant = "matrix"
+            else:
+                ci_variant = "rust"
+        else:
+            ci_variant = "node"
+    if ci_variant is None and rust_present and not python_present:
+        ci_variant = "rust"
+
+    git_complete = (
+        files[".releaserc.json"] and files["CHANGELOG.md"] and files["commitlint.config.js"]
+    )
+    git_stale = files[".releaserc.json"] and not files[".github/workflows/changelog-check.yml"]
+
+    if polyglot:
+        inferred_shape = "polyglot"
+    elif python_present:
+        inferred_shape = "python"
+    elif rust_present:
+        inferred_shape = "rust"
+    elif node_present:
+        inferred_shape = "node"
+    else:
+        inferred_shape = "greenfield"
+
+    tool_versions_detail: dict[str, str] = {}
+    if tool_versions:
+        for line in tool_versions.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                tool_versions_detail[parts[0]] = parts[1]
+
+    verify_gates: dict[str, bool] = {
+        "formatter": bool(
+            re.search(r"ruff.*format|cargo fmt|prettier", pyproject + release_yml + pkg_json)
+        ),
+        "linter": bool(
+            re.search(
+                r"ruff check|clippy|eslint", pyproject + release_yml + pkg_json, re.IGNORECASE
+            )
+        ),
+        "typecheck": bool(
+            re.search(
+                r"basedpyright|mypy|tsc --noEmit|cargo check", pyproject + release_yml + pkg_json
+            )
+        ),
+        "tests": bool(
+            re.search(r"pytest|cargo test|npm test|vitest", pyproject + release_yml + pkg_json)
+        ),
+    }
+
+    result: dict[str, object] = {
+        "cwd": str(cwd),
+        "project_name": infer_project_name(cwd),
+        "inferred_shape": inferred_shape,
+        "files": files,
+        "git_contract": {
+            "complete": git_complete,
+            "stale": git_stale,
+            "has_releaserc": files[".releaserc.json"] or files[".releaserc.js"],
+            "has_changelog": files["CHANGELOG.md"],
+            "has_changelog_check": files[".github/workflows/changelog-check.yml"],
+            "has_hooks": files[".githooks/pre-push"] or files[".husky/pre-push"],
+        },
+        "runtimes": {
+            "python": python_present,
+            "rust": rust_present,
+            "node": node_present,
+            "polyglot": polyglot,
+            "tool_versions": tool_versions_detail,
+        },
+        "python": {
+            "present": python_present,
+            "coverage": python_coverage,
+            "threshold": python_coverage_threshold,
+        },
+        "rust": {
+            "present": rust_present,
+            "coverage": rust_coverage,
+        },
+        "ci": {
+            "present": files[".github/workflows/release.yml"],
+            "variant": ci_variant,
+            "coverage": ci_coverage,
+            "has_release_yml": files[".github/workflows/release.yml"],
+        },
+        "changelog": {
+            "has_unreleased": "## [Unreleased]" in changelog if changelog else False,
+        },
+        "verify_gates": verify_gates,
+    }
+    return result
+
+
+def print_detect(cwd: pathlib.Path, as_json: bool) -> int:
+    data = detect_project(cwd)
+    json_str = json.dumps(data, indent=2, sort_keys=True)
+    print(json_str)
+    files = data["files"]  # type: ignore[assignment]
+    print(f"\n# Detect summary for {cwd}", file=sys.stderr)
+    print(f"shape={data['inferred_shape']} project={data['project_name']}", file=sys.stderr)
+    present = [k for k, v in files.items() if v]  # type: ignore[union-attr]
+    missing = [k for k, v in files.items() if not v]  # type: ignore[union-attr]
+    print(f"present: {', '.join(present) if present else '(none)'}", file=sys.stderr)
+    print(f"missing: {', '.join(missing) if missing else '(none)'}", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Deterministic scaffold generator")
     ap.add_argument(
         "--flavor",
         choices=["git", "python", "rust", "ci", "all"],
-        required=True,
+        required=False,
+        default=None,
         help="flavor to scaffold",
     )
     ap.add_argument(
@@ -799,12 +984,22 @@ def main() -> int:
         default=80,
         help="coverage fail-under threshold (default: 80)",
     )
-
+    ap.add_argument(
+        "--detect", action="store_true", help="detect project state and exit (no writes)"
+    )
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        help="with --detect, emit JSON only (alias, JSON always to stdout)",
+    )
     args = ap.parse_args()
 
     cwd = pathlib.Path(args.cwd).resolve()
+    if args.detect:
+        return print_detect(cwd, as_json=True)
+    if args.flavor is None:
+        ap.error("--flavor is required unless --detect is used")
     project_name = args.project_name or infer_project_name(cwd)
-
     flavor: str = args.flavor
     dry_run: bool = args.dry_run
     with_coverage: bool = args.with_coverage

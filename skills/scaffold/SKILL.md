@@ -49,11 +49,77 @@ Read the subskill that matches the projection you need. Use `Read` (not `Skill` 
 | `rust`   | `$SKILL_DIR/subskills/rust/SKILL.md`   | `rust-toolchain.toml` + `cargo fmt/clippy/test` wiring — [rust](subskills/rust/SKILL.md)                           |
 | `ci`     | `$SKILL_DIR/subskills/ci/SKILL.md`     | GitHub Actions verify+release + on-demand dispatch — [ci](subskills/ci/SKILL.md)                                   |
 
-Omitted flavor loads only the spine above. For interactive scaffolding, run **Grilling** below before dispatch — the chain selects optional leaves (coverage, formatter, linter, type, tests) without forking the spine.
+Omitted flavor loads only the spine above. For interactive scaffolding, run **Explore First** then **Grilling** — explore detects, grilling confirms only ambiguous leaves.
 
-## Grilling — Chain Questions Then Scaffold
+## Explore First — Detect Before Asking
 
-Grilling is the selection projection. One truth: `scaffold.py` owns bytes; dialogs own selection. Ask sequentially — one question per dialog, 2–4 options + `Other`, header ≤20 chars — then map answers to the generator. Branch only on prior answer (see notes). Present each dialog as plain text per `dialog-contract.md`.
+> [!tip] GDD boundary
+> **Tool owns detection, model owns recommendation.** Detection is deterministic and cheap (file existence + content sniff, no LLM guessing). Run the detector, then the model interprets the JSON into 2–4 curated combos with reasons tied to detection.
+
+### Detection command
+
+```bash
+uv run $SKILL_DIR/scripts/scaffold.py --detect --cwd .          # JSON to stdout, human summary to stderr
+uv run $SKILL_DIR/scripts/scaffold.py --detect --cwd . > /tmp/detect.json  # machine path
+```
+
+Single source of truth — no new script. `--detect` never writes; it exits 0 after printing. Cheap: `pathlib.exists()` + ≤4k content sniff per file, no deps.
+
+### Output shape (excerpt)
+
+```json
+{
+  "inferred_shape": "python",
+  "project_name": "my-app",
+  "files": { ".python-version": true, "pyproject.toml": true, "Cargo.toml": false, ".releaserc.json": false },
+  "git_contract": { "complete": false, "stale": false },
+  "python": { "present": true, "coverage": false, "threshold": null },
+  "ci": { "present": false, "variant": null, "coverage": false },
+  "verify_gates": { "formatter": true, "linter": true, "typecheck": true, "tests": true }
+}
+```
+
+Full keys: `cwd`, `inferred_shape` (`greenfield|python|rust|node|polyglot`), `files` (20 entries), `git_contract`, `runtimes`, `python`/`rust`/`ci`/`changelog`/`verify_gates`. Human summary on `stderr`: `shape=… present: … missing: …`.
+
+### From detection → Recommended combos
+
+After `--detect`, the model **must** render 2–4 curated combos before any grill dialog. Each combo ties reason to detected evidence, not generic menus.
+
+> [!example] Render pattern (plain text, not JSON dump)
+>
+> ```
+> **Explore** — python detected (.python-version + pyproject.toml, no .releaserc.json, no CI)
+> present: .python-version, pyproject.toml, uv.lock  missing: .releaserc.json, release.yml
+>
+> **Recommended combos**
+> 1. ✅ Recommended — Python 80% + CI (python) — adds coverage + verify→release; reason: python present, no coverage, no CI → smallest delta to full gate
+> 2. Minimal — Git only — wire .releaserc.json + changelog guard; reason: git contract missing, keeps spine
+> 3. Full — Python 90% strict + CI — for high-rigor teams; reason: opt-in, same files + threshold bump
+> ```
+
+Selection rule: **preset when confident, ask only when ambiguous.** If `inferred_shape` is confident and `git_contract.complete` clear, prefill Dialog 1/4 and skip. Grill only leaves where detection is inconclusive (e.g. greenfield, polyglot variant, coverage threshold choice).
+
+| Detected state                                                                               | Recommended combos (2–4, with generator)                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Greenfield** (no runtime, no git contract)                                                 | 1. Python 80% + CI — `scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `ci --ci-variant python --with-coverage` + `git` (reason: most common, minimal seam) · 2. Rust + CI — `rust --with-coverage` + `ci --ci-variant rust` (reason: alternative runtime) · 3. Node minimal — `git` + `ci --ci-variant node` (reason: no python/rust files) |
+| **Existing Python, no scaffold** (`pyproject.toml` present, no `.releaserc.json`)            | 1. ✅ Retrofit Python 80% + CI — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` + `git` (reason: preserve existing pyproject, add missing contract) · 2. Minimal — `git` only (reason: wire release without touching runtime) · 3. Add --dry-run preview first (reason: show diff before writes)                                        |
+| **Existing Rust, no scaffold** (`Cargo.toml` present)                                        | 1. ✅ Retrofit Rust + CI — `rust` + `ci --ci-variant rust` + `git` (reason: mirror python pattern) · 2. With coverage — add `--with-coverage --coverage-threshold 80` (reason: opt-in llvm-cov)                                                                                                                                                                 |
+| **Python scaffold stale** (has `.releaserc.json` but missing `changelog-check.yml` or hooks) | 1. ✅ Repair git contract — `git --dry-run` then `git` (reason: changelog guard stale, `--dry-run` shows drift) · 2. Add coverage if `python.coverage==false` — `python --with-coverage 80` (reason: coverage absent)                                                                                                                                           |
+| **Scaffold complete, no coverage** (`git_contract.complete && !python.coverage`)             | 1. ✅ Add 80% coverage — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` (reason: cheapest rigor bump) · 2. Add 90% strict (reason: high-rigor variant) · 3. Hold — keep as-is (reason: tests without gate is valid)                                                                                                                     |
+| **Polyglot / .tool-versions**                                                                | 1. ✅ Matrix CI — `all --with-coverage 80` + `ci --matrix` note in `ci/SKILL.md` (reason: `polyglot==true`, needs `asdf install` sync) · 2. Single-variant CI — `ci --ci-variant python` (reason: cheapest, one verify job)                                                                                                                                     |
+| **CI variant mismatch** (`Cargo.toml` + `ci.variant==node`)                                  | 1. ✅ Fix variant — `ci --ci-variant rust` (reason: runtime is rust but workflow is node) · 2. Matrix — `ci --matrix` (reason: if both runtimes present)                                                                                                                                                                                                        |
+
+> [!warning] Anti-pattern
+> Do not dump raw JSON to the user as the recommendation. Translate detection into combos with reasons. Raw JSON is the handle; combos are the surface.
+
+### Information boundary
+
+- Deterministic → tool: file existence, `fail_under` sniff, `setup-uv`/`dtolnay` markers, `## [Unreleased]` check.
+- Semantic → model: which combo fits team intent, threshold 80 vs 90, whether polyglot needs matrix.
+
+## Grilling — Confirm Ambiguous Leaves
+
+Grilling is the selection projection **after** Explore First. One truth: `scaffold.py` owns bytes; dialogs own selection. Ask only for ambiguous leaves — skip any dialog where detection is confident (preset the answer and note `preset from detect: <evidence>`). Sequential, one question per dialog, 2–4 options + `Other`, header ≤20 chars — then map answers to the generator. Branch only on prior answer (see notes). Present each dialog as plain text per `dialog-contract.md`.
 
 ### Dialog 1 — Project Shape
 
@@ -188,7 +254,7 @@ Wire on-demand release + CI verify gate?
 
 ### Selection → Generator Mapping
 
-After the chain, map answers to the deterministic generator. Tool owns bytes; model proofreads mixed warnings on stderr.
+After Explore + Grilling, map **preset + confirmed** answers to the deterministic generator. Tool owns bytes; model proofreads mixed warnings on stderr. If detection was confident, Dialog 1/4 values come from `--detect` preset (note `preset from detect`), not re-asked.
 
 | Grilling answers                   | Generator invocation                                                                                                                                                                                                                                                                                                    |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -242,5 +308,5 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run                  # 
 - **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`.
 - **Mixed** (script writes skeleton + warns on stderr → proofread): `CONTRIBUTING.md` (`{{project_name}}` + Before PR line), `pyproject.toml`/`Cargo.toml` (name/description/edition; with `--with-coverage` also `fail_under`), `AGENTS.md` patch (keep 3 sections, verify pointer wording).
 
-- `$SKILL_DIR/scripts/scaffold.py` — deterministic source of truth (tool owns bytes); preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor <git|python|rust|ci> --dry-run`
+- `$SKILL_DIR/scripts/scaffold.py` — deterministic source of truth (tool owns bytes); preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor <git|python|rust|ci> --dry-run`; detect with `uv run $SKILL_DIR/scripts/scaffold.py --detect --cwd .` (JSON to stdout, summary to stderr)
 - `$SKILL_DIR/scripts/verify.sh` — deterministic gate runner (`--dry-run` + `validate-deps` + `npm ls`/`cargo` checks)
