@@ -110,6 +110,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **scaffold:** bump GH Actions to Node 24 — checkout v5, setup-node v5, setup-python v6, github-script v8
+- **scaffold:** include lint in pre-merge gate — respect tool feedback
 - **branch-worktree-pr:** surface pre-push changelog guard in merge_copy and open_pr
 - **scaffold:** husky vs githooks pre-push delegation and default hooksPath
 - **ci:** remove stale ci jobs and fix release env mapping, update scaffold template
@@ -185,3 +187,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Code Refactoring
 
 - **changelog:** adopt Option A PR guard + pre-push hook (BREAKING CHANGE)
+- **skills:** set explicit-only (`disable-model-invocation:true`) for 16 workflow/meta skills (scaffold, blueprint, brainstorming, orchestrating, tdd-cycle, branch-worktree-pr, rfc-pipeline, docs-scraper, docs-to-skill, skill-stocktake, skill-comply, rules-distill, prompt-optimizer, pr-enhance, handoff, update-docs) — Pi ≥0.84.4 true zero-load
+- **docs:** merge `docs-scraper` + `docs-to-skill` into single `docs` pipeline (router `source-as-verb` + `auto` dispatch + `to-skill` bridge, 7 per-source curated refs retained)
+- **docs:** remove 4.8M committed raw docs bloat `skills/docs-scraper/cuda_skill/` (648 files) — raw now only in consumer `-raw/` / `.lsz/tmp`
+- **docs:** lean `docs-scraper` from 981→80 lines, `style` format heuristic — parent keeps auto table + Quick Start, detail → `references/*`
