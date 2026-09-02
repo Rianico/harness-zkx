@@ -2,11 +2,9 @@
 extend-exclude = [
   "skills/ratatui-guide/references/ratatui-raw/**",
   "skills/scaffold/subskills/git/references/semantic-release-raw/**",
-  "skills/docs-scraper/cuda_skill/references/**",
   "skills/docs-scraper/references/**",
   ".lsz/**",
   ".venv/**",
-  "skills/docs-scraper/cuda_skill/**",
   "skills/lsp-guideline/**",
   "tests/continuous-learning/fixtures/**",
   "skills/md-to-html/assets/**",
