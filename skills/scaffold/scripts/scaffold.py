@@ -57,12 +57,13 @@ RELEASERC_JSON = """\
       }
     ],
     ["@semantic-release/changelog", {"changelogFile": "CHANGELOG.md"}],
+    ["@semantic-release/npm", {"npmPublish": false}],
     "@semantic-release/github",
     [
       "@semantic-release/git",
       {
         "assets": ["CHANGELOG.md", "package.json", "package-lock.json"],
-        "message": "chore(release): ${nextRelease.version} [skip ci]\\n\\n${nextRelease.notes}"
+        "message": "chore(release): ${nextRelease.version}\\n\\n${nextRelease.notes}"
       }
     ]
   ]
@@ -110,6 +111,7 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HUSKY: "0"
 """
 
 CHANGELOG_CHECK_YML = """\
@@ -187,6 +189,9 @@ jobs:
 GITHOOK_PRE_PUSH = """\
 #!/usr/bin/env bash
 set -e
+# skip in CI / when uv missing — semantic-release push must not fail on hook
+if [ "${HUSKY:-}" = "0" ]; then exit 0; fi
+if ! command -v uv >/dev/null 2>&1; then exit 0; fi
 # pre-push hook: warn if CHANGELOG.md Unreleased stale
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
@@ -229,6 +234,157 @@ exec .githooks/pre-push "$@"
 
 COMMITLINT_JS = 'export default { extends: ["@commitlint/config-conventional"] };\n'
 
+ISSUE_BUG_REPORT_YML = """\
+name: "\U0001F41B Bug report"
+description: Concise, paste-complete repro \u2014 see #38 as exemplar
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search to see if an issue already exists for the bug you encountered.
+      options:
+        - label: I have searched the existing issues
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One line \u2014 what broke + failure mode (e.g. trailingDups silently drops `}` \u2192 brace imbalance)
+      placeholder: "Plugin 0.5.0 \u2014 trailingDups removes replacement's last line \u2192 brace imbalance"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: plugin/app version, module/file, trigger command
+      placeholder: |
+        - Version: 0.5.0
+        - Module: lib/hashline/anchor-pipeline.js
+        - Trigger: edit with remove_from/remove_to
+      value: |
+        - Version:
+        - Module:
+        - Trigger:
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal complete file + operation map + exact payload (paste-complete, prefer text over screenshots)
+      placeholder: |
+        1. Minimal file content (paste-complete):
+        ```cpp
+        void foo() { }
+        ```
+        2. Operation map / payload:
+        ```json
+        { "edits": [["<from>", "<to>", "<replacement_text>"]], "path": "D:\\test.txt" }
+        ```
+        3. Run: `...`
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen (paste expected file/diff)
+      placeholder: |
+        ```cpp
+        // 10 lines, brace-balanced
+        ```
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened \u2014 quote diff / logs / autoFixes / balance delta
+      placeholder: |
+        ```json
+        {"kind":"trailing","removedLine":"\\t}"}
+        ```
+        brace balance -1
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact & Trigger Conditions
+      description: When it fires, frequency, blast radius
+    validations:
+      required: false
+  - type: textarea
+    id: root-cause
+    attributes:
+      label: Root Cause / Suggested Fixes (optional)
+      description: Hypothesis + numbered alternatives with tradeoff (threshold / fail-closed / symmetric range)
+    validations:
+      required: false
+"""
+
+ISSUE_FEATURE_REQUEST_YML = """\
+name: "\u2728 Feature request"
+description: Suggest an idea \u2014 problem, proposal, alternatives
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search to see if an issue already exists.
+      options:
+        - label: I have searched the existing issues
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem \u2014 is your request related to a problem?
+      description: What problem does this solve? Who is affected?
+      placeholder: "When doing X, I need Y but currently Z happens..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal \u2014 describe the solution you'd like
+      description: Concise proposal, API/UX sketch if applicable
+      placeholder: "Add `...` / change `...` so that ..."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered and why not
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Examples, prior art, links (e.g. similar issues, RFC)
+    validations:
+      required: false
+"""
+
+ISSUE_CONFIG_YML = """\
+blank_issues_enabled: false
+contact_links:
+  - name: "Exemplar: well-structured bug report #38"
+    url: https://github.com/Rianico/dsh-better-edit/issues/38
+    about: Concise Summary \u2192 Environment \u2192 Repro \u2192 Expected/Actual \u2192 Impact \u2014 copy this structure
+  - name: "Ask a question \u2014 Discussions"
+    url: https://github.com/Rianico/dsh-better-edit/discussions
+    about: For questions/support, use Discussions instead of an issue
+"""
+
 CONTRIBUTING_MD_TMPL = """\
 # Contributing to {project_name}
 ## Conventional commits
@@ -238,6 +394,15 @@ CONTRIBUTING_MD_TMPL = """\
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
 `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required, `diff -q` vs generated); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types `style|chore|refactor|test|build|ci` only appear when `!`/`BREAKING CHANGE`.
+## Reporting Issues
+Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` (blank issues disabled, `config.yml` links #38):
+| Intent | Template | Structure |
+|---|---|---|
+| **Bug** | `01-bug_report.yml` | **Exemplar #38**: Summary \u2192 Environment (Version/Module/Trigger) \u2192 Steps to Reproduce (paste-complete file + operation map + exact payload) \u2192 Expected vs Actual (quote diff/logs) \u2192 Impact & Trigger Conditions \u2192 Root Cause / Suggested Fixes (optional, numbered tradeoffs) |
+| **Feature** | `02-feature_request.yml` | Problem \u2192 Proposal \u2192 Alternatives \u2192 Additional context |
+- Bugs: paste-complete, prefer text over screenshots, include `read` hashes / payload and `autoFixes`/balance delta. Link #38 as style reference.
+- Features: state problem + proposal at minimum; alternatives optional.
+Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
 ## Before PR
 `npm run lint && npm run typecheck && npm test` must pass. See `AGENTS.md` for agent rules.
 """
@@ -250,6 +415,15 @@ CONTRIBUTING_MD_TMPL_PYTHON = """\
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
 `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types only appear when `!`/`BREAKING CHANGE`.
+## Reporting Issues
+Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` (blank issues disabled, `config.yml` links #38):
+| Intent | Template | Structure |
+|---|---|---|
+| **Bug** | `01-bug_report.yml` | **Exemplar #38**: Summary \u2192 Environment (Version/Module/Trigger) \u2192 Steps to Reproduce (paste-complete file + operation map + exact payload) \u2192 Expected vs Actual (quote diff/logs) \u2192 Impact & Trigger Conditions \u2192 Root Cause / Suggested Fixes (optional, numbered tradeoffs) |
+| **Feature** | `02-feature_request.yml` | Problem \u2192 Proposal \u2192 Alternatives \u2192 Additional context |
+- Bugs: paste-complete, prefer text over screenshots, include `read` hashes / payload and `autoFixes`/balance delta. Link #38 as style reference.
+- Features: state problem + proposal at minimum; alternatives optional.
+Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
 ## Before PR
 `uv run ruff check . && uv run basedpyright && uv run pytest` must pass. See `AGENTS.md` for agent rules.
 """
@@ -366,6 +540,7 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HUSKY: "0"
 """
 
 CI_PYTHON_COVERAGE_YML = """\
@@ -405,6 +580,7 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HUSKY: "0"
 """
 
 CI_RUST_VERIFY_YML = """\
@@ -442,6 +618,7 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HUSKY: "0"
 """
 
 CI_RUST_COVERAGE_YML = """\
@@ -480,6 +657,7 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HUSKY: "0"
 """
 
 
@@ -657,6 +835,20 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
     write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
     write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     write_file(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run)
+    write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "01-bug_report.yml", ISSUE_BUG_REPORT_YML, dry_run)
+    write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "02-feature_request.yml", ISSUE_FEATURE_REQUEST_YML, dry_run)
+    write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
+    # migrate legacy markdown template (pre-YAML) — keep spine small
+    legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
+    if legacy_md.exists():
+        if dry_run:
+            print(f"would remove legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stdout)
+        else:
+            try:
+                legacy_md.unlink()
+                print(f"removed legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stderr)
+            except OSError:
+                pass
     contrib = CONTRIBUTING_MD_TMPL.format(project_name=project_name)
     write_file(
         cwd / "CONTRIBUTING.md",

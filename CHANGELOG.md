@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **scaffold:** add issue templates, npm publish toggle and release polish
+- **scaffold:** explore project first then recommend combos
 - **scaffold:** add git semantic-release workflow
 - **scaffold:** add deterministic scaffold router with git/python/rust/ci flavors and taxonomy 4→3 redefinition
 - **skill:** wire commitlint into worktrunk pre-merge gate
@@ -108,6 +110,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **branch-worktree-pr:** surface pre-push changelog guard in merge_copy and open_pr
+- **scaffold:** husky vs githooks pre-push delegation and default hooksPath
 - **ci:** remove stale ci jobs and fix release env mapping, update scaffold template
 - resolve typos in docs-scraper and allowlist technical terms
 - harden CI and python shims, pin actions and fix gate
@@ -133,6 +137,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **gotcha:** add GitHub access guard preferring gh CLI
+- **branch-worktree-pr:** mandate tdd and delegate release lifecycle
 - add information boundary pattern to ai-engineering-expert
 - changelog for branch-worktree py shims and autofix formatting
 - define worktree workflow language and ADR 0013
