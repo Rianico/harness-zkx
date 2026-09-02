@@ -82,9 +82,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
         with: {node-version: 22}
       - run: npm ci
       - run: npm audit signatures
@@ -98,11 +98,11 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
         with: {node-version: 22}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
         with: {python-version: "3.12"}
       - name: Clear Unreleased section (handoff to semantic-release)
         run: python scripts/changelog-unreleased.py clear
@@ -131,11 +131,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
         with:
           python-version: "3.12"
       - name: Check Unreleased is up to date
@@ -163,7 +163,7 @@ jobs:
           exit 1
       - name: Comment on failure
         if: failure()
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const body = `> [!warning] CHANGELOG.md Unreleased stale
@@ -515,7 +515,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: astral-sh/setup-uv@v5
         with: {python-version: '3.14'}
@@ -532,9 +532,9 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
@@ -555,7 +555,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: astral-sh/setup-uv@v5
         with: {python-version: '3.14'}
@@ -572,9 +572,9 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
@@ -595,7 +595,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --check
@@ -610,9 +610,9 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
@@ -633,7 +633,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
@@ -649,9 +649,9 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
         with: {node-version: 22}
       - run: npm ci
       - run: npx semantic-release
