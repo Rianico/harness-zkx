@@ -9,6 +9,8 @@ origin: community
 metadata:
   author: YannJY02
   version: "1.0.0"
+disable-model-invocation: true
+
 ---
 
 # Prompt Optimizer

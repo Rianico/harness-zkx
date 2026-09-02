@@ -6,6 +6,8 @@ argument-hint: |-
   [--peer-review]
 metadata:
   depends-on: [handoff]
+disable-model-invocation: true
+
 ---
 
 # Brainstorming Ideas Into Designs

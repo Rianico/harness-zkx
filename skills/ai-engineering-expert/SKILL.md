@@ -92,12 +92,12 @@ Context load is a first-class architectural constraint. Every skill's `descripti
 
 Every skill declares one of two classes via the canonical `disable-model-invocation` field:
 
-| Declaration                      | Class              | Behavior                                                      |
-| -------------------------------- | ------------------ | ------------------------------------------------------------- |
-| Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously; description triggers discovery |
-| `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke                              |
+| Declaration                      | Class              | Behavior                                                                                       |
+| -------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
+| Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously; description triggers discovery                                  |
+| `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke; on Pi omitted from `<available_skills>` XML (true zero-load) |
 
-**Selection ≠ metadata cost.** The `description` is always present in the initial skill list -- invocation class only controls _selection_, not _presence_. Explicit-only is not zero-load.
+Origin: Claude Code `disable-model-invocation`. Pi ≥0.84.4 advances it — `formatSkillsForPrompt` filters `disableModelInvocation=true` skills and **removes them from the `<available_skills>` XML** injected into the system prompt, so they pay **zero context/metadata cost**. Claude's original gating is selection-only (description stays listed, model instructed not to pick it); Pi strips it from context entirely — no description, no tokens, no attention — reachable only via explicit `/skill:name`.
 
 ### Description Budget
 
@@ -107,18 +107,17 @@ Every skill declares one of two classes via the canonical `disable-model-invocat
 
 ### Platform Sync
 
-Claude Code `SKILL.md` is the canonical format. Scripts generate platform-specific artifacts:
+Claude Code `SKILL.md` is the canonical format. Scripts generate platform-specific artifacts; Pi handles the field natively at prompt build:
 
-`SKILL.md` (canonical) → `validate-deps.py sync` → `agents/openai.yaml` (generated)
+`SKILL.md` (canonical) → `validate-deps.py sync` → `agents/openai.yaml` (generated) · Pi ≥0.84.4 `formatSkillsForPrompt` → strip from `<available_skills>` XML
 
-| Canonical field                   | Generated field                           |
-| --------------------------------- | ----------------------------------------- |
-| `name`                            | `interface.display_name`                  |
-| `description`                     | `interface.short_description`             |
-| `disable-model-invocation: true`  | `policy.allow_implicit_invocation: false` |
-| `disable-model-invocation: false` | `policy.allow_implicit_invocation: true`  |
-
-Sync always regenerates output from canonical source. No drift detection needed.
+| Canonical field                                                                  | Generated field (OpenAI)                  | Pi ≥0.84.4 runtime                            |
+| -------------------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------- |
+| `name`                                                                           | `interface.display_name`                  | `<name>` in `<available_skills>` when visible |
+| `description`                                                                    | `interface.short_description`             | `<description>` when visible                  |
+| `disable-model-invocation: true`                                                 | `policy.allow_implicit_invocation: false` | **Removed from XML** — zero-load              |
+| `disable-model-invocation: false`                                                | `policy.allow_implicit_invocation: true`  | Listed in XML — normal load                   |
+| Sync always regenerates output from canonical source. No drift detection needed. |
 
 ### Enforcement
 

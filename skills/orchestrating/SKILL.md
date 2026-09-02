@@ -6,6 +6,8 @@ argument-hint: |-
   [feature|refactor|bugfix|docs] [--lightweight|--heavy]
 metadata:
   depends-on: [brainstorming, architect, eval-gate, tdd-cycle, code-review, build-fix, update-docs, handoff]
+disable-model-invocation: true
+
 ---
 
 # Orchestration (GDD)

@@ -6,6 +6,8 @@ argument-hint: |-
   <doc-dir> [--name <skill-name>] [--supplementary <paths-or-urls>]
 metadata:
   depends-on: [ai-engineering-expert]
+disable-model-invocation: true
+
 ---
 
 # Docs-to-Skill Meta Skill

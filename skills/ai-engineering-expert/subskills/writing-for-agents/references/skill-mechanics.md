@@ -2,14 +2,13 @@
 
 The skill-specific branch of writing for agents: what changes when the document is a skill — frontmatter, the invocation choice, and router skills. Everything else about writing it is the universal reference in the parent `SKILL.md`. `$SKILL_DIR` for this sub-skill is `skills/ai-engineering-expert/subskills/writing-for-agents`.
 
-## Invocation
+## Invocation — Origin: Claude Code, Pi ≥0.84.4 removes from context
 
-Two choices, trading the two loads:
+Frontmatter `disable-model-invocation` originates from Claude Code. Pi ≥0.84.4 advances it: `formatSkillsForPrompt` filters `disableModelInvocation=true` and **removes the skill from the `<available_skills>` XML** — true zero-load (no description, no tokens, no attention) vs Claude's selection-only gating where the description stays listed. Two choices, trading the two loads:
 
 - A **model-invoked** skill keeps a `description`, so the agent can fire it autonomously — and other skills can reach it. You can still type its name: model-invocation always _includes_ user reach; a description only ever adds agent discovery, never removes the human's. The description is the skill's top-level context pointer, forced to stay loaded at all times — permanent context load in exchange for discoverability. A model-invoked skill whose content is all reference is also one home for shared reference: another skill can invoke it, so reference needed by several skills lives in one place. Mechanics: omit `disable-model-invocation`, and write a model-facing description carrying the trigger branches (the pointer-writing rules in parent `SKILL.md` apply in full).
-- A **user-invoked** skill strips the description from the agent's reach: only the human typing its name can invoke it, and no other skill can. Zero context load, but it spends cognitive load — you are the index that must remember it exists. Mechanics: set `disable-model-invocation: true`; the `description` becomes human-facing — a one-line summary, trigger lists stripped.
-
-Pick model-invocation only when the agent must reach the skill on its own, or another skill must. If it only ever fires by hand, make it user-invoked and pay no context load.
+- A **user-invoked** skill is removed from the agent's reach: on Claude it strips autonomous selection (description stays listed, selection-only); on Pi ≥0.84.4 it is **stripped from `<available_skills>` XML entirely** — zero context load, the model never learns its name until the human types `/skill:name`, and no other skill can fire it (`Skill` tool cannot reach it). It spends cognitive load — you are the index that must remember it exists. Mechanics: set `disable-model-invocation: true`; the `description` becomes human-facing — a one-line summary, trigger lists stripped (Pi: never injected into context, so keep it concise for the slash menu).
+  Pick model-invocation only when the agent must reach the skill on its own, or another skill must. If it only ever fires by hand, make it user-invoked and pay no context load.
 
 Shared reference that two user-invoked skills both need can live in neither — with no descriptions, neither can fire the other. Push it to a plain file outside the skill system: external reference any skill can point at.
 

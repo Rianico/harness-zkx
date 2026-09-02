@@ -135,7 +135,7 @@ Reference: [glossary.md](references/glossary.md) for the full domain vocabulary 
 - `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line using the `|` or `>-` block scalar: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
 - `allowed-tools`: Tool allowlist without permission prompts
 - `user-invocable`: Show in `/` menu (default: `true`). Set `false` for internal skills accessed only through routing commands.
-- `disable-model-invocation`: Prevents the `Skill` tool from invoking the skill entirely (default: `false`). Do NOT use for skills accessed through routing commands -- it blocks both automatic loading AND explicit invocation.
+- `disable-model-invocation`: Origin: Claude Code. On Claude: prevents automatic loading (description stays listed — selection-only). On Pi ≥0.84.4: **removed from `<available_skills>` XML** (`formatSkillsForPrompt` filters `!disableModelInvocation`) — true zero context/metadata cost, only `/skill:name` reaches it (default: `false`). Do NOT use for skills accessed through routing commands — it blocks both automatic loading AND explicit invocation via `Skill` tool on Claude, and on Pi hides the skill from model context entirely.
 - `model`: Override model (`opus`, `sonnet`, `haiku`, `inherit`)
 - `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)
 

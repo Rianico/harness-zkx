@@ -5,6 +5,8 @@ description: >-
 arguments: mode
 argument-hint: |-
    "[full|quick|overview] -- audit mode (default: overview)"
+disable-model-invocation: true
+
 ---
 # skill-stocktake
 

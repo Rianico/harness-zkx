@@ -1,11 +1,9 @@
 ---
----
-
 name: writing-for-agents
 description: >-
-Agent-document writing — context pointers, hierarchy, disclosure, completion, leading words, pruning. Use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or tightening skill narratives. TRIGGER: writing for agents, AGENTS.md, context pointer, leading word
+  Agent-document writing — context pointers, hierarchy, disclosure, completion, leading words, pruning. Use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or tightening skill narratives. TRIGGER: writing for agents, AGENTS.md, context pointer, leading word
 metadata:
-managed-by: ai-engineering-expert
+  managed-by: ai-engineering-expert
 ---
 
 # Writing for Agents
@@ -25,7 +23,7 @@ A pointer does two jobs — state what the material is, and list the **branches*
 - **Front-load the leading word** — the pointer is where it does its triggering work.
 - **One trigger per branch.** Synonyms that rename a single branch are one branch written twice; collapse them and keep only genuinely distinct branches.
 - **Cut identity the body already carries.**
-- **Never point to an independent surface:** Prompt Templates (`/release`) and `disable-model-invocation: true` skills have zero model-visible `Metadata Cost` — the model never learns their name until the human invokes them. A pointer from an always-loaded doc cannot fire; it only adds `Context Load` with zero retrieval. Discovery is human-driven (slash menu, autocomplete), not pointer-driven. Never disclose an independent surface; keep its own command/description as the sole index.
+- **Never point to an independent surface:** Prompt Templates (`/release`) and `disable-model-invocation: true` skills have **zero** model-visible `Metadata Cost` on Pi — `disable-model-invocation` originates from Claude Code, but Pi ≥0.84.4 advances it by **removing the skill from `<available_skills>` XML** (`formatSkillsForPrompt` filter) so the model never learns its name until the human invokes `/skill:name`. A pointer from an always-loaded doc cannot fire; it only adds `Context Load` with zero retrieval. Discovery is human-driven (slash menu, autocomplete), not pointer-driven. Never disclose an independent surface; keep its own command/description as the sole index. (Claude's original gating is selection-only; Pi strips from context.)
 
 ## The two loads
 

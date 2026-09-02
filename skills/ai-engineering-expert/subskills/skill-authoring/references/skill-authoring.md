@@ -210,20 +210,20 @@ The `metadata` field supports project-specific structural declarations. The LSZ 
 
 These fields extend the Agent Skills spec for Claude Code specifically.
 
-| Field                      | Required | Type            | Purpose                                                  |
-| -------------------------- | -------- | --------------- | -------------------------------------------------------- |
-| `argument-hint`            | Optional | string          | Autocomplete hint for arguments                          |
-| `arguments`                | Optional | string or array | Named positional arguments for `$name` substitution      |
-| `allowed-tools`            | Optional | string or array | Tools allowed without permission prompts                 |
-| `disable-model-invocation` | Optional | boolean         | Prevent automatic skill loading (default: false)         |
-| `user-invocable`           | Optional | boolean         | Show in `/` menu (default: true)                         |
-| `model`                    | Optional | string          | Override model (`opus`, `sonnet`, `haiku`, `inherit`)    |
-| `effort`                   | Optional | string          | Thinking level (`low`, `medium`, `high`, `xhigh`, `max`) |
-| `context`                  | Optional | string          | Set to `fork` for subagent isolation                     |
-| `agent`                    | Optional | string          | Subagent type when `context: fork`                       |
-| `hooks`                    | Optional | object          | Skill-scoped lifecycle hooks                             |
-| `paths`                    | Optional | string or array | Glob patterns limiting skill activation                  |
-| `shell`                    | Optional | string          | Shell for inline commands (`bash` default, `powershell`) |
+| Field                      | Required | Type            | Purpose                                                                                                                                                                                                                                                           |
+| -------------------------- | -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `argument-hint`            | Optional | string          | Autocomplete hint for arguments                                                                                                                                                                                                                                   |
+| `arguments`                | Optional | string or array | Named positional arguments for `$name` substitution                                                                                                                                                                                                               |
+| `allowed-tools`            | Optional | string or array | Tools allowed without permission prompts                                                                                                                                                                                                                          |
+| `disable-model-invocation` | Optional | boolean         | Origin: Claude Code. On Claude: prevent automatic loading (description stays listed — selection-only). On Pi ≥0.84.4: **removed from `<available_skills>` XML** (`formatSkillsForPrompt` filter) — true zero-load, only `/skill:name` reaches it (default: false) |
+| `user-invocable`           | Optional | boolean         | Show in `/` menu (default: true)                                                                                                                                                                                                                                  |
+| `model`                    | Optional | string          | Override model (`opus`, `sonnet`, `haiku`, `inherit`)                                                                                                                                                                                                             |
+| `effort`                   | Optional | string          | Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)                                                                                                                                                                                                          |
+| `context`                  | Optional | string          | Set to `fork` for subagent isolation                                                                                                                                                                                                                              |
+| `agent`                    | Optional | string          | Subagent type when `context: fork`                                                                                                                                                                                                                                |
+| `hooks`                    | Optional | object          | Skill-scoped lifecycle hooks                                                                                                                                                                                                                                      |
+| `paths`                    | Optional | string or array | Glob patterns limiting skill activation                                                                                                                                                                                                                           |
+| `shell`                    | Optional | string          | Shell for inline commands (`bash` default, `powershell`)                                                                                                                                                                                                          |
 
 #### `arguments`
 

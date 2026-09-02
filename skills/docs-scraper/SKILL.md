@@ -8,6 +8,8 @@ description: >-
   PTX, CUDA, Rust, scrape site, skill.sh, compose skills, fetch skill.
 argument-hint: |-
   [lsp|ptx|runtime|driver|rust <target>|site|skills <url|owner/collection[/skill]>...] [--force] [--output-dir <path>] [--base-url <url>] [--staging <path>] [--run <slug>] [--method auto|raw|clone|npx]
+disable-model-invocation: true
+
 ---
 
 # Documentation Scraper Skill

@@ -6,6 +6,8 @@ argument-hint: |-
   <feature or module> [--lightweight] [handoff_pointer=<path>] [issues=<path>]
 metadata:
   depends-on: [tdd-expert, handoff]
+disable-model-invocation: true
+
 ---
 
 # TDD Cycle Orchestration Skill

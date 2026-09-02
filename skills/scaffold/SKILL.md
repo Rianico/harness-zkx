@@ -11,6 +11,8 @@ argument-hint: |-
   omitted -- loads the 80/20 spine, GDD wiring, and dispatch registry
 metadata:
   manage: [git, python, rust, ci]
+disable-model-invocation: true
+
 ---
 
 # Scaffold

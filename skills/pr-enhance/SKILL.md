@@ -5,6 +5,8 @@ description: >-
 arguments: base_branch
 argument-hint: |-
    "[base_branch] -- base branch to diff against (default: main)"
+disable-model-invocation: true
+
 ---
 
 # Pull Request Enhancement Skill

@@ -3,6 +3,8 @@ name: blueprint
 description: >-
   Multi-session/multi-agent construction plans from one-line objectives with per-step context briefs. Adversarial review/dependency graph/parallel detection/anti-pattern catalog/plan mutation protocol. TRIGGER: plan, blueprint, roadmap, multi-PR. DO NOT TRIGGER: single-PR, <3 calls, 'just do it'
 origin: community
+disable-model-invocation: true
+
 ---
 
 # Blueprint — Construction Plan Generator

@@ -6,18 +6,20 @@ Full policy contract and enforcement details. The parent spine holds the 20% sum
 
 Every skill declares one of two invocation classes via the canonical `disable-model-invocation` field in `SKILL.md` frontmatter:
 
-| Declaration | Class | Claude Code | Codex |
-|-------------|-------|-------------|-------|
-| Omit (default `false`) | `implicit-allowed` | Model can invoke autonomously | `allow_implicit_invocation: true` |
-| `disable-model-invocation: true` | `explicit-only` | Only user or `$skill` can invoke | `allow_implicit_invocation: false` |
+| Declaration                      | Class              | Claude Code                                                                  | Codex                              | Pi ≥0.84.4                                                                                |
+| -------------------------------- | ------------------ | ---------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------- |
+| Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously                                                | `allow_implicit_invocation: true`  | Listed in `<available_skills>` XML — normal load                                          |
+| `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke (description still listed — selection-only) | `allow_implicit_invocation: false` | **Removed from `<available_skills>` XML** — true zero-load; only `/skill:name` reaches it |
 
-**The field is canonical.** It controls both Claude Code behavior and the generated `agents/openai.yaml`. No separate platform-specific field exists in `SKILL.md` — the sync script maps this single field to each platform's mechanism.
+**Origin:** Claude Code. **Pi ≥0.84.4 advances it** — `formatSkillsForPrompt` filters `disableModelInvocation=true` and omits the entry from the system-prompt XML entirely. Claude's gating is selection-only (description stays, model instructed not to pick it); Pi strips it from context (no tokens, no attention).
 
-## Selection ≠ Metadata Cost
+**The field is canonical.** It controls Claude Code behavior, the generated `agents/openai.yaml`, and — on Pi — prompt inclusion. No separate platform-specific field exists in `SKILL.md` — the sync script maps this single field to each platform's mechanism; Pi applies the filter at prompt-build time.
 
-The invocation class controls _selection_ — whether the model can autonomously pick the skill. It does NOT control _metadata presence_ — the `description` is always in the initial skill-list metadata, visible to the harness on every turn.
+## Selection vs Metadata Cost — Platform Divergence
 
-An explicit-only skill still pays context load for its description. It is not zero-load. This is the single most surprising fact about the policy and the primary reason it is recorded as an ADR.
+**Claude Code (origin):** The invocation class controls _selection_ — whether the model can autonomously pick the skill. It does NOT control _metadata presence_ — the `description` stays in the initial skill-list metadata, visible to the harness on every turn. An explicit-only skill still pays context load for its description. It is not zero-load. This selection≠metadata separation is the single most surprising fact about the original policy and the primary reason it was recorded as an ADR.
+
+**Pi ≥0.84.4 (advanced):** `disable-model-invocation: true` **does** control metadata presence. Skills with the flag are filtered by `formatSkillsForPrompt` (`skills.filter(s => !s.disableModelInvocation)`) and **removed from the `<available_skills>` XML** injected into the system prompt. They pay **zero context/metadata cost** — the model never learns their name until the human invokes `/skill:name`. Design consequence: on Pi, `explicit-only` is the correct tool to remove a skill from skill context; do not add a pointer to it from any always-loaded doc (see `writing-for-agents` — independent surfaces).
 
 ## Description Budget Rationale
 
@@ -29,12 +31,12 @@ The 300-character limit is intentionally conservative — it forces description 
 
 ### Mapping Table
 
-| `SKILL.md` (canonical) | `agents/openai.yaml` (generated) |
-|------------------------|----------------------------------|
-| `name` | `interface.display_name` |
-| `description` | `interface.short_description` |
-| `disable-model-invocation: true` | `policy.allow_implicit_invocation: false` |
-| `disable-model-invocation: false` (default) | `policy.allow_implicit_invocation: true` |
+| `SKILL.md` (canonical)                      | `agents/openai.yaml` (generated)          | Pi ≥0.84.4 (`<available_skills>` XML) |
+| ------------------------------------------- | ----------------------------------------- | ------------------------------------- |
+| `name`                                      | `interface.display_name`                  | `<name>` when visible                 |
+| `description`                               | `interface.short_description`             | `<description>` when visible          |
+| `disable-model-invocation: true`            | `policy.allow_implicit_invocation: false` | **Omitted from XML** — zero-load      |
+| `disable-model-invocation: false` (default) | `policy.allow_implicit_invocation: true`  | Listed in XML — normal load           |
 
 ### Deliberately Omitted
 
@@ -61,6 +63,7 @@ The 300-character limit is intentionally conservative — it forces description 
 ### Semantic Quality (not in CI)
 
 The following are enforced by `skill-authoring` methodology during authoring:
+
 - Third-person voice (no "I can help you...")
 - Front-loaded leading word (first sentence distinguishes from other skills)
 - No trigger duplication with another skill's description

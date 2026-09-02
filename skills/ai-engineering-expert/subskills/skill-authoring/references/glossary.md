@@ -18,12 +18,12 @@ _Avoid_: Ability, tool, capability.
 
 ### User-Invoked
 
-A skill with `disable-model-invocation: true` — invisible to the agent's autonomous selection and reachable only by the human typing its name or another skill invoking `$skill`. Still pays **context load** for its description in the initial metadata list (the description is always present regardless of invocation class).
+A skill with `disable-model-invocation: true` — invisible to the agent's autonomous selection and reachable only by the human typing its name (`/skill:name`). **Origin:** Claude Code. **Pi ≥0.84.4 advances it:** `formatSkillsForPrompt` removes the entry from the `<available_skills>` XML, so on Pi the skill pays **zero context load / zero metadata cost** — the model never learns its name until the human invokes it. (Claude's original gating is selection-only; description stays listed.)
 _Avoid_: Procedure, workflow, command.
 
 ### Description
 
-The skill's machine-readable trigger. Its mere presence _is_ the invocation axis: omit `disable-model-invocation` and the skill is model-invoked; set it to `true` and the skill is user-invoked. The source of a model-invoked skill's context load, and always present in the initial skill-list metadata.
+The skill's machine-readable trigger. Its mere presence _is_ the invocation axis on Claude Code: omit `disable-model-invocation` and the skill is model-invoked; set it to `true` and the skill is user-invoked (description still listed — selection-only). **On Pi ≥0.84.4**, `disable-model-invocation: true` removes the description from the `<available_skills>` XML entirely, so user-invoked skills do **not** contribute to initial metadata. The source of a model-invoked skill's context load; absent for Pi user-invoked skills.
 _Avoid_: Frontmatter, summary.
 
 ### Description Budget
@@ -38,7 +38,7 @@ _Avoid_: Link, reference, import.
 
 ### Context Load
 
-The permanent token and attention cost a skill's `description` imposes on every turn by sitting in the initial skill-list metadata. Paid regardless of invocation class — even user-invoked skills contribute their description to the initial list.
+The permanent token and attention cost a skill's `description` imposes on every turn by sitting in the initial skill-list metadata. **Claude Code (origin):** paid regardless of invocation class — even user-invoked skills contribute their description to the initial list. **Pi ≥0.84.4 (advanced):** `disable-model-invocation: true` skills are removed from `<available_skills>` XML, so they pay **zero** context load — true zero-load via `skills.filter(s => !s.disableModelInvocation)` in `formatSkillsForPrompt`.
 _Avoid_: Token cost, context bloat.
 
 ### Cognitive Load
@@ -58,7 +58,7 @@ _Avoid_: Chunking, modularity.
 
 ### Invocation Class
 
-Whether a skill is reachable by model inference (`implicit-allowed`) or only by explicit name (`explicit-only`). Declared via the canonical `disable-model-invocation` field. Controls selection, not metadata presence.
+Whether a skill is reachable by model inference (`implicit-allowed`) or only by explicit name (`explicit-only`). Declared via the canonical `disable-model-invocation` field (origin: Claude Code). **Claude Code:** controls selection, not metadata presence. **Pi ≥0.84.4:** controls both — `true` removes the skill from `<available_skills>` XML.
 _Avoid_: Invocation mode, trigger mode.
 
 ### Selection Mode
@@ -68,7 +68,7 @@ _Avoid_: Discovery mode, pick mode.
 
 ### Metadata Cost
 
-The context consumed by a skill's name and description being listed in the initial available-skills inventory. Paid even when implicit invocation is disabled. The key principle: selection ≠ metadata cost.
+The context consumed by a skill's name and description being listed in the initial available-skills inventory. **Claude Code (origin):** paid even when implicit invocation is disabled — the key principle was selection ≠ metadata cost. **Pi ≥0.84.4 (advanced):** `disable-model-invocation: true` skills are omitted from `<available_skills>` XML, so on Pi metadata cost is **zero** for explicit-only skills; selection and metadata cost collapse.
 _Avoid_: Listing cost, inventory cost.
 
 ## Information Hierarchy
