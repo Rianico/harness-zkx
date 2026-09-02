@@ -124,8 +124,6 @@ def _detect_auto_type(targets: list[str]) -> str:
         low = tok.lower()
         if "docs.rs" in low or low.endswith(".rs"):
             return "rust"
-        if "github.com" in low:
-            return "rust"
         if (
             tok
             and "/" not in tok

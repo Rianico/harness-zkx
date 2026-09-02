@@ -19,15 +19,15 @@ Core = script + converter. Per-source cleanup lives in `references/*` loaded on 
 
 ## Auto Dispatch
 
-| Input pattern                                           | Resolved  | Notes                     |
-| ------------------------------------------------------- | --------- | ------------------------- |
-| `https://microsoft.github.io/.../lsp/` or `lsp` keyword | `lsp`     | LSP 3.17 spec             |
-| `*.ptx` / `docs.nvidia.com/cuda/ptx`                    | `ptx`     | PTX ISA                   |
-| `docs.nvidia.com/cuda/cuda-runtime`                     | `runtime` | CUDA Runtime              |
-| `docs.nvidia.com/cuda/cuda-driver`                      | `driver`  | CUDA Driver               |
-| `github.com/*` `docs.rs` `crate name` `*.rs`            | `rust`    | cargo-docs-md             |
-| `skill.sh` URL / `owner/collection/skill`               | `skills`  | npx skills                |
-| otherwise                                               | `site`    | llms.txt/sitemap fallback |
+| Input pattern                                                             | Resolved  | Notes                                        |
+| ------------------------------------------------------------------------- | --------- | -------------------------------------------- |
+| `https://microsoft.github.io/.../lsp/` or `lsp` keyword                   | `lsp`     | LSP 3.17 spec                                |
+| `*.ptx` / `docs.nvidia.com/cuda/ptx`                                      | `ptx`     | PTX ISA                                      |
+| `docs.nvidia.com/cuda/cuda-runtime`                                       | `runtime` | CUDA Runtime                                 |
+| `docs.nvidia.com/cuda/cuda-driver`                                        | `driver`  | CUDA Driver                                  |
+| `docs.rs` `crate name` `*.rs` (or explicit `rust https://github.com/...`) | `rust`    | cargo-docs-md (GitHub needs explicit `rust`) |
+| `skill.sh` URL / `owner/collection/skill`                                 | `skills`  | npx skills                                   |
+| otherwise                                                                 | `site`    | llms.txt/sitemap fallback                    |
 
 Explicit source skips detection: `uv run $SKILL_DIR/scripts/scrape.py site --base-url https://example.com`.
 
