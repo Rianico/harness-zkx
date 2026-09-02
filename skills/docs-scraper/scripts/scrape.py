@@ -98,6 +98,38 @@ SCRAPERS = {
     },
 }
 
+def _detect_auto_type(targets: list[str]) -> str:
+    """Heuristic source detection for `auto` — explicit source overrides."""
+    joined = " ".join(targets).lower()
+    if not targets:
+        return "site"
+    if "skill.sh" in joined or "skills.sh" in joined:
+        return "skills"
+    if "microsoft.github.io" in joined and "lsp" in joined:
+        return "lsp"
+    if joined.strip() == "lsp":
+        return "lsp"
+    if "ptx" in joined and "nvidia" in joined:
+        return "ptx"
+    if joined.strip() == "ptx":
+        return "ptx"
+    if "cuda-runtime" in joined or "cudart" in joined:
+        return "runtime"
+    if "cuda-driver" in joined:
+        return "driver"
+    for tok in targets:
+        if tok.startswith("--"):
+            continue
+        low = tok.lower()
+        if "docs.rs" in low or low.endswith(".rs"):
+            return "rust"
+        if "github.com" in low:
+            return "rust"
+        if tok and "/" not in tok and "." not in tok and "://" not in tok and not tok.startswith("-"):
+            if len(tok) < 40:
+                return "rust"
+    return "site"
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
@@ -271,6 +303,11 @@ For detailed help on a specific scraper:
 
 def main() -> None:
     """Main entry point."""
+    # auto dispatch — replace 'auto' with heuristic before parsing
+    if len(sys.argv) >= 2 and sys.argv[1] == "auto":
+        raw_targets = [a for a in sys.argv[2:] if not a.startswith("-")]
+        _detected = _detect_auto_type(raw_targets if raw_targets else sys.argv[2:])
+        sys.argv[1] = _detected
     parser = create_parser()
 
     # Handle no arguments
