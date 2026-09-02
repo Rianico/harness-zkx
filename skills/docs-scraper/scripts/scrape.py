@@ -98,6 +98,7 @@ SCRAPERS = {
     },
 }
 
+
 def _detect_auto_type(targets: list[str]) -> str:
     """Heuristic source detection for `auto` — explicit source overrides."""
     joined = " ".join(targets).lower()
@@ -125,7 +126,13 @@ def _detect_auto_type(targets: list[str]) -> str:
             return "rust"
         if "github.com" in low:
             return "rust"
-        if tok and "/" not in tok and "." not in tok and "://" not in tok and not tok.startswith("-"):
+        if (
+            tok
+            and "/" not in tok
+            and "." not in tok
+            and "://" not in tok
+            and not tok.startswith("-")
+        ):
             if len(tok) < 40:
                 return "rust"
     return "site"

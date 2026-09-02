@@ -21,7 +21,7 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant rust     # Rust v
 uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --dry-run
 ```
 
-Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `checkout@11d596...` + `setup-node@49933...`, `zizmor: ignore` justified, `contents: read` → `release` escalates `write/id-token`, `needs: verify`).
+Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `checkout@93cb6e...` + `setup-node@a0853c...` (v5, Node 24) + `setup-python@e797f8...` (v6), `zizmor: ignore` justified, `contents: read` → `release` escalates `write/id-token`, `needs: verify`).
 
 - On-demand dispatch is the default: `repository_dispatch` (`semantic-release`) + `workflow_dispatch` only — no `push: tags` auto-release.
 - Language-specific verify steps live in the variant; multi-runtime uses matrix (`needs: [verify-node, verify-python]`). See `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` for byte view.
