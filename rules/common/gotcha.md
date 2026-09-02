@@ -28,6 +28,18 @@ Blocking signals are hard gates. Fix at source, do not route around.
 
 ---
 
+## 3) GitHub access — prefer `gh` CLI
+
+**When:** model needs to access links related to `github` (`github.com` URLs, issues, PRs, API, repos).
+
+**Don't:** `curl https://github.com/...` / `curl https://api.github.com/...` / `fetch` / `fetch_content` for GitHub hosts.
+
+**Do:** Use `gh` clients — `gh issue view <n> --json title,body --repo <owner/repo>`, `gh pr view`, `gh repo view`, `gh api repos/<owner>/<repo>/issues/<n>` (auth, rate-limit, JSON shape). `curl`/`fetch` only as fallback when `gh` unavailable or for non-GitHub hosts.
+
+**Check:** No `curl`/`fetch` to `github.com`/`api.github.com` when `gh` is available; `gh` command appears in transcript for GitHub links.
+
+---
+
 ## Common
 
 **Taint:** Bypass may make one command succeed but taints shell provenance `untrusted` — blocks all later `commit`/`push`/`diff` until fresh `pi`/terminal. Re-running `pi-lens` clears diagnostics, not provenance.
