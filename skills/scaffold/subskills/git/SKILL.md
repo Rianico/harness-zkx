@@ -56,7 +56,7 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 > [!tip] Verification — run before every push/release
 >
 > - `npm run lint` / `npm run typecheck` / `npm test` — if any fails → `BLOCKED`
-> - `custom/no-comments` allows only `SAFETY:` + Gherkin; `noUncheckedIndexedAccess` needs `(l: string)` in tests
+> - `custom/no-comments` allows `SAFETY:` `WHY:` `Invariant:` `See ADR-` `via https://` `TODO(#\d+):` `HACK:` + Gherkin (`Given|When|Then`); `noUncheckedIndexedAccess` needs `(l: string)` in tests — see ADR-0014 (harness AI engineering, `files:off` is shrink-only, `edit-pipeline` hard-code deleted, harness owns regex)
 
 ## Notes
 

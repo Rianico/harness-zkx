@@ -137,6 +137,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **adr:** allow high-signal comments via curated allowlist — replace total ban (ADR-0014)
 - **gotcha:** add GitHub access guard preferring gh CLI
 - **branch-worktree-pr:** mandate tdd and delegate release lifecycle
 - add information boundary pattern to ai-engineering-expert
