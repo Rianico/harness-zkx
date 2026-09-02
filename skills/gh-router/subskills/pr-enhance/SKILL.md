@@ -5,6 +5,8 @@ description: >-
 arguments: base_or_pr
 argument-hint: |-
   "[base|pr_url] -- base branch, PR URL (https://github.com/.../pull/123) or number (123); default: inferred from context — PR base or cwd's base, fallback main)"
+metadata:
+  managed-by: gh-router
 ---
 
 # Pull Request Enhancement Skill
