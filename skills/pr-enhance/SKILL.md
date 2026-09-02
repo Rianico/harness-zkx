@@ -1,12 +1,10 @@
 ---
 name: pr-enhance
 description: >-
-  Pull Request optimization expert. Generates comprehensive PR descriptions, diagrams, and checklists based on git diff analysis to facilitate efficient code reviews.
-arguments: base_branch
+  Pull Request optimization expert. Generates comprehensive PR descriptions, diagrams, and checklists based on git diff analysis. Use when submitting a PR or refining a PR description. TRIGGER: submit PR, refine PR, enhance PR.
+arguments: base_or_pr
 argument-hint: |-
-   "[base_branch] -- base branch to diff against (default: main)"
-disable-model-invocation: true
-
+  "[base|pr_url] -- base branch, PR URL (https://github.com/.../pull/123) or number (123); default: inferred from context — PR base or cwd's base, fallback main)"
 ---
 
 # Pull Request Enhancement Skill
@@ -15,57 +13,37 @@ You are a PR optimization expert specializing in creating high-quality pull requ
 
 ## Workflow
 
-When invoked via `/pr-enhance [base_branch]`:
+When invoked via `/pr-enhance [base|pr_url]` (default: inferred from context — PR base or cwd's base, fallback `main`):
 
-### 1. Execute Analysis Scripts
-Use the `Bash` tool to run the python scripts to analyze the current git state:
-```bash
-# Analyze changes
-python3 $SKILL_DIR/scripts/analyze-pr.py [base_branch] > pr_analysis.json
+1. **Analyze** — `uv run $SKILL_DIR/scripts/analyze-pr.py [base|pr_url] > tmp/pr.json` — captures files changed, stats, categories (base, PR URL, or number; inferred from context if omitted). Keep artifacts in tmp dir (ephemeral).
+2. **Draft** — from `tmp/pr.json` generate PR description and save to `tmp/pr_body.md`:
 
-# Generate Checklist
-cat pr_analysis.json | python3 $SKILL_DIR/scripts/generate-checklist.py > pr_checklist.md
-```
+   ````markdown
+   ## Summary
 
-### 2. Generate the PR Description
-Using the results from `pr_analysis.json` and the generated `pr_checklist.md`, draft a highly detailed PR description using this format:
+   [2-3 sentence why, based on diff]
+   **Impact**: [X] files ([Y] +, [Z] -) · **Risk**: Low/Medium/High
 
-```markdown
-## Summary
-[Write a 2-3 sentence executive summary explaining the "why" behind the changes based on your understanding of the diff]
+   ## What Changed
 
-**Impact**: [X] files changed ([Y] additions, [Z] deletions)
-**Risk Level**: [Assess as Low/Medium/High/Critical based on files touched]
+   [grouped by feature/system; flag migrations/API changes]
 
-## What Changed
-[List major changes categorized by feature/system. If there are DB migrations or API changes, highlight them!]
+   ## Architecture
 
-## Architecture Changes
-[If you detect architectural shifts, generate a simple Mermaid.js diagram representing the before/after state]
-```mermaid
-graph LR
-   ...
-```
+   [Mermaid before/after only if structural shift]
 
-## Review Checklist
-[Paste the contents of `pr_checklist.md` here]
-```
+   ```mermaid
+   graph LR
+     ...
+   ```
+   ````
 
-### 3. Ask for Approval
-Present the drafted PR description to the user and wait for their decision:
+   ## Checklist
 
----
-**PR Draft Ready**
+   [review checklist derived from categories]
 
-Here is the draft for your PR. Would you like me to open it on GitHub?
+   ```
 
-1. **Yes, create the PR**
-2. **No, I will modify it manually**
----
+   ```
 
-### 4. Create the PR (If Approved)
-If the user approves, save the description to a temporary file `.pr_body.md` and use the `Bash` tool to execute:
-```bash
-gh pr create --body-file .pr_body.md
-```
-Then clean up the temporary files (`pr_analysis.json`, `pr_checklist.md`, `.pr_body.md`).
+3. **Review** — present draft, await approval, then create PR and clean tmp artifacts.
