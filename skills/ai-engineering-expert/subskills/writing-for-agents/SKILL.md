@@ -1,14 +1,16 @@
 ---
-name: writing
+---
+
+name: writing-for-agents
 description: >-
-  Agent-document writing — context pointers, hierarchy, disclosure, completion, leading words, pruning. Use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or tightening skill narratives. TRIGGER: writing for agents, AGENTS.md, context pointer, leading word
+Agent-document writing — context pointers, hierarchy, disclosure, completion, leading words, pruning. Use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or tightening skill narratives. TRIGGER: writing for agents, AGENTS.md, context pointer, leading word
 metadata:
-  managed-by: ai-engineering-expert
+managed-by: ai-engineering-expert
 ---
 
 # Writing for Agents
 
-Managed sub-skill of `ai-engineering-expert`. Load when `$domain` is `writing` or when any `ai-engineering-expert` task writes or edits an agent-consumed document. For skill files, also read [$SKILL_DIR/references/skill-mechanics.md](references/skill-mechanics.md).
+Managed sub-skill of `ai-engineering-expert`. Load when `$domain` is `writing-for-agents` or when any `ai-engineering-expert` task writes or edits an agent-consumed document. For skill files, also read [$SKILL_DIR/references/skill-mechanics.md](references/skill-mechanics.md).
 
 Reference for writing any document an agent consumes — a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable — the agent taking the same _process_ every run, not producing the same output.
 
@@ -100,6 +102,6 @@ Rules must be _correct_ and _approachable_ or they are unfollowed — the game-r
 
 ## Harness Wiring
 
-- **When to load:** `ai-engineering-expert` dispatch for `skill-authoring` or any task that creates/edits an agent-consumed doc must also read this sub-skill via `Read` at `$SKILL_DIR/subskills/writing/SKILL.md` (parent) — subskills hidden from `Skill` discovery.
+- **When to load:** `ai-engineering-expert` dispatch for `skill-authoring` or any task that creates/edits an agent-consumed doc must also read this sub-skill via `Read` at `$SKILL_DIR/subskills/writing-for-agents/SKILL.md` (parent) — subskills hidden from `Skill` discovery.
 - **Skill-authoring integration:** Apply hierarchy, pointer wording, completion criteria, leading words, and pruning when drafting `SKILL.md` body. Keep body under 500 lines; push deep methodology to `references/` behind a pointer (see [skill-mechanics](references/skill-mechanics.md)).
 - **Verification:** Writing output verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` and `context-check` (frontmatter, description budget, trigger vocab, single source), and semantically via a Skeptic subagent comparing prose to intent. See sibling [verification](../verification/SKILL.md) for the full EDD loop. Never trust model says doc is good; trust fresh validation output.

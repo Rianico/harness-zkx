@@ -53,7 +53,7 @@ Create the skill following LSZ conventions:
      description: >-
        Expert methodology for X. TRIGGER when...
      ```
-5. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`. Apply [writing sub-skill](../writing/SKILL.md) for information hierarchy, pointer wording, completion criteria, leading words, and pruning.
+5. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`. Apply [writing-for-agents sub-skill](../writing-for-agents/SKILL.md) for information hierarchy, pointer wording, completion criteria, leading words, and pruning.
 6. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
 7. **Scripts** -- Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally, don't punt to the LLM
 8. **Taxonomy-specific structure:**
@@ -173,7 +173,7 @@ Reference: [glossary.md](references/glossary.md) for the full domain vocabulary 
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts
 - [dialog-contract.md](references/dialog-contract.md) -- Standard pattern for user interactions
 - [glossary.md](references/glossary.md) -- Domain vocabulary: invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms
-- [writing sub-skill](../writing/SKILL.md) -- Agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; load when drafting any SKILL.md/AGENTS.md/CLAUDE.md
+- [writing-for-agents sub-skill](../writing-for-agents/SKILL.md) -- Agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; load when drafting any SKILL.md/AGENTS.md/CLAUDE.md
 
 ## Skill Authoring Checklist
 
