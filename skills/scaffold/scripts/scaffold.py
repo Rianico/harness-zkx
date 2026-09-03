@@ -29,6 +29,14 @@ import pathlib
 import re
 import sys
 
+# Pinned GH Actions SHAs for Node 24 (single source) — keep in sync with .github/workflows/*.yml
+SHA_TABLE = {
+    "checkout": "93cb6efe18208431cddfb8368fd83d5badbf9bfd",  # actions/checkout v5
+    "setup-node": "a0853c24544627f65ddf259abe73b1d18a591444",  # actions/setup-node v5
+    "setup-python": "e797f83bcb11b83ae66e0230d6156d7c80228e7c",  # actions/setup-python v6
+    "github-script": "ed597411d8f924073f98dfc5c65a23a2325f34cd",  # actions/github-script v8
+}
+
 # ------------------------------------------------------------------ templates (pure-deterministic except {{project_name}})
 RELEASERC_JSON = """\
 {
@@ -235,7 +243,7 @@ exec .githooks/pre-push "$@"
 COMMITLINT_JS = 'export default { extends: ["@commitlint/config-conventional"] };\n'
 
 ISSUE_BUG_REPORT_YML = """\
-name: "\U0001F41B Bug report"
+name: "\U0001f41b Bug report"
 description: Concise, paste-complete repro \u2014 see #38 as exemplar
 title: "[bug] "
 labels: ["bug"]
@@ -659,6 +667,141 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HUSKY: "0"
 """
+GH_ROUTER_SKILL = """---
+name: gh-router
+description: >-
+  GitHub workflow router \u2014 release via dispatch and PR enhancement. Use when releasing, dispatching semantic-release, submitting or refining PRs. TRIGGER: release, dispatch, pr enhance, submit PR, refine PR
+argument-hint: |-
+  gh-release [--dry-run] -- changelog and publish via dispatch
+  pr-enhance [base|pr_url] -- PR description generation
+metadata:
+  manage: [gh-release, pr-enhance]
+---
+
+# GH Router
+
+GitHub workflow router. Model-invocable \u2014 dispatches to `gh-release` or `pr-enhance` via subskill load.
+
+## Subskills
+
+| Subskill | Trigger |
+|----------|---------|
+| `gh-release` | `release`, dispatch semantic-release |
+| `pr-enhance` | `submit PR`, `refine PR` |
+
+Load via `Read $SKILL_DIR/subskills/<name>/SKILL.md`.
+"""
+
+GH_RELEASE_SKILL = (
+    pathlib.Path(__file__)
+    .parent.parent.joinpath("..", "gh-router", "subskills", "gh-release", "SKILL.md")
+    .read_text(encoding="utf-8")
+    if pathlib.Path(__file__)
+    .parent.parent.joinpath("..", "gh-router", "subskills", "gh-release", "SKILL.md")
+    .exists()
+    else """---
+name: gh-release
+description: >-
+  Release via semantic-release dispatch. Validates conventional commits, runs verification, dispatches publish. TRIGGER: release, dispatch, publish, dry-run
+argument-hint: |-
+  "[--dry-run] -- dispatch semantic-release (dry-run previews version)"
+metadata:
+  managed-by: gh-router
+---
+
+# GH Release
+
+Dispatch semantic-release from `main`.
+"""
+)
+
+PR_ENHANCE_SKILL = (
+    pathlib.Path(__file__)
+    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-enhance", "SKILL.md")
+    .read_text(encoding="utf-8")
+    if pathlib.Path(__file__)
+    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-enhance", "SKILL.md")
+    .exists()
+    else """---
+name: pr-enhance
+description: >-
+  Pull Request optimization expert. TRIGGER: submit PR, refine PR
+arguments: base_or_pr
+argument-hint: |-
+  "[base|pr_url] -- base branch or PR URL"
+metadata:
+  managed-by: gh-router
+---
+
+# PR Enhance
+
+See gh-router.
+"""
+)
+
+
+def _write_gh_router(cwd: pathlib.Path, dry_run: bool) -> None:
+    # Deterministic gh-router skill with subskills — mirrors current harness
+    base = cwd / "skills" / "gh-router"
+    write_file(base / "SKILL.md", GH_ROUTER_SKILL, dry_run)
+    # Use current harness files as source if available, else fallback to embedded
+    for sub in ["gh-release", "pr-enhance"]:
+        src = (
+            pathlib.Path(__file__).parent.parent.parent
+            / "gh-router"
+            / "subskills"
+            / sub
+            / "SKILL.md"
+        )
+        # fallback to embedded already handled
+        if src.exists():
+            content = src.read_text(encoding="utf-8")
+            write_file(base / "subskills" / sub / "SKILL.md", content, dry_run)
+        else:
+            content = GH_RELEASE_SKILL if sub == "gh-release" else PR_ENHANCE_SKILL
+            if content.strip():
+                write_file(base / "subskills" / sub / "SKILL.md", content, dry_run)
+    # Scripts for gh-release (check/verify/dispatch) — copy if present
+    src_scripts = (
+        pathlib.Path(__file__).parent.parent.parent
+        / "gh-router"
+        / "subskills"
+        / "gh-release"
+        / "scripts"
+    )
+    if src_scripts.exists():
+        for p in src_scripts.iterdir():
+            if p.is_file():
+                try:
+                    write_file(
+                        base / "subskills" / "gh-release" / "scripts" / p.name,
+                        p.read_text(encoding="utf-8"),
+                        dry_run,
+                    )
+                    if not dry_run:
+                        (base / "subskills" / "gh-release" / "scripts" / p.name).chmod(0o755)
+                except Exception:
+                    pass
+    src_pr_scripts = (
+        pathlib.Path(__file__).parent.parent.parent
+        / "gh-router"
+        / "subskills"
+        / "pr-enhance"
+        / "scripts"
+    )
+    if src_pr_scripts.exists():
+        for p in src_pr_scripts.iterdir():
+            if p.is_file():
+                try:
+                    write_file(
+                        base / "subskills" / "pr-enhance" / "scripts" / p.name,
+                        p.read_text(encoding="utf-8"),
+                        dry_run,
+                    )
+                    if not dry_run and p.suffix == ".py":
+                        (base / "subskills" / "pr-enhance" / "scripts" / p.name).chmod(0o755)
+                except Exception:
+                    pass
 
 
 def infer_project_name(cwd: pathlib.Path) -> str:
@@ -835,18 +978,28 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
     write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
     write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     write_file(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run)
-    write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "01-bug_report.yml", ISSUE_BUG_REPORT_YML, dry_run)
-    write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "02-feature_request.yml", ISSUE_FEATURE_REQUEST_YML, dry_run)
+    write_file(
+        cwd / ".github" / "ISSUE_TEMPLATE" / "01-bug_report.yml", ISSUE_BUG_REPORT_YML, dry_run
+    )
+    write_file(
+        cwd / ".github" / "ISSUE_TEMPLATE" / "02-feature_request.yml",
+        ISSUE_FEATURE_REQUEST_YML,
+        dry_run,
+    )
     write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
     # migrate legacy markdown template (pre-YAML) — keep spine small
     legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
     if legacy_md.exists():
         if dry_run:
-            print(f"would remove legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stdout)
+            print(
+                f"would remove legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stdout
+            )
         else:
             try:
                 legacy_md.unlink()
-                print(f"removed legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stderr)
+                print(
+                    f"removed legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stderr
+                )
             except OSError:
                 pass
     contrib = CONTRIBUTING_MD_TMPL.format(project_name=project_name)
@@ -862,6 +1015,7 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
         "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
         dry_run,
     )
+    _write_gh_router(cwd, dry_run)
     patch_wt_hooks(cwd, dry_run)
 
 

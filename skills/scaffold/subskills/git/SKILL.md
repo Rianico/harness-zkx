@@ -22,8 +22,9 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name> --dry-r
 Pure-deterministic (no proofread, byte-identical):
 
 - `.releaserc.json` — conventional commits preset `conventionalcommits@8.0.0` (`writer@8.4.0`), `@semantic-release/npm` with `npmPublish: false` (publish disabled by default; enable per language — Node `private:false` + `NPM_TOKEN` to publish, Python/Rust omit `npm` and use language-native registry)
-- `.github/workflows/release.yml` — pinned `actions/checkout@93cb6e...` + `setup-node@a0853c...` (v5) + `setup-python@e797f8...` (v6), `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `release` job runs `scripts/changelog-unreleased.py clear` before `npx semantic-release` to hand off `## [Unreleased]`
-- `.github/workflows/changelog-check.yml` — on `pull_request` to `main` (required), `diff -q` vs `scripts/changelog-unreleased.py update`, `fail+comment` if stale
+- `.github/workflows/release.yml` — pinned `actions/checkout@93cb6e...` + `setup-node@a0853c...` (v5) + `setup-python@e797f8...` (v6) via `SHA_TABLE` (single source) + `setup-node` `zizmor: ignore[cache-poisoning]`, `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `release` job runs `scripts/changelog-unreleased.py clear` before `npx semantic-release` to hand off `## [Unreleased]`
+- `skills/gh-router` — router `gh-router` (`gh-release` + `pr-enhance` subskills, `GITHUB_TOKEN=$(gh auth token)` dispatch, `tmp/` ephemeral) — GitHub surface is `gh-router`, not standalone `pr-enhance`
+- `.github/workflows/changelog-check.yml` — on `pull_request` to `main` (required), `diff -q` vs `scripts/changelog-unreleased.py update`, `fail+comment` if stale — SHA pins from `SHA_TABLE` (`checkout v5`, `setup-python v6`, `github-script v8`)
 - `.githooks/pre-push` (deterministic source) + `.husky/pre-push` (delegation `exec .githooks/pre-push "$@"`) — `warn+block`, `cp before + update + diff`, hint `uv run python scripts/changelog-unreleased.py update && git add && git commit --amend` (both chmod 755; husky sets `core.hooksPath=.husky` so delegation keeps guard live)
 - `scripts/changelog-unreleased.py` — manages `## [Unreleased]` (`update` stages notes from `git log <last-tag>..HEAD`, `clear` strips it before release)
 - `commitlint.config.js` — `export default { extends: ['@commitlint/config-conventional'] }`
@@ -79,6 +80,7 @@ Reference index (all under `references/`, raw scrape in `references/semantic-rel
 | [ci-configuration](references/ci-configuration.md)             | CI requirements, auth tokens, GitHub Actions recipe, npx running, Node/Git versions | Verifying CI wiring or release.yml shape                          |
 
 ## Grilling
+
 ## Reporting Issues — model/user prompt
 
 When helping file an issue, infer intent then use the matching YAML form (`.github/ISSUE_TEMPLATE/01-bug_report.yml` for `bug`, `02-feature_request.yml` for `feat`): `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit` as style ref for bugs, then `gh issue create --template 01-bug_report.yml` / `--template 02-feature_request.yml`. The model must ask for any missing `body` required field of that form (bug: Summary/Environment/Repro/Expected/Actual required; feature: Problem/Proposal required) and render in form order. Prefer text over screenshots for code defects. Blank issues are disabled via `config.yml`; Q&A goes to Discussions.
