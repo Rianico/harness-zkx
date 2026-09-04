@@ -1,7 +1,7 @@
 # Semantic Release — Release Steps & Plugins
 
 Source: semantic-release **25.0.9** (scraped 2026-08-29) — <https://semantic-release.org/foundation/release-steps/> · <https://semantic-release.org/foundation/plugins/> · <https://semantic-release.org/foundation/how-it-works/>
-Raw: `$SKILL_DIR/subskills/git/references/semantic-release-raw/006-how-it-works.md` · `007-release-steps.md` · `008-plugins.md`
+Raw: `$SKILL_DIR/subskills/git-scaffolding/references/semantic-release-raw/006-how-it-works.md` · `007-release-steps.md` · `008-plugins.md`
 Lead: **release steps** — the fixed-order phases of one `semantic-release` run; plugins bind lifecycle hooks onto them.
 
 ## The core model

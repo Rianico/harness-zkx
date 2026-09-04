@@ -1,7 +1,7 @@
 # Semantic Release — Configuration
 
 Source: semantic-release **25.0.9** (scraped 2026-08-29) — <https://semantic-release.org/usage/configuration/>
-Raw: `$SKILL_DIR/subskills/git/references/semantic-release-raw/003-configuration.md`
+Raw: `$SKILL_DIR/subskills/git-scaffolding/references/semantic-release-raw/003-configuration.md`
 Lead: **configuration** — options, plugins, and release branches via config file, CLI arguments, or shareable configs. `.releaserc.json` is the scaffold's emitted form.
 
 ## Where config lives

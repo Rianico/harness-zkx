@@ -1,7 +1,7 @@
 # Semantic Release — Workflow Configuration & Recipes
 
 Source: semantic-release **25.0.9** (scraped 2026-08-29) — <https://semantic-release.org/foundation/workflow-configuration/> · <https://semantic-release.org/foundation/supported-branching/> · <https://semantic-release.org/recipes/release-workflow/>
-Raw: `$SKILL_DIR/subskills/git/references/semantic-release-raw/009-workflow-configuration.md` · `010-supported-branching.md` · `011-release-workflow.md` · `012-distribution-channels.md` · `013-maintenance-releases.md` · `014-pre-releases.md`
+Raw: `$SKILL_DIR/subskills/git-scaffolding/references/semantic-release-raw/009-workflow-configuration.md` · `010-supported-branching.md` · `011-release-workflow.md` · `012-distribution-channels.md` · `013-maintenance-releases.md` · `014-pre-releases.md`
 Lead: **branching** — release/maintenance/pre-release branches and distribution channels configured via the `branches` option.
 
 ## Branch types

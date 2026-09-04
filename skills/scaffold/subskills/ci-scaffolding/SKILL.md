@@ -1,5 +1,5 @@
 ---
-name: ci
+name: ci-scaffolding
 description: >-
   Git CI scaffolding with pinned GitHub Actions verify+release and on-demand dispatch. Use when wiring CI gates, retrofitting workflows, or standardizing verification. TRIGGER: ci scaffold, github actions, verify gate, release workflow
 metadata:
@@ -40,7 +40,7 @@ Matrix preview: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` (t
 
 1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant <node|python|rust>` (or `--dry-run`), optionally `--cwd`.
 2. Ensure `verify` precedes `release` via `needs: verify`; `release` holds only `write`/`id-token` perms (enforced by script template).
-3. Wire pre-merge gate docs: `CONTRIBUTING.md` → `pnpm run lint && pnpm run typecheck && pnpm test` (or `uv`/`cargo` equiv) — see `$SKILL_DIR/subskills/git/SKILL.md`.
+3. Wire pre-merge gate docs: `CONTRIBUTING.md` → `pnpm run lint && pnpm run typecheck && pnpm test` (or `uv`/`cargo` equiv) — see `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`.
 4. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` + `yamllint .github/workflows/release.yml` and `zizmor .github/workflows/release.yml`
 
 > [!tip] Verification — before merging workflow changes
@@ -54,7 +54,7 @@ If Dialog 3 selected coverage, add `--with-coverage --coverage-threshold <n>` to
 
 ## Relation to Other Subskills
 
-- Do not duplicate `.releaserc.json` / `CONTRIBUTING.md` / `commitlint.config.js` — canonical in `$SKILL_DIR/subskills/git/SKILL.md`.
+- Do not duplicate `.releaserc.json` / `CONTRIBUTING.md` / `commitlint.config.js` — canonical in `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`.
 - Runtime files (`pyproject.toml`, `rust-toolchain.toml`) stay canonical in their language subskills.
 
 ## Arguments
