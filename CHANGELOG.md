@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **scaffold:** add TypeScript flavor with lib/cli/pi-extension variants
 - **scaffold:** add issue templates, npm publish toggle and release polish
 - **scaffold:** explore project first then recommend combos
 - **scaffold:** add git semantic-release workflow
@@ -110,6 +111,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **scaffold:** patch releaserc assets to pnpm-lock.yaml in TS flavor
+- **scaffold:** move TS smoke test to tests/ layout
+- **scaffold:** single-source Node version from NODE_VERSION_NUM
+- **scaffold:** drop .agents/ from gitignore additions
 - **ci:** prune continuous-learning tests and sync changelog
 - **ci:** bump GH Actions to Node 24 in workflows
 - **docs:** github.com is not rust for auto-detect
@@ -142,6 +147,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- update changelog unreleased section
 - **changelog:** update Unreleased for docs/skills refactor
 - **adr:** allow high-signal comments via curated allowlist — replace total ban (ADR-0014)
 - **gotcha:** add GitHub access guard preferring gh CLI
