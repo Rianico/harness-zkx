@@ -36,9 +36,9 @@ Variants (`--ts-variant`, default `lib`):
 | `cli`          | `bin: {<name>: ./src/cli.ts}`, `chmod +x` (shebang `pnpm dlx tsx`) | `src/cli.ts` (+`index.ts`) |
 | `pi-extension` | `pi.extensions: ["./src/index.ts"]`, no build step                 | `src/index.ts`             |
 
-Every variant ships `src/index.ts` + `src/index.test.ts` (vitest smoke test) so `pnpm test` is green day one — same precedent as `cargo new`.
+Every variant ships `src/index.ts` + `tests/index.test.ts` (vitest smoke test, `tests/` layout per `branch-worktree-pr`) so `pnpm test` is green day one — same precedent as `cargo new`.
 
-Pure-deterministic: `.nvmrc` (`24`), `tsconfig.json` (`strict`, ESM `NodeNext`, `ES2022`, `types: ["node"]` — explicit because pnpm's symlinked `@types` defeats auto-inclusion), `biome.json` (`indentStyle: space`, 2-wide — matches emitted bytes so `biome check` self-passes), `src/*.ts`, `vitest.config.ts` (coverage only), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `node_modules/` + `dist/`).
+Pure-deterministic: `.nvmrc` (`24`), `tsconfig.json` (`strict`, ESM `NodeNext`, `ES2022`, `types: ["node"]` — explicit because pnpm's symlinked `@types` defeats auto-inclusion; `include: ["src", "tests"]`), `biome.json` (`indentStyle: space`, 2-wide — matches emitted bytes so `biome check` self-passes), `src/*.ts` + `tests/*.ts`, `vitest.config.ts` (coverage only), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `node_modules/` + `dist/`).
 
 Mixed (script warns → proofread): `package.json` (`{{project_name}}` normalized to lowercase kebab-case, description), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
 

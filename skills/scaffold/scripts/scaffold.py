@@ -577,11 +577,11 @@ def build_tsconfig() -> str:
             "noEmit": True,
             "types": ["node"],
         },
-        "include": ["src"],
+        "include": ["src", "tests"],
     }
     rendered = json.dumps(tsconfig, indent=2)
     # biome collapses short arrays — match its bytes so `biome check` is green
-    rendered = rendered.replace('[\n    "src"\n  ]', '["src"]')
+    rendered = rendered.replace('[\n    "src",\n    "tests"\n  ]', '["src", "tests"]')
     rendered = rendered.replace('[\n      "node"\n    ]', '["node"]')
     return rendered + "\n"
 
@@ -628,7 +628,7 @@ main();
 
 INDEX_TEST_TS_TMPL = """\
 import {{ describe, expect, it }} from "vitest";
-import {{ main }} from "./index.js";
+import {{ main }} from "../src/index.js";
 
 describe("main", () => {{
   it("runs without throwing", () => {{
@@ -1280,7 +1280,7 @@ def do_typescript(
         INDEX_TS_TMPL.format(project_name=npm_name),
         dry_run,
     )
-    write_file(cwd / "src" / "index.test.ts", INDEX_TEST_TS_TMPL.format(), dry_run)
+    write_file(cwd / "tests" / "index.test.ts", INDEX_TEST_TS_TMPL.format(), dry_run)
     if ts_variant == "cli":
         cli_path = cwd / "src" / "cli.ts"
         write_file(cli_path, CLI_TS_TMPL.format(), dry_run)
