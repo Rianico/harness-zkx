@@ -4,14 +4,14 @@ description: >-
   Deterministic project scaffolding for Git, Python, Rust, TypeScript, and CI — conventional commits, semantic-release, and runtime wiring. Use when initializing or retrofitting a repo, wiring release flow, or selecting a toolchain. TRIGGER: scaffold, init project, retrofit, semantic-release, conventional commits
 arguments: flavor
 argument-hint: |-
-  git -- loads conventional commits, semantic-release, changelog, and branch hygiene
-  python -- loads uv, .python-version, pyproject, and pytest wiring
-  rust -- loads Cargo, rust-toolchain, fmt/clippy/test wiring
-  typescript -- loads pnpm, .nvmrc, package.json/tsconfig, and biome/vitest wiring (lib/cli/pi-extension)
-  ci -- loads GitHub Actions verify+release and on-demand dispatch
+  git-scaffolding -- loads conventional commits, semantic-release, changelog, and branch hygiene
+  python-scaffolding -- loads uv, .python-version, pyproject, and pytest wiring
+  rust-scaffolding -- loads Cargo, rust-toolchain, fmt/clippy/test wiring
+  typescript-scaffolding -- loads pnpm, .nvmrc, package.json/tsconfig, and biome/vitest wiring (lib/cli/pi-extension)
+  ci-scaffolding -- loads GitHub Actions verify+release and on-demand dispatch
   omitted -- loads the 80/20 spine, GDD wiring, and dispatch registry
 metadata:
-  manage: [git, python, rust, typescript, ci]
+  manage: [git-scaffolding, python-scaffolding, rust-scaffolding, typescript-scaffolding, ci-scaffolding]
 disable-model-invocation: true
 ---
 
@@ -44,13 +44,13 @@ Authority: scaffold skill owns scaffolding decisions; project owns files. Writer
 
 Read the subskill that matches the projection you need. Use `Read` (not `Skill` tool — subskills hidden from discovery).
 
-| Flavor       | Subskill                                   | When to load                                                                                                                         |
-| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `git`        | `$SKILL_DIR/subskills/git/SKILL.md`        | Conventional commits, semantic-release, changelog, `.gitignore`, `AGENTS.md` patch — [git](subskills/git/SKILL.md)                   |
-| `python`     | `$SKILL_DIR/subskills/python/SKILL.md`     | `uv` + `.python-version` + `pyproject.toml` wiring — [python](subskills/python/SKILL.md)                                             |
-| `rust`       | `$SKILL_DIR/subskills/rust/SKILL.md`       | `rust-toolchain.toml` + `cargo fmt/clippy/test` wiring — [rust](subskills/rust/SKILL.md)                                             |
-| `typescript` | `$SKILL_DIR/subskills/typescript/SKILL.md` | `pnpm` + `.nvmrc` + `package.json`/`tsconfig.json` wiring (`lib`/`cli`/`pi-extension`) — [typescript](subskills/typescript/SKILL.md) |
-| `ci`         | `$SKILL_DIR/subskills/ci/SKILL.md`         | GitHub Actions verify+release + on-demand dispatch — [ci](subskills/ci/SKILL.md)                                                     |
+| Flavor       | Subskill                                               | When to load                                                                                                                                                 |
+| ------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `git`        | `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`        | Conventional commits, semantic-release, changelog, `.gitignore`, `AGENTS.md` patch — [git-scaffolding](subskills/git-scaffolding/SKILL.md)                   |
+| `python`     | `$SKILL_DIR/subskills/python-scaffolding/SKILL.md`     | `uv` + `.python-version` + `pyproject.toml` wiring — [python-scaffolding](subskills/python-scaffolding/SKILL.md)                                             |
+| `rust`       | `$SKILL_DIR/subskills/rust-scaffolding/SKILL.md`       | `rust-toolchain.toml` + `cargo fmt/clippy/test` wiring — [rust-scaffolding](subskills/rust-scaffolding/SKILL.md)                                             |
+| `typescript` | `$SKILL_DIR/subskills/typescript-scaffolding/SKILL.md` | `pnpm` + `.nvmrc` + `package.json`/`tsconfig.json` wiring (`lib`/`cli`/`pi-extension`) — [typescript-scaffolding](subskills/typescript-scaffolding/SKILL.md) |
+| `ci`         | `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`         | GitHub Actions verify+release + on-demand dispatch — [ci-scaffolding](subskills/ci-scaffolding/SKILL.md)                                                     |
 
 Omitted flavor loads only the spine above. For interactive scaffolding, run **Explore First** then **Grilling** — explore detects, grilling confirms only ambiguous leaves.
 
@@ -109,7 +109,7 @@ Selection rule: **preset when confident, ask only when ambiguous.** If `inferred
 | **Existing Rust, no scaffold** (`Cargo.toml` present)                                        | 1. ✅ Retrofit Rust + CI — `rust` + `ci --ci-variant rust` + `git` (reason: mirror python pattern) · 2. With coverage — add `--with-coverage --coverage-threshold 80` (reason: opt-in llvm-cov)                                                                                                                                                                                                                                  |
 | **Python scaffold stale** (has `.releaserc.json` but missing `changelog-check.yml` or hooks) | 1. ✅ Repair git contract — `git --dry-run` then `git` (reason: changelog guard stale, `--dry-run` shows drift) · 2. Add coverage if `python.coverage==false` — `python --with-coverage 80` (reason: coverage absent)                                                                                                                                                                                                            |
 | **Scaffold complete, no coverage** (`git_contract.complete && !python.coverage`)             | 1. ✅ Add 80% coverage — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` (reason: cheapest rigor bump) · 2. Add 90% strict (reason: high-rigor variant) · 3. Hold — keep as-is (reason: tests without gate is valid)                                                                                                                                                                                      |
-| **Polyglot / .tool-versions**                                                                | 1. ✅ Matrix CI — `all --with-coverage 80` + `ci --matrix` note in `ci/SKILL.md` (reason: `polyglot==true`, needs `asdf install` sync) · 2. Single-variant CI — `ci --ci-variant python` (reason: cheapest, one verify job)                                                                                                                                                                                                      |
+| **Polyglot / .tool-versions**                                                                | 1. ✅ Matrix CI — `all --with-coverage 80` + `ci --matrix` note in `ci-scaffolding/SKILL.md` (reason: `polyglot==true`, needs `asdf install` sync) · 2. Single-variant CI — `ci --ci-variant python` (reason: cheapest, one verify job)                                                                                                                                                                                          |
 | **CI variant mismatch** (`Cargo.toml` + `ci.variant==node`)                                  | 1. ✅ Fix variant — `ci --ci-variant rust` (reason: runtime is rust but workflow is node) · 2. Matrix — `ci --matrix` (reason: if both runtimes present)                                                                                                                                                                                                                                                                         |
 
 > [!warning] Anti-pattern
@@ -265,12 +265,12 @@ After Explore + Grilling, map **preset + confirmed** answers to the deterministi
 | Rust + Tests + 90% + Yes           | `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --with-coverage --coverage-threshold 90` + `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant rust --with-coverage --coverage-threshold 90`                                                                                                           |
 | Python + Tests + No coverage + Yes | `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>` (no flag) + `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --project-name <name>`                                                                                                                                 |
 | Any shape + No Tests + — + Yes     | Skip `--with-coverage` entirely — coverage flag is inert without tests; generator omits `pytest-cov`/`llvm-cov` wiring                                                                                                                                                                                                  |
-| Polyglot Python+Rust + 80% + Yes   | `uv run $SKILL_DIR/scripts/scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --with-coverage` and matrix note in `$SKILL_DIR/subskills/ci/SKILL.md`                                                                            |
+| Polyglot Python+Rust + 80% + Yes   | `uv run $SKILL_DIR/scripts/scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --with-coverage` and matrix note in `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`                                                                |
 | Any + Formatter skipped            | Generator still writes file (formatter config is deterministic); CI verify step for that gate is omitted by the caller — file remains byte-identical, gate is optional leaf                                                                                                                                             |
 
 > Formatter/linter/type/test are always wired in the flavor file (one concept one location). Skipping a gate means not running it, not deleting its config — keeps the spine small. Coverage is the only leaf that changes file bytes (`pyproject.toml` `pytest-cov` + `[tool.coverage.*]`, Rust `llvm-cov` note, CI `*COVERAGE_YML`). All other leaves are verification choices, not artifact changes.
 
-Omitted grilling (direct dispatch) defaults to: Tests=on, Coverage=off, CI=Yes, threshold 80 — so `/scaffold python` without grilling still gets the current byte-identical output.
+Omitted grilling (direct dispatch) defaults to: Tests=on, Coverage=off, CI=Yes, threshold 80 — so `/scaffold python-scaffolding` without grilling still gets the current byte-identical output.
 
 ## Trade-offs
 

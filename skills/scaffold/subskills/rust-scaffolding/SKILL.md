@@ -1,5 +1,5 @@
 ---
-name: rust
+name: rust-scaffolding
 description: >-
   Rust project scaffolding with Cargo, rust-toolchain, and fmt/clippy/test wiring. Use when initializing or retrofitting a Rust repo or selecting its toolchain. TRIGGER: rust scaffold, cargo, rust-toolchain, clippy
 metadata:
@@ -50,5 +50,5 @@ If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-cove
 
 ## Relation to Other Subskills
 
-- Git contract stays canonical in `$SKILL_DIR/subskills/git/SKILL.md`; Rust does not redeclare it.
-- CI wiring for Rust lives in `$SKILL_DIR/subskills/ci/SKILL.md` — Rust CI job runs `cargo test` inside the shared verify gate.
+- Git contract stays canonical in `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`; Rust does not redeclare it.
+- CI wiring for Rust lives in `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md` — Rust CI job runs `cargo test` inside the shared verify gate.

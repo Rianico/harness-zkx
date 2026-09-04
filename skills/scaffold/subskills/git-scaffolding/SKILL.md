@@ -1,5 +1,5 @@
 ---
-name: git
+name: git-scaffolding
 description: >-
   Deterministic Git scaffolding — conventional commits, semantic-release, changelog, and branch hygiene. Use when wiring release flow, commit linting, or retrofitting Git artifacts. TRIGGER: git scaffold, semantic-release, conventional commits, commitlint
 metadata:
@@ -8,7 +8,7 @@ metadata:
 
 # Git Scaffold
 
-Migrated from `~/.pi/agent/prompts/scaffold-git.md`. Explicit human authority (`/scaffold git`) to create or retrofit Git scaffolding. Goal (GDD): every project gets the same deterministic artifacts so `feat`/`fix` intent maps to one shared contract (BDD) and env truth is the gate (EDD).
+Migrated from `~/.pi/agent/prompts/scaffold-git.md`. Explicit human authority (`/scaffold git-scaffolding`) to create or retrofit Git scaffolding. Goal (GDD): every project gets the same deterministic artifacts so `feat`/`fix` intent maps to one shared contract (BDD) and env truth is the gate (EDD).
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
@@ -65,7 +65,7 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 - `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update` via `.githooks/pre-push` + `.husky/pre-push` delegation) and `changelog-check.yml` (`pull_request` required); `release.yml` (`release` job) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections (`@semantic-release/changelog` + `@semantic-release/npm` (`npmPublish: false` by default) + `@semantic-release/git`). Do not hand-edit versioned sections.
 - `wt` worktrees: if `.config/wt.toml` exists, `scaffold` ensures `[post-start] setup-hooks = "git config core.hooksPath .githooks"` so `wt switch --create` clones get live pre-push without manual `git config`.
 - `@semantic-release/git` bumps `package.json` + `CHANGELOG.md` + commits + tags atomically; no manual `git tag` or manifest bump.
-- For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci/SKILL.md`.
+- For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`.
 
 ## References
 

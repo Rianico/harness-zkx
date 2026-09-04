@@ -1,5 +1,5 @@
 ---
-name: python
+name: python-scaffolding
 description: >-
   Python project scaffolding with uv, .python-version, pyproject, and verification wiring. Use when initializing or retrofitting a Python repo or selecting its toolchain. TRIGGER: python scaffold, uv, pyproject, pytest
 metadata:
@@ -56,5 +56,5 @@ If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-cove
 
 ## Relation to Other Subskills
 
-- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git/SKILL.md`.
-- CI wiring belongs to `$SKILL_DIR/subskills/ci/SKILL.md`; Python CI job runs `uv run pytest` inside the shared verify gate.
+- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`.
+- CI wiring belongs to `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`; Python CI job runs `uv run pytest` inside the shared verify gate.

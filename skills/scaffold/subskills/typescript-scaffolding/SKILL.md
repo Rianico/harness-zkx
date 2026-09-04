@@ -1,5 +1,5 @@
 ---
-name: typescript
+name: typescript-scaffolding
 description: >-
   TypeScript project scaffolding with pnpm, .nvmrc, package.json/tsconfig, and biome/vitest wiring. Use when initializing or retrofitting a TS repo (lib, CLI, or pi-extension) or selecting its toolchain. TRIGGER: typescript scaffold, pnpm, package.json, tsconfig, vitest, pi-extension
 metadata:
@@ -68,6 +68,6 @@ If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-cove
 
 ## Relation to Other Subskills
 
-- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git/SKILL.md`. The TS flavor patches `.releaserc.json` `assets` deterministically (`package-lock.json` → `pnpm-lock.yaml`) because `package.json` declares pnpm — no manual proofread-swap.
-- CI wiring belongs to `$SKILL_DIR/subskills/ci/SKILL.md`; the Node verify job runs `corepack enable` + `pnpm install` + `pnpm run lint && pnpm run typecheck && pnpm test` on Node 24 inside the shared verify gate.
+- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`. The TS flavor patches `.releaserc.json` `assets` deterministically (`package-lock.json` → `pnpm-lock.yaml`) because `package.json` declares pnpm — no manual proofread-swap.
+- CI wiring belongs to `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`; the Node verify job runs `corepack enable` + `pnpm install` + `pnpm run lint && pnpm run typecheck && pnpm test` on Node 24 inside the shared verify gate.
 - Vite/React apps are out of scope (`Other` → `pnpm create vite` upstream). This flavor embeds minimal `lib`/`cli`/`pi-extension` templates only.

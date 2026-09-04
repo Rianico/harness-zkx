@@ -1,7 +1,7 @@
 # Semantic Release — CI Configuration & Running
 
 Source: semantic-release **25.0.9** (scraped 2026-08-29) — <https://semantic-release.org/usage/ci-configuration/> · <https://semantic-release.org/recipes/ci-configurations/github-actions/> · <https://semantic-release.org/usage/running/> · <https://semantic-release.org/support/git-version/> · <https://semantic-release.org/support/node-version/>
-Raw: `$SKILL_DIR/subskills/git/references/semantic-release-raw/004-ci-configuration.md` · `015-github-actions.md` · `005-running.md` · `016-git-version.md` · `017-node-version.md` · `018-faq.md`
+Raw: `$SKILL_DIR/subskills/git-scaffolding/references/semantic-release-raw/004-ci-configuration.md` · `015-github-actions.md` · `005-running.md` · `016-git-version.md` · `017-node-version.md` · `018-faq.md`
 Lead: **CI** — run semantic-release only after all tests pass, with Git + registry auth; npx invocation; version requirements.
 
 ## Two core requirements
