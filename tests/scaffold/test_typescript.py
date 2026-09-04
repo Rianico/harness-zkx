@@ -80,7 +80,7 @@ def test_tsconfig_base():
     assert opts["module"] == "NodeNext"
     assert opts["target"] == "ES2022"
     assert opts["types"] == ["node"]  # explicit: pnpm symlinks defeat auto-inclusion
-    assert tsconfig["include"] == ["src"]
+    assert tsconfig["include"] == ["src", "tests"]  # tests/ layout per branch-worktree-pr
 
 
 def test_biome_self_passing_style():
