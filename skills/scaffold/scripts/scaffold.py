@@ -11,6 +11,7 @@ Usage:
   uv run $SKILL_DIR/scripts/scaffold.py --flavor git [--project-name NAME] [--dry-run]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor python [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor rust [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
+  uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript [--ts-variant lib|cli|pi-extension] [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor ci [--project-name NAME] [--dry-run] [--with-coverage]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor all [--project-name NAME] [--dry-run] [--with-coverage]
 
@@ -93,10 +94,11 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 22}
-      - run: npm ci
-      - run: npm audit signatures
-      - run: npm test
+        with: {node-version: 24}
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm audit --audit-level high
+      - run: pnpm run lint && pnpm run typecheck && pnpm test
   release:
     needs: verify
     runs-on: ubuntu-latest
@@ -109,14 +111,14 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 22}
+        with: {node-version: 24}
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
         with: {python-version: "3.12"}
       - name: Clear Unreleased section (handoff to semantic-release)
         run: python scripts/changelog-unreleased.py clear
-      - run: npm ci
-      - run: npm audit signatures
-      - run: npx semantic-release
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm dlx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HUSKY: "0"
@@ -412,7 +414,7 @@ Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` 
 - Features: state problem + proposal at minimum; alternatives optional.
 Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
 ## Before PR
-`npm run lint && npm run typecheck && npm test` must pass. See `AGENTS.md` for agent rules.
+`pnpm run lint && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
 """
 CONTRIBUTING_MD_TMPL_PYTHON = """\
 # Contributing to {project_name}
@@ -454,8 +456,11 @@ GITIGNORE_GIT = [".lsz/", ".pi/", ".agents/", "coverage/"]
 
 GITIGNORE_PYTHON_EXTRA = ["__pycache__/", ".venv/"]
 GITIGNORE_RUST_EXTRA = ["target/"]
+GITIGNORE_TS_EXTRA = ["node_modules/", "dist/"]
 
 PYTHON_VERSION = "3.14\n"
+
+NODE_VERSION = "24\n"
 
 
 def build_pyproject(project_name: str, with_coverage: bool, threshold: int) -> str:
@@ -511,6 +516,146 @@ edition = "2021"
 [dependencies]
 """
 
+
+def _ts_normalize_name(project_name: str) -> str:
+    return project_name.lower().replace(" ", "-").replace("_", "-")
+
+
+def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) -> str:
+    npm_name = _ts_normalize_name(project_name)
+    scripts: dict[str, str] = {
+        "lint": "biome check .",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+    }
+    dev_deps: dict[str, str] = {
+        "typescript": ">=5.6",
+        "@biomejs/biome": ">=2",
+        "vitest": ">=3",
+        "tsx": ">=4",
+        "@types/node": ">=24",
+    }
+    if with_coverage:
+        scripts["coverage"] = "vitest run --coverage"
+        dev_deps["@vitest/coverage-v8"] = ">=3"
+    pkg: dict[str, object] = {
+        "name": npm_name,
+        "version": "0.1.0",
+        "description": "",
+        "type": "module",
+        "packageManager": "pnpm@10.0.0",
+        "engines": {"node": ">=24"},
+        "scripts": scripts,
+        "devDependencies": dev_deps,
+    }
+    if ts_variant == "cli":
+        pkg["bin"] = {npm_name: "./src/cli.ts"}
+    elif ts_variant == "pi-extension":
+        pkg["pi"] = {"extensions": ["./src/index.ts"]}
+    else:
+        pkg["main"] = "./src/index.ts"
+        pkg["exports"] = {".": "./src/index.ts"}
+    return json.dumps(pkg, indent=2) + "\n"
+
+
+def build_tsconfig() -> str:
+    tsconfig: dict[str, object] = {
+        "compilerOptions": {
+            "target": "ES2022",
+            "module": "NodeNext",
+            "moduleResolution": "NodeNext",
+            "strict": True,
+            "verbatimModuleSyntax": True,
+            "skipLibCheck": True,
+            "noEmit": True,
+            "types": ["node"],
+        },
+        "include": ["src"],
+    }
+    rendered = json.dumps(tsconfig, indent=2)
+    # biome collapses short arrays — match its bytes so `biome check` is green
+    rendered = rendered.replace('[\n    "src"\n  ]', '["src"]')
+    rendered = rendered.replace('[\n      "node"\n    ]', '["node"]')
+    return rendered + "\n"
+
+
+BIOME_JSON = """\
+{
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "linter": {
+    "enabled": true
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  }
+}
+"""
+
+VITEST_CONFIG_TMPL = """\
+import {{ defineConfig }} from "vitest/config";
+
+export default defineConfig({{
+  test: {{
+    coverage: {{
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      thresholds: {{ lines: {threshold}, functions: {threshold} }},
+    }},
+  }},
+}});
+"""
+
+INDEX_TS_TMPL = """\
+export function main(): void {{
+  console.log("hello from {project_name}");
+}}
+
+main();
+"""
+
+INDEX_TEST_TS_TMPL = """\
+import {{ describe, expect, it }} from "vitest";
+import {{ main }} from "./index.js";
+
+describe("main", () => {{
+  it("runs without throwing", () => {{
+    expect(() => main()).not.toThrow();
+  }});
+}});
+"""
+
+CLI_TS_TMPL = """\
+#!/usr/bin/env -S pnpm dlx tsx
+export function run(args: readonly string[]): void {{
+  console.log(`args: ${{args.join(" ")}}`);
+}}
+
+run(process.argv.slice(2));
+"""
+
+CONTRIBUTING_MD_TMPL_TYPESCRIPT = """\
+# Contributing to {project_name}
+## Conventional commits
+- `feat[(scope)]: description` → MINOR, `fix[(scope)]:` → PATCH, `feat!:` / `BREAKING CHANGE:` → MAJOR
+- Other types `docs|style|refactor|perf|test|build|ci|chore|revert` hidden unless `!`
+- Scope is noun, description imperative present, lowercase, no period, ≤72 chars
+- Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
+## Changelog
+`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types only appear when `!`/`BREAKING CHANGE`.
+## Reporting Issues
+Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (blank issues disabled).
+- Bugs: paste-complete, prefer text over screenshots.
+- Features: state problem + proposal at minimum; alternatives optional.
+## Before PR
+`pnpm run lint && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
+"""
+
 CI_PYTHON_VERIFY_YML = """\
 name: Verify and Release
 on:
@@ -543,7 +688,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 22}
+        with: {node-version: 24}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -583,7 +728,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 22}
+        with: {node-version: 24}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -621,7 +766,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 22}
+        with: {node-version: 24}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -660,7 +805,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 22}
+        with: {node-version: 24}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -1088,6 +1233,77 @@ def do_rust(
         )
 
 
+def do_typescript(
+    cwd: pathlib.Path,
+    project_name: str,
+    dry_run: bool,
+    ts_variant: str,
+    with_coverage: bool,
+    threshold: int,
+) -> None:
+    npm_name = _ts_normalize_name(project_name)
+    if npm_name != project_name:
+        print(
+            f"WARNING: npm package name normalized to '{npm_name}' (from '{project_name}') — proofread package.json name.",
+            file=sys.stderr,
+        )
+    write_file(cwd / ".nvmrc", NODE_VERSION, dry_run)
+    pkg_json = build_package_json(project_name, ts_variant, with_coverage)
+    warn = "mixed: {{project_name}} + description — proofread package name and description."
+    if with_coverage:
+        warn += f" + coverage @vitest/coverage-v8 {threshold}%"
+    write_file(
+        cwd / "package.json",
+        pkg_json,
+        dry_run,
+        warn_mixed=warn,
+    )
+    write_file(cwd / "tsconfig.json", build_tsconfig(), dry_run)
+    write_file(cwd / "biome.json", BIOME_JSON, dry_run)
+    write_file(
+        cwd / "src" / "index.ts",
+        INDEX_TS_TMPL.format(project_name=npm_name),
+        dry_run,
+    )
+    write_file(cwd / "src" / "index.test.ts", INDEX_TEST_TS_TMPL.format(), dry_run)
+    if ts_variant == "cli":
+        cli_path = cwd / "src" / "cli.ts"
+        write_file(cli_path, CLI_TS_TMPL.format(), dry_run)
+        if not dry_run:
+            try:
+                cli_path.chmod(0o755)
+            except OSError:
+                pass
+    if with_coverage:
+        write_file(
+            cwd / "vitest.config.ts",
+            VITEST_CONFIG_TMPL.format(threshold=threshold),
+            dry_run,
+        )
+        print(
+            f"NOTE: TypeScript coverage wired — run `pnpm run coverage` (fail_under lines/functions {threshold}%)",
+            file=sys.stderr,
+        )
+    append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
+    patch_agents(
+        cwd / "AGENTS.md",
+        "### Runtime\nTypeScript: pnpm + .nvmrc (24), verify via biome/tsc/vitest; see package.json\n",
+        dry_run,
+    )
+    contrib_ts = CONTRIBUTING_MD_TMPL_TYPESCRIPT.format(project_name=project_name)
+    write_file(
+        cwd / "CONTRIBUTING.md",
+        contrib_ts,
+        dry_run,
+        warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
+    )
+    if ts_variant == "pi-extension":
+        print(
+            "NOTE: pi-extension entry is ./src/index.ts (pi loads .ts directly, no build step) — proofread package.json `pi.extensions` path.",
+            file=sys.stderr,
+        )
+
+
 def do_ci(
     cwd: pathlib.Path, dry_run: bool, variant: str, with_coverage: bool, threshold: int
 ) -> None:
@@ -1108,8 +1324,9 @@ def do_ci(
     else:
         content = RELEASE_YML
         if with_coverage:
+            content = content.replace("- run: pnpm test", "- run: pnpm run coverage")
             print(
-                "NOTE: Node coverage gate not auto-wired — add `c8 --check-coverage --lines 80` to verify job",
+                "NOTE: Node/TS coverage runs `pnpm run coverage` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
                 file=sys.stderr,
             )
     write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
@@ -1138,6 +1355,9 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         "Cargo.toml": exists("Cargo.toml"),
         "rust-toolchain.toml": exists("rust-toolchain.toml"),
         "package.json": exists("package.json"),
+        ".nvmrc": exists(".nvmrc"),
+        "tsconfig.json": exists("tsconfig.json"),
+        "biome.json": exists("biome.json"),
         "package-lock.json": exists("package-lock.json"),
         "pnpm-lock.yaml": exists("pnpm-lock.yaml"),
         ".tool-versions": exists(".tool-versions"),
@@ -1159,6 +1379,7 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
     changelog = read_text("CHANGELOG.md")
     tool_versions = read_text(".tool-versions")
     pkg_json = read_text("package.json")
+    vitest_config = read_text("vitest.config.ts")
 
     python_present = files["pyproject.toml"] or files[".python-version"]
     rust_present = files["Cargo.toml"] or files["rust-toolchain.toml"]
@@ -1179,7 +1400,30 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         except ValueError:
             python_coverage_threshold = None
     rust_coverage = "llvm-cov" in release_yml or has_content("Cargo.toml", r"llvm-cov")
-    ci_coverage = "--cov" in release_yml or "llvm-cov" in release_yml or "fail-under" in release_yml
+    ci_coverage = (
+        "--cov" in release_yml
+        or "llvm-cov" in release_yml
+        or "fail-under" in release_yml
+        or "pnpm run coverage" in release_yml
+    )
+    ts_coverage = "coverage" in vitest_config or "@vitest/coverage" in pkg_json
+    ts_coverage_threshold: int | None = None
+    m_ts = re.search(r"lines:\s*(\d+)", vitest_config)
+    if m_ts:
+        try:
+            ts_coverage_threshold = int(m_ts.group(1))
+        except ValueError:
+            ts_coverage_threshold = None
+    ts_variant: str | None
+    if node_present:
+        if '"extensions"' in pkg_json and '"pi"' in pkg_json:
+            ts_variant = "pi-extension"
+        elif '"bin"' in pkg_json:
+            ts_variant = "cli"
+        else:
+            ts_variant = "lib"
+    else:
+        ts_variant = None
 
     ci_variant: str | None = None
     if files[".github/workflows/release.yml"]:
@@ -1223,11 +1467,11 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
 
     verify_gates: dict[str, bool] = {
         "formatter": bool(
-            re.search(r"ruff.*format|cargo fmt|prettier", pyproject + release_yml + pkg_json)
+            re.search(r"ruff.*format|cargo fmt|prettier|biome", pyproject + release_yml + pkg_json)
         ),
         "linter": bool(
             re.search(
-                r"ruff check|clippy|eslint", pyproject + release_yml + pkg_json, re.IGNORECASE
+                r"ruff check|clippy|eslint|biome", pyproject + release_yml + pkg_json, re.IGNORECASE
             )
         ),
         "typecheck": bool(
@@ -1269,6 +1513,12 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             "present": rust_present,
             "coverage": rust_coverage,
         },
+        "typescript": {
+            "present": node_present and files["tsconfig.json"],
+            "coverage": ts_coverage,
+            "threshold": ts_coverage_threshold,
+            "variant": ts_variant,
+        },
         "ci": {
             "present": files[".github/workflows/release.yml"],
             "variant": ci_variant,
@@ -1301,7 +1551,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Deterministic scaffold generator")
     ap.add_argument(
         "--flavor",
-        choices=["git", "python", "rust", "ci", "all"],
+        choices=["git", "python", "rust", "typescript", "ci", "all"],
         required=False,
         default=None,
         help="flavor to scaffold",
@@ -1318,11 +1568,17 @@ def main() -> int:
         default="node",
         help="CI verify variant (default: node)",
     )
+    ap.add_argument(
+        "--ts-variant",
+        choices=["lib", "cli", "pi-extension"],
+        default="lib",
+        help="TypeScript project variant (default: lib)",
+    )
     ap.add_argument("--cwd", default=".", help="target directory (default: .)")
     ap.add_argument(
         "--with-coverage",
         action="store_true",
-        help="wire coverage gate (pytest-cov / cargo llvm-cov)",
+        help="wire coverage gate (pytest-cov / cargo llvm-cov / vitest coverage)",
     )
     ap.add_argument(
         "--coverage-threshold",
@@ -1365,6 +1621,8 @@ def main() -> int:
         do_python(cwd, project_name, dry_run, with_coverage, threshold)
     if flavor in ("rust", "all"):
         do_rust(cwd, project_name, dry_run, with_coverage, threshold)
+    if flavor in ("typescript", "all"):
+        do_typescript(cwd, project_name, dry_run, args.ts_variant, with_coverage, threshold)
     if flavor == "ci":
         do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold)
 

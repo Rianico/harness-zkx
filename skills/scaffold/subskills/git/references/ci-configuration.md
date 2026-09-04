@@ -88,4 +88,4 @@ Key facts:
 - **Branch protection:** the auto-populated `GITHUB_TOKEN` cannot push when branch protection is enabled on the target branch — use a GitHub App token (`create-github-app-token`); avoid PATs (broad security risk).
 - **Publish pipeline Node version** can differ from verification jobs, but must meet the Node requirement.
 
-> Scaffold note: `release.yml` emits verify (read) → release (write + id-token, `needs: verify`) with pinned SHAs, `npm ci` + `npm audit signatures` + `npm test` gates, and `npx semantic-release` with `GITHUB_TOKEN`. On-demand via `repository_dispatch`/`workflow_dispatch`. Regenerate from `scaffold.py`.
+> Scaffold note: `release.yml` emits verify (read) → release (write + id-token, `needs: verify`) with pinned SHAs, `pnpm install` + `pnpm audit` + `pnpm run lint && pnpm run typecheck && pnpm test` gates (Node 24), and `pnpm dlx semantic-release` with `GITHUB_TOKEN`. On-demand via `repository_dispatch`/`workflow_dispatch`. Regenerate from `scaffold.py`.

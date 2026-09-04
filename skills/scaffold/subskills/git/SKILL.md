@@ -22,7 +22,7 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name> --dry-r
 Pure-deterministic (no proofread, byte-identical):
 
 - `.releaserc.json` — conventional commits preset `conventionalcommits@8.0.0` (`writer@8.4.0`), `@semantic-release/npm` with `npmPublish: false` (publish disabled by default; enable per language — Node `private:false` + `NPM_TOKEN` to publish, Python/Rust omit `npm` and use language-native registry)
-- `.github/workflows/release.yml` — pinned `actions/checkout@93cb6e...` + `setup-node@a0853c...` (v5) + `setup-python@e797f8...` (v6) via `SHA_TABLE` (single source) + `setup-node` `zizmor: ignore[cache-poisoning]`, `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `release` job runs `scripts/changelog-unreleased.py clear` before `npx semantic-release` to hand off `## [Unreleased]`
+- `.github/workflows/release.yml` — pinned `actions/checkout@93cb6e...` + `setup-node@a0853c...` (v5) + `setup-python@e797f8...` (v6) via `SHA_TABLE` (single source) + `setup-node` `zizmor: ignore[cache-poisoning]`, `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `verify` runs `corepack enable` + `pnpm install` + `pnpm run lint && pnpm run typecheck && pnpm test` (Node 24); `release` job runs `scripts/changelog-unreleased.py clear` before `pnpm dlx semantic-release` to hand off `## [Unreleased]`
 - `skills/gh-router` — router `gh-router` (`gh-release` + `pr-enhance` subskills, `GITHUB_TOKEN=$(gh auth token)` dispatch, `tmp/` ephemeral) — GitHub surface is `gh-router`, not standalone `pr-enhance`
 - `.github/workflows/changelog-check.yml` — on `pull_request` to `main` (required), `diff -q` vs `scripts/changelog-unreleased.py update`, `fail+comment` if stale — SHA pins from `SHA_TABLE` (`checkout v5`, `setup-python v6`, `github-script v8`)
 - `.githooks/pre-push` (deterministic source) + `.husky/pre-push` (delegation `exec .githooks/pre-push "$@"`) — `warn+block`, `cp before + update + diff`, hint `uv run python scripts/changelog-unreleased.py update && git add && git commit --amend` (both chmod 755; husky sets `core.hooksPath=.husky` so delegation keeps guard live)
@@ -42,7 +42,7 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run` (tool 
 ## GDD Wiring
 
 - **BDD contract:** `Given` conventional commit `feat`/`fix`, `When` `repository_dispatch` `semantic-release` (or `workflow_dispatch`) is sent, `Then` `semantic-release` on `main` cuts `v1.3.0` with `### Features`/`### Bug Fixes` and updates `CHANGELOG.md`. Contract is `CONTRIBUTING.md` + `.releaserc.json`.
-- **EDD gate:** `commitlint` + `npm run lint/typecheck/test` are deterministic; tag push fails if commit not conventional. Env truth is `npm ls` + `git tag -l`.
+- **EDD gate:** `commitlint` + `pnpm run lint/typecheck/test` are deterministic; tag push fails if commit not conventional. Env truth is `pnpm ls` + `git tag -l`.
 - **Semantic vs deterministic split:** `feat`/`fix` intent → model/human; `commit-analyzer` bump + `release-notes-generator` → tool.
 
 ## Steps — Tool Owns Determinism
@@ -56,7 +56,7 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 
 > [!tip] Verification — run before every push/release
 >
-> - `npm run lint` / `npm run typecheck` / `npm test` — if any fails → `BLOCKED`
+> - `pnpm run lint` / `pnpm run typecheck` / `pnpm test` — if any fails → `BLOCKED`
 > - `custom/no-comments` allows `SAFETY:` `WHY:` `Invariant:` `See ADR-` `via https://` `TODO(#\d+):` `HACK:` + Gherkin (`Given|When|Then`); `noUncheckedIndexedAccess` needs `(l: string)` in tests — see ADR-0014 (harness AI engineering, `files:off` is shrink-only, `edit-pipeline` hard-code deleted, harness owns regex)
 
 ## Notes

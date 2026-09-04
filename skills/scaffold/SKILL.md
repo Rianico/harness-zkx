@@ -1,18 +1,18 @@
 ---
 name: scaffold
 description: >-
-  Deterministic project scaffolding for Git, Python, Rust, and CI — conventional commits, semantic-release, and runtime wiring. Use when initializing or retrofitting a repo, wiring release flow, or selecting a toolchain. TRIGGER: scaffold, init project, retrofit, semantic-release, conventional commits
+  Deterministic project scaffolding for Git, Python, Rust, TypeScript, and CI — conventional commits, semantic-release, and runtime wiring. Use when initializing or retrofitting a repo, wiring release flow, or selecting a toolchain. TRIGGER: scaffold, init project, retrofit, semantic-release, conventional commits
 arguments: flavor
 argument-hint: |-
   git -- loads conventional commits, semantic-release, changelog, and branch hygiene
   python -- loads uv, .python-version, pyproject, and pytest wiring
   rust -- loads Cargo, rust-toolchain, fmt/clippy/test wiring
+  typescript -- loads pnpm, .nvmrc, package.json/tsconfig, and biome/vitest wiring (lib/cli/pi-extension)
   ci -- loads GitHub Actions verify+release and on-demand dispatch
   omitted -- loads the 80/20 spine, GDD wiring, and dispatch registry
 metadata:
-  manage: [git, python, rust, ci]
+  manage: [git, python, rust, typescript, ci]
 disable-model-invocation: true
-
 ---
 
 # Scaffold
@@ -27,16 +27,16 @@ Deterministic project scaffolding — one spine, many projections. The 20% that 
 
 ## Keel Spine
 
-Keep the spine small. One load-bearing path: **declared runtime → deterministic artifacts → verification gate → on-demand release**. Language variants (Python/Rust/CI) are projections, not parallel spines. Adding a variant must not fork the git contract.
+Keep the spine small. One load-bearing path: **declared runtime → deterministic artifacts → verification gate → on-demand release**. Language variants (Python/Rust/TypeScript/CI) are projections, not parallel spines. Adding a variant must not fork the git contract.
 
 Grade every surface:
 
-| Surface                                                                       | Promise                    | Change rule                                                         |
-| ----------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------- |
-| Router description + `argument-hint`                                          | Public contract            | Versioned, never silently broken                                    |
-| Subskill SKILL.md                                                             | Cross-module interface     | Consumer-found-by-tooling, cutover via docs                         |
-| `$SKILL_DIR/scripts/scaffold.py` (embedded templates)                         | Module internals           | Free churn behind BDD/EDD                                           |
-| Generated project files (`.releaserc.json`, `CHANGELOG.md`, `pyproject.toml`) | Projection (not authority) | Regenerate from scaffold, never hand-edit except `{{project_name}}` |
+| Surface                                                                                       | Promise                    | Change rule                                                         |
+| --------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------- |
+| Router description + `argument-hint`                                                          | Public contract            | Versioned, never silently broken                                    |
+| Subskill SKILL.md                                                                             | Cross-module interface     | Consumer-found-by-tooling, cutover via docs                         |
+| `$SKILL_DIR/scripts/scaffold.py` (embedded templates)                                         | Module internals           | Free churn behind BDD/EDD                                           |
+| Generated project files (`.releaserc.json`, `CHANGELOG.md`, `pyproject.toml`, `package.json`) | Projection (not authority) | Regenerate from scaffold, never hand-edit except `{{project_name}}` |
 
 Authority: scaffold skill owns scaffolding decisions; project owns files. Writers propose via explicit `/scaffold` invocation. Projections are regenerated from source.
 
@@ -44,12 +44,13 @@ Authority: scaffold skill owns scaffolding decisions; project owns files. Writer
 
 Read the subskill that matches the projection you need. Use `Read` (not `Skill` tool — subskills hidden from discovery).
 
-| Flavor   | Subskill                               | When to load                                                                                                       |
-| -------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `git`    | `$SKILL_DIR/subskills/git/SKILL.md`    | Conventional commits, semantic-release, changelog, `.gitignore`, `AGENTS.md` patch — [git](subskills/git/SKILL.md) |
-| `python` | `$SKILL_DIR/subskills/python/SKILL.md` | `uv` + `.python-version` + `pyproject.toml` wiring — [python](subskills/python/SKILL.md)                           |
-| `rust`   | `$SKILL_DIR/subskills/rust/SKILL.md`   | `rust-toolchain.toml` + `cargo fmt/clippy/test` wiring — [rust](subskills/rust/SKILL.md)                           |
-| `ci`     | `$SKILL_DIR/subskills/ci/SKILL.md`     | GitHub Actions verify+release + on-demand dispatch — [ci](subskills/ci/SKILL.md)                                   |
+| Flavor       | Subskill                                   | When to load                                                                                                                         |
+| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `git`        | `$SKILL_DIR/subskills/git/SKILL.md`        | Conventional commits, semantic-release, changelog, `.gitignore`, `AGENTS.md` patch — [git](subskills/git/SKILL.md)                   |
+| `python`     | `$SKILL_DIR/subskills/python/SKILL.md`     | `uv` + `.python-version` + `pyproject.toml` wiring — [python](subskills/python/SKILL.md)                                             |
+| `rust`       | `$SKILL_DIR/subskills/rust/SKILL.md`       | `rust-toolchain.toml` + `cargo fmt/clippy/test` wiring — [rust](subskills/rust/SKILL.md)                                             |
+| `typescript` | `$SKILL_DIR/subskills/typescript/SKILL.md` | `pnpm` + `.nvmrc` + `package.json`/`tsconfig.json` wiring (`lib`/`cli`/`pi-extension`) — [typescript](subskills/typescript/SKILL.md) |
+| `ci`         | `$SKILL_DIR/subskills/ci/SKILL.md`         | GitHub Actions verify+release + on-demand dispatch — [ci](subskills/ci/SKILL.md)                                                     |
 
 Omitted flavor loads only the spine above. For interactive scaffolding, run **Explore First** then **Grilling** — explore detects, grilling confirms only ambiguous leaves.
 
@@ -101,15 +102,15 @@ After `--detect`, the model **must** render 2–4 curated combos before any gril
 
 Selection rule: **preset when confident, ask only when ambiguous.** If `inferred_shape` is confident and `git_contract.complete` clear, prefill Dialog 1/4 and skip. Grill only leaves where detection is inconclusive (e.g. greenfield, polyglot variant, coverage threshold choice).
 
-| Detected state                                                                               | Recommended combos (2–4, with generator)                                                                                                                                                                                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Greenfield** (no runtime, no git contract)                                                 | 1. Python 80% + CI — `scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `ci --ci-variant python --with-coverage` + `git` (reason: most common, minimal seam) · 2. Rust + CI — `rust --with-coverage` + `ci --ci-variant rust` (reason: alternative runtime) · 3. Node minimal — `git` + `ci --ci-variant node` (reason: no python/rust files) |
-| **Existing Python, no scaffold** (`pyproject.toml` present, no `.releaserc.json`)            | 1. ✅ Retrofit Python 80% + CI — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` + `git` (reason: preserve existing pyproject, add missing contract) · 2. Minimal — `git` only (reason: wire release without touching runtime) · 3. Add --dry-run preview first (reason: show diff before writes)                                        |
-| **Existing Rust, no scaffold** (`Cargo.toml` present)                                        | 1. ✅ Retrofit Rust + CI — `rust` + `ci --ci-variant rust` + `git` (reason: mirror python pattern) · 2. With coverage — add `--with-coverage --coverage-threshold 80` (reason: opt-in llvm-cov)                                                                                                                                                                 |
-| **Python scaffold stale** (has `.releaserc.json` but missing `changelog-check.yml` or hooks) | 1. ✅ Repair git contract — `git --dry-run` then `git` (reason: changelog guard stale, `--dry-run` shows drift) · 2. Add coverage if `python.coverage==false` — `python --with-coverage 80` (reason: coverage absent)                                                                                                                                           |
-| **Scaffold complete, no coverage** (`git_contract.complete && !python.coverage`)             | 1. ✅ Add 80% coverage — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` (reason: cheapest rigor bump) · 2. Add 90% strict (reason: high-rigor variant) · 3. Hold — keep as-is (reason: tests without gate is valid)                                                                                                                     |
-| **Polyglot / .tool-versions**                                                                | 1. ✅ Matrix CI — `all --with-coverage 80` + `ci --matrix` note in `ci/SKILL.md` (reason: `polyglot==true`, needs `asdf install` sync) · 2. Single-variant CI — `ci --ci-variant python` (reason: cheapest, one verify job)                                                                                                                                     |
-| **CI variant mismatch** (`Cargo.toml` + `ci.variant==node`)                                  | 1. ✅ Fix variant — `ci --ci-variant rust` (reason: runtime is rust but workflow is node) · 2. Matrix — `ci --matrix` (reason: if both runtimes present)                                                                                                                                                                                                        |
+| Detected state                                                                               | Recommended combos (2–4, with generator)                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Greenfield** (no runtime, no git contract)                                                 | 1. Python 80% + CI — `scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `ci --ci-variant python --with-coverage` + `git` (reason: most common, minimal seam) · 2. Rust + CI — `rust --with-coverage` + `ci --ci-variant rust` (reason: alternative runtime) · 3. TypeScript lib + CI — `typescript --ts-variant lib` + `ci --ci-variant node` + `git` (reason: no python/rust files, pnpm + biome/vitest gate) |
+| **Existing Python, no scaffold** (`pyproject.toml` present, no `.releaserc.json`)            | 1. ✅ Retrofit Python 80% + CI — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` + `git` (reason: preserve existing pyproject, add missing contract) · 2. Minimal — `git` only (reason: wire release without touching runtime) · 3. Add --dry-run preview first (reason: show diff before writes)                                                                                                         |
+| **Existing Rust, no scaffold** (`Cargo.toml` present)                                        | 1. ✅ Retrofit Rust + CI — `rust` + `ci --ci-variant rust` + `git` (reason: mirror python pattern) · 2. With coverage — add `--with-coverage --coverage-threshold 80` (reason: opt-in llvm-cov)                                                                                                                                                                                                                                  |
+| **Python scaffold stale** (has `.releaserc.json` but missing `changelog-check.yml` or hooks) | 1. ✅ Repair git contract — `git --dry-run` then `git` (reason: changelog guard stale, `--dry-run` shows drift) · 2. Add coverage if `python.coverage==false` — `python --with-coverage 80` (reason: coverage absent)                                                                                                                                                                                                            |
+| **Scaffold complete, no coverage** (`git_contract.complete && !python.coverage`)             | 1. ✅ Add 80% coverage — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` (reason: cheapest rigor bump) · 2. Add 90% strict (reason: high-rigor variant) · 3. Hold — keep as-is (reason: tests without gate is valid)                                                                                                                                                                                      |
+| **Polyglot / .tool-versions**                                                                | 1. ✅ Matrix CI — `all --with-coverage 80` + `ci --matrix` note in `ci/SKILL.md` (reason: `polyglot==true`, needs `asdf install` sync) · 2. Single-variant CI — `ci --ci-variant python` (reason: cheapest, one verify job)                                                                                                                                                                                                      |
+| **CI variant mismatch** (`Cargo.toml` + `ci.variant==node`)                                  | 1. ✅ Fix variant — `ci --ci-variant rust` (reason: runtime is rust but workflow is node) · 2. Matrix — `ci --matrix` (reason: if both runtimes present)                                                                                                                                                                                                                                                                         |
 
 > [!warning] Anti-pattern
 > Do not dump raw JSON to the user as the recommendation. Translate detection into combos with reasons. Raw JSON is the handle; combos are the surface.
@@ -136,7 +137,7 @@ Dialog:
     - label: 'Rust (cargo)'
       description: 'Single-runtime Rust — stable toolchain + rustfmt/clippy; minimal seam'
     - label: 'Node (pnpm)'
-      description: 'Single-runtime Node 22 — semantic-release + npm audit; minimal seam'
+      description: 'Single-runtime Node 24 — pnpm + .nvmrc + package.json/tsconfig (lib/cli/pi-extension); minimal seam'
     - label: 'Polyglot (asdf)'
       description: 'Two+ runtimes — asdf + .tool-versions syncs uv/cargo/pnpm; adds matrix'
     - label: 'Other'
@@ -152,7 +153,7 @@ Which runtime owns this repo?
 
 1. Python (uv) — Single-runtime Python 3.14 — uv + .python-version + pyproject.toml
 2. Rust (cargo) — Single-runtime Rust — stable toolchain + rustfmt/clippy
-3. Node (pnpm) — Single-runtime Node 22 — semantic-release + npm audit
+3. Node (pnpm) — Single-runtime Node 24 — pnpm + .nvmrc + package.json/tsconfig (lib/cli/pi-extension)
 4. Polyglot (asdf) — Two+ runtimes — asdf + .tool-versions syncs uv/cargo/pnpm
 5. Other — Custom stack
 ```
@@ -166,13 +167,13 @@ Dialog:
   multipleChoice: true
   options:
     - label: 'Formatter'
-      description: 'Enforces style without debate — ruff format / cargo fmt / prettier'
+      description: 'Enforces style without debate — ruff format / cargo fmt / biome check'
     - label: 'Linter'
-      description: 'Catches bugs/idioms — ruff check / clippy -D warnings / eslint'
+      description: 'Catches bugs/idioms — ruff check / clippy -D warnings / biome check'
     - label: 'Type check'
       description: 'Proves contracts — basedpyright strict / tsc --noEmit / cargo check'
     - label: 'Tests'
-      description: 'Proves behavior — pytest / cargo test / npm test; required for coverage'
+      description: 'Proves behavior — pytest / cargo test / pnpm test; required for coverage'
     - label: 'Other'
       description: 'Custom gate (e.g., audit, zizmor, actionlint)'
 ```
@@ -187,11 +188,11 @@ Which gates should the pre-merge check enforce? (select any)
 1. Formatter — ruff format / cargo fmt
 2. Linter — ruff check / clippy -D warnings
 3. Type check — basedpyright strict / tsc --noEmit
-4. Tests — pytest / cargo test / npm test
+4. Tests — pytest / cargo test / pnpm test
 5. Other — Custom gate
 ```
 
-> Branching: if Q1=Python, defaults map to ruff/basedpyright/pytest; if Rust, to fmt/clippy/test; if Node, to prettier/eslint/tsc/vitest — but user may skip any leaf; skipping does not remove the flavor file, only the gate step.
+> Branching: if Q1=Python, defaults map to ruff/basedpyright/pytest; if Rust, to fmt/clippy/test; if Node, to biome/tsc --noEmit/vitest (tsx runner) — but user may skip any leaf; skipping does not remove the flavor file, only the gate step.
 
 ### Dialog 3 — Coverage (conditional)
 

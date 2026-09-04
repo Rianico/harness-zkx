@@ -69,7 +69,7 @@ To use **semantic-release** you need:
 - Git CLI **≥ 2.7.1** in the CI environment
 - Node.js **≥ 22.14.0** in the CI environment
 
-The scaffold's `release.yml` pins `setup-node` with `node-version: 22` and `actions/checkout` with `fetch-depth: 0` (tags needed for "Get last release").
+The scaffold's `release.yml` pins `setup-node` with `node-version: 24` and `actions/checkout` with `fetch-depth: 0` (tags needed for "Get last release").
 
 ## Get help
 

@@ -29,7 +29,8 @@ Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `che
 
 ### Language-Specific Verify Steps
 
-- Python projection: replace `npm ci`/`npm test` with `uv sync` + `uv run ruff check . && uv run basedpyright && uv run pytest` inside the same `verify` job (or a matrix job when multi-runtime).
+- Node projection (default): `corepack enable` + `pnpm install --no-frozen-lockfile` + `pnpm run lint && pnpm run typecheck && pnpm test` on Node 24 inside `verify` (`--with-coverage` swaps the test step to `pnpm run coverage`).
+- Python projection: replace the Node `pnpm ...` steps with `uv sync` + `uv run ruff check . && uv run basedpyright && uv run pytest` inside the same `verify` job (or a matrix job when multi-runtime).
 - Rust projection: `cargo fmt --check && cargo clippy -- -D warnings && cargo test` inside `verify`.
 - Multi-runtime: `asdf install` + matrix, or split jobs `verify-node`/`verify-python`/`verify-rust` with `needs: [verify-node, verify-python]` on `release`.
 
@@ -37,10 +38,9 @@ Matrix preview: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` (t
 
 ## Steps — Tool Owns Determinism
 
-
 1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant <node|python|rust>` (or `--dry-run`), optionally `--cwd`.
 2. Ensure `verify` precedes `release` via `needs: verify`; `release` holds only `write`/`id-token` perms (enforced by script template).
-3. Wire pre-merge gate docs: `CONTRIBUTING.md` → `npm run lint && npm run typecheck && npm test` (or `uv`/`cargo` equiv) — see `$SKILL_DIR/subskills/git/SKILL.md`.
+3. Wire pre-merge gate docs: `CONTRIBUTING.md` → `pnpm run lint && pnpm run typecheck && pnpm test` (or `uv`/`cargo` equiv) — see `$SKILL_DIR/subskills/git/SKILL.md`.
 4. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` + `yamllint .github/workflows/release.yml` and `zizmor .github/workflows/release.yml`
 
 > [!tip] Verification — before merging workflow changes
