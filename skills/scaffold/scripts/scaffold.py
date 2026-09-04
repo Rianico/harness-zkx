@@ -38,6 +38,15 @@ SHA_TABLE = {
     "github-script": "ed597411d8f924073f98dfc5c65a23a2325f34cd",  # actions/github-script v8
 }
 
+NODE_VERSION_NUM = "24"
+NODE_VERSION = NODE_VERSION_NUM + "\n"
+
+
+def _expand_node_version(text: str) -> str:
+    """Single-source Node version: expand the placeholder from NODE_VERSION_NUM."""
+    return text.replace("__NODE_VERSION__", NODE_VERSION_NUM)
+
+
 # ------------------------------------------------------------------ templates (pure-deterministic except {{project_name}})
 RELEASERC_JSON = """\
 {
@@ -94,7 +103,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 24}
+        with: {node-version: __NODE_VERSION__}
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm audit --audit-level high
@@ -111,7 +120,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 24}
+        with: {node-version: __NODE_VERSION__}
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
         with: {python-version: "3.12"}
       - name: Clear Unreleased section (handoff to semantic-release)
@@ -460,8 +469,6 @@ GITIGNORE_TS_EXTRA = ["node_modules/", "dist/"]
 
 PYTHON_VERSION = "3.14\n"
 
-NODE_VERSION = "24\n"
-
 
 def build_pyproject(project_name: str, with_coverage: bool, threshold: int) -> str:
     cov_deps = ', "pytest-cov>=5"' if with_coverage else ""
@@ -688,7 +695,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 24}
+        with: {node-version: __NODE_VERSION__}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -728,7 +735,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 24}
+        with: {node-version: __NODE_VERSION__}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -766,7 +773,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 24}
+        with: {node-version: __NODE_VERSION__}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -805,13 +812,21 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: 24}
+        with: {node-version: __NODE_VERSION__}
       - run: npm ci
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HUSKY: "0"
 """
+
+
+# Resolve the single-sourced Node version in every CI template above.
+RELEASE_YML = _expand_node_version(RELEASE_YML)
+CI_PYTHON_VERIFY_YML = _expand_node_version(CI_PYTHON_VERIFY_YML)
+CI_PYTHON_COVERAGE_YML = _expand_node_version(CI_PYTHON_COVERAGE_YML)
+CI_RUST_VERIFY_YML = _expand_node_version(CI_RUST_VERIFY_YML)
+CI_RUST_COVERAGE_YML = _expand_node_version(CI_RUST_COVERAGE_YML)
 GH_ROUTER_SKILL = """---
 name: gh-router
 description: >-
