@@ -1123,6 +1123,41 @@ def patch_wt_hooks(cwd: pathlib.Path, dry_run: bool) -> None:
     print(f"patched {wt} with hooksPath", file=sys.stderr)
 
 
+def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
+    """pnpm contract: this flavor declares pnpm, so releaserc assets ship pnpm-lock.yaml."""
+    path = cwd / ".releaserc.json"
+    if dry_run:
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+            if '"package-lock.json"' in text:
+                print(
+                    f"would patch {path}: package-lock.json \u2192 pnpm-lock.yaml (pnpm contract)",
+                    file=sys.stdout,
+                )
+            else:
+                print(f"unchanged  {path} (releaserc lockfile already pnpm)", file=sys.stderr)
+        else:
+            print(
+                f"NOTE (dry-run): no {path} \u2014 run git flavor first so the pnpm lockfile patch has a target",
+                file=sys.stderr,
+            )
+        return
+    if not path.exists():
+        print(
+            f"NOTE: no {path} \u2014 skipping pnpm lockfile patch (run git flavor first)",
+            file=sys.stderr,
+        )
+        return
+    text = path.read_text(encoding="utf-8")
+    if '"package-lock.json"' not in text:
+        print(f"unchanged  {path} (releaserc lockfile already pnpm)", file=sys.stderr)
+        return
+    path.write_text(text.replace('"package-lock.json"', '"pnpm-lock.yaml"'), encoding="utf-8")
+    print(
+        f"patched {path}: package-lock.json \u2192 pnpm-lock.yaml (pnpm contract)", file=sys.stderr
+    )
+
+
 def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
     write_file(cwd / ".releaserc.json", RELEASERC_JSON, dry_run)
     write_file(cwd / ".github" / "workflows" / "release.yml", RELEASE_YML, dry_run)
@@ -1299,6 +1334,7 @@ def do_typescript(
             f"NOTE: TypeScript coverage wired — run `pnpm run coverage` (fail_under lines/functions {threshold}%)",
             file=sys.stderr,
         )
+    patch_releaserc_lockfile(cwd, dry_run)
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",

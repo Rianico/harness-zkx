@@ -68,6 +68,6 @@ If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-cove
 
 ## Relation to Other Subskills
 
-- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git/SKILL.md`. Note: `.releaserc.json` `assets` lists `package-lock.json` — pnpm projects must proofread-swap it to `pnpm-lock.yaml` (mixed-file proofread, not a template fork).
+- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git/SKILL.md`. The TS flavor patches `.releaserc.json` `assets` deterministically (`package-lock.json` → `pnpm-lock.yaml`) because `package.json` declares pnpm — no manual proofread-swap.
 - CI wiring belongs to `$SKILL_DIR/subskills/ci/SKILL.md`; the Node verify job runs `corepack enable` + `pnpm install` + `pnpm run lint && pnpm run typecheck && pnpm test` on Node 24 inside the shared verify gate.
 - Vite/React apps are out of scope (`Other` → `pnpm create vite` upstream). This flavor embeds minimal `lib`/`cli`/`pi-extension` templates only.
