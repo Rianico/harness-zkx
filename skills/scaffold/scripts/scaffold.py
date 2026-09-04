@@ -452,7 +452,7 @@ except FileNotFoundError:
         "#!/usr/bin/env python3\n# managed by scaffold — see scripts/changelog-unreleased.py\n"
     )
 
-GITIGNORE_GIT = [".lsz/", ".pi/", ".agents/", "coverage/"]
+GITIGNORE_GIT = [".lsz/", ".pi/", "coverage/"]
 
 GITIGNORE_PYTHON_EXTRA = ["__pycache__/", ".venv/"]
 GITIGNORE_RUST_EXTRA = ["target/"]
