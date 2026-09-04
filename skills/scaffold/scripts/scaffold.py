@@ -174,7 +174,9 @@ jobs:
           echo ""
           echo "Fix locally:"
           echo "  uv run python scripts/changelog-unreleased.py update"
-          echo "  git add CHANGELOG.md && git commit --amend --no-edit --no-verify && git push --force-with-lease"
+          echo "  git add CHANGELOG.md && git commit -m 'chore: sync changelog unreleased section' --no-verify && git push"
+          echo "  # or amend on a feature branch: git add CHANGELOG.md && git commit --amend --no-edit --no-verify && git push --force-with-lease"
+          echo "  Sync commit must use a hidden type (chore:/style:/refactor:/test:/build:/ci:); a visible type (feat/fix/perf/revert/docs) re-triggers the guard and loops forever."
           echo ""
           echo "Hidden types (style/chore/refactor/test/build/ci) without BREAKING CHANGE don't need Unreleased."
           # restore committed file so subsequent steps see original
@@ -191,10 +193,12 @@ jobs:
             Fix:
             \\`\\`\\`bash
             uv run python scripts/changelog-unreleased.py update
-            git add CHANGELOG.md && git commit --amend --no-edit
-            git push --force-with-lease
+            git add CHANGELOG.md && git commit -m 'chore: sync changelog unreleased section'
+            git push
+            # or amend on a feature branch: git commit --amend --no-edit && git push --force-with-lease
             \\`\\`\\`
-            Hidden types \\`style|chore|refactor|test|build|ci\\` only need update when breaking.`;
+            Sync commit must use a hidden type (\\`chore:\\` etc.); a visible type (\\`feat|fix|perf|revert|docs\\`) re-triggers the guard and loops forever.
+            Hidden types \\`style|chore|refactor|test|build|ci\\` only need update when breaking.
             // avoid duplicate comments
             const {data: comments} = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number
@@ -231,8 +235,10 @@ Visible conventional commit in push range but Unreleased not updated.
 Fix:
   uv run python scripts/changelog-unreleased.py update
   git add CHANGELOG.md
-  git commit --amend --no-edit   # feature branch ok
-  git push --force-with-lease
+  git commit -m 'chore: sync changelog unreleased section'  # hidden type required
+  # visible feat/fix/perf/revert/docs re-triggers the guard and loops forever
+  # or amend on a feature branch: git commit --amend --no-edit && git push --force-with-lease
+  git push
 Bypass (human): git push --no-verify
 EOF
     cp "$tmp" CHANGELOG.md
@@ -412,7 +418,7 @@ CONTRIBUTING_MD_TMPL = """\
 - Scope is noun, description imperative present, lowercase, no period, ≤72 chars
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
-`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required, `diff -q` vs generated); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types `style|chore|refactor|test|build|ci` only appear when `!`/`BREAKING CHANGE`.
+`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required, `diff -q` vs generated); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type (`feat`/`fix`/`docs` etc.) re-triggers the guard and loops forever. Hidden types `style|chore|refactor|test|build|ci` only appear when `!`/`BREAKING CHANGE`.
 ## Reporting Issues
 Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` (blank issues disabled, `config.yml` links #38):
 | Intent | Template | Structure |
@@ -433,7 +439,7 @@ CONTRIBUTING_MD_TMPL_PYTHON = """\
 - Scope is noun, description imperative present, lowercase, no period, ≤72 chars
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
-`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types only appear when `!`/`BREAKING CHANGE`.
+`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type re-triggers the guard and loops forever. Hidden types only appear when `!`/`BREAKING CHANGE`.
 ## Reporting Issues
 Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` (blank issues disabled, `config.yml` links #38):
 | Intent | Template | Structure |
@@ -654,7 +660,7 @@ CONTRIBUTING_MD_TMPL_TYPESCRIPT = """\
 - Scope is noun, description imperative present, lowercase, no period, ≤72 chars
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
-`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types only appear when `!`/`BREAKING CHANGE`.
+`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type re-triggers the guard and loops forever. Hidden types only appear when `!`/`BREAKING CHANGE`.
 ## Reporting Issues
 Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (blank issues disabled).
 - Bugs: paste-complete, prefer text over screenshots.
