@@ -111,6 +111,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **scaffold:** provision pnpm via action-setup in CI templates
 - **scaffold:** prescribe hidden-type changelog sync commits
 - **scaffold:** patch releaserc assets to pnpm-lock.yaml in TS flavor
 - **scaffold:** move TS smoke test to tests/ layout

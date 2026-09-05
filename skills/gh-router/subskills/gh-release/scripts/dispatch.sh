@@ -93,12 +93,12 @@ if [[ "$ans" != "a" ]]; then
 fi
 
 OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || git remote get-url origin | sed -E 's/.*github.com[:\/](.*)\.git/\1/')
-info "dispatching semantic-release to $OWNER_REPO…"
-if gh api "repos/$OWNER_REPO/dispatches" -f event_type=semantic-release >/dev/null 2>&1; then
-  ok "dispatched $OWNER_REPO"
-  dim "Actions: https://github.com/$OWNER_REPO/actions"
+info "dispatching semantic-release to ${OWNER_REPO}…"
+if gh api "repos/${OWNER_REPO}/dispatches" -f event_type=semantic-release >/dev/null 2>&1; then
+  ok "dispatched ${OWNER_REPO}"
+  dim "Actions: https://github.com/${OWNER_REPO}/actions"
 else
-  phase_fail 3 "gh api dispatch failed for $OWNER_REPO"
+  phase_fail 3 "gh api dispatch failed for ${OWNER_REPO}"
   exit 1
 fi
 
