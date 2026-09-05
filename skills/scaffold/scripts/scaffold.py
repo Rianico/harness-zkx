@@ -102,9 +102,10 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with: {run_install: false}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
-      - run: corepack enable
+        with: {node-version: __NODE_VERSION__, cache: pnpm}
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm audit --audit-level high
       - run: pnpm run lint && pnpm run typecheck && pnpm test
@@ -119,15 +120,16 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with: {fetch-depth: 0}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with: {run_install: false}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
+        with: {node-version: __NODE_VERSION__, cache: pnpm}
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
         with: {python-version: "3.12"}
       - name: Clear Unreleased section (handoff to semantic-release)
         run: python scripts/changelog-unreleased.py clear
-      - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
-      - run: pnpm dlx semantic-release
+      - run: pnpm exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HUSKY: "0"
@@ -547,6 +549,14 @@ def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) 
         "vitest": ">=3",
         "tsx": ">=4",
         "@types/node": ">=24",
+        "@semantic-release/changelog": ">=7",
+        "@semantic-release/commit-analyzer": ">=13",
+        "@semantic-release/git": ">=11",
+        "@semantic-release/github": ">=12",
+        "@semantic-release/npm": ">=13",
+        "@semantic-release/release-notes-generator": ">=14",
+        "conventional-changelog-conventionalcommits": ">=8",
+        "semantic-release": ">=25",
     }
     if with_coverage:
         scripts["coverage"] = "vitest run --coverage"
