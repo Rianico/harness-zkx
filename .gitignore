@@ -1,10 +1,10 @@
-# Claude Code runtime directories
+# Agent runtime directories
 .agents/
 .claude/agents/
 .lsz/
 .pi/
 
-# Claude Code user-specific files (keep rules tracked)
+# Agent user-specific files (keep rules tracked)
 .claude/skills/
 .claude/hooks/
 .claude/commands/
@@ -12,14 +12,14 @@
 
 .llm-lsp-cli/
 
-## npx skills 
+# Agent traces
+.traces/
+
+## npx skills
 .skills-lock.json
 
 # ADR
 .adr-dir
-
-# Claude Tap
-.traces/
 
 # extra repo
 everything-claude-code/
@@ -88,7 +88,7 @@ logs/
 __pycache__/
 *.pyc
 
-# Task files (Claude Code teams)
+# Task files (agent teams)
 tasks/
 
 # Personal configs (if any)
