@@ -34,9 +34,9 @@ Blocking signals are hard gates. Fix at source, do not route around.
 
 **Don't:** `curl https://github.com/...` / `curl https://api.github.com/...` / `fetch` / `fetch_content` for GitHub hosts.
 
-**Do:** Use `gh` clients — `gh issue view <n> --json title,body --repo <owner/repo>`, `gh pr view`, `gh repo view`, `gh api repos/<owner>/<repo>/issues/<n>` (auth, rate-limit, JSON shape). `curl`/`fetch` only as fallback when `gh` unavailable or for non-GitHub hosts.
+**Do:** Use `gh` clients — `gh issue view <n> --json title,body --repo <owner/repo>`, `gh pr view`, `gh repo view`, `gh api repos/<owner>/<repo>/issues/<n>` (auth, rate-limit, JSON shape). For Actions progress: `gh run list --workflow <name>`, `gh run view <id>`, `gh run watch <id>` — never poll via `curl` or web fetch. `curl`/`fetch` only as fallback when `gh` unavailable or for non-GitHub hosts.
 
-**Check:** No `curl`/`fetch` to `github.com`/`api.github.com` when `gh` is available; `gh` command appears in transcript for GitHub links.
+**Check:** No `curl`/`fetch` to `github.com`/`api.github.com` when `gh` is available; `gh` command appears in transcript for GitHub links and Actions progress.
 
 ---
 
