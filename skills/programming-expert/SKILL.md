@@ -1,7 +1,7 @@
 ---
 name: programming-expert
 description: >-
-  Polyglot language expertise for Python/TypeScript/Rust/Go/Lua/C++/Java/Kotlin/Swift/PHP/Perl and type checking. Use when implementing, debugging, testing, or reviewing code in any language. TRIGGER: python, typescript, rust, go, lua, cpp, java, kotlin, swift, php, perl, basedpyright
+  Polyglot language expertise for Python/TypeScript/Rust/Go/Lua/C++/Java/Kotlin/Swift/PHP/Perl and type checking. Use when implementing, debugging, testing, or reviewing code in any language. TRIGGER: python, typescript, rust, go, lua, cpp, java, kotlin, swift, php, perl, basedpyright, architecture
 arguments: language
 argument-hint: |-
   python-expert -- async, Django, PyTorch, testing patterns
@@ -30,9 +30,13 @@ Polyglot language router — one description, many projections. The 20% that sol
 General engineering rules applied by every subskill — language detail varies, principles don't.
 
 - **Clean commits, clear boundaries** — one commit = one intent, conventional `feat|fix|doc:` prefix, atomic bisectable; separate `code` vs `docs` vs `chore`; modules own their boundaries, cross-module only via public contract, no hidden coupling.
-- **SOLID** — SRP one reason to change, OCP open for extension closed for modification, LSP substitutability, ISP narrow interfaces, DIP depend on abstractions; apply at module seams, not per-line.
-- **Clean architecture** — dependency rule: inner domain knows nothing of outer delivery; ports & adapters at edges, use cases orchestrate, frameworks are plugins; keep I/O at the boundary, typed admission there.
-- **ADR** — record any hard-to-reverse, surprising, or traded-off decision as lightweight ADR (`CONTEXT.md` + `docs/adr/`); keep ADR short: context → decision → consequences; link supersession.
+- **SOLID** — SRP one reason to change, OCP open for extension closed for modification, LSP substitutability, ISP narrow interfaces, DIP depend on abstractions; apply at module seams, not per-line; SOLID as design pressure, not ceremony.
+- **Clean architecture** — dependency rule: inner domain knows nothing of outer delivery; ports & adapters at edges, use cases orchestrate, frameworks are plugins; keep I/O at the boundary, typed admission there. Ask: which code is policy vs detail? Are inner layers protected from frameworks? Is abstraction serving a real boundary vs speculative purity? Isolate business rules from frameworks; testability through decoupling.
+- **Domain & boundaries** — what belongs in core domain vs edges; what boundaries must stay stable as system evolves; bounded contexts, ubiquitous language, aggregate invariants; align code structure with domain concepts, don't share tables across contexts.
+- **Transactional & coupling** — what must be transactional together vs asynchronous; what coupling is introduced and is it acceptable; avoid modifying two aggregates in one transaction; prefer events/Saga/Outbox over 2PC.
+- **Operational realism** — what operational burden does the decision create; what becomes easier vs harder afterwards; prefer operable, observable, independently deployable boundaries; avoid premature microservice splits.
+- **Artifacts: ADR / Blueprint / Technical standards** — ADR is the concise decision log (context → decision → consequences, rejected alternatives); Blueprint is the current model (components, boundaries, interfaces, data/control flow, runtime shape, invariants, risks); Technical standards are reusable rules (naming, layering, dependency direction, FK/deletion policy, API contracts). Update blueprint/standards only when establishing reusable paradigm, not one-off details.
+- **Decision framing** — keep reasoning decision-oriented; surface trade-offs explicitly; make rejected alternatives concrete; tie concerns back to boundaries, invariants, and risks.
 - **Self-described code** — names reveal intent, functions do one thing, errors fail loud with context, comments explain why not what; no `Any`/`object` fallbacks inside typed code, validate once at admission, trust inside.
 
 ## Dispatch
@@ -59,7 +63,7 @@ Omitted argument loads only the spine above. For an unknown language, use the cl
 ## When to Use vs Neighbors
 
 - **This router:** language-idiomatic implementation, debugging, testing, review; applies clean-code principles above within each language.
-- **`architecture-expert` / `adr`:** deep system boundaries, trade-offs, DDD and ADR lifecycle methodology — router only applies the ADR *principle* (record the decision), not the full ADR process.
+- **`adr`:** ADR lifecycle methodology — `adr` owns the full decision log process; this router now owns the architecture foundations (boundaries, trade-offs, DDD) and the lightweight ADR principle.
 - **`sysops-expert` / `safety-guard`:** ops, security, privacy — not code style.
 - **`basedpyright` subskill vs `tdd-expert`:** type checker config lives here; test strategy lives in `tdd-expert`.
 

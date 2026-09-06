@@ -9,7 +9,7 @@ tools:
   - Skill
   - Write
 model: opus
-skills: [adr, architecture-expert]
+skills: [adr, programming-expert]
 color: purple
 ---
 
