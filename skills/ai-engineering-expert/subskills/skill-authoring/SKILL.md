@@ -77,6 +77,7 @@ Validate the draft before presenting to the user:
 - [ ] Scripts handle errors internally and use `uv run $SKILL_DIR/scripts/` invocation
 - [ ] No content that belongs in rules (always-on preferences) or other skills
 - [ ] Writing rigor applied (hierarchy, pointers, completion criteria, leading words, pruning) via writing sub-skill; no-ops pruned
+- [ ] Router dispatch triggers on task-match, not just explicit domain (no "only when $domain" gate)
 
 Then ask the user:
 
@@ -278,6 +279,7 @@ metadata:
 - Sub-skills are nested in `subskills/` directory (hidden from Claude Code discovery)
 - Parent uses `Read` tool to dispatch (not `Skill` tool -- nested paths not discoverable)
 - Sub-skills are full skills with frontmatter, references, scripts
+- Dispatch on task-match OR explicit domain — never domain-only. Parent dispatch reads "when `$domain` matches OR the task matches a sub-skill's triggers, Read it"; "omitted loads spine only" states the default, not a gate. The model must never wait for the user to name the domain.
 
 **Sub-skill names must not collide with top-level skill names** — see Name Collision Rule in the reference. Enforced by `validate-deps.py lint`.
 
