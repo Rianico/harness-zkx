@@ -1,8 +1,10 @@
 ---
-name: lua
-description: Lua development guidelines covering tables, metatables, error handling, game development, and performance optimization.
+name: lua-expert
+description: >-
+  Lua development guidelines covering tables, metatables, error handling, game development, and performance optimization. Use when writing Lua modules or Love2D game code. TRIGGER: lua, love2d
+metadata:
+  managed-by: programming-expert
 ---
-
 # Lua Development
 
 You are an expert in Lua programming with deep knowledge of tables, metatables, and game development patterns.

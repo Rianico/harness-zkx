@@ -50,7 +50,7 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 | N803 (protocol names) | File-level suppression with comment |
 | D107/D102 (trivial docstrings) | Disable rules or add docstrings |
 
-**For complex diagnostics:** Invoke `python-expert` skill with `typing` argument.
+**For complex diagnostics:** Invoke `programming-expert` (`python-expert`) skill with `typing` argument.
 
 ## Code Quality
 
@@ -89,7 +89,7 @@ Baseline behavior, style preferences, and lib selection for everyday Python deve
 For complex patterns and domain gotchas, invoke the expert skill:
 
 ```
-Skill(skill="python-expert", args="[async|fastapi|testing|django|pytorch|typing]")
+Skill(skill="programming-expert", args="python-expert [async|fastapi|testing|django|pytorch|typing]")
 ```
 
 **When to invoke:**

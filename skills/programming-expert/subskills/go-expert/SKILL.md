@@ -4,6 +4,8 @@ description: >-
   Go/Golang domain expertise for modules, idiomatic package design, interfaces, error handling, goroutines/channels/concurrency, table-driven tests, gomock, build errors, and code review. For Go implementation, debugging, testing, build resolution, concurrency design, and refactoring.
 argument-hint: |-
   [build|review|testing]
+metadata:
+  managed-by: programming-expert
 ---
 
 # Go Expert Skill

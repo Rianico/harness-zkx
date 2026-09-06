@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-- **skills:** improve release, pr/merge and pre-push hooks with watch and auto-fix
+- **skills:** improve release, pr/merge and pre-push hooks with watch and auto-fix (#12)
 - **scaffold:** add TypeScript flavor with lib/cli/pi-extension variants
 - **scaffold:** add issue templates, npm publish toggle and release polish
 - **scaffold:** explore project first then recommend combos
@@ -112,7 +112,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-- **scaffold:** abort pre-push after auto-amend to push new HEAD
 - **scaffold:** provision pnpm via action-setup in CI templates
 - **scaffold:** prescribe hidden-type changelog sync commits
 - **scaffold:** patch releaserc assets to pnpm-lock.yaml in TS flavor
@@ -151,9 +150,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-- **skills:** clarify hooks and release workflows with watch stages
-- **gotcha:** clarify Actions wait via gh run watch
-- **git-convention:** make code/docs split explicit
 - **rules:** clarify gates and internal deprecation + skill sync (#11)
 - **git-convention:** make concise with clear organization (#10)
 - update changelog unreleased section
@@ -205,4 +201,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Code Refactoring
 
+- **skills:** consolidate language experts into programming-expert router (BREAKING CHANGE)
 - **changelog:** adopt Option A PR guard + pre-push hook (BREAKING CHANGE)

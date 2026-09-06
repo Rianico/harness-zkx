@@ -25,7 +25,7 @@ Apply these mandatory architectural constraints directly in your reasoning:
 ## PHASE 1: CONTEXT INHERITANCE (MANDATORY SETUP)
 The Orchestrator has provided you with `[DOMAIN CONTEXT]` in your prompt, including the target tech stack and root configuration file.
 1. Use the `Read` tool to read the root file provided by the Orchestrator. *(Crucial: Reading this file triggers the system to inject the Domain Rules into your context).*
-2. Review the newly injected Domain Rules. If they instruct you to load a language Expert Skill (e.g., `python-expert`), use the `Skill` tool to retrieve it.
+2. Review the newly injected Domain Rules. If they instruct you to load a language Expert Skill (e.g., `programming-expert` (`python-expert`)), use the `Skill` tool to retrieve it.
 
 ## PHASE 2: ARCHITECTURAL DESIGN
 1. Evaluate the user's request against both the domain constraints and the architectural principles above.

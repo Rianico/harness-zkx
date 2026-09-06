@@ -4,6 +4,8 @@ description: >-
   Modern C++ domain expertise for C++11/14/17/20/23, CMake/linker errors, memory safety, RAII, smart pointers, templates, const correctness, GoogleTest, Catch2, GoogleMock, performance review, and idiomatic refactoring. For C++ implementation, debugging, testing, build resolution, and code review.
 argument-hint: |-
   [build|review|testing]
+metadata:
+  managed-by: programming-expert
 ---
 
 # C++ Expert Skill

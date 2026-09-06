@@ -4,6 +4,8 @@ description: >-
   PHP and Laravel domain expertise: Laravel architecture, controllers, actions, services, Eloquent ORM, Form Requests, Auth/Policies, Pest/PHPUnit/factories, and security. For implementation, debugging, testing, authorization, database, and refactoring.
 argument-hint: |-
   [patterns|security|testing]
+metadata:
+  managed-by: programming-expert
 ---
 
 # PHP/Laravel Expert Skill

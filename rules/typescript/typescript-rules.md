@@ -55,7 +55,7 @@ Baseline behavior, style preferences, and lib selection for everyday TypeScript 
 | `noUnnecessaryCondition`               | Simplify the now-always-true branch after narrowing                                       |
 | `returnType` from `unknown`            | Strengthen the helper return type; remove the cast                                        |
 
-**For complex types/diagnostics:** Invoke `typescript-expert` skill with the relevant argument (see Expertise Routing).
+**For complex types/diagnostics:** Invoke `programming-expert` (`typescript-expert`) skill with the relevant argument (see Expertise Routing).
 
 ## Code Quality
 
@@ -90,7 +90,7 @@ Baseline behavior, style preferences, and lib selection for everyday TypeScript 
 For complex types and domain gotchas, invoke the expert skill:
 
 ```
-Skill(skill="typescript-expert", args="[types|testing|style|tooling]")
+Skill(skill="programming-expert", args="typescript-expert [types|testing|style|tooling]")
 ```
 
 **When to invoke:**

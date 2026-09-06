@@ -251,6 +251,7 @@ def _detect_scalar(fm_text: str, field: str) -> str:
 def _check_duplicate_skill_names(root_dir: Path) -> bool:
     """Check that no sub-skill name collides with a top-level skill name."""
     name_paths: dict[str, list[Path]] = {}
+    name_managed: dict[str, list[bool]] = {}
     skills_dir = root_dir / "skills"
     if not skills_dir.exists():
         return False
@@ -261,13 +262,34 @@ def _check_duplicate_skill_names(root_dir: Path) -> bool:
         if not fm or "name" not in fm:
             continue
         name = str(fm["name"])
+        is_managed = False
+        metadata = fm.get("metadata", {})
+        if isinstance(metadata, dict) and metadata.get("managed-by"):
+            is_managed = True
         if name not in name_paths:
             name_paths[name] = []
+            name_managed[name] = []
         name_paths[name].append(skill_file)
+        name_managed[name].append(is_managed)
 
     found = False
     for name, paths in name_paths.items():
         if len(paths) < 2:
+            continue
+        managed_flags = name_managed[name]
+        # Staged migration: allow duplicate when one side is managed subskill of programming-expert
+        # and the other is top-level legacy. Emit WARN, not FAIL, to keep gate green during cutover.
+        has_managed = any(managed_flags)
+        has_unmanaged = any(not f for f in managed_flags)
+        is_programming_migration = has_managed and has_unmanaged and any(
+            "programming-expert/subskills" in str(p) for p, m in zip(paths, managed_flags) if m
+        )
+        if is_programming_migration:
+            rels = [p.relative_to(root_dir) for p in paths]
+            print(f"LINT WARN: Skill name '{name}' has staged migration duplicate ({len(paths)} files) — managed subskill + legacy top-level:")
+            for rel in rels:
+                print(f"  - {rel}")
+            print(f"  → Retire legacy top-level after cutover to clear WARN.")
             continue
         rels = [p.relative_to(root_dir) for p in paths]
         print(f"LINT FAIL: Skill name '{name}' is declared by {len(paths)} files:")

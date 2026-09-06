@@ -8,6 +8,8 @@ meta:
     - https://www.skills.sh/wshobson/agents/typescript-advanced-types
     - https://www.skills.sh/lobehub/lobehub/typescript
     - https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert
+metadata:
+  managed-by: programming-expert
 ---
 
 # TypeScript Composed Expert

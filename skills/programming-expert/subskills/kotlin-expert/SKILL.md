@@ -4,6 +4,8 @@ description: >-
   Kotlin domain expertise for Android/KMP, Compose Multiplatform, Ktor/Exposed, Coroutines/Flow, and Gradle builds. Use for implementation, debugging, testing, architecture, and Compose UI patterns. TRIGGER: Kotlin, Android, KMP, Compose, Coroutines, Ktor, Exposed, Kotest, Gradle
 argument-hint: |-
   [frameworks|coroutines|testing|build|compose]
+metadata:
+  managed-by: programming-expert
 ---
 
 # Kotlin Expert Skill
