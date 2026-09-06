@@ -26,6 +26,7 @@ When narrowing tangles, ask: why does this serialization exist here? Move it to 
 
 - Cross-module → public contract (needs cutover plan).
 - Internal → private; don't widen to silence warning — move caller or seam.
+- Deprecation → internal-only: remove + update callers atomically (no deprecated mark). Public/cross-boundary: deprecate with shim + migration window, cutover plan before removal.
   SOLID at module seams, not per-line.
 
 ## 2. Guards — Errors, Security, Suppressions
@@ -64,6 +65,9 @@ _Check:_ re-run failing signal from fresh state and confirm terminal invariant.
 Dispatch when main only needs result: research → conclusions; sub-module → report+files; pipeline (`tdd→refactor→verify`) → one subagent per stage. Handoff via file pointer + dumped artifact, not bulk paste.
 
 Subagents share same worktree — parallel writers race. Fan-out ≥2 touching `src`/`test`/tracked files → isolate with `worktree`. Pattern: main creates one worktree per task; dispatch `subagent` with that `cwd` + branch instruction; isolated writes; verify each worktree; integrate; clean up. Single writer or read-only → no worktree. See `git-convention.md` + `branch-worktree-pr` skill.
+
+**Sub-skills — match, don't wait** — router parents stay lean; model Reads the matching sub-skill as soon as the task matches its triggers. Explicit $domain is one trigger, task-match is the other — never wait for the user to name the domain. Creating/editing any agent-consumed doc always loads writing-for-agents.
+_Check:_ task matched a sub-skill trigger means its file was Read before acting.
 
 ## Ephemeral artifacts → `.lsz/tmp`
 
