@@ -64,8 +64,8 @@ if [[ "$DRY" == "true" ]]; then
   exit 0
 fi
 
-# non-dry-run: single preview + prompt + dispatch
-phase 3 3 "Preview & Dispatch"
+# non-dry-run: preview + prompt + dispatch + watch
+phase 3 3 "Preview → Dispatch → Watch"
 
 info "running semantic-release --dry-run (preview)…"
 preview_out=$(run_preview)
@@ -91,15 +91,65 @@ if [[ "$ans" != "a" ]]; then
   phase_ok 3 "aborted by user"
   exit 0
 fi
-
+# capture latest run id before dispatch so we can detect the new one
+BEFORE_ID=$(gh run list --workflow release.yml --event repository_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || echo "")
 OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || git remote get-url origin | sed -E 's/.*github.com[:\/](.*)\.git/\1/')
 info "dispatching semantic-release to ${OWNER_REPO}…"
-if gh api "repos/${OWNER_REPO}/dispatches" -f event_type=semantic-release >/dev/null 2>&1; then
-  ok "dispatched ${OWNER_REPO}"
-  dim "Actions: https://github.com/${OWNER_REPO}/actions"
-else
+if ! gh api "repos/${OWNER_REPO}/dispatches" -f event_type=semantic-release >/dev/null 2>&1; then
   phase_fail 3 "gh api dispatch failed for ${OWNER_REPO}"
   exit 1
 fi
+ok "dispatched ${OWNER_REPO}"
+dim "Actions: https://github.com/${OWNER_REPO}/actions"
 
-phase_ok 3 "dispatch sent — watch Actions for Verify and Release"
+# --- watch dispatched workflow until completion (gh run watch) ---
+info "waiting for workflow run to appear…"
+RUN_ID=""
+for _ in $(seq 1 30); do
+  sleep 2
+  CANDIDATE=$(gh run list --workflow release.yml --event repository_dispatch --limit 5 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+  # fallback to workflow name if file filter yields nothing (e.g. renamed workflow file)
+  if [[ -z "$CANDIDATE" ]]; then
+    CANDIDATE=$(gh run list --workflow "Verify and Release" --event repository_dispatch --limit 5 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+  fi
+  if [[ -n "$CANDIDATE" && "$CANDIDATE" != "$BEFORE_ID" ]]; then
+    RUN_ID="$CANDIDATE"
+    break
+  fi
+done
+
+if [[ -z "$RUN_ID" ]]; then
+  warn "dispatched but no workflow run appeared within ~60s"
+  dim "check manually: https://github.com/${OWNER_REPO}/actions/workflows/release.yml"
+  dim "or: gh run list --workflow release.yml --event repository_dispatch --limit 5"
+  phase_ok 3 "dispatched (watch skipped — run not yet visible)"
+  exit 0
+fi
+
+info "watching run ${RUN_ID} — https://github.com/${OWNER_REPO}/actions/runs/${RUN_ID}"
+echo ""
+set +e
+gh run watch "$RUN_ID" --exit-status
+WATCH_RC=$?
+set -e
+echo ""
+
+if [[ $WATCH_RC -eq 0 ]]; then
+  ok "release workflow succeeded — run ${RUN_ID}"
+  git fetch --tags --quiet 2>/dev/null || true
+  dim "tags: $(git tag --sort=-v:refname | head -n 5 | tr '\n' ' ' 2>/dev/null || echo n/a)"
+  if [[ -f CHANGELOG.md ]]; then
+    dim "CHANGELOG head:"
+    head -n 20 CHANGELOG.md | sed 's/^/  /' || true
+  fi
+  dim "run: https://github.com/${OWNER_REPO}/actions/runs/${RUN_ID}"
+  phase_ok 3 "released v${ver:-unknown} — workflow ${RUN_ID} passed"
+else
+  _conclusion=$(gh run view "$RUN_ID" --json conclusion --jq .conclusion 2>/dev/null || echo "failed")
+  phase_fail 3 "release workflow ${_conclusion} — run ${RUN_ID}"
+  warn "fetching failed logs…"
+  gh run view "$RUN_ID" --log-failed 2>&1 | tail -n 120 || gh run view "$RUN_ID" 2>&1 | tail -n 80 || true
+  dim "view: gh run view ${RUN_ID} --log-failed"
+  dim "web:  https://github.com/${OWNER_REPO}/actions/runs/${RUN_ID}"
+  exit $WATCH_RC
+fi

@@ -20,7 +20,7 @@
 
 ## 4. Commits
 
-- **Atomic inside, squash outside:** atomic bisectable commits inside topic; squash fixup/typo churn on merge to base. Split `code` vs `docs` commits.
+- **Atomic inside, squash outside:** atomic bisectable commits inside topic; squash fixup/typo churn on merge to base. `code` and `docs` MUST be separate commits — never mix code + docs in one commit, even in same PR.
 - **Conventional (Conventional Commits 1.0.0 + semver):** `type[(scope)][!]: description`
   - Blank line → body (what/why) → blank line → footer(s).
   - `feat` = MINOR, `fix` = PATCH, `!` / `BREAKING CHANGE:` = MAJOR; other types (`docs|style|refactor|perf|test|build|ci|chore|revert`) no bump unless breaking.
