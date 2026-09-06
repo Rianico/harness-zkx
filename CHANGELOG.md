@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **skills:** add lua-expert skill
 - **scaffold:** add TypeScript flavor with lib/cli/pi-extension variants
 - **scaffold:** add issue templates, npm publish toggle and release polish
 - **scaffold:** explore project first then recommend combos
@@ -149,8 +150,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-- **git-convention:** make concise with clear organization
-- **gotcha:** route GitHub Actions progress through gh CLI
+- **skill-authoring:** clarify router dispatch on task-match
+- **obsidian-markdown:** refresh skill with workflow and embeds
+- **rules:** clarify gates and internal deprecation
+- **git-convention:** make concise with clear organization (#10)
 - update changelog unreleased section
 - **changelog:** update Unreleased for docs/skills refactor
 - **adr:** allow high-signal comments via curated allowlist — replace total ban (ADR-0014)
