@@ -76,6 +76,23 @@ def build_parser() -> argparse.ArgumentParser:
     _ = p_pr.add_argument("branch", help="Branch")
     _ = p_pr.add_argument("base", help="Base branch")
     _ = p_pr.add_argument("issue_number", help="Issue number")
+    _ = p_pr.add_argument("--no-watch", action="store_true", help="Skip watching checks")
+    _ = p_pr.add_argument("--watch-interval", type=int, default=10, help="Watch interval")
+    _ = p_pr.add_argument("--fail-fast", action="store_true", help="Fail fast during watch")
+
+    p_mpr = sub.add_parser("merge-pr", help="Merge PR and watch runs")
+    _ = p_mpr.add_argument("pr", help="PR branch, number, or URL")
+    _ = p_mpr.add_argument("--base", default="", help="Expected base branch")
+    _ = p_mpr.add_argument("--squash", dest="strategy", action="store_const", const="squash", default="squash")
+    _ = p_mpr.add_argument("--merge", dest="strategy", action="store_const", const="merge")
+    _ = p_mpr.add_argument("--rebase", dest="strategy", action="store_const", const="rebase")
+    _ = p_mpr.add_argument("--no-delete-branch", action="store_true")
+    _ = p_mpr.add_argument("--auto", action="store_true")
+    _ = p_mpr.add_argument("--admin", action="store_true")
+    _ = p_mpr.add_argument("--no-watch", action="store_true")
+    _ = p_mpr.add_argument("--watch-interval", type=int, default=10)
+    _ = p_mpr.add_argument("--fail-fast", action="store_true")
+    _ = p_mpr.add_argument("--no-post-merge-watch", dest="post_merge_watch", action="store_false")
 
     return parser
 
@@ -118,7 +135,35 @@ def main(argv: list[str] | None = None) -> None:
         mod.main([])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
     elif cmd == "open-pr":
         mod = load_module("open_pr", "open_pr.py")
-        mod.main([args.branch, args.base, args.issue_number])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        extra: list[str] = [args.branch, args.base, args.issue_number]
+        if args.no_watch:
+            extra.append("--no-watch")
+        if args.watch_interval != 10:
+            extra.extend(["--watch-interval", str(args.watch_interval)])
+        if args.fail_fast:
+            extra.append("--fail-fast")
+        mod.main(extra)  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+    elif cmd == "merge-pr":
+        mod = load_module("merge_pr", "merge_pr.py")
+        extra2: list[str] = [args.pr]
+        if args.base:
+            extra2.extend(["--base", args.base])
+        extra2.extend([f"--{args.strategy}"])
+        if args.no_delete_branch:
+            extra2.append("--no-delete-branch")
+        if args.auto:
+            extra2.append("--auto")
+        if args.admin:
+            extra2.append("--admin")
+        if args.no_watch:
+            extra2.append("--no-watch")
+        if args.watch_interval != 10:
+            extra2.extend(["--watch-interval", str(args.watch_interval)])
+        if args.fail_fast:
+            extra2.append("--fail-fast")
+        if not args.post_merge_watch:
+            extra2.append("--no-post-merge-watch")
+        mod.main(extra2)  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
     else:
         parser.print_help()
         sys.exit(1)
