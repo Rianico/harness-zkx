@@ -33,10 +33,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       if git rev-parse --verify HEAD >/dev/null 2>&1; then
         if git commit --amend --no-edit --no-verify >/dev/null 2>&1; then
           echo "[pre-push] amended HEAD $(git rev-parse --short HEAD) with updated CHANGELOG.md [Unreleased]" >&2
-          echo "[pre-push] push will continue with amended commit — no manual fix needed" >&2
+          echo "[pre-push] push aborted — amended commit, please run: git push" >&2
           echo "[pre-push] (bypass: PREPUSH_AUTOFIX=0 git push --no-verify)" >&2
           rm -f "$tmp"
-          continue
+          exit 1
         fi
       fi
       echo "[pre-push] auto-fix failed — restoring original and blocking push" >&2
