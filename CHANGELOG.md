@@ -149,6 +149,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **git-convention:** make concise with clear organization
+- **gotcha:** route GitHub Actions progress through gh CLI
 - update changelog unreleased section
 - **changelog:** update Unreleased for docs/skills refactor
 - **adr:** allow high-signal comments via curated allowlist — replace total ban (ADR-0014)
