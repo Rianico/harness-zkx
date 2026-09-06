@@ -321,16 +321,20 @@ Squash loses ancestry — trailer is the only provenance. See `[[git-merge-pr]]`
 
 **Done when** `git log --oneline --no-merges | head` shows atomic commits, `CHANGELOG.md` diff shows one new bullet under `## [Unreleased]` with correct subsection, and `git show -s HEAD --format=%B` contains trailers where needed.
 
-### Phase 6 — Open PR (squash boundary)
+### Phase 6 — Open PR (squash boundary) + watch checks
 
 ```bash
-# Push and open PR — ensures Closes trailer and CHANGELOG check via _lib
+# Push and open PR — ensures Closes trailer, CHANGELOG, then watches checks to green
 uv run scripts/open_pr.py feat/<ticket-slug> main <issue-number>
 # dispatcher: uv run scripts/worktree.py open-pr feat/<ticket-slug> main <issue-number>
-# internally: git push -u origin <branch>, gh pr list --head / gh pr view, gh pr create --fill --base <base>, gh pr edit for Closes, git diff --check (not gh pr diff --check), CHANGELOG [Unreleased]
+# --no-watch to skip, --watch-interval 10, --fail-fast to exit on first failure
+# internally: git push -u origin <branch>, gh pr list --head / gh pr view, gh pr create --fill --base <base>, gh pr edit for Closes,
+#             git diff --check (not gh pr diff --check), CHANGELOG [Unreleased],
+#             gh pr checks <branch> --watch --interval 10 (mirrors dispatch.sh gh run watch) → gh run list fallback
 ```
 
 - `Closes #<ticket>` last line when ticket is fully resolved; `Part of #<map>` for wayfinder children.
+- Final stage mirrors `dispatch.sh` watch: after PR is open, `gh pr checks <id> --watch --interval <n>` streams checks (Tests + Changelog Check) to completion; failure surfaces `gh pr checks --json` + `gh run list` and `headRefOid` for `gh run watch` triage. Use `--no-watch` for offline or `--fail-fast` to abort on first failure.
 - PR description: what was done, closed ticket/spec, and `by @<author>` when external.
 
 **Completion for review:**
@@ -339,24 +343,43 @@ uv run scripts/open_pr.py feat/<ticket-slug> main <issue-number>
 - [ ] Body ends with `Closes #<ticket>` / `Part of #<map>`
 - [ ] `CHANGELOG.md` bullet present
 - [ ] Squash preview (`git log origin/main..HEAD`) coherent
+- [ ] `gh pr checks --watch` passed (or skipped via `--no-watch`)
 
 > [!warning] NEVER merge without explicit user approval
-> **Do NOT** run `gh pr merge`, `wt merge <main>`, or `git merge` that lands the PR. Stop at `gh pr view`/`gh pr diff`. Wait for user's `approve` — user needs to review and run ==extra verification==. If blocked, state `BLOCKED: awaiting PR approval`.
+> **Do NOT** run `gh pr merge`, `wt merge <main>`, or `git merge` that lands the PR *unless user asked for merge*. Stop at `gh pr view`/`gh pr diff` + checks watch. Wait for user's `approve` — user needs to review and run ==extra verification==. If blocked, state `BLOCKED: awaiting PR approval`. When user says `merge`, delegate to Phase 7.
 
-**Done when** PR is `OPEN` and `git diff --check` is clean. Merge is a **user decision**, not a model transition.
+**Done when** PR is `OPEN`, `git diff --check` clean, and `gh pr checks --watch` passed (or intentionally skipped).
 
-### Phase 7 — Tag / Release / Publish — delegated
+### Phase 6b — Merge PR (when approved) + watch runs
+
+> Approvals live with the user. Only run this when user explicitly says `merge` / `approve` / `land`.
+
+```bash
+# Squash-merge approved PR and watch post-merge runs to green (mirrors dispatch.sh gh run watch)
+uv run scripts/merge_pr.py <branch|pr_number|pr_url> [--base main] [--squash|--merge|--rebase] [--auto] [--admin]
+# dispatcher: uv run scripts/worktree.py merge-pr <branch> --base main
+# flags: --no-watch, --watch-interval 10, --fail-fast, --no-post-merge-watch, --no-delete-branch
+# internally: gh pr checks snapshot → gh pr checks --watch (pre-merge gate, like dispatch.sh BEFORE_ID)
+#             gh pr merge --squash --delete-branch → gh pr view state=MERGED
+#             post-merge: poll gh run list --branch <base> for new run (!= BEFORE_ID) → gh run watch --exit-status
+```
+
+- Default strategy `--squash` + `--delete-branch`; `--auto` enables auto-merge when checks are still pending.
+- Pre-merge gate is the same `gh pr checks --watch` as Phase 6; on failure exits with `gh pr checks --json` + `gh run list` diagnostics (no merge attempted unless `--auto`).
+- Post-merge watch replicates `dispatch.sh` final stage: captures `BEFORE_ID` on base branch before merge, polls `gh run list --branch <base>` for new `databaseId`, then `gh run watch <id> --exit-status`; on failure shows `gh run view --log-failed`.
+
+**Done when** `gh pr view --json state` is `MERGED` and post-merge `gh run watch` passed (or skipped via `--no-watch`/`--no-post-merge-watch`).
+
+### Phase 7 — Tag / Release / Publish — delegated (dispatch.sh watch applies)
 
 > [!warning] NEVER tag, release, or publish proactively — delegated
-> This skill stops at PR `OPEN`. Tag → release → publish lifecycle is owned by `scaffold` (`release.yml`) and `release` skill. At workflow end confirm with user, then delegate to `release` skill if requested.
+> This skill stops at PR `MERGED` (or `OPEN` when merge not requested). Tag → release → publish is owned by `gh-release` (`dispatch.sh` with `gh run watch`). At workflow end confirm with user, then delegate to `gh-release` if requested.
+Delegation (when user confirms release after merge):
 
-Delegation:
+- `gh-release` (`skills/gh-router/subskills/gh-release/scripts/dispatch.sh`): `check.sh` → `verify.sh` → `dispatch.sh` (preview → dispatch → `gh run watch`) — version from `feat`/`fix`/`!` since last tag.
+- Publish via `gh-release` only (interactive, `gh auth token` + `semantic-release --dry-run` preview).
 
-- `release` skill: `npm run release -- X.Y.Z` (`--dry-run` supported) — bumps manifest, moves `CHANGELOG` `Unreleased` → `[X.Y.Z]`, commits `chore: release`, annotated tag, pushes tag to trigger `release.yml`
-- Publish via `release` skill only (interactive, OTP)
-
-**Done when** PR is `OPEN` and user confirms next step or defers to `release` skill.
-
+**Done when** PR is `MERGED` (or `OPEN` when merge not yet requested) and release delegation is user-confirmed.
 ## Completion checklist
 
 - [ ] Ticket claimed (`assignee == me`)
@@ -364,7 +387,7 @@ Delegation:
 - [ ] Write tickets fanned out as isolated worktrees (read-only tickets skipped); children merged back via `wt merge` pre-merge gate
 - [ ] Parent heavy gate (`wt.toml pre-merge`) green, atomic commits clean, `CHANGELOG.md` bullet under `## [Unreleased]`
 - [ ] `Co-authored-by` trailers present when ticket author ≠ merger
-- [ ] PR `OPEN` with body ending `Closes #<ticket>` / `Part of #<map>`; diff clean; **NOT merged**
+- [ ] PR `OPEN` (or `MERGED` after Phase 6b) with body ending `Closes #<ticket>` / `Part of #<map>`; diff clean; `gh pr checks --watch` passed; post-merge `gh run watch` passed when merged
 - [ ] Tag/release/publish **confirmed with user** — no proactive tag/publish executed
 
 ## Disclosed references
