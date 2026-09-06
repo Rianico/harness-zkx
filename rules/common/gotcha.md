@@ -1,6 +1,18 @@
 # Gotcha — Never Bypass Blocking Signals
 
-Blocking signals are hard gates. Fix at source, do not route around.
+Blocking signals are hard gates. Never skip, escape, or bypass any gate or verification — fix at source, do not route around.
+
+---
+
+## 0) Never skip / escape / bypass any gate or verification
+
+**When:** any gate blocks — `pi-lens` blocking / `blocking_provenance_untrusted`, `wt` pre-merge / pre-push (`commitlint`, CHANGELOG guard), CI (`tests`, `typecheck`, `lint`).
+
+**Don't:** `--no-verify`, `--no-gpg-sign` bypass, raw `git worktree add` / `git merge` to dodge `wt` hooks, commenting out / disabling any gate, `--force` / force-merge to override, or blanket suppression.
+
+**Do:** fix code/config/docs at source → re-run that gate → green / `0 blocking` → clean operation. If false positive, suppress at smallest seam with invariant + owner (`// SAFETY:`, `// ast-grep-ignore:`, `# zizmor: ignore[...]`) — never bypass.
+
+**Check:** transcript shows no `--no-verify` / raw bypass / disabled gate when blocked; only narrow suppression with reason and invariant.
 
 ---
 
@@ -40,10 +52,22 @@ Blocking signals are hard gates. Fix at source, do not route around.
 
 ---
 
+## 4) GitHub repo exploration — clone once, read locally
+
+**When:** model needs to explore a GitHub repo (browse code, compare versions, gather API facts).
+
+**Don't:** `fetch`/`fetch_content` the same repo file-by-file — burns context, rate limits, and repeats on every question.
+
+**Do:** `gh repo clone <owner/repo> $(mktemp -d)/<repo> -- --depth 1` (add `--branch <b>` when version matters), then `rg`/`fd`/`read` locally. Re-clone or `git fetch --depth 1` only when stale.
+
+**Check:** repeated reads against one repo hit local files, not fresh `fetch_content` calls; no more than one clone per repo per session unless ref changes.
+
+---
+
 ## Common
 
 **Taint:** Bypass may make one command succeed but taints shell provenance `untrusted` — blocks all later `commit`/`push`/`diff` until fresh `pi`/terminal. Re-running `pi-lens` clears diagnostics, not provenance.
 
-**Why:** Breaks EDD evidence loop; hides safety signal.
+**Why:** Breaks EDD evidence loop; hides safety signal. Skipping any gate defeats verification — the gate is the point.
 
-**Escalation:** If false positive, suppress at smallest seam (`// SAFETY:`, `// ast-grep-ignore:`, `# zizmor: ignore[...]`) with invariant — do not bypass.
+**Escalation:** If false positive, suppress at smallest seam (`// SAFETY:`, `// ast-grep-ignore:`, `# zizmor: ignore[...]`) with invariant — do not bypass any gate.
