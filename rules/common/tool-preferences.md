@@ -1,6 +1,5 @@
 # Tool Preferences
 
-- **Discovery:** `fd` > `find`; `rg` > `grep`; `eza -T -L 3` for tree
 - **Reading:** `read` for files you will edit (not `cat`/`bat`)
 - **Paths:** absolute only — cwd resets between subagent turns
 - **Code nav:** AST/treesitter for overview; LSP for cross-file renames (`rename`, `references`)
