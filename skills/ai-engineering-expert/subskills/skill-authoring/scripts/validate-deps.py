@@ -282,14 +282,14 @@ def _check_duplicate_skill_names(root_dir: Path) -> bool:
         has_managed = any(managed_flags)
         has_unmanaged = any(not f for f in managed_flags)
         is_programming_migration = has_managed and has_unmanaged and any(
-            "programming-expert/subskills" in str(p) for p, m in zip(paths, managed_flags) if m
+            "programming-expert/subskills" in str(p) for p, m in zip(paths, managed_flags) if m  # noqa: B905
         )
         if is_programming_migration:
             rels = [p.relative_to(root_dir) for p in paths]
             print(f"LINT WARN: Skill name '{name}' has staged migration duplicate ({len(paths)} files) — managed subskill + legacy top-level:")
             for rel in rels:
                 print(f"  - {rel}")
-            print(f"  → Retire legacy top-level after cutover to clear WARN.")
+            print("  → Retire legacy top-level after cutover to clear WARN.")
             continue
         rels = [p.relative_to(root_dir) for p in paths]
         print(f"LINT FAIL: Skill name '{name}' is declared by {len(paths)} files:")

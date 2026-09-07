@@ -4,7 +4,7 @@ description: >-
   Foundational coding principles + polyglot expertise for Python/TypeScript/Rust/Go/C++/Java/Kotlin/Swift/PHP/Perl/Lua. Use when writing, refactoring, debugging, testing, or reviewing code — Clean Code/SOLID/architecture language-agnostically. TRIGGER: coding, programming, basedpyright, architecture
 arguments: language
 argument-hint: |-
-  python-expert -- async, Django, PyTorch, testing patterns
+  python-expert -- type safety (Pydantic), async, testing, design, observability, resilience, packaging, production — 18 sub-domains
   typescript-expert -- advanced types, Jest, style, tooling, monorepo
   rust-expert -- Cargo, borrow checker, lifetimes, testing
   go-expert -- modules, interfaces, concurrency, table-driven tests
@@ -45,7 +45,7 @@ Read the subskill that matches the language you need. Use `Read` (not `Skill` to
 
 | Language              | Subskill                                              | When to load                                                                                             |
 | --------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `python-expert`       | `$SKILL_DIR/subskills/python-expert/SKILL.md`       | async, Django, PyTorch, generics, pytest — [python-expert](subskills/python-expert/SKILL.md)           |
+| `python-expert`       | `$SKILL_DIR/subskills/python-expert/SKILL.md`       | type safety (Pydantic strict), async, testing, design, observability, resilience, resources, jobs, packaging, production — [python-expert](subskills/python-expert/SKILL.md) |
 | `typescript-expert`   | `$SKILL_DIR/subskills/typescript-expert/SKILL.md`   | advanced types, Jest, style, tooling, monorepo — [typescript-expert](subskills/typescript-expert/SKILL.md) |
 | `rust-expert`         | `$SKILL_DIR/subskills/rust-expert/SKILL.md`         | Cargo, borrow checker, lifetimes, Result, async — [rust-expert](subskills/rust-expert/SKILL.md)         |
 | `go-expert`           | `$SKILL_DIR/subskills/go-expert/SKILL.md`           | modules, interfaces, goroutines, table-driven tests — [go-expert](subskills/go-expert/SKILL.md)         |
