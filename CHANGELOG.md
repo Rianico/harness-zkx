@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **programming-expert:** absorb python universal principles into router spine
 - **python-expert:** refine with Pydantic-first type safety and 18-source comprehensive patterns
 - **skills:** refine writing-for-agents and programming-expert triggers (#13)
 - **scaffold:** migrate typescript toolchain to native pnpm v12 + oxlint/oxfmt
