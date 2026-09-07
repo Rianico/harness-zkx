@@ -7,7 +7,7 @@
 ## Runtimes — native tool owns version + deps; commit version file
 
 - **Python:** `uv` > `pip`/`poetry`/`pipenv` — `uv run` / `uv add` / `uv sync`; respects `.python-version` (default 3.14) and `.tool-versions` when present
-- **TypeScript/Node:** `pnpm` > `npm`/`yarn` — `pnpm -r` workspaces; runner `tsx` > `ts-node`; check `tsc --noEmit` (`tsc -b`), lint `biome` or `eslint`, test `vitest` / `node --test`
+- **TypeScript/Node:** `pnpm v12` > `npm`/`yarn` — `pnpm -r` workspaces (Rust native, content-addressed, `packageManager: pnpm@12.0.0` + `.nvmrc 24`); runner `tsx` > `ts-node`; check `tsc --noEmit` (TS v7 Go native, `tsc -b` parallel), lint `oxlint` + format `oxfmt` (native, Prettier fallback; `biome` deprecated compat), test `vitest` / `node --test`, build `vite v8` (Rolldown + Oxc)
 - **Rust:** `cargo` — `cargo test` / `cargo clippy` / `cargo fmt` + `rust-toolchain.toml`
 - **Go:** `go` — `go test ./...` / `go vet` / `gofumpt` / `golangci-lint` + `go.mod` / `go.work`
 - **Multi (2+ runtimes):** `asdf` + `.tool-versions` → `asdf install` syncs all; other tools respect it; `corepack`/`nvm` + `.nvmrc` for Node fallback when single

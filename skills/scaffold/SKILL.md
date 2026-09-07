@@ -7,7 +7,7 @@ argument-hint: |-
   git-scaffolding -- loads conventional commits, semantic-release, changelog, and branch hygiene
   python-scaffolding -- loads uv, .python-version, pyproject, and pytest wiring
   rust-scaffolding -- loads Cargo, rust-toolchain, fmt/clippy/test wiring
-  typescript-scaffolding -- loads pnpm, .nvmrc, package.json/tsconfig, and biome/vitest wiring (lib/cli/pi-extension)
+  typescript-scaffolding -- loads pnpm v12, .nvmrc, package.json/tsconfig, and oxlint/oxfmt + vite/vitest wiring (TS v7) (lib/cli/pi-extension)
   ci-scaffolding -- loads GitHub Actions verify+release and on-demand dispatch
   omitted -- loads the 80/20 spine, GDD wiring, and dispatch registry
 metadata:
@@ -104,7 +104,7 @@ Selection rule: **preset when confident, ask only when ambiguous.** If `inferred
 
 | Detected state                                                                               | Recommended combos (2–4, with generator)                                                                                                                                                                                                                                                                                                                                                                                         |
 | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Greenfield** (no runtime, no git contract)                                                 | 1. Python 80% + CI — `scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `ci --ci-variant python --with-coverage` + `git` (reason: most common, minimal seam) · 2. Rust + CI — `rust --with-coverage` + `ci --ci-variant rust` (reason: alternative runtime) · 3. TypeScript lib + CI — `typescript --ts-variant lib` + `ci --ci-variant node` + `git` (reason: no python/rust files, pnpm + biome/vitest gate) |
+| **Greenfield** (no runtime, no git contract)                                                 | 1. Python 80% + CI — `scaffold.py --flavor all --with-coverage --coverage-threshold 80` + `ci --ci-variant python --with-coverage` + `git` (reason: most common, minimal seam) · 2. Rust + CI — `rust --with-coverage` + `ci --ci-variant rust` (reason: alternative runtime) · 3. TypeScript lib + CI — `typescript --ts-variant lib` + `ci --ci-variant node` + `git` (reason: no python/rust files, pnpm v12 + oxlint/oxfmt/vite gate) |
 | **Existing Python, no scaffold** (`pyproject.toml` present, no `.releaserc.json`)            | 1. ✅ Retrofit Python 80% + CI — `python --with-coverage 80` + `ci --ci-variant python --with-coverage` + `git` (reason: preserve existing pyproject, add missing contract) · 2. Minimal — `git` only (reason: wire release without touching runtime) · 3. Add --dry-run preview first (reason: show diff before writes)                                                                                                         |
 | **Existing Rust, no scaffold** (`Cargo.toml` present)                                        | 1. ✅ Retrofit Rust + CI — `rust` + `ci --ci-variant rust` + `git` (reason: mirror python pattern) · 2. With coverage — add `--with-coverage --coverage-threshold 80` (reason: opt-in llvm-cov)                                                                                                                                                                                                                                  |
 | **Python scaffold stale** (has `.releaserc.json` but missing `changelog-check.yml` or hooks) | 1. ✅ Repair git contract — `git --dry-run` then `git` (reason: changelog guard stale, `--dry-run` shows drift) · 2. Add coverage if `python.coverage==false` — `python --with-coverage 80` (reason: coverage absent)                                                                                                                                                                                                            |
@@ -167,9 +167,9 @@ Dialog:
   multipleChoice: true
   options:
     - label: 'Formatter'
-      description: 'Enforces style without debate — ruff format / cargo fmt / biome check'
+      description: 'Enforces style without debate — ruff format / cargo fmt / oxlint / oxfmt --check'
     - label: 'Linter'
-      description: 'Catches bugs/idioms — ruff check / clippy -D warnings / biome check'
+      description: 'Catches bugs/idioms — ruff check / clippy -D warnings / oxlint / oxfmt --check'
     - label: 'Type check'
       description: 'Proves contracts — basedpyright strict / tsc --noEmit / cargo check'
     - label: 'Tests'

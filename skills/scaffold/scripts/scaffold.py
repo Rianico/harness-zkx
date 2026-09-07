@@ -8,7 +8,7 @@
 Deterministic scaffold generator — tool owns bytes, model owns intent.
 
 Usage:
-  uv run $SKILL_DIR/scripts/scaffold.py --flavor git [--project-name NAME] [--dry-run]
+  uv run $SKILL_DIR/scripts/scaffold.py --flavor git [--project-name NAME] [--dry-run] [--only pre-push|releaserc|...] [--without ...] [--components ...]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor python [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor rust [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript [--ts-variant lib|cli|pi-extension] [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
@@ -108,7 +108,7 @@ jobs:
         with: {node-version: __NODE_VERSION__, cache: pnpm}
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm audit --audit-level high
-      - run: pnpm run lint && pnpm run typecheck && pnpm test
+      - run: pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
   release:
     needs: verify
     runs-on: ubuntu-latest
@@ -246,10 +246,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       git add CHANGELOG.md
       if git rev-parse --verify HEAD >/dev/null 2>&1; then
         if git commit --amend --no-edit --no-verify >/dev/null 2>&1; then
-          echo "[pre-push] amended HEAD $(git rev-parse --short HEAD) with updated CHANGELOG.md [Unreleased]" >&2
-          echo "[pre-push] push aborted — amended commit, please run: git push" >&2
-          echo "[pre-push] (bypass: PREPUSH_AUTOFIX=0 git push --no-verify)" >&2
+          echo "[pre-push] amended HEAD $(git rev-parse --short HEAD) with updated CHANGELOG.md [Unreleased] — auto-pushing..." >&2
           rm -f "$tmp"
+          # Schedule auto-retry after this hook aborts the current push.
+          # Use background job so the outer `git push` can exit cleanly (code 1) before retry.
+          # Retry re-enters this hook once (now Unreleased is clean) and succeeds.
+          echo "[pre-push] push aborted — auto-retrying in background..." >&2
+          ( sleep 0.5; git push </dev/null >&2 || git push --set-upstream origin HEAD </dev/null >&2 ) &
           exit 1
         fi
       fi
@@ -455,7 +458,7 @@ Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` 
 - Features: state problem + proposal at minimum; alternatives optional.
 Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
 ## Before PR
-`pnpm run lint && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
+`pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
 """
 CONTRIBUTING_MD_TMPL_PYTHON = """\
 # Contributing to {project_name}
@@ -498,6 +501,63 @@ GITIGNORE_GIT = [".lsz/", ".pi/", "coverage/"]
 GITIGNORE_PYTHON_EXTRA = ["__pycache__/", ".venv/"]
 GITIGNORE_RUST_EXTRA = ["target/"]
 GITIGNORE_TS_EXTRA = ["node_modules/", "dist/"]
+
+# Component granularity — git flavor default is all; --only/--without/--components select subset
+GIT_COMPONENTS: set[str] = {
+    "releaserc",           # .releaserc.json
+    "release-yml",         # .github/workflows/release.yml (git variant)
+    "changelog-check",     # .github/workflows/changelog-check.yml
+    "pre-push",            # .githooks/pre-push + .husky/pre-push + wt hook
+    "changelog-script",    # scripts/changelog-unreleased.py
+    "commitlint",          # commitlint.config.js
+    "changelog-md",        # CHANGELOG.md
+    "issue-templates",     # .github/ISSUE_TEMPLATE/* + config.yml
+    "contributing",        # CONTRIBUTING.md
+    "agents",              # AGENTS.md patch
+    "gh-router",           # skills/gh-router
+    "gitignore",           # .gitignore append
+}
+
+CI_COMPONENTS: set[str] = {
+    "release-yml",         # .github/workflows/release.yml (ci variant)
+}
+
+def _parse_components(raw: str | None, available: set[str], flag: str) -> set[str] | None:
+    if raw is None:
+        return None
+    # allow comma-separated, plus alias normalization for pre-push vs pre_push, changelog vs changelog-script, etc.
+    alias = {
+        "hooks": "pre-push",
+        "hook": "pre-push",
+        "pre_push": "pre-push",
+        "changelog": "changelog-md",
+        "script": "changelog-script",
+        "templates": "issue-templates",
+        "issues": "issue-templates",
+    }
+    parts = [s.strip() for s in raw.split(",") if s.strip()]
+    resolved: set[str] = set()
+    for part in parts:
+        low = part.lower()
+        low = alias.get(low, low)
+        if low not in available:
+            raise ValueError(f"unknown component '{part}' for {flag} (available: {', '.join(sorted(available))})")
+        resolved.add(low)
+    return resolved
+
+def _resolve_selected(only: str | None, without: str | None, components: str | None, available: set[str]) -> set[str]:
+    # --components is alias for --only
+    effective_only = components if components is not None else only
+    if effective_only is not None:
+        sel = _parse_components(effective_only, available, "--only/--components")
+        assert sel is not None
+    else:
+        sel = set(available)
+    if without is not None:
+        excl = _parse_components(without, available, "--without")
+        assert excl is not None
+        sel -= excl
+    return sel
 
 PYTHON_VERSION = "3.14\n"
 
@@ -563,14 +623,18 @@ def _ts_normalize_name(project_name: str) -> str:
 def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) -> str:
     npm_name = _ts_normalize_name(project_name)
     scripts: dict[str, str] = {
-        "lint": "biome check .",
+        "lint": "oxlint .",
+        "format": "oxfmt --check .",
+        "format:fix": "oxfmt .",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
     }
     dev_deps: dict[str, str] = {
-        "typescript": ">=5.6",
-        "@biomejs/biome": ">=2",
-        "vitest": ">=3",
+        "typescript": ">=7",
+        "oxlint": ">=1",
+        "oxfmt": ">=0.15",
+        "vite": ">=8",
+        "vitest": ">=4",
         "tsx": ">=4",
         "@types/node": ">=24",
         "@semantic-release/changelog": ">=7",
@@ -590,7 +654,7 @@ def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) 
         "version": "0.1.0",
         "description": "",
         "type": "module",
-        "packageManager": "pnpm@10.0.0",
+        "packageManager": "pnpm@12.0.0",
         "engines": {"node": ">=24"},
         "scripts": scripts,
         "devDependencies": dev_deps,
@@ -620,7 +684,7 @@ def build_tsconfig() -> str:
         "include": ["src", "tests"],
     }
     rendered = json.dumps(tsconfig, indent=2)
-    # biome collapses short arrays — match its bytes so `biome check` is green
+    # oxfmt/biome compat — keep short arrays collapsed so formatter is green
     rendered = rendered.replace('[\n    "src",\n    "tests"\n  ]', '["src", "tests"]')
     rendered = rendered.replace('[\n      "node"\n    ]', '["node"]')
     return rendered + "\n"
@@ -641,6 +705,20 @@ BIOME_JSON = """\
       "quoteStyle": "double"
     }
   }
+}
+"""
+
+# Ox native toolchain (pnpm v12 + TS v7 + Vite v8 + Oxlint + Oxfmt)
+OXLINT_JSON = """\
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "rules": {}
+}
+"""
+
+OXFMT_JSON = """\
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json"
 }
 """
 
@@ -700,7 +778,7 @@ Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (bl
 - Bugs: paste-complete, prefer text over screenshots.
 - Features: state problem + proposal at minimum; alternatives optional.
 ## Before PR
-`pnpm run lint && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
+`pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
 """
 
 CI_PYTHON_VERIFY_YML = """\
@@ -1198,30 +1276,40 @@ def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
     )
 
 
-def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
-    write_file(cwd / ".releaserc.json", RELEASERC_JSON, dry_run)
-    write_file(cwd / ".github" / "workflows" / "release.yml", RELEASE_YML, dry_run)
-    write_file(cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run)
-    write_file(cwd / ".githooks" / "pre-push", GITHOOK_PRE_PUSH, dry_run)
-    write_file(cwd / ".husky" / "pre-push", HUSKY_PRE_PUSH, dry_run)
-    if not dry_run:
+def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool, selected: set[str] | None = None) -> None:
+    # finer granularity: default all, filtered by --only/--without/--components
+    sel = selected if selected is not None else GIT_COMPONENTS
+    if "releaserc" in sel:
+        write_file(cwd / ".releaserc.json", RELEASERC_JSON, dry_run)
+    if "release-yml" in sel:
+        write_file(cwd / ".github" / "workflows" / "release.yml", RELEASE_YML, dry_run)
+    if "changelog-check" in sel:
+        write_file(cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run)
+    if "pre-push" in sel:
+        write_file(cwd / ".githooks" / "pre-push", GITHOOK_PRE_PUSH, dry_run)
+        write_file(cwd / ".husky" / "pre-push", HUSKY_PRE_PUSH, dry_run)
+    if "pre-push" in sel and not dry_run:
         for _hook in (cwd / ".githooks" / "pre-push", cwd / ".husky" / "pre-push"):
             try:
                 _hook.chmod(0o755)
             except OSError:  # best-effort chmod, ignore on read-only FS
                 pass
-    write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
-    write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
-    write_file(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run)
-    write_file(
-        cwd / ".github" / "ISSUE_TEMPLATE" / "01-bug_report.yml", ISSUE_BUG_REPORT_YML, dry_run
-    )
-    write_file(
-        cwd / ".github" / "ISSUE_TEMPLATE" / "02-feature_request.yml",
+    if "changelog-script" in sel:
+        write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
+    if "commitlint" in sel:
+        write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
+    if "changelog-md" in sel:
+        write_file(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run)
+    if "issue-templates" in sel:
+        write_file(
+            cwd / ".github" / "ISSUE_TEMPLATE" / "01-bug_report.yml", ISSUE_BUG_REPORT_YML, dry_run
+        )
+        write_file(
+            cwd / ".github" / "ISSUE_TEMPLATE" / "02-feature_request.yml",
         ISSUE_FEATURE_REQUEST_YML,
         dry_run,
     )
-    write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
+        write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
     # migrate legacy markdown template (pre-YAML) — keep spine small
     legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
     if legacy_md.exists():
@@ -1237,21 +1325,26 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool) -> None:
                 )
             except OSError:
                 pass
-    contrib = CONTRIBUTING_MD_TMPL.format(project_name=project_name)
-    write_file(
-        cwd / "CONTRIBUTING.md",
+    if "contributing" in sel:
+        contrib = CONTRIBUTING_MD_TMPL.format(project_name=project_name)
+        write_file(
+            cwd / "CONTRIBUTING.md",
         contrib,
         dry_run,
         warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
     )
-    append_gitignore(cwd / ".gitignore", GITIGNORE_GIT, dry_run)
-    patch_agents(
-        cwd / "AGENTS.md",
+    if "gitignore" in sel:
+        append_gitignore(cwd / ".gitignore", GITIGNORE_GIT, dry_run)
+    if "agents" in sel:
+        patch_agents(
+            cwd / "AGENTS.md",
         "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
         dry_run,
     )
-    _write_gh_router(cwd, dry_run)
-    patch_wt_hooks(cwd, dry_run)
+    if "gh-router" in sel:
+        _write_gh_router(cwd, dry_run)
+    if "pre-push" in sel:
+        patch_wt_hooks(cwd, dry_run)
 
 
 def do_python(
@@ -1349,7 +1442,8 @@ def do_typescript(
         warn_mixed=warn,
     )
     write_file(cwd / "tsconfig.json", build_tsconfig(), dry_run)
-    write_file(cwd / "biome.json", BIOME_JSON, dry_run)
+    write_file(cwd / ".oxlintrc.json", OXLINT_JSON, dry_run)
+    write_file(cwd / ".oxfmtrc.json", OXFMT_JSON, dry_run)
     write_file(
         cwd / "src" / "index.ts",
         INDEX_TS_TMPL.format(project_name=npm_name),
@@ -1378,7 +1472,7 @@ def do_typescript(
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
-        "### Runtime\nTypeScript: pnpm + .nvmrc (24), verify via biome/tsc/vitest; see package.json\n",
+        "### Runtime\nTypeScript: pnpm v12 + .nvmrc (24) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json\n",
         dry_run,
     )
     contrib_ts = CONTRIBUTING_MD_TMPL_TYPESCRIPT.format(project_name=project_name)
@@ -1396,8 +1490,11 @@ def do_typescript(
 
 
 def do_ci(
-    cwd: pathlib.Path, dry_run: bool, variant: str, with_coverage: bool, threshold: int
+    cwd: pathlib.Path, dry_run: bool, variant: str, with_coverage: bool, threshold: int, selected: set[str] | None = None
 ) -> None:
+    sel = selected if selected is not None else CI_COMPONENTS
+    if "release-yml" not in sel:
+        return
     if variant == "python":
         if with_coverage:
             content = CI_PYTHON_COVERAGE_YML.replace(
@@ -1449,6 +1546,10 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         ".nvmrc": exists(".nvmrc"),
         "tsconfig.json": exists("tsconfig.json"),
         "biome.json": exists("biome.json"),
+        ".oxlintrc.json": exists(".oxlintrc.json"),
+        ".oxfmtrc.json": exists(".oxfmtrc.json"),
+        "oxlint.json": exists("oxlint.json"),
+        "oxfmt.json": exists("oxfmt.json"),
         "package-lock.json": exists("package-lock.json"),
         "pnpm-lock.yaml": exists("pnpm-lock.yaml"),
         ".tool-versions": exists(".tool-versions"),
@@ -1558,11 +1659,11 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
 
     verify_gates: dict[str, bool] = {
         "formatter": bool(
-            re.search(r"ruff.*format|cargo fmt|prettier|biome", pyproject + release_yml + pkg_json)
+            re.search(r"ruff.*format|cargo fmt|prettier|biome|oxfmt", pyproject + release_yml + pkg_json)
         ),
         "linter": bool(
             re.search(
-                r"ruff check|clippy|eslint|biome", pyproject + release_yml + pkg_json, re.IGNORECASE
+                r"ruff check|clippy|eslint|biome|oxlint", pyproject + release_yml + pkg_json, re.IGNORECASE
             )
         ),
         "typecheck": bool(
@@ -1681,6 +1782,22 @@ def main() -> int:
         "--detect", action="store_true", help="detect project state and exit (no writes)"
     )
     ap.add_argument(
+        "--only",
+        default=None,
+        help="only scaffold these components (comma-separated, e.g. 'pre-push,releaserc'); default all",
+    )
+    ap.add_argument(
+        "--without",
+        default=None,
+        dest="without",
+        help="exclude these components (comma-separated, e.g. 'release-yml,changelog-check')",
+    )
+    ap.add_argument(
+        "--components",
+        default=None,
+        help="alias for --only (comma-separated)",
+    )
+    ap.add_argument(
         "--json",
         action="store_true",
         help="with --detect, emit JSON only (alias, JSON always to stdout)",
@@ -1706,8 +1823,20 @@ def main() -> int:
         print("error: --project-name is required when cwd has no inferrable name", file=sys.stderr)
         return 2
 
+    # finer granularity: resolve selected components (git/ci)
+    git_selected: set[str] | None = None
+    ci_selected: set[str] | None = None
+    if flavor in ("git", "all") or flavor == "ci":
+        try:
+            if flavor in ("git", "all"):
+                git_selected = _resolve_selected(args.only, args.without, args.components, GIT_COMPONENTS)
+            if flavor == "ci":
+                ci_selected = _resolve_selected(args.only, args.without, args.components, CI_COMPONENTS)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
     if flavor in ("git", "all"):
-        do_git(cwd, project_name, dry_run)
+        do_git(cwd, project_name, dry_run, selected=git_selected)
     if flavor in ("python", "all"):
         do_python(cwd, project_name, dry_run, with_coverage, threshold)
     if flavor in ("rust", "all"):
@@ -1715,7 +1844,7 @@ def main() -> int:
     if flavor in ("typescript", "all"):
         do_typescript(cwd, project_name, dry_run, args.ts_variant, with_coverage, threshold)
     if flavor == "ci":
-        do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold)
+        do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold, selected=ci_selected)
 
     if dry_run:
         print(

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **scaffold:** migrate typescript toolchain to native pnpm v12 + oxlint/oxfmt
 - **skills:** improve release, pr/merge and pre-push hooks with watch and auto-fix (#12)
 - **scaffold:** add TypeScript flavor with lib/cli/pi-extension variants
 - **scaffold:** add issue templates, npm publish toggle and release polish
@@ -201,5 +202,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Code Refactoring
 
+- **skills:** absorb architecture-expert into programming-expert (BREAKING CHANGE)
 - **skills:** consolidate language experts into programming-expert router (BREAKING CHANGE)
 - **changelog:** adopt Option A PR guard + pre-push hook (BREAKING CHANGE)
