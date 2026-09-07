@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **skills:** refine writing-for-agents and programming-expert triggers
+- **harness-audit:** audit pi sessions for oversized bash with type-safe triage
 - **scaffold:** migrate typescript toolchain to native pnpm v12 + oxlint/oxfmt
 - **skills:** improve release, pr/merge and pre-push hooks with watch and auto-fix (#12)
 - **scaffold:** add TypeScript flavor with lib/cli/pi-extension variants

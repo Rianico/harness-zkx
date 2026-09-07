@@ -1,7 +1,7 @@
 ---
 name: programming-expert
 description: >-
-  Polyglot language expertise for Python/TypeScript/Rust/Go/Lua/C++/Java/Kotlin/Swift/PHP/Perl and type checking. Use when implementing, debugging, testing, or reviewing code in any language. TRIGGER: python, typescript, rust, go, lua, cpp, java, kotlin, swift, php, perl, basedpyright, architecture
+  Foundational coding principles + polyglot expertise for Python/TypeScript/Rust/Go/C++/Java/Kotlin/Swift/PHP/Perl/Lua. Use when writing, refactoring, debugging, testing, or reviewing code — Clean Code/SOLID/architecture language-agnostically. TRIGGER: coding, programming, basedpyright, architecture
 arguments: language
 argument-hint: |-
   python-expert -- async, Django, PyTorch, testing patterns

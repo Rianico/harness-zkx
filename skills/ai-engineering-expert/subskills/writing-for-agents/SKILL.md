@@ -10,9 +10,22 @@ metadata:
 
 Managed sub-skill of `ai-engineering-expert`. Load when `$domain` is `writing-for-agents` or when any `ai-engineering-expert` task writes or edits an agent-consumed document. For skill files, also read [$SKILL_DIR/references/skill-mechanics.md](references/skill-mechanics.md).
 
+This skill teaches how to **shape a document so a later model run follows it reliably** — not how to run a workflow yourself. You are the designer; a future agent is the reader. Every choice below serves that handoff.
+
 Reference for writing any document an agent consumes — a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable — the agent taking the same _process_ every run, not producing the same output.
 
 When the document you're writing is a skill, read [`references/skill-mechanics.md`](references/skill-mechanics.md) for frontmatter, invocation choice, and router skills. For harness context-load, invocation-class, and description-budget rules, see parent `ai-engineering-expert` Context-Load Policy (`$SKILL_DIR/../..`) — single source of truth, not duplicated here.
+
+## Start from intent, name the goal
+
+Derive a one-sentence **goal** from the user's intent, artifacts, and prior chat — then let that goal decide what the document keeps, trims, and how it is ordered. This is the first and highest-leverage move; everything below only earns its keep against that goal.
+
+- **Name it before you draft.** Write the goal down in one sentence (as `handoff` does with its Primary Goal) before choosing headings. If you delete a section and the goal still holds intact, delete it.
+- **Use the goal as the review bar.** A reviewer must be able to point to the goal sentence and audit each section: "does this serve the goal, or is it exposition?"
+- **Pin each behavior with a concrete example.** For every branch or rule, give a before/after or given/when/then-shaped example — the example *is* the contract. A new agent should be able to map each example to a file:line without guessing.
+- **Verify with fresh signals, not assertions.** Lints, typechecks, and tests are the authority; for qualitative fit, use a skeptic second read. Never trust "I did it" — trust the tool output that would go red if the claim were false.
+
+Keep the whole skill body inline when you teach a writer — the writer needs the full picture in one read. Splitting core guidance behind extra pointers adds round-trips and variance; reserve disclosure for branch-conditional depth, not for moves needed on every run. See [philosophy](references/philosophy.md) for the builder-facing mapping of these moves to their prior labels.
 
 ## Context pointers
 
@@ -102,4 +115,4 @@ Rules must be _correct_ and _approachable_ or they are unfollowed — the game-r
 
 - **When to load:** `ai-engineering-expert` dispatch for `skill-authoring` or any task that creates/edits an agent-consumed doc must also read this sub-skill via `Read` at `$SKILL_DIR/subskills/writing-for-agents/SKILL.md` (parent) — subskills hidden from `Skill` discovery.
 - **Skill-authoring integration:** Apply hierarchy, pointer wording, completion criteria, leading words, and pruning when drafting `SKILL.md` body. Keep body under 500 lines; push deep methodology to `references/` behind a pointer (see [skill-mechanics](references/skill-mechanics.md)).
-- **Verification:** Writing output verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` and `context-check` (frontmatter, description budget, trigger vocab, single source), and semantically via a Skeptic subagent comparing prose to intent. See sibling [verification](../verification/SKILL.md) for the full EDD loop. Never trust model says doc is good; trust fresh validation output.
+- **Verification:** Writing output verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` and `context-check` (frontmatter, description budget, trigger vocab, single source), and semantically via a Skeptic subagent comparing prose to intent. See sibling [verification](../verification/SKILL.md) for how to verify with fresh environment signals plus a skeptic review. Never trust the model says the doc is good; trust fresh validation output.
