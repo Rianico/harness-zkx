@@ -185,6 +185,7 @@ GET /api/v1/users?fields=id,name,email
 Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 
 # API key (server-to-server)
+// pi-lens-ignore: generic-api-key
 X-API-Key: sk_live_abc123
 ```
 

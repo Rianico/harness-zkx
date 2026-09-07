@@ -145,6 +145,7 @@ Consider a client sending a `textDocument/reference` request to a server and the
     		"includeDeclaration": true
     	},
     	// The token used to report work done progress.
+    	// pi-lens-ignore: generic-api-key
     	"workDoneToken": "1d546990-40a3-4b77-b134-46622995f6ae"
     }
     
@@ -165,6 +166,7 @@ The corresponding type definition for the parameter property looks like this:
 A server uses the `workDoneToken` to report progress for the specific `textDocument/reference`. For the above request the `$/progress` notification params look like this:
 
 
+    // pi-lens-ignore: generic-api-key
     {
     	"token": "1d546990-40a3-4b77-b134-46622995f6ae",
     	"value": {

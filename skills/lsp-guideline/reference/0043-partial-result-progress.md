@@ -22,6 +22,7 @@ Partial results are also reported using the generic [`$/progress`](#progress) no
     		"includeDeclaration": true
     	},
     	// The token used to report work done progress.
+    	// pi-lens-ignore: generic-api-key
     	"workDoneToken": "1d546990-40a3-4b77-b134-46622995f6ae",
     	// The token used to report partial result progress.
     	"partialResultToken": "5f6f349e-4f81-4a3b-afff-ee04bff96804"
