@@ -31,7 +31,7 @@ Modern Python 3.12+ environment setup and language features.
 - Structural pattern matching: `match/case`
 - Built-in generics: `list[str]`, `dict[str, int]`, `str | None` (NOT `List`, `Dict`, `Union`, `Optional`)
 - Type parameter syntax: `def func[T](x: T) -> T:`
-- `dataclasses` or `pydantic` for data structures
+- `Pydantic BaseModel` for validated typed models; `dataclasses` only for unvalidated internals
 
 ## Inline Script Metadata
 
