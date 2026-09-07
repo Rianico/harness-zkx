@@ -38,13 +38,15 @@ def test_lib_variant_fields():
     pkg = json.loads(scaffold.build_package_json("demo-lib", "lib", False))
     assert pkg["name"] == "demo-lib"
     assert pkg["type"] == "module"
-    assert pkg["packageManager"] == "pnpm@10.0.0"
+    assert pkg["packageManager"] == "pnpm@12.0.0"
     assert pkg["engines"] == {"node": ">=24"}
     assert pkg["main"] == "./src/index.ts"
     assert pkg["exports"] == {".": "./src/index.ts"}
     assert "bin" not in pkg and "pi" not in pkg
     assert pkg["scripts"] == {
-        "lint": "biome check .",
+        "lint": "oxlint .",
+        "format": "oxfmt --check .",
+        "format:fix": "oxfmt .",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
     }
@@ -109,7 +111,8 @@ def test_dry_run_lists_expected_files(tmp_path, capsys):
     for name in (
         "package.json",
         "tsconfig.json",
-        "biome.json",
+        ".oxlintrc.json",
+        ".oxfmtrc.json",
         ".nvmrc",
         "index.ts",
         "cli.ts",
@@ -153,7 +156,7 @@ def test_generate_then_detect(tmp_path):
 def test_node_ci_variant_is_pnpm_on_24():
     assert "node-version: 24" in scaffold.RELEASE_YML
     assert "node-version: 22" not in scaffold.RELEASE_YML
-    assert "pnpm run lint && pnpm run typecheck && pnpm test" in scaffold.RELEASE_YML
+    assert "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test" in scaffold.RELEASE_YML
     assert "npm ci" not in scaffold.RELEASE_YML
 
 

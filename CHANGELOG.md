@@ -115,6 +115,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **scaffold:** align tests with pnpm v12 + oxlint/oxfmt migration
 - **scaffold:** provision pnpm via action-setup in CI templates
 - **scaffold:** prescribe hidden-type changelog sync commits
 - **scaffold:** patch releaserc assets to pnpm-lock.yaml in TS flavor
