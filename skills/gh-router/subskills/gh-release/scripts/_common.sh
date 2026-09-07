@@ -5,6 +5,12 @@
 
 set -uo pipefail
 
+# Quiet mode: GH_RELEASE_QUIET=1 suppresses informational lines (info/dim/step and
+# the phase banner bar) so harness/context-limited runs stay lean. Meaningful
+# outcomes (ok/warn/fail/phase markers) always print.
+_QUIET=false
+[[ "${GH_RELEASE_QUIET:-0}" == "1" ]] && _QUIET=true
+
 # --- color setup ---
 if [[ -n "${NO_COLOR:-}" ]] || [[ "${TERM:-}" == "dumb" ]] || ! [[ -t 1 ]] 2>/dev/null; then
   _C_RESET=""; _C_BOLD=""; _C_DIM=""; _C_RED=""; _C_GREEN=""; _C_YELLOW=""; _C_BLUE=""; _C_CYAN=""; _C_MAGENTA=""
@@ -27,7 +33,11 @@ phase() {
   local name="$*"
   local bar="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printf "\n%s%s━━━ Phase %s/%s: %s ━━━%s\n" "$_C_BOLD" "$_C_CYAN" "$n" "$m" "$name" "$_C_RESET"
-  printf "%s%s%s%s\n" "$_C_DIM" "$bar" "$_C_RESET" ""
+  if [[ "$_QUIET" != "true" ]]; then
+    local bar="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    printf "%s%s%s%s\n" "$_C_DIM" "$bar" "$_C_RESET" ""
+  fi
+
 }
 
 phase_ok() {
@@ -41,12 +51,12 @@ phase_fail() {
   _log "$_C_RED" "✘" "Phase $n failed${*:+ — $*}"
 }
 
-info()  { _log "$_C_BLUE"   "→" "$*"; }
+info()  { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_BLUE"   "→" "$*"; }
 ok()    { _log "$_C_GREEN"  "✔" "$*"; }
 warn()  { _log "$_C_YELLOW" "⚠" "$*"; }
 fail()  { _log "$_C_RED"    "✘" "$*"; }
-dim()   { _log "$_C_DIM"    "·" "$*"; }
-step()  { _log "$_C_CYAN"   "▸" "$*"; }
+dim()   { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_DIM"    "·" "$*"; }
+step()  { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_CYAN"   "▸" "$*"; }
 
 # Ensure errors show a clear marker before set -e exits
 trap 'fail "command failed: $BASH_COMMAND (line $LINENO)"' ERR

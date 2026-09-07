@@ -16,47 +16,45 @@ else
 fi
 info "repo type: $repo"
 
-fail_step() {
-  phase_fail 2 "$1 failed"
+# Run a verification step, printing ONLY a concise result on success and the
+# output tail on failure — command output (lint warnings, test details) is
+# unrelated noise on the happy path and would flood the context window.
+run_step() {
+  local name="$1" tolerant="${2:-false}" out rc
+  shift 2
+  step "$name"
+  out=$(mktemp)
+  set +e
+  "$@" >"$out" 2>&1
+  rc=$?
+  set -e
+  if [[ $rc -eq 0 ]]; then
+    ok "$name passed"
+    rm -f "$out"
+    return 0
+  fi
+  if [[ "$tolerant" == "true" ]]; then
+    warn "$name failed or not configured (rc=$rc)"
+    tail -n 40 "$out"
+    rm -f "$out"
+    return 0
+  fi
+  tail -n 80 "$out"
+  rm -f "$out"
+  phase_fail 2 "$name failed"
   exit 1
 }
 
 if [[ "$repo" == "node" ]]; then
-  step "lint"
-  if ! npm run --silent lint 2>&1 | tail -n 100; then
-    fail_step "lint"
-  fi
-  ok "lint passed"
-
-  step "typecheck"
-  if ! npm run --silent typecheck 2>&1 | tail -n 100; then
-    fail_step "typecheck"
-  fi
-  ok "typecheck passed"
-
-  step "test"
-  if ! npm test 2>&1 | tail -n 60; then
-    fail_step "test"
-  fi
-  ok "test passed"
-
+  run_step "lint"     false npm run --silent lint
+  run_step "typecheck" false npm run --silent typecheck
+  run_step "test"     false npm test
 elif [[ "$repo" == "rust" ]]; then
-  step "clippy"
-  cargo clippy 2>&1 | tail -n 80 || fail_step "clippy"
-  ok "clippy passed"
-
-  step "test"
-  cargo test 2>&1 | tail -n 80 || fail_step "test"
-  ok "cargo test passed"
-
+  run_step "clippy" false cargo clippy
+  run_step "test"   false cargo test
 else
-  step "ruff check"
-  ruff check . 2>&1 | tail -n 80 || fail_step "ruff"
-  ok "ruff passed"
-
-  step "pytest"
-  uv run pytest -q 2>&1 | tail -n 80 || warn "pytest failed or not configured"
-  ok "verify done"
+  run_step "ruff check" false ruff check .
+  run_step "pytest"     true uv run pytest -q
 fi
 
 phase_ok 2 "verification passed"
