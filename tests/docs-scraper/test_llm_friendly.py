@@ -26,11 +26,13 @@ class TestCheckLlmsTxt:
         scraper_with_mock_session.session.head = MagicMock(
             side_effect=requests.exceptions.RequestException()
         )
+        scraper_with_mock_session.session.get = MagicMock(
+            side_effect=requests.exceptions.RequestException()
+        )
 
         result = scraper_with_mock_session.check_llms_txt()
 
         assert result is None
-
     def test_uses_custom_base_url(self, scraper_with_mock_session) -> None:
         """Should use provided base_url instead of instance base_url."""
         mock_response = MagicMock()

@@ -323,6 +323,9 @@ class DocumentationScraper(ABC):
     def check_llms_txt(self, base_url: str | None = None) -> str | None:
         """Check if site has an llms.txt file.
 
+        Tries HEAD first, falls back to GET for servers that reject HEAD
+        (e.g. 405 Method Not Allowed on static hosts / Cloudflare edge).
+
         Args:
             base_url: Base URL to check (defaults to self.base_url)
 
@@ -336,8 +339,22 @@ class DocumentationScraper(ABC):
             response = self.session.head(llms_url, timeout=self.timeout)
             if response.status_code == 200:
                 return llms_url
+            # Fallback for servers that don't support HEAD (405/501) or block it (403)
+            if response.status_code in (403, 404, 405, 501):
+                try:
+                    get_resp = self.session.get(llms_url, timeout=self.timeout)
+                    if get_resp.status_code == 200:
+                        return llms_url
+                except requests.exceptions.RequestException:
+                    pass
         except requests.exceptions.RequestException:
-            pass
+            # HEAD failed entirely — try lightweight GET as fallback
+            try:
+                get_resp = self.session.get(llms_url, timeout=self.timeout)
+                if get_resp.status_code == 200:
+                    return llms_url
+            except requests.exceptions.RequestException:
+                pass
 
         return None
 

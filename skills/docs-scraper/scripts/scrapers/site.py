@@ -16,6 +16,7 @@ Supports dual-mode operation:
 
 import json
 import re
+import time
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
@@ -262,8 +263,11 @@ Output includes README.md (with page index) and pages/ directory with numbered m
     def discover_urls(self) -> dict[str, Any]:
         """Discover URLs from llms.txt and sitemap.xml.
 
+        Tries llms.txt first (curated, LLM-optimized), then sitemap.xml
+        (exhaustive, XML). Results are deduplicated; llms.txt wins on conflict.
+
         Returns:
-            Dict with "urls" list and "source" list indicating discovery methods
+            Dict with "urls" list, "source" list, and "metrics" dict
         """
         all_urls: list[dict[str, Any]] = []
         sources: list[str] = []
@@ -300,11 +304,18 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             )
             print(f"Warning: No URLs discovered from {self.base_url}")
 
+        metrics = {
+            "total": len(all_urls),
+            "llms_txt": len(llms_result.get("urls", [])),
+            "sitemap_xml": len(sitemap_result.get("urls", [])),
+            "deduplicated": len(all_urls),
+            "sources": sources,
+        }
         return {
             "urls": all_urls,
             "source": sources,
+            "metrics": metrics,
         }
-
     def _discover_from_llms_txt(self) -> dict[str, Any]:
         """Fetch and parse llms.txt from the site."""
         llms_url = urljoin(self.base_url, "/llms.txt")
@@ -477,7 +488,8 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         return None
 
     def fetch_urls(self) -> None:
-        """Fetch all configured URLs and write output."""
+        """Fetch all configured URLs and write output with metrics."""
+        t0 = time.time()
         # Deduplicate URLs
         unique_urls: list[str] = []
         seen: set[str] = set()
@@ -489,8 +501,10 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Track results for README.md page index
+        # Track results for README.md page index and metrics
         results: list[dict[str, Any]] = []
+        format_counts: dict[str, int] = {}
+        total_bytes = 0
 
         # Fetch each URL
         for idx, url in enumerate(unique_urls, start=1):
@@ -498,6 +512,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
 
             try:
                 content, fmt = self.fetch_page_llm_friendly(url, cache_file=f"page_{idx}")
+                format_counts[fmt] = format_counts.get(fmt, 0) + 1
 
                 if content is None:
                     print(f"  Warning: Failed to fetch {url}")
@@ -506,6 +521,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
                             "url": url,
                             "status": "error",
                             "error": "Failed to fetch",
+                            "format": fmt,
                         }
                     )
                     continue
@@ -517,7 +533,8 @@ Output includes README.md (with page index) and pages/ directory with numbered m
 
                 # Write content
                 output_file.write_text(content, encoding="utf-8")
-                print(f"  Written: {output_file.name}")
+                print(f"  Written: {output_file.name} ({len(content)} bytes, fmt={fmt})")
+                total_bytes += len(content)
 
                 results.append(
                     {
@@ -525,6 +542,8 @@ Output includes README.md (with page index) and pages/ directory with numbered m
                         "status": "success",
                         "title": title,
                         "filename": output_file.name,
+                        "format": fmt,
+                        "bytes": len(content),
                     }
                 )
 
@@ -549,6 +568,29 @@ Output includes README.md (with page index) and pages/ directory with numbered m
 
         # Generate README.md (includes page index)
         self._generate_readme(results)
+        # Write metrics.json and print summary
+        elapsed = time.time() - t0
+        success = sum(1 for r in results if r.get("status") == "success")
+        blocked = sum(1 for r in results if r.get("status") == "blocked")
+        failed = len(results) - success - blocked
+        metrics = {
+            "total": len(unique_urls),
+            "success": success,
+            "blocked": blocked,
+            "failed": failed,
+            "success_rate": (success / len(results) if results else 0),
+            "total_bytes": total_bytes,
+            "avg_bytes": (total_bytes // success if success else 0),
+            "formats": format_counts,
+            "elapsed_seconds": round(elapsed, 2),
+            "base_url": self.base_url,
+        }
+        try:
+            metrics_path = self.output_dir / "metrics.json"
+            metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+            print(f"Metrics: {metrics_path} ({success}/{len(results)} success, {elapsed:.1f}s, {format_counts})")
+        except Exception as e:
+            print(f"Warning: could not write metrics.json: {e}")
 
     def _generate_readme(self, results: list[dict[str, Any]]) -> None:
         """Generate README.md with template placeholders for LLM to fill."""

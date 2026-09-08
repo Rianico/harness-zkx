@@ -62,6 +62,55 @@ uv run $SKILL_DIR/scripts/scrape.py auto https://example.com --output-dir .lsz/t
 
 Details per scraper → `references/*.md`.
 
+## LLMs.txt Support
+
+**Yes — first-class, with fallback.**
+
+`site` scraper discovers URLs via:
+1. `GET /llms.txt` — parses markdown links `[Title](URL)` + bare URLs, respects `## Optional` section (see `references/llms-txt-patterns.md`). Curated, high-signal; preferred when present.
+2. `GET /sitemap.xml` — parses `<loc>` tags, recurses into sitemap indexes (depth ≤2), validates URLs. Exhaustive fallback.
+3. Deduplication: `llms.txt` wins on overlap; `sitemap.xml` adds only unseen URLs.
+4. Detection: `check_llms_txt()` now tries `HEAD /llms.txt` then falls back to `GET` (handles 405/403 on static/CDN hosts).
+
+`site --base-url https://example.com` emits `{urls, source, metrics: {total, llms_txt, sitemap_xml, deduplicated}}`. `fetch_urls()` also writes `metrics.json`. Non-site scrapers (lsp/ptx/cuda/rust/skills) do not use llms.txt — they hit fixed upstream URLs or cargo/docs.rs.
+
+## Fetching Way
+
+### Discovery (site only, `--base-url`)
+
+```
+GET /llms.txt  → parse_llms_txt() → structured {url, title, section, optional}
+GET /sitemap.xml → parse_sitemap_xml() → <loc> URLs → child sitemaps if index
+merge + dedup → {urls, source: ["llms_txt", "sitemap_xml"], metrics}
+```
+
+### Fetch (site `urls...`, `site --base-url` with fetch, or any scraper page fetch)
+
+`DocumentationScraper.fetch_page_llm_friendly()` — 6-step cascade, caches to `.cache/<name>/page_<n>.md|.html`:
+
+1. **Accept: text/markdown** — `Accept: text/markdown, text/html` content negotiation (Cloudflare `x-markdown-tokens`, ~80% token savings).
+2. **.md extension** — tries `page.md`, `<page>.md`, `<page>/index.md`.
+3. **defuddle CLI** — local `defuddle parse <url> --md` (cleaner than html2text, no network).
+4. **Jina Reader** — `https://r.jina.ai/<url>` free proxy, no API key.
+5. **HTML + html2text** — fallback `fetch_page()` → `convert_to_markdown()` (BeautifulSoup + html2text, `body_width=0`).
+6. **Cache reuse** — `.md` / `.html` cache hit short-circuits network unless `--force`.
+
+All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser`, fail-open), crawl-delay + `delay=1.0s` rate limiting, User-Agent rotation (5-browser pool), exponential backoff on 408/429/5xx (Retry-After honoured, capped 60s, `max_retries=3`).
+
+### Other scrapers
+
+- `lsp`/`ptx`/`cuda` — single/multi-page HTML via `_rate_limited_get()` + cached `.cache/<name>/` (e.g. `.cache/lsp/spec.html`).
+- `rust` — `cargo-docs-md` pipeline: clone → `cargo +nightly doc` (JSON) → `cargo docs-md --dir` → flatten `module/index.md→module.md` → rewrite links → verify.
+- `skills` — `npx -y skills add <repo> --list` + `npx add <repo> --skill` via `skills` CLI, staged to `.lsz/tmp/skill-compose/<run>/stage`.
+
+## Metrics
+
+- **Discovery metrics** (site): `metrics: {total, llms_txt, sitemap_xml, deduplicated, sources}` returned by `discover_urls()` and printed as JSON in `site --base-url` mode.
+- **Fetch metrics** (site): `metrics.json` in output dir — `{total, success, blocked, failed, success_rate, total_bytes, avg_bytes, formats: {markdown, html}, elapsed_seconds, base_url}` + `README.md` page index. Format counts track cascade effectiveness (markdown = negotiation/.md/defuddle/jina hit; html = fell through to conversion).
+- **CUDA metrics**: `_create_index` + cleanup reports `files: total_original→total_new bytes (reduction%)`, output dir size.
+- **Rust metrics**: post-run `Generated N markdown files`, `verify_links` broken-link count, `flattened N files`.
+- **Skill quality metrics**: `references/quality-metrics.md` — 6 criteria (Trigger Coverage 20%, Pattern Usefulness 20%, Beginner Friendliness 15%, Documentation Completeness 15%, Navigation Clarity 15%, Graceful Degradation 15%) scored 0-1, compiled by `scripts/compile.py validate-skill/validate-triggers`.
+
 ## References
 
 - `references/lsp-patterns.md` — emoji anchor cleanup
