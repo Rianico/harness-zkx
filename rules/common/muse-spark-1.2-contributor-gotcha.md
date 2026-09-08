@@ -53,3 +53,25 @@ Owner: harness-audit triage. Removal: when audit shows <2 oversized/100 bash ove
 **Do:** pre-check with `lsp_diagnostics` (or `lens_diagnostics`) before `tsc`; if bash needed, cap with `| head -n 20` / `--emit-filtered --keep-head-tail 20`. Keep `bash` for final gate, diagnose via LSP.
 
 **Check:** `npx tsc` / heavy log appears only after `lsp_diagnostics` or with `| head`/`| tail` bound to ≤20 lines, or is post-filtered via `audit.py --emit-filtered`.
+---
+
+## 9) Dump — multi-cat / for-loop / sed-range (repo files, extends 5)
+
+**When:** you need 2+ repo files (`package.json`, workflows, `tsconfig.json`) or a code range inside one file.
+
+**Don't:** `cat package.json; echo "---"; cat .nvmrc; cat tsconfig.json` (01a07a6c:9 → 122) / `for f in .github/workflows/*.yml; cat "$f"` (01a07a6c:24 → 160) / `sed -n '265,310p' src/hashline/resolve.ts` (01a07a6c:130 → 64) — full dumps via bash.
+
+**Do:** read one file at a time with `offset`/`limit` (`read --limit 20`, then next chunk if needed); for a range, run `module_report` then `read_symbol`, or `read --offset 265 --limit 45` when no symbol handle exists. One tool call per file — stop early instead of concatenating.
+
+**Check:** transcript shows no unbounded `cat A; cat B` / `for …; cat` / `sed -n` / `wc && head` when `read`/`read_symbol`/`module_report` applies; `bash cat` only appears with `| head -n 20` and ≤20 total lines.
+---
+
+## 10) Verbose — unbounded git / scaffold / npm-view (extends 8)
+
+**When:** `git status`/`git diff`, `scaffold --detect`, or `npm view`/`pnpm install` still spill >20 lines even with `| head -60` / `| tail -40`.
+
+**Don't:** `git status --short | head -60` (01a07a6c:116 → 73 on 205 files) / `git diff .releaserc.json` (01a07a6c:120 → 66) / `uv run scaffold.py --detect` (01a07a6c:11 → 87) / `npm view vitest@4.1.11 …` chain (01a07a6c:29 → 49) / `pnpm install 2>&1 | tail -40` (01a07a6c:43 → 40) — each stays >20.
+
+**Do:** scope first (`git status --short | head -n 20`, `git diff --stat` before full diff, single `npm view <pkg> version` instead of 5-query chain). For type gates, pre-check `lsp_diagnostics`/`lens_diagnostics`; otherwise cap `| head -n 20` / `| tail -n 20` or post-filter with `audit.py --emit-filtered --keep-head-tail 10`.
+
+**Check:** `git status`/`git diff`/`scaffold --detect`/`npm view`/`pnpm install` only appear with `| head -n 20` / `| tail -n 20` or after `lsp`/`lens_diagnostics`, or filtered via `audit.py --emit-filtered`.
