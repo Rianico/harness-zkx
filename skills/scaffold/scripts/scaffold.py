@@ -504,23 +504,24 @@ GITIGNORE_TS_EXTRA = ["node_modules/", "dist/"]
 
 # Component granularity — git flavor default is all; --only/--without/--components select subset
 GIT_COMPONENTS: set[str] = {
-    "releaserc",           # .releaserc.json
-    "release-yml",         # .github/workflows/release.yml (git variant)
-    "changelog-check",     # .github/workflows/changelog-check.yml
-    "pre-push",            # .githooks/pre-push + .husky/pre-push + wt hook
-    "changelog-script",    # scripts/changelog-unreleased.py
-    "commitlint",          # commitlint.config.js
-    "changelog-md",        # CHANGELOG.md
-    "issue-templates",     # .github/ISSUE_TEMPLATE/* + config.yml
-    "contributing",        # CONTRIBUTING.md
-    "agents",              # AGENTS.md patch
-    "gh-router",           # skills/gh-router
-    "gitignore",           # .gitignore append
+    "releaserc",  # .releaserc.json
+    "release-yml",  # .github/workflows/release.yml (git variant)
+    "changelog-check",  # .github/workflows/changelog-check.yml
+    "pre-push",  # .githooks/pre-push + .husky/pre-push + wt hook
+    "changelog-script",  # scripts/changelog-unreleased.py
+    "commitlint",  # commitlint.config.js
+    "changelog-md",  # CHANGELOG.md
+    "issue-templates",  # .github/ISSUE_TEMPLATE/* + config.yml
+    "contributing",  # CONTRIBUTING.md
+    "agents",  # AGENTS.md patch
+    "gh-router",  # skills/gh-router
+    "gitignore",  # .gitignore append
 }
 
 CI_COMPONENTS: set[str] = {
-    "release-yml",         # .github/workflows/release.yml (ci variant)
+    "release-yml",  # .github/workflows/release.yml (ci variant)
 }
+
 
 def _parse_components(raw: str | None, available: set[str], flag: str) -> set[str] | None:
     if raw is None:
@@ -541,11 +542,16 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
         low = part.lower()
         low = alias.get(low, low)
         if low not in available:
-            raise ValueError(f"unknown component '{part}' for {flag} (available: {', '.join(sorted(available))})")
+            raise ValueError(
+                f"unknown component '{part}' for {flag} (available: {', '.join(sorted(available))})"
+            )
         resolved.add(low)
     return resolved
 
-def _resolve_selected(only: str | None, without: str | None, components: str | None, available: set[str]) -> set[str]:
+
+def _resolve_selected(
+    only: str | None, without: str | None, components: str | None, available: set[str]
+) -> set[str]:
     # --components is alias for --only
     effective_only = components if components is not None else only
     if effective_only is not None:
@@ -558,6 +564,7 @@ def _resolve_selected(only: str | None, without: str | None, components: str | N
         assert excl is not None
         sel -= excl
     return sel
+
 
 PYTHON_VERSION = "3.14\n"
 
@@ -712,8 +719,106 @@ BIOME_JSON = """\
 OXLINT_JSON = """\
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "rules": {}
+  "jsPlugins": ["./scripts/oxlint-plugin-comment-gate.js"],
+  "rules": {
+    "harness/no-comments": "error"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**", "test/**", "**/*.test.ts", "**/*.spec.ts", "scripts/oxlint-plugin-comment-gate.js"],
+      "rules": {
+        "harness/no-comments": "off"
+      }
+    }
+  ]
 }
+"""
+
+OXLINT_COMMENT_GATE_JS = """\
+// harness/no-comments — curated allowlist per ADR-0014 (harness AI engineering)
+// Deterministic CI gate: only allow high-signal comments. Everything else is error.
+// Allowlist: SAFETY:|WHY:|Invariant:|See ADR-|via https://|TODO(#\\d+):|HACK:|GHERKIN
+// GHERKIN = ^\\s*(Given|When|Then|And|But|Feature|Scenario|Background|Scenario Outline|Examples)\\b/i
+// Legal /** JSDoc header remains separate — allowed regardless of tag.
+
+const ALLOWLIST_RE = /SAFETY:|WHY:|Invariant:|See ADR-|via https:\\/\\/|TODO\\(#\\d+\\):|HACK:/;
+const GHERKIN_RE =
+  /^\\s*(Given|When|Then|And|But|Feature|Scenario|Background|Scenario Outline|Examples)\\b/i;
+
+function isAllowed(rawValue) {
+  if (!rawValue || !rawValue.trim()) return true; // empty comment
+  const trimmed = rawValue.trim();
+  // Legal /** JSDoc header: block value starts with '*' — allow regardless (ADR says separate)
+  if (trimmed.startsWith("*")) return true;
+  if (ALLOWLIST_RE.test(rawValue)) return true;
+  if (GHERKIN_RE.test(trimmed)) return true;
+  return false;
+}
+
+const MESSAGE =
+  "Comments must use allowlist prefix: SAFETY:, WHY:, Invariant:, See ADR-, via https://, TODO(#<digits>):, HACK:, or Gherkin (Given/When/Then/And/But/Feature/Scenario). " +
+  "Prefer extraction/rename until code explains what/how; use tag only for why/invariant/warning/regex/hack/ADR link with provenance. " +
+  "Examples: // SAFETY: cast validated by ... | // WHY: tombstone union needed for ... | // See ADR-0013 | // TODO(#123):. " +
+  "Otherwise fix code. Files with 50+ hits use overrides to disable rule per ADR ladder (shrink-only).";
+
+const rule = {
+  meta: {
+    type: "suggestion",
+    docs: {
+      description: "enforce curated comment allowlist (ADR-0014)",
+      url: "https://github.com/Rianico/pi-better-edit/blob/main/docs/adr/0001-served-state-range-verification.md",
+    },
+    messages: {
+      disallowed: MESSAGE,
+    },
+  },
+  create(context) {
+    const sourceCode = context.sourceCode;
+    return {
+      Program() {
+        let comments = [];
+        if (sourceCode.getAllComments) {
+          try {
+            comments = sourceCode.getAllComments();
+          } catch {}
+        }
+        // fallback for oxlint: ast.comments or getComments()
+        if (!comments || comments.length === 0) {
+          if (sourceCode.ast && sourceCode.ast.comments) comments = sourceCode.ast.comments;
+          else if (context.sourceCode.text !== undefined) {
+            // no comments API — skip
+            comments = [];
+          }
+        }
+
+        for (const c of comments) {
+          const value = c.value ?? "";
+          if (isAllowed(value)) continue;
+
+          // Report at comment location; eslint supports loc, oxlint supports node+loc
+          const loc = c.loc;
+          if (loc) {
+            context.report({ loc, message: MESSAGE });
+          } else if (c.range) {
+            // fallback: report on Program with range-derived loc not available — use Program node
+            context.report({ node: c, message: MESSAGE });
+          } else {
+            // last resort: report on Program
+            const program = sourceCode.ast && sourceCode.ast.body ? sourceCode.ast.body[0] : null;
+            context.report({ node: program || { type: "Program" }, message: MESSAGE });
+          }
+        }
+      },
+    };
+  },
+};
+
+const plugin = {
+  meta: { name: "harness" },
+  rules: { "no-comments": rule },
+};
+
+export default plugin;
 """
 
 OXFMT_JSON = """\
@@ -1276,7 +1381,9 @@ def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
     )
 
 
-def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool, selected: set[str] | None = None) -> None:
+def do_git(
+    cwd: pathlib.Path, project_name: str, dry_run: bool, selected: set[str] | None = None
+) -> None:
     # finer granularity: default all, filtered by --only/--without/--components
     sel = selected if selected is not None else GIT_COMPONENTS
     if "releaserc" in sel:
@@ -1284,7 +1391,9 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool, selected: set[st
     if "release-yml" in sel:
         write_file(cwd / ".github" / "workflows" / "release.yml", RELEASE_YML, dry_run)
     if "changelog-check" in sel:
-        write_file(cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run)
+        write_file(
+            cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run
+        )
     if "pre-push" in sel:
         write_file(cwd / ".githooks" / "pre-push", GITHOOK_PRE_PUSH, dry_run)
         write_file(cwd / ".husky" / "pre-push", HUSKY_PRE_PUSH, dry_run)
@@ -1306,9 +1415,9 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool, selected: set[st
         )
         write_file(
             cwd / ".github" / "ISSUE_TEMPLATE" / "02-feature_request.yml",
-        ISSUE_FEATURE_REQUEST_YML,
-        dry_run,
-    )
+            ISSUE_FEATURE_REQUEST_YML,
+            dry_run,
+        )
         write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
     # migrate legacy markdown template (pre-YAML) — keep spine small
     legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
@@ -1329,18 +1438,18 @@ def do_git(cwd: pathlib.Path, project_name: str, dry_run: bool, selected: set[st
         contrib = CONTRIBUTING_MD_TMPL.format(project_name=project_name)
         write_file(
             cwd / "CONTRIBUTING.md",
-        contrib,
-        dry_run,
-        warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
-    )
+            contrib,
+            dry_run,
+            warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
+        )
     if "gitignore" in sel:
         append_gitignore(cwd / ".gitignore", GITIGNORE_GIT, dry_run)
     if "agents" in sel:
         patch_agents(
             cwd / "AGENTS.md",
-        "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
-        dry_run,
-    )
+            "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
+            dry_run,
+        )
     if "gh-router" in sel:
         _write_gh_router(cwd, dry_run)
     if "pre-push" in sel:
@@ -1443,6 +1552,7 @@ def do_typescript(
     )
     write_file(cwd / "tsconfig.json", build_tsconfig(), dry_run)
     write_file(cwd / ".oxlintrc.json", OXLINT_JSON, dry_run)
+    write_file(cwd / "scripts" / "oxlint-plugin-comment-gate.js", OXLINT_COMMENT_GATE_JS, dry_run)
     write_file(cwd / ".oxfmtrc.json", OXFMT_JSON, dry_run)
     write_file(
         cwd / "src" / "index.ts",
@@ -1490,7 +1600,12 @@ def do_typescript(
 
 
 def do_ci(
-    cwd: pathlib.Path, dry_run: bool, variant: str, with_coverage: bool, threshold: int, selected: set[str] | None = None
+    cwd: pathlib.Path,
+    dry_run: bool,
+    variant: str,
+    with_coverage: bool,
+    threshold: int,
+    selected: set[str] | None = None,
 ) -> None:
     sel = selected if selected is not None else CI_COMPONENTS
     if "release-yml" not in sel:
@@ -1659,11 +1774,15 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
 
     verify_gates: dict[str, bool] = {
         "formatter": bool(
-            re.search(r"ruff.*format|cargo fmt|prettier|biome|oxfmt", pyproject + release_yml + pkg_json)
+            re.search(
+                r"ruff.*format|cargo fmt|prettier|biome|oxfmt", pyproject + release_yml + pkg_json
+            )
         ),
         "linter": bool(
             re.search(
-                r"ruff check|clippy|eslint|biome|oxlint", pyproject + release_yml + pkg_json, re.IGNORECASE
+                r"ruff check|clippy|eslint|biome|oxlint",
+                pyproject + release_yml + pkg_json,
+                re.IGNORECASE,
             )
         ),
         "typecheck": bool(
@@ -1829,9 +1948,13 @@ def main() -> int:
     if flavor in ("git", "all") or flavor == "ci":
         try:
             if flavor in ("git", "all"):
-                git_selected = _resolve_selected(args.only, args.without, args.components, GIT_COMPONENTS)
+                git_selected = _resolve_selected(
+                    args.only, args.without, args.components, GIT_COMPONENTS
+                )
             if flavor == "ci":
-                ci_selected = _resolve_selected(args.only, args.without, args.components, CI_COMPONENTS)
+                ci_selected = _resolve_selected(
+                    args.only, args.without, args.components, CI_COMPONENTS
+                )
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2

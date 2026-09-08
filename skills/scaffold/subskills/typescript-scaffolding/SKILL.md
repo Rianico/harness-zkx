@@ -20,7 +20,7 @@ Per `development-patterns.md` §3:
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_package_json`, `build_tsconfig`, `OXLINT_JSON`, `OXFMT_JSON`, `VITEST_CONFIG_TMPL`, `INDEX_TS_TMPL`, `CLI_TS_TMPL`, `INDEX_TEST_TS_TMPL`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` to preview.
+Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_package_json`, `build_tsconfig`, `OXLINT_JSON`, `OXLINT_COMMENT_GATE_JS`, `OXFMT_JSON`, `VITEST_CONFIG_TMPL`, `INDEX_TS_TMPL`, `CLI_TS_TMPL`, `INDEX_TEST_TS_TMPL`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` to preview.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --project-name <name>
@@ -39,7 +39,7 @@ Variants (`--ts-variant`, default `lib`):
 
 Every variant ships `src/index.ts` + `tests/index.test.ts` (vitest smoke test, `tests/` layout per `branch-worktree-pr`) so `pnpm test` is green day one — same precedent as `cargo new`.
 
-Pure-deterministic: `.nvmrc` (`24`), `tsconfig.json` (`strict`, ESM `NodeNext`, `ES2022`, `types: ["node"]` — explicit because pnpm's symlinked `@types` defeats auto-inclusion; `include: ["src", "tests"]`), `.oxlintrc.json` + `.oxfmtrc.json` (ox native, `oxfmt` handles JS/TS/JSX/TSX + Prettier fallback), `src/*.ts` + `tests/*.ts`, `vitest.config.ts` (coverage only), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `node_modules/` + `dist/`). `biome.json` is deprecated — retained for compat, new projects use `oxlint`/`oxfmt`.
+Pure-deterministic: `.nvmrc` (`24`), `tsconfig.json` (`strict`, ESM `NodeNext`, `ES2022`, `types: ["node"]` — explicit because pnpm's symlinked `@types` defeats auto-inclusion; `include: ["src", "tests"]`), `.oxlintrc.json` (`harness/no-comments` via `jsPlugins: ["./scripts/oxlint-plugin-comment-gate.js"]` + `overrides` for `tests/**`, `**/*.test.ts` per ADR-0014) + `scripts/oxlint-plugin-comment-gate.js` (deterministic allowlist `SAFETY:|WHY:|Invariant:|See ADR-|via https://|TODO(#\\d+):|HACK:|GHERKIN` + `/**` JSDoc) + `.oxfmtrc.json` (ox native, `oxfmt` handles JS/TS/JSX/TSX + Prettier fallback), `src/*.ts` + `tests/*.ts`, `vitest.config.ts` (coverage only), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `node_modules/` + `dist/`). `biome.json` is deprecated — retained for compat, new projects use `oxlint`/`oxfmt`.
 
 Mixed (script warns → proofread): `package.json` (`{{project_name}}` normalized to lowercase kebab-case, description, `packageManager: pnpm@12.0.0`, deps `typescript>=7` + `vite>=8` + `oxlint`/`oxfmt` + `vitest>=4`), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
 
@@ -50,7 +50,7 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run`
 1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant <lib|cli|pi-extension> --project-name <name>` (handles `--cwd`, infers name, normalizes, warns on mixed).
 2. Install: `pnpm install --no-frozen-lockfile` (corepack reads `packageManager: pnpm@12.0.0`; `--no-frozen-lockfile` because greenfield has no lockfile yet).
 3. Proofread mixed warnings: `package.json` name/description, `AGENTS.md` 3-section preservation.
-4. Wire verification: `pnpm run lint` (`oxlint .`), `pnpm run format --check` (`oxfmt --check .`), `pnpm run typecheck` (`tsc --noEmit`), `pnpm test` (`vitest run`) via `pnpm`. Loop is `edit → typecheck → lint → format → test/build → fix` with native latency.
+4. Wire verification: `pnpm run lint` (`oxlint .` with `harness/no-comments` allowlist — intercepts mismatched comments and outputs requirements `SAFETY:/WHY:/Invariant:/See ADR-/via https:///TODO(#\\d+):/HACK:/GHERKIN`), `pnpm run format --check` (`oxfmt --check .`), `pnpm run typecheck` (`tsc --noEmit`), `pnpm test` (`vitest run`) via `pnpm`. Loop is `edit → typecheck → lint → format → test/build → fix` with native latency.
 5. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` + `pnpm install && pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test`
 
 > [!tip] Verification — before every push/PR
