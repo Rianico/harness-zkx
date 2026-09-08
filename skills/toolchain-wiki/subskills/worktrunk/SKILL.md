@@ -1,12 +1,15 @@
 ---
-name: worktrunk-guide
-description: >-
-  Git worktree lifecycle reference for branch-addressed worktrees with hooks, templates, and LLM commits. Use when managing parallel worktrees, configuring worktrunk, or debugging shell integration. TRIGGER: worktrunk, wt, git worktree, hash_port
-argument-hint: |-
-  [topic]
+argument-hint: '[topic]'
+description: 'Git worktree lifecycle reference for branch-addressed worktrees with
+  hooks, templates, and LLM commits. Use when managing parallel worktrees, configuring
+  worktrunk, or debugging shell integration. TRIGGER: worktrunk, wt, git worktree,
+  hash_port'
+metadata:
+  managed-by: toolchain-wiki
+name: worktrunk
 ---
 
-# Worktrunk Guide
+# Worktrunk
 
 > **v0.74.0** (2026-08-14) — <https://github.com/max-sixty/worktrunk> — `wt` CLI
 
@@ -176,10 +179,10 @@ Environment-related setup (shell, paths, env vars, approvals, state) is delibera
 | LLM commits, Claude Code plugin, statusline                           | `llm`        | [integrations](references/integrations.md) |
 | dev server, DB isolation, cold-start, recipes, FAQ                    | `pattern`    | [patterns](references/patterns.md)         |
 
-Raw source (authoritative for flag-level detail): `$SKILL_DIR/worktrunk-guide-raw/`
+Raw source (authoritative for flag-level detail): `$SKILL_DIR/worktrunk-raw/`
 
-- Prose pointer: `$SKILL_DIR/worktrunk-guide-raw/<file>.md` (cwd unknown)
-- Markdown link: `worktrunk-guide-raw/001-switch.md` from SKILL.md; `../worktrunk-guide-raw/001-switch.md` from `references/` (e.g. `[switch](worktrunk-guide-raw/001-switch.md)` vs `[switch](../worktrunk-guide-raw/001-switch.md)`)
+- Prose pointer: `$SKILL_DIR/worktrunk-raw/<file>.md` (cwd unknown)
+- Markdown link: `worktrunk-raw/001-switch.md` from SKILL.md; `../worktrunk-raw/001-switch.md` from `references/` (e.g. `[switch](worktrunk-raw/001-switch.md)` vs `[switch](../worktrunk-raw/001-switch.md)`)
 - If curated summary conflicts with observation, raw doc wins
 
 ## When writing code
@@ -194,7 +197,7 @@ Raw source (authoritative for flag-level detail): `$SKILL_DIR/worktrunk-guide-ra
 
 1. Answer from the practical workflows and in-file reference above first.
 2. For branch-specific detail, read `$SKILL_DIR/references/<module>.md` per the reference map.
-3. For flag-level or edge-case behavior, read `$SKILL_DIR/worktrunk-guide-raw/<file>.md`.
+3. For flag-level or edge-case behavior, read `$SKILL_DIR/worktrunk-raw/<file>.md`.
 
 **Done when:** every cited flag or behavior is traced to a curated reference or raw doc, not memory.
 

@@ -1,7 +1,7 @@
 # Worktrunk Guide — Operations
 
 Source: worktrunk **v0.74.0** (2026-08-14) — <https://github.com/max-sixty/worktrunk>
-Raw: `$SKILL_DIR/worktrunk-guide-raw/006-step.md`
+Raw: `$SKILL_DIR/worktrunk-raw/006-step.md`
 Lead: **`step`** — building blocks for `commit` / `squash` / `copy-ignored` / `diff` / `prune` and other per-worktree ops.
 
 > For `switch`/`list`/`remove`/`merge` see [basics](basics.md). For hook lifecycle see [automation](automation.md).
@@ -26,7 +26,7 @@ wt step <COMMAND>
 | `prune`        | Remove worktrees merged into default branch |
 | `relocate`     | Move worktrees to expected paths            |
 
-Raw: [`006-step.md`](../worktrunk-guide-raw/006-step.md)
+Raw: [`006-step.md`](../worktrunk-raw/006-step.md)
 
 ---
 

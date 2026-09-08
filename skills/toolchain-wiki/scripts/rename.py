@@ -6,11 +6,10 @@
 """
 Deprecated shim for toolchain rename (proxy).
 
-Canonical: skills/ai-engineering-expert/subskills/skill-authoring/scripts/rename.py
-Use: uv run $SKILL_DIR/../../ai-engineering-expert/subskills/skill-authoring/scripts/rename.py <old> <new> [--dry-run]
-     or  uv run $SKILL_DIR/scripts/rename.py --to <target>
-
-Tool owns bytes in rename.py; this file is a thin proxy.
+Canonical: skills/ai-engineering-expert/subskills/skill-authoring/scripts/skill.py
+Use: uv run $SKILL_DIR/../../ai-engineering-expert/subskills/skill-authoring/scripts/skill.py <old> <new> [--dry-run]
+     or  uv run $SKILL_DIR/scripts/rename.py --to <target>  (deprecated shim, delegates to skill.py)
+Tool owns bytes in skill.py; this file is a thin proxy (deprecated, use skill.py).
 """
 
 from __future__ import annotations
@@ -65,14 +64,14 @@ def main() -> None:
         / "subskills"
         / "skill-authoring"
         / "scripts"
-        / "rename.py"
+        / "skill.py"
     )
     cmd = [sys.executable, str(general), current, target]
     if args.dry_run:
         cmd.append("--dry-run")
     if args.cwd:
         cmd.extend(["--cwd", str(args.cwd)])
-    print(f"[shim] delegating to general rename: {' '.join(cmd)}", file=sys.stderr)
+    print(f"[shim] delegating to skill.py: {' '.join(cmd)}", file=sys.stderr)
     result = subprocess.run(cmd)
     sys.exit(result.returncode)
 

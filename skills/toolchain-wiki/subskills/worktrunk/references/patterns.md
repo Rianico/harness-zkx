@@ -1,7 +1,7 @@
 # Worktrunk Guide — Patterns
 
 Source: worktrunk **v0.74.0** (2026-08-14) — <https://github.com/max-sixty/worktrunk>
-Raw: `$SKILL_DIR/worktrunk-guide-raw/011-tips-patterns.md` · `012-faq.md`
+Raw: `$SKILL_DIR/worktrunk-raw/011-tips-patterns.md` · `012-faq.md`
 Lead: **`pattern`** — recipes for dev servers, DB isolation, cold-start elimination, validation, and FAQ.
 
 > Hook and template engine: single source is [automation](automation.md). `wt step` building blocks: [operations](operations.md).
@@ -10,7 +10,7 @@ Lead: **`pattern`** — recipes for dev servers, DB isolation, cold-start elimin
 
 Each worktree runs its own server on deterministic `hash_port`. The `hash_port` filter (see [automation](automation.md)) maps branch → port 10000-19999 stably.
 
-**Raw:** [`011-tips-patterns.md`](../worktrunk-guide-raw/011-tips-patterns.md)
+**Raw:** [`011-tips-patterns.md`](../worktrunk-raw/011-tips-patterns.md)
 
 ```toml
 # .config/wt.toml
@@ -229,7 +229,7 @@ url = "http://{{ branch | sanitize }}.{{ repo }}.localhost:8080"
 
 ## FAQ
 
-**Raw:** [`012-faq.md`](../worktrunk-guide-raw/012-faq.md)
+**Raw:** [`012-faq.md`](../worktrunk-raw/012-faq.md)
 
 ### Worktrunk vs plain `git worktree`
 
@@ -289,7 +289,7 @@ Disables bash syntax highlighting in output, keeps core functionality.
 
 ## Changes since v0.49 → v0.74 (sync 2026-08-25)
 
-- **New doc: Code Signing Policy (0.73)** — `013-code-signing.md` → `$SKILL_DIR/worktrunk-guide-raw/013-code-signing.md` (Windows release binaries, certificate provenance, per-release approval); also `docs/public/.well-known` agent-skills index
+- **New doc: Code Signing Policy (0.73)** — `013-code-signing.md` → `$SKILL_DIR/worktrunk-raw/013-code-signing.md` (Windows release binaries, certificate provenance, per-release approval); also `docs/public/.well-known` agent-skills index
 - **Dev server / DB:** `{{ remote_repo }}` now for renamed clones; `('db-' ~ branch)|hash_port` still avoids dev/DB collision; `wt step copy-ignored` reflink still 68s→3s Rust, symlink note for Node, `uv sync` for Python venv
 - **List recipes:** custom columns now select/order whole table — use `[list] columns` + `custom-columns` templates to build trimmed fast views (narrowed columns skip git probes, 0.63, 36% warm-cache)
 - **Prune recipe:** 12s→0.6s for 24 worktrees, ordered JSON, drains queue on first failure (0.70)

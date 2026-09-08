@@ -1,7 +1,7 @@
 # Worktrunk Guide — Automation
 
 Source: worktrunk **v0.74.0** (2026-08-14) — <https://github.com/max-sixty/worktrunk>
-Raw: `$SKILL_DIR/worktrunk-guide-raw/007-hook.md` · `008-extending.md`
+Raw: `$SKILL_DIR/worktrunk-raw/007-hook.md` · `008-extending.md`
 Lead: **`hook`** — lifecycle hooks, template engine, aliases, custom subcommands. Single source for `{{ }}` variables/filters.
 
 > For `switch`/`list`/`remove`/`merge` see [basics](basics.md). For `wt step` ops see [operations](operations.md). For project vs user config locations see [config](config.md).
@@ -10,7 +10,7 @@ Lead: **`hook`** — lifecycle hooks, template engine, aliases, custom subcomman
 
 Shell commands at worktree lifecycle points. Ten hooks across five events; each event has `pre-` (blocking, failure aborts) and `post-` (background, logged).
 
-**Raw:** [`007-hook.md`](../worktrunk-guide-raw/007-hook.md)
+**Raw:** [`007-hook.md`](../worktrunk-raw/007-hook.md)
 
 | Event  | `pre-` (blocking) | `post-` (background) |
 | ------ | ----------------- | -------------------- |
@@ -77,7 +77,7 @@ Security: project commands require approval on first run; `wt hook ... --yes` by
 
 Used by hooks, aliases, `worktree-path`, `wt step eval`, and `wt step for-each`.
 
-**Raw:** [`007-hook.md`](../worktrunk-guide-raw/007-hook.md)
+**Raw:** [`007-hook.md`](../worktrunk-raw/007-hook.md)
 
 ### Variables — active (current worktree)
 
@@ -181,7 +181,7 @@ wt hook pre-merge -- --extra args          # forward into {{ args }}
 
 Aliases define `wt <name>` commands. Resolution: built-in → alias → custom subcommand.
 
-**Raw:** [`008-extending.md`](../worktrunk-guide-raw/008-extending.md)
+**Raw:** [`008-extending.md`](../worktrunk-raw/008-extending.md)
 
 ```toml
 [aliases]

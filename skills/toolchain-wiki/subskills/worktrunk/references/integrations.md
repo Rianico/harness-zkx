@@ -1,14 +1,14 @@
 # Worktrunk Guide — Integrations
 
 Source: worktrunk **v0.74.0** (2026-08-14) — <https://github.com/max-sixty/worktrunk>
-Raw: `$SKILL_DIR/worktrunk-guide-raw/009-llm-commits.md` · `010-claude-code.md`
+Raw: `$SKILL_DIR/worktrunk-raw/009-llm-commits.md` · `010-claude-code.md`
 Lead: **`llm`** — LLM-generated commit messages and Claude Code plugin.
 
 ## LLM commit messages
 
 Worktrunk builds a templated prompt from diffs and pipes it to an external command via `sh -c`. Integrates with `wt merge`, `wt step commit`, and `wt step squash`.
 
-**Raw:** [`009-llm-commits.md`](../worktrunk-guide-raw/009-llm-commits.md)
+**Raw:** [`009-llm-commits.md`](../worktrunk-raw/009-llm-commits.md)
 
 ### Setup — add to `~/.config/worktrunk/config.toml`
 
@@ -115,7 +115,7 @@ Without LLM configured, worktrunk generates deterministic messages from filename
 
 Plugin provides config skill, worktree isolation, and activity markers.
 
-**Raw:** [`010-claude-code.md`](../worktrunk-guide-raw/010-claude-code.md)
+**Raw:** [`010-claude-code.md`](../worktrunk-raw/010-claude-code.md)
 
 ### Installation
 

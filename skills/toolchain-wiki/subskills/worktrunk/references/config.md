@@ -1,7 +1,7 @@
 # Worktrunk Guide — Config
 
 Source: worktrunk **v0.74.0** (2026-08-14) — <https://github.com/max-sixty/worktrunk>
-Raw: `$SKILL_DIR/worktrunk-guide-raw/005-config.md`
+Raw: `$SKILL_DIR/worktrunk-raw/005-config.md`
 Lead: **`config`** — user/project config, shell integration, worktree path, state.
 
 > For template engine details (variables/filters/functions) see [automation](automation.md). For LLM commit generation see [integrations](integrations.md).
@@ -14,7 +14,7 @@ Lead: **`config`** — user/project config, shell integration, worktree path, st
 | Project config | `.config/wt.toml`                 | Hooks, dev server URL, aliases | Yes (VCS) |
 | System config  | Platform-specific                 | Shared defaults                | Yes       |
 
-Raw: [`005-config.md`](../worktrunk-guide-raw/005-config.md)
+Raw: [`005-config.md`](../worktrunk-raw/005-config.md)
 
 ## `wt config`
 

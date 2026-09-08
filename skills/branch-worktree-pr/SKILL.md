@@ -212,7 +212,7 @@ For BDD scenarios driving this phase see [bdd-scenarios.md](references/bdd-scena
 ### Phase 3 — Merge back via script (fan-in)
 
 `wt merge <TARGET>` merges the **current branch into target** then removes the current
-folder (like GitHub's merge button — see `worktrunk-guide` 004-merge.md). Fan-in names the
+folder (like GitHub's merge button — see `worktrunk` 004-merge.md). Fan-in names the
 parent/map as target. Never run `wt merge <child>` from the parent — parent is removed.
 
 Use the thin router — base runs one command, script detects. Step is done when the script exits 0.
@@ -270,7 +270,7 @@ uv run scripts/verify_parent.py  # or: uv run scripts/worktree.py verify
 # delegates to wt.toml gate (typecheck + test + commitlint --from=origin/{{ default_branch }} --to=HEAD), then git diff --check and git status clean (allows .lsz/tmp)
 ```
 
-But authoritative gate is `.config/wt.toml [pre-merge]` — skill demands _that_ gate passes, not a hard-coded `npm` string. Current template is `gate = "npm run typecheck && npm test && npx commitlint --from=origin/{{ default_branch }} --to=HEAD --verbose"` (pipeline form: `[pre-merge]` table = concurrent, `[[pre-merge]]` serial — see `worktrunk-guide` automation.md). `commitlint` uses `{{ default_branch }}` / `{{ target }}` vars and `wt hook pre-merge --yes` to test; hook approval frozen at `~/.config/worktrunk/approvals.toml`.
+But authoritative gate is `.config/wt.toml [pre-merge]` — skill demands _that_ gate passes, not a hard-coded `npm` string. Current template is `gate = "npm run typecheck && npm test && npx commitlint --from=origin/{{ default_branch }} --to=HEAD --verbose"` (pipeline form: `[pre-merge]` table = concurrent, `[[pre-merge]]` serial — see `worktrunk` automation.md). `commitlint` uses `{{ default_branch }}` / `{{ target }}` vars and `wt hook pre-merge --yes` to test; hook approval frozen at `~/.config/worktrunk/approvals.toml`.
 
 **Done when** parent worktree's pre-merge hook exits 0 and `git status --porcelain` is clean or only intended untracked under `.lsz/tmp`.
 
@@ -396,7 +396,7 @@ Delegation (when user confirms release after merge):
 | ---------------------------------------------------- | ----------------------------------------------------------------- |
 | Fork PR you can't push                               | `[[git-merge-pr]]` — `pr_prefix/<N>-<suffix>` + squash trailers   |
 | Upstream `pi-better-edit` sync                       | `CLAUDE.md:Upstream sync` — `absorb/tN-*` worktrees               |
-| Worktrunk mechanics (hooks, hash_port, copy-ignored) | `worktrunk-guide` skill, `$SKILL_DIR/references/wt-template.toml` |
+| Worktrunk mechanics (hooks, hash_port, copy-ignored) | `worktrunk` skill, `$SKILL_DIR/references/wt-template.toml` |
 | Reset / atomic commits / changelog layout            | `[[git-convention]]`                                              |
 
 For full BDD scenarios see [bdd-scenarios.md](references/bdd-scenarios.md).

@@ -1,7 +1,7 @@
 # Worktrunk Guide — Basics
 
 Source: worktrunk **v0.74.0** (2026-08-14) — <https://github.com/max-sixty/worktrunk>
-Raw: `$SKILL_DIR/worktrunk-guide-raw/001-switch.md` · `002-list.md` · `003-remove.md` · `004-merge.md`
+Raw: `$SKILL_DIR/worktrunk-raw/001-switch.md` · `002-list.md` · `003-remove.md` · `004-merge.md`
 Lead: **`switch`** — branch-addressed CRUD. Shell: Bash/Zsh/Fish/PowerShell. Package: `worktrunk`.
 
 > Covers the 80% surface: `wt switch` / `list` / `remove` / `merge`. For hooks/templates see [automation](automation.md); for step ops see [operations](operations.md).
@@ -10,7 +10,7 @@ Lead: **`switch`** — branch-addressed CRUD. Shell: Bash/Zsh/Fish/PowerShell. P
 
 Branch-addressed switch. Unlike `git switch`, navigates between worktrees; path comes from `worktree-path` template. Shortcuts also apply to `--base`.
 
-**Raw:** [`001-switch.md`](../worktrunk-guide-raw/001-switch.md)
+**Raw:** [`001-switch.md`](../worktrunk-raw/001-switch.md)
 
 ### Syntax
 
@@ -59,7 +59,7 @@ wt switch --create fix -x claude -- 'Fix bug #42'  # create + launch agent
 
 Progressive table: branch names first, git status fills async. Shows uncommitted changes, divergence from default/remote, optional CI and LLM summaries.
 
-**Raw:** [`002-list.md`](../worktrunk-guide-raw/002-list.md)
+**Raw:** [`002-list.md`](../worktrunk-raw/002-list.md)
 
 ### Syntax
 
@@ -125,7 +125,7 @@ wt list --format=json | jq '.[] | select(.main_state == "integrated") | .branch'
 
 Defaults to current worktree. Runs in background (returns immediately); use `--foreground` to block.
 
-**Raw:** [`003-remove.md`](../worktrunk-guide-raw/003-remove.md)
+**Raw:** [`003-remove.md`](../worktrunk-raw/003-remove.md)
 
 ### Syntax
 
@@ -167,7 +167,7 @@ wt remove --no-delete-branch feature
 
 Like GitHub "Merge PR" locally, but direction is current **into** target (inverse of `git merge`). Pipeline: commit → squash → rebase → pre-merge hooks → fast-forward merge → pre-remove hooks → remove worktree → post hooks (background).
 
-**Raw:** [`004-merge.md`](../worktrunk-guide-raw/004-merge.md)
+**Raw:** [`004-merge.md`](../worktrunk-raw/004-merge.md)
 
 ### Syntax
 
