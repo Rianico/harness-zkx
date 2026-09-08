@@ -5,10 +5,10 @@ description: 'Native toolchain wiki router for JS/TS/Python — Oxlint/Oxfmt (ox
   oxc, oxlint, oxfmt, basedpyright, worktrunk, wt'
 metadata:
   manage:
-  - oxlint
-  - oxfmt
-  - typecheck
-  - worktrunk
+    - oxlint
+    - oxfmt
+    - typecheck
+    - worktrunk
 name: toolchain-wiki
 ---
 
@@ -22,9 +22,9 @@ This skill owns **sequencing only** — no bytes. Each projection owns its bytes
 
 Read the subskill that matches the task. Use `Read` (not `Skill` tool — subskills hidden from discovery).
 
-| Domain      | Subskill                                  | When to load                                                                                                      |
-| `oxlint`    | `$SKILL_DIR/subskills/oxlint/SKILL.md`  | Oxlint config, CLI, categories/plugins, writing custom rules & JS plugins, ESLint migration — [oxlint](subskills/oxlint/SKILL.md) |
-| `oxfmt`     | `$SKILL_DIR/subskills/oxfmt/SKILL.md`   | Oxfmt config, CLI, embedded formatting, Prettier/Biome compat — [oxfmt](subskills/oxfmt/SKILL.md)                |
+| Domain | Subskill | When to load |
+| `oxlint` | `$SKILL_DIR/subskills/oxlint/SKILL.md` | Oxlint config, CLI, categories/plugins, writing custom rules & JS plugins, ESLint migration — [oxlint](subskills/oxlint/SKILL.md) |
+| `oxfmt` | `$SKILL_DIR/subskills/oxfmt/SKILL.md` | Oxfmt config, CLI, embedded formatting, Prettier/Biome compat — [oxfmt](subskills/oxfmt/SKILL.md) |
 | `typecheck` | `$SKILL_DIR/subskills/typecheck/SKILL.md` | Basedpyright setup, strict mode, diagnostics, stubs — proxy to `programming-expert/subskills/basedpyright-expert` |
 | `worktrunk` | `$SKILL_DIR/subskills/worktrunk/SKILL.md` | Branch-addressed worktrees, hooks, `hash_port`, LLM commits — [worktrunk](subskills/worktrunk/SKILL.md) |
 
