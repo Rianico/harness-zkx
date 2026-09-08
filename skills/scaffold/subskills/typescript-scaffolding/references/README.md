@@ -1,73 +1,20 @@
-# TypeScript Scaffold — Oxc references
+# TypeScript Scaffold — Oxc references (pointer)
 
-Curated LLM-friendly reference for `typescript-scaffolding`'s Oxc-native toolchain-wiki (pnpm v12 + TS 7 Go + Vite 8 Rolldown + Oxlint + Oxfmt).
+Canonical Oxc docs live at `toolchain-wiki/subskills/oxc/references/` — single source, no duplication.
 
-## Quick index
+## Canonical index
 
-| File                  | Covers                                                                           | Source                                        |
-| --------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
-| `oxc-introduction.md` | What is Oxc, getting-started entry points, scaffold mapping, verify gate         | <https://oxc.rs/docs/guide/introduction.html> |
-| `oxlint.md`           | Install, scripts, config discovery, categories/plugins, CLI for verify gate      | <https://oxc.rs/docs/guide/usage/linter/>     |
-| `oxfmt.md`            | Install, scripts, config discovery, printWidth etc., CLI, ignore                 | <https://oxc.rs/docs/guide/usage/formatter/>  |
-| `oxc-raw/`            | Raw 14-page scrape snapshot (introduction, linter/_, formatter/_, coding-agents) | `scrape.py site` 2026-09-08                   |
+| File                  | Location                                                                       |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `oxc-introduction.md` | `$SKILL_DIR/../../toolchain-wiki/subskills/oxc/references/oxc-introduction.md` |
+| `oxlint.md`           | `$SKILL_DIR/../../toolchain-wiki/subskills/oxc/references/oxlint.md`           |
+| `oxfmt.md`            | `$SKILL_DIR/../../toolchain-wiki/subskills/oxc/references/oxfmt.md`            |
+| `oxc-raw/` (14 pages) | `$SKILL_DIR/../../toolchain-wiki/subskills/oxc/references/oxc-raw/`            |
 
-## Deterministic artifacts (tool owns bytes)
+## Why pointer
 
-Preview:
+`scaffold/subskills/typescript-scaffolding` is `managed-by: scaffold` / `depends-on: [toolchain-wiki]`. Toolchain owns bytes at `toolchain-wiki/subskills/oxc/`; scaffold is a projection, not an owner. Wrapper copies were removed (previously duplicated 18 files) — read canonical via `$SKILL_DIR/../../toolchain-wiki/subskills/oxc/references/` (80% curated + 20% raw per `docs-scraper`).
 
-```bash
-uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --project-name my-lib --dry-run
-```
+## Refresh
 
-Generates (per `scaffold.py` → `OXLINT_JSON`, `OXFMT_JSON`, `build_package_json`):
-
-- `.nvmrc` → `24`
-- `package.json` → `packageManager: pnpm@12.0.0`, `engines node >=24`, `typescript >=7`, `vite >=8`, `oxlint >=1`, `oxfmt >=0.15`, `tsx >=4`, `@types/node >=24` (+ `@semantic-release/*` — see `scaffold.py:build_package_json`), scripts `lint: oxlint .`, `format: oxfmt --check .`, `format:fix: oxfmt .`, `typecheck: tsc --noEmit`, `test: vitest run`
-- `.oxlintrc.json` → `{ "$schema": "./node_modules/oxlint/configuration_schema.json", "rules": {} }`
-- `.oxfmtrc.json` → `{ "$schema": "./node_modules/oxfmt/configuration_schema.json" }`
-- `tsconfig.json` → strict, ESM NodeNext, ES2022, `types: ["node"]`
-- Variants (SKILL.md): `lib` → `main`/`exports: ./src/index.ts`; `cli` → `bin: {name: ./src/cli.ts}` + `pnpm dlx tsx` shebang; `pi-extension` → `pi.extensions: ["./src/index.ts"]`
-- Coverage (optional): `--with-coverage --coverage-threshold 80` adds `coverage: "vitest run --coverage"` + `@vitest/coverage-v8` + `vitest.config.ts`; CI swaps `pnpm test` → `pnpm run coverage`
-
-Raw snapshot files are self-contained; curated files are the 80% surface. For byte truth, read `scaffold.py`.
-
-## Verify gate (before push/PR)
-
-```bash
-pnpm install --no-frozen-lockfile
-pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
-# --check gate: oxlint .  +  oxfmt --check .
-# fix locally: oxlint --fix .  /  oxfmt .
-```
-
-CI verify job (`ci-scaffolding`, Node 24) runs the same 4 steps on pnpm (`pnpm run coverage` when `--with-coverage` enabled).
-
-## Refreshing the snapshot
-
-Regenerate raw:
-
-```bash
-uv run $SKILL_DIR/../docs-scraper/scripts/scrape.py site \
-  https://oxc.rs/docs/guide/introduction.md \
-  https://oxc.rs/docs/guide/what-is-oxc.md \
-  https://oxc.rs/docs/guide/usage/linter.md \
-  https://oxc.rs/docs/guide/usage/linter/config.md \
-  https://oxc.rs/docs/guide/usage/linter/cli.md \
-  https://oxc.rs/docs/guide/usage/linter/config-file-reference.md \
-  https://oxc.rs/docs/guide/usage/formatter.md \
-  https://oxc.rs/docs/guide/usage/formatter/config.md \
-  https://oxc.rs/docs/guide/usage/formatter/cli.md \
-  https://oxc.rs/docs/guide/usage/formatter/config-file-reference.md \
-  https://oxc.rs/docs/guide/usage/formatter/generated-config.md \
-  --output-dir .lsz/tmp/oxc-raw --force
-cp .lsz/tmp/oxc-raw/*.md skills/scaffold/subskills/typescript-scaffolding/references/oxc-raw/
-```
-
-Then update curated files `oxlint.md` / `oxfmt.md` for scaffold-facing delta; keep raw as self-contained layer per `docs-scraper` layered-skill contract (curated + raw).
-
-## Upstream docs
-
-- Oxc intro: <https://oxc.rs/docs/guide/introduction.html>
-- Oxlint: <https://oxc.rs/docs/guide/usage/linter.html>
-- Oxfmt: <https://oxc.rs/docs/guide/usage/formatter.html>
-- llms.txt: <https://oxc.rs/llms.txt>
+Canonical refresh is owned by `toolchain-wiki/subskills/oxc` — see `$SKILL_DIR/../../toolchain-wiki/subskills/oxc/references/README.md` for `scrape.py site` recipe. Do not regenerate here.

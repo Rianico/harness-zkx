@@ -27,7 +27,7 @@ Generates (per `scaffold.py` → `OXLINT_JSON`, `OXFMT_JSON`, `build_package_jso
 - `.oxfmtrc.json` → `{ "$schema": "./node_modules/oxfmt/configuration_schema.json" }`
 - `tsconfig.json` → strict, ESM NodeNext, ES2022, `types: ["node"]`
 
-Canonical for `scaffold/subskills/typescript-scaffolding` — see `typescript-scaffolding` `depends-on: [toolchain-wiki]`. Wrapper copies remain in `scaffold/subskills/typescript-scaffolding/references/` for compat.
+Canonical for `scaffold/subskills/typescript-scaffolding` — see `typescript-scaffolding` `depends-on: [toolchain-wiki]`. Single source; scaffold wrapper is now pointer-only (see `scaffold/subskills/typescript-scaffolding/references/README.md`).
 
 Raw snapshot files are self-contained; curated files are the 80% surface. For byte truth, read `scaffold.py`.
 
@@ -61,8 +61,6 @@ uv run $SKILL_DIR/../../../docs-scraper/scripts/scrape.py site \
   https://oxc.rs/docs/guide/usage/formatter/generated-config.md \
   --output-dir .lsz/tmp/oxc-raw --force
 cp .lsz/tmp/oxc-raw/*.md $SKILL_DIR/references/oxc-raw/
-# also sync wrapper for compat:
-cp $SKILL_DIR/references/oxc-raw/*.md ../../scaffold/subskills/typescript-scaffolding/references/oxc-raw/
 ```
 
 Then update curated files `oxlint.md` / `oxfmt.md` for scaffold-facing delta; keep raw as self-contained layer per `docs-scraper` layered-skill contract (curated + raw).
