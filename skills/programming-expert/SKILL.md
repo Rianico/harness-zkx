@@ -1,7 +1,7 @@
 ---
 name: programming-expert
 description: >-
-  Foundational coding principles + polyglot expertise for Python/TypeScript/Rust/Go/C++/Java/Kotlin/Swift/PHP/Perl/Lua. Use when writing, refactoring, debugging, testing, or reviewing code — Clean Code/SOLID/architecture language-agnostically. TRIGGER: coding, programming, basedpyright, architecture
+  Foundational coding principles + polyglot expertise for Python/TS/Rust/Go/C++/Java/Kotlin/Swift/PHP/Perl/Lua/Bash. Use for writing, reviewing, or hardening code — Clean Code/SOLID/architecture language-agnostically. TRIGGER: coding, programming, bash, shell script, architecture
 arguments: language
 argument-hint: |-
   python-expert -- type safety (Pydantic), async, testing, design, observability, resilience, packaging, production — 18 sub-domains
@@ -15,10 +15,11 @@ argument-hint: |-
   swift-expert -- SwiftUI, concurrency, actors
   php-expert -- Laravel, Eloquent, Pest
   perl-expert -- modern Perl, Moo, security
+  bash-expert -- strict mode, quoting, defensive patterns, ShellCheck/Bats/shfmt, portability, templates
   basedpyright-expert -- type checker config, diagnostics, stubs
   omitted -- loads router spine and dispatch table only
 metadata:
-  manage: [python-expert, typescript-expert, rust-expert, go-expert, lua-expert, cpp-expert, java-expert, kotlin-expert, swift-expert, php-expert, perl-expert, basedpyright-expert]
+  manage: [python-expert, typescript-expert, rust-expert, go-expert, lua-expert, cpp-expert, java-expert, kotlin-expert, swift-expert, php-expert, perl-expert, bash-expert, basedpyright-expert]
 ---
 
 # Programming Expert
@@ -37,7 +38,11 @@ General engineering rules applied by every subskill — language detail varies, 
 - **Operational realism** — what operational burden does the decision create; what becomes easier vs harder afterwards; prefer operable, observable, independently deployable boundaries; avoid premature microservice splits; emit JSON structured logs with `correlation_id` (`ContextVar`/`AsyncLocalStorage`) + `method/path/status`; Prometheus bounded cardinality (never `user_id` label); watch golden signals (latency/traffic/errors/saturation).
 - **Configuration — fail fast** — externalize env-specific values; parse and validate all config at boot into typed `Settings` (Py `BaseSettings`/`Field(alias=)` / TS `zod` env schema / Rust `config` crate); crash with field-level errors before serving. No secrets in code/logs/errors.
 - **Resilience — retry only transient** — retry `ConnectionError/TimeoutError` + `429/502/503/504`, never `ValueError/TypeError`/auth 4xx; `wait_exponential_jitter` with cap on attempts _and_ wall time; jitter to avoid thundering herd.
-- **Resources — RAII** — acquire in `enter`/`aenter`, release unconditionally in `exit`/`aexit` (`with`/`using`/`defer`/`Drop`); stack with `ExitStack`/`AsyncExitStack` for nesting; streaming finalizes in `finally`/`exit`.
+- **Resources — RAII & signal-safe cleanup** — acquire in `enter`/`aenter`, release unconditionally in `exit`/`aexit` (`with`/`using`/`defer`/`Drop` / `trap ... EXIT`); stack with `ExitStack`/`AsyncExitStack`; streaming finalizes in `finally`/`exit`. Ensure cleanup runs on all exits (signals/exceptions/interrupts/crashes), not just happy path — same invariant for temp files, locks, descriptors, processes.
+- **Strict by default — permissive hides bugs** — permissive defaults mask failures (silent empty, swallowed pipe errors, implicit `any`). Separate declaration from assignment when assignment can fail (`local x; x=$(cmd)`, `export x; x=$(cmd)`) to prevent declaration builtins returning 0 from masking exit status under `set -e`. Enable strictest checks first (`strict`/`--enable=all`/`-Wall -Werror`/type `strict`); relax only with narrow, reasoned suppression at smallest scope.
+- **Data is not code — keep channels separate** — boundary validation: never interpolate data into code via strings (SQL/XSS/injection); isolate options from untrusted positional args via `--` delimiter (`cmd -- "$arg"`); keep data in typed data channels (parameterized queries, placeholders, typed args, arrays), never build commands or code by string concatenation; avoid `eval`/string-concat execution.
+- **Delimiters lie — use structured over ad-hoc split** — ad-hoc splitting (`split(',')`, newline/token) fails when data contains delimiter; prefer delimiters that cannot appear in data or structured encodings (arrays/JSON/length-prefix); prove delimiter safety if you must split.
+- **Platform is a dependency — probe, don't assume** — same API can differ across platforms/versions; declare minimum version, probe capabilities/feature-detect, gate with fallback, fail fast with actionable `install X >=Y`, test on targets.
 - **Artifacts: ADR / Blueprint / Technical standards** — ADR is the concise decision log (context → decision → consequences, rejected alternatives); Blueprint is the current model (components, boundaries, interfaces, data/control flow, runtime shape, invariants, risks); Technical standards are reusable rules (naming, layering, dependency direction, FK/deletion policy, API contracts). Update blueprint/standards only when establishing reusable paradigm, not one-off details.
 - **Decision framing** — keep reasoning decision-oriented; surface trade-offs explicitly; make rejected alternatives concrete; tie concerns back to boundaries, invariants, and risks.
 - **Self-described code** — names reveal intent, functions do one thing, errors fail loud with context, comments explain why not what; `object` forces validation, `Any` silences the checker; reserve `Any` for truly dynamic data or designated transport/IPC zones (file-level suppression only); validate once at admission, trust inside.
@@ -59,6 +64,7 @@ Read the subskill that matches the language you need. Use `Read` (not `Skill` to
 | `swift-expert`        | `$SKILL_DIR/subskills/swift-expert/SKILL.md`        | SwiftUI, actors, Sendable, strict concurrency — [swift-expert](subskills/swift-expert/SKILL.md)                                                                              |
 | `php-expert`          | `$SKILL_DIR/subskills/php-expert/SKILL.md`          | Laravel, Eloquent, Pest, auth/policies — [php-expert](subskills/php-expert/SKILL.md)                                                                                         |
 | `perl-expert`         | `$SKILL_DIR/subskills/perl-expert/SKILL.md`         | modern Perl 5.36+, Moo, taint, Test2 — [perl-expert](subskills/perl-expert/SKILL.md)                                                                                         |
+| `bash-expert`         | `$SKILL_DIR/subskills/bash-expert/SKILL.md`         | defensive Bash, strict mode, quoting, file/temp safety, args, portability, ShellCheck/Bats — [bash-expert](subskills/bash-expert/SKILL.md)                                   |
 | `basedpyright-expert` | `$SKILL_DIR/subskills/basedpyright-expert/SKILL.md` | pyright config, diagnostics, stubs, migration — [basedpyright-expert](subskills/basedpyright-expert/SKILL.md)                                                                |
 
 Omitted argument loads only the spine above. For an unknown language, use the closest subskill or escalate — do not invent a new projection in place.
@@ -86,6 +92,7 @@ npx tsc --noEmit && npm test                                           # typescr
 cargo check && cargo test && cargo clippy                              # rust
 go vet ./... && go test ./...                                          # go
 luacheck . && busted                                                   # lua (when present)
+shellcheck --enable=all --external-sources **/*.sh && shfmt -i 2 -ci -bn -sr -kp -d . && bats tests/  # bash
 ```
 
 See subskill for exact command.
