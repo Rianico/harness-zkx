@@ -99,7 +99,7 @@ def get_user(id: str) -> UserModel:  # SQLAlchemy model
 @app.get("/users/{id}")
 def get_user(id: str) -> UserResponse:
     user = db.query(UserModel).get(id)
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user, from_attributes=True)
 ```
 
 ### Mixed I/O and Business Logic
@@ -149,7 +149,7 @@ except ConnectionError as e:
     raise
 except ValueError as e:
     logger.error("Invalid input", error=str(e))
-    raise BadRequestError(str(e))
+    raise BadRequestError(str(e)) from e
 ```
 
 ### Ignored Partial Failures
@@ -233,6 +233,59 @@ async def fetch_data():
     await asyncio.sleep(1)
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
+```
+
+## Function & Scope Anti-Patterns
+
+### Mutable Default Arguments
+
+```python
+# BAD: Mutable default is evaluated once at def time and shared across all invocations
+def append_item(item: str, target: list[str] = []) -> list[str]:
+    target.append(item)
+    return target
+```
+
+**Fix:** Use `None` sentinel with runtime instantiation, or `Field(default_factory=list)` in Pydantic models.
+
+```python
+# GOOD: Sentinel pattern
+def append_item(item: str, target: list[str] | None = None) -> list[str]:
+    if target is None:
+        target = []
+    target.append(item)
+    return target
+
+# GOOD (Pydantic): default_factory
+from pydantic import BaseModel, Field
+
+class ItemBatch(BaseModel):
+    items: list[str] = Field(default_factory=list)
+```
+
+### Late-Binding Closures in Loops
+
+```python
+# BAD: Functions look up `i` in outer scope when called, returning 4 for all items
+funcs = [lambda: i for i in range(5)]
+results = [f() for f in funcs]  # [4, 4, 4, 4, 4]
+```
+
+**Fix:** Bind the loop variable eagerly via default argument (`lambda i=i:`) or `functools.partial`.
+
+```python
+# GOOD: Default argument binds value at definition time
+funcs = [lambda i=i: i for i in range(5)]
+results = [f() for f in funcs]  # [0, 1, 2, 3, 4]
+
+# GOOD: functools.partial binds arguments eagerly
+import functools
+
+def get_val(val: int) -> int:
+    return val
+
+funcs = [functools.partial(get_val, i) for i in range(5)]
+results = [f() for f in funcs]  # [0, 1, 2, 3, 4]
 ```
 
 ## Type Safety Anti-Patterns
@@ -322,8 +375,11 @@ Before finalizing code, verify:
 - [ ] No exposed internal types (ORM models, protobufs)
 - [ ] No mixed I/O and business logic
 - [ ] No bare `except Exception: pass`
+- [ ] Exception chaining preserved (`raise ... from e`)
 - [ ] No ignored partial failures in batches
 - [ ] No missing input validation
+- [ ] No mutable default arguments (`None` sentinel or `Field(default_factory=list)`)
+- [ ] No late-binding closures in loops (`lambda i=i:` or `functools.partial`)
 - [ ] No unclosed resources (using context managers)
 - [ ] No blocking calls in async code
 - [ ] All public functions have type hints
@@ -337,13 +393,16 @@ Before finalizing code, verify:
 |-------------|-----|
 | Scattered retry logic | Centralized decorators |
 | Hard-coded config | Environment variables + pydantic-settings |
-| Exposed ORM models | DTO/response schemas |
+| Exposed ORM models | DTO schemas with `model_validate(obj, from_attributes=True)` |
 | Mixed I/O + logic | Repository pattern |
 | Bare except | Catch specific exceptions |
+| Lost exception context | `raise BadRequestError(...) from e` |
 | Batch stops on error | Return BatchResult with successes/failures |
 | No validation | Validate at boundaries with Pydantic |
+| Mutable default `def f(x=[])` | Sentinel `x: list[str] | None = None` or `Field(default_factory=list)` |
+| Late-binding closure in loop | Default arg `lambda i=i:` or `functools.partial` |
 | Unclosed resources | Context managers |
-| Blocking in async | Async-native libraries |
+| Blocking in async | Async-native libraries or `asyncio.to_thread` |
 | Missing types | Type annotations on all public APIs |
 | Only happy path tests | Test errors and edge cases |
 

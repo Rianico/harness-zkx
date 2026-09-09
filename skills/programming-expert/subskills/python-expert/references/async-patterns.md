@@ -105,19 +105,65 @@ async def main():
 asyncio.run(main())
 ```
 
-### Pattern 2: Concurrent Execution with gather()
+### Pattern 2: Structured Concurrency with TaskGroup (Python 3.11+)
+
+`asyncio.TaskGroup` is the modern, recommended default for concurrent execution in Python 3.11+. It provides true structured concurrency with guaranteed task cleanup.
 
 ```python
 import asyncio
-from typing import List
 
 async def fetch_user(user_id: int) -> dict:
     """Fetch user data."""
     await asyncio.sleep(0.5)
     return {"id": user_id, "name": f"User {user_id}"}
 
-async def fetch_all_users(user_ids: List[int]) -> List[dict]:
-    """Fetch multiple users concurrently."""
+async def fetch_all_users(user_ids: list[int]) -> list[dict]:
+    """Fetch multiple users concurrently using structured concurrency."""
+    async with asyncio.TaskGroup() as tg:
+        tasks = [tg.create_task(fetch_user(uid)) for uid in user_ids]
+    # Context manager exit awaits all tasks; all results guaranteed available here
+    return [task.result() for task in tasks]
+
+async def main():
+    user_ids = [1, 2, 3, 4, 5]
+    users = await fetch_all_users(user_ids)
+    print(f"Fetched {len(users)} users")
+
+asyncio.run(main())
+```
+
+**Why `TaskGroup` over `asyncio.gather()`:**
+- **Automatic sibling cancellation:** If any task inside a `TaskGroup` raises an exception, all other active tasks in the group are immediately cancelled and awaited before exiting the block.
+- **Exception grouping (`ExceptionGroup`):** Captures exceptions from all failing tasks into an `ExceptionGroup`, which can be handled selectively with `except*`.
+- **Zero task leakage:** Tasks are bound to the lexical scope of the context manager.
+
+#### Task Cancellation Leakage with `asyncio.gather()`
+
+> [!WARNING]
+> **Cancellation Leakage Pitfall in `asyncio.gather()`:**
+> When using `asyncio.gather(*tasks)` without `return_exceptions=True`, if one task raises an exception, `gather` re-raises that exception immediately. However, **remaining tasks continue running in the background as orphans** on the event loop. They are NOT cancelled!
+>
+> ```python
+> # DANGEROUS: Task leakage on exception
+> async def leak_example():
+>     # If task1 raises ValueError, task2 keeps running in background unmonitored!
+>     results = await asyncio.gather(failing_task(), long_running_task())
+> ```
+>
+> If you must use `gather()` (e.g., Python <3.11), pass `return_exceptions=True` and manually handle cancellation and exceptions. For Python 3.11+, always prefer `asyncio.TaskGroup`.
+
+### Pattern 3: Concurrent Execution with gather() (Legacy / Tuple Results)
+
+```python
+import asyncio
+
+async def fetch_user(user_id: int) -> dict:
+    """Fetch user data."""
+    await asyncio.sleep(0.5)
+    return {"id": user_id, "name": f"User {user_id}"}
+
+async def fetch_all_users(user_ids: list[int]) -> list[dict]:
+    """Fetch multiple users concurrently using gather."""
     tasks = [fetch_user(uid) for uid in user_ids]
     results = await asyncio.gather(*tasks)
     return results
@@ -233,17 +279,32 @@ result = async_function()
 result = await async_function()
 ```
 
-### 2. Blocking the Event Loop
+### 2. Blocking the Event Loop (Sync DB / Blocking I/O in async def)
+
+> [!CAUTION]
+> **Never call synchronous database drivers or blocking I/O inside `async def` routes!**
+> A single synchronous blocking call (`requests.get`, `time.sleep`, sync DB queries via `psycopg2`, sync SQLAlchemy `session.execute`, or `sqlite3`) stalls the entire event loop. All other concurrent requests handled by that worker process freeze.
+>
+> **Remedies:**
+> - Use an async-native driver (`asyncpg`, `aiomysql`, `httpx.AsyncClient`, `aiofiles`).
+> - If you must call a synchronous DB or blocking library, offload it via `await asyncio.to_thread(...)`.
 
 ```python
-# Wrong - blocks event loop
-import time
-async def bad():
-    time.sleep(1)  # Blocks!
+# FATAL: Stalls the event loop for all concurrent requests
+@app.get("/users/{id}")
+async def get_user(id: str):
+    return sync_db.query(UserModel).get(id)  # Blocks everything!
 
-# Correct
-async def good():
-    await asyncio.sleep(1)  # Non-blocking
+# GOOD: Async-native driver
+@app.get("/users/{id}")
+async def get_user(id: str):
+    async with async_session() as session:
+        return await session.get(UserModel, id)
+
+# GOOD: Offload synchronous blocking call to a worker thread
+@app.get("/users/{id}")
+async def get_user(id: str):
+    return await asyncio.to_thread(sync_db.query(UserModel).get, id)
 ```
 
 ### 3. Not Handling Cancellation
@@ -710,7 +771,7 @@ async def read_file_async(path: str) -> str:
 
 async def call_sync_library(data: dict) -> dict:
     """Wrap a synchronous library call."""
-    # Useful for sync database drivers, file I/O, CPU work
+    # Useful for sync database drivers (psycopg2, sqlite3), blocking file I/O, CPU work
     return await asyncio.to_thread(sync_library.process, data)
 ```
 

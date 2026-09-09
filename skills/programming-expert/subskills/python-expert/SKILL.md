@@ -20,7 +20,7 @@ Domain knowledge for production Python — typed, observable, resilient, well-st
 | ------------------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------ |
 | type hints, generics, `Protocol`, `TypeVar`, `TypeAlias`, `Pydantic`, `strict` | §1 Type Safety            | python-type-safety                                                                                     |
 | `BaseSettings`, `.env`, secrets, env vars, config validation                   | §2 Configuration          | python-configuration                                                                                   |
-| `async`/`await`, `asyncio`, `gather`, `Semaphore`, `ContextVar`                | §3 Async                  | async-python-patterns                                                                                  |
+| `async`/`await`, `asyncio`, `TaskGroup`, `Semaphore`, `ContextVar`             | §3 Async                  | async-python-patterns                                                                                  |
 | `Celery`, `RQ`, task queue, job state, idempotency, webhook                    | §4 Background Jobs        | python-background-jobs                                                                                 |
 | `with`/`async with`, `__enter__`/`__exit__`, `contextmanager`, `ExitStack`     | §5 Resources              | python-resource-management                                                                             |
 | `try`/`except`, `ValidationError`, `HttpError`, retries, backoff, `tenacity`   | §6 Errors & Resilience    | python-error-handling, python-resilience                                                               |
@@ -30,6 +30,7 @@ Domain knowledge for production Python — typed, observable, resilient, well-st
 | `ruff`, `mypy`/`pyright`, PEP 8, docstrings, naming, imports                   | §10 Style & Anti-patterns | python-code-style, python-anti-patterns                                                                |
 | `pyproject.toml`, `src/` layout, `py.typed`, `wheel`, `pip`/`uv` publish       | §11 Packaging             | python-packaging                                                                                       |
 | singleton client, batch/OData, chunked upload, audit trail, production         | §12 Production            | dataverse-python-production-code, dataverse-python-advanced-patterns, dataverse-python-usecase-builder |
+| pre-commit gate, ruff check, typecheck, pytest verification                    | §13 Verification          | —                                                                                                      |
 
 If your task matches two rows, read both sections plus `references/` for the overlapping pattern.
 
@@ -45,6 +46,8 @@ If your task matches two rows, read both sections plus `references/` for the ove
 # Prefer X | None over Optional[X] on 3.10+
 def get_user(user_id: str) -> User | None: ...
 def process(items: list[Item], max_workers: int = 4) -> BatchResult[ProcessedItem]: ...
+# Never mutable defaults — use None sentinel or Field(default_factory=list)
+def append_item(item: str, target: list[str] | None = None) -> list[str]: ...
 
 class UserRepository:
     def __init__(self, db: Database) -> None: ...
@@ -62,6 +65,7 @@ class CreateUserInput(BaseModel):
     email: str = Field(..., min_length=5)
     name: str = Field(..., min_length=1)
     age: int = Field(ge=0, le=150)
+    tags: list[str] = Field(default_factory=list)  # default_factory, never []
 
     @field_validator("email")
     @classmethod
@@ -77,6 +81,7 @@ user = User.from_input(validated)  # typed throughout
 
 - Anti-pattern: `data: dict[str, object] = model.model_dump(); langs = data.get("languages")` — loses types that `model.languages.items()` preserves.
 - `Any` at boundaries silences the checker; `object` forces validation. Reserve `Any` for truly dynamic data or designated Any zones (transport/IPC).
+- Never mutable default arguments: use `x: list[T] | None = None` sentinel in functions or `Field(default_factory=list)` in Pydantic.
 
 ### 1.3 Modern type vocabulary
 
@@ -88,11 +93,11 @@ def parse(v: str) -> int | float | str: ...
 type UserId = str  # 3.12+
 UserId2: TypeAlias = str  # 3.10 compat
 
-# Generics — preserve type across containers
-from typing import TypeVar, Generic
-T = TypeVar("T", bound=BaseModel)
-class Repository(Generic[T]):
+# Generics (PEP 695, Python 3.12+) — preserve type across containers
+class Repository[T: BaseModel]:
     def get(self, id: str) -> T | None: ...
+
+def get[T](id: str) -> T | None: ...
 
 # Protocol — structural typing without inheritance
 from typing import Protocol, runtime_checkable
@@ -143,51 +148,36 @@ See `[configuration.md](references/configuration.md)`.
 
 ```python
 import asyncio, httpx
+from contextvars import ContextVar
 
-# Never block the loop
-async def fetch(url: str) -> dict[str, object]:
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url)
-        return resp.json()  # type: ignore[no-any-return]
+# Structured concurrency (Python 3.11+ TaskGroup) — cancels siblings on error, zero task leakage
+async def fetch_all(urls: list[str]) -> list[dict[str, object]]:
+    async with asyncio.TaskGroup() as tg:
+        tasks = [tg.create_task(fetch(u)) for u in urls]
+    return [t.result() for t in tasks]
 
-# Concurrent with backpressure — gather + Semaphore
+# Concurrent with backpressure — Semaphore
 sem = asyncio.Semaphore(5)
 async def bounded_fetch(url: str) -> dict[str, object]:
     async with sem:
         return await fetch(url)
-results = await asyncio.gather(*(bounded_fetch(u) for u in urls))
 
 # Context that survives async hops — ContextVar, not thread-local
-from contextvars import ContextVar
 request_id: ContextVar[str] = ContextVar("request_id")
 ```
 
-- Stay fully sync or fully async per call path. Mixing `requests`/`time.sleep` inside `async def` blocks the loop.
-- For CPU work inside async, offload with `await asyncio.to_thread(cpu_bound)`.
+- Prefer `asyncio.TaskGroup` over `asyncio.gather` (`gather` leaks uncancelled orphan tasks on unhandled exceptions).
+- Stay fully sync or fully async per call path. Never call sync DB drivers or blocking I/O in `async def` — blocks the whole event loop.
+- For CPU work or legacy sync calls, offload with `await asyncio.to_thread(sync_fn, arg)`.
 - See producer/consumer queues, async iterators, timeouts, cancellation, and `async with`/`async for` in `[async-patterns.md](references/async-patterns.md)`.
 
 ## 4. Background Jobs & Task Queues
 
-```python
-from celery import Celery
-app = Celery("tasks", broker="redis://localhost:6379")
-app.conf.update(task_acks_late=True, task_reject_on_worker_lost=True,
-                worker_prefetch_multiplier=1)
+- **Pattern:** `POST /jobs` → persist `Job(status=pending)` → enqueue task → return `202 {job_id, poll_url}` immediately → worker updates state (`running → succeeded|failed`).
+- **Idempotency & at-least-once delivery:** Worker failures trigger retries; design all tasks to be safe for duplicate execution using deduplication keys or idempotency tokens.
+- **Engines:** Celery (`task_acks_late=True`, `task_reject_on_worker_lost=True`), RQ, Dramatiq, or `asyncio.Queue` for in-process backgrounding.
 
-@app.task(bind=True, max_retries=3, autoretry_for=(ConnectionError, TimeoutError))
-def send_email(self, to: str, subject: str, body: str) -> None:
-    email_client.send(to, subject, body)
-
-# API returns job ID immediately; worker runs async
-@app.task  # enqueue: send_email.delay(to, subject, body)
-def noop(): ...
-```
-
-- Pattern: `POST /jobs` → persist `Job(status=pending)` → `enqueue` → `202 {job_id, poll_url}` → worker updates `running → succeeded/failed`.
-- Idempotent tasks, at-least-once delivery → guard against duplicate execution; job state machine `pending → running → succeeded|failed`.
-- Alternatives: RQ, Dramatiq, `asyncio.Queue`, cloud queues — same state/idempotency rules.
-
-See `[background-jobs.md](references/background-jobs.md)`.
+See full Celery worker setup, failure recovery, and idempotency recipes in `[background-jobs.md](references/background-jobs.md)`.
 
 ## 5. Resource Management
 
@@ -392,7 +382,7 @@ ruff check --fix . && ruff format . && basedpyright
 
 **Anti-patterns checklist** (scan before merge):
 
-- Scattered timeout/retry, double retry at two layers, hardcoded secrets, leaking ORM models to API, mixed I/O+logic, bare `except Exception: pass`, aborted batches, unclosed resources, blocking `time.sleep`/`requests` in `async`, missing type hints, untyped `list` — see `[anti-patterns.md](references/anti-patterns.md)`.
+- Mutable defaults (`def f(x=[])` prohibited; use `None` sentinel or `Field(default_factory=list)`), late-binding closures in loops (`lambda i=i:` or `functools.partial`), unchained exceptions (`raise ... from e`), scattered timeout/retry, double retry, hardcoded secrets, leaking ORM models to API, mixed I/O+logic, bare `except Exception: pass`, aborted batches, unclosed resources, blocking sync calls in `async`, missing type hints, untyped collections — see `[anti-patterns.md](references/anti-patterns.md)`.
 
 ## 11. Packaging — `src` Layout, `pyproject.toml`, Distribution
 
@@ -428,36 +418,10 @@ See `[packaging.md](references/packaging.md)`.
 
 ## 12. Production Readiness
 
-Abstracted from Dataverse production patterns — apply to any SDK/service integration:
+SDK and service integrations require production hygiene: singleton client management, retry loops with exponential backoff for transient errors (`429`, `503`, timeouts), server-side query filtering (`filter`, `select`, `top`), chunked uploads (4 MiB), and metadata cache invalidation.
 
-```python
-# Singleton client + typed config
-class Service:
-    _instance = None
-    def __new__(cls, *a, **kw):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    def __init__(self, settings: Settings) -> None:
-        if not hasattr(self, "_client"):
-            self._client = DataverseClient(settings.org_url, credential)  # replace with your SDK
-
-# Retry with DataverseError-style hierarchy
-for attempt in range(3):
-    try:
-        return client.create(table, records)
-    except HttpError as e:
-        if attempt == 2 or not e.is_transient: raise
-        time.sleep(2 ** attempt)
-
-# Query optimization — push work to server
-client.get(table, filter="status eq 1", select=["id","name"], orderby="name", top=500)
-# For large payloads: chunked upload / batch create / paged iteration
-```
-
-- Idempotency keys, batch with partial-failure handling, `select`/`filter`/`top`/`orderby` pushed server-side, file uploads chunked (4 MiB), metadata cache invalidation on schema change.
-
-See `[production-patterns.md](references/production-patterns.md)`. Legacy Django/PyTorch deep dives remain in `[django-patterns.md](references/django-patterns.md)` / `[pytorch-patterns.md](references/pytorch-patterns.md)` — use only when those frameworks apply.
+- For full singleton client patterns, OData/batch architectures, and retry hierarchies, see `[production-patterns.md](references/production-patterns.md)`.
+- Legacy Django/PyTorch deep dives remain in `[django-patterns.md](references/django-patterns.md)` / `[pytorch-patterns.md](references/pytorch-patterns.md)` — use only when those frameworks apply.
 
 ## References — Progressive Disclosure
 
@@ -488,10 +452,10 @@ See `[production-patterns.md](references/production-patterns.md)`. Legacy Django
 
 For `basedpyright`/`pyright` config, `typeCheckingMode`, `baseline.json`, `report*` diagnostics, `py.typed`, and migration from `mypy`, use **basedpyright-expert** directly — do not duplicate that material here.
 
-## Verification
+## 13. Verification
 
 ```bash
-ruff check . && ruff format --check . && basedpyright && uv run pytest --cov=myapp --cov-fail-under=80
+uv run ruff check . && uv run basedpyright && uv run pytest
 # LSP-wide stale check
 uv run python -m basedpyright --stats
 ```
