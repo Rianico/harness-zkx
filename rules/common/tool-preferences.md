@@ -3,6 +3,9 @@
 - **Reading:** `read` for files you will edit (not `cat`/`bat`)
 - **Paths:** absolute only — cwd resets between subagent turns
 - **Code nav:** AST/treesitter for overview; LSP for cross-file renames (`rename`, `references`)
+- **Search:** `rg` > `grep`/`grep -r` — ripgrep (respects `.gitignore`, faster, scope with `--glob`/`-g`/`--type`)
+- **File discovery:** `fd` > `find` — respects ignores, simpler `fd <pattern> <path>`; use `fd --type f`/`--type d`
+- **Listing:** `eza` > `ls`/`tree` — `eza -la` / `eza --tree` (icons, git); fallback `ls`/`tree` when `eza` unavailable
 
 ## Runtimes — native tool owns version + deps; commit version file
 
