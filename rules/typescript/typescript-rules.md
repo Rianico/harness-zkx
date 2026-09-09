@@ -15,25 +15,29 @@ You are operating in a TypeScript codebase. Before proceeding, review and apply 
 
 ## Core TypeScript Standards (80% Base)
 
-- **Formatting:** `camelCase` vars/funcs, `PascalCase` types/classes/components; `import type {}` for type-only imports; sorted `stdlib → third-party → local`; named exports over `default`.
-- **Strict:** `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` + `noImplicitOverride` in every `tsconfig.json`.
-- **Typed boundaries:** `JSON.parse` returns `any` → `zod`/`valibot` `parse` at admission boundary (API/file/env/config); typed model inside; serialize only at output.
-- **Immutability:** `readonly`/`ReadonlyArray`/`as const` over mutation; avoid `Array.push` on shared state; `undefined` for missing, `null` only for explicit sentinel.
+- **Package manager & tooling:** `pnpm` (preferred; fallback `npm`, avoid yarn classic). Runner: `tsx` for scripts/ESM. Lint/format: Biome (fast lint+format) or ESLint; keep one. Dedicated typecheck: `tsc --noEmit` (or `tsc -b` for project references) in CI.
+- **Strict tsconfig:** Enable `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `skipLibCheck`. Target modern ESM (`"type": "module"`, `module: "ESNext"`, `moduleResolution: "bundler"`).
+- **Typed boundaries with Zod:** `JSON.parse`, fetch, env vars, and file reads return untyped data (`any`/`unknown`). Parse at admission boundaries with Zod schemas (`Schema.parse(raw)`) to admit strictly typed models; internal domain logic relies on typed models; serialize only at egress.
+- **Formatting & structure:** `camelCase` vars/functions, `PascalCase` types/classes/components; `import type { }` for type-only imports; sorted imports `stdlib → third-party → local`; named exports over `default` (except framework-mandated routes/configs).
+- **Immutability:** `readonly`/`ReadonlyArray`/`as const` over mutation; `undefined` for missing values, `null` only for explicit sentinel values.
 
-## Type Safety (First Principle)
+## Critical Cruxes (Blockers)
 
-- **Fix over suppress;** narrowest suppression scope; never blanket-disable.
-- **`unknown` over `any`, `satisfies` over `as`, type guards over casts:** `unknown` forces `typeof`/`in`/discriminated guard; `as const satisfies` checks without widening; `x is T` predicates over `as`.
-- **Shape vs union:** `interface` for object shapes, `type` for unions/intersections/tuples; discriminated union with literal `type` tag; `Record<string, unknown>` over `{}`/`object`.
-- **Exhaustiveness:** `never` branch on `switch`/union so new members fail to compile; `with noUncheckedIndexedAccess`, `obj[key]` is `T | undefined` — narrow before use.
-- **Generics:** `T extends U` constraints, avoid explicit `any`; `enum` → `as const` map + `keyof typeof` unless true persisted identity.
+- **`exactOptionalPropertyTypes` key omission:** An optional property `{ prop?: string }` rejects `{ prop: undefined }`. Use conditional spreading `...(val !== undefined && { val })` to omit keys instead of assigning `undefined`.
+- **`noUncheckedIndexedAccess` narrowing:** Array indices (`arr[i]`) and record lookups (`map[key]`) return `T | undefined`. Safely narrow before use (`const [first] = arr; if (first !== undefined) ...`) or use `for...of`.
+- **`any` elimination:** Never introduce or allow `any`. Use `unknown` for unadmitted data, derive types with `z.infer<typeof Schema>`, use `satisfies` over `as` for literal validation without widening, and use custom type guards (`val is T`) or assertion functions (`asserts val is T`) instead of type casts.
+- **Async `forEach` trap:** Never use `items.forEach(async ...)`. It ignores returned promises and creates unhandled floating executions. Use `await Promise.all(items.map(...))` for concurrent operations or `for (const item of items) await ...` for sequential operations.
+- **`assertNever` exhaustiveness:** Always enforce exhaustiveness on discriminated unions / `switch` statements with `default: return assertNever(state);` so additions to union variants trigger compile-time errors.
 
-## Expertise Routing (Use `Skill` tool)
+## Expertise Routing (Use `Read` tool)
 
-If your task needs deep methodology, you MUST pause and invoke `Skill` for `programming-expert` (`typescript-expert`):
+`typescript-expert` is a managed subskill of `programming-expert` router. Subskills are hidden from discovery (`managed-by: programming-expert`). Do NOT invoke `Skill(skill="typescript-expert")` or `Skill(skill="programming-expert", args="typescript-expert")`. Instead, read the required reference directly using the `Read` tool:
 
-- **Types/boundaries:** `Skill(skill="programming-expert", args="typescript-expert types")` — generics, conditional/mapped/template literal, branded types, utility types.
-- **Testing:** `Skill(skill="programming-expert", args="typescript-expert testing")` — Vitest/Jest, mocking, React Testing Library.
-- **Tooling/style:** `Skill(skill="programming-expert", args="typescript-expert tooling")` — strict config, monorepo, ESM/CJS, lint choice.
+- **Subskill guide:** `Read skills/programming-expert/subskills/typescript-expert/SKILL.md`
+- **Advanced types & patterns:** `Read skills/programming-expert/subskills/typescript-expert/references/advanced-types.md`
+- **Cheatsheet & Zod boundaries:** `Read skills/programming-expert/subskills/typescript-expert/references/cheatsheet.md`
+- **Testing (Jest / Vitest):** `Read skills/programming-expert/subskills/typescript-expert/references/jest-testing.md`
+- **Tooling, monorepo & strict config:** `Read skills/programming-expert/subskills/typescript-expert/references/tooling.md`
+- **Style guide & conventions:** `Read skills/programming-expert/subskills/typescript-expert/references/style-guide.md`
 
-**CRITICAL:** Do not guess type fixes or `strict` workarounds without retrieving the expert skill first.
+**CRITICAL:** Do not guess type fixes, loose casts, or `strict` workarounds without reading the expert documentation first.
