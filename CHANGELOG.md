@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **docs-scraper:** add deterministic inject-sources script for meta.sources
+- **programming-expert:** add bash-expert subskill and defensive shell rules
 - **gh-router:** make gh-release scripts package-manager-aware (npm/pnpm)
 - **docs-scraper:** add llms.txt HEAD fallback and discovery/fetch metrics
 - **scaffold:** enforce harness comment allowlist via oxlint harness/no-comments
@@ -158,6 +160,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **rules:** refine mental-model and development-patterns
 - **rules:** prefer rg, fd, eza over grep, find, ls
 - **rules:** clarify gates and internal deprecation + skill sync (#11)
 - **git-convention:** make concise with clear organization (#10)

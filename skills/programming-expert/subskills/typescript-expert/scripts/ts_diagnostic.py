@@ -83,6 +83,102 @@ def check_versions():
     print(f"  Node.js: {node_version or 'Not found'}")
 
 
+def strip_jsonc(text: str) -> str:
+    """Strip JSONC comments (single and multi-line) and trailing commas."""
+    # Pass 1: strip comments while preserving strings
+    out = []
+    i = 0
+    n = len(text)
+    in_string = False
+    escape = False
+
+    while i < n:
+        c = text[i]
+        if in_string:
+            out.append(c)
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if c == '"':
+            in_string = True
+            out.append(c)
+            i += 1
+            continue
+
+        if c == "/" and i + 1 < n:
+            if text[i + 1] == "/":
+                i += 2
+                while i < n and text[i] != "\n":
+                    i += 1
+                continue
+            elif text[i + 1] == "*":
+                i += 2
+                while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                    i += 1
+                i += 2
+                continue
+
+        out.append(c)
+        i += 1
+
+    clean = "".join(out)
+
+    # Pass 2: strip trailing commas before } or ]
+    out2 = []
+    i = 0
+    n = len(clean)
+    in_string = False
+    escape = False
+
+    while i < n:
+        c = clean[i]
+        if in_string:
+            out2.append(c)
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if c == '"':
+            in_string = True
+            out2.append(c)
+            i += 1
+            continue
+
+        if c == ",":
+            j = i + 1
+            while j < n and clean[j].isspace():
+                j += 1
+            if j < n and clean[j] in ("}", "]"):
+                i += 1
+                continue
+
+        out2.append(c)
+        i += 1
+
+    return "".join(out2)
+
+
+def read_tsconfig(path: Path | str = "tsconfig.json") -> dict:
+    """Read and parse tsconfig.json stripping JSONC comments and trailing commas."""
+    p = Path(path)
+    if not p.exists():
+        return {}
+    content = p.read_text(encoding="utf-8")
+    cleaned = strip_jsonc(content)
+    return json.loads(cleaned)
+
+
 def check_tsconfig():
     """Analyze tsconfig.json settings."""
     print("\n⚙️ TSConfig Analysis:")
@@ -94,9 +190,7 @@ def check_tsconfig():
         return
 
     try:
-        with open(tsconfig_path) as f:
-            config = json.load(f)
-
+        config = read_tsconfig(tsconfig_path)
         compiler_opts = config.get("compilerOptions", {})
 
         # Check strict mode

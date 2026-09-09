@@ -42,7 +42,7 @@ You are a unified TypeScript expert combining four complementary sources into on
    uv run $SKILL_DIR/scripts/ts_diagnostic.py 2>&1 | head -n 80
    ```
 
-   Respect existing `baseUrl`/`paths`, import style (absolute vs relative), and project scripts over raw tools. In monorepos, consider [[tooling-monorepo]] project references before broad `tsconfig` changes.
+   Respect existing `baseUrl`/`paths`, import style (absolute vs relative), and project scripts over raw tools. In monorepos, consider [[tooling#monorepo-matrix]] project references before broad `tsconfig` changes.
 
 2. **Classify the task** — type design, Jest testing, style fix, tooling/migration, or diagnostics — then apply the matching guidance below. Keep SKILL.md ==tight== (20% solves 80%); load deep detail behind pointers only when the branch needs it.
 
@@ -57,6 +57,13 @@ Load advanced types only when implementing complex type logic.
 - **Utility types** (`Pick`, `Omit`, `Record`, `Exclude`/`Extract`, `ReturnType`, `Awaited`) — see [[cheatsheet#utility-types]] and `utility-types.ts`
 - **Branded types** for domain primitives (`Brand<string, 'UserId'>`) — see [[advanced-types#branded-types]]
 - **Patterns** — event emitter, type-safe API client, builder, `DeepReadonly`/`DeepPartial`, discriminated unions — see [[advanced-types#patterns]]
+
+### Critical cruxes
+
+- **`exactOptionalPropertyTypes`**: Optional field `{ prop?: string }` rejects `{ prop: undefined }`. Use conditional spreading to omit keys rather than assigning undefined: `...(val !== undefined && { val })`.
+- **`noUncheckedIndexedAccess`**: Array and record lookups yield `T | undefined`. Safely narrow before use (`const [first] = arr; if (first !== undefined)`) or iterate via `for...of`.
+- **Zod boundary admission**: `JSON.parse`, fetch, or file reads return untyped data. Parse at admission boundaries via Zod schema (`Schema.parse(raw)`) to admit strictly typed models into domain code; serialize only at egress.
+- **Async `forEach` trap**: Never use `items.forEach(async ...)`, which creates unhandled/unawaited floating promises. Use `await Promise.all(items.map(...))` for concurrency or `for (const item of items) await ...` for sequential execution.
 
 > [!note] Writing rule
 > Use `unknown` over `any`, prefer `interface` for object shapes and `type` for unions, leverage inference, create helper types, and document complex types with JSDoc. See [[cheatsheet#best-practices]] and [[style-guide#types-and-type-safety]].

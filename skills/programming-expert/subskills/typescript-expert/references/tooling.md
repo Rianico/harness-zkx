@@ -104,71 +104,44 @@ class DomainError extends Error {
 - Validate AI-generated types with type tests
 - Document complex types for AI context
 
-## Debugging (from same source)
+## Monorepo Management
 
-### CLI Debugging Tools
-```bash
-# Debug TypeScript files directly (if tools installed)
-command -v tsx >/dev/null 2>&1 && npx tsx --inspect src/file.ts
-command -v ts-node >/dev/null 2>&1 && npx ts-node --inspect-brk src/file.ts
+### Monorepo Matrix
 
-# Trace module resolution issues
-npx tsc --traceResolution > resolution.log 2>&1
-grep "Module resolution" resolution.log
+**Nx vs Turborepo Decision Matrix**
+- Choose **Turborepo** if: Simple structure, need speed, <20 packages
+- Choose **Nx** if: Complex dependencies, need visualization, plugins required
+- Performance: Nx often performs better on large monorepos (>50 packages)
 
-# Debug type checking performance (use --incremental false for clean trace)
-npx tsc --generateTrace trace --incremental false
-# Analyze trace (if installed)
-command -v @typescript/analyze-trace >/dev/null 2>&1 && npx @typescript/analyze-trace trace
-
-# Memory usage analysis
-node --max-old-space-size=8192 node_modules/typescript/lib/tsc.js
-```
-
-### Custom Error Classes
-```typescript
-// Proper error class with stack preservation
-class DomainError extends Error {
-  constructor(
-    message: string,
-    public code: string,
-    public statusCode: number
-  ) {
-    super(message);
-    this.name = 'DomainError';
-    Error.captureStackTrace(this, this.constructor);
-  }
-}
-```
-
-## Current Best Practices (Strict & ESM)
-
-### Strict by Default
+**TypeScript Monorepo Configuration**
 ```json
+// Root tsconfig.json
 {
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/ui" },
+    { "path": "./apps/web" }
+  ],
   "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "exactOptionalPropertyTypes": true,
-    "noPropertyAccessFromIndexSignature": true
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true
   }
 }
 ```
 
-### ESM-First Approach
-- Set `"type": "module"` in package.json
-- Use `.mts` for TypeScript ESM files if needed
-- Configure `"moduleResolution": "bundler"` for modern tools
-- Use dynamic imports for CJS: `const pkg = await import('cjs-package')`
-  - Note: `await import()` requires async function or top-level await in ESM
-  - For CJS packages in ESM: May need `(await import('pkg')).default` depending on the package's export structure and your compiler settings
+### Migration
 
-### AI-Assisted Development
-- GitHub Copilot excels at TypeScript generics
-- Use AI for boilerplate type definitions
-- Validate AI-generated types with type tests
-- Document complex types for AI context
+**JavaScript to TypeScript Migration**
+```bash
+# Incremental migration strategy:
+# 1. Enable allowJs and checkJs in tsconfig.json
+# 2. Rename files gradually (.js -> .ts)
+# 3. Add types file by file
+# 4. Enable strict mode features one by one
+command -v ts-migrate >/dev/null 2>&1 && npx ts-migrate migrate . --sources 'src/**/*.js'
+command -v typesync >/dev/null 2>&1 && npx typesync
+```
 
 > [!tip] Scripts
 > Use `uv run $SKILL_DIR/scripts/ts_diagnostic.py` for project diagnostics (versions, tsconfig, tooling, monorepo, `any`/`as` counts, `tsc --extendedDiagnostics`).

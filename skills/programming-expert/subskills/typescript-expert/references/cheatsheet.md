@@ -256,6 +256,8 @@ function handle<T>(state: State<T>) {
       return state.message  // string
     case 'loading':
       return null
+    default:
+      return assertNever(state)
   }
 }
 
@@ -365,11 +367,18 @@ const config = {
   api: 'https://api.example.com'
 } satisfies Record<string, string>
 
-// ✅ Use unknown over any
-function parse(input: unknown) {
-  if (typeof input === 'string') {
-    return JSON.parse(input)
-  }
+// ✅ Safe parsing with Zod instead of any-leaking JSON.parse
+import { z } from 'zod'
+
+const UserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+})
+type UserData = z.infer<typeof UserSchema>
+
+function parseUser(input: unknown): UserData {
+  const raw: unknown = typeof input === 'string' ? JSON.parse(input) : input
+  return UserSchema.parse(raw)
 }
 
 // ✅ Explicit return types for public APIs

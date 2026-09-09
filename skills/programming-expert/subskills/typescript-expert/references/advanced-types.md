@@ -652,7 +652,7 @@ function isArrayOf<T>(
 const data: unknown = ["a", "b", "c"];
 
 if (isArrayOf(data, isString)) {
-  data.forEach((s) => s.toUpperCase()); // Type: string[]
+  data.map((s) => s.toUpperCase()); // Type: string[]
 }
 ```
 

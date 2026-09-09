@@ -1,10 +1,10 @@
-# Style Guide — LobeHub Conventions
+# Style Guide — TypeScript Conventions
 
 > Source: `lobehub/lobehub/typescript`. Enforce when editing `*.ts`/`*.tsx`/`*.mts`. Deduplicated against cheatsheet type-safety section.
 
 ---
 name: typescript
-description: 'LobeHub TypeScript style and type-safety guide. Use when editing TS/TSX/MTS, fixing types, choosing interface vs type, avoiding any/object, import type, async flow, or ts-expect-error.'
+description: 'Standard TypeScript style and type-safety guide. Use when editing TS/TSX/MTS, fixing types, choosing interface vs type, avoiding any/object, import type, async flow, or ts-expect-error.'
 user-invocable: false
 ---
 
@@ -39,8 +39,8 @@ user-invocable: false
 - When a file already has `import type { ... }` from a package and you need to add a value import, keep them as **two separate statements**:
 
   ```ts
-  import type { ChatTopicBotContext } from '@lobechat/types';
-  import { RequestTrigger } from '@lobechat/types';
+  import type { UserProfile } from './types';
+  import { RequestTrigger } from './types';
   ```
 
 - Within each import statement, specifiers are sorted **alphabetically by name**
@@ -52,13 +52,13 @@ user-invocable: false
 - Replace magic numbers/strings with well-named constants
 - Defer formatting to tooling
 - Prefer **named exports** over `export default` — keeps refactor renames and IDE auto-import in sync, and avoids the `default` re-naming drift you get with `import Foo from './foo'`. Reserve `export default` for files where the framework requires it (Next.js page/route/layout, React.lazy targets, config files like `vitest.config.ts`). The codebase still has many `export default` occurrences — that's historical debt, not a pattern to copy; do not model new code on existing `export default` usage outside the framework-required cases above
-- Before adding local helpers for common guards/parsing/normalization (record checks, string extraction, empty-string handling, timing helpers, JSON-safe utilities, etc.), search `packages/utils` first. If the helper already exists or clearly belongs there, import it from `@lobechat/utils` (or the relevant `@lobechat/utils/*` subpath) instead of duplicating tiny helpers across feature files.
+- Before adding local helpers for common guards/parsing/normalization (record checks, string extraction, empty-string handling, timing helpers, JSON-safe utilities, etc.), search shared utility packages/directories first. If the helper already exists or clearly belongs there, import it from the shared utility module instead of duplicating tiny helpers across feature files.
 
 ## UI and Theming
 
-- Use `@lobehub/ui`, Ant Design components instead of raw HTML tags
+- Use design system / UI component libraries instead of raw unstyled HTML tags
 - Design for dark mode and mobile responsiveness
-- Use `antd-style` token system instead of hard-coded colors
+- Use design tokens or CSS theme variables instead of hard-coded colors
 
 ## Performance
 
@@ -66,8 +66,8 @@ user-invocable: false
 
 ## Reusability
 
-- Reuse existing utils in `packages/utils` or installed npm packages
-- Do not hand-roll reusable record/object-map guards such as `typeof value === 'object' && value !== null`; import helpers like `isRecord`, `isPlainRecord`, `isObjectLike`, `toRecord`, `pickString`, `UnknownRecord`, etc. from `@lobechat/utils/object`.
+- Reuse existing utils in shared utility packages or installed npm packages
+- Do not hand-roll reusable record/object-map guards such as `typeof value === 'object' && value !== null`; import or centralize helpers like `isRecord`, `isPlainRecord`, `isObjectLike`, `toRecord`, `pickString`, `UnknownRecord`, etc. in a shared utils module.
 - Assign `Date.now()` to a constant once and reuse for consistency
 
 ## Logging
@@ -80,4 +80,4 @@ user-invocable: false
 > [!tip] Deduplication note
 > Type-safety overlap with [[cheatsheet#types-and-type-safety]] and [[advanced-types#utility-types]] is intentional split: cheatsheet is type reference, style-guide is project lint/import/async conventions.
 
-> [!warning] Do not hand-roll `isRecord` helpers — reuse `packages/utils` or `@lobechat/utils`.
+> [!warning] Do not hand-roll `isRecord` helpers — reuse shared utility packages or project helpers.
