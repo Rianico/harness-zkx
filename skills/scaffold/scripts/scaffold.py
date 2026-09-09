@@ -439,6 +439,41 @@ contact_links:
     about: For questions/support, use Discussions instead of an issue
 """
 
+PULL_REQUEST_TEMPLATE_MD = """\
+<!-- markdownlint-disable MD041 -->
+## Summary
+
+<!-- 2-3 sentences: why this change, user-visible effect. -->
+
+**Impact**: <!-- X files (Y +, Z -) --> \u00b7 **Risk**: <!-- Low | Medium | High -->
+<!-- Risk: Low = docs/tests only; Medium = isolated feature/fix; High = cross-module contract, migration, or BREAKING CHANGE -->
+
+## What Changed
+
+<!-- Grouped by system/feature, not file list. Flag migrations / API / payload-contract changes. -->
+<!-- Example: - hashline: ... -->
+
+-
+
+## Architecture
+
+<!-- Mermaid before/after only when structural seams, layering, or data-flow changes; delete section otherwise. -->
+
+```mermaid
+graph LR
+  A --> B
+```
+
+## Checklist
+
+- [ ] `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` green
+- [ ] Conventional Commits (`commitlint` + `husky`) \u2014 `npx commitlint --from=origin/main --to=HEAD`
+- [ ] `CHANGELOG.md` `## [Unreleased]` updated (if user-facing)
+- [ ] Docs / `docs/adr/` updated when seams or contracts change
+- [ ] No generated artifacts committed outside `.lsz/tmp`
+- [ ] Linked issue with `Closes #NN` (if applicable)
+"""
+
 CONTRIBUTING_MD_TMPL = """\
 # Contributing to {project_name}
 ## Conventional commits
@@ -459,6 +494,15 @@ Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` 
 Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
 ## Before PR
 `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
+## Pull Requests
+Prefer topic branch \u2192 PR \u2192 squash merge. Keep one concern per PR; link the issue with `Closes #NN` in the description or commit footer.
+### Description
+PR body is auto-populated from `.github/pull_request_template.md` (GitHub PR template). Keep the four headings \u2014 delete `Architecture` when no structural change:
+- **Summary** \u2014 2-3 sentences on *why*, not what line changed. Include `**Impact**: X files (Y +, Z -) \u00b7 **Risk**: Low | Medium | High` (Low = docs/tests only; Medium = isolated feature/fix; High = cross-module contract, migration, or `BREAKING CHANGE`).
+- **What Changed** \u2014 grouped by system/feature (`hashline`, `anchors`, `session`, `payload`, `docs`, `ci`), not by file list. Flag migrations / API / `ADR-0007` payload `{{path, edits:[[h,h,t]]}}` / `CANON_VERSION` touches.
+- **Architecture** \u2014 Mermaid `graph LR` / `sequenceDiagram` before \u2192 after only for structural seams, layering, or data-flow changes.
+- **Checklist** \u2014 derived from change categories; start from the template checklist and add items as needed (e.g., benchmarks for perf, absorption notes for upstream sync).
+CI (`changelog-check.yml`, `verify`) must be green before requesting review.
 """
 CONTRIBUTING_MD_TMPL_PYTHON = """\
 # Contributing to {project_name}
@@ -480,6 +524,15 @@ Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` 
 Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
 ## Before PR
 `uv run ruff check . && uv run basedpyright && uv run pytest` must pass. See `AGENTS.md` for agent rules.
+## Pull Requests
+Prefer topic branch \u2192 PR \u2192 squash merge. Keep one concern per PR; link the issue with `Closes #NN`.
+### Description
+PR body is auto-populated from `.github/pull_request_template.md`. Keep the four headings \u2014 delete `Architecture` when no structural change:
+- **Summary** \u2014 2-3 sentences on *why*; include `**Impact**: X files (Y +, Z -) \u00b7 **Risk**: Low | Medium | High`.
+- **What Changed** \u2014 grouped by system/feature, not file list; flag migrations / API changes.
+- **Architecture** \u2014 Mermaid before \u2192 after only for structural/layering changes.
+- **Checklist** \u2014 start from template checklist; add category-specific items.
+CI (`changelog-check.yml`, `verify`) must be green before requesting review.
 """
 
 CHANGELOG_MD = """\
@@ -512,6 +565,7 @@ GIT_COMPONENTS: set[str] = {
     "commitlint",  # commitlint.config.js
     "changelog-md",  # CHANGELOG.md
     "issue-templates",  # .github/ISSUE_TEMPLATE/* + config.yml
+    "pr-template",  # .github/pull_request_template.md
     "contributing",  # CONTRIBUTING.md
     "agents",  # AGENTS.md patch
     "gh-router",  # skills/gh-router
@@ -535,6 +589,12 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
         "script": "changelog-script",
         "templates": "issue-templates",
         "issues": "issue-templates",
+        "pr": "pr-template",
+        "pr-template": "pr-template",
+        "pr_template": "pr-template",
+        "pull-request": "pr-template",
+        "pull_request": "pr-template",
+        "pullrequest": "pr-template",
     }
     parts = [s.strip() for s in raw.split(",") if s.strip()]
     resolved: set[str] = set()
@@ -884,6 +944,15 @@ Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (bl
 - Features: state problem + proposal at minimum; alternatives optional.
 ## Before PR
 `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
+## Pull Requests
+Prefer topic branch \u2192 PR \u2192 squash merge. Keep one concern per PR; link the issue with `Closes #NN`.
+### Description
+PR body is auto-populated from `.github/pull_request_template.md` (GitHub PR template). Keep the four headings \u2014 delete `Architecture` when no structural change:
+- **Summary** \u2014 2-3 sentences on *why*; include `**Impact**: X files (Y +, Z -) \u00b7 **Risk**: Low | Medium | High`.
+- **What Changed** \u2014 grouped by system/feature, not file list; flag migrations / API / payload-contract changes.
+- **Architecture** \u2014 Mermaid before \u2192 after only for structural seams.
+- **Checklist** \u2014 start from template checklist; add items as needed.
+CI (`changelog-check.yml`, `verify`) must be green before requesting review.
 """
 
 CI_PYTHON_VERIFY_YML = """\
@@ -1419,6 +1488,8 @@ def do_git(
             dry_run,
         )
         write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
+    if "pr-template" in sel:
+        write_file(cwd / ".github" / "pull_request_template.md", PULL_REQUEST_TEMPLATE_MD, dry_run)
     # migrate legacy markdown template (pre-YAML) — keep spine small
     legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
     if legacy_md.exists():
