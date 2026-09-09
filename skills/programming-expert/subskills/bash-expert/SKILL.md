@@ -6,6 +6,17 @@ argument-hint: |-
   [strict|quoting|file-ops|args|portability|safety|testing|tooling|all]
 metadata:
   managed-by: programming-expert
+meta:
+  sources:
+    - https://www.skills.sh/pproenca/dot-skills/shell
+    - https://www.skills.sh/wshobson/agents/bash-defensive-patterns
+    - https://www.skills.sh/sickn33/agentic-awesome-skills/bash-scripting
+    - https://www.skills.sh/rmyndharis/antigravity-skills/bash-pro
+    - https://www.skills.sh/vudovn/ag-kit/bash-linux
+    - https://www.skills.sh/sickn33/agentic-awesome-skills/linux-shell-scripting
+    - https://www.skills.sh/wshobson/agents/error-handling-patterns
+    - https://www.skills.sh/wshobson/agents/bats-testing-patterns
+    - https://github.com/sickn33/agentic-awesome-skills/blob/main/skills/os-scripting/SKILL.md
 ---
 
 # Bash Expert Skill
@@ -56,7 +67,9 @@ IFS=$'\n\t'                 # prevent word splitting on spaces
 - Debug opt-in: support `--trace` via `set -x` and `PS4='+ ${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '`.
 
 ### Crux: Exit Status Masking in Declarations
+
 `local` and `export` are builtins returning 0. Under `set -e`, combining declaration and command substitution SILENTLY MASKS failures:
+
 ```bash
 # WRONG — if cmd fails, local returns 0 and script continues!
 local output="$(failing_command)"
@@ -70,7 +83,9 @@ token="$(failing_command)"
 ```
 
 ### Crux: Condition Context Errexit Bypass
+
 Inside `if cmd; then`, `while cmd; do`, or `cmd || fallback`, `set -e` is DISABLED for `cmd` AND all functions invoked by `cmd`. Never assume a function will abort on error when called in a condition context:
+
 ```bash
 # Function called inside if condition runs with set -e DISABLED internally!
 if process_payload; then ... fi  # internal errors in process_payload won't abort
@@ -126,7 +141,9 @@ mapfile -t files < <(ls)  # correct — null-safe later
 - Glob safety: `shopt -s nullglob` / `failglob` / `set -f` to control expansion.
 
 ### Crux: Option & Argument Injection Defense
+
 If a variable begins with `-`, commands parse it as a flag instead of a filename/argument:
+
 ```bash
 # VULNERABLE — if $dir is "-rf /" or $file is "-n", flags trigger!
 rm -rf "$dir"
@@ -142,10 +159,13 @@ git checkout -- "$branch"
 ```
 
 ### Crux: `printf '%s\n'` over `echo`
+
 `echo "$var"` fails when `$var` equals `-n`, `-e`, `-E`, or starts with `-`. Furthermore, backslash interpretation differs between Bash and POSIX `sh`. Always use `printf '%s\n' "$var"`.
 
 ### Crux: NUL Stream Boundaries
+
 Filenames can contain spaces, tabs, and newlines; only `/` and `\0` are invalid in Unix paths. Parsing with `for f in $(cat)` or newline splitting corrupts valid paths. Always use NUL boundaries:
+
 ```bash
 find . -type f -name '*.txt' -print0 | while IFS= read -r -d '' file; do
   printf 'File: %s\n' "$file"
@@ -189,7 +209,9 @@ echo "${var@Q}"              # shell-quoted (4.4+), @U upper, @L lower
 ```
 
 ### Crux: Pipeline Subshell State Loss
+
 In standard Unix pipelines, each stage runs in a subshell fork. Variable mutations inside a piped loop do not survive loop exit:
+
 ```bash
 # BROKEN — RHS executes in a subshell fork; count is lost!
 count=0
@@ -209,7 +231,9 @@ find . -type f | while IFS= read -r line; do (( count++ )); done
 ```
 
 ### Crux: Octal Parsing in Arithmetic
+
 In arithmetic contexts (`$(( ))`, `(( ))`), numbers with leading zeros (e.g. `08`, `09`) are parsed as octal, triggering syntax errors (`value too great for base`). Force decimal parsing:
+
 ```bash
 # BROKEN on "08" or "09"
 month="08"
