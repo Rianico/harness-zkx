@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **gh-router:** make gh-release scripts package-manager-aware (npm/pnpm)
+- **docs-scraper:** add llms.txt HEAD fallback and discovery/fetch metrics
+- **scaffold:** enforce harness comment allowlist via oxlint harness/no-comments
+- **skill-authoring,toolchain,scaffold:** add general rename script and toolchain-wiki oxc references
 - **programming-expert:** absorb python universal principles into router spine
 - **python-expert:** refine with Pydantic-first type safety and 18-source comprehensive patterns
 - **skills:** refine writing-for-agents and programming-expert triggers (#13)
@@ -154,6 +158,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **rules:** prefer rg, fd, eza over grep, find, ls
 - **rules:** clarify gates and internal deprecation + skill sync (#11)
 - **git-convention:** make concise with clear organization (#10)
 - update changelog unreleased section

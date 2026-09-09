@@ -46,9 +46,32 @@ run_step() {
 }
 
 if [[ "$repo" == "node" ]]; then
-  run_step "lint"     false npm run --silent lint
-  run_step "typecheck" false npm run --silent typecheck
-  run_step "test"     false npm test
+  # Detect package manager: pnpm vs npm (compatible with both)
+  pm="npm"
+  if [[ -f pnpm-lock.yaml ]]; then
+    pm="pnpm"
+  elif grep -q '"packageManager"[[:space:]]*:[[:space:]]*"pnpm' package.json 2>/dev/null; then
+    pm="pnpm"
+  elif [[ -f pnpm-workspace.yaml ]]; then
+    pm="pnpm"
+  fi
+  info "package manager: $pm"
+  if [[ "$pm" == "pnpm" ]]; then
+    run_step "lint"     false pnpm run --silent lint
+    if grep -q '"format"[[:space:]]*:' package.json 2>/dev/null; then
+      run_step "format"   false pnpm run --silent format
+    fi
+    run_step "typecheck" false pnpm run --silent typecheck
+    if grep -q '"test:coverage"[[:space:]]*:' package.json 2>/dev/null; then
+      run_step "test"     false pnpm run --silent test:coverage
+    else
+      run_step "test"     false pnpm test
+    fi
+  else
+    run_step "lint"     false npm run --silent lint
+    run_step "typecheck" false npm run --silent typecheck
+    run_step "test"     false npm test
+  fi
 elif [[ "$repo" == "rust" ]]; then
   run_step "clippy" false cargo clippy
   run_step "test"   false cargo test

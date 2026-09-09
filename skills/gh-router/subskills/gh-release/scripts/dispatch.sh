@@ -22,10 +22,19 @@ NEXT_VER=""
 # that would otherwise flood the context window. Full log available on demand via
 # the hint printed by `preview`.
 preview() {
-  local tmp out
+  local tmp out _pm_exec
   tmp=$(mktemp)
+  # Detect package manager for semantic-release (npm vs pnpm)
+  _pm_exec="npx --silent"
+  if [[ -f pnpm-lock.yaml ]]; then
+    _pm_exec="pnpm exec"
+  elif grep -q '"packageManager"[[:space:]]*:[[:space:]]*"pnpm' package.json 2>/dev/null; then
+    _pm_exec="pnpm exec"
+  elif [[ -f pnpm-workspace.yaml ]]; then
+    _pm_exec="pnpm exec"
+  fi
   set +e
-  GITHUB_TOKEN="$GITHUB_TOKEN" npx --silent semantic-release --dry-run >"$tmp" 2>&1
+  GITHUB_TOKEN="$GITHUB_TOKEN" $_pm_exec semantic-release --dry-run >"$tmp" 2>&1
   set -e
   out=$(cat "$tmp")
   rm -f "$tmp"
@@ -38,7 +47,12 @@ preview() {
     warn "no new version — nothing to release"
     dim "commits since last tag do not trigger a release (need feat/fix/! or BREAKING CHANGE)"
   fi
-  dim "full trace: GITHUB_TOKEN=\$(gh auth token) npx semantic-release --dry-run"
+  # Provide full-trace hint matching the detected package manager
+  if [[ "$_pm_exec" == "pnpm exec" ]]; then
+    dim "full trace: GITHUB_TOKEN=\$(gh auth token) pnpm exec semantic-release --dry-run"
+  else
+    dim "full trace: GITHUB_TOKEN=\$(gh auth token) npx semantic-release --dry-run"
+  fi
 }
 
 if [[ "$DRY" == "true" ]]; then

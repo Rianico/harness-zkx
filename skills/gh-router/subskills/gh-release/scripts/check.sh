@@ -33,14 +33,24 @@ if [[ "$commit_count" -eq 0 ]]; then
   warn "no commits ahead of origin/main — nothing to check"
 else
   info "checking $commit_count commit(s) vs origin/main…"
+  # Detect package manager for commitlint execution (npm vs pnpm)
+  _pm_exec="npx --silent"
+  if [[ -f pnpm-lock.yaml ]]; then
+    _pm_exec="pnpm exec"
+  elif grep -q '"packageManager"[[:space:]]*:[[:space:]]*"pnpm' package.json 2>/dev/null; then
+    _pm_exec="pnpm exec"
+  elif [[ -f pnpm-workspace.yaml ]]; then
+    _pm_exec="pnpm exec"
+  fi
   set +e
-  out=$(npx --silent commitlint --from=origin/main --to=HEAD 2>&1)
+  out=$($_pm_exec commitlint --from=origin/main --to=HEAD 2>&1)
   rc=$?
   set -e
   if [[ $rc -ne 0 ]]; then
     phase_fail 1 "commitlint failed"
-    # re-run verbose for actionable output
-    npx commitlint --from=origin/main --to=HEAD --verbose || true
+    # re-run verbose for actionable output (strip --silent for full logs)
+    _pm_exec_verbose="${_pm_exec/ --silent/}"
+    $_pm_exec_verbose commitlint --from=origin/main --to=HEAD --verbose || true
     exit $rc
   fi
   ok "$commit_count commit(s) — conventional commits ok"
