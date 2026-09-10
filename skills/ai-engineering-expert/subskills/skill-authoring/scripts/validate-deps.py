@@ -584,7 +584,25 @@ def rename_skill(old_name: str, new_name: str, root_dir: Path, dry_run: bool = F
 
 
 DESCRIPTION_BUDGET = 300
-TRIGGER_PATTERN = re.compile(r"trigger|use when|when the user", re.IGNORECASE)
+USE_WHEN_PATTERN = re.compile(r"\buse\s+(?:[a-z_\-]+\s+)?when\b", re.IGNORECASE)
+DEPRECATED_TRIGGER_PATTERN = re.compile(r"\btrigger(?:\s*when|:|\b)", re.IGNORECASE)
+NEGATIVE_BOUNDARY_PATTERN = re.compile(
+    r"\b(do not use|don't use|not for|avoid using|defer to|instead of)\b",
+    re.IGNORECASE,
+)
+SYMPTOM_KEYWORD_PATTERN = re.compile(
+    r"\b(fail(?:ing|s|ed|ure)?|error(?:s)?|bug(?:s)?|issue(?:s)?|break(?:s|ing)?|broken|"
+    r"problem(?:s)?|leak(?:s|ing)?|flak(?:y|iness)|crash(?:es|ed|ing)?|slow(?:ness)?|"
+    r"stuck|timeout|bottleneck(?:s)?|regression(?:s)?|conflict(?:s)?|drift|mess(?:y)?|"
+    r"dirty|legacy|refactor(?:ing)?|debug(?:ging)?|diagnos(?:e|ing|is)?|troubleshoot(?:ing)?|"
+    r"investigat(?:e|ing)?|should|decid(?:e|ing|ion)?|choos(?:e|ing)?|compar(?:e|ing|ison)?|"
+    r"evaluat(?:e|ing|ion)?|trade-off(?:s)?|audit(?:ing)?|review(?:ing)?|migrat(?:e|ing|ion)?|"
+    r"scaffold(?:ing)?|updat(?:e|ing)?|fix(?:ing|es)?|enhanc(?:e|ing)?|validat(?:e|ing|ion)?|"
+    r"test(?:ing|s)?|verif(?:y|ying|ication)?)\b",
+    re.IGNORECASE,
+)
+# Retain TRIGGER_PATTERN as alias for backward compatibility
+TRIGGER_PATTERN = USE_WHEN_PATTERN
 
 
 def sync_skill(skill_path: Path, dry_run: bool = False) -> bool:
@@ -747,24 +765,49 @@ def context_check_all(
                 print(f"  {description}")
             continue
 
-        # Soft warning: trigger vocabulary
+        # Check description quality standards on model-discoverable skills
         # Skip check for managed-by subskills — the model can't discover
         # them autonomously, so trigger vocabulary serves no purpose.
         metadata = fm.get("metadata", {})
         is_managed = bool(metadata.get("managed-by")) if isinstance(metadata, dict) else False
         if not is_managed:
-            has_trigger = bool(TRIGGER_PATTERN.search(description))
-            if not has_trigger:
+            # 1. Required: "Use when..." condition
+            has_use_when = bool(USE_WHEN_PATTERN.search(description))
+            if not has_use_when:
                 results["warn"].append(
                     {
                         "skill": skill_name,
                         "path": rel_path,
-                        "reason": "description lacks trigger vocabulary"
-                        ' -- consider adding "Use when..."',
+                        "reason": "description lacks required 'Use when...' trigger vocabulary",
                     }
                 )
 
-        results["pass"].append({"skill": skill_name, "path": rel_path, "chars": desc_len})
+            # 2. Fundamental standard: Symptom keywords / problem framing
+            has_symptom = bool(SYMPTOM_KEYWORD_PATTERN.search(description))
+            if not has_symptom:
+                results["warn"].append(
+                    {
+                        "skill": skill_name,
+                        "path": rel_path,
+                        "reason": "description lacks symptom keywords or problem-framing signals",
+                    }
+                )
+
+            # 3. Deprecated TRIGGER: tag check
+            if DEPRECATED_TRIGGER_PATTERN.search(description):
+                results["warn"].append(
+                    {
+                        "skill": skill_name,
+                        "path": rel_path,
+                        "reason": "description contains deprecated 'TRIGGER:' tag -- remove and formulate triggers via 'Use when...' and symptom keywords",
+                    }
+                )
+
+        has_negative_boundary = bool(NEGATIVE_BOUNDARY_PATTERN.search(description))
+        pass_data: dict[str, object] = {"skill": skill_name, "path": rel_path, "chars": desc_len}
+        if has_negative_boundary:
+            pass_data["negative_boundary"] = True
+        results["pass"].append(pass_data)
 
     if json_output:
         print(json.dumps(results, indent=2))

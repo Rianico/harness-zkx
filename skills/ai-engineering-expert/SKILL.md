@@ -1,7 +1,7 @@
 ---
 name: ai-engineering-expert
 description: >-
-  AI engineering methodology spine for LSZ harness — context-load, skill/agent design, writing for agents, testing, subagent-first execution. Use when designing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md). TRIGGER: skill design, writing for agents, context-load policy
+  AI engineering methodology spine for LSZ harness — context-load, skill/agent design, writing for agents, testing, subagent-first execution. Use when designing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md), or diagnosing context bloat.
 arguments: domain
 argument-hint: |-
   skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, progressive disclosure, rules-vs-skills boundary, platform sync, parent/sub-skill layout, and authoring checklists
@@ -99,11 +99,22 @@ Every skill declares one of two classes via the canonical `disable-model-invocat
 
 Origin: Claude Code `disable-model-invocation`. Pi ≥0.84.4 advances it — `formatSkillsForPrompt` filters `disableModelInvocation=true` skills and **removes them from the `<available_skills>` XML** injected into the system prompt, so they pay **zero context/metadata cost**. Claude's original gating is selection-only (description stays listed, model instructed not to pick it); Pi strips it from context entirely — no description, no tokens, no attention — reachable only via explicit `/skill:name`.
 
-### Description Budget
+### Description Principles & Budget
 
-- Description must be present and non-empty
-- Maximum 300 characters
-- Should contain trigger vocabulary ("use when", "when the user", "trigger")
+Every skill's `description` is its top-level machine-readable trigger and permanent context-load footprint. Grounded in empirical function-calling benchmarks, descriptions reject pseudo-syntax annotations (`TRIGGER:`) in favor of natural language conditionals and symptom hooks within a strict 300-character budget:
+
+1. **What it is (Role/Identity Anchor):** Category noun defining nature and domain (e.g., *Methodology spine...*, *Verification gate...*, *CLI reference...*). Front-load in first 50 chars.
+2. **What it does (Active Capabilities & Outputs):** Third-person present tense verbs defining concrete operations and deliverables (e.g., *audits test refutability and invariants...*, *synthesizes multi-stack test runners...*).
+3. **When to use (Activation Boundary via `Use when...`):** **Required.** Explicit condition starting with `Use when...` (or `when the user...`). Benchmarks show natural language conditionals activate model routing policy heads far more reliably than passive topic summaries.
+4. **Symptom Keywords Standard:** **Fundamental standard.** Users describe problems and symptoms, not solutions. Must include concrete failure states, bug indicators, debugging signals, and pain phrases (e.g., *flaky tests*, *drift*, *messy code*, *memory leak*, *crash*, *slow*).
+5. **Negative Boundary:** **Opt-in.** Clause specifying when NOT to use the skill (e.g., *Do not use for unit testing; defer to Y for Z*). Proven highest-leverage lever to eliminate false-positive collisions between adjacent skills.
+
+**Enforcement Rules:**
+- Must be present, non-empty, and written with YAML block scalar `>-`
+- Maximum 300 characters (hard gate)
+- Must contain explicit `Use when...` clause (contract check)
+- Strict third-person perspective (never first/second person: "I can...", "You can...")
+- No legacy `TRIGGER:` tags (script flags as deprecated)
 
 ### Platform Sync
 
@@ -121,13 +132,16 @@ Claude Code `SKILL.md` is the canonical format. Scripts generate platform-specif
 
 ### Enforcement
 
-`validate-deps.py context-check` enforces hard gates (fail CI) and soft warnings (pass CI):
+`validate-deps.py context-check` deterministically enforces:
 
-- Missing/empty description → hard fail
-- Description over 300 chars → hard fail
-- No trigger vocabulary → soft warning
+- **Hard Gates (fail CI):** Missing/empty description, or description over 300 chars.
+- **Contract Warnings (pass CI, flagged for remediation):**
+  - Missing required `Use when...` trigger clause.
+  - Missing symptom keywords / problem-framing signals.
+  - Presence of deprecated `TRIGGER:` tags.
+- **Opt-in Detection:** Records presence of negative boundary clauses (`Do not use for...`, `defer to...`).
 
-Semantic quality rules (third-person voice, front-loaded leading word, deduplication) are enforced by `skill-authoring` methodology during authoring, not by CI.
+Semantic quality rules (tripartite structure, third-person voice, front-loaded leading words, deduplication) are enforced by `skill-authoring` methodology during authoring.
 
 Reference: [Context-load policy contract](references/context-load-policy.md)
 

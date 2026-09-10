@@ -361,7 +361,10 @@ def _create_skill_file(
 def cmd_add(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
     name: str = args.name
     parent: str | None = args.parent
-    description: str = args.description or f"Domain guide for {name}. Use when ... TRIGGER: {name}"
+    description: str = (
+        args.description
+        or f"Domain guide for {name}. Resolves and guides {name} workflows. Use when working with {name} or diagnosing {name} issues."
+    )
     # ensure description uses block scalar when dumped -> ensure it is set correctly
     # If user provided inline, we keep as is; frontmatter will handle
     depends: list[str] = args.depends_on or []

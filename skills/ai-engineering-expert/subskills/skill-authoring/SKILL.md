@@ -1,7 +1,7 @@
 ---
 name: skill-authoring
 description: >-
-  Skill design, authoring process (Gather-Draft-Review), taxonomy classification, frontmatter, descriptions, progressive disclosure, and authoring checklists. TRIGGER when creating, writing, or improving a skill; classifying skill type; or designing skill structure.
+  Skill design and authoring guide. Structures taxonomy, frontmatter, descriptions, progressive disclosure, and checklists. Use when creating, writing, or improving a skill, classifying skill types, debugging discovery failures, or refining skill boundaries.
 metadata:
   managed-by: ai-engineering-expert
 ---
@@ -47,11 +47,11 @@ Create the skill following LSZ conventions:
 1. **Directory structure** -- `skills/<name>/SKILL.md` plus `references/` and `scripts/` as needed
 2. **Verification Logic (EDD)** -- Include scripts in `scripts/` for deterministic verification. Define how semantic verification (e.g., via a Skeptic subagent) will be handled.
 3. **Behavioral Spec (BDD)** -- Include a `references/bdd-scenarios.md` if the workflow is complex, or embed scenarios directly in the SKILL.md body.
-4. **Frontmatter** -- `name` (matches directory), `description` (third-person, what + when, trigger vocabulary), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies.
+4. **Frontmatter** -- `name` (matches directory), `description` (third-person, tripartite formula: what it is + what it does + when to use via `Use when...`, ≤300 chars), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies.
    - **CRITICAL: YAML Formatting** -- Always use YAML block scalars (`>-` or `|`) for `description` and `argument-hint` to prevent parsing errors caused by unquoted colons, special characters, or multi-line text.
      ```yaml
      description: >-
-       Expert methodology for X. TRIGGER when...
+       Expert methodology for X. Synthesizes Y. Use when...
      ```
 5. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`. Apply [writing-for-agents sub-skill](../writing-for-agents/SKILL.md) for information hierarchy, pointer wording, completion criteria, leading words, and pruning.
 6. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
@@ -71,7 +71,7 @@ Validate the draft before presenting to the user:
 - [ ] Taxonomy type is correct and structure matches that type
 - [ ] BDD scenarios are defined (Given/When/Then)
 - [ ] EDD verification path is clear (scripts for deterministic, skepticism for semantic)
-- [ ] Description is third-person, includes what + when, covers trigger patterns
+- [ ] Description follows tripartite formula (what it is, what it does, when to use with "Use when..."), third-person, ≤ 300 chars
 - [ ] Frontmatter complete: `name`, `description`, `arguments`/`argument-hint` if needed, `metadata` for relationships
 - [ ] References are one level deep from SKILL.md
 - [ ] Scripts handle errors internally and use `uv run $SKILL_DIR/scripts/` invocation
@@ -90,44 +90,67 @@ Then ask the user:
 ## Required Frontmatter
 
 - `name`: **Required** -- must match directory name (lowercase, hyphens, max 64 chars)
-- `description`: **Required** -- what + when, third-person, trigger vocabulary. Use `>-` block scalar.
+- `description`: **Required** -- what it is + what it does + when to use (`Use when...`), third-person, trigger vocabulary. Use `>-` block scalar.
 
 **Description Writing Principles**
 
-The description is the skill's machine-readable trigger and permanent context-load footprint. Budget: 300 chars (hard gate). It must trigger model discovery, stay within budget, and remain human-legible — all at once.
+The description is the skill's machine-readable trigger and permanent context-load footprint. Budget: 300 chars (hard gate). Grounded in empirical function-calling benchmarks, descriptions reject pseudo-syntax annotations (`TRIGGER:`) in favor of natural language conditionals and symptom hooks.
 
-**Structure (max 3 clauses):**
+**The Tripartite Formula:**
 
-1. **What it is** — Category noun first: "Reference for..." "Protocol for..." "Expert methodology for..."
-2. **When to use** — Category-level trigger scenarios, not verb enumeration: "managing ADRs" not "initializing, creating, linking, superseding, listing, and reading ADRs"
-3. **Value proposition** — What makes this skill distinctive (optional, recommended): "Keeps ADR content compatible with adr-tools"
+Every effective skill description MUST explicitly address three elements:
+
+1. **What it is (Role/Identity Anchor):** Category noun defining nature and domain (e.g., *"Adversarial crux code review gate..."*, *"Methodology spine..."*, *"CLI reference manager..."*). Front-load in the first 50 chars to anchor identity and distinguish from adjacent skills.
+2. **What it does (Active Capabilities & Outputs):** Active third-person present tense verbs articulating specific functional capabilities, actions taken, and concrete outputs (e.g., *"audits test refutability, state invariants, and Clean Architecture boundaries"*, *"synthesizes multi-stack test runners and executes contract checks"*).
+3. **When to use (Activation Boundary via `Use when...`):** **Required.** Explicit condition starting with `Use when...` (or `when the user...`). Benchmarks show natural language conditionals activate model routing policy heads far more reliably than passive topic summaries.
+
+**Empirical Benchmark Levers:**
+
+- **Symptom Keywords Standard (Fundamental):** Users describe problems and symptoms, not solutions. Bridge the user-to-tool semantic gap by embedding concrete failure states, bug indicators, debugging signals, and pain phrases (e.g., *flaky tests*, *drift*, *messy code*, *memory leak*, *crash*, *slow*, *unhandled exception*). Academic taxonomy alone (*"architectural hygiene"*) causes routing misses.
+- **Negative Boundary (Opt-in):** Highest-leverage steering lever in empirical evals (+20–35% routing precision). When two skills have adjacent or overlapping scopes, include an explicit exclusion (e.g., *"Do not use for unit tests; defer to Y for Z"*). Opt-in: only needed when adjacent boundaries collide.
+- **No Pseudo-Syntax (`TRIGGER:` Removed):** Models possess no internal `TRIGGER` parser. Uppercase annotations waste character budget without adding semantic weight. Put keyword tokens directly inside the `Use when...` clause.
+- **Strict Third-Person Present Tense:** "Synthesizes...", "Audits...", "Extracts...". Strictly avoid first-person ("I can help...", "My purpose is...") or second-person ("You can use this to...").
+- **Strict Budget:** Hard gate ≤ 300 characters. Every character counts against global context load.
 
 **Compression Rules (apply in order until within budget):**
 
-1. **Categories over actions** — "ADR lifecycle management" not verb-by-verb enumeration
+1. **Categories over actions** — "ADR lifecycle management" not "create, edit, link, list, and read ADRs"
 2. **Domain slashes** — "Spring Boot/JPA/Hibernate" not "Spring Boot, JPA, Hibernate, and JUnit"
 3. **Parentheticals to body** — "(hard to reverse, surprising without context)" moves to SKILL.md body
-4. **TRIGGER: tag for key terms** — End with `TRIGGER: term1, term2, ...` for explicit model matching
+4. **Embed keywords into `Use when...`** — Weave technical nouns directly into the conditional clause
 5. **Front-load distinctive terms** — First 50 chars must distinguish this skill from related skills
-6. **Third-person, present tense** — "Manages ADRs" not "I can help you..." or "This skill manages..."
 
-**Good (108 chars):**
+**Good (288 chars):** Follows What it is + What it does + When to use (`Use when...`) with symptom keywords.
+
+```
+Adversarial crux code review gate auditing test refutability, domain state invariants, failure resiliency, and Clean Architecture boundaries. Evaluates semantic soundness beyond test passes. Use when reviewing code changes, auditing PRs, checking invariants, or verifying goal attainment.
+```
+
+**Good (299 chars):** Follows What it is + What it does + When to use (`Use when...`) with concrete verification actions.
+
+```
+Eval-driven verification gate for deterministic pass/fail quality decisions. Synthesizes native test and quality runners across polyglot stacks, executing capability, contract, and regression checks. Use when defining acceptance criteria, validating implementations, or running pre-PR quality gates.
+```
+
+**Good with Opt-in Negative Boundary (279 chars):** What it is + What it does + When to use + Negative boundary.
+
+```
+ADR lifecycle manager via `adr` CLI. Initiates, links, supersedes, and verifies architecture decision records. Use when documenting architectural decisions, evaluating technical trade-offs, or diagnosing ADR drift. Defer to git for commit management.
+```
+
+**Bad (108 chars):** Missing required `Use when...` clause. Fails script check; model cannot evaluate decision boundary.
 
 ```
 Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.
 ```
 
-**Good (237 chars):**
-
-```
-Methodology spine for LSZ harness AI engineering — context-load policy, skill design, agent action spaces, testing, and subagent-first execution. Use when designing skills/agents/rules/workflows, setting invocation classes or description budgets, or planning eval-first testing. TRIGGER: context-load policy, skill design, agent design, testing methodology.
-```
-
-**Bad (443 chars):** Verb enumeration instead of categories. Parenthetical detail belongs in body, not description. Missing TRIGGER tag. Exhaustive where it should be distinctive.
+**Bad (443 chars):** Verb enumeration instead of categories. Parenthetical detail belongs in body. Missing `Use when...`. Fails 300-char hard gate.
 
 ```
 Manage architecture decision records with the `adr` CLI. Use for initializing an ADR repository, creating, linking, superseding, listing, and reading ADRs; for deciding whether a new decision relates to older ADRs; for evaluating whether a decision warrants an ADR (hard to reverse, surprising without context, genuine trade-off); and for keeping ADR content short, historical, and compatible with adr-tools templates and status/link behavior.
 ```
+
+**Bad:** Legacy syntax (`TRIGGER: foo, bar`) or first-person POV ("I can help you..."). Script warns on `TRIGGER:`; first-person causes agent discovery failures.
 
 Reference: [glossary.md](references/glossary.md) for the full domain vocabulary (invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms).
 
@@ -185,10 +208,10 @@ Before publishing a skill:
 - [ ] BDD scenarios cover Happy Path, Edge Case, and Error Case
 - [ ] Deterministic goals have corresponding evaluation scripts (EDD)
 - [ ] Semantic goals have a verification plan (e.g., Adversarial Review)
-- [ ] Description is third-person, specific, includes trigger terms
-- [ ] Description includes both what AND when to use
+- [ ] Description follows tripartite formula: what it is + what it does + when to use via `Use when...`
+- [ ] Description is third-person, ≤ 300 chars, and uses `>-` YAML block scalar
+- [ ] Description covers natural trigger patterns (direct request, problem framing/symptoms, decision points)
 - [ ] Description updated for any new capability added (hooks, MCP, testing patterns)
-- [ ] Methodology skills: Description covers all three trigger patterns (direct domain, problem framing, decision language)
 - [ ] SKILL.md body under 500 lines / 5,000 tokens
 - [ ] Reference files are one level deep from SKILL.md
 - [ ] No time-sensitive information (or in "old patterns" section)

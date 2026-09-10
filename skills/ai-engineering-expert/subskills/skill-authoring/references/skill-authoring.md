@@ -112,24 +112,41 @@ name: my-skill # if directory is named "other-skill"
 
 **This field is mandatory.** A skill without a proper description cannot be discovered or triggered.
 
-- Write in **third person** (injected into system prompt; first-person causes discovery failures)
-- Include **both** what the skill does AND when to use it
-- Lead with the key use case (truncated at 1,536 chars in skill listing)
-- Include trigger vocabulary: verbs, artifact names, domains, topic words
-- Maximum 1024 characters
+Every description must satisfy the **Tripartite Formula**:
+1. **What it is (Role/Identity Anchor):** Category noun defining nature and domain (e.g., *"Architecture decision record manager..."*, *"Adversarial code review gate..."*). Front-load in the first 50 characters to distinguish from adjacent skills.
+2. **What it does (Active Capabilities & Outputs):** Concrete third-person present tense action verbs specifying functions and deliverables (e.g., *"initiates, links, and supersedes ADRs"*, *"audits test refutability and invariants"*).
+3. **When to use (Decision Boundary via `Use when...`):** Explicit trigger condition starting with `Use when...` (or `when the user...`). Acts as a boolean gate for the LLM router to match against direct tasks, symptoms, or choices.
 
-**Good:**
+**Key Conventions:**
+- Write strictly in **third person** (injected into system prompt; first-person causes discovery failures; second-person adds verbosity).
+- Always format with YAML block scalar `>-` (folded, stripped).
+- **Budget limit:** Enforce **≤ 300 characters** hard gate in the LSZ harness (verified by `validate-deps.py context-check`). Although the open Agent Skills spec allows up to 1024 characters, 300 characters prevents prompt context degradation across multi-skill catalogs.
+- **Required trigger syntax:** Must include explicit `Use when...` conditional.
+- **Fundamental standard:** Must include concrete symptom keywords and error signals (e.g. *flaky tests*, *drift*, *errors*, *debugging*).
+- **Opt-in lever:** Include negative boundary (*"Do not use for..."; "defer to Y for Z"*) when adjacent skills collide.
+- **No pseudo-syntax:** Do NOT use `TRIGGER: tag1, tag2`. Models have no trigger parser; uppercase tags waste budget. Weave keywords into `Use when...`.
+
+**Good (279 chars):** What it is + What it does + When to use (`Use when...`) + Opt-in Negative boundary.
 
 ```yaml
 description: >-
-  Extracts text and tables from PDF files, fills PDF forms, merges documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
+  ADR lifecycle manager via `adr` CLI. Initiates, links, supersedes, and verifies architecture decision records. Use when documenting architectural decisions, evaluating technical trade-offs, or diagnosing ADR drift. Defer to git for commit management.
+```
+
+**Good (288 chars):** Follows What it is + What it does + When to use (`Use when...`) with symptom keywords.
+
+```yaml
+description: >-
+  Adversarial crux code review gate auditing test refutability, domain state invariants, failure resiliency, and Clean Architecture boundaries. Evaluates semantic soundness beyond test passes. Use when reviewing code changes, auditing PRs, checking invariants, or verifying goal attainment.
 ```
 
 **Poor:**
 
 ```yaml
-description: 'Helps with documents' # too vague
-description: 'I can help you process PDFs' # wrong POV
+description: 'Helps with documents' # too vague: missing what it is, what it does, and when to use
+description: 'I can help you process PDFs' # wrong POV: first-person causes discovery failures
+description: >-
+  Extracts text and tables from PDF files, fills PDF forms, merges documents. # missing "Use when...": fails soft warning
 ```
 
 ### YAML Frontmatter Scalar Convention
@@ -386,12 +403,13 @@ For methodology and domain-knowledge skills, descriptions MUST cover all natural
 | **Problem framing**   | "this code is a mess", "need to scale", "too many bugs"       | User describes symptom, not domain |
 | **Decision language** | "should we use X or Y", "which approach", "trade-off between" | User needs guidance, not action    |
 
-### TRIGGER Clause Pattern
+### Trigger Clause Pattern (`Use when...` + Symptom Keywords)
 
-For methodology skills, use an explicit TRIGGER clause:
+For methodology skills, integrate trigger patterns into the tripartite structure using `Use when...`, symptom signals, and opt-in negative boundaries:
 
 ```yaml
-description: "Architecture expertise for system design. TRIGGER when: designing architecture, defining boundaries, evaluating approaches; OR user mentions scaling problems, messy code, coupling issues; OR user asks 'should we', 'which approach', 'is this the right pattern'."
+description: >-
+  System architecture expertise. Defines boundaries, modular seams, and trade-offs. Use when designing architecture, evaluating technical trade-offs, or when user asks 'should we' or reports messy code, coupling issues, or scaling bottlenecks.
 ```
 
 ## Calibration: Freedom vs Prescriptiveness

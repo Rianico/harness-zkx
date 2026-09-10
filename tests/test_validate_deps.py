@@ -199,6 +199,51 @@ def test_context_check_passes_clean(tmp_path: Path) -> None:
     assert "PASS" in result.stdout
 
 
+def test_context_check_warns_deprecated_trigger(tmp_path: Path) -> None:
+    """context-check warns when a skill uses deprecated TRIGGER: syntax."""
+    write_raw_skill(
+        tmp_path,
+        "legacy-trigger",
+        "name: legacy-trigger\ndescription: >-\n  Use when fixing bugs. TRIGGER: bug, fix\n",
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "context-check")
+
+    assert result.returncode == 0
+    assert "WARN" in result.stdout
+    assert "deprecated 'TRIGGER:' tag" in result.stdout
+
+
+def test_context_check_warns_missing_symptom_keywords(tmp_path: Path) -> None:
+    """context-check warns when Use when lacks symptom keywords or problem-framing signals."""
+    write_raw_skill(
+        tmp_path,
+        "abstract-skill",
+        "name: abstract-skill\ndescription: >-\n  General conceptual tool. Use when working with abstractions.\n",
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "context-check")
+
+    assert result.returncode == 0
+    assert "WARN" in result.stdout
+    assert "symptom keywords" in result.stdout
+
+
+def test_context_check_accepts_opt_in_negative_boundary(tmp_path: Path) -> None:
+    """context-check accepts opt-in negative boundary clauses."""
+    write_raw_skill(
+        tmp_path,
+        "boundary-skill",
+        "name: boundary-skill\ndescription: >-\n  Audits code invariants. Use when debugging errors. Do not use for unit testing.\n",
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "context-check")
+
+    assert result.returncode == 0
+    assert "PASS" in result.stdout
+    assert "WARN" not in result.stdout
+
+
 def test_fix_actually_modifies(tmp_path: Path) -> None:
     """fix without --dry-run changes the file on disk."""
     write_raw_skill(

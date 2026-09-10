@@ -25,7 +25,12 @@ Every skill declares one of two invocation classes via the canonical `disable-mo
 
 Codex budgets 8,000 characters for the global initial skill list. It shortens descriptions before omitting skills. At 300 characters per skill, ~25 skills fit without shortening.
 
-The 300-character limit is intentionally conservative — it forces description discipline (front-load triggers, collapse synonyms) and leaves headroom for skill growth.
+The 300-character limit is intentionally conservative — it forces description discipline and leaves headroom for skill growth. Grounded in empirical function-calling benchmarks, every description must fit the **Tripartite Formula**:
+1. **What it is:** Category noun / role anchor (identity in first 50 chars).
+2. **What it does:** Concrete third-person action verbs defining capabilities and outputs.
+3. **When to use:** **Required.** Explicit decision boundary with `Use when...` (or `when the user...`).
+4. **Symptom keywords:** **Fundamental standard.** Explicit failure states, error signs, or user pain phrases.
+5. **Negative boundary:** **Opt-in.** Exclusion clause (`Do not use for...`, `defer to...`) to prevent collisions.
 
 ## Platform Sync Details
 
@@ -56,14 +61,18 @@ The 300-character limit is intentionally conservative — it forces description 
 2. `description` value is empty string
 3. `description` length exceeds 300 characters
 
-### Soft Warnings (pass CI)
+### Script Checks & Warnings (pass CI)
 
-1. Description does not match trigger vocabulary pattern (`trigger|use when|when the user`)
+1. **Required `Use when...`:** Description must match `\buse\s+(?:[a-z_\-]+\s+)?when\b`.
+2. **Symptom keywords standard:** Description must contain problem signals or symptom keywords.
+3. **Deprecated `TRIGGER:` tag:** Flags legacy `TRIGGER:` pseudo-syntax for removal.
+4. **Negative boundary detection:** Recognizes opt-in exclusion clauses (`do not use`, `not for`, `defer to`).
 
 ### Semantic Quality (not in CI)
 
 The following are enforced by `skill-authoring` methodology during authoring:
 
+- Tripartite formula compliance (What it is + What it does + When to use via `Use when...`)
 - Third-person voice (no "I can help you...")
 - Front-loaded leading word (first sentence distinguishes from other skills)
 - No trigger duplication with another skill's description
