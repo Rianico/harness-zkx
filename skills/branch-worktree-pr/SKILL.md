@@ -1,7 +1,7 @@
 ---
 name: branch-worktree-pr
 description: >-
-  Orchestration for branch+worktree+PR workflow — ticket/spec → isolated worktrees → verify → squash merge. Use when creating a branch from a ticket/spec, dispatching parallel worktrees, merging via wt merge, or opening a PR that closes tickets. TRIGGER: branch, worktree, wt merge, squash, Closes
+  Orchestration for branch+worktree+PR workflow — ticket/spec → isolated worktrees → verify → squash merge. Use when creating a branch from a ticket/spec, dispatching parallel worktrees, merging via wt merge, or opening a PR that closes tickets.
 disable-model-invocation: true
 
 ---

@@ -1,7 +1,7 @@
 ---
 name: typecheck
 description: >-
-  Python typecheck via Basedpyright (strict, diagnostics, stubs, baseline). Use when configuring basedpyright, fixing Unknown/Any, diagnostic rules, or migrating from mypy/pyright. TRIGGER: basedpyright, pyright, typecheck, type stubs, strict mode
+  Python typecheck via Basedpyright (strict, diagnostics, stubs, baseline). Use when configuring basedpyright, fixing Unknown/Any, diagnostic rules, or migrating from mypy/pyright.
 metadata:
   managed-by: toolchain-wiki
 ---

@@ -1,7 +1,7 @@
 ---
 name: rust-scaffolding
 description: >-
-  Rust project scaffolding with Cargo, rust-toolchain, and fmt/clippy/test wiring. Use when initializing or retrofitting a Rust repo or selecting its toolchain. TRIGGER: rust scaffold, cargo, rust-toolchain, clippy
+  Rust project scaffolding with Cargo, rust-toolchain, and fmt/clippy/test wiring. Use when initializing or retrofitting a Rust repo or selecting its toolchain.
 metadata:
   managed-by: scaffold
 ---

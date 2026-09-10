@@ -1,11 +1,7 @@
 ---
 name: design-system
 description: >-
-  Design system generation, visual audit, and AI slop detection.
-  Audits CSS/Tailwind/styled-components for visual consistency across
-  color/typography/spacing/shadows/breakpoints. Detects AI patterns
-  (gradients, purple-to-blue, glass morphism). TRIGGER: design
-  system, visual audit, CSS consistency.
+  Design system guide for themes, component styling, and visual tokens. Use when styling UI components, adjusting palettes, or maintaining theme consistency.
 ---
 
 # Design System — Generate & Audit Visual Systems

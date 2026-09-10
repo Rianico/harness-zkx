@@ -1,9 +1,8 @@
 ---
-argument-hint: '[topic]'
-description: 'Git worktree lifecycle reference for branch-addressed worktrees with
-  hooks, templates, and LLM commits. Use when managing parallel worktrees, configuring
-  worktrunk, or debugging shell integration. TRIGGER: worktrunk, wt, git worktree,
-  hash_port'
+argument-hint: |-
+  [topic]
+description: >-
+  Git worktree lifecycle reference for branch-addressed worktrees with hooks and templates. Use when managing parallel worktrees, configuring worktrunk, or debugging shell integration.
 metadata:
   managed-by: toolchain-wiki
 name: worktrunk

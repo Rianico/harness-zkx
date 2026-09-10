@@ -1,11 +1,7 @@
 ---
 name: backend-patterns
 description: >-
-  Backend architecture and API design patterns — REST/GraphQL,
-  database optimization (N+1, indexing), caching (Redis), auth
-  (JWT/OAuth/sessions), background jobs, middleware, rate limiting,
-  versioning. TRIGGER: API design, endpoint, database query, SQL,
-  cache, Redis, rate limit, JWT.
+  Backend architecture guide covering API design, endpoints, and SQL queries. Use when structuring API endpoints, optimizing database queries, or designing backend services.
 ---
 
 # Backend Development Patterns

@@ -1,7 +1,7 @@
 ---
 name: sysops-expert
 description: >-
-  Systems operations for deployment/Docker/CI-CD/health checks/rollback/production readiness. TRIGGER: deploy, Docker/k8s/container, CI/CD/GitHub Actions/Jenkins, health/readiness/liveness probe, rollback, staging/production, DevOps/SRE, monitoring/observability, security hardening, resource limits
+  Systems operations guide for deployment, Docker/k8s, CI/CD, and rollback. Use when configuring container infrastructure, health checks, or staging/production readiness.
 argument-hint: |-
   [deploy|docker|cicd|containers]
 ---

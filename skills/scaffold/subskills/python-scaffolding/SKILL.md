@@ -1,7 +1,7 @@
 ---
 name: python-scaffolding
 description: >-
-  Python project scaffolding with uv, .python-version, pyproject, and verification wiring. Use when initializing or retrofitting a Python repo or selecting its toolchain. TRIGGER: python scaffold, uv, pyproject, pytest
+  Python project scaffolding with uv, .python-version, pyproject, and verification wiring. Use when initializing or retrofitting a Python repo or selecting its toolchain.
 metadata:
   managed-by: scaffold
 ---

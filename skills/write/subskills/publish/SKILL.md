@@ -1,7 +1,7 @@
 ---
 name: write-publish
 description: >-
-  Platform-native content creation and multi-platform distribution across X, LinkedIn, Threads, Bluesky, TikTok, YouTube, newsletters. TRIGGER: social posts, threads, scripts, content calendars, crossposting, platform-specific adaptation.
+  Platform-native content creation across social channels. Use when drafting social threads, video scripts, content calendars, or crossposting across platforms.
 arguments: platform source
 argument-hint: |-
   [x|linkedin|threads|bluesky|tiktok|youtube|newsletter] -- target platform

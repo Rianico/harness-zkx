@@ -1,7 +1,7 @@
 ---
 name: gh-release
 description: >-
-  Release via semantic-release dispatch. Validates conventional commits, runs verification, dispatches publish. TRIGGER: release, dispatch, publish, dry-run
+  Release dispatch via semantic-release. Validates conventional commits and runs verification. Use when dispatching releases, publishing packages, or running dry-run release checks.
 argument-hint: |-
   "[--dry-run] -- dispatch semantic-release (dry-run previews version)"
 metadata:

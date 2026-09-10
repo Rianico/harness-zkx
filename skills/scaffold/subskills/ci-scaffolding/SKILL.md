@@ -1,7 +1,7 @@
 ---
 name: ci-scaffolding
 description: >-
-  Git CI scaffolding with pinned GitHub Actions verify+release and on-demand dispatch. Use when wiring CI gates, retrofitting workflows, or standardizing verification. TRIGGER: ci scaffold, github actions, verify gate, release workflow
+  Git CI scaffolding with pinned GitHub Actions verify+release and on-demand dispatch. Use when wiring CI gates, retrofitting workflows, or standardizing verification.
 metadata:
   managed-by: scaffold
 ---

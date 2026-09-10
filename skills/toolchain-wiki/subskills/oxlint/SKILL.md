@@ -1,7 +1,7 @@
 ---
 name: oxlint
 description: >-
-  Domain guide for Oxlint — categories, plugins, config, CLI, writing custom rules and JS plugins, migration from ESLint. Use when configuring lint, enabling rules or plugins, or writing linter rules. TRIGGER: oxlint, linter rule, eslint, oxc linter
+  Domain guide for Oxlint — categories, plugins, config, CLI, writing custom rules and JS plugins, migration from ESLint. Use when configuring lint, enabling rules or plugins, or writing linter rules.
 metadata:
   managed-by: toolchain-wiki
 ---

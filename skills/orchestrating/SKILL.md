@@ -1,7 +1,7 @@
 ---
 name: orchestrating
 description: >-
-  Orchestrate multi-step LSZ workflows for feature dev, refactors, bug fixes, and docs. Defines skill sequence with approval checkpoints and pointer-based state passing. Supports lightweight and heavy pipelines. TRIGGER: LSZ workflow, orchestration, GDD, multi-step pipeline
+  Orchestrator for multi-step LSZ pipelines with approval checkpoints and pointer-based state. Use when coordinating feature dev, complex refactors, or multi-agent workflows.
 argument-hint: |-
   [feature|refactor|bugfix|docs] [--lightweight|--heavy]
 metadata:

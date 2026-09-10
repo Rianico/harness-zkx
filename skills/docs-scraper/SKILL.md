@@ -1,7 +1,7 @@
 ---
 name: docs-scraper
 description: >-
-  Docs pipeline: scrape LSP/PTX/CUDA/Rust/site/skill.sh to LLM markdown + layered skill generation. TRIGGER: scrape docs, auto, to-skill, convert docs to skill, compose skills.
+  Documentation scraper for LSP, PTX, CUDA, and Rust sites. Converts docs to markdown skills. Use when scraping docs, converting docs to skills, or composing layered skills.
 argument-hint: |-
   [auto|lsp|ptx|runtime|driver|rust|site|skills <target>] [--output-dir <path>] [--force] [--base-url <url>] [--staging <path>] [--run <slug>]
   to-skill: <doc-dir|url> [--name <skill>] [--supplementary <paths-or-urls>] [--output-dir <path>]

@@ -1,7 +1,7 @@
 ---
 name: programming-expert
 description: >-
-  Foundational coding principles + polyglot expertise for Python/TS/Rust/Go/C++/Java/Kotlin/Swift/PHP/Perl/Lua/Bash. Use for writing, reviewing, or hardening code — Clean Code/SOLID/architecture language-agnostically. TRIGGER: coding, programming, bash, shell script, architecture
+  Foundational coding principles and polyglot expertise across languages. Use when writing, reviewing, or hardening code, enforcing Clean Code/SOLID principles, or resolving architecture issues.
 arguments: language
 argument-hint: |-
   python-expert -- type safety (Pydantic), async, testing, design, observability, resilience, packaging, production — 18 sub-domains

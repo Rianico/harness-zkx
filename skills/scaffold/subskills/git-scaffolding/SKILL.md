@@ -1,7 +1,7 @@
 ---
 name: git-scaffolding
 description: >-
-  Deterministic Git scaffolding — conventional commits, semantic-release, changelog, and branch hygiene. Use when wiring release flow, commit linting, or retrofitting Git artifacts. TRIGGER: git scaffold, semantic-release, conventional commits, commitlint
+  Deterministic Git scaffolding — conventional commits, semantic-release, changelog, and branch hygiene. Use when wiring release flow, commit linting, or retrofitting Git artifacts.
 metadata:
   managed-by: scaffold
 ---

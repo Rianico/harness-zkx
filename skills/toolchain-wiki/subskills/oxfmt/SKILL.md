@@ -1,7 +1,7 @@
 ---
 name: oxfmt
 description: >-
-  Domain guide for Oxfmt — config, CLI, embedded formatting, Prettier/Biome compat, language support. Use when configuring or migrating formatters, sorting imports, or handling formatter ignore. TRIGGER: oxfmt, formatter, prettier, oxc formatter
+  Domain guide for Oxfmt — config, CLI, embedded formatting, Prettier/Biome compat, language support. Use when configuring or migrating formatters, sorting imports, or handling formatter ignore.
 metadata:
   managed-by: toolchain-wiki
 ---

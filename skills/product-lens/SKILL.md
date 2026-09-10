@@ -1,7 +1,7 @@
 ---
 name: product-lens
 description: >-
-  Product thinking framework for feature validation/founder review/user journey audit/prioritization. TRIGGER: feature validation, product diagnostics, product-market fit, onboarding friction, ICE scoring, product review, pre-launch sanity check, product brief
+  Product thinking framework for feature validation and user journey audits. Use when reviewing product diagnostics, diagnosing onboarding friction, or prioritizing features.
 ---
 
 # Product Lens — Think Before You Build

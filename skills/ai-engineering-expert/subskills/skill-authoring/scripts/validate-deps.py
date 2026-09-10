@@ -307,7 +307,7 @@ def lint_skills(root_dir: Path, skill_map: dict[str, Path]) -> bool:
     if _check_duplicate_skill_names(root_dir):
         found_issues = True
     for _, location in skill_map.items():
-        if location.name == "skills-lock.json":
+        if location.name != "SKILL.md":
             continue
 
         try:
@@ -383,7 +383,7 @@ def fix_skills(root_dir: Path, skill_map: dict[str, Path], dry_run: bool = False
     print(msg)
     fixed_count = 0
     for _, location in skill_map.items():
-        if location.name == "skills-lock.json":
+        if location.name != "SKILL.md":
             continue
 
         try:

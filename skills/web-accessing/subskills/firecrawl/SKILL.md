@@ -1,7 +1,7 @@
 ---
 name: firecrawl
 description: >-
-  Firecrawl CLI for web search, scraping, crawling, site mapping, and document parsing. Use when finding pages, extracting markdown from URLs, mapping site structure, or converting local documents to markdown. TRIGGER: web search, scraping, crawling, site mapping
+  Firecrawl CLI for web search, scraping, crawling, site mapping, and document parsing. Use when finding pages, extracting markdown from URLs, mapping site structure, or converting local documents to markdown.
 argument-hint: |-
   search <query> | scrape <url> | map <site_url> | crawl <url> | parse <file> | interact --prompt <action> | download <url>
 allowed-tools:

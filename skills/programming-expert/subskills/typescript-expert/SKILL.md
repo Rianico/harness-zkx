@@ -1,7 +1,7 @@
 ---
 name: typescript-expert
 description: >-
-  TypeScript expert unifying advanced types, Jest testing, style conventions, and monorepo/tooling performance for type-safe applications. Use when implementing complex types, writing Jest tests, enforcing style, or diagnosing TS issues. TRIGGER: typescript, jest, advanced types, testing, tsconfig
+  TypeScript expert unifying advanced types, Jest testing, style conventions, and monorepo/tooling performance for type-safe applications. Use when implementing complex types, writing Jest tests, enforcing style, or diagnosing TS issues.
 meta:
   sources:
     - https://www.skills.sh/github/awesome-copilot/javascript-typescript-jest

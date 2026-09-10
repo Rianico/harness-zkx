@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: >-
-  Semantic audit and adversarial code review for LSZ. TRIGGER after implementation (heavy: step 7, lightweight: step 5) to perform qualitative verification of architecture, intent alignment, and maintainability. Acts as the Semantic Gate complementing eval-gate's Deterministic Gate.
+  Adversarial code review and semantic audit for architecture, intent alignment, and maintainability. Use when auditing implementations, reviewing PRs, checking semantic drift, or verifying Clean Architecture boundaries.
 metadata:
   managed-by: ai-engineering-expert
 ---

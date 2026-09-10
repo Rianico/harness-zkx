@@ -1,7 +1,7 @@
 ---
 name: python-expert
 description: >-
-  Comprehensive Python engineering — Pydantic type safety, async, testing, design, observability, resilience, resources, jobs, packaging, production. Use for typed APIs, strict checking, async/queues, structured logging, retries, layout. TRIGGER: Pydantic, type safety, async, pytest
+  Comprehensive Python engineering for Pydantic type safety, async, and packaging. Use when developing typed APIs, debugging async queues, structured logging, or hardening production services.
 argument-hint: |-
   [type-safety|async|testing|design|style|structure|error|resilience|observability|config|resources|jobs|packaging|production]
 metadata:

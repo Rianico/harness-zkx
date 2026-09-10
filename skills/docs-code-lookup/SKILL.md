@@ -1,7 +1,7 @@
 ---
 name: docs-code-lookup
 description: >-
-  Fetch current library documentation and code examples. TRIGGER when: user asks how to use a library, framework, or API; needs setup guide, configuration help, or code examples; asks about React, Next.js, Prisma, Supabase, Tailwind, Express, Vue, Django, or any library.
+  Fetch current library documentation and code examples. Use when user asks how to use a library, framework, or API; needs setup guide, configuration help, or code examples; asks about React, Next.js, Prisma, Supabase, Tailwind, Express, Vue, Django, or any library.
 argument-hint: |-
   <library> <question>
 ---

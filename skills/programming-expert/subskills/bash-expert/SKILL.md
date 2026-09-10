@@ -1,7 +1,7 @@
 ---
 name: bash-expert
 description: >-
-  Defensive Bash/POSIX scripting — strict mode, quoting, file/temp safety, portability, and testing with Bats/ShellCheck/shfmt. Use for writing, reviewing, or hardening shell scripts, CI pipelines, and automation. TRIGGER: bash, shell script, shellcheck, bats, pipefail, defensive bash
+  Defensive Bash/POSIX scripting guide with strict mode, safety, and Bats/ShellCheck testing. Use when writing, reviewing, or debugging shell scripts, CI pipelines, and automation.
 argument-hint: |-
   [strict|quoting|file-ops|args|portability|safety|testing|tooling|all]
 metadata:

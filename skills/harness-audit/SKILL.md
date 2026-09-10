@@ -1,7 +1,7 @@
 ---
 name: harness-audit
 description: >-
-  Audits pi session JSONL for oversized bash outputs, analyses cause and triages refinable vs replaceable-by-tool vs filter vs keep for fix-or-gotcha decision. Use when trimming verbose results or hardening context-window bloat. TRIGGER: harness audit, session jsonl, bash triage, gotcha rule
+  Audits pi session JSONL for oversized bash outputs, analyses cause and triages refinable vs replaceable-by-tool vs filter vs keep for fix-or-gotcha decision. Use when trimming verbose results or hardening context-window bloat.
 arguments: target
 argument-hint: |-
   <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file

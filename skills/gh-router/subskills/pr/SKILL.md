@@ -1,7 +1,7 @@
 ---
 name: pr
 description: >-
-  Create PR, watch verify, and squash-merge via gh api. Polls check-runs and merges when green. TRIGGER: pr create, pr watch, pr merge, squash merge
+  Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
 arguments: title_or_branch
 argument-hint: |-
   "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge] [--draft]"

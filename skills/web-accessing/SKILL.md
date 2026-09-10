@@ -1,8 +1,7 @@
 ---
 name: web-accessing
 description: >-
-  Web access layer for AI agents. Routes to tavily (search, extract, crawl, research) or firecrawl (search, scrape, crawl, parse).
-  TRIGGER: web search, scrape, crawl, extract URL, map site, research, download docs, parse PDF/DOCX, interact with pages, get web content.
+  Web access layer for AI agents routing to Tavily and Firecrawl. Use when searching the web, crawling sites, scraping pages, or extracting content from URLs.
 arguments: tool command
 argument-hint: |-
   tavily search|extract|map|crawl|research -- Tavily for search, extract, research

@@ -1,11 +1,7 @@
 ---
 name: tavily
 description: >-
-  Tavily CLI for web search/extraction/site mapping/crawling/deep
-  research. Covers page discovery, markdown extraction, site
-  structure mapping, bulk crawling, and citation-backed analysis.
-  Returns LLM-optimized markdown. TRIGGER: search web, extract URL,
-  map site, crawl docs, deep research.
+  Tavily CLI for web search, URL extraction, and site crawling. Returns LLM-optimized markdown. Use when searching the web, mapping site structure, or conducting deep research.
 argument-hint: |-
   search <query> | extract <url> | map <site_url> | crawl <url> | research <topic> [--model mini|pro]
 allowed-tools: Bash(tvly *)

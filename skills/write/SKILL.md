@@ -1,7 +1,7 @@
 ---
 name: write
 description: >-
-  Content creation and distribution cluster: article for long-form writing (blog/newsletter/guide/tutorial), publish for platform-native content (X/LinkedIn/Threads/Bluesky/TikTok/YouTube/newsletter). TRIGGER: article, blog, social posts, crossposting, content repurposing.
+  Content creation cluster: articles for long-form writing and publish for social distribution. Use when drafting articles, repurposing content, or managing social posts.
 arguments: mode content_type platform
 argument-hint: |-
   article [blog|essay|guide|tutorial|newsletter] -- long-form writing with voice capture

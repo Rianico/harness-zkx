@@ -1,8 +1,7 @@
 ---
 name: videodb
 description: >-
-  Video/audio: ingestion/indexing/search/transcoding/editing/live capture. Covers uploads, RTSP, desktop capture, scene detection, subtitle/overlay/dubbing, aspect/resolution conversion, timeline composition, spoken word indexing. TRIGGER: video, audio, transcode, clip, subtitle, stream, RTSP
-
+  Video/audio engine for ingestion, indexing, and editing. Covers uploads, RTSP, and live capture. Use when transcoding media, indexing spoken audio, or composing video timelines.
 allowed-tools: Read Grep Glob Bash(python:*)
 argument-hint: |-
   [task description]

@@ -1,8 +1,6 @@
 ---
-description: 'Native toolchain wiki router for JS/TS/Python — Oxlint/Oxfmt (oxc),
-  Basedpyright, Worktrunk. Use when configuring linters/formatters, writing linter
-  rules/plugins, type-checking Python, or managing parallel worktrees. TRIGGER: toolchain-wiki,
-  oxc, oxlint, oxfmt, basedpyright, worktrunk, wt'
+description: >-
+  Native toolchain wiki router for JS/TS/Python — Oxlint/Oxfmt, Basedpyright, Worktrunk. Use when configuring linters, formatters, type checking, or managing parallel worktrees.
 metadata:
   manage:
     - oxlint
