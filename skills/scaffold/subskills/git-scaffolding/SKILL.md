@@ -32,6 +32,8 @@ Pure-deterministic (no proofread, byte-identical):
 - `.github/ISSUE_TEMPLATE/01-bug_report.yml` — YAML form (Summary \u2192 Environment \u2192 Repro \u2192 Expected/Actual \u2192 Impact, exemplar [#38](https://github.com/Rianico/dsh-better-edit/issues/38), `required:true` on repro fields + `render:shell`) + `02-feature_request.yml` — YAML form (Problem \u2192 Proposal \u2192 Alternatives \u2192 Context, `required:true` on problem/proposal) + `config.yml` (`blank_issues_enabled:false`, exemplar + Discussions contact_links); ordered `01/02` for chooser
 - `.github/pull_request_template.md` — PR template (Summary + Impact/Risk \u00b7 What Changed \u00b7 Architecture (Mermaid, delete if N/A) \u00b7 Checklist) — auto-populated by GitHub; `CONTRIBUTING.md` `## Pull Requests` documents the four headings
 
+> PR → watch → squash + release watch live as **gh-router skill scripts** (not scaffold repo files): `uv run $GH_ROUTER_DIR/subskills/pr/scripts/pr.sh --watch --merge` (create via `gh api pulls`, poll `check-runs`/`gh pr checks`, dump `gh run --log` on failure for model fix, then squash) and `uv run $GH_ROUTER_DIR/subskills/gh-release/scripts/release-watch.sh --watch` (dispatch `semantic-release` then poll `actions/runs release.yml`)
+
 Mixed (script writes skeleton + warns on stderr → model must proofread):
 
 - `CONTRIBUTING.md` — `{{project_name}}` + `Before PR` toolchain line + `Reporting Issues` matrix (Bug `01-bug_report.yml` / Feature `02-feature_request.yml`, links #38) + `Pull Requests` (Summary/Impact/Risk \u00b7 What Changed \u00b7 Architecture \u00b7 Checklist via `.github/pull_request_template.md`); script warns: proofread name + lint commands

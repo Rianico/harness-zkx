@@ -441,6 +441,7 @@ contact_links:
 
 PULL_REQUEST_TEMPLATE_MD = """\
 <!-- markdownlint-disable MD041 -->
+
 ## Summary
 
 <!-- 2-3 sentences: why this change, user-visible effect. -->
@@ -535,6 +536,8 @@ PR body is auto-populated from `.github/pull_request_template.md`. Keep the four
 CI (`changelog-check.yml`, `verify`) must be green before requesting review.
 """
 
+
+
 CHANGELOG_MD = """\
 # Changelog
 All notable changes to this project will be documented in this file.
@@ -589,7 +592,6 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
         "script": "changelog-script",
         "templates": "issue-templates",
         "issues": "issue-templates",
-        "pr": "pr-template",
         "pr-template": "pr-template",
         "pr_template": "pr-template",
         "pull-request": "pr-template",

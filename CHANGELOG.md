@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **gh-router:** add pr watch-merge and release-watch scripts
 - **docs-scraper:** add deterministic inject-sources script for meta.sources
 - **programming-expert:** add bash-expert subskill and defensive shell rules
 - **gh-router:** make gh-release scripts package-manager-aware (npm/pnpm)
