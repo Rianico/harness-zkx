@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **workflow:** add dynamic-workflow-wrapper and inlined role contracts
+- **skill-authoring:** enforce empirical skill description standards
 - **gh-router:** add pr watch-merge and release-watch scripts
 - **docs-scraper:** add deterministic inject-sources script for meta.sources
 - **programming-expert:** add bash-expert subskill and defensive shell rules
@@ -123,6 +125,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **agents:** drop tools that never register in subagents
+- **converge-goal:** run every round in a persistent wt worktree
 - **scaffold:** provision pnpm via action-setup in CI templates
 - **scaffold:** prescribe hidden-type changelog sync commits
 - **scaffold:** patch releaserc assets to pnpm-lock.yaml in TS flavor
@@ -161,6 +165,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **workflow-wrapper:** record worktree contract and allowlist reality
 - **rules:** refine mental-model and development-patterns
 - **rules:** prefer rg, fd, eza over grep, find, ls
 - **rules:** clarify gates and internal deprecation + skill sync (#11)
