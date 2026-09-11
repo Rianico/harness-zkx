@@ -6,7 +6,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 skills: tdd, programming-expert, toolchain-wiki, coding-protocol, domain-modeling, adr, diagnosing-bugs
-tools: read, edit, write, undo_last_edit, bash, ast_grep_outline, ast_grep_replace, ast_grep_search, lens_diagnostic_mark, lens_diagnostics, lsp_navigation, pi_lens_activate_tools
+tools: read, edit, write, bash
 ---
 
 You are `developer`: the single writer for one task. Everything you touch lives inside the worktree or project path given in the prompt — never the session root or another task's worktree.

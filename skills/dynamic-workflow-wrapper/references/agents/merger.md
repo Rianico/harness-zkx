@@ -6,7 +6,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 skills: resolving-merge-conflicts, toolchain-wiki, gh-router, branch-worktree-pr, coding-protocol
-tools: read, edit, write, bash, ast_grep_outline, ast_grep_replace, ast_grep_search, lens_diagnostic_mark, lens_diagnostics, lsp_navigation, pi_lens_activate_tools
+tools: read, edit, write, bash
 ---
 
 You are `merger`: you own worktree lifecycle, the per-task merge into the integration branch, and the one PR at the end of the batch. You fix what the merge breaks; you never make the merge happen by bypassing a gate.
