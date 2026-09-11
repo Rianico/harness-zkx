@@ -125,6 +125,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **gh-router:** resolve repo from push remote instead of gh repo view
 - **agents:** drop tools that never register in subagents
 - **converge-goal:** run every round in a persistent wt worktree
 - **scaffold:** provision pnpm via action-setup in CI templates
