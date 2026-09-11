@@ -88,9 +88,15 @@ else
   fi
 fi
 
+# Resolve the release repo from this checkout's push remote (never `gh repo view`,
+# which can point at an upstream/fork and dispatch a release at the wrong project).
+if ! OWNER_REPO=$(repo_slug); then
+  phase_fail 3 "cannot resolve release repo slug (no GitHub remote for branch/origin)"
+  exit 1
+fi
+
 # capture latest run id before dispatch so we can detect the new one
-BEFORE_ID=$(gh run list --workflow release.yml --event repository_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || echo "")
-OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || git remote get-url origin | sed -E 's/.*github.com[:\/](.*)\.git/\1/')
+BEFORE_ID=$(gh run list --repo "$OWNER_REPO" --workflow release.yml --event repository_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || echo "")
 info "dispatching semantic-release to ${OWNER_REPO}…"
 if ! gh api "repos/${OWNER_REPO}/dispatches" -f event_type=semantic-release >/dev/null 2>&1; then
   phase_fail 3 "gh api dispatch failed for ${OWNER_REPO}"
@@ -104,10 +110,10 @@ info "waiting for workflow run to appear…"
 RUN_ID=""
 for _ in $(seq 1 30); do
   sleep 2
-  CANDIDATE=$(gh run list --workflow release.yml --event repository_dispatch --limit 5 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+  CANDIDATE=$(gh run list --repo "$OWNER_REPO" --workflow release.yml --event repository_dispatch --limit 5 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
   # fallback to workflow name if file filter yields nothing (e.g. renamed workflow file)
   if [[ -z "$CANDIDATE" ]]; then
-    CANDIDATE=$(gh run list --workflow "Verify and Release" --event repository_dispatch --limit 5 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+    CANDIDATE=$(gh run list --repo "$OWNER_REPO" --workflow "Verify and Release" --event repository_dispatch --limit 5 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
   fi
   if [[ -n "$CANDIDATE" && "$CANDIDATE" != "$BEFORE_ID" ]]; then
     RUN_ID="$CANDIDATE"
@@ -118,7 +124,7 @@ done
 if [[ -z "$RUN_ID" ]]; then
   warn "dispatched but no workflow run appeared within ~60s"
   dim "check manually: https://github.com/${OWNER_REPO}/actions/workflows/release.yml"
-  dim "or: gh run list --workflow release.yml --event repository_dispatch --limit 5"
+  dim "or: gh run list --repo ${OWNER_REPO} --workflow release.yml --event repository_dispatch --limit 5"
   phase_ok 3 "dispatched (watch skipped — run not yet visible)"
   exit 0
 fi
@@ -127,7 +133,7 @@ info "watching run ${RUN_ID} — https://github.com/${OWNER_REPO}/actions/runs/$
 # Poll status quietly; emit nothing until completion to keep the context window clean.
 RC=1
 for _ in $(seq 1 120); do
-  ST=$(gh run view "$RUN_ID" --json status,conclusion --jq '.status + " " + (.conclusion // "")' 2>/dev/null || true)
+  ST=$(gh run view "$RUN_ID" --repo "$OWNER_REPO" --json status,conclusion --jq '.status + " " + (.conclusion // "")' 2>/dev/null || true)
   STATUS="${ST%% *}"
   CONCLUSION="${ST#* }"
   if [[ "$STATUS" == "completed" ]]; then
@@ -155,11 +161,11 @@ if [[ $RC -eq 0 ]]; then
   dim "run: https://github.com/${OWNER_REPO}/actions/runs/${RUN_ID}"
   phase_ok 3 "released v${NEXT_VER:-unknown} — workflow ${RUN_ID} passed"
 else
-  _conclusion=$(gh run view "$RUN_ID" --json conclusion --jq .conclusion 2>/dev/null || echo "failed")
+  _conclusion=$(gh run view "$RUN_ID" --repo "$OWNER_REPO" --json conclusion --jq .conclusion 2>/dev/null || echo "failed")
   phase_fail 3 "release workflow ${_conclusion} — run ${RUN_ID}"
   warn "fetching failed logs…"
-  gh run view "$RUN_ID" --log-failed 2>&1 | tail -n 120 || gh run view "$RUN_ID" 2>&1 | tail -n 80 || true
-  dim "view: gh run view ${RUN_ID} --log-failed"
+  gh run view "$RUN_ID" --repo "$OWNER_REPO" --log-failed 2>&1 | tail -n 120 || gh run view "$RUN_ID" --repo "$OWNER_REPO" 2>&1 | tail -n 80 || true
+  dim "view: gh run view ${RUN_ID} --repo ${OWNER_REPO} --log-failed"
   dim "web:  https://github.com/${OWNER_REPO}/actions/runs/${RUN_ID}"
   exit $RC
 fi

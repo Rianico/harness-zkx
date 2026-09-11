@@ -58,5 +58,34 @@ fail()  { _log "$_C_RED"    "✘" "$*"; }
 dim()   { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_DIM"    "·" "$*"; }
 step()  { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_CYAN"   "▸" "$*"; }
 
+# repo_slug — owner/name of the release repo.
+#
+# Derived from the remote this checkout actually pushes to (branch.<ref>.pushRemote ->
+# branch.<ref>.remote -> origin), NOT from `gh repo view`: with an upstream/fork remote
+# configured, `gh repo view` can resolve to the upstream repo and this script would then
+# dispatch a release event at the wrong project. check.sh is origin-centric too, so the
+# release target and the commit range under check agree by construction.
+#
+# Usage: REPO=$(repo_slug) || exit 2
+repo_slug() {
+  local ref remote url slug
+  ref=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  remote=""
+  if [[ -n "$ref" ]]; then
+    remote=$(git config --get "branch.$ref.pushRemote" || git config --get "branch.$ref.remote" || echo "")
+  fi
+  [[ -z "$remote" ]] && remote=origin
+  url=$(git remote get-url --push "$remote" 2>/dev/null || git remote get-url origin 2>/dev/null || echo "")
+  # Handle SCP-style (git@host:owner/name) AND URL-style (scheme://[user@]host/owner/name).
+  slug=$(printf '%s' "$url" \
+    | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^/@]*@##; s#^[^/:]+[:/]##; s#\.git$##; s#/+$##')
+  # A URL that failed to parse must NOT leak through as a "slug" — validate shape.
+  if [[ ! "$slug" =~ ^[^/:[:space:]]+/[^/:[:space:]]+$ ]]; then
+    slug=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "")
+  fi
+  [[ -z "$slug" ]] && return 1
+  printf '%s' "$slug"
+}
+
 # Ensure errors show a clear marker before set -e exits
 trap 'fail "command failed: $BASH_COMMAND (line $LINENO)"' ERR

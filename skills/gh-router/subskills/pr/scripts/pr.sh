@@ -27,19 +27,31 @@ done
 
 if [[ -z "$HEAD_REF" ]]; then HEAD_REF=$(git rev-parse --abbrev-ref HEAD); fi
 if [[ "$HEAD_REF" == "HEAD" || "$HEAD_REF" == "main" ]]; then echo "refusing to open PR from $HEAD_REF" >&2; exit 2; fi
-if [[ -z "$BASE" ]]; then
-  if BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null) && [[ -n "$BASE" ]]; then :;
-  elif BASE=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@origin/@@'); then :;
-  else BASE="main"; fi
-fi
 if [[ -z "$TITLE" ]]; then TITLE=$(git log -1 --pretty=%s); fi
 if [[ -n "$BODY_FILE" ]]; then BODY=$(cat "$BODY_FILE"); fi
 if [[ -z "$BODY" ]]; then
   if [[ -f .github/pull_request_template.md ]]; then BODY=$(cat .github/pull_request_template.md); else BODY=""; fi
 fi
 
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || git remote get-url origin | sed -E 's@.*github\\.com[:/]([^/]+/[^/.]+)(\\.git)?@\\1@')
-echo "repo=$REPO head=$HEAD_REF base=$BASE watch=$WATCH merge=$MERGE" >&2
+# Repo slug from the remote this branch actually pushes to (branch.<ref>.pushRemote ->
+# branch.<ref>.remote -> origin). `gh repo view` is NOT authoritative here: with an
+# upstream/fork remote configured it can resolve to the upstream repo, which then 422s
+# the POST /pulls (head branch does not exist there).
+REMOTE=$(git config --get "branch.$HEAD_REF.pushRemote" || git config --get "branch.$HEAD_REF.remote" || echo origin)
+PUSH_URL=$(git remote get-url --push "$REMOTE" 2>/dev/null || git remote get-url origin 2>/dev/null || echo "")
+# Handle SCP-style (git@host:owner/name) AND URL-style (scheme://[user@]host/owner/name).
+REPO=$(printf '%s' "$PUSH_URL" \
+  | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^/@]*@##; s#^[^/:]+[:/]##; s#\.git$##; s#/+$##')
+# A URL that failed to parse must NOT leak through as a "slug" — validate shape and
+# fall back to gh only then (a garbage value would 404 the repos/<slug>/pulls calls).
+if [[ ! "$REPO" =~ ^[^/:[:space:]]+/[^/:[:space:]]+$ ]]; then
+  REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "")
+fi
+if [[ -z "$BASE" ]]; then
+  BASE=$(gh api "repos/$REPO" --jq .default_branch 2>/dev/null || echo "")
+  if [[ -z "$BASE" ]]; then BASE=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@origin/@@'); fi
+  if [[ -z "$BASE" ]]; then BASE="main"; fi
+fi
 
 EXISTING=$(gh api "repos/$REPO/pulls?head=${REPO%%/*}:$HEAD_REF&state=open" --jq '.[0].number' 2>/dev/null || echo "")
 if [[ -n "$EXISTING" && "$EXISTING" != "null" ]]; then
@@ -76,10 +88,10 @@ watch_checks() {
         RUN_ID=$(gh api "repos/$REPO/actions/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id' 2>/dev/null || echo "")
       fi
       if [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]]; then
-        gh run view "$RUN_ID" --log 2>&1 | tail -n 200 >&2 || true
+        gh run view "$RUN_ID" --repo "$REPO" --log 2>&1 | tail -n 200 >&2 || true
         gh api "repos/$REPO/actions/runs/$RUN_ID/logs" 2>&1 | tail -n 20 >&2 || true
       fi
-      gh pr checks "$num" --json state,conclusion 2>&1 | tail -n 50 >&2 || true
+      gh pr checks "$num" --repo "$REPO" --json state,conclusion 2>&1 | tail -n 50 >&2 || true
       return 1
     fi
     echo "checks $STATE ($i/$tries)…" >&2
