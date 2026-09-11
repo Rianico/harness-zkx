@@ -61,7 +61,7 @@ Frontmatter rules for every role:
 
 | Key | Value | Why |
 |---|---|---|
-| `tools` | explicit allowlist, including the full pi-lens set | omitting it grants everything; a partial pi-lens set makes tool availability a surprise |
+| `tools` | explicit allowlist drawn only from `read`, `bash`, `edit`, `write` | those four are the subagent's entire tool set: pi-dynamic-workflows builds each subagent with a shared extension-free loader (`noExtensions: true`, upstream #109), so host-extension tools never register. `ast_grep_*`, `lens_diagnostics`, `lens_diagnostic_mark`, `lsp_navigation`, `pi_lens_activate_tools` (pi-lens) and `undo_last_edit` (pi-better-edit) match nothing when named; search happens through `bash` |
 | `skills` | parent skills only (`programming-expert`, `toolchain-wiki`, `ai-engineering-expert`) | preloaded deterministically; sub-skills stay reachable through their parents and the prompt's path pointers |
 | `inheritSkills` | `false` | the role gets its declared set, not the operator's whole catalog |
 | `inheritProjectContext` | `true` | AGENTS.md, CONTEXT.md, and project rules reach the child |

@@ -54,15 +54,19 @@ Analyze the user's intent to select the target workflow:
 ### Build Arguments
 
 #### For `converge-goal`:
+
 ```json
 {
   "task": "Implement async token refresh with lock guard",
   "maxAttempts": 5,
   "stack": "python-uv",
-  "evalDir": null
+  "evalDir": null,
+  "base": "main",
+  "branch": "feat/token-refresh-lock"
 }
 ```
 
+`base` and `branch` are optional. Prepare resolves the base (falling back to the repo default) and derives `branch` as `converge/<task-slug>` when omitted. The run creates ONE persistent worktree for the whole loop — `wt switch --create … --no-cd` when `command -v wt` and `.config/wt.toml` both exist, else `git worktree add` — and reuses it on resume. Every round works inside that worktree through an explicit absolute-path contract, because `agent(prompt, { cwd })` is not forwarded by the runtime; the deterministic gate fails the round if the session root gains a tracked change. The worktree is left in place at the end: it holds the run's commits, and merge/PR ownership stays with the operator.
 #### For `ship-tasks`:
 ```json
 {
@@ -101,6 +105,7 @@ Monitor execution or await completion. When the workflow terminates, parse the r
 ```markdown
 ### Workflow Run `<runId>` [<STATUS>]
 **Workflow**: `<name>` | **Attempts**: `<n>/<max>` | **Duration**: `<elapsed>`
+**Worktree**: `<path>` (branch `<branch>`, base `<base>`) — left in place for review/merge
 
 | Task / Goal | Status | Attempts | Deterministic Gate | Crux Code Review | Touched Artifacts |
 |---|---|---|---|---|---|
