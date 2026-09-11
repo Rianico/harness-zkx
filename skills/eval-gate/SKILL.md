@@ -1,12 +1,10 @@
 ---
 name: eval-gate
 description: >-
-  Eval-driven verification gate for deterministic pass/fail quality decisions across polyglot stacks. Use when defining acceptance criteria, validating implementations, running pre-PR quality gates, or executing capability and regression checks.
+  Eval-driven verification gate for deterministic pass/fail decisions. Synthesizes native test and quality runners across polyglot stacks, executing capability, contract, and regression checks. Use when defining acceptance criteria, validating implementations, or running gates; not for code reviews.
+arguments: action feature source
 argument-hint: |-
-  [define|check|quick|report|list|clean] [feature-name] [source-of-truth] [topic_root=<path>|artifact_dir=<path>]
-tools:
-  - Agent
-  - Bash
+  [define <feature> [source]|check <feature>|quick|report <feature>|list|clean] [topic_root=<path>]
 ---
 
 # Eval Gate (EDD)
@@ -15,10 +13,11 @@ Run **EDD (Eval-Driven Development)** gates while keeping substantive work out o
 
 ## Core Loop (GDD)
 
-```
-Define (Intent -> Spec)  →  Execute Implementation
-                           ↓
-Deterministic Gate  ←  Re-run evals  ←  Implementation complete
+```mermaid
+flowchart LR
+    Define["1. Define (Intent -> Spec)"] --> Impl["2. Execute Implementation"]
+    Impl --> RunEvals["3. Re-run Evals"]
+    RunEvals --> Gate["4. Deterministic Gate"]
 ```
 
 **Baseline capture** happens inside `define`: the subagent writes scripts, runs them, and writes `baseline.json`. This anchors expectations and prevents "it works because I wrote tests after." The orchestrator never needs to run eval scripts directly.
@@ -34,22 +33,20 @@ Deterministic Gate  ←  Re-run evals  ←  Implementation complete
 | `list` | Show all eval definitions and statuses |
 | `clean` | Remove old logs, keep last 10 runs per feature |
 
-**Source docs**: Pass any combination of design.md, ADR, plan, or other requirements. Eval criteria are derived from whatever sources are provided.
+**Source docs**: Pass any combination of design.md, plan, or other requirements. Eval criteria are derived from whatever sources are provided.
 
-## Quick Mode
+## Multi-Stack Discovery & Quick Mode
 
-`eval-gate quick` runs 6 standard quality phases without requiring a formal eval definition. Use for fast pre-PR quality gates or periodic verification during long sessions.
+`eval-gate quick` automatically detects the repository toolchain (Rust, TypeScript, Python, Go) using `uv run skills/eval-gate/scripts/gate_generator.py detect` and runs project-native verification phases without manual configuration.
 
-### Six Phases
+### Stack Command Matrix
 
-| Phase | Checks | Commands |
-|-------|--------|----------|
-| **Build** | Project compiles | `npm run build` / `pnpm build` |
-| **Types** | No type errors | `tsc --noEmit` / `basedpyright .` |
-| **Lint** | Style compliance | `npm run lint` / `ruff check .` |
-| **Tests** | Suite passes + coverage | `npm run test -- --coverage` |
-| **Security** | No secrets, no leaks | `rg "sk-" .` / `rg "api_key" .` |
-| **Diff** | Review changed files | `git diff --stat` |
+| Stack | Build | Types | Lint | Tests |
+|-------|-------|-------|------|-------|
+| **Rust** (`Cargo.toml`) | `cargo check` | `cargo check --all-targets` | `cargo clippy -- -D warnings` | `cargo test` |
+| **TypeScript** (`package.json`) | `pnpm/npm run build` | `npx tsc --noEmit` | `pnpm/npm run lint` / `eslint` | `pnpm/npm test` |
+| **Python** (`pyproject.toml`) | `uv run python -m compileall .` | `uv run basedpyright` / `mypy` | `uv run ruff check .` | `uv run pytest` |
+| **Go** (`go.mod`) | `go build ./...` | `go vet ./...` | `golangci-lint run` | `go test ./...` |
 
 ### Quick Mode Output
 
@@ -294,30 +291,30 @@ For each criterion, define:
 
 When `defining` evals, you MUST create a single executable script (Python or Bash) in the eval artifact directory that serves as the "source of truth" for the implementation's quality.
 
-- **Unified Output:** The script MUST output a single JSON blob containing all results.
+- **Stack Discovery & Generation**: Execute `uv run skills/eval-gate/scripts/gate_generator.py generate-gate --repo-root . --output-dir [eval_dir]` to automatically detect the toolchain (Rust, TypeScript, Python, Go) and synthesize `run_evals.py`.
+- **Unified Output:** The script MUST output a single JSON blob containing all results (`status`, `stack`, `score`, `criteria`, `issues`).
 - **LLM-Friendly:** The output should include clear failure details (desired vs actual), failed tests, and specific line-level issues.
-- **Execute Once:** The agent should be able to run `python3 run_evals.py` (or similar) and receive the full state of the project.
+- **Execute Once:** The agent should be able to run `uv run [eval_dir]/run_evals.py` (or `./run_evals.py`) and receive the full state of the project.
 - **Enumerated Issues:** If any check fails, the script MUST populate a global `issues` array with specific, actionable failure locations (file:line:message).
 
-### The Remediation Loop (EDD -> TDD)
+### The Remediation Loop
 
 The `check` mode is the trigger for the **Remediation Loop**. 
 
 1. **Failure Detection**: `eval-gate check` executes the consolidated script and detects a top-level `status: "fail"`.
-2. **Issue Aggregation**: The orchestrator extracts all strings from the global `issues` array in the JSON output and writes them to `[eval_dir]/issues.md` (one per line).
-3. **Route: remediate**: The orchestrator receives the `remediate` route and the path to `issues.md`.
-4. **TDD Resumption**: The orchestrator invokes `tdd-cycle --lightweight issues=[eval_dir]/issues.md topic_root=[topic_root]`.
-5. **Deterministic Fix**: The `tdd-cycle` skill treats each line in `issues.md` as a **Work Unit** to be resolved.
-6. **Re-Verification**: Once `tdd-cycle` completes, control returns to the orchestrator, which MUST re-run `eval-gate check` to verify the fix.
+2. **Issue Aggregation**: All strings from the global `issues` array in the JSON output are written to `[eval_dir]/issues.md` (one actionable issue per line).
+3. **Route: remediate**: The gate returns `route: "remediate"` and the pointer to `issues.md`.
+4. **Remediation Dispatch**: The orchestrator (e.g. graph workflow node, developer subagent, or TDD worker) consumes `issues.md` to resolve failures.
+5. **Re-Verification**: Once fixes are applied, the orchestrator re-runs `eval-gate check` to verify resolution.
 
 ### Anti-Patterns
 
 | Wrong | Right |
 |-------|-------|
-| Running `check-types.py`, then `check-tests.py` | Running `run_evals.py` which calls both and aggregates |
-| Description: "Check if types are okay" | Script: `scripts/run_evals.py` (executable) |
+| Running `check-types.py`, then `check-tests.py` | Running `run_evals.py` which calls all phases and aggregates |
+| Description: "Check if types are okay" | Script: `scripts/run_evals.py` (executable runner) |
 | Output: "It failed with some errors" | Output: `{"status": "fail", "issues": ["src/main.py:12: Type error..."]}` |
-| Remediation: "Look at the logs and fix it" | Remediation: `tdd-cycle --lightweight issues=eval/issues.md` |
+| Remediation: "Look at the logs and fix it" | Remediation: Pass structured `issues.md` to worker node |
 | Relying on exit code 0 | Parsing `status: "pass"` from JSON output |
 
 ---

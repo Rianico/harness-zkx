@@ -36,7 +36,7 @@ The Orchestrator has provided you with `[DOMAIN CONTEXT]` in your prompt, includ
 6. **Behavioral Specification (BDD)**: Include concrete scenarios using **Given / When / Then** syntax to illustrate how the architecture handles key behaviors. This ensures the design is human-readable and validates the proposed structure against user intent.
 7. Do NOT generate an implementation task list, execution phases, test plan, fixture plan, or file-by-file work breakdown unless the orchestrator prompt explicitly asks for it.
 ## PHASE 3: REPORT DELIVERY (MANDATORY CONTRACT)
-Write the requested architecture artifact when instructed by the orchestrator, then return a structured response per `rules/templates/resp-format.md`:
+Write the requested architecture artifact when instructed by the orchestrator, then return a structured response per `skills/dynamic-workflow-wrapper/references/resp-format.md`:
 
 ```markdown
 ## Summary

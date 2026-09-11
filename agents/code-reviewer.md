@@ -28,7 +28,7 @@ After you have retrieved the expert methodology:
 3. Provide actionable, concise feedback. Do not nitpick unless the code violates explicit domain rules.
 
 ## PHASE 3: REPORT DELIVERY (MANDATORY CONTRACT)
-Format your findings into a structured response per `rules/templates/resp-format.md`:
+Format your findings into a structured response per `skills/dynamic-workflow-wrapper/references/resp-format.md`:
 
 ```markdown
 ## Summary

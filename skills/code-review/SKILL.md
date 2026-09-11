@@ -1,75 +1,129 @@
 ---
 name: code-review
 description: >-
-  Adversarial code review and semantic audit for architecture, intent alignment, and maintainability. Use when auditing implementations, reviewing PRs, checking semantic drift, or verifying Clean Architecture boundaries.
-metadata:
-  managed-by: ai-engineering-expert
+  Adversarial crux code review gate auditing test refutability, domain state invariants, failure resiliency, and Clean Architecture boundaries. Evaluates semantic soundness beyond test passes. Use when reviewing code changes, auditing PRs, or verifying invariants; not for styling or lint checks.
+arguments: target
+argument-hint: |-
+  [target] [--diff-file <path>] [--spec <path>] [--eval-report <path>]
 ---
 
-# Code Review (Semantic Audit)
+# Code Review (Crux & Intent Gate)
 
-In the LSZ architecture, Code Review is the **Semantic Gate**. While `eval-gate` verifies that the code *runs correctly* (Deterministic), Code Review verifies that the code *is correct in intent and architecture* (Semantic).
+Code Review is an atomic **Semantic & Structural Verification Gate**. It verifies that a code change is **sound in state, resilient in failure, faithful to intent, and compliant with Clean Architecture**, evaluating semantic soundness beyond green test suites.
 
-## The Persona: The Skeptic
+Operates under **Keel** (load-bearing judgment and boundary seams) and **Coding-Protocol** (read-only evidence state, zero mutation, risk-scaled).
 
-You are not just a "reviewer"; you are a **Skeptic**. Your goal is to prove that the implementation is lazy, architecturally fragile, or semantically drifted from the original BDD intent.
+---
 
-### Skeptic's Focus
-1.  **Semantic Drift:** Does the code actually implement the logic described in the BDD scenarios, or does it just "look" like it does?
-2.  **Design-Implementation Sync (ADR-0009):** verify that any architectural or path-level changes made during implementation (e.g., changing `/tmp/path` to `/tmp/path-{uid}`) are back-propagated as amendments to `design.md`. The design MUST remain the durable Source of Truth.
-3.  **Lazy Implementation:** Did the model use hardcoded values, "TODOs," or empty functions to pass deterministic tests?
-3.  **Architectural Mismatch:** Does the implementation violate the constraints set in the ADRs or the Project Instructions (GEMINI.md)?
-4.  **Idiomatic Quality:** Is the code truly idiomatic for the language/framework, or is it "AI-style" code that is hard to maintain?
+## The 3 First-Principles Crux Invariants
+
+A code change $\Delta S$ transitions system state space $S \rightarrow S'$. The reviewer audits three irreducible invariants:
+
+```mermaid
+flowchart TD
+    Reviewer["Skeptic Reviewer Subagent"]
+    Reviewer --> I1["1. Epistemic Truth (Refutability)"]
+    Reviewer --> I2["2. Ontological Truth (State Safety)"]
+    Reviewer --> I3["3. Structural Topology (Clean Boundaries)"]
+```
+
+### 1. Epistemic Truth (VDD / Refutability)
+- **Refutability Criterion**: Every test must be capable of failing when the behavior is broken. A test that passes regardless of implementation provides 0 bits of information.
+- **Red Flag (Paper Tigers)**: Reject tests that mock the unit under test (SUT), assert tautologies (`assert True`), or only assert `mock.called` without asserting return state or side-effect outcomes.
+- **Negative Path Invariant**: Critical execution paths must assert refusal and error modes (timeouts, bad payloads, malformed inputs), not only the happy path.
+
+### 2. Ontological Truth (EDD / State Safety & Anti-Laziness)
+- **Anti-Laziness Criterion**: The implementation must solve the generalized problem, not just hardcode outputs to satisfy test fixtures.
+- **Red Flag (Shortcuts & Swallows)**: Reject hardcoded return values tailored to sample inputs, empty `catch`/`except` blocks, stubbed dummy branches, or unhandled `TODO` markers.
+- **State Invariant**: Domain models must make invalid states unrepresentable. Primitive obsession without validation invariants is rejected.
+- **Contract Fidelity**: Diff must satisfy the specified BDD intent without behavioral shortcuts or unrequested scope creep.
+
+### 3. Structural Topology (Clean Architecture & Boundary Seams)
+- **The Dependency Rule**: Source code dependencies point inward toward domain entities. Core business logic MUST NOT import delivery mechanisms (CLI, HTTP, ORM, frameworks, database drivers).
+- **Single Responsibility (SRP)**: Each module has one reason to change. Business logic, serialization/wire format, and transport must remain separated.
+- **Encapsulation & Seams**: Cross subsystem boundaries exclusively through explicit interfaces or DTOs. Never expose raw internal database entities or mutable state across boundaries.
+- **Design Alignment**: File paths, schemas, interfaces, or CLI flags changed in implementation must match `design.md`.
+
+---
+
+## Operating Protocol (Keel & Coding-Protocol)
+
+1. **Evidence State Only (Coding-Protocol §1-3)**:
+   - Reviewer holds **judgment authority** only, never **mutation authority**.
+   - Reviewer is strictly forbidden from editing files, fixing bugs, or rewriting code.
+2. **Scale by Risk (Coding-Protocol §1)**:
+   - **Zero Nitpicks**: Skip all formatting, whitespace, syntax, or styling issues handled by linters.
+   - Surface only **`[BLOCKING]`** (contract breach, fake mock, security hole, unhandled failure) and **`[HIGH]`** (architectural leak, design drift, state corruption risk) issues.
+3. **Subagent-First Isolation**:
+   - Run in a fresh subagent context with only diff, spec, and verification logs.
+   - Do NOT inherit the author's conversational rationalizations (eliminates anchoring bias).
 
 ---
 
 ## Review Process
 
-### Phase 1: Context Recovery
-Read the **Handoff** and **Design/BDD** documents. Lock in the "Human Goal" and the "Intent Contract."
+### Step 1: Ingest Evidence
+Retrieve:
+- `diff`: `git diff <base>...HEAD` or list of modified files.
+- `spec`: BDD scenarios, issue description, or `design.md` (optional).
+- `eval_evidence`: Test runner, typecheck, or linter outputs (optional).
 
-### Phase 2: Adversarial Analysis
-Compare the `diff` against the `BDD scenarios`. 
-- **The "How" Check:** Don't just look at the outputs (tests). Look at *how* the logic is implemented.
-- **The "Why" Check:** For any complex logic, ask: "Does this satisfy the BDD intent, or is it a shortcut?"
+Run deterministic pre-scan via `uv run skills/code-review/scripts/review_gate.py scan-diff --diff-file <path>` to flag empty exception handlers, skipped tests, and illegal boundary imports.
 
-### Phase 3: Classification of Findings
-Classify every issue by impact:
-- **Blocking:** Must fix (security, core intent failure, major architectural violation).
-- **High:** Significant quality/maintainability issue.
-- **Medium:** Stylistic or minor architectural drift.
-- **Low/Minor:** Nitpicks (should be auto-remediated if possible).
+### Step 2: Adversarial Crux Audit
+Evaluate diff strictly against the 3 Invariants:
+- Did the author write real tests, or paper tigers?
+- Did the author implement genuine logic, or lazy shortcuts?
+- Does the code violate inward dependency direction or leak abstraction seams?
+- Has `design.md` drifted from implementation?
+
+### Step 3: Score & Gate Classification
+Score the submission on a 1–10 scale:
+- **1-4 (Failing/Blocked)**: Broken contract, fake mock pass, empty error swallow, or core architectural inversion.
+- **5-7 (Remediate)**: Working happy path, but paper tiger tests, missing failure paths, boundary leaks, or SOT drift.
+- **8-10 (Passing)**: Robust, refutable tests, clean dependencies, domain invariants protected, SOT in sync.
+
+**Routing Rules**:
+- `Route: continue` $\rightarrow$ Score $\ge 8$, zero `BLOCKING` issues, SOT in sync.
+- `Route: remediate` $\rightarrow$ Score $< 8$, or any `BLOCKING`/`HIGH` issues, or SOT drift.
+- `Route: blocked` $\rightarrow$ Fundamental architectural flaw or irrecoverable specification mismatch.
 
 ---
 
-## Standard Return Format
+## Mandatory Response Contract
+
+Format output per `skills/dynamic-workflow-wrapper/references/resp-format.md`:
 
 ```markdown
 ## Summary
-<Semantic evaluation of the implementation vs. BDD intent>
+<Carmack-style technical evaluation: core invariants verified, architectural fitness, failure mode resiliency, observed tradeoffs>
 
-## Findings
-- [Severity] <Title>: <Description>
-- [Severity] <Title>: <Description>
+## Artifacts
+- <path/to/review_report.md (or inline report)>
 
 ## Route
 continue | remediate | blocked
 Issues:
-- <brief summary of blocking/high issues>
-```
+- [BLOCKING|HIGH] <brief issue title, ≤10 words>
 
-**Routing Decision:**
-- `Route: continue`: No Blocking or High issues.
-- `Route: remediate`: Blocking or High issues found.
-- `Route: blocked`: Implementation is fundamentally flawed/not salvageable.
+## Gate Verdict
+Score: <1-10>/10 (Quality Gate: 8)
+Status: PASS | FAIL
+
+## Crux Invariant Violations
+- [BLOCKING|HIGH] <file>:<line>
+  - Invariant: [VDD-Refutability | EDD-Intent | Clean-Architecture]
+  - Defect: <precise description of what breaks>
+  - Impact: <how state corrupts, why test is a paper tiger, or how boundary leaks>
+  - Remediation: <concrete actionable fix>
+
+## SOT Sync (Design Alignment)
+Status: In Sync | Drift Detected
+Details: <amendments required for design.md, if any>
+```
 
 ---
 
-## Orchestration Integration
-
-When invoked with `orchestrated_final_review=true`:
-1.  **Auto-Remediation:** For `medium`, `low`, or `minor` findings, the orchestrator dispatches a `developer` subagent to fix them immediately.
-2.  **Approval Gate:** Only `blocking` or `high` findings are surfaced for user approval before remediation.
-
-## Reference
-[Full details: semantic-review-patterns.md](references/semantic-review-patterns.md)
+## References & Tools
+- [Crux Rubric & Heuristics](references/crux-rubric.md): Concrete examples of paper tigers, anti-laziness patterns, and Clean Architecture checks.
+- Script: `skills/code-review/scripts/review_gate.py` for deterministic diff scanning and verdict validation.

@@ -155,3 +155,26 @@ _Avoid_: sibling branch, parent-side merge
 **Target**:
 Parent branch (`feat/<slug>` or `map/<slug>`) created in place via `git switch -c` at session cwd; children are `wt` siblings.
 _Avoid_: `wt switch --create` for target
+
+## Loop & Graph Engineering
+
+**Goal Gate**:
+The composite predicate determining whether an autonomous session or graph node has fulfilled its objective. Composed of a non-probabilistic Deterministic Floor plus a qualitative Semantic Ceiling.
+_Avoid_: Single-score threshold, vibes-based pass.
+
+**Deterministic Floor**:
+The non-LLM, binary environment baseline: compilation, static typing, test execution, security scans, and pattern checks. Executed natively by toolchain probes synthesized by `eval-gate`.
+_Avoid_: LLM guessing build/test pass.
+
+**Semantic Ceiling**:
+The qualitative audit performed by an isolated Review Subagent (The Skeptic) that scores intent alignment, anti-laziness (no paper tigers or hardcoded passes), Clean Architecture invariants, and SOT sync.
+_Avoid_: Stylistic nitpicking, syntax pedantry.
+
+**Convergence Loop**:
+A bounded worker-evaluator feedback cycle (e.g., `/goal`, Ralph loop, review-loop) that iteratively implements, tests against the Deterministic Floor, audits against the Semantic Ceiling, and terminates upon Goal Gate satisfaction or bounded iteration limit.
+_Avoid_: Unbounded while-true loops, unassisted self-review.
+
+**Gate Synthesis**:
+The automated generation of project-native verification runners (`run_evals.sh` or `run_evals.py`) by `eval-gate` based on discovered repo toolchains (Rust, TypeScript, Python, Go) and declarative criteria.
+_Avoid_: Hardcoded per-stack runner scripts in caller skills.
+

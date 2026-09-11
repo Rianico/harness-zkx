@@ -72,7 +72,7 @@ Agent tool (architect):
 
     Avoid writing actual test code or detailed test cases here. Focus on defining the *what* and the *order*. Create or update the compact lineage artifact at [lineage_pointer] with: phase name, result (the tracer bullet), and artifact pointer. You MUST use the Write tool to save the sequence map to [base_dir]/01-behavior-sequence.md.
 
-    **Return format per rules/templates/resp-format.md:**
+    **Return format per skills/dynamic-workflow-wrapper/references/resp-format.md:**
     ## Summary
     <the identified tracer bullet and the logic behind the behavior sequence>
 
@@ -112,7 +112,7 @@ Agent tool (developer):
 
     All failure analysis, debugging, and micro-refactors stay inside this phase. When the implementation justifies it, run broader test targets to ensure no regressions. Save a concise summary of the implementation progress to [base_dir]/02-implementation-summary.md. Update the lineage artifact at [lineage_pointer] with entries for each major behavior milestone reached.
 
-    **Return format per rules/templates/resp-format.md:**
+    **Return format per skills/dynamic-workflow-wrapper/references/resp-format.md:**
     ## Summary
     <how many behaviors were implemented, architectural decisions made during the loop, final status>
 
@@ -141,7 +141,7 @@ Agent tool (developer):
 
     All failure analysis, debugging, and micro-refactors stay inside this phase. When the implementation justifies it, run broader test targets to ensure no regressions. Save a concise summary of the fixes to [base_dir]/02-implementation-summary.md. Update the lineage artifact at [lineage_pointer] with entries for each issue resolved.
 
-    **Return format per rules/templates/resp-format.md:**
+    **Return format per skills/dynamic-workflow-wrapper/references/resp-format.md:**
     ## Summary
     <how many issues were fixed, architectural decisions made during the loop, final status>
 
@@ -179,7 +179,7 @@ Agent tool (developer):
 
     Save the summary report to [base_dir]/03-verification-report.md. Update the lineage artifact at [lineage_pointer] with the final verification result.
 
-    **Return format per rules/templates/resp-format.md:**
+    **Return format per skills/dynamic-workflow-wrapper/references/resp-format.md:**
     ## Summary
     <verification results, any final minor adjustments, overall confidence>
 

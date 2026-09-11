@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "agents": {
+    "code-reviewer.md": "0af703f484fed8690abc3e7e3c53f8f61738a9b8d94eea9452817655b3f48692",
+    "developer.md": "8d7371cf5d12b5f36a0f0ef34db9b40f76a23eb4d2ca081739103e2a08e04737",
+    "gate-runner.md": "9642cbf066e06b1201ec70a4fbd48ea3fd4b99a8ee95f5a9a4badbf3f99d826b",
+    "merger.md": "82b05ba449af28153d7d0226e58e2f7771fe73824aa5cfb444796c49434f6599",
+    "ticket-planner.md": "21868bf47684bb139165ec511995ad73f07b148576685a044b6e5c14dccbd6f3"
+  },
+  "includes": {
+    "references/resp-format.md": "3a4b8e3b494dc04b0beef189cc4e2e82948f6cea91cc2fedfb2066518dd9d686"
+  },
+  "compiled": {
+    "code-reviewer.md": "0060003a8a70207a027892287e2e28fe00f2947a29107d080d0659990fb8efe5",
+    "developer.md": "daa2668e6ca9d0b637b0ed8bf0405ab82d9bd7d12d2d6e15ea8cb2c289e2fbab",
+    "gate-runner.md": "b5af0b3bccb1d50284e1013efceb6ea8d3523e4e6339ed3e136c9ca685b75e38",
+    "merger.md": "fcdc9f6ed5a83e8572fc780869086aecf871fec1ecd21a8ece5a11371fcae4c2",
+    "ticket-planner.md": "21868bf47684bb139165ec511995ad73f07b148576685a044b6e5c14dccbd6f3"
+  }
+}

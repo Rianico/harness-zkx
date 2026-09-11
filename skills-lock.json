@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "coding-protocol": {
+      "source": "lencx/skills",
+      "sourceType": "github",
+      "skillPath": "skills/coding-protocol/SKILL.md",
+      "computedHash": "29f3fd33c6efd71e76bd2e1589f6cf6b87ae3a01f481a9b94be30e9d926a5f4c"
+    },
+    "keel": {
+      "source": "lencx/skills",
+      "sourceType": "github",
+      "skillPath": "skills/keel/SKILL.md",
+      "computedHash": "9449afa2595a83968dde0e0e9760008fdd7a1881ddef6446510c68bf949d6156"
+    },
+    "show-me": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/show-me/skills/show-me/SKILL.md",
+      "computedHash": "de32a72f802801f08a84641b467f2c6306d35a58ce5e59ea607ac3a993a18c91"
+    }
+  }
+}

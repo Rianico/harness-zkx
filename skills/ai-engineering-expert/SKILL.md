@@ -239,7 +239,7 @@ prompt: |
 <context and requirements>
 <execution instructions>
 
-    Return format per rules/templates/resp-format.md:
+    Return format per skills/dynamic-workflow-wrapper/references/resp-format.md:
     ## Summary
     ## Artifacts
     ## Route (if applicable)
