@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **workflow:** add converge-tasks for single and multi-task convergence
 - **workflow:** add dynamic-workflow-wrapper and inlined role contracts
 - **skill-authoring:** enforce empirical skill description standards
 - **gh-router:** add pr watch-merge and release-watch scripts
@@ -166,6 +167,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **workflow:** document the unified run, merge evidence, and the operator PR
 - **workflow-wrapper:** record worktree contract and allowlist reality
 - **rules:** refine mental-model and development-patterns
 - **rules:** prefer rg, fd, eza over grep, find, ls

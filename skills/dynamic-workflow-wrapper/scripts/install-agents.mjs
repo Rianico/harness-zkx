@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * install-agents.mjs — align the ship-tasks role definitions with their canonical copies.
+ * install-agents.mjs — align the workflow role definitions with their canonical copies.
  *
  * Canonical: <skill-dir>/references/agents/*.md  (locked by <skill-dir>/references/agents.lock.json)
  * Target:    <repo>/.pi/agents/*.md   (project-scoped agent definitions, gitignored)

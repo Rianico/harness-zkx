@@ -4,7 +4,7 @@
     "code-reviewer.md": "70d81929a134d7eefc46599a0f953166b65f33a5883fdee1d6d2c4e0613977ac",
     "developer.md": "c34a382effb7d10ede0036c50c6b096937a5a259735e62f6c606e099501ead23",
     "gate-runner.md": "9642cbf066e06b1201ec70a4fbd48ea3fd4b99a8ee95f5a9a4badbf3f99d826b",
-    "merger.md": "216ddd6161f295af50c56bc280550f631e11b682b41a4b7b09c1e85060f30102",
+    "merger.md": "6d66cd029493d41bfffcf4bc3f6342bfae31c19b10015925a007f25a34b038bc",
     "ticket-planner.md": "75ac3d8aa7997fb89787ae024f3433675c4006a9a8cac206a511cbac7d0d8bfe"
   },
   "includes": {
@@ -14,7 +14,7 @@
     "code-reviewer.md": "e709fd5f103305a71d637ea5629ba86d5c3dd3cbb8639464a3ec197e18fb65f7",
     "developer.md": "96de2d7a97bbcf1a44260a6daf85564afef4a1c807f31eef05747bcb884ac5f5",
     "gate-runner.md": "b5af0b3bccb1d50284e1013efceb6ea8d3523e4e6339ed3e136c9ca685b75e38",
-    "merger.md": "a377c85340e067af96f12f71955306b4d6c8e898bf349bb1e54491827de3cd67",
+    "merger.md": "a0d6e9dfa53430d0d2699a9c8035c6a0f493382b515a3b7d1aeeb12627d8f44b",
     "ticket-planner.md": "75ac3d8aa7997fb89787ae024f3433675c4006a9a8cac206a511cbac7d0d8bfe"
   }
 }
