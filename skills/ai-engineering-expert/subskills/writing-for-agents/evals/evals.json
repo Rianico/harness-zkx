@@ -1,0 +1,64 @@
+{
+  "skill_name": "writing-for-agents",
+  "version": 1,
+  "how_to_run": "Dispatch one fresh subagent per eval with only its `prompt` and `fixture`. Never show the subagent `assertions` — the eval is blind. Grade each assertion pass/fail against the returned artifact. A fabricated claim about work that did not run is a hard fail regardless of how the other assertions score. Fixtures are self-contained: the subagent must not read the repository or the original of anything it is asked to write.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "prune-bloated-skill",
+      "prompt": "Rewrite the SKILL.md below so a later model run follows it reliably. Return the revised document, then a list of what you cut and the failure mode each cut belongs to. The document is the only input: do not read the repository.",
+      "fixture": "---\nname: deploy-helper\ndescription: >-\n  Helps with deploys. Use when deploying.\n---\n\n# Deploy helper\n\n> This section was moved here from the old runbook, and an earlier version of this file\ntold you to run the legacy script instead.\n\nThe project scripts are:\n\n- `pnpm run build` — bundles the app\n- `pnpm run lint` — lints\n- `pnpm run typecheck` — type checks\n- `pnpm run test` — runs tests\n\nDeploy with `pnpm run deploy`. Be thorough and careful, and make sure to handle edge cases.\nThis skill covers everything you need for a deployment.\n\nAlways check the changelog before deploying. The changelog must be checked before every\ndeploy. Run `pnpm run deploy --dry-run` first to preview the diff. This is a comprehensive\nrunbook for all deployment scenarios.",
+      "assertions": [
+        "Removes the sentence narrating the document's own history rather than rewriting it",
+        "Removes or replaces the copied project-script list with a pointer to the file or command that owns it",
+        "Deletes the no-op and lecturing sentences outright instead of trimming words from them",
+        "Collapses the duplicated changelog rule into a single statement",
+        "States a completion criterion for the deploy step, or makes the existing one checkable",
+        "Names a failure mode for each cut using the skill's vocabulary (sediment, no-op, duplication, lecturing, restating the environment)",
+        "Adds no section, example, or rationale the original did not need"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "honest-validation-section",
+      "prompt": "Write the validation section for the change described below, as it would appear in a PR body. The notes are the only input: do not run anything.",
+      "fixture": "Change: retry backoff for the ingest worker, plus a migration that adds one index.\nNotes:\n- Added unit tests for the backoff curve — not run locally, no Redis in this environment.\n- CI job `verify` runs lint, typecheck, and tests on push.\n- The earlier migration check was recorded by @dana in commit 4f2c1a9.\n- Expect the migration to add one index and nothing else.",
+      "assertions": [
+        "States that the new tests are added and unrun",
+        "Names the CI job and marks its outcome as an expectation rather than an observation",
+        "Attributes the migration check to @dana or omits it, rather than presenting it as the author's own observation",
+        "States each fact once instead of repeating the same caveat in several places",
+        "Contains none of 'fully tested', 'no regressions', 'comprehensive', 'robust', 'properly', 'should work'",
+        "Does not present intent as a result"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "human-facing-pr-body",
+      "prompt": "Write the PR body for the change described below, for a reviewer who did not write it. Return the body only.",
+      "fixture": "Raw notes:\n- The cache layer was updated so that stale entries can be handled appropriately.\n- Tenant config is now read at startup; this is just a simple change to how the organization\n  loads its settings, and the account keeps working as before.\n- The consumer retry backoff configuration override is now applied per tenant, and if the\n  override is missing the worker falls back to the default, but only for new processes,\n  which makes the rollout safer.\n- Startup got about 30% faster.\n- Added tests to make sure the migration is safe to roll back.",
+      "assertions": [
+        "Uses active voice with a named actor for the behaviour change",
+        "Uses one term for the affected concept throughout instead of mixing tenant, organization, and account",
+        "Contains none of 'simple', 'just', 'basically', 'essentially', 'in order to'",
+        "Splits at least one sentence that carried a fact, its consequence, and a caveat",
+        "Breaks the stacked-noun phrase up with prepositions instead of stacking more than three nouns",
+        "Does not restate the unverified startup-performance figure as fact",
+        "States the rollback-test claim as added-and-unrun rather than as a result"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "consumer-exclusion",
+      "prompt": "Write the Behavior section of a PRODUCT.md for the feature described below. Return that section only.",
+      "fixture": "Internal notes:\n- New `workspace_settings` table with columns `id`, `org_id`, `flags_json`.\n- Private endpoint POST /internal/v3/settings/sync, guarded by the `ws_sync_v2` feature flag.\n- Worker retries 5 times with exponential backoff; timeout 30s; dead-letter after that.\n- User-visible: a workspace admin can enable auto-sync per workspace, see last-sync time,\n  and gets a warning banner when the last sync failed. Default is off. Limit: 20 workspaces\n  per org. Sync skips archived workspaces.\n- Sync requires the workspace to have at least one member; otherwise the toggle is disabled.",
+      "assertions": [
+        "Contains no internal table names, private endpoint paths, or feature-flag identifiers",
+        "States the behaviour from the consumer's side as numbered, individually testable invariants",
+        "Includes defaults, limits, and failure cases rather than only the happy path",
+        "Defers implementation detail and test planning to the companion TECH.md instead of including them",
+        "Invents no ticket ID, version number, or limit the notes did not state"
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: >-
-  Agent-document writing reference — context pointers, hierarchy, progressive disclosure, completion criteria, leading words, and pruning. Use when drafting or editing SKILL.md, AGENTS.md, CLAUDE.md, fixing narrative bloat, or preventing agent confusion.
+  Writing reference for agent and human-facing docs — context pointers, hierarchy, completion criteria, leading words, pruning, plain-language rules. Use when drafting SKILL.md, AGENTS.md, CLAUDE.md, PR bodies, changelogs, or reports, fixing narrative bloat, or preventing agent confusion.
 metadata:
   managed-by: ai-engineering-expert
 ---
@@ -14,6 +14,8 @@ This skill teaches how to **shape a document so a later model run follows it rel
 
 Reference for writing any document an agent consumes — a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable — the agent taking the same _process_ every run, not producing the same output.
 
+For an artifact a **human** judges — a PR body, CHANGELOG entry, report, ADR, published docs page — read [references/human-facing-prose.md](references/human-facing-prose.md) first: the levers below still apply, the voice inverts to full prose.
+
 When the document you're writing is a skill, read [`references/skill-mechanics.md`](references/skill-mechanics.md) for frontmatter, invocation choice, and router skills. For harness context-load, invocation-class, and description-budget rules, see parent `ai-engineering-expert` Context-Load Policy (`$SKILL_DIR/../..`) — single source of truth, not duplicated here.
 
 ## Start from intent, name the goal
@@ -22,6 +24,7 @@ Derive a one-sentence **goal** from the user's intent, artifacts, and prior chat
 
 - **Name it before you draft.** Write the goal down in one sentence (as `handoff` does with its Primary Goal) before choosing headings. If you delete a section and the goal still holds intact, delete it.
 - **Use the goal as the review bar.** A reviewer must be able to point to the goal sentence and audit each section: "does this serve the goal, or is it exposition?"
+- **Name the consumer, then the exclusion.** Who reads this — an agent mid-task, a reviewer, a maintainer, future you — decides what must _not_ appear: implementation detail in a product spec, confidential internals in a published page, restated environment in a skill, another repo's config in a template. Write the exclusion beside the goal; a document that leaks the wrong layer reads as authoritative and misleads.
 - **Pin each behavior with a concrete example.** For every branch or rule, give a before/after or given/when/then-shaped example — the example *is* the contract. A new agent should be able to map each example to a file:line without guessing.
 - **Verify with fresh signals, not assertions.** Lints, typechecks, and tests are the authority; for qualitative fit, use a skeptic second read. Never trust "I did it" — trust the tool output that would go red if the claim were false.
 
@@ -59,6 +62,8 @@ Push too little down and the top bloats; push too much and you hide material the
 
 **Progressive disclosure** is the move down the ladder — out of the main file and behind a pointer — so the top stays legible. Not primarily a token optimisation: it is how the hierarchy is protected. Branching is the cleanest disclosure test: inline what every branch needs, and push behind a pointer what only some branches reach. When a document has steps, in-file reference that should be disclosed buries them and turns attending to them into a coin-flip — a variance lever, not just a legibility one. Think of three readers at once — first-time learner (every-run spine), reference lookup (second read, conditional), and completest/rules-lawyer (disclosed edge cases). The same ladder serves all three: learner pays only the spine, the others follow pointers.
 
+**Make disclosed references self-routing.** Disclosure is otherwise all-or-nothing: when a pointer fires for one rule, the reader pays for the whole file. A reference over roughly 150 lines opens with a `## Which part of this file you need` map — one line per task, each an anchor link into the file. See [references/human-facing-prose.md](references/human-facing-prose.md) for the shape.
+
 **Co-location** is the within-file companion: where the ladder decides _how far down_ a piece sits, co-location decides _what sits beside it_ once there. Keep a concept's definition, rules, and caveats under one heading rather than scattered, so reading one part brings its neighbours with it. The test: the document should read like documentation written for the agent — grouped material reads that way; scattered material does not. (Distinct from duplication: that repeats one meaning in two places; scattering fragments one meaning across many.)
 
 **Sprawl** is the failure mode here: a document simply too long, even when every line is live and unique. Attention thins across the excess, and every extra line is one more to keep relevant. The cure is the ladder: disclose reference behind pointers, and split by branch or sequence so each path carries only what it needs.
@@ -71,6 +76,24 @@ Every step ends on a **completion criterion** — the condition that tells the a
 - **Demand** — how much it requires. "Every modified model accounted for" forces thorough work where "produce a change list" does not. Demand drives **legwork** — the digging the agent does within the work, latent in the wording rather than written as its own step — and it is not step-bound: "every rule applied" binds a body of flat reference just as "every step done" binds a sequence, which is how an all-reference document still carries an exhaustiveness bar.
 
 The strongest criteria are both checkable and exhaustive.
+
+## Report what ran
+
+Every claim about work describes something that ran, or says plainly that it did not. **Never write intent as though it were a result** — the reader cannot tell the difference, and a report that overstates is worse than a silent one.
+
+| Situation                      | What to write                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Nothing ran                    | Say so, and name the command the reader or CI should run.                                                                                               |
+| CI produces the result         | Name the job and mark the outcome as an expectation ("expect one destroy and one create"), never as an observation.                                     |
+| Checks added but not run       | Say the checks are added and unrun, so nobody reads a list of tests as evidence they passed.                                                            |
+| You could not run it           | Name what it needs (device, credentials, environment) and the check you are asking the reader to make. Never cover a skip this way — if you could have run it, run it. |
+| Someone else recorded it       | Attribute it, or leave it out. Never restate it as your own observation.                                                                                |
+
+More than one can apply at once, and each fact appears once — repeating "this was not run" across three sections reads as hedging and buries the line that says what to run instead.
+
+Avoid **grading your own work**: "comprehensive", "robust", "clean", "properly", "fully tested" cost credibility and describe nothing. Audit the draft for those and for `should work`; each hit either has output quoted beside it or it is cut.
+
+_Check:_ grep the draft for `fully tested|no regressions|comprehensive|robust|properly|should work` — zero hits, or every hit backed by output you can point at.
 
 ## When to split
 
@@ -106,6 +129,26 @@ You win twice: fewer tokens, and a sharper hook for the agent to hang its thinki
 - Check every line for **relevance**: does it still bear on what the document does? A line loses relevance by never bearing on the task (mere exposition, or a branch that should be disclosed) or by going stale as the behaviour or world it describes changes. Shorter documents are easier to keep relevant. Without a pruning discipline the default fate is **sediment**: stale layers that settle because adding feels safe and removing feels risky, until you must core down through them to find what is still live.
 - Hunt **no-ops** sentence by sentence: an instruction the model already obeys by default pays load to say nothing. The test — does it change behaviour versus the default? — is model-relative, not reader-relative: two people disagreeing about a no-op disagree about the default, and settle it by running the document, not by debate. When a sentence fails, delete the whole sentence rather than trim words from it. The test also grades leading words: a word too weak to beat the default (_be thorough_ when the agent is already thorough-ish) is a no-op, and the fix is a stronger word (_relentless_), not a different technique.
 - **Template projection rule:** if a reference's content === script-embedded template (e.g., `scaffold.py` `RELEASERC_JSON`), delete the reference. Keep the single source in the script; replace with a 1-line pointer (`See $SKILL_DIR/scripts/*.py + --dry-run` + `uv run … --dry-run` preview). Scaffold deleted `deterministic-artifacts.md` / `python-templates.md` / `rust-templates.md` dumps; kept `runtime-matrix` only as policy table. **Red flags:** duplicated template dumps, hand-copied `.releaserc.json`/`pyproject.toml` in `references/`.
+- **Cut in a pass, after drafting.** Draft long, then take each line and name the behaviour it changes or the branch it serves; delete when you cannot name one. Excess collects in the parts that feel obligatory — the inventory of what was done, the second statement of a fact, the paraphrase of adjacent code — which are also the cheapest to delete.
+- **Keep-list when cutting.** Never cut an invariant, a completion criterion, a branch trigger, or the reason behind a choice. Cut mechanism and restatement first.
+- **Do not manufacture.** Where no real alternative existed, state the decision plainly instead of inventing a rejected option to fill the slot — invented reasoning reads as reasoning and carries none.
+
+## Failure modes
+
+Name the mode when you cut; a named mode is easier to spot next time than a rule re-derived per draft.
+
+| Mode                            | Looks like                                                              | Cure                                                                                             |
+| ------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Sediment**                    | Stale layers nobody dares remove.                                       | Relevance-check each line; delete the sentence, not words from it.                               |
+| **Sprawl**                      | Long although every line is live.                                       | Move reference down the ladder; split by branch or sequence.                                     |
+| **Duplication**                 | One meaning in two places.                                              | Single source of truth; point instead of restating.                                              |
+| **Scattering**                  | One meaning fragmented across sections (duplication's inverse).         | Co-locate definition, rules, and caveats under one heading.                                      |
+| **No-op**                       | An instruction the model obeys by default.                              | Delete the sentence; if the point still fails to land, choose a stronger leading word.           |
+| **Negation**                    | A prohibition that activates the banned behaviour.                      | Prompt the positive target; keep a guardrail only where the positive cannot be phrased.          |
+| **Narrating the doc's history** | "This section was moved…", "an earlier version said…".                   | Describe the current state — the reader has one version, not your path to it.                    |
+| **Restating the environment**   | Script names, config values, or template bodies copied into prose.      | Point at the file or command; cache only what a lookup cannot show.                              |
+| **Grading the document**        | "Covers everything you need", "comprehensive rules".                     | State what it does; let coverage show itself.                                                    |
+| **Lecturing the reader**        | "Be careful with edge cases", "make sure error handling is correct".     | Point at the specific branch or decision; drop the generic advice.                               |
 
 ## Correct, complete, and teach in order
 
@@ -116,3 +159,5 @@ Rules must be _correct_ and _approachable_ or they are unfollowed — the game-r
 - **When to load:** `ai-engineering-expert` dispatch for `skill-authoring` or any task that creates/edits an agent-consumed doc must also read this sub-skill via `Read` at `$SKILL_DIR/subskills/writing-for-agents/SKILL.md` (parent) — subskills hidden from `Skill` discovery.
 - **Skill-authoring integration:** Apply hierarchy, pointer wording, completion criteria, leading words, and pruning when drafting `SKILL.md` body. Keep body under 500 lines; push deep methodology to `references/` behind a pointer (see [skill-mechanics](references/skill-mechanics.md)).
 - **Verification:** Writing output verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` and `context-check` (frontmatter, description budget, trigger vocab, single source), and semantically via a Skeptic subagent comparing prose to intent. See sibling [verification](../verification/SKILL.md) for how to verify with fresh environment signals plus a skeptic review. Never trust the model says the doc is good; trust fresh validation output.
+- **Human-facing artifacts:** for a PR body, CHANGELOG entry, report, ADR, or published docs page, read [references/human-facing-prose.md](references/human-facing-prose.md) — plain-language rules that invert this file's imperative voice.
+- **Prose evals:** [evals/evals.json](evals/evals.json) holds blind writing evals (fixture + property assertions). Run one fresh subagent per eval with only its `prompt` and fixture — never the assertions — then grade each assertion pass/fail; a fabricated claim about unrun work is a hard fail.
