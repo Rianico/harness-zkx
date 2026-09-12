@@ -537,7 +537,6 @@ CI (`changelog-check.yml`, `verify`) must be green before requesting review.
 """
 
 
-
 CHANGELOG_MD = """\
 # Changelog
 All notable changes to this project will be documented in this file.
