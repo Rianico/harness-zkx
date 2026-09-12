@@ -468,6 +468,13 @@ def fix_skills(root_dir: Path, skill_map: dict[str, Path], dry_run: bool = False
     return True
 
 
+def _rewrite_flow_list(match: re.Match[str], old: str, new: str) -> str:
+    """Rewrite an exact item in a flow-style list, leaving prefixed siblings intact."""
+    items = [item.strip() for item in match.group(2).split(",")]
+    rewritten = [new if item == old else item for item in items]
+    return f"{match.group(1)}{', '.join(rewritten)}{match.group(3)}"
+
+
 def rename_skill(old_name: str, new_name: str, root_dir: Path, dry_run: bool = False) -> bool:
     """Rename a skill and cascade updates.
 
@@ -541,9 +548,10 @@ def rename_skill(old_name: str, new_name: str, root_dir: Path, dry_run: bool = F
         new_fm = fm_text
         for field in ["depends-on", "manage", "managed-by"]:
             new_fm = re.sub(
-                rf"({field}:\s*\[.*?)\b{re.escape(old_name)}\b(.*?\])",
-                rf"\g<1>{new_name}\g<2>",
+                rf"^([ \t]*{field}:[ \t]*\[)([^\]]*)(\])",
+                lambda m, old=old_name, new=new_name: _rewrite_flow_list(m, old, new),
                 new_fm,
+                flags=re.MULTILINE,
             )
             new_fm = re.sub(
                 rf"^({field}:\s*){re.escape(old_name)}\s*$",

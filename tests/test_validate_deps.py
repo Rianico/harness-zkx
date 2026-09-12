@@ -363,6 +363,24 @@ def test_rename_cascades_updates(tmp_path: Path) -> None:
     assert "old-name" not in caller_content
 
 
+def test_rename_rewrites_exact_list_item_only(tmp_path: Path) -> None:
+    """rename updates the exact flow-list item without corrupting prefixed siblings."""
+    write_raw_skill(tmp_path, "pr", "name: pr\ndescription: >-\n  A PR skill.\n")
+    write_raw_skill(
+        tmp_path,
+        "parent",
+        "name: parent\ndescription: >-\n  A parent.\nmetadata:\n"
+        "  manage: [gh-release, pr-enhance, pr]\n",
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "rename", "pr", "pr-land")
+
+    assert result.returncode == 0
+    parent_content = (tmp_path / "skills" / "parent" / "SKILL.md").read_text(encoding="utf-8")
+    assert "  manage: [gh-release, pr-enhance, pr-land]" in parent_content
+    assert "pr-land-enhance" not in parent_content
+
+
 def test_make_validate_deps_runs_check(tmp_path: Path) -> None:
     """make validate-deps executes check against PROJECT_ROOT."""
     # Give the temp project a valid skill so check passes
