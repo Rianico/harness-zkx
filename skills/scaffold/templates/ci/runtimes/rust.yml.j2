@@ -1,0 +1,15 @@
+{% extends "ci/release.yml.j2" %}
+{% block verify %}
+      - uses: actions/checkout@{{ shas.checkout }}
+        with: {fetch-depth: 0}
+      - uses: dtolnay/rust-toolchain@stable
+{% if with_coverage %}
+      - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - run: cargo llvm-cov report --fail-under-lines {{ threshold }}
+{% endif %}
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+{% if not with_coverage %}
+      - run: cargo test
+{% endif %}
+{% endblock %}

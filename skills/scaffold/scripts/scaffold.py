@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = []
+# dependencies = ["jinja2>=3.1.6"]
 # ///
 
 """
@@ -18,8 +18,10 @@ Usage:
 
 Information boundary: script emits byte-identical artifacts; for mixed
 deterministic+semantic files it writes the skeleton and warns on stderr
-so the model proofreads semantic sections. Never hand-copy templates.
-This script is the single source of truth — preview with --dry-run.
+so the model proofreads semantic sections.
+Static bytes live in ../templates/<flavor>/<target path>: raw files ship verbatim,
+`.j2` files render through one Jinja Environment (see render_template).
+Never hand-copy a template. This script is the single source of truth — preview with --dry-run.
 """
 
 from __future__ import annotations
@@ -31,95 +33,86 @@ import pathlib
 import re
 import sys
 
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
+
 # Pinned GH Actions SHAs for Node 24 (single source) — keep in sync with .github/workflows/*.yml
 SHA_TABLE = {
     "checkout": "93cb6efe18208431cddfb8368fd83d5badbf9bfd",  # actions/checkout v5
     "setup-node": "a0853c24544627f65ddf259abe73b1d18a591444",  # actions/setup-node v5
     "setup-python": "e797f83bcb11b83ae66e0230d6156d7c80228e7c",  # actions/setup-python v6
     "github-script": "ed597411d8f924073f98dfc5c65a23a2325f34cd",  # actions/github-script v8
+    "pnpm-setup": "b906affcce14559ad1aafd4ab0e942779e9f58b1",  # pnpm/action-setup v4
 }
 
 NODE_VERSION_NUM = "24"
 NODE_VERSION = NODE_VERSION_NUM + "\n"
 
 
-def _expand_node_version(text: str) -> str:
-    """Single-source Node version: expand the placeholder from NODE_VERSION_NUM."""
-    return text.replace("__NODE_VERSION__", NODE_VERSION_NUM)
-
-
-# ------------------------------------------------------------------ template loader
-# Static artifacts live in ../templates/<flavor>/<target path> — one byte source, no
-# embedded copy to drift. Computed artifacts (manifests, thresholds, project name) stay
-# as builder functions below; only static bytes move to disk.
+# ------------------------------------------------------------------ template rendering
+# Raw templates ship byte-for-byte (Jinja never parses them); a `.j2` suffix marks a file
+# that `render_template` renders.
+#
+# Environment rules (jinja skill, Authoring Rules), each one deliberate:
+#   - one Environment, built once here, never per render;
+#   - autoescape=False: these artifacts are code/config/prose, not markup, and escaping
+#     would corrupt YAML/shell/Markdown bytes;
+#   - StrictUndefined: a typo in a context variable fails loud instead of printing "";
+#   - trim_blocks/lstrip_blocks: tag-only lines disappear, so composition needs no
+#     `{%- -%}` markers. Consequence: never end a line with an inline tag, or its newline
+#     is eaten — the byte pins in tests/scaffold/test_templates.py catch that;
+#   - keep_trailing_newline=True: the default strips the trailing newline, which is part
+#     of the byte contract.
 TEMPLATES_DIR = pathlib.Path(__file__).parent.parent / "templates"
+
+_ENV = Environment(
+    loader=FileSystemLoader(str(TEMPLATES_DIR)),
+    autoescape=False,
+    undefined=StrictUndefined,
+    trim_blocks=True,
+    lstrip_blocks=True,
+    keep_trailing_newline=True,
+    newline_sequence="\n",
+)
+
+# A GitHub Actions expression (`${{ … }}`) reaches templates as a *variable*: Jinja's
+# delimiters are the default `{{ }}`, so the literal must never enter the parser.
+GH_ACTIONS_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
+
+DEFAULT_COVERAGE_THRESHOLD = 80
+
+
+def _template_missing(rel: str) -> FileNotFoundError:
+    return FileNotFoundError(
+        f"scaffold template missing: {TEMPLATES_DIR / rel}\n"
+        "templates/ ships with scripts/ — copy the whole skill directory "
+        "(or pass --cwd to a checkout that has it)."
+    )
 
 
 def load_template(rel: str) -> str:
-    """Read a static template. Fails loud — a missing template must never fall back.
+    """Read a static template verbatim. Fails loud — a missing template must never fall back.
 
     Vendoring only `scripts/` breaks the byte contract; better to refuse than to
     invent bytes that no human reviewed.
     """
     path = TEMPLATES_DIR / rel
     if not path.is_file():
-        raise FileNotFoundError(
-            f"scaffold template missing: {path}\n"
-            "templates/ ships with scripts/ — copy the whole skill directory "
-            "(or pass --cwd to a checkout that has it)."
-        )
+        raise _template_missing(rel)
     return path.read_text(encoding="utf-8")
 
 
-# ------------------------------------------------------------------ templates (pure-deterministic except {{project_name}})
+def render_template(rel: str, /, **context: object) -> str:
+    """Render a `.j2` template. Same fail-loud contract as `load_template`."""
+    try:
+        return _ENV.get_template(rel).render(**context)
+    except TemplateNotFound as exc:
+        raise _template_missing(rel) from exc
+
+# ------------------------------------------------------------------ templates
+# Raw: shipped byte-for-byte — Jinja never parses these, so the `${{ … }}` expressions and
+# `${…}` expansions inside workflow YAML and shell stay untouched.
 RELEASERC_JSON = load_template("git/.releaserc.json")
 
-RELEASE_YML = """\
-name: Verify and Release
-on:
-  repository_dispatch:
-    types: [semantic-release]
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with: {fetch-depth: 0}
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with: {run_install: false}
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__, cache: pnpm}
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm audit --audit-level high
-      - run: pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
-  release:
-    needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with: {fetch-depth: 0}
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with: {run_install: false}
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__, cache: pnpm}
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
-        with: {python-version: "3.12"}
-      - name: Clear Unreleased section (handoff to semantic-release)
-        run: python scripts/changelog-unreleased.py clear
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm exec semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HUSKY: "0"
-"""
 
 CHANGELOG_CHECK_YML = load_template("git/.github/workflows/changelog-check.yml")
 
@@ -137,11 +130,15 @@ ISSUE_CONFIG_YML = load_template("git/.github/ISSUE_TEMPLATE/config.yml")
 
 PULL_REQUEST_TEMPLATE_MD = load_template("git/.github/pull_request_template.md")
 
-CONTRIBUTING_MD_TMPL = load_template("shared/CONTRIBUTING.default.md")
-CONTRIBUTING_MD_TMPL_PYTHON = load_template("shared/CONTRIBUTING.python.md")
-
-
 CHANGELOG_MD = load_template("git/CHANGELOG.md")
+
+# Other flavors' static artifacts — same contract, one byte source per flavor.
+RUST_TOOLCHAIN_TOML = load_template("rust/rust-toolchain.toml")
+OXLINT_JSON = load_template("typescript/.oxlintrc.json")
+OXFMT_JSON = load_template("typescript/.oxfmtrc.json")
+OXLINT_COMMENT_GATE_JS = load_template("typescript/scripts/oxlint-plugin-comment-gate.js")
+INDEX_TEST_TS = load_template("typescript/tests/index.test.ts")
+CLI_TS = load_template("typescript/src/cli.ts")
 
 try:
     CHANGELOG_UNRELEASED_PY = (pathlib.Path(__file__).parent / "changelog-unreleased.py").read_text(
@@ -284,24 +281,6 @@ testpaths = ["tests"]
 {cov_section}"""
 
 
-PYPROJECT_TOML_TMPL = build_pyproject("{project_name}", False, 80)
-
-RUST_TOOLCHAIN_TOML = """\
-[toolchain]
-channel = "stable"
-components = ["rustfmt", "clippy"]
-"""
-
-CARGO_TOML_TMPL = """\
-[package]
-name = "{project_name}"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-"""
-
-
 def _ts_normalize_name(project_name: str) -> str:
     return project_name.lower().replace(" ", "-").replace("_", "-")
 
@@ -376,344 +355,17 @@ def build_tsconfig() -> str:
     return rendered + "\n"
 
 
-BIOME_JSON = """\
-{
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2
-  },
-  "linter": {
-    "enabled": true
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double"
-    }
-  }
+# TypeScript artifacts that need no substitution ship verbatim from `templates/`; index.ts,
+# vitest.config.ts and Cargo.toml are `.j2` templates rendered at their call sites.
+
+# CI release workflow — one base (`ci/release.yml.j2`) plus one fragment per runtime, so
+# adding a runtime costs one registry entry and one file while the coverage axis stays a
+# branch inside the fragment. `--ci-variant` takes its choices from here.
+CI_RUNTIMES: dict[str, str] = {
+    "node": "ci/runtimes/node.yml.j2",
+    "python": "ci/runtimes/python.yml.j2",
+    "rust": "ci/runtimes/rust.yml.j2",
 }
-"""
-
-# Ox native toolchain (pnpm v12 + TS v7 + Vite v8 + Oxlint + Oxfmt)
-OXLINT_JSON = """\
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "jsPlugins": ["./scripts/oxlint-plugin-comment-gate.js"],
-  "rules": {
-    "harness/no-comments": "error"
-  },
-  "overrides": [
-    {
-      "files": ["tests/**", "test/**", "**/*.test.ts", "**/*.spec.ts", "scripts/oxlint-plugin-comment-gate.js"],
-      "rules": {
-        "harness/no-comments": "off"
-      }
-    }
-  ]
-}
-"""
-
-OXLINT_COMMENT_GATE_JS = """\
-// harness/no-comments — curated allowlist per ADR-0014 (harness AI engineering)
-// Deterministic CI gate: only allow high-signal comments. Everything else is error.
-// Allowlist: SAFETY:|WHY:|Invariant:|See ADR-|via https://|TODO(#\\d+):|HACK:|GHERKIN
-// GHERKIN = ^\\s*(Given|When|Then|And|But|Feature|Scenario|Background|Scenario Outline|Examples)\\b/i
-// Legal /** JSDoc header remains separate — allowed regardless of tag.
-
-const ALLOWLIST_RE = /SAFETY:|WHY:|Invariant:|See ADR-|via https:\\/\\/|TODO\\(#\\d+\\):|HACK:/;
-const GHERKIN_RE =
-  /^\\s*(Given|When|Then|And|But|Feature|Scenario|Background|Scenario Outline|Examples)\\b/i;
-
-function isAllowed(rawValue) {
-  if (!rawValue || !rawValue.trim()) return true; // empty comment
-  const trimmed = rawValue.trim();
-  // Legal /** JSDoc header: block value starts with '*' — allow regardless (ADR says separate)
-  if (trimmed.startsWith("*")) return true;
-  if (ALLOWLIST_RE.test(rawValue)) return true;
-  if (GHERKIN_RE.test(trimmed)) return true;
-  return false;
-}
-
-const MESSAGE =
-  "Comments must use allowlist prefix: SAFETY:, WHY:, Invariant:, See ADR-, via https://, TODO(#<digits>):, HACK:, or Gherkin (Given/When/Then/And/But/Feature/Scenario). " +
-  "Prefer extraction/rename until code explains what/how; use tag only for why/invariant/warning/regex/hack/ADR link with provenance. " +
-  "Examples: // SAFETY: cast validated by ... | // WHY: tombstone union needed for ... | // See ADR-0013 | // TODO(#123):. " +
-  "Otherwise fix code. Files with 50+ hits use overrides to disable rule per ADR ladder (shrink-only).";
-
-const rule = {
-  meta: {
-    type: "suggestion",
-    docs: {
-      description: "enforce curated comment allowlist (ADR-0014)",
-      url: "https://github.com/Rianico/pi-better-edit/blob/main/docs/adr/0001-served-state-range-verification.md",
-    },
-    messages: {
-      disallowed: MESSAGE,
-    },
-  },
-  create(context) {
-    const sourceCode = context.sourceCode;
-    return {
-      Program() {
-        let comments = [];
-        if (sourceCode.getAllComments) {
-          try {
-            comments = sourceCode.getAllComments();
-          } catch {}
-        }
-        // fallback for oxlint: ast.comments or getComments()
-        if (!comments || comments.length === 0) {
-          if (sourceCode.ast && sourceCode.ast.comments) comments = sourceCode.ast.comments;
-          else if (context.sourceCode.text !== undefined) {
-            // no comments API — skip
-            comments = [];
-          }
-        }
-
-        for (const c of comments) {
-          const value = c.value ?? "";
-          if (isAllowed(value)) continue;
-
-          // Report at comment location; eslint supports loc, oxlint supports node+loc
-          const loc = c.loc;
-          if (loc) {
-            context.report({ loc, message: MESSAGE });
-          } else if (c.range) {
-            // fallback: report on Program with range-derived loc not available — use Program node
-            context.report({ node: c, message: MESSAGE });
-          } else {
-            // last resort: report on Program
-            const program = sourceCode.ast && sourceCode.ast.body ? sourceCode.ast.body[0] : null;
-            context.report({ node: program || { type: "Program" }, message: MESSAGE });
-          }
-        }
-      },
-    };
-  },
-};
-
-const plugin = {
-  meta: { name: "harness" },
-  rules: { "no-comments": rule },
-};
-
-export default plugin;
-"""
-
-OXFMT_JSON = """\
-{
-  "$schema": "./node_modules/oxfmt/configuration_schema.json"
-}
-"""
-
-VITEST_CONFIG_TMPL = """\
-import {{ defineConfig }} from "vitest/config";
-
-export default defineConfig({{
-  test: {{
-    coverage: {{
-      provider: "v8",
-      reporter: ["text", "lcov"],
-      thresholds: {{ lines: {threshold}, functions: {threshold} }},
-    }},
-  }},
-}});
-"""
-
-INDEX_TS_TMPL = """\
-export function main(): void {{
-  console.log("hello from {project_name}");
-}}
-
-main();
-"""
-
-INDEX_TEST_TS_TMPL = """\
-import {{ describe, expect, it }} from "vitest";
-import {{ main }} from "../src/index.js";
-
-describe("main", () => {{
-  it("runs without throwing", () => {{
-    expect(() => main()).not.toThrow();
-  }});
-}});
-"""
-
-CLI_TS_TMPL = """\
-#!/usr/bin/env -S pnpm dlx tsx
-export function run(args: readonly string[]): void {{
-  console.log(`args: ${{args.join(" ")}}`);
-}}
-
-run(process.argv.slice(2));
-"""
-
-CONTRIBUTING_MD_TMPL_TYPESCRIPT = load_template("shared/CONTRIBUTING.typescript.md")
-
-CI_PYTHON_VERIFY_YML = """\
-name: Verify and Release
-on:
-  repository_dispatch:
-    types: [semantic-release]
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: astral-sh/setup-uv@v5
-        with: {python-version: '3.14'}
-      - run: uv sync --group dev
-      - run: uv run ruff check .
-      - run: uv run basedpyright
-      - run: uv run pytest
-  release:
-    needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
-      - run: npm ci
-      - run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HUSKY: "0"
-"""
-
-CI_PYTHON_COVERAGE_YML = """\
-name: Verify and Release
-on:
-  repository_dispatch:
-    types: [semantic-release]
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: astral-sh/setup-uv@v5
-        with: {python-version: '3.14'}
-      - run: uv sync --group dev
-      - run: uv run ruff check .
-      - run: uv run basedpyright
-      - run: uv run pytest --cov --cov-report=term-missing --cov-report=lcov --cov-fail-under=80
-  release:
-    needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
-      - run: npm ci
-      - run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HUSKY: "0"
-"""
-
-CI_RUST_VERIFY_YML = """\
-name: Verify and Release
-on:
-  repository_dispatch:
-    types: [semantic-release]
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-      - run: cargo test
-  release:
-    needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
-      - run: npm ci
-      - run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HUSKY: "0"
-"""
-
-CI_RUST_COVERAGE_YML = """\
-name: Verify and Release
-on:
-  repository_dispatch:
-    types: [semantic-release]
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
-      - run: cargo llvm-cov report --fail-under-lines 80
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-  release:
-    needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with: {fetch-depth: 0}
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
-      - run: npm ci
-      - run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HUSKY: "0"
-"""
-
-
-# Resolve the single-sourced Node version in every CI template above.
-RELEASE_YML = _expand_node_version(RELEASE_YML)
-CI_PYTHON_VERIFY_YML = _expand_node_version(CI_PYTHON_VERIFY_YML)
-CI_PYTHON_COVERAGE_YML = _expand_node_version(CI_PYTHON_COVERAGE_YML)
-CI_RUST_VERIFY_YML = _expand_node_version(CI_RUST_VERIFY_YML)
-CI_RUST_COVERAGE_YML = _expand_node_version(CI_RUST_COVERAGE_YML)
 GH_ROUTER_SKILL_PATH = pathlib.Path(__file__).parent.parent.joinpath("..", "gh-router", "SKILL.md")
 GH_ROUTER_SKILL = (
     GH_ROUTER_SKILL_PATH.read_text(encoding="utf-8")
@@ -1075,6 +727,18 @@ def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
     )
 
 
+def render_ci_release(variant: str, with_coverage: bool, threshold: int) -> str:
+    """Render .github/workflows/release.yml for one CI runtime variant."""
+    return render_template(
+        CI_RUNTIMES[variant],
+        shas=SHA_TABLE,
+        node_version=NODE_VERSION_NUM,
+        gh_actions_token=GH_ACTIONS_TOKEN,
+        with_coverage=with_coverage,
+        threshold=threshold,
+    )
+
+
 def do_git(
     cwd: pathlib.Path,
     project_name: str,
@@ -1092,7 +756,13 @@ def do_git(
         if update and rel.exists():
             notes.append(preserve(rel, FLAVOR_FOREIGN["release-yml"]))
         else:
-            write_file(rel, RELEASE_YML, dry_run)
+            write_file(
+                rel,
+                render_ci_release(
+                    "node", with_coverage=False, threshold=DEFAULT_COVERAGE_THRESHOLD
+                ),
+                dry_run,
+            )
     if "changelog-check" in sel:
         write_file(
             cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run
@@ -1142,7 +812,9 @@ def do_git(
             except OSError:
                 pass
     if "contributing" in sel:
-        contrib = CONTRIBUTING_MD_TMPL.format(project_name=project_name)
+        contrib = render_template(
+            "shared/CONTRIBUTING.default.md.j2", project_name=project_name
+        )
         note = write_generated(
             cwd / "CONTRIBUTING.md",
             contrib,
@@ -1198,7 +870,9 @@ def do_python(
         "### Runtime\nPython: uv + .python-version (3.14), run via uv run; see pyproject.toml\n",
         dry_run,
     )
-    contrib_py = CONTRIBUTING_MD_TMPL_PYTHON.format(project_name=project_name)
+    contrib_py = render_template(
+        "shared/CONTRIBUTING.python.md.j2", project_name=project_name
+    )
     note = write_generated(
         cwd / "CONTRIBUTING.md",
         contrib_py,
@@ -1232,7 +906,7 @@ def do_rust(
             file=sys.stderr,
         )
     write_file(cwd / "rust-toolchain.toml", RUST_TOOLCHAIN_TOML, dry_run)
-    cargo = CARGO_TOML_TMPL.format(project_name=cargo_name)
+    cargo = render_template("rust/Cargo.toml.j2", project_name=cargo_name)
     warn = "mixed: {{project_name}} normalized to kebab-case — proofread package name and edition."
     if with_coverage:
         warn += f" + coverage llvm-cov {threshold}%"
@@ -1295,13 +969,13 @@ def do_typescript(
     write_file(cwd / ".oxfmtrc.json", OXFMT_JSON, dry_run)
     write_file(
         cwd / "src" / "index.ts",
-        INDEX_TS_TMPL.format(project_name=npm_name),
+        render_template("typescript/src/index.ts.j2", project_name=npm_name),
         dry_run,
     )
-    write_file(cwd / "tests" / "index.test.ts", INDEX_TEST_TS_TMPL.format(), dry_run)
+    write_file(cwd / "tests" / "index.test.ts", INDEX_TEST_TS, dry_run)
     if ts_variant == "cli":
         cli_path = cwd / "src" / "cli.ts"
-        write_file(cli_path, CLI_TS_TMPL.format(), dry_run)
+        write_file(cli_path, CLI_TS, dry_run)
         if not dry_run:
             try:
                 cli_path.chmod(0o755)
@@ -1310,7 +984,7 @@ def do_typescript(
     if with_coverage:
         write_file(
             cwd / "vitest.config.ts",
-            VITEST_CONFIG_TMPL.format(threshold=threshold),
+            render_template("typescript/vitest.config.ts.j2", threshold=threshold),
             dry_run,
         )
         print(
@@ -1324,7 +998,9 @@ def do_typescript(
         "### Runtime\nTypeScript: pnpm v12 + .nvmrc (24) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json\n",
         dry_run,
     )
-    contrib_ts = CONTRIBUTING_MD_TMPL_TYPESCRIPT.format(project_name=project_name)
+    contrib_ts = render_template(
+        "shared/CONTRIBUTING.typescript.md.j2", project_name=project_name
+    )
     note = write_generated(
         cwd / "CONTRIBUTING.md",
         contrib_ts,
@@ -1353,28 +1029,12 @@ def do_ci(
     sel = selected if selected is not None else CI_COMPONENTS
     if "release-yml" not in sel:
         return
-    if variant == "python":
-        if with_coverage:
-            content = CI_PYTHON_COVERAGE_YML.replace(
-                "--cov-fail-under=80", f"--cov-fail-under={threshold}"
-            )
-        else:
-            content = CI_PYTHON_VERIFY_YML
-    elif variant == "rust":
-        if with_coverage:
-            content = CI_RUST_COVERAGE_YML.replace(
-                "--fail-under-lines 80", f"--fail-under-lines {threshold}"
-            )
-        else:
-            content = CI_RUST_VERIFY_YML
-    else:
-        content = RELEASE_YML
-        if with_coverage:
-            content = content.replace("- run: pnpm test", "- run: pnpm run coverage")
-            print(
-                "NOTE: Node/TS coverage runs `pnpm run coverage` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
-                file=sys.stderr,
-            )
+    content = render_ci_release(variant, with_coverage=with_coverage, threshold=threshold)
+    if variant == "node" and with_coverage:
+        print(
+            "NOTE: Node/TS coverage runs `pnpm run coverage` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
+            file=sys.stderr,
+        )
     write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
 
 
@@ -1612,10 +1272,10 @@ def print_next_actions(cwd: pathlib.Path, notes: list[str]) -> None:
     det = detect_project(cwd)
     ci_variant = det["ci"]["variant"]  # type: ignore[index]
     shape = det["inferred_shape"]
-    variant = ci_variant if ci_variant in {"python", "rust", "node"} else shape
+    variant = ci_variant if ci_variant in CI_RUNTIMES else shape
     follow_up: dict[str, str] = {
         "release.yml": f"uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant {variant}",
-        "CONTRIBUTING.md": "hand-merge the 'Before PR' toolchain line (mixed file) — templates/shared/CONTRIBUTING.{default,python,typescript}.md",
+        "CONTRIBUTING.md": "hand-merge the 'Before PR' toolchain line (mixed file) — templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2",
         "CHANGELOG.md": "nothing to do — @semantic-release/changelog owns versioned sections",
         "pyproject.toml": "regenerate deliberately: --flavor python [--with-coverage --coverage-threshold N]",
         "Cargo.toml": "regenerate deliberately: --flavor rust [--with-coverage --coverage-threshold N]",
@@ -1646,7 +1306,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="print diff without writing")
     ap.add_argument(
         "--ci-variant",
-        choices=["node", "python", "rust"],
+        choices=list(CI_RUNTIMES),
         default="node",
         help="CI verify variant (default: node)",
     )
@@ -1665,7 +1325,7 @@ def main() -> int:
     ap.add_argument(
         "--coverage-threshold",
         type=int,
-        default=80,
+        default=DEFAULT_COVERAGE_THRESHOLD,
         help="coverage fail-under threshold (default: 80)",
     )
     ap.add_argument(
