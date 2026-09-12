@@ -8,7 +8,11 @@
         with: {node-version: {{ node_version }}, cache: pnpm}
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm audit --audit-level high
+{% if with_coverage %}
+      - run: pnpm run coverage
+{% else %}
       - run: pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
+{% endif %}
 {% endblock %}
 {% block release %}
       - uses: actions/checkout@{{ shas.checkout }} # v5

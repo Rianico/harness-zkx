@@ -165,6 +165,15 @@ def test_node_ci_variant_is_pnpm_on_24():
     assert "npm ci" not in release_yml
 
 
+def test_node_coverage_variant_runs_the_coverage_script():
+    """Regression: the coverage cell was a no-op `.replace()` and ran `pnpm test` un-gated."""
+    plain = scaffold.render_ci_release("node", with_coverage=False, threshold=80)
+    covered = scaffold.render_ci_release("node", with_coverage=True, threshold=80)
+    assert "- run: pnpm run coverage" in covered
+    assert "pnpm run coverage" not in plain
+    assert covered != plain
+
+
 def test_python_flavor_untouched(tmp_path, capsys):
     """Q3c guard: python bytes keep uv wiring after the TS addition."""
     rc = _run_main(

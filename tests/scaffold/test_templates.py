@@ -118,7 +118,7 @@ RENDERED_SHA256: dict[str, str] = {
     "CONTRIBUTING.default (project_name=demo)": "3af4b4bbb29406a678a01bfc8cceadf576577db747680a7c4b0f8451451c2357",
     "CONTRIBUTING.python (project_name=demo)": "cc3105b590d9b9e6ee644bc72cf849d219f368effa4124f3ab8e526bce029a16",
     "CONTRIBUTING.typescript (project_name=demo)": "31dafc569c65f1dbca8137fce61b5ef168c83226cd271a6d74e2c73d0aa0417f",
-    "ci/release.yml[node+coverage]": "efbb1c3028b8776dcf76d9e1f6a68a8d834ad7dc4a82b8469b3c63f0b8590aa7",
+    "ci/release.yml[node+coverage]": "e3b1190fae6ccade3d0f35bc3ed3cbf79e6ba8cba90907fc8f23c9080f38bb97",
     "ci/release.yml[node]": "efbb1c3028b8776dcf76d9e1f6a68a8d834ad7dc4a82b8469b3c63f0b8590aa7",
     "ci/release.yml[python+coverage]": "ae174f49d7559869c9e340074e722740c94ff3c13d4480cef52dba82b6c39bb1",
     "ci/release.yml[python]": "76776943ebe6ae4de1da0961f2cd39907893f39296041fe78e1d3349db87e473",
