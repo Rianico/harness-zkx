@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **scaffold:** add --update mode and extract static templates
 - **writing-for-agents:** add human-facing prose and blind prose evals
 - **workflow:** support suggestions and feed-forward gotchas in converge-tasks
 - **resolve-merge-conflicts:** add intent discovery and uv execution
@@ -176,6 +177,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **scaffold:** document template layout and update ownership
 - **skill-comply:** drop legacy commands/*.md from supported targets
 - **changelog:** sync unreleased section
 - **changelog:** sync unreleased section
