@@ -8,7 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-- **toolchain-wiki:** add jinja subskill
 - **writing-for-agents:** add human-facing prose and blind prose evals
 - **workflow:** support suggestions and feed-forward gotchas in converge-tasks
 - **resolve-merge-conflicts:** add intent discovery and uv execution
