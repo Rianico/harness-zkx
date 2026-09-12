@@ -36,9 +36,11 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v6
+        with:
+          enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --frozen --group dev
 
       - name: Run all tests
         run: uv run pytest
