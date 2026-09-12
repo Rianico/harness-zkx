@@ -3,6 +3,7 @@
       - uses: actions/checkout@{{ shas.checkout }}
         with: {fetch-depth: 0}
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@{{ shas['rust-cache'] }} # v2
 {% if with_coverage %}
       - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
       - run: cargo llvm-cov report --fail-under-lines {{ threshold }}

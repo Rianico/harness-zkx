@@ -42,6 +42,7 @@ SHA_TABLE = {
     "setup-python": "e797f83bcb11b83ae66e0230d6156d7c80228e7c",  # actions/setup-python v6
     "github-script": "ed597411d8f924073f98dfc5c65a23a2325f34cd",  # actions/github-script v8
     "pnpm-setup": "b906affcce14559ad1aafd4ab0e942779e9f58b1",  # pnpm/action-setup v4
+    "rust-cache": "6323deb102c322ba6fcbdcafc7e3dddab59af2b6",  # Swatinem/rust-cache v2.9.2
 }
 
 NODE_VERSION_NUM = "24"
