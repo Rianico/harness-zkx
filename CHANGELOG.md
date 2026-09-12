@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **writing-for-agents:** add human-facing prose rules, blind prose evals, and report-what-ran contract
 - **resolve-merge-conflicts:** add intent discovery and uv execution
 - **code-review:** add spec drift and pragmatism boundaries
 - **workflow:** add converge-tasks workflow
