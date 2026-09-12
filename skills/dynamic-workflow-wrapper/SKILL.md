@@ -1,7 +1,7 @@
 ---
 name: dynamic-workflow-wrapper
 description: >-
-  Autonomous dispatcher and lifecycle operator for pi-dynamic-workflows. Aligns canonical subagent roles, inspects project stack, routes requests to the target workflow (task convergence or audits), and provides unified AFK status management. Use when running autonomous tasks, single-task or batch convergence to a verified branch, or audits; not for single trivial edits.
+  Autonomous dispatcher for pi-dynamic-workflows — aligns canonical subagent roles, inspects the project stack, routes to the target workflow (convergence or audit), and tracks AFK status. Use when running autonomous tasks or converging work to a verified branch; not for single trivial edits.
 ---
 
 # dynamic-workflow-wrapper
