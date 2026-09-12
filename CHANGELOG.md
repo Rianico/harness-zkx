@@ -131,6 +131,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **scaffold:** run pnpm coverage in the node CI coverage variant
 - **skill-authoring:** assert equal-length zip in duplicate-name check
 - **dynamic-workflow-wrapper:** fit description to the context-load budget
 - **skill-authoring:** exclude legacy commands/ from the skill registry
@@ -177,6 +178,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **scaffold:** document the Jinja template layer and CI fragment layout
 - **scaffold:** document template layout and update ownership
 - **skill-comply:** drop legacy commands/*.md from supported targets
 - **changelog:** sync unreleased section
