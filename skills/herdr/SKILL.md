@@ -209,3 +209,17 @@ After that failed read, ask the agent to write its complete response as Markdown
 > - Use `--trust-repository` only after the user has verified the repository. It grants per-request Git trust; it is not a routine retry for a failed worktree command.
 > - Never run `herdr server stop` from an active session unless the user explicitly intends to stop the server and its pane processes.
 > - Never kill the main Herdr process. Use named test sessions for experiments that need an isolated server.
+
+## Local helper — `herdr-pane` (not upstream)
+
+The whole env-check → resolve → split sequence above, as one command: `skills/herdr/scripts/herdr_pane.py`, on PATH as `herdr-pane` (`~/.local/bin/herdr-pane` symlinks to the repo script).
+
+```bash
+herdr-pane vertical            # stack a pane below the caller (--direction down)
+herdr-pane horizontal          # place a pane right of the caller (--direction right)
+herdr-pane                     # caller wider than tall -> right, else down
+herdr-pane vertical --focus --ratio 0.3 --env FOO=bar --cwd /tmp
+herdr-pane horizontal --dry-run    # print the herdr command, split nothing
+```
+
+Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`. Exit `0` ok, `1` herdr failure, `2` usage or missing precondition. Tests: `tests/herdr/`.
