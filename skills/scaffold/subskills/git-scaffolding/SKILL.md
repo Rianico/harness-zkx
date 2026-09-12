@@ -12,7 +12,7 @@ Migrated from `~/.pi/agent/prompts/scaffold-git.md`. Explicit human authority (`
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (embedded `RELEASERC_JSON`, `RELEASE_YML`, etc.) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run` to preview byte-identical files.
+Byte source is `$SKILL_DIR/templates/<flavor>/<target path>` (`templates/git/.githooks/pre-push` → `.githooks/pre-push`, `templates/shared/CONTRIBUTING.*.md` for the language dimension); `scaffold.py` loads them with `load_template()` and fails loud when the directory is missing — never a silent fallback to embedded bytes. Still in code: `build_pyproject` / `build_package_json` / `build_tsconfig` (computed), the CI variants (next extraction), `{{project_name}}`/threshold substitution. Preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run`; `tests/scaffold/test_templates.py` pins layout, registry coherence and template SHA-256 so a formatter or editor rewrite fails there before it ships.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name>
@@ -22,13 +22,13 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name> --dry-r
 Pure-deterministic (no proofread, byte-identical):
 
 - `.releaserc.json` — conventional commits preset `conventionalcommits@8.0.0` (`writer@8.4.0`), `@semantic-release/npm` with `npmPublish: false` (publish disabled by default; enable per language — Node `private:false` + `NPM_TOKEN` to publish, Python/Rust omit `npm` and use language-native registry)
-- `.github/workflows/release.yml` — pinned `actions/checkout@93cb6e...` + `setup-node@a0853c...` (v5) + `setup-python@e797f8...` (v6) via `SHA_TABLE` (single source) + `setup-node` `zizmor: ignore[cache-poisoning]`, `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `verify` runs `corepack enable` + `pnpm install` + `pnpm run lint && pnpm run typecheck && pnpm test` (Node 24); `release` job runs `scripts/changelog-unreleased.py clear` before `pnpm dlx semantic-release` to hand off `## [Unreleased]`
-- `skills/gh-router` — router `gh-router` (`gh-release` + `pr-land` + `pr-enhance` subskills, `GITHUB_TOKEN=$(gh auth token)` dispatch, `tmp/` ephemeral) — GitHub surface is `gh-router`, not standalone `pr-enhance`
+- `.github/workflows/release.yml` — Node/pnpm variant: `pnpm/action-setup@b906af...` (v4) + `setup-node@a0853c...` (v5) + `setup-python@e797f8...` (v6) via `SHA_TABLE` (single source) + `setup-node` `zizmor: ignore[cache-poisoning]`, `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `verify` runs `pnpm install --no-frozen-lockfile` + `pnpm audit --audit-level high` + `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` (Node 24); `release` runs `scripts/changelog-unreleased.py clear` then `pnpm exec semantic-release` (`HUSKY: "0"` so the changelog guard skips the release push) to hand off `## [Unreleased]`. Non-Node repos take this job from `--flavor ci --ci-variant python|rust` instead (see `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`)
+- `skills/gh-router` — router `gh-router` (`gh-release` + `pr-land` + `pr-enhance` subskills, `GITHUB_TOKEN=$(gh auth token)` dispatch, `tmp/` ephemeral) — GitHub surface is `gh-router`, not standalone `pr-enhance`; the three `SKILL.md` + their `scripts/` are copied from the harness when present, else from embedded stubs (a target repo without the harness gets the router + stubs, no `pr.sh`)
 - `.github/workflows/changelog-check.yml` — on `pull_request` to `main` (required), `diff -q` vs `scripts/changelog-unreleased.py update`, `fail+comment` if stale — SHA pins from `SHA_TABLE` (`checkout v5`, `setup-python v6`, `github-script v8`)
-- `.githooks/pre-push` (deterministic source) + `.husky/pre-push` (delegation `exec .githooks/pre-push "$@"`) — `warn+block`, `cp before + update + diff`, hint `uv run python scripts/changelog-unreleased.py update && git add && git commit -m 'chore: sync changelog unreleased section'` (hidden type required — a visible `feat`/`fix`/`docs` re-triggers the guard and loops forever; amend alternative on a feature branch) (both chmod 755; husky sets `core.hooksPath=.husky` so delegation keeps guard live)
+- `.githooks/pre-push` (deterministic source) + `.husky/pre-push` (delegation `exec .githooks/pre-push "$@"`) — skips when `HUSKY=0` or `uv`/`python3` absent; on stale `## [Unreleased]` in the push range it `cp before + update + diff`, then auto-fixes (`git add` + `commit --amend --no-edit --no-verify`) and re-pushes in the background, aborting the current push with a retry message; with `PREPUSH_AUTOFIX=0` or a failed amend it restores the file and blocks with manual instructions (`uv run python scripts/changelog-unreleased.py update && git add && git commit -m 'chore: sync changelog unreleased section'` — hidden type required, a visible `feat`/`fix`/`docs` re-triggers the guard and loops forever) (both chmod 755; husky sets `core.hooksPath=.husky` so delegation keeps guard live)
 - `scripts/changelog-unreleased.py` — manages `## [Unreleased]` (`update` stages notes from `git log <last-tag>..HEAD`, `clear` strips it before release)
 - `commitlint.config.js` — `export default { extends: ['@commitlint/config-conventional'] }`
-- `CHANGELOG.md` — initial `# Changelog` header
+- `CHANGELOG.md` — initial `# Changelog` header + Keep-a-Changelog pointer. `--update` preserves it; a plain `--flavor git` run truncates versioned sections, so use `--without changelog-md` when refreshing an existing repo without `--update`
 - `.github/ISSUE_TEMPLATE/01-bug_report.yml` — YAML form (Summary \u2192 Environment \u2192 Repro \u2192 Expected/Actual \u2192 Impact, exemplar [#38](https://github.com/Rianico/dsh-better-edit/issues/38), `required:true` on repro fields + `render:shell`) + `02-feature_request.yml` — YAML form (Problem \u2192 Proposal \u2192 Alternatives \u2192 Context, `required:true` on problem/proposal) + `config.yml` (`blank_issues_enabled:false`, exemplar + Discussions contact_links); ordered `01/02` for chooser
 - `.github/pull_request_template.md` — PR template (Summary + Impact/Risk \u00b7 What Changed \u00b7 Architecture (Mermaid, delete if N/A) \u00b7 Checklist) — auto-populated by GitHub; `CONTRIBUTING.md` `## Pull Requests` documents the four headings
 
@@ -41,6 +41,36 @@ Mixed (script writes skeleton + warns on stderr → model must proofread):
 - `.config/wt.toml` — if present, patches `[post-start] setup-hooks = "git config core.hooksPath .githooks"` (idempotent, `wt switch --create` auto-activates guard)
 
 Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run` (tool owns bytes). Pin check: `conventional-changelog-conventionalcommits@8.0.0` via `npm ls conventional-changelog-writer` → `8.4.0`.
+
+## Update — Tool Replaces, Model Decides
+
+Updating an existing repo is one command. It replaces every generated file byte-identically, preserves what the project owns, and prints the leftover decisions:
+
+```bash
+uv run $SKILL_DIR/scripts/scaffold.py --update --cwd .              # implies --flavor git
+uv run $SKILL_DIR/scripts/scaffold.py --update --flavor all --dry-run  # preview
+uv run $SKILL_DIR/scripts/scaffold.py --update --flavor python --with-coverage  # language files too
+```
+
+Ownership is declared in `scaffold.py` (`PROJECT_OWNED`, `FLAVOR_FOREIGN`) — the tool replaces, the model never guesses:
+
+| Artifact                                                                                                                                                                                                                    | `--update` behaviour                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `.releaserc.json`, `changelog-check.yml`, `.githooks/pre-push`, `.husky/pre-push`, `scripts/changelog-unreleased.py`, `commitlint.config.js`, `.github/ISSUE_TEMPLATE/*`, `pull_request_template.md`, `skills/gh-router/**` | **replaced** byte-identically                                        |
+| `AGENTS.md`, `.gitignore`, `.config/wt.toml`                                                                                                                                                                                | patched (append-only / dedup, never rewrites)                        |
+| `CHANGELOG.md`, `CONTRIBUTING.md`, `pyproject.toml`, `Cargo.toml`, `package.json`                                                                                                                                           | **preserved** (data / mixed / project manifest)                      |
+| `.github/workflows/release.yml`                                                                                                                                                                                             | **preserved** in the git flavor — it is the `ci` flavor's projection |
+
+The printed `NEXT` block _is_ the remaining task. Work it in this order:
+
+1. **`release.yml`** — the git flavor ships a Node/pnpm verify job. Re-run detection's variant: `--flavor ci --ci-variant python|rust|node`; confirm `verify` runs the repo's real gate (`.config/wt.toml [pre-merge].gate` is the authority for the same commands).
+2. **`CONTRIBUTING.md`** — mixed file (project name + `## Before PR` toolchain line). Hand-merge the toolchain line from `templates/shared/CONTRIBUTING.{default,python,typescript}.md`; never regenerate it from the git flavor (that writes the pnpm line into a uv/cargo repo).
+3. **`CHANGELOG.md`** — data, not projection. Nothing to do; `@semantic-release/changelog` owns versioned sections.
+4. **Manifests** (`pyproject.toml`, `Cargo.toml`, `package.json`) — regenerate only when the gate or deps changed, deliberately, with the language flavor + `--with-coverage`.
+5. **Language-variant files** — `--only`/`--without`/`--components` select git components only; language flavors write their whole file set. To refresh one language file, either re-run that flavor deliberately or edit its file under `$SKILL_DIR/templates/` (then re-pin the SHA-256 in `tests/scaffold/test_templates.py`).
+
+> [!warning] `--update` is not `--flavor git`
+> A plain `--flavor git` run rewrites everything, including `CHANGELOG.md` (header only) and `release.yml` (Node variant). Existing repo → `--update`. Greenfield repo → plain flavor.
 
 ## GDD Wiring
 
@@ -95,3 +125,6 @@ Git flavor is spine — always present. Grilling `Project Shape` selects sibling
 - `--cwd <path>` — target repo root (default `.`)
 - `--dry-run` — print diff without writing + emit mixed warnings on stderr
 - `--retrofit` behavior is implicit: `.gitignore` dedup + `AGENTS.md` append-only (preserves manual sections)
+- `--only <a,b>` / `--components <a,b>` — write just those components keyed by `GIT_COMPONENTS` (`releaserc`, `release-yml`, `changelog-check`, `pre-push`, `changelog-script`, `commitlint`, `changelog-md`, `issue-templates`, `pr-template`, `contributing`, `agents`, `gh-router`, `gitignore`; aliases `hooks`, `changelog`, `issues`, `pull-request`)
+- `--without <a,b>` — inverse of `--only`; the recorded way to retrofit without clobbering project-owned files (e.g. `--without changelog-md,release-yml,contributing`)
+- `--detect` — read-only state detection (JSON to stdout, summary to stderr); never writes

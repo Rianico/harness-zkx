@@ -31,12 +31,12 @@ Keep the spine small. One load-bearing path: **declared runtime → deterministi
 
 Grade every surface:
 
-| Surface                                                                                       | Promise                    | Change rule                                                         |
-| --------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------- |
-| Router description + `argument-hint`                                                          | Public contract            | Versioned, never silently broken                                    |
-| Subskill SKILL.md                                                                             | Cross-module interface     | Consumer-found-by-tooling, cutover via docs                         |
-| `$SKILL_DIR/scripts/scaffold.py` (embedded templates)                                         | Module internals           | Free churn behind BDD/EDD                                           |
-| Generated project files (`.releaserc.json`, `CHANGELOG.md`, `pyproject.toml`, `package.json`) | Projection (not authority) | Regenerate from scaffold, never hand-edit except `{{project_name}}` |
+| Surface                                                                                                             | Promise                    | Change rule                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Router description + `argument-hint`                                                                                | Public contract            | Versioned, never silently broken                                                                                                                                                        |
+| Subskill SKILL.md                                                                                                   | Cross-module interface     | Consumer-found-by-tooling, cutover via docs                                                                                                                                             |
+| `$SKILL_DIR/templates/<flavor>/<target path>` (static bytes) + `scripts/scaffold.py` (loaders, builders, detection) | Module internals           | Free churn behind BDD/EDD; static bytes only — computed artifacts stay in code                                                                                                          |
+| Generated project files (`.releaserc.json`, `.github/workflows/*`, hooks, `CHANGELOG.md`, `pyproject.toml`)         | Projection (not authority) | `--update` regenerates infrastructure byte-identically; project-owned files (`CHANGELOG.md`, `CONTRIBUTING.md`, manifests) are created once, then merged — see `git-scaffolding` Update |
 
 Authority: scaffold skill owns scaffolding decisions; project owns files. Writers propose via explicit `/scaffold` invocation. Projections are regenerated from source.
 
@@ -306,10 +306,11 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --with-cov
 uv run $SKILL_DIR/scripts/scaffold.py --flavor all --project-name <name>     # git+python+rust
 uv run $SKILL_DIR/scripts/scaffold.py --flavor all --with-coverage --coverage-threshold 80 --dry-run
 uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run                  # diff without writing
+uv run $SKILL_DIR/scripts/scaffold.py --update --cwd .                        # existing repo: refresh in place, preserve project-owned files, print NEXT
 ```
 
 - **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`.
 - **Mixed** (script writes skeleton + warns on stderr → proofread): `CONTRIBUTING.md` (`{{project_name}}` + Before PR line), `pyproject.toml`/`Cargo.toml` (name/description/edition; with `--with-coverage` also `fail_under`), `AGENTS.md` patch (keep 3 sections, verify pointer wording).
 
-- `$SKILL_DIR/scripts/scaffold.py` — deterministic source of truth (tool owns bytes); preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor <git|python|rust|ci> --dry-run`; detect with `uv run $SKILL_DIR/scripts/scaffold.py --detect --cwd .` (JSON to stdout, summary to stderr)
+- `$SKILL_DIR/scripts/scaffold.py` — deterministic source of truth (tool owns bytes); static artifacts are files under `$SKILL_DIR/templates/<flavor>/<target path>` (SHA-256-pinned by `tests/scaffold/test_templates.py`); preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor <git|python|rust|ci> --dry-run`; detect with `uv run $SKILL_DIR/scripts/scaffold.py --detect --cwd .` (JSON to stdout, summary to stderr)
 - `$SKILL_DIR/scripts/verify.sh` — deterministic gate runner (`--dry-run` + `validate-deps` + `npm ls`/`cargo` checks)

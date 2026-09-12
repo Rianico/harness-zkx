@@ -21,6 +21,8 @@ Per `development-patterns.md` §3:
 
 Source of truth is `$SKILL_DIR/scripts/scaffold.py` (embedded `PYPROJECT_TOML_TMPL`, `PYTHON_VERSION`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
 
+> Existing repo? `--update` refreshes generated files but preserves `pyproject.toml` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
+
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>
 uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name> --dry-run

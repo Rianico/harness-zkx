@@ -22,6 +22,8 @@ Per `development-patterns.md` §3:
 
 Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_package_json`, `build_tsconfig`, `OXLINT_JSON`, `OXLINT_COMMENT_GATE_JS`, `OXFMT_JSON`, `VITEST_CONFIG_TMPL`, `INDEX_TS_TMPL`, `CLI_TS_TMPL`, `INDEX_TEST_TS_TMPL`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` to preview.
 
+> Existing repo? `--update` refreshes generated files but preserves `package.json` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
+
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --project-name <name>
 uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant cli --project-name <name>
