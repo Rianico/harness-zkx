@@ -156,7 +156,10 @@ def test_generate_then_detect(tmp_path):
 def test_node_ci_variant_is_pnpm_on_24():
     assert "node-version: 24" in scaffold.RELEASE_YML
     assert "node-version: 22" not in scaffold.RELEASE_YML
-    assert "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test" in scaffold.RELEASE_YML
+    assert (
+        "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test"
+        in scaffold.RELEASE_YML
+    )
     assert "npm ci" not in scaffold.RELEASE_YML
 
 

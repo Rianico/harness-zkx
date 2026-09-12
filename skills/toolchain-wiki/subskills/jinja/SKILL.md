@@ -73,11 +73,11 @@ print(env.get_template('page.html').render(users=[]))"
 
 ### Delimiters
 
-| Syntax      | Meaning                                     |
-| ----------- | ------------------------------------------- |
-| `{{ … }}`   | Expression printed to output                |
-| `{% … %}`   | Statement: control flow, inheritance, macros |
-| `{# … #}`   | Comment, not in output                      |
+| Syntax      | Meaning                                                            |
+| ----------- | ------------------------------------------------------------------ |
+| `{{ … }}`   | Expression printed to output                                       |
+| `{% … %}`   | Statement: control flow, inheritance, macros                       |
+| `{# … #}`   | Comment, not in output                                             |
 | line prefix | `line_statement_prefix` / `line_comment_prefix` (unset by default) |
 
 ### Composition skeleton
@@ -99,17 +99,17 @@ print(env.get_template('page.html').render(users=[]))"
 
 ### Most-used filters
 
-| Filter                          | Effect                                                     |
-| ------------------------------- | ---------------------------------------------------------- |
-| `default(value, '', boolean=False)` | Fallback when undefined (or falsy with `boolean=True`) |
-| `join(sep='')`, `length`, `first`, `last` | Sequence shaping                               |
-| `map(attribute=…)`, `select('odd')`, `rejectattr('x')`, `selectattr('x', 'eq', v)` | Lazy filtering/transforming |
-| `sort(reverse=False, case_sensitive=False, attribute=None)`, `groupby('attr')`, `unique`, `dictsort` | Ordering |
-| `title`, `capitalize`, `lower`, `upper`, `trim`, `replace(old, new, count)`, `truncate(length, …)`, `wordwrap(width)`, `center(width)`, `indent(width)` | Text |
-| `tojson(indent=None)`, `urlencode`, `urlize`, `striptags`, `xmlattr`, `filesizeformat`, `pprint` | Output shaping |
-| `int(default=0)`, `float(default=0.0)`, `round(precision, method)`, `abs`, `sum(attribute=None)` | Numbers |
-| `escape`, `forceescape`, `safe` | Escaping — `safe` only on trusted content |
-| `batch(linecount, fill_with)`, `slice(slices, fill_with)`, `items`, `attr(name)` | Grouping / access |
+| Filter                                                                                                                                                  | Effect                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `default(value, '', boolean=False)`                                                                                                                     | Fallback when undefined (or falsy with `boolean=True`) |
+| `join(sep='')`, `length`, `first`, `last`                                                                                                               | Sequence shaping                                       |
+| `map(attribute=…)`, `select('odd')`, `rejectattr('x')`, `selectattr('x', 'eq', v)`                                                                      | Lazy filtering/transforming                            |
+| `sort(reverse=False, case_sensitive=False, attribute=None)`, `groupby('attr')`, `unique`, `dictsort`                                                    | Ordering                                               |
+| `title`, `capitalize`, `lower`, `upper`, `trim`, `replace(old, new, count)`, `truncate(length, …)`, `wordwrap(width)`, `center(width)`, `indent(width)` | Text                                                   |
+| `tojson(indent=None)`, `urlencode`, `urlize`, `striptags`, `xmlattr`, `filesizeformat`, `pprint`                                                        | Output shaping                                         |
+| `int(default=0)`, `float(default=0.0)`, `round(precision, method)`, `abs`, `sum(attribute=None)`                                                        | Numbers                                                |
+| `escape`, `forceescape`, `safe`                                                                                                                         | Escaping — `safe` only on trusted content              |
+| `batch(linecount, fill_with)`, `slice(slices, fill_with)`, `items`, `attr(name)`                                                                        | Grouping / access                                      |
 
 Full list with signatures and examples: [filters](references/filters.md).
 
@@ -127,29 +127,29 @@ Globals: `range()`, `dict()`, `lipsum(n, html, min, max)`, `cycler(*items)` (`.n
 
 ### Environment options worth knowing
 
-| Option                                     | Default   | Use it for                                     |
-| ------------------------------------------ | --------- | ---------------------------------------------- |
-| `loader`, `optimized`, `auto_reload`       | `None`, `True`, `True` | Template resolution and reload behaviour |
-| `autoescape`                               | `False`   | `select_autoescape()` for markup               |
-| `undefined`                                | `Undefined` | `StrictUndefined` / `ChainableUndefined`     |
-| `trim_blocks`, `lstrip_blocks`             | `False`   | Removing tag-only line whitespace              |
-| `keep_trailing_newline`, `newline_sequence`| `False`, `'\n'` | Exact output bytes                       |
-| `extensions` / `add_extension()`           | `[]`      | i18n, `do`, loop controls, debug               |
-| `cache_size`                               | `400`     | `-1` never clear, `0` recompile always         |
-| `finalize`, `enable_async`                 | `None`, `False` | Pre-output coercion, async templates      |
+| Option                                      | Default                | Use it for                               |
+| ------------------------------------------- | ---------------------- | ---------------------------------------- |
+| `loader`, `optimized`, `auto_reload`        | `None`, `True`, `True` | Template resolution and reload behaviour |
+| `autoescape`                                | `False`                | `select_autoescape()` for markup         |
+| `undefined`                                 | `Undefined`            | `StrictUndefined` / `ChainableUndefined` |
+| `trim_blocks`, `lstrip_blocks`              | `False`                | Removing tag-only line whitespace        |
+| `keep_trailing_newline`, `newline_sequence` | `False`, `'\n'`        | Exact output bytes                       |
+| `extensions` / `add_extension()`            | `[]`                   | i18n, `do`, loop controls, debug         |
+| `cache_size`                                | `400`                  | `-1` never clear, `0` recompile always   |
+| `finalize`, `enable_async`                  | `None`, `False`        | Pre-output coercion, async templates     |
 
 Loaders, undefined types, policies, `Template`/`Context` objects, exceptions and the Meta API: [api](references/api.md).
 
 ### Bundled extensions
 
-| Extension                | Adds                                | Status                          |
-| ------------------------ | ----------------------------------- | ------------------------------- |
-| `jinja2.ext.i18n`        | `{% trans %}` + `gettext`/Babel filters | Requires `install_gettext_*` |
-| `jinja2.ext.do`          | `{% do %}` expression statement     | Active                          |
-| `jinja2.ext.loopcontrols`| `{% break %}`, `{% continue %}`     | Active                          |
-| `jinja2.ext.debug`       | `{% debug %}` context dump          | Active                          |
-| `jinja2.ext.with_`       | `{% with %}`                        | Built-in since 2.9 (no-op)      |
-| `jinja2.ext.autoescape`  | `{% autoescape %}`                  | Removed in 2.9 (built-in)       |
+| Extension                 | Adds                                    | Status                       |
+| ------------------------- | --------------------------------------- | ---------------------------- |
+| `jinja2.ext.i18n`         | `{% trans %}` + `gettext`/Babel filters | Requires `install_gettext_*` |
+| `jinja2.ext.do`           | `{% do %}` expression statement         | Active                       |
+| `jinja2.ext.loopcontrols` | `{% break %}`, `{% continue %}`         | Active                       |
+| `jinja2.ext.debug`        | `{% debug %}` context dump              | Active                       |
+| `jinja2.ext.with_`        | `{% with %}`                            | Built-in since 2.9 (no-op)   |
+| `jinja2.ext.autoescape`   | `{% autoescape %}`                      | Removed in 2.9 (built-in)    |
 
 Writing your own extension (Extension, Parser, AST APIs): [extensions](references/extensions.md).
 
@@ -158,24 +158,24 @@ Writing your own extension (Extension, Parser, AST APIs): [extensions](reference
 `SandboxedEnvironment` swaps the compiler for a safe runtime and raises `SecurityError` on insecure attribute access; `SandboxedEnvironment(SecurityPolicy, …)` and `intercepted_binops` / `call_binop()` tune the surface.
 
 > [!WARNING]
-> The sandbox is not a security sandbox for untrusted *template authors* by default: `is_safe_callable`, `is_safe_attribute` and the operator tables must be audited for your threat model. Details: [sandbox](references/sandbox.md).
+> The sandbox is not a security sandbox for untrusted _template authors_ by default: `is_safe_callable`, `is_safe_attribute` and the operator tables must be audited for your threat model. Details: [sandbox](references/sandbox.md).
 
 `NativeEnvironment` renders to native Python types (`int`, `list`, arbitrary objects) instead of strings — for templates that define values, not text.
 
 ## Reference Map
 
-| Need                                                                              | Leading word | Pointer                                          |
-| --------------------------------------------------------------------------------- | ------------ | ------------------------------------------------ |
-| delimiters, variables, whitespace, escaping, control structures, expressions       | `syntax`     | [language](references/language.md)               |
-| `extends`/`block`/`super`, macros, `call`, `include`, `import`                     | `inheritance`| [inheritance](references/inheritance.md)          |
-| every builtin filter, custom filter registration                                   | `filters`    | [filters](references/filters.md)                  |
-| builtin tests, global functions, custom test registration                           | `tests`      | [tests](references/tests.md)                      |
-| `Environment`, loaders, undefined types, context, cache, exceptions, Meta API       | `environment`| [api](references/api.md)                          |
-| i18n/`do`/`loopcontrols`/`debug`, writing an extension, Extension API               | `extensions` | [extensions](references/extensions.md)            |
-| `SandboxedEnvironment`, `SecurityPolicy`, operator intercepting, `NativeEnvironment`| `sandbox`    | [sandbox](references/sandbox.md)                  |
-| Flask, Django, Babel, Pylons; Django/Mako → Jinja translation                      | `integration`| [integration](references/integration.md)          |
-| null-default fallback, alternating rows, active menu, parent loop, FAQ             | `recipes`    | [recipes](references/recipes.md)                  |
-| release-by-release removals, default changes, 2.x → 3.1 upgrade                     | `migration`  | [migration](references/migration.md)              |
+| Need                                                                                 | Leading word  | Pointer                                  |
+| ------------------------------------------------------------------------------------ | ------------- | ---------------------------------------- |
+| delimiters, variables, whitespace, escaping, control structures, expressions         | `syntax`      | [language](references/language.md)       |
+| `extends`/`block`/`super`, macros, `call`, `include`, `import`                       | `inheritance` | [inheritance](references/inheritance.md) |
+| every builtin filter, custom filter registration                                     | `filters`     | [filters](references/filters.md)         |
+| builtin tests, global functions, custom test registration                            | `tests`       | [tests](references/tests.md)             |
+| `Environment`, loaders, undefined types, context, cache, exceptions, Meta API        | `environment` | [api](references/api.md)                 |
+| i18n/`do`/`loopcontrols`/`debug`, writing an extension, Extension API                | `extensions`  | [extensions](references/extensions.md)   |
+| `SandboxedEnvironment`, `SecurityPolicy`, operator intercepting, `NativeEnvironment` | `sandbox`     | [sandbox](references/sandbox.md)         |
+| Flask, Django, Babel, Pylons; Django/Mako → Jinja translation                        | `integration` | [integration](references/integration.md) |
+| null-default fallback, alternating rows, active menu, parent loop, FAQ               | `recipes`     | [recipes](references/recipes.md)         |
+| release-by-release removals, default changes, 2.x → 3.1 upgrade                      | `migration`   | [migration](references/migration.md)     |
 
 Raw upstream docs (authoritative for flag-level and edge-case detail): `$SKILL_DIR/references/jinja-raw/` — `001-stable`, `002-intro`, `003-api`, `004-sandbox`, `005-nativetypes`, `006-templates`, `007-extensions`, `008-integration`, `009-switching`, `010-tricks`, `011-faq`, `013-changes`.
 

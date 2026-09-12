@@ -116,10 +116,6 @@ def test_hidden_types_still_skipped_unless_breaking():
 
 
 def test_hidden_breaking_still_visible():
-    sections = sync_mod.commits_to_sections(
-        [("chore!: sync changelog unreleased section", "")]
-    )
+    sections = sync_mod.commits_to_sections([("chore!: sync changelog unreleased section", "")])
     flat = [e for entries in sections.values() for e in entries]
     assert any("sync changelog" in e for e in flat)
-
-
