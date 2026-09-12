@@ -1,0 +1,136 @@
+# Jinja
+
+<img src="_images/jinja-name.svg" class="align-center" style="height: 200px;" alt="_images/jinja-name.svg" />
+
+Jinja is a fast, expressive, extensible templating engine. Special placeholders in the template allow writing code similar to Python syntax. Then the template is passed data to render the final document.
+
+Contents:
+
+- Introduction
+  - Installation
+- API
+  - Basics
+  - High Level API
+  - Autoescaping
+  - Notes on Identifiers
+  - Undefined Types
+  - The Context
+  - Loaders
+  - Bytecode Cache
+  - Async Support
+  - Policies
+  - Utilities
+  - Exceptions
+  - Custom Filters
+  - Custom Tests
+  - Evaluation Context
+  - The Global Namespace
+  - Low Level API
+  - The Meta API
+- Sandbox
+  - Security Considerations
+  - API
+  - Operator Intercepting
+- Native Python Types
+  - Examples
+  - Sandboxed Native Environment
+  - API
+- Template Designer Documentation
+  - Synopsis
+  - Variables
+  - Filters
+  - Tests
+  - Comments
+  - Whitespace Control
+  - Escaping
+  - Line Statements
+  - Template Inheritance
+  - HTML Escaping
+  - List of Control Structures
+  - Import Context Behavior
+  - Expressions
+  - List of Builtin Filters
+  - List of Builtin Tests
+  - List of Global Functions
+  - Extensions
+  - Autoescape Overrides
+- Extensions
+  - Adding Extensions
+  - i18n Extension
+  - Expression Statement
+  - Loop Controls
+  - With Statement
+  - Autoescape Extension
+  - Debug Extension
+  - Writing Extensions
+  - Example Extensions
+  - Extension API
+- Integration
+  - Flask
+  - Django
+  - Babel
+  - Pylons
+- Switching From Other Template Engines
+  - Django
+  - Mako
+- Tips and Tricks
+  - Null-Default Fallback
+  - Alternating Rows
+  - Highlighting Active Menu Items
+  - Accessing the parent Loop
+- Frequently Asked Questions
+  - Why is it called Jinja?
+  - How fast is Jinja?
+  - Isn’t it a bad idea to put logic in templates?
+  - Why is HTML escaping not the default?
+- BSD-3-Clause License
+- Changes
+  - Version 3.1.6
+  - Version 3.1.5
+  - Version 3.1.4
+  - Version 3.1.3
+  - Version 3.1.2
+  - Version 3.1.1
+  - Version 3.1.0
+  - Version 3.0.3
+  - Version 3.0.2
+  - Version 3.0.1
+  - Version 3.0.0
+  - Version 2.11.3
+  - Version 2.11.2
+  - Version 2.11.1
+  - Version 2.11.0
+  - Version 2.10.3
+  - Version 2.10.2
+  - Version 2.10.1
+  - Version 2.10
+  - Version 2.9.6
+  - Version 2.9.5
+  - Version 2.9.4
+  - Version 2.9.3
+  - Version 2.9.2
+  - Version 2.9.1
+  - Version 2.9
+  - Version 2.8.1
+  - Version 2.8
+  - Version 2.7.3
+  - Version 2.7.2
+  - Version 2.7.1
+  - Version 2.7
+  - Version 2.6
+  - Version 2.5.5
+  - Version 2.5.4
+  - Version 2.5.3
+  - Version 2.5.2
+  - Version 2.5.1
+  - Version 2.5
+  - Version 2.4.1
+  - Version 2.4
+  - Version 2.3.1
+  - Version 2.3
+  - Version 2.2.1
+  - Version 2.2
+  - Version 2.1.1
+  - Version 2.1
+  - Version 2.0
+  - Version 2.0rc1
