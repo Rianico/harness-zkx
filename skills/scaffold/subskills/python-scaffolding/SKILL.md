@@ -19,7 +19,7 @@ Per `development-patterns.md` §3:
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (embedded `PYPROJECT_TOML_TMPL`, `PYTHON_VERSION`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
+Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_pyproject` — computed, `PYTHON_VERSION`) plus `$SKILL_DIR/templates/shared/CONTRIBUTING.python.md.j2` (rendered) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
 
 > Existing repo? `--update` refreshes generated files but preserves `pyproject.toml` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
 

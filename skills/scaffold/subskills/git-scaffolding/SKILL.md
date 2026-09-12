@@ -12,7 +12,7 @@ Migrated from `~/.pi/agent/prompts/scaffold-git.md`. Explicit human authority (`
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Byte source is `$SKILL_DIR/templates/<flavor>/<target path>` (`templates/git/.githooks/pre-push` → `.githooks/pre-push`, `templates/shared/CONTRIBUTING.*.md` for the language dimension); `scaffold.py` loads them with `load_template()` and fails loud when the directory is missing — never a silent fallback to embedded bytes. Still in code: `build_pyproject` / `build_package_json` / `build_tsconfig` (computed), the CI variants (next extraction), `{{project_name}}`/threshold substitution. Preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run`; `tests/scaffold/test_templates.py` pins layout, registry coherence and template SHA-256 so a formatter or editor rewrite fails there before it ships.
+Byte source is `$SKILL_DIR/templates/<flavor>/<target path>`: raw templates ship verbatim (`templates/git/.githooks/pre-push` → `.githooks/pre-push`, `templates/shared/CONTRIBUTING.*.md.j2` → `CONTRIBUTING.md`), while a `.j2` suffix marks a template Jinja renders through one `Environment` (`render_template()`; `StrictUndefined` so a typo fails loud, `trim_blocks`/`lstrip_blocks` so tag-only lines vanish, `keep_trailing_newline` because the trailing newline is part of the contract). `scaffold.py` fails loud when a template is missing — never a silent fallback to embedded bytes. Still in code: `build_pyproject` / `build_package_json` / `build_tsconfig` (computed, not static). Preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run`; `tests/scaffold/test_templates.py` pins the layout, registry coherence, raw template SHA-256 and every rendered cell, so a formatter or editor rewrite fails there before it ships.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name>
@@ -64,10 +64,10 @@ Ownership is declared in `scaffold.py` (`PROJECT_OWNED`, `FLAVOR_FOREIGN`) — t
 The printed `NEXT` block _is_ the remaining task. Work it in this order:
 
 1. **`release.yml`** — the git flavor ships a Node/pnpm verify job. Re-run detection's variant: `--flavor ci --ci-variant python|rust|node`; confirm `verify` runs the repo's real gate (`.config/wt.toml [pre-merge].gate` is the authority for the same commands).
-2. **`CONTRIBUTING.md`** — mixed file (project name + `## Before PR` toolchain line). Hand-merge the toolchain line from `templates/shared/CONTRIBUTING.{default,python,typescript}.md`; never regenerate it from the git flavor (that writes the pnpm line into a uv/cargo repo).
+2. **`CONTRIBUTING.md`** — mixed file (project name + `## Before PR` toolchain line). Hand-merge the toolchain line from `templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2`; never regenerate it from the git flavor (that writes the pnpm line into a uv/cargo repo).
 3. **`CHANGELOG.md`** — data, not projection. Nothing to do; `@semantic-release/changelog` owns versioned sections.
 4. **Manifests** (`pyproject.toml`, `Cargo.toml`, `package.json`) — regenerate only when the gate or deps changed, deliberately, with the language flavor + `--with-coverage`.
-5. **Language-variant files** — `--only`/`--without`/`--components` select git components only; language flavors write their whole file set. To refresh one language file, either re-run that flavor deliberately or edit its file under `$SKILL_DIR/templates/` (then re-pin the SHA-256 in `tests/scaffold/test_templates.py`).
+5. **Language-variant files** — `--only`/`--without`/`--components` select git components only; language flavors write their whole file set. To refresh one language file, re-run that flavor deliberately, or edit its template under `$SKILL_DIR/templates/` — raw templates are pinned by file hash, `.j2` templates by rendered-output hash (both in `tests/scaffold/test_templates.py`); re-pin only when the byte change is intended.
 
 > [!warning] `--update` is not `--flavor git`
 > A plain `--flavor git` run rewrites everything, including `CHANGELOG.md` (header only) and `release.yml` (Node variant). Existing repo → `--update`. Greenfield repo → plain flavor.
