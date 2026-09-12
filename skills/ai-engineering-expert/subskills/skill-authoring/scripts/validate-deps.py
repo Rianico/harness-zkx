@@ -107,19 +107,10 @@ def _scan_lock_file(lock_file: Path) -> dict[str, Path]:
         return {}
 
 
-def _scan_commands_dir(commands_dir: Path) -> dict[str, Path]:
-    """Add commands from commands/ directory not already in the map."""
-    if not commands_dir.is_dir():
-        return {}
-
-    return {cmd_file.stem: cmd_file for cmd_file in commands_dir.glob("*.md") if cmd_file.stem}
-
-
 def scan_skills(root_dir: Path) -> SkillRegistry:
     """Scan all skill sources and return a SkillRegistry."""
     skills_dir = root_dir / "skills"
     lock_file = root_dir / "skills-lock.json"
-    commands_dir = root_dir / "commands"
 
     skill_map: dict[str, Path] = {}
     dependency_graph: dict[str, list[str]] = {}
@@ -134,11 +125,6 @@ def scan_skills(root_dir: Path) -> SkillRegistry:
 
     # Phase 2: Add lock file entries not already in map
     for name, path in _scan_lock_file(lock_file).items():
-        if name not in skill_map:
-            skill_map[name] = path
-
-    # Phase 3: Add command entries not already in map
-    for name, path in _scan_commands_dir(commands_dir).items():
         if name not in skill_map:
             skill_map[name] = path
 

@@ -142,6 +142,29 @@ def test_check_passes_valid_dependencies(tmp_path: Path) -> None:
     assert "All dependencies validated successfully" in result.stdout
 
 
+def test_commands_dir_is_not_scanned(tmp_path: Path) -> None:
+    """commands/ is legacy: its files are not registry entries."""
+    write_raw_skill(
+        tmp_path,
+        "caller",
+        "name: caller\ndescription: >-\n  A caller.\nmetadata:\n  depends-on: [legacy-cmd]\n",
+    )
+    commands_dir = tmp_path / "commands"
+    commands_dir.mkdir()
+    (commands_dir / "legacy-cmd.md").write_text(
+        "---\nname: legacy-cmd\n---\n\n# legacy-cmd\n", encoding="utf-8"
+    )
+
+    check = run_validate_deps("--project-root", str(tmp_path), "check")
+
+    assert check.returncode == 1
+    assert "depends on missing skill 'legacy-cmd'" in check.stdout
+
+    related = run_validate_deps("--project-root", str(tmp_path), "related", "legacy-cmd")
+
+    assert "commands/" not in related.stdout
+
+
 def test_context_check_fails_missing_description(tmp_path: Path) -> None:
     """context-check exits 1 when a skill has no description."""
     write_raw_skill(tmp_path, "no-desc", "name: no-desc\n")
