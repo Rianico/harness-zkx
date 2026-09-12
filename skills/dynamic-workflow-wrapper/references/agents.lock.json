@@ -8,13 +8,13 @@
     "ticket-planner.md": "75ac3d8aa7997fb89787ae024f3433675c4006a9a8cac206a511cbac7d0d8bfe"
   },
   "includes": {
-    "references/resp-format.md": "3a4b8e3b494dc04b0beef189cc4e2e82948f6cea91cc2fedfb2066518dd9d686"
+    "references/resp-format.md": "d008d22ac3f54d03bbdc242315a778a6dfb665b14e72d39ab584293325f3bf1f"
   },
   "compiled": {
-    "code-reviewer.md": "1b068d1a4c6aae4b43f87f49165e8d92cae53cd5a27ccfadaf0c2d2e78fd3ceb",
-    "developer.md": "96de2d7a97bbcf1a44260a6daf85564afef4a1c807f31eef05747bcb884ac5f5",
-    "gate-runner.md": "b5af0b3bccb1d50284e1013efceb6ea8d3523e4e6339ed3e136c9ca685b75e38",
-    "merger.md": "a0d6e9dfa53430d0d2699a9c8035c6a0f493382b515a3b7d1aeeb12627d8f44b",
+    "code-reviewer.md": "a81ea7261c90619a84e676d9a10632eb52c866858147510f247917039493e006",
+    "developer.md": "ec69c155f6589a6bd4783f3ce31c95baca1f07f94909646211fa9fa46b340855",
+    "gate-runner.md": "0e7a6d8b5f6e4368615864a38b2d47c7e26dc0367590795643825aed751815a6",
+    "merger.md": "ba7ff2cfe29643a8a9fedb05dd7ae47f97cbd613d2b3fa9e31f03e0625f74282",
     "ticket-planner.md": "75ac3d8aa7997fb89787ae024f3433675c4006a9a8cac206a511cbac7d0d8bfe"
   }
 }

@@ -54,6 +54,43 @@ const requestedIntegration = typeof rawArgs.integration === 'string' && rawArgs.
 const requestedBranch = typeof rawArgs.branch === 'string' && rawArgs.branch.trim() ? rawArgs.branch.trim() : null;
 const root = typeof cwd === 'string' ? cwd : process.cwd();
 
+const knownGotchas = Array.isArray(rawArgs.knownGotchas)
+  ? rawArgs.knownGotchas.filter(g => typeof g === 'string' && g.trim()).map(g => g.trim())
+  : [];
+const suggestions = [];
+
+function recordSuggestions(source, items) {
+  if (!Array.isArray(items)) return;
+  for (const item of items) {
+    if (!item) continue;
+    if (typeof item === 'string' && item.trim()) {
+      suggestions.push({
+        source,
+        category: 'General',
+        observation: item.trim(),
+        impact: '',
+        workaround: '',
+        suggestion: item.trim()
+      });
+    } else if (typeof item === 'object') {
+      suggestions.push({
+        source,
+        category: typeof item.category === 'string' ? item.category : 'General',
+        observation: typeof item.observation === 'string' ? item.observation : '',
+        impact: typeof item.impact === 'string' ? item.impact : '',
+        workaround: typeof item.workaround === 'string' ? item.workaround : '',
+        suggestion: typeof item.suggestion === 'string' ? item.suggestion : ''
+      });
+    }
+  }
+}
+
+function gotchasBlock() {
+  return knownGotchas.length > 0
+    ? `Known Environment Gotchas / Tips:\n${knownGotchas.map(g => `- ${g}`).join('\n')}`
+    : '';
+}
+
 function slugify(value, limit = 48) {
   const slug = String(value)
     .toLowerCase()
@@ -120,7 +157,8 @@ const planSchema = {
         required: ['id', 'ref', 'acceptance', 'dependsOn']
       }
     },
-    issues: { type: 'array', items: { type: 'string' } }
+    issues: { type: 'array', items: { type: 'string' } },
+    suggestions: { type: 'array' }
   },
   required: ['summary', 'status', 'tasks', 'issues']
 };
@@ -139,7 +177,8 @@ const prepSchema = {
     integrationReused: { type: 'boolean' },
     preMergeHook: { type: 'boolean' },
     rootBranch: { type: 'string' },
-    issues: { type: 'array', items: { type: 'string' } }
+    issues: { type: 'array', items: { type: 'string' } },
+    suggestions: { type: 'array' }
   },
   required: ['summary', 'status', 'cleanRoot', 'base', 'baseSource', 'integrationBranch', 'integrationPath', 'integrationTool', 'integrationReused', 'preMergeHook', 'rootBranch', 'issues']
 };
@@ -155,7 +194,8 @@ const allocSchema = {
     baseSource: { type: 'string' },
     tool: { type: 'string', enum: ['wt', 'git'] },
     reused: { type: 'boolean' },
-    issues: { type: 'array', items: { type: 'string' } }
+    issues: { type: 'array', items: { type: 'string' } },
+    suggestions: { type: 'array' }
   },
   required: ['summary', 'status', 'worktreePath', 'branch', 'base', 'baseSource', 'tool', 'reused', 'issues']
 };
@@ -189,7 +229,8 @@ const devSchema = {
         required: ['name', 'command', 'ok']
       }
     },
-    issues: { type: 'array', items: { type: 'string' } }
+    issues: { type: 'array', items: { type: 'string' } },
+    suggestions: { type: 'array' }
   },
   required: ['summary', 'status', 'filesChanged', 'issues']
 };
@@ -215,7 +256,8 @@ const gateSchema = {
         required: ['name', 'command', 'ok']
       }
     },
-    issues: { type: 'array' }
+    issues: { type: 'array' },
+    suggestions: { type: 'array' }
   },
   required: ['summary', 'status', 'ok', 'phases', 'issues']
 };
@@ -244,7 +286,8 @@ const reviewSchema = {
         required: ['id', 'severity', 'file', 'defect', 'remediation']
       }
     },
-    priorIssues: { type: 'array' }
+    priorIssues: { type: 'array' },
+    suggestions: { type: 'array' }
   },
   required: ['summary', 'status', 'route', 'issues']
 };
@@ -272,7 +315,8 @@ const mergeSchema = {
     integrationBranch: { type: 'string' },
     taskBranch: { type: 'string' },
     worktreePath: { type: 'string' },
-    issues: { type: 'array', items: { type: 'string' } }
+    issues: { type: 'array', items: { type: 'string' } },
+    suggestions: { type: 'array' }
   },
   required: ['summary', 'status', 'merged', 'outcome', 'attempts', 'repaired', 'integrationBranch', 'taskBranch', 'worktreePath', 'issues']
 };
@@ -318,6 +362,7 @@ report(
 const planPrompt = [
   `You are the Plan node of an AFK convergence run. You expand each task reference into an executable spec.`,
   `You never create branches or worktrees, you never write repository files, and you never implement.`,
+  gotchasBlock(),
   ``,
   `Session root (read-only for you): ${root}`,
   `Tasks as declared (JSON): ${JSON.stringify(tasks.map(task => ({ id: task.id, kind: task.kind, ref: task.ref, dependsOn: task.dependsOn })))}`,
@@ -336,6 +381,7 @@ const planPrompt = [
   .join('\n');
 
 const plan = await accept(planPrompt, { agentType: 'ticket-planner', label: 'plan', schema: planSchema });
+recordSuggestions('ticket-planner', plan && plan.suggestions);
 const planRows = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
 const planIssues = plan && Array.isArray(plan.issues) ? plan.issues : [];
 
@@ -402,7 +448,8 @@ if (admissionFailure) {
     ledger: [{ taskId: null, round: 0, stage: 'plan', ok: false, feedback: admissionFailure }],
     planIssues,
     nextActions: ['Resolve the plan or dependency problem above, then re-run.'],
-    summary: `Blocked before any work: ${admissionFailure}`
+    summary: `Blocked before any work: ${admissionFailure}`,
+    suggestions
   };
 }
 
@@ -411,6 +458,7 @@ report(`plan complete — order: ${orderResult.order.join(' -> ')}`);
 const prepPrompt = [
   `You are the Prepare node of an AFK convergence run. You perform admission checks and allocate the ONE integration worktree.`,
   `You do not implement, gate, review, or merge, and you never modify repository files.`,
+  gotchasBlock(),
   ``,
   `Session root (your cwd, must stay untouched): ${root}`,
   `Requested base: ${requestedBase}`,
@@ -439,6 +487,7 @@ const prepPrompt = [
   .join('\n');
 
 const prep = await accept(prepPrompt, { agentType: 'merger', label: 'prepare', schema: prepSchema });
+recordSuggestions('prepare', prep && prep.suggestions);
 const integrationPath = prep && typeof prep.integrationPath === 'string' ? prep.integrationPath.trim() : '';
 const prepared = Boolean(prep) && prep.status === 'COMPLETED' && prep.cleanRoot === true && (!integrationWanted || integrationPath !== '');
 
@@ -461,7 +510,8 @@ if (!prepared) {
     root,
     ledger: [{ taskId: null, round: 0, stage: 'prepare', ok: false, feedback: reason }],
     nextActions: ['Fix the admission failure above, then re-run.'],
-    summary: `Blocked before round 1: ${reason}`
+    summary: `Blocked before round 1: ${reason}`,
+    suggestions
   };
 }
 
@@ -488,6 +538,7 @@ for (const taskId of orderResult.order) {
   const allocPrompt = [
     `You are the Allocate node of an AFK convergence run. You create the copy worktree for exactly ONE task.`,
     `You do not implement, gate, review, or merge, and you never modify repository files.`,
+    gotchasBlock(),
     ``,
     `Task id: ${task.id}`,
     `Task: ${task.ref}`,
@@ -507,6 +558,7 @@ for (const taskId of orderResult.order) {
   ].join('\n');
 
   const alloc = await accept(allocPrompt, { agentType: 'merger', label: `alloc:${slugify(task.id, 24)}`, schema: allocSchema });
+  recordSuggestions('allocate', alloc && alloc.suggestions);
   const taskPath = alloc && typeof alloc.worktreePath === 'string' ? alloc.worktreePath.trim() : '';
   const taskBranch = (alloc && alloc.branch) || task.branch;
   const taskBase = (alloc && alloc.base) || (integrationWanted ? integrationBranch : base);
@@ -539,6 +591,7 @@ for (const taskId of orderResult.order) {
         acceptanceBlock(task),
         feedback ? `\n[FEEDBACK FROM THE PREVIOUS ROUND — REMEDIATION REQUIRED]\n${feedback}\n` : '',
         workspace,
+        gotchasBlock(),
         `Implement the minimal change with a failing test first (TDD). Keep the change inside ${taskPath}.`,
         `Commit on \`${taskBranch}\` inside the worktree using Conventional Commits${task.issue ? ` and include \`Closes ${task.issue}\`` : ''}; keep code and docs in separate commits.`,
         `The repository's pre-merge gate may require exactly one new bullet under \`## [Unreleased]\` in CHANGELOG.md — add it when the repo tracks a changelog and the task is user-visible.`,
@@ -548,6 +601,7 @@ for (const taskId of orderResult.order) {
         .join('\n');
 
       const devResult = await accept(devPrompt, { agentType: 'developer', label: `dev:${slugify(task.id, 20)}:r${roundNumber}`, schema: devSchema });
+      recordSuggestions('developer', devResult && devResult.suggestions);
 
       if (!devResult) {
         return { ok: false, stage: 'developer', feedback: `Developer subagent returned no output for task ${task.id}.` };
@@ -563,6 +617,7 @@ for (const taskId of orderResult.order) {
         `Run deterministic verification for task (${task.id}): "${task.ref}"`,
         acceptanceBlock(task),
         workspace,
+        gotchasBlock(),
         `Touched files: ${JSON.stringify(Array.from(touchedFiles))}`,
         evalDir ? `Eval directory: ${evalDir}` : '',
         stackHint ? `Stack: ${stackHint}` : '',
@@ -577,6 +632,7 @@ for (const taskId of orderResult.order) {
         .join('\n');
 
       const gateResult = await accept(gatePrompt, { agentType: 'gate-runner', label: `gate:${slugify(task.id, 20)}:r${roundNumber}`, schema: gateSchema });
+      recordSuggestions('gate-runner', gateResult && gateResult.suggestions);
       const failedPhases = (gateResult && Array.isArray(gateResult.phases) ? gateResult.phases : []).filter(phase => !phase.ok);
 
       if (!gateResult || gateResult.ok !== true || failedPhases.length > 0) {
@@ -591,6 +647,7 @@ for (const taskId of orderResult.order) {
         `Task: ${task.ref}`,
         acceptanceBlock(task),
         workspace,
+        gotchasBlock(),
         `Diff under review — read it with \`git -C ${taskPath} diff ${taskBase}...HEAD\` plus \`git -C ${taskPath} log --oneline ${taskBase}..HEAD\`.`,
         `Touched files: ${JSON.stringify(Array.from(touchedFiles))}`,
         `The deterministic gate passed. Focus exclusively on semantic correctness and invariant violations, and re-verify each issue from the previous round as fixed or not-fixed.`
@@ -599,6 +656,7 @@ for (const taskId of orderResult.order) {
         .join('\n');
 
       const reviewResult = await accept(reviewPrompt, { agentType: 'code-reviewer', label: `review:${slugify(task.id, 20)}:r${roundNumber}`, schema: reviewSchema });
+      recordSuggestions('code-reviewer', reviewResult && reviewResult.suggestions);
       const blockerIssues = (reviewResult && Array.isArray(reviewResult.issues) ? reviewResult.issues : []).filter(issue => issue.severity === 'P1' || issue.severity === 'P2');
       const reviewPassed = reviewResult && reviewResult.route === 'continue' && blockerIssues.length === 0;
 
@@ -628,6 +686,7 @@ for (const taskId of orderResult.order) {
 
       const mergePrompt = [
         `You are the Merge node of an AFK convergence run. You attempt exactly ONE merge: task copy → integration branch.`,
+        gotchasBlock(),
         ``,
         `Task id: ${task.id}`,
         `Task branch: ${taskBranch}`,
@@ -650,6 +709,7 @@ for (const taskId of orderResult.order) {
       ].join('\n');
 
       const mergeResult = await accept(mergePrompt, { agentType: 'merger', label: `merge:${slugify(task.id, 20)}:a${mergeAttempts}`, schema: mergeSchema });
+      recordSuggestions('merger', mergeResult && mergeResult.suggestions);
       const merges = mergeResult && Array.isArray(mergeResult.attempts) ? mergeResult.attempts : [];
       const nonZero = merges.filter(entry => Number(entry.exitCode) !== 0);
       const merged = Boolean(mergeResult) && mergeResult.merged === true && mergeResult.outcome === 'MERGED' && nonZero.length === 0;
@@ -723,6 +783,7 @@ if (integrationWanted && mergedAny && !haltedBy) {
     `Integration worktree — run everything from here: ${integrationPath}`,
     `Base: ${base}`,
     stackHint ? `Stack: ${stackHint}` : '',
+    gotchasBlock(),
     `Session root — never touch: ${root}`,
     `pi-dynamic-workflows does not forward a per-agent cwd, so prefix every command with \`cd ${integrationPath} && \` or address the tree with \`git -C ${integrationPath}\`.`,
     `This is the verification a human will rely on before opening a pull request, so run the FULL suite on the integrated tree, not a subset:`,
@@ -736,6 +797,7 @@ if (integrationWanted && mergedAny && !haltedBy) {
     .join('\n');
 
   compositeGate = await accept(finalPrompt, { agentType: 'gate-runner', label: 'final-gate', schema: gateSchema });
+  recordSuggestions('composite-gate', compositeGate && compositeGate.suggestions);
 }
 
 const compositeOk = !integrationWanted || !mergedAny ? true : Boolean(compositeGate && compositeGate.ok === true);
@@ -789,5 +851,6 @@ return {
   nextActions,
   summary: converged
     ? `${taskRows.length} task(s) converged and verified on ${deliveryBranch} (${integrationWanted ? 'integration branch' : 'task branch'}), base ${base}. Nothing was pushed and no pull request was opened — merge/PR ownership stays with the operator.`
-    : `Run ended ${finalStatus} after ${ledger.length} recorded stage(s); the branch ${deliveryBranch || '(none)'} is left in place at ${deliveryPath || '(none)'} with the failing evidence above. Nothing was pushed.`
+    : `Run ended ${finalStatus} after ${ledger.length} recorded stage(s); the branch ${deliveryBranch || '(none)'} is left in place at ${deliveryPath || '(none)'} with the failing evidence above. Nothing was pushed.`,
+  suggestions
 };

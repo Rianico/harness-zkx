@@ -32,9 +32,12 @@ Every node returns the same envelope; role-specific fields sit beside it, never 
 | `artifacts`    | array of `{ path, kind }`              | absolute paths only; `kind` is `spec`, `report`, `diff`, `eval`, `pr` |
 | `status`       | `COMPLETED` \| `BLOCKED` \| `REJECTED` | the route the graph reads                                             |
 | `issues`       | array of issue objects                 | empty array when clean, never omitted                                 |
+| `suggestions`  | array of suggestion objects, optional  | incidental environment / process observations; capped ≤ 2 items       |
 | `next_actions` | array of strings, optional             | only when a human decision is required                                |
 
 An **issue** is `{ id, severity, file, line, invariant, defect, remediation }` with `severity` in `P1` (contract/correctness/security/fake test), `P2` (architecture/state safety/design drift), `P3` (real but small: dead code, missing negative test, doc drift). Formatting never becomes an issue — the gate owns it.
+
+A **suggestion** is `{ category, observation, impact, workaround, suggestion }` capturing incidental environment friction or process debt. Suggestions are non-interfering: they never fail gates or delay convergence.
 
 Downstream nodes receive **pointers plus distilled values**: `specPath`, `worktreePath`, `issues` JSON, `prUrl`. Paste a file body into a prompt and the run's context budget dies with it.
 

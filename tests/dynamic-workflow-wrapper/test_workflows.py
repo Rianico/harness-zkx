@@ -127,6 +127,20 @@ def test_converge_tasks_never_pushes_or_opens_a_pull_request():
     assert "nextActions" in content, "the operator step must be reported as nextActions"
 
 
+def test_converge_tasks_supports_suggestions_and_known_gotchas():
+    """converge-tasks.js must feed forward knownGotchas and collect non-blocking suggestions."""
+    content = read_workflow("converge-tasks.js")
+
+    assert "knownGotchas" in content
+    assert "gotchasBlock" in content
+    assert "recordSuggestions" in content
+    assert "suggestions: { type: 'array' }" in content
+
+    for source in ("ticket-planner", "prepare", "allocate", "developer", "gate-runner", "code-reviewer", "merger"):
+        assert f"recordSuggestions('{source}'" in content, f"missing suggestion recording for {source}"
+
+
+
 DOCS_WITH_WORKFLOW_POINTERS = (
     SKILL_DIR / "SKILL.md",
     SKILL_DIR / "references" / "workflow-guidelines.md",

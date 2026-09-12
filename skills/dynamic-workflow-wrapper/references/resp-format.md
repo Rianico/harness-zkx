@@ -26,6 +26,9 @@ continue | remediate | blocked
 
 ## Issues
 - [P1|P2|P3] <file>:<line> — <Invariant / Contract>: <Defect description>. Remediation: <Concrete fix>
+
+## Suggestions (Optional)
+- [Tooling|Environment|Spec|Workflow] <observation>. Workaround: <workaround>. Suggestion: <suggestion>
 ```
 
 ### Mode B: Structured JSON Schema Format
@@ -52,6 +55,15 @@ Used in dynamic workflows via `agent(prompt, { schema })` and the `structured_ou
       "defect": "Race condition on concurrent refresh",
       "remediation": "Add async lock guard before refresh invocation"
     }
+  ],
+  "suggestions": [
+    {
+      "category": "Tooling | Environment | Spec | Workflow",
+      "observation": "Direct oxfmt binary failed in subshell; needed package manager exec",
+      "impact": "Unnecessary gate format failure",
+      "workaround": "Invoked via pnpm exec oxfmt",
+      "suggestion": "Prefix format commands with package manager exec in gate scripts"
+    }
   ]
 }
 ```
@@ -68,6 +80,7 @@ Used in dynamic workflows via `agent(prompt, { schema })` and the `structured_ou
 | `## Artifacts` | `artifacts` | `array` | Absolute paths to touched/created files with `kind`. Never paste file bodies. |
 | `## Evidence` | `checks` | `array` | Deterministic verification command results (`name`, `command`, `ok`, `tail`). |
 | `## Issues` | `issues` | `array` | Actionable defects with severity, file:line, invariant, defect, remediation. Empty array / "None" if clean. |
+| `## Suggestions` | `suggestions` | `array` | Optional non-blocking observations on environment/tooling friction (`category`, `observation`, `impact`, `workaround`, `suggestion`). |
 
 ---
 
@@ -92,4 +105,5 @@ Used in dynamic workflows via `agent(prompt, { schema })` and the `structured_ou
 - **Formatting is never an issue:** Linters and formatters own whitespace and style deterministically. Never flag formatting as a semantic issue.
 - **Paths, not contents:** Never paste file bodies into summary or issues. Downstream nodes read files via absolute paths.
 - **Zero nitpicks:** An issue without `<file>:<line>`, violated invariant, defect, and concrete remediation is invalid.
+- **Non-interfering suggestions:** `suggestions` are strictly non-blocking. They never fail a gate (`route: continue` remains valid) and do not delay primary delivery. Budget-capped at ≤ 2 items per turn.
 
