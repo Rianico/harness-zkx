@@ -1,243 +1,264 @@
+## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
+
+### ⚠ BREAKING CHANGES
+
+* **gh-router:** gh-router subskill skills/gh-router/subskills/pr is now
+skills/gh-router/subskills/pr-land; update references to the `pr` subskill.
+* **skills:** skills/architecture-expert removed; use programming-expert
+with architecture trigger instead. Agents referencing architecture-expert must
+migrate to programming-expert.
+
+Co-authored-by: internal-model <noreply@ai>
+* **skills:** top-level skills python-expert, typescript-expert,
+rust-expert, go-expert, lua-expert, cpp-expert, java-expert,
+kotlin-expert, swift-expert, php-expert, perl-expert,
+basedpyright-expert removed; use programming-expert with
+python-expert, typescript-expert, etc. subskills
+* **changelog:** tags on 45959c lineage not ancestor of HEAD;
+future Unreleased now spans first commit until tags retagged on 340cc
+lineage.
+
+Co-authored-by: Muse Spark <noreply@muse.spark>
+
+### Features
+
+* add skill.sh scraper and typescript-expert ([6044334](https://github.com/Rianico/harness-zkx/commit/60443348a9076c1bfe84d2a399ba63c93abe94a3))
+* add TypeScript rules (baseline + modern tooling) ([ca724a6](https://github.com/Rianico/harness-zkx/commit/ca724a6023dc0befa0751be53f9d40ed70cb5852))
+* **agent:** add a 4-step fallback discovery to explore a project so engage with rules better ([8df9d08](https://github.com/Rianico/harness-zkx/commit/8df9d0819ed16946d27f85e899afbcbc2308ed51))
+* **agents:** add Matt Pocock engineering skills configuration ([817d908](https://github.com/Rianico/harness-zkx/commit/817d908ee9ea04cb9f5907ed27da55c832b52570))
+* **ai-engineering-expert:** absorb writing-for-agents as router subskill ([976a808](https://github.com/Rianico/harness-zkx/commit/976a80884c5a7f0561b45fef6d948c93b4bee631))
+* **ai-engineering-expert:** add hook language selection guidance ([72dd613](https://github.com/Rianico/harness-zkx/commit/72dd6133708eb97048fbaaf89cc1ec2de4c18872))
+* **ai-engineering:** formalize Manifest Engineering patterns ([06a83d8](https://github.com/Rianico/harness-zkx/commit/06a83d86079775daa143186a50944dbef4fb0aa0))
+* **ai-expert:** consolidate and relocate skill validation tool ([c2f475a](https://github.com/Rianico/harness-zkx/commit/c2f475a7976692f1c49591177ca1411d5f80c6dd))
+* **ai-expert:** establish GDD/BDD/EDD as foundational philosophy ([76876bf](https://github.com/Rianico/harness-zkx/commit/76876bfb075e990f9e0480ac1175731454c08976))
+* **ai-expert:** integrate High-Fidelity Handoff pattern as a core principle ([2824b39](https://github.com/Rianico/harness-zkx/commit/2824b393b05bce83d89495da5ddc7083396a421c))
+* **architect:** align ADR workflows with adr-tools ([840250f](https://github.com/Rianico/harness-zkx/commit/840250f1388a8cdbe2cc2468278f8a1aa929e1b7))
+* **bdd:** align architect agent and tdd-cycle with BDD behavioral specifications ([c12d5a1](https://github.com/Rianico/harness-zkx/commit/c12d5a1e49d5a6cf9d61e4fa202838622c8480eb))
+* **brainstorming:** add mandatory design validation with examples step ([b555b6f](https://github.com/Rianico/harness-zkx/commit/b555b6ffd136dcfd37e823c7c4c42081b58e9b4f))
+* **brainstorming:** integrate BDD (Given/When/Then) into design process and documentation ([132a40b](https://github.com/Rianico/harness-zkx/commit/132a40bc4671ddfbd44352846b5786ab653f3115))
+* branch-worktree python shims with wt gate delegation (ADR 0013) ([7fcad33](https://github.com/Rianico/harness-zkx/commit/7fcad33417ecfc8722a5b97c520d7f511dfb435c))
+* branch-worktree python shims with wt gate delegation and auto-scaffold ([94d1f81](https://github.com/Rianico/harness-zkx/commit/94d1f8191de67580b806055238c8c63fc2f49d6d))
+* **code-review:** add spec drift and pragmatism boundaries ([bf1235c](https://github.com/Rianico/harness-zkx/commit/bf1235cbde7abac1b05fd8add66dd8b433073567))
+* **commands:** add /ux-testing and /write entry points ([4b74a64](https://github.com/Rianico/harness-zkx/commit/4b74a64e1411aeb83c35aedfea73baf508dc7030))
+* **commands:** routing command pattern + argument-hint standardization ([55cedc1](https://github.com/Rianico/harness-zkx/commit/55cedc1714a22f03d34fd0947d0a7c2bacd5b3a8))
+* **continuous-learning:** integrate observation hooks and pattern detection ([e3c9057](https://github.com/Rianico/harness-zkx/commit/e3c90579a948430fe7a25fabf33f6c75ab9380e4))
+* **conventions:** generalize $SKILL_DIR as universal resource path anchor ([0b9d832](https://github.com/Rianico/harness-zkx/commit/0b9d8327a2fd90aa1c64f3bf227710a42ea2d87f))
+* docs-scraper CLI standards + typo hardening (merge feat/docs-scraper-cli-standards) ([59cc371](https://github.com/Rianico/harness-zkx/commit/59cc37121042c67647455c147ec7d5aac1cd0862))
+* docs-scraper CLI standards for global args ([1f67a3d](https://github.com/Rianico/harness-zkx/commit/1f67a3dc1a0a105b2e530ea54447630844a24a45))
+* **docs-scraper:** add deterministic inject-sources script for meta.sources ([6e322d3](https://github.com/Rianico/harness-zkx/commit/6e322d32ba4bb1e8ed207005709bc3c5189896c0))
+* **docs-scraper:** add llms.txt HEAD fallback and discovery/fetch metrics ([3990cfc](https://github.com/Rianico/harness-zkx/commit/3990cfc312f4e231484e7bc150e80be4381fc4e2))
+* **docs-to-skill:** add meta skill for transforming docs to flat skills ([e085df3](https://github.com/Rianico/harness-zkx/commit/e085df3fc46b30549e0f6bab9447d8eba99b1fd7))
+* **eval-gate:** consolidate evaluation script execution and reporting ([b4cc279](https://github.com/Rianico/harness-zkx/commit/b4cc279c558c9e6e71f27b76b0b0e8a1a815a387))
+* **full-review:** Add comprehensive multi-dimensional code review orchestrator and PR enhancement skill from plugin comprehensive-review@wshobson/agents ([029722a](https://github.com/Rianico/harness-zkx/commit/029722afdd1c71e17680d58025f776ca4416b14d))
+* **gdd:** align orchestration and verification skills with GDD/BDD/EDD philosophy ([54c54f1](https://github.com/Rianico/harness-zkx/commit/54c54f1dea872ae0b7d58f04bac8da6156dcb2c2))
+* **gdd:** codify GDD philosophy and streamline orchestration via ADRs ([fe22161](https://github.com/Rianico/harness-zkx/commit/fe221618d43001ed1d3e92b81d9102f0430bc74c))
+* **gdd:** define Mission Manifest schema and update contract (ADR-0007) ([6b41e01](https://github.com/Rianico/harness-zkx/commit/6b41e01ad345e778e036b0c7df603d80db3b05f5))
+* **gdd:** implement Goal Locking and Aggregated Manifest Hierarchy (ADR-0008) ([86eb7a9](https://github.com/Rianico/harness-zkx/commit/86eb7a973c62685d646ae317839f1af3c1145314))
+* **gdd:** implement Second-Generation GDD patterns (ADR-0009) ([10768e5](https://github.com/Rianico/harness-zkx/commit/10768e510e04c3dc6f7f6a7ec30cc32165e75f91))
+* **gdd:** implement Versioned Phase-Run Pattern (ADR-0010) ([d87c2a8](https://github.com/Rianico/harness-zkx/commit/d87c2a8eac1b57eded69e6d80e8c7e7ccd269c1e))
+* **gh-router:** add pr watch-merge and release-watch scripts ([40d9819](https://github.com/Rianico/harness-zkx/commit/40d9819aa276b886c5b82c4d1cec822495fc6833))
+* **gh-router:** make gh-release scripts package-manager-aware (npm/pnpm) ([9764202](https://github.com/Rianico/harness-zkx/commit/976420254856433db3c3a34ff837a82283730d95))
+* **handoff:** establish standard LSZ Handoff methodology with pointer passing ([03d6e52](https://github.com/Rianico/harness-zkx/commit/03d6e52bdcbe07bd532987b337d4ee016cd4cda2))
+* **handoff:** implement Handoff as Context Aggregator to displace full documents ([2d735a7](https://github.com/Rianico/harness-zkx/commit/2d735a75f6632dcd4cd5b90fb4b594ce2a9126e1))
+* **handoff:** integrate Context Aggregator into architect, plan, eval-gate, and code-review ([befafa3](https://github.com/Rianico/harness-zkx/commit/befafa305ea02417c8f03585afbb732e7362797c))
+* **handoff:** integrate standard LSZ return format and cross-session handoffs ([6850231](https://github.com/Rianico/harness-zkx/commit/685023194aa46bf639595c5bd80cb046623f16b8))
+* **handoff:** pivot methodology to focus on user intent, goals, and reasoning ([7fb637a](https://github.com/Rianico/harness-zkx/commit/7fb637a0fcd6c839bc04ba5bf879586c0e7ffea6))
+* **handoff:** refactor orchestrating skill for handoff-first context passing ([692f49d](https://github.com/Rianico/harness-zkx/commit/692f49d9a23f9dc9e4c74e0fb1347f67766ccec3))
+* **herdr:** absorb the upstream Herdr skill into skills/ ([#16](https://github.com/Rianico/harness-zkx/issues/16)) ([d8c3f5b](https://github.com/Rianico/harness-zkx/commit/d8c3f5bba615a2612163bedece04b9c6e60d9afb))
+* **hooks:** add CLI entry point to observer daemon ([1c2c71f](https://github.com/Rianico/harness-zkx/commit/1c2c71f1618274cdf2f5f9d77927d7877ee36c2b))
+* **hooks:** add observe family installer for continuous learning ([a1b9b03](https://github.com/Rianico/harness-zkx/commit/a1b9b037e25ae685b46fb6018054922636727e1f))
+* **hooks:** add pre-install tool check phase for hook families ([950ed69](https://github.com/Rianico/harness-zkx/commit/950ed6956acccc3c60bc1f633c38aca6f9baa75b))
+* **hooks:** add unified installer and ensure todo hooks ([2c7f79e](https://github.com/Rianico/harness-zkx/commit/2c7f79e75de8b64e97a0036539f3e4c67edf8727))
+* **md-to-html:** add asset integrity verification with SHA-256 manifest ([9f40146](https://github.com/Rianico/harness-zkx/commit/9f40146a7afea315cd95efeeeeb97dae884ea340))
+* **metadata:** update depends-on metadata for handoff integration ([4b4417f](https://github.com/Rianico/harness-zkx/commit/4b4417f0a6fe1e3e981bb91a63ba0ca955b65d2a))
+* **obsidian-markdown:** add skill and default markdown flavour rule ([a5994c1](https://github.com/Rianico/harness-zkx/commit/a5994c1f6dea12b0a2db6ee1d92b968c77391715))
+* **orchestrate:** add eval-gated feature workflow ([b93357f](https://github.com/Rianico/harness-zkx/commit/b93357fc490da5f9cfdf7688c3d927f800161711))
+* **orchestrating:** add lightweight pipeline with complexity-based routing ([30dc369](https://github.com/Rianico/harness-zkx/commit/30dc369940cbf65e1518d2db6f81891a0a29496e))
+* **orchestrating:** enhance manifest granularity and timestamp tracking ([22e5751](https://github.com/Rianico/harness-zkx/commit/22e57519d7e1902539fe583b0556754ac06667b0))
+* **programming-expert:** absorb python universal principles into router spine ([cdc7ea1](https://github.com/Rianico/harness-zkx/commit/cdc7ea11f4bc14da467757b2fa952b63734048ce))
+* **programming-expert:** add bash-expert subskill and defensive shell rules ([c9229f2](https://github.com/Rianico/harness-zkx/commit/c9229f2761955db4269571f497be61898f6b3ebf))
+* **python-expert:** add diagnostic resolution playbook ([9b20d20](https://github.com/Rianico/harness-zkx/commit/9b20d2060e8391c300395e6c1582d1af9b02856d))
+* **python-expert:** add stub file (.pyi) authoring guidance ([3f8020d](https://github.com/Rianico/harness-zkx/commit/3f8020d35bc720eff416a9088f412b22e089406f))
+* **python-expert:** refine with Pydantic-first type safety and 18-source comprehensive patterns ([d45b3c1](https://github.com/Rianico/harness-zkx/commit/d45b3c1e7245aab10bc7af08961e3319805a3e39))
+* **python:** add type boundary enforcement pattern ([8f95369](https://github.com/Rianico/harness-zkx/commit/8f9536951196acd9370a3ce88b026476af892aa4))
+* **python:** adopt basedpyright as default LSP server and type checker ([f0a175b](https://github.com/Rianico/harness-zkx/commit/f0a175b3ac3c89b1758729852661ca9160ad4034))
+* **ratatui-guide:** add flat skill with curated references and raw docs ([d36e29e](https://github.com/Rianico/harness-zkx/commit/d36e29e211fb350f7d871f5265fcaaad6579873e))
+* **resolve-merge-conflicts:** add intent discovery and uv execution ([31f481b](https://github.com/Rianico/harness-zkx/commit/31f481bd6391ddcd6e3b282c95c5622e6364bb59))
+* **rule:** enchance python rules ([7c1b16c](https://github.com/Rianico/harness-zkx/commit/7c1b16ccaa891dab4ebaf5ecd83350673e289316))
+* **rules:** add git workflow conventions from history analysis ([73746bf](https://github.com/Rianico/harness-zkx/commit/73746bfb230018bcd1f1162e72418f8accf08eb7))
+* **rules:** add standard subagent response format template ([ce13c1d](https://github.com/Rianico/harness-zkx/commit/ce13c1dcea470c23b616b71b86b51de352125878))
+* **scaffold:** add deterministic scaffold router with git/python/rust/ci flavors and taxonomy 4→3 redefinition ([6df8a0e](https://github.com/Rianico/harness-zkx/commit/6df8a0ed333f526e5b8212d5c2c2a133e4f75b3e))
+* **scaffold:** add git semantic-release workflow ([6e61107](https://github.com/Rianico/harness-zkx/commit/6e611077f8eb649e3d5ad9ecc310566b97da910a))
+* **scaffold:** add issue templates, npm publish toggle and release polish ([4375566](https://github.com/Rianico/harness-zkx/commit/4375566fd533e15f6288a4edd719c800641ec27c)), closes [#38](https://github.com/Rianico/harness-zkx/issues/38)
+* **scaffold:** add TypeScript flavor with lib/cli/pi-extension variants ([700224b](https://github.com/Rianico/harness-zkx/commit/700224b0bf6ba867006adbfac8879b8448b67ba5))
+* **scaffold:** enforce harness comment allowlist via oxlint harness/no-comments ([dc2845e](https://github.com/Rianico/harness-zkx/commit/dc2845ed6812bacd1850f76bad7c85e4f65527a5))
+* **scaffold:** explore project first then recommend combos ([84ca623](https://github.com/Rianico/harness-zkx/commit/84ca6234b789f66cff635c038a6e3dc84752d449))
+* **scaffold:** migrate typescript toolchain to native pnpm v12 + oxlint/oxfmt ([f803562](https://github.com/Rianico/harness-zkx/commit/f803562f4c2d910a328136e61d4e156af43650c5))
+* **scraper:** add compact output with flatten/rewrite/verify pipeline ([804f19c](https://github.com/Rianico/harness-zkx/commit/804f19ca0517fd56cc5acf55a91d2e5f99c61207))
+* **scraper:** add Jina Reader proxy for markdown fetching ([0bd75a2](https://github.com/Rianico/harness-zkx/commit/0bd75a277ae57f425afc55acd9319430d4415a0c))
+* **scraper:** add LLM-friendly fetching methods ([23e8380](https://github.com/Rianico/harness-zkx/commit/23e8380146bdc762697ec029acab00ce4ba6f81c))
+* **scraper:** add rust documentation scraper with cargo-docs-md ([f9ea7ef](https://github.com/Rianico/harness-zkx/commit/f9ea7ef64f8435203a353440340727800e43a8a1))
+* **scraper:** add web scraping best practices to base scraper ([895ed63](https://github.com/Rianico/harness-zkx/commit/895ed6365b8643e793089fa1250531a1001fd776))
+* **scraper:** create documentation scraper skill with LSP emoji handling ([04d24fd](https://github.com/Rianico/harness-zkx/commit/04d24fde38f1f14719a6dabe63551bb57af30bb7))
+* **scraper:** generate README.md with metadata for crawled docs ([16e30bf](https://github.com/Rianico/harness-zkx/commit/16e30bf890ef81349cfb885641c824039a170738))
+* **scraper:** integrate defuddle for cleaner markdown extraction ([495dded](https://github.com/Rianico/harness-zkx/commit/495ddeda1a5146218850afcb8884e37b66da5ce7))
+* **skill-authoring,toolchain,scaffold:** add general rename script and toolchain-wiki oxc references ([ef61830](https://github.com/Rianico/harness-zkx/commit/ef618300b3c522cde146fbe9c86e6182c4cc69d5))
+* **skill-authoring:** enforce empirical skill description standards ([6c0a34d](https://github.com/Rianico/harness-zkx/commit/6c0a34d552146abee46fa98d427936f05cd08277))
+* **skill-comply:** add structured JSON output for classifier and configurable timeouts ([b58aa31](https://github.com/Rianico/harness-zkx/commit/b58aa31734273ed6b20c060c43d9105f1edaa246))
+* **skill-stocktake:** adapt to continuous learning observation schema ([78fa1e2](https://github.com/Rianico/harness-zkx/commit/78fa1e2d6a7b579d32c67f117522fa7d9004aeed))
+* **skill-stocktake:** aggregate observations from all project files ([ddf956d](https://github.com/Rianico/harness-zkx/commit/ddf956d816e6a5b58d713feb5cb875a3e056bee1))
+* **skill-stocktake:** improve Rich terminal output with HORIZONTALS style ([55e3387](https://github.com/Rianico/harness-zkx/commit/55e338754f6207e92bd2796be19533717450b91c))
+* **skill-stocktake:** sort overview by 7d usage descending ([d888203](https://github.com/Rianico/harness-zkx/commit/d8882039a2601b9b7065d8d321aaebc3e4ff04ef))
+* **skill:** absorb game-rules writing principles into writing skill ([66aeb30](https://github.com/Rianico/harness-zkx/commit/66aeb3067cb54defcd88c57456020e1bc342399b))
+* **skill:** add a skill for iterating harness ([ce1d78c](https://github.com/Rianico/harness-zkx/commit/ce1d78c065fa78adf540fb37bbadaabce8af69c1))
+* **skill:** add lsp 3.17 specification skill ([d0c5364](https://github.com/Rianico/harness-zkx/commit/d0c5364e8e70b12690f8ece5a01b218ca19082a7))
+* **skills:** absorb write-a-skill into skill authoring ([84c44fa](https://github.com/Rianico/harness-zkx/commit/84c44faa4b0e44dc20b1e2da040a9059857a2c35))
+* **skills:** add arguments and argument-hint to hidden skills ([416c4e8](https://github.com/Rianico/harness-zkx/commit/416c4e80a4c105b6a3bb170799897e616f33ba3a))
+* **skills:** add basedpyright-expert domain knowledge skill ([050ffc4](https://github.com/Rianico/harness-zkx/commit/050ffc43b8db1e47fedfbc4acff26d6307c607b4))
+* **skills:** add dependency caller scanner ([e20d117](https://github.com/Rianico/harness-zkx/commit/e20d1172f9e1e1539c87fe76b3487f8da3b6c952))
+* **skills:** add deterministic skill dependency scanner ([2f94f0b](https://github.com/Rianico/harness-zkx/commit/2f94f0b0dda7e81ffbec71fe27da8aba91a12cb4))
+* **skills:** add llm-lsp-cli-guide skill ([a5a39aa](https://github.com/Rianico/harness-zkx/commit/a5a39aa13d3b8352fd6809059a9d4e0853282e93))
+* **skills:** Add reference guide for modern CLI tools (fd, rg, eza) ([8ab17d0](https://github.com/Rianico/harness-zkx/commit/8ab17d04328e82706eb00ada0be00567e00d3e9b))
+* **skills:** add rename command to validate-deps.py ([1389b2a](https://github.com/Rianico/harness-zkx/commit/1389b2ae4f84599b4f15676cb8faafb02fb9ae24))
+* **skills:** add toolchain detection to setup-lsz-skills ([1386ff8](https://github.com/Rianico/harness-zkx/commit/1386ff80922425f02e115ae63df7df641089c9e8))
+* **skills:** consolidate codebase-onboarding and zoom-out into a single 'onboarding' skill ([2c11059](https://github.com/Rianico/harness-zkx/commit/2c11059aad28be1cace954c2a4b8d548145e1def))
+* **skills:** consolidate firecrawl and tavily into unified tool skills ([58d4f6a](https://github.com/Rianico/harness-zkx/commit/58d4f6a070b5ab6a7e4d21695ac6cb26d25fd473))
+* **skills:** consolidate tavily and firecrawl into web-accessing parent skill ([4ace80a](https://github.com/Rianico/harness-zkx/commit/4ace80a1967e2bda5693be29e4c89abe0d2bf644))
+* **skills:** convert ux-testing command to parent skill with sub-skills ([0dc22cf](https://github.com/Rianico/harness-zkx/commit/0dc22cf44d7edce5b14fbbbcc5561fc924d31152))
+* **skills:** enhance brainstorming, ADR, and ai-engineering-expert hints ([2baf42b](https://github.com/Rianico/harness-zkx/commit/2baf42b41cbca3903d0d32488d7610d2db33e607))
+* **skills:** evolve TDD engine and Developer agent with AI Engineering principles ([299581d](https://github.com/Rianico/harness-zkx/commit/299581d4b95e3d0911d49b62d0855b8acb68fa5a))
+* **skills:** implement md-to-html v2.3 for data-driven report rendering ([d7f67cb](https://github.com/Rianico/harness-zkx/commit/d7f67cb6b0be13e9bd0a21692ad3b96b26351a80))
+* **skills:** improve release, pr/merge and pre-push hooks with watch and auto-fix ([#12](https://github.com/Rianico/harness-zkx/issues/12)) ([b84d13f](https://github.com/Rianico/harness-zkx/commit/b84d13f1f01223f25bb9c6211028cd8b418c79a3))
+* **skills:** introduce parent-skill-with-sub-skills pattern ([f06f577](https://github.com/Rianico/harness-zkx/commit/f06f577ad2dff3ff5cd7651deaa0e7f30ada02db))
+* **skills:** merge callers and deps into a single 'related' command ([eb5ddc1](https://github.com/Rianico/harness-zkx/commit/eb5ddc1202c636fcd39bdde0fa697c0c4427da34))
+* **skills:** refine writing-for-agents and programming-expert triggers ([#13](https://github.com/Rianico/harness-zkx/issues/13)) ([8f6b6af](https://github.com/Rianico/harness-zkx/commit/8f6b6afee0ef4c8d6dc1a93930f36a0bc2502f79))
+* **skills:** restructure ai-engineering-expert into parent-child with metadata.depends-on ([7a62e73](https://github.com/Rianico/harness-zkx/commit/7a62e73f9879016df4c23f2dd548ac3189f57de5))
+* **skills:** stabilize architecture with missing core skills and validation ([d208d08](https://github.com/Rianico/harness-zkx/commit/d208d084be9498f3c0ae86650ee0190ccfd1253b))
+* **skills:** upgrade dependency scanner and fix invalid YAML frontmatter ([5298bed](https://github.com/Rianico/harness-zkx/commit/5298bed75eec4c965aad8fcb8347306c0edded31))
+* **skills:** upgrade validate-deps.py to versatile skill management tool ([9354e18](https://github.com/Rianico/harness-zkx/commit/9354e1899945a31206a20c185ab4aca4e6907ff5))
+* **skill:** wire commitlint into worktrunk pre-merge gate ([a69a7f1](https://github.com/Rianico/harness-zkx/commit/a69a7f128ef5e578bf9ec13d3daecd52fce53997))
+* **tdd-cycle:** add lightweight mode for eval remediation ([9290b3c](https://github.com/Rianico/harness-zkx/commit/9290b3c3ec85ebe78c4106a7980670e7a9d01bc4))
+* **tdd:** apply vertical slice pattern to tdd-cycle lightweight mode ([e6f25f9](https://github.com/Rianico/harness-zkx/commit/e6f25f9fdfb90c8723c23da059596ebeecb565ec))
+* **timezone:** add timezone awareness rule and auto-detection utility ([b8aaed3](https://github.com/Rianico/harness-zkx/commit/b8aaed330dba2c3a729c99cb832dbf6ec9283e7d))
+* **workflow:** add converge-tasks workflow ([b29ea03](https://github.com/Rianico/harness-zkx/commit/b29ea0329ceef5ad23db5b09bd16bbec5e77ac0c))
+* **workflow:** add dynamic-workflow-wrapper and inlined role contracts ([add5f0c](https://github.com/Rianico/harness-zkx/commit/add5f0c000fcbc001ca33a13eebdf3cb6585dfe3))
+* **workflow:** support suggestions and feed-forward gotchas in converge-tasks ([0f29f68](https://github.com/Rianico/harness-zkx/commit/0f29f68953b6cde4548491f369efdcfaebfbcf63))
+* **writing-for-agents:** add human-facing prose and blind prose evals ([8ad3c5d](https://github.com/Rianico/harness-zkx/commit/8ad3c5db7b0f066115ed12e03da3185fabb7dd9d))
+
+### Bug Fixes
+
+* **agents:** drop tools that never register in subagents ([0989c27](https://github.com/Rianico/harness-zkx/commit/0989c27d64b5ed65bbcf6ebf32ec9f437fa959b5)), closes [#109](https://github.com/Rianico/harness-zkx/issues/109)
+* **ai-engineering-expert:** use <skill-name>-raw/ path for raw docs ([3cda5b1](https://github.com/Rianico/harness-zkx/commit/3cda5b112e3b17d5e131f5b01cd82ee0dce47c55))
+* **branch-worktree-pr:** surface pre-push changelog guard in merge_copy and open_pr ([b0084da](https://github.com/Rianico/harness-zkx/commit/b0084daa15d4711e16b80a8773f9b904a8f7c9e1))
+* **ci:** bump GH Actions to Node 24 in workflows ([8367bb7](https://github.com/Rianico/harness-zkx/commit/8367bb77d9ddf492b0249462bb79b628ccac4cdc))
+* **ci:** prune continuous-learning tests and sync changelog ([4835c39](https://github.com/Rianico/harness-zkx/commit/4835c39969b52bc31e3debd02eb458887a2e668a))
+* **ci:** remove stale ci jobs and fix release env mapping, update scaffold template ([b745dd8](https://github.com/Rianico/harness-zkx/commit/b745dd8cf1467af120e98b4a8bb6f25d53350ab4))
+* clarify worktrunk-guide markdown link example to avoid broken link ([7214d34](https://github.com/Rianico/harness-zkx/commit/7214d34f36ef72ab9d96b738ac689e1c72715fb4))
+* **commands:** apply routing pattern to /write command ([7f541a2](https://github.com/Rianico/harness-zkx/commit/7f541a25cb1a8c8c8a6a9eed35af09e5a925c67c))
+* **commands:** improve argument-hint with concrete types and platforms ([74d9a62](https://github.com/Rianico/harness-zkx/commit/74d9a622ae7f547fbdd6f13b830bc86f7b568238))
+* **converge-goal:** run every round in a persistent wt worktree ([df49641](https://github.com/Rianico/harness-zkx/commit/df49641ecceefd939628f88c1407d0bda8540e5f))
+* **deps:** add rich to dependencies for stocktake script ([f1c56e0](https://github.com/Rianico/harness-zkx/commit/f1c56e02ec3471aa5ae15dd25eb5a620413bf156))
+* **docs-to-skill:** use ROUNDED table style for summary output ([c5f263e](https://github.com/Rianico/harness-zkx/commit/c5f263e03b90181380659522603fe801252f4845))
+* **docs:** github.com is not rust for auto-detect ([8f9859e](https://github.com/Rianico/harness-zkx/commit/8f9859e58770619d2b3ed300c9f38c7552bbf14f))
+* **dynamic-workflow-wrapper:** fit description to the context-load budget ([434d2c3](https://github.com/Rianico/harness-zkx/commit/434d2c3a8625bc48830836a14b29656629486bec))
+* **gh-router:** resolve repo from push remote instead of gh repo view ([a39541d](https://github.com/Rianico/harness-zkx/commit/a39541d784e40cbf30c89b4ce96eed314952cf76))
+* **handoff:** use phase-specific storage to prevent filename conflicts ([b677301](https://github.com/Rianico/harness-zkx/commit/b677301e6cf497806d1e1a179de6c4418c772879))
+* harden CI and python shims, pin actions and fix gate ([067eec0](https://github.com/Rianico/harness-zkx/commit/067eec02117ba83bb45fbb4c7980d7af04f24e4c))
+* **hooks/observe:** support standalone and module import patterns ([24747b0](https://github.com/Rianico/harness-zkx/commit/24747b0affda7ba27722091107f5ba0c4034380b))
+* **hooks:** handle empty projects.json and add comprehensive logging ([777ae3f](https://github.com/Rianico/harness-zkx/commit/777ae3f2a79e4afdd93fcae9a906b79633505067))
+* **orchestrating:** clarify orchestrator must dispatch eval-gate, not run verification directly ([00ad509](https://github.com/Rianico/harness-zkx/commit/00ad5094313b8874200edee7112587dc5f03448c))
+* **plan:** fix the mistake that planner can not write plan itself ([1ca152b](https://github.com/Rianico/harness-zkx/commit/1ca152b4e45c841eff43f03f54f45727b4d509bf))
+* resolve typos in docs-scraper and allowlist technical terms ([7398237](https://github.com/Rianico/harness-zkx/commit/7398237b0373d58bfa8e340dda438377cafa7e25))
+* restore skill-stocktake Python scripts for token-saving ([e3bfc95](https://github.com/Rianico/harness-zkx/commit/e3bfc9573f720a3fa3525e28fff50b87f6daced1))
+* **rules:** fix missing rules from git log ([525b520](https://github.com/Rianico/harness-zkx/commit/525b520693c4a13b0b6f22a21ab8777e92e34d83))
+* **scaffold:** bump GH Actions to Node 24 — checkout v5, setup-node v5, setup-python v6, github-script v8 ([fe50921](https://github.com/Rianico/harness-zkx/commit/fe5092170f2d0aeef17fa6ccb8c1c50137e94eb3))
+* **scaffold:** drop .agents/ from gitignore additions ([869ef92](https://github.com/Rianico/harness-zkx/commit/869ef920b7f19205fe7e32182f3ef40b18e851f9))
+* **scaffold:** husky vs githooks pre-push delegation and default hooksPath ([f9375b9](https://github.com/Rianico/harness-zkx/commit/f9375b938dc2f89c7866d793adc1327eaa487e14))
+* **scaffold:** include lint in pre-merge gate — respect tool feedback ([b167b39](https://github.com/Rianico/harness-zkx/commit/b167b393a80301fea0348bb0eb2b2ee3725a7eb3))
+* **scaffold:** move TS smoke test to tests/ layout ([b4b4358](https://github.com/Rianico/harness-zkx/commit/b4b43583f64d3f34063492385e6faab4c718d7e8))
+* **scaffold:** patch releaserc assets to pnpm-lock.yaml in TS flavor ([1d6e87e](https://github.com/Rianico/harness-zkx/commit/1d6e87e204671912fe4ba12f952998db9c94bf8b))
+* **scaffold:** prescribe hidden-type changelog sync commits ([66d2793](https://github.com/Rianico/harness-zkx/commit/66d27931ae739067ec2e04171b5ab60a15d9c98e))
+* **scaffold:** prescribe hidden-type changelog sync commits ([0b1ced1](https://github.com/Rianico/harness-zkx/commit/0b1ced1ef6970b3ac8f94d303b6b2851718a98ca))
+* **scaffold:** provision pnpm via action-setup in CI templates ([af6dfc5](https://github.com/Rianico/harness-zkx/commit/af6dfc565bc0fdc3b3481952a88d040b4dedd70b))
+* **scaffold:** single-source Node version from NODE_VERSION_NUM ([a91b8e0](https://github.com/Rianico/harness-zkx/commit/a91b8e07013d5a3b457583da9a16fc88f5c68620))
+* **skill-authoring:** assert equal-length zip in duplicate-name check ([d532770](https://github.com/Rianico/harness-zkx/commit/d5327701d383ab435ed2673e63863f9c277bfce9))
+* **skill-authoring:** exclude legacy commands/ from the skill registry ([0d3120f](https://github.com/Rianico/harness-zkx/commit/0d3120fafe5ba2d399270b618a4a5fec40bb7858))
+* **skill-authoring:** rewrite only the exact flow-list item on rename ([da2e363](https://github.com/Rianico/harness-zkx/commit/da2e363532c70208436667d1b9dc7df167467f65))
+* **skill-comply:** update test assertions to match fixture spec id ([d134999](https://github.com/Rianico/harness-zkx/commit/d134999afc8bb55c0aef33b976939a81d3361cb9))
+* **skill-comply:** use shell=True for setup commands with heredocs ([267abd4](https://github.com/Rianico/harness-zkx/commit/267abd440f3bae030cdf2fe617c8a064317242e3))
+* **skill-stocktake:** follow symlinks and fix awk syntax ([5cff394](https://github.com/Rianico/harness-zkx/commit/5cff3947368cbf544d796d6b77686e6114c83b50))
+* **skill:** add missing opener for handoff skill's frontmatter ([d971a31](https://github.com/Rianico/harness-zkx/commit/d971a318552ed3ca45c3b143c6b1fec7d95f24e6))
+* **skills:** restore correct YAML block scalars for argument-hint ([cc9f585](https://github.com/Rianico/harness-zkx/commit/cc9f585441ca62972d4026274ede5413e4accee2))
+* **verification:** point writing sub-skill links at writing-for-agents ([aa465c7](https://github.com/Rianico/harness-zkx/commit/aa465c70bb60efcb5f8de7dde0182a1fbb4dbf2f))
+* worktrunk-guide document global options for wt merge ([48abbfa](https://github.com/Rianico/harness-zkx/commit/48abbfad9665bf8359b211615a91ec730fec6992))
+
+### Documentation
+
+* add information boundary pattern to ai-engineering-expert ([72224a3](https://github.com/Rianico/harness-zkx/commit/72224a3f1df069f1f43f62ad3cc90183d4001a90))
+* add Router Skill glossary and ADR 0012 for router injection ([ae0cb65](https://github.com/Rianico/harness-zkx/commit/ae0cb65f1fdbff2eb815ab66f952cd0e39fe7977))
+* **adr:** adopt hybrid Nygard + Considered Options template ([4c694a0](https://github.com/Rianico/harness-zkx/commit/4c694a00f7d82780bbcd52d4725487d27a7a2442)), closes [#8](https://github.com/Rianico/harness-zkx/issues/8)
+* **adr:** allow high-signal comments via curated allowlist — replace total ban (ADR-0014) ([7829450](https://github.com/Rianico/harness-zkx/commit/7829450badec73ca205bc7a99361bd67eb09e589))
+* **adr:** link ADR-0009 to root philosophy and hierarchy ([bebe8d4](https://github.com/Rianico/harness-zkx/commit/bebe8d405ff13349ad7ee078fe9adfbe5867e4e9))
+* **adr:** link new ADRs to establish architectural lineage ([e523ffe](https://github.com/Rianico/harness-zkx/commit/e523ffeb49ebd3dca410a8752b23e5fa2a1bed5b))
+* **ai-engineering-expert:** arguments and hints should reflect skill function ([57f7583](https://github.com/Rianico/harness-zkx/commit/57f758326fac966b3e9b7b4282ab7e41635d30f6))
+* **ai-engineering:** add artifact hygiene as fifth core tenet ([1099e2b](https://github.com/Rianico/harness-zkx/commit/1099e2b82c972676eac8e21d5abd44525a530ba0))
+* **ai-engineering:** add subagent-first execution as core philosophy ([688b725](https://github.com/Rianico/harness-zkx/commit/688b7254e0d5b79d425c5592da7243da4517639e))
+* **branch-worktree-pr:** mandate tdd and delegate release lifecycle ([bba2bd3](https://github.com/Rianico/harness-zkx/commit/bba2bd35fb906849bb8b02e890cfa08f77e9bfe9))
+* changelog for branch-worktree py shims and autofix formatting ([7ba8291](https://github.com/Rianico/harness-zkx/commit/7ba82912cc0dd9dbba68757eef6f2ed4e3294a20))
+* **changelog:** sync unreleased section ([df621a3](https://github.com/Rianico/harness-zkx/commit/df621a341eca4e66962ed454a937987b5c34f70d))
+* **changelog:** sync unreleased section ([05b9797](https://github.com/Rianico/harness-zkx/commit/05b9797c051a2210ac1a869c26f16659f11228f9))
+* **changelog:** sync unreleased section ([32c0eb0](https://github.com/Rianico/harness-zkx/commit/32c0eb06ac026d50517e869adc67beb7104eb056))
+* **changelog:** update Unreleased for docs/skills refactor ([03eddee](https://github.com/Rianico/harness-zkx/commit/03eddee5aa08f8a1dc33e8d7d43a690565dd614e))
+* **claude:** add hook design philosophy ([a5805d5](https://github.com/Rianico/harness-zkx/commit/a5805d54c911837c530508cbdc5568343c86c2ba))
+* **context-load:** add policy reference, glossary, and updated domain terms ([699ca25](https://github.com/Rianico/harness-zkx/commit/699ca254dd1a4d1698d852bef2535a063dc834eb))
+* define worktree workflow language and ADR 0013 ([2c1a62d](https://github.com/Rianico/harness-zkx/commit/2c1a62dc2128c208fa62da3de0b0686cad33d298))
+* **environment:** add workspace-diagnostics to LSP commands ([84b7b74](https://github.com/Rianico/harness-zkx/commit/84b7b74b6a1bee70b3b70be8f9e61d553632ecb7))
+* **environment:** integrate llm-lsp-cli as first-class code intelligence tool ([55a8fc4](https://github.com/Rianico/harness-zkx/commit/55a8fc4a3803c805c86a8b236ba6fdaa71a0001c))
+* **eval-gate:** add grader selection guidance ([3868b8f](https://github.com/Rianico/harness-zkx/commit/3868b8f893f0495ccc5feb9b806e89b69710a012))
+* formalize project glossary and tool feedback ADR ([24ef457](https://github.com/Rianico/harness-zkx/commit/24ef45761f0c5481158deeca6d2d8e4365d36ab5))
+* **git-convention:** make concise with clear organization ([#10](https://github.com/Rianico/harness-zkx/issues/10)) ([141c7d5](https://github.com/Rianico/harness-zkx/commit/141c7d5bab26f23fb00f29ac3cca7fe4cd2c9ec9))
+* **gotcha:** add GitHub access guard preferring gh CLI ([718d9db](https://github.com/Rianico/harness-zkx/commit/718d9dbe24936c98270b3e345132a6724c81fcf7))
+* **handoff:** generalize next directive example ([56c76fb](https://github.com/Rianico/harness-zkx/commit/56c76fbe09e1d0b566b564bcc2df5bcc2f2cc6b1))
+* **handoff:** use recommendation language instead of directive language ([243826c](https://github.com/Rianico/harness-zkx/commit/243826ccb5b0e0065c4eca78735452a65edc412c))
+* **mental-model:** add critical thinking as primary thinking mode ([635d67d](https://github.com/Rianico/harness-zkx/commit/635d67d80201396ed185467c373651ee69cc6f2f))
+* **mental-model:** add knowledge gap as primary reason to ask ([0cd790b](https://github.com/Rianico/harness-zkx/commit/0cd790bcb25e1f666877ed2dcc9fa56590323fc5))
+* modernize project instructions and mental model ([b39c202](https://github.com/Rianico/harness-zkx/commit/b39c2020aaaf703c055788c7b1bc447eee8eb787))
+* **python-expert:** add serialization layering principle ([f2c3a87](https://github.com/Rianico/harness-zkx/commit/f2c3a8755c6c5efd23d7277851080f6013e8787e))
+* **python:** add keep-typed-models principle and trace-to-source methodology ([ab1c783](https://github.com/Rianico/harness-zkx/commit/ab1c783bcf352bc5ad98d0b74111773bb914a634))
+* **python:** codify diagnostic resolution rules ([cc250e2](https://github.com/Rianico/harness-zkx/commit/cc250e2e9814d961ef46f53c1323527dbbe0face))
+* **python:** strengthen type safety principles and patterns ([090e521](https://github.com/Rianico/harness-zkx/commit/090e5219ec808304574cb3f08e90132dc6ff95f0))
+* **quality:** add prefer type-safe libraries principle ([71119d8](https://github.com/Rianico/harness-zkx/commit/71119d82b130268c6961225a3f069c61cf13dd82))
+* refine skill naming conventions by taxonomy ([7ebbe4e](https://github.com/Rianico/harness-zkx/commit/7ebbe4ea013767ef38a9109e41f196c587c54a61))
+* **rules,skill:** add mandatory performance testing requirements ([5db17b8](https://github.com/Rianico/harness-zkx/commit/5db17b8782608edc213d70d4f3a1e139a562c05d))
+* **rules:** add language management best practices ([67190c4](https://github.com/Rianico/harness-zkx/commit/67190c4fe4fb87f6c674ccc1f21e877234c789e9))
+* **rules:** clarify branch+worktree target stays in session, children isolated ([09a4b2a](https://github.com/Rianico/harness-zkx/commit/09a4b2a1d90272ea08b4787e657eca5a31841e44))
+* **rules:** clarify gates and internal deprecation + skill sync ([#11](https://github.com/Rianico/harness-zkx/issues/11)) ([e23479e](https://github.com/Rianico/harness-zkx/commit/e23479ed0a5604cb3722649a54e69baadecf3df6))
+* **rules:** enhance Scoped Over Global with category-level thinking ([7e6a4a7](https://github.com/Rianico/harness-zkx/commit/7e6a4a7a501d8bd2982b3b0c08e4eca3f2b4e309))
+* **rules:** establish code quality, security, environment, and testing baselines ([553ae49](https://github.com/Rianico/harness-zkx/commit/553ae4930cb2f0106dd1b7a9ae6405435056428b))
+* **rules:** prefer rg, fd, eza over grep, find, ls ([3912343](https://github.com/Rianico/harness-zkx/commit/39123432ff1fbef70b5abc1347580281e1ec0996))
+* **rules:** refine mental-model and development-patterns ([7ff6c9f](https://github.com/Rianico/harness-zkx/commit/7ff6c9ff48b4fad76afac626ec71f3b102840392))
+* **rules:** refine Python type safety with nuanced suppression approach ([cb028e7](https://github.com/Rianico/harness-zkx/commit/cb028e77eeb0f91bac0b2ab312317153835362fa))
+* **rules:** update agents, coding style, workflow and security guidelines in common rules ([b264d33](https://github.com/Rianico/harness-zkx/commit/b264d331d8a7cddb30d39fbab0c22d62a027411a))
+* **scraper:** add comprehensive Tavily Extract comparison ([2926d07](https://github.com/Rianico/harness-zkx/commit/2926d077af9e26e352fe2a2cfc702f97959e0e3f))
+* **skill-authoring:** document YAML scalar convention and name collision rule ([ecccc2a](https://github.com/Rianico/harness-zkx/commit/ecccc2a8def81d90a1b5e1c560681ea6fe21f68a))
+* **skill-comply:** drop legacy commands/*.md from supported targets ([b85919f](https://github.com/Rianico/harness-zkx/commit/b85919f411a989bf81d54b9a07fb72f442161cc0))
+* **skill-stocktake:** document required tools ([9db0a46](https://github.com/Rianico/harness-zkx/commit/9db0a46c85d6e7289e99c94a00a2ca080dd7b874))
+* **skills:** add comprehensive skill authoring standards and fix 30 skills ([9c8e2b1](https://github.com/Rianico/harness-zkx/commit/9c8e2b1e622dbb34837ac4ac6e4c34396ba3c7a1))
+* **skills:** align exploration narrative with environment-behavior rules ([c908361](https://github.com/Rianico/harness-zkx/commit/c90836140f8299e7097a6fa06a1adeb5deb2567a))
+* **skills:** rewrite search and orchestrate descriptions for trigger recall ([9cf6398](https://github.com/Rianico/harness-zkx/commit/9cf6398c4cce2ec964aa6583882ab25f5b59462c))
+* update changelog unreleased section ([6cb2fc8](https://github.com/Rianico/harness-zkx/commit/6cb2fc8a3400631ae7a7012d3878d052fbea7c60))
+* **workflow-wrapper:** record worktree contract and allowlist reality ([22dc86d](https://github.com/Rianico/harness-zkx/commit/22dc86d9eb72fabfa1ef11143311a36f0ccea68c))
+* **worktrunk:** expand merge workflow guidance and triggers ([05f25aa](https://github.com/Rianico/harness-zkx/commit/05f25aad3d2cc6d381a8ee67b75431ba3fa7fce6))
+
+### Code Refactoring
+
+* **changelog:** adopt Option A PR guard + pre-push hook ([de81d2b](https://github.com/Rianico/harness-zkx/commit/de81d2bd4e9fbb3a6f98360e72291fa32d9ad146))
+* **gh-router:** rename pr subskill to pr-land ([d535dfe](https://github.com/Rianico/harness-zkx/commit/d535dfe9e2e25edfc7abd5f5cc843b990c97ec39))
+* **skills:** absorb architecture-expert into programming-expert ([aa9d538](https://github.com/Rianico/harness-zkx/commit/aa9d5385717a7f5fe8a3a6ce594216a346d378ab))
+* **skills:** consolidate language experts into programming-expert router ([872a893](https://github.com/Rianico/harness-zkx/commit/872a89330281754fb7462f272d7cb19fa6ac18fb))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries link to related issues/PRs inline where tracked: `([#N](https://github.com/.../issues/N))` — entries with no tracked issue stay linkless.
-
-## [Unreleased]
-
-### Features
-
-- **herdr:** add herdr-pane pane-split helper
-- **herdr:** absorb the upstream Herdr skill into skills/
-- **writing-for-agents:** add human-facing prose and blind prose evals
-- **workflow:** support suggestions and feed-forward gotchas in converge-tasks
-- **resolve-merge-conflicts:** add intent discovery and uv execution
-- **code-review:** add spec drift and pragmatism boundaries
-- **workflow:** add converge-tasks workflow
-- **workflow:** add dynamic-workflow-wrapper and inlined role contracts
-- **skill-authoring:** enforce empirical skill description standards
-- **gh-router:** add pr watch-merge and release-watch scripts
-- **docs-scraper:** add deterministic inject-sources script for meta.sources
-- **programming-expert:** add bash-expert subskill and defensive shell rules
-- **gh-router:** make gh-release scripts package-manager-aware (npm/pnpm)
-- **docs-scraper:** add llms.txt HEAD fallback and discovery/fetch metrics
-- **scaffold:** enforce harness comment allowlist via oxlint harness/no-comments
-- **skill-authoring,toolchain,scaffold:** add general rename script and toolchain-wiki oxc references
-- **programming-expert:** absorb python universal principles into router spine
-- **python-expert:** refine with Pydantic-first type safety and 18-source comprehensive patterns
-- **skills:** refine writing-for-agents and programming-expert triggers (#13)
-- **scaffold:** migrate typescript toolchain to native pnpm v12 + oxlint/oxfmt
-- **skills:** improve release, pr/merge and pre-push hooks with watch and auto-fix (#12)
-- **scaffold:** add TypeScript flavor with lib/cli/pi-extension variants
-- **scaffold:** add issue templates, npm publish toggle and release polish
-- **scaffold:** explore project first then recommend combos
-- **scaffold:** add git semantic-release workflow
-- **scaffold:** add deterministic scaffold router with git/python/rust/ci flavors and taxonomy 4→3 redefinition
-- **skill:** wire commitlint into worktrunk pre-merge gate
-- **skill:** absorb game-rules writing principles into writing skill
-- add TypeScript rules (baseline + modern tooling)
-- add skill.sh scraper and typescript-expert
-- docs-scraper CLI standards for global args
-- branch-worktree python shims with wt gate delegation and auto-scaffold
-- **ai-engineering-expert:** absorb writing-for-agents as router subskill
-- **md-to-html:** add asset integrity verification with SHA-256 manifest
-- **skills:** implement md-to-html v2.3 for data-driven report rendering
-- **ai-engineering:** formalize Manifest Engineering patterns
-- **orchestrating:** enhance manifest granularity and timestamp tracking
-- **eval-gate:** consolidate evaluation script execution and reporting
-- **gdd:** implement Versioned Phase-Run Pattern (ADR-0010)
-- **gdd:** implement Second-Generation GDD patterns (ADR-0009)
-- **gdd:** implement Goal Locking and Aggregated Manifest Hierarchy (ADR-0008)
-- **gdd:** define Mission Manifest schema and update contract (ADR-0007)
-- **gdd:** codify GDD philosophy and streamline orchestration via ADRs
-- **gdd:** align orchestration and verification skills with GDD/BDD/EDD philosophy
-- **ai-expert:** establish GDD/BDD/EDD as foundational philosophy
-- **ai-expert:** consolidate and relocate skill validation tool
-- **ai-expert:** integrate High-Fidelity Handoff pattern as a core principle
-- **handoff:** refactor orchestrating skill for handoff-first context passing
-- **handoff:** integrate Context Aggregator into architect, plan, eval-gate, and code-review
-- **handoff:** implement Handoff as Context Aggregator to displace full documents
-- **handoff:** pivot methodology to focus on user intent, goals, and reasoning
-- **skills:** add toolchain detection to setup-lsz-skills
-- **skills:** add rename command to validate-deps.py
-- **skills:** consolidate codebase-onboarding and zoom-out into a single 'onboarding' skill
-- **skills:** merge callers and deps into a single 'related' command
-- **skills:** upgrade validate-deps.py to versatile skill management tool
-- **skills:** stabilize architecture with missing core skills and validation
-- **skills:** upgrade dependency scanner and fix invalid YAML frontmatter
-- **skills:** add deterministic skill dependency scanner
-- **metadata:** update depends-on metadata for handoff integration
-- **handoff:** integrate standard LSZ return format and cross-session handoffs
-- **handoff:** establish standard LSZ Handoff methodology with pointer passing
-- **bdd:** align architect agent and tdd-cycle with BDD behavioral specifications
-- **brainstorming:** integrate BDD (Given/When/Then) into design process and documentation
-- **tdd:** apply vertical slice pattern to tdd-cycle lightweight mode
-- **skills:** evolve TDD engine and Developer agent with AI Engineering principles
-- **skills:** add dependency caller scanner
-- **skills:** enhance brainstorming, ADR, and ai-engineering-expert hints
-- **skills:** absorb write-a-skill into skill authoring
-- **skills:** restructure ai-engineering-expert into parent-child with metadata.depends-on
-- **agents:** add Matt Pocock engineering skills configuration
-- **rules:** add git workflow conventions from history analysis
-- **skills:** convert ux-testing command to parent skill with sub-skills
-- **skills:** consolidate tavily and firecrawl into web-accessing parent skill
-- **skills:** introduce parent-skill-with-sub-skills pattern
-- **skills:** consolidate firecrawl and tavily into unified tool skills
-- **skills:** add arguments and argument-hint to hidden skills
-- **commands:** routing command pattern + argument-hint standardization
-- **commands:** add /ux-testing and /write entry points
-- **skills:** add basedpyright-expert domain knowledge skill
-- **python-expert:** add diagnostic resolution playbook
-- **obsidian-markdown:** add skill and default markdown flavour rule
-- **scraper:** integrate defuddle for cleaner markdown extraction
-- **scraper:** generate README.md with metadata for crawled docs
-- **docs-to-skill:** add meta skill for transforming docs to flat skills
-- **ratatui-guide:** add flat skill with curated references and raw docs
-- **conventions:** generalize $SKILL_DIR as universal resource path anchor
-- **python-expert:** add stub file (.pyi) authoring guidance
-- **rules:** add standard subagent response format template
-- **tdd-cycle:** add lightweight mode for eval remediation
-- **scraper:** add compact output with flatten/rewrite/verify pipeline
-- **skills:** add llm-lsp-cli-guide skill
-- **scraper:** add rust documentation scraper with cargo-docs-md
-- **python:** add type boundary enforcement pattern
-- **python:** adopt basedpyright as default LSP server and type checker
-- **skill-comply:** add structured JSON output for classifier and configurable timeouts
-- **timezone:** add timezone awareness rule and auto-detection utility
-- **brainstorming:** add mandatory design validation with examples step
-- **orchestrating:** add lightweight pipeline with complexity-based routing
-- **skill-stocktake:** sort overview by 7d usage descending
-- **skill-stocktake:** improve Rich terminal output with HORIZONTALS style
-- **hooks:** add CLI entry point to observer daemon
-- **skill-stocktake:** aggregate observations from all project files
-- **skill-stocktake:** adapt to continuous learning observation schema
-- **hooks:** add pre-install tool check phase for hook families
-- **hooks:** add observe family installer for continuous learning
-- **continuous-learning:** integrate observation hooks and pattern detection
-- **ai-engineering-expert:** add hook language selection guidance
-- **scraper:** add Jina Reader proxy for markdown fetching
-- **scraper:** add LLM-friendly fetching methods
-- **scraper:** add web scraping best practices to base scraper
-- **scraper:** create documentation scraper skill with LSP emoji handling
-- **orchestrate:** add eval-gated feature workflow
-- **architect:** align ADR workflows with adr-tools
-- **skill:** add lsp 3.17 specification skill
-- **hooks:** add unified installer and ensure todo hooks
-- **skills:** Add reference guide for modern CLI tools (fd, rg, eza)
-- **full-review:** Add comprehensive multi-dimensional code review orchestrator and PR enhancement skill from plugin comprehensive-review@wshobson/agents
-- **rule:** enchance python rules
-- **skill:** add a skill for iterating harness
-- **agent:** add a 4-step fallback discovery to explore a project so engage with rules better
-
-### Bug Fixes
-
-- **skill-authoring:** assert equal-length zip in duplicate-name check
-- **dynamic-workflow-wrapper:** fit description to the context-load budget
-- **skill-authoring:** exclude legacy commands/ from the skill registry
-- **verification:** point writing sub-skill links at writing-for-agents
-- **skill-authoring:** rewrite only the exact flow-list item on rename
-- **gh-router:** resolve repo from push remote instead of gh repo view
-- **agents:** drop tools that never register in subagents
-- **converge-goal:** run every round in a persistent wt worktree
-- **scaffold:** provision pnpm via action-setup in CI templates
-- **scaffold:** prescribe hidden-type changelog sync commits
-- **scaffold:** patch releaserc assets to pnpm-lock.yaml in TS flavor
-- **scaffold:** move TS smoke test to tests/ layout
-- **scaffold:** single-source Node version from NODE_VERSION_NUM
-- **scaffold:** drop .agents/ from gitignore additions
-- **ci:** prune continuous-learning tests and sync changelog
-- **ci:** bump GH Actions to Node 24 in workflows
-- **docs:** github.com is not rust for auto-detect
-- **scaffold:** bump GH Actions to Node 24 — checkout v5, setup-node v5, setup-python v6, github-script v8
-- **scaffold:** include lint in pre-merge gate — respect tool feedback
-- **branch-worktree-pr:** surface pre-push changelog guard in merge_copy and open_pr
-- **scaffold:** husky vs githooks pre-push delegation and default hooksPath
-- **ci:** remove stale ci jobs and fix release env mapping, update scaffold template
-- resolve typos in docs-scraper and allowlist technical terms
-- harden CI and python shims, pin actions and fix gate
-- clarify worktrunk-guide markdown link example to avoid broken link
-- worktrunk-guide document global options for wt merge
-- **orchestrating:** clarify orchestrator must dispatch eval-gate, not run verification directly
-- **skill:** add missing opener for handoff skill's frontmatter
-- **handoff:** use phase-specific storage to prevent filename conflicts
-- **skills:** restore correct YAML block scalars for argument-hint
-- **commands:** improve argument-hint with concrete types and platforms
-- **commands:** apply routing pattern to /write command
-- **deps:** add rich to dependencies for stocktake script
-- **docs-to-skill:** use ROUNDED table style for summary output
-- **ai-engineering-expert:** use <skill-name>-raw/ path for raw docs
-- **hooks:** handle empty projects.json and add comprehensive logging
-- restore skill-stocktake Python scripts for token-saving
-- **skill-stocktake:** follow symlinks and fix awk syntax
-- **hooks/observe:** support standalone and module import patterns
-- **skill-comply:** update test assertions to match fixture spec id
-- **skill-comply:** use shell=True for setup commands with heredocs
-- **plan:** fix the mistake that planner can not write plan itself
-- **rules:** fix missing rules from git log
-
-### Documentation
-
-- **herdr:** document the local herdr-pane helper
-- **skill-comply:** drop legacy commands/*.md from supported targets
-- **changelog:** sync unreleased section
-- **changelog:** sync unreleased section
-- **changelog:** sync unreleased section
-- **workflow-wrapper:** record worktree contract and allowlist reality
-- **rules:** refine mental-model and development-patterns
-- **rules:** prefer rg, fd, eza over grep, find, ls
-- **rules:** clarify gates and internal deprecation + skill sync (#11)
-- **git-convention:** make concise with clear organization (#10)
-- update changelog unreleased section
-- **changelog:** update Unreleased for docs/skills refactor
-- **adr:** allow high-signal comments via curated allowlist — replace total ban (ADR-0014)
-- **gotcha:** add GitHub access guard preferring gh CLI
-- **branch-worktree-pr:** mandate tdd and delegate release lifecycle
-- add information boundary pattern to ai-engineering-expert
-- changelog for branch-worktree py shims and autofix formatting
-- define worktree workflow language and ADR 0013
-- **rules:** clarify branch+worktree target stays in session, children isolated
-- add Router Skill glossary and ADR 0012 for router injection
-- **adr:** adopt hybrid Nygard + Considered Options template
-- **skill-authoring:** document YAML scalar convention and name collision rule
-- **context-load:** add policy reference, glossary, and updated domain terms
-- **python:** codify diagnostic resolution rules
-- **adr:** link ADR-0009 to root philosophy and hierarchy
-- **adr:** link new ADRs to establish architectural lineage
-- modernize project instructions and mental model
-- formalize project glossary and tool feedback ADR
-- refine skill naming conventions by taxonomy
-- **skills:** align exploration narrative with environment-behavior rules
-- **handoff:** use recommendation language instead of directive language
-- **handoff:** generalize next directive example
-- **worktrunk:** expand merge workflow guidance and triggers
-- **ai-engineering-expert:** arguments and hints should reflect skill function
-- **rules:** refine Python type safety with nuanced suppression approach
-- **rules:** enhance Scoped Over Global with category-level thinking
-- **rules:** add language management best practices
-- **mental-model:** add critical thinking as primary thinking mode
-- **python-expert:** add serialization layering principle
-- **ai-engineering:** add subagent-first execution as core philosophy
-- **eval-gate:** add grader selection guidance
-- **python:** strengthen type safety principles and patterns
-- **ai-engineering:** add artifact hygiene as fifth core tenet
-- **environment:** add workspace-diagnostics to LSP commands
-- **python:** add keep-typed-models principle and trace-to-source methodology
-- **environment:** integrate llm-lsp-cli as first-class code intelligence tool
-- **quality:** add prefer type-safe libraries principle
-- **mental-model:** add knowledge gap as primary reason to ask
-- **skill-stocktake:** document required tools
-- **rules,skill:** add mandatory performance testing requirements
-- **skills:** add comprehensive skill authoring standards and fix 30 skills
-- **scraper:** add comprehensive Tavily Extract comparison
-- **skills:** rewrite search and orchestrate descriptions for trigger recall
-- **claude:** add hook design philosophy
-- **rules:** establish code quality, security, environment, and testing baselines
-- **rules:** update agents, coding style, workflow and security guidelines in common rules
-
-### Code Refactoring
-
-- **gh-router:** rename pr subskill to pr-land (BREAKING CHANGE)
-- **skills:** absorb architecture-expert into programming-expert (BREAKING CHANGE)
-- **skills:** consolidate language experts into programming-expert router (BREAKING CHANGE)
-- **changelog:** adopt Option A PR guard + pre-push hook (BREAKING CHANGE)
