@@ -128,6 +128,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **skill-authoring:** rewrite only the exact flow-list item on rename
 - **gh-router:** resolve repo from push remote instead of gh repo view
 - **agents:** drop tools that never register in subagents
 - **converge-goal:** run every round in a persistent wt worktree
@@ -225,4 +226,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **skills:** absorb architecture-expert into programming-expert (BREAKING CHANGE)
 - **skills:** consolidate language experts into programming-expert router (BREAKING CHANGE)
+- **gh-router:** rename `pr` subskill to `pr-land` (BREAKING CHANGE: subskill name and path changed)
 - **changelog:** adopt Option A PR guard + pre-push hook (BREAKING CHANGE)
