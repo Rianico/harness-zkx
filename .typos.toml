@@ -6,6 +6,7 @@ extend-exclude = [
   ".lsz/**",
   ".venv/**",
   "skills/lsp-guideline/**",
+  "skills/scaffold/templates/**",
   "tests/continuous-learning/fixtures/**",
   "skills/md-to-html/assets/**",
   "**/*.min.js"

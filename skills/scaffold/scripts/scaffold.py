@@ -14,6 +14,7 @@ Usage:
   uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript [--ts-variant lib|cli|pi-extension] [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor ci [--project-name NAME] [--dry-run] [--with-coverage]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor all [--project-name NAME] [--dry-run] [--with-coverage]
+  uv run $SKILL_DIR/scripts/scaffold.py --update [--flavor git|all] [--dry-run]  # refresh generated infrastructure in place; project-owned files are preserved and printed as NEXT actions
 
 Information boundary: script emits byte-identical artifacts; for mixed
 deterministic+semantic files it writes the skeleton and warns on stderr
@@ -47,46 +48,31 @@ def _expand_node_version(text: str) -> str:
     return text.replace("__NODE_VERSION__", NODE_VERSION_NUM)
 
 
+# ------------------------------------------------------------------ template loader
+# Static artifacts live in ../templates/<flavor>/<target path> — one byte source, no
+# embedded copy to drift. Computed artifacts (manifests, thresholds, project name) stay
+# as builder functions below; only static bytes move to disk.
+TEMPLATES_DIR = pathlib.Path(__file__).parent.parent / "templates"
+
+
+def load_template(rel: str) -> str:
+    """Read a static template. Fails loud — a missing template must never fall back.
+
+    Vendoring only `scripts/` breaks the byte contract; better to refuse than to
+    invent bytes that no human reviewed.
+    """
+    path = TEMPLATES_DIR / rel
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"scaffold template missing: {path}\n"
+            "templates/ ships with scripts/ — copy the whole skill directory "
+            "(or pass --cwd to a checkout that has it)."
+        )
+    return path.read_text(encoding="utf-8")
+
+
 # ------------------------------------------------------------------ templates (pure-deterministic except {{project_name}})
-RELEASERC_JSON = """\
-{
-  "branches": ["main"],
-  "plugins": [
-    "@semantic-release/commit-analyzer",
-    [
-      "@semantic-release/release-notes-generator",
-      {
-        "preset": "conventionalcommits",
-        "presetConfig": {
-          "types": [
-            {"type": "feat", "section": "Features"},
-            {"type": "fix", "section": "Bug Fixes"},
-            {"type": "perf", "section": "Performance Improvements"},
-            {"type": "revert", "section": "Reverts"},
-            {"type": "docs", "section": "Documentation", "hidden": false},
-            {"type": "style", "section": "Styles", "hidden": true},
-            {"type": "chore", "section": "Miscellaneous Chores", "hidden": true},
-            {"type": "refactor", "section": "Code Refactoring", "hidden": true},
-            {"type": "test", "section": "Tests", "hidden": true},
-            {"type": "build", "section": "Build System", "hidden": true},
-            {"type": "ci", "section": "Continuous Integration", "hidden": true}
-          ]
-        }
-      }
-    ],
-    ["@semantic-release/changelog", {"changelogFile": "CHANGELOG.md"}],
-    ["@semantic-release/npm", {"npmPublish": false}],
-    "@semantic-release/github",
-    [
-      "@semantic-release/git",
-      {
-        "assets": ["CHANGELOG.md", "package.json", "package-lock.json"],
-        "message": "chore(release): ${nextRelease.version}\\n\\n${nextRelease.notes}"
-      }
-    ]
-  ]
-}
-"""
+RELEASERC_JSON = load_template("git/.releaserc.json")
 
 RELEASE_YML = """\
 name: Verify and Release
@@ -135,413 +121,27 @@ jobs:
           HUSKY: "0"
 """
 
-CHANGELOG_CHECK_YML = """\
-name: Changelog Check
-on:
-  pull_request:
-    branches: [main]
-permissions:
-  contents: read
-concurrency:
-  group: changelog-check-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
-        with:
-          python-version: "3.12"
-      - name: Check Unreleased is up to date
-        run: |
-          # save committed version
-          cp CHANGELOG.md /tmp/before.md 2>/dev/null || touch /tmp/before.md
-          python scripts/changelog-unreleased.py update
-          if diff -q /tmp/before.md CHANGELOG.md >/dev/null; then
-            echo "CHANGELOG.md Unreleased ok"
-            exit 0
-          fi
-          echo "::error::CHANGELOG.md Unreleased stale"
-          echo ""
-          echo "Visible conventional commits in this PR require Unreleased update."
-          echo "Expected diff:"
-          diff -u /tmp/before.md CHANGELOG.md || true
-          echo ""
-          echo "Fix locally:"
-          echo "  uv run python scripts/changelog-unreleased.py update"
-          echo "  git add CHANGELOG.md && git commit -m 'chore: sync changelog unreleased section' --no-verify && git push"
-          echo "  # or amend on a feature branch: git add CHANGELOG.md && git commit --amend --no-edit --no-verify && git push --force-with-lease"
-          echo "  Sync commit must use a hidden type (chore:/style:/refactor:/test:/build:/ci:); a visible type (feat/fix/perf/revert/docs) re-triggers the guard and loops forever."
-          echo ""
-          echo "Hidden types (style/chore/refactor/test/build/ci) without BREAKING CHANGE don't need Unreleased."
-          # restore committed file so subsequent steps see original
-          cp /tmp/before.md CHANGELOG.md
-          exit 1
-      - name: Comment on failure
-        if: failure()
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        with:
-          script: |
-            const body = `> [!warning] CHANGELOG.md Unreleased stale
-            This PR contains visible conventional commits (\\`feat|fix|perf|revert|docs\\` or \\`!\\/BREAKING CHANGE\\`) but \\`## [Unreleased]\\` doesn't match \\`scripts/changelog-unreleased.py update\\`.
+CHANGELOG_CHECK_YML = load_template("git/.github/workflows/changelog-check.yml")
 
-            Fix:
-            \\`\\`\\`bash
-            uv run python scripts/changelog-unreleased.py update
-            git add CHANGELOG.md && git commit -m 'chore: sync changelog unreleased section'
-            git push
-            # or amend on a feature branch: git commit --amend --no-edit && git push --force-with-lease
-            \\`\\`\\`
-            Sync commit must use a hidden type (\\`chore:\\` etc.); a visible type (\\`feat|fix|perf|revert|docs\\`) re-triggers the guard and loops forever.
-            Hidden types \\`style|chore|refactor|test|build|ci\\` only need update when breaking.
-            // avoid duplicate comments
-            const {data: comments} = await github.rest.issues.listComments({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number
-            });
-            if (comments.some(c => c.body.includes('CHANGELOG.md Unreleased stale'))) return;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body
-            });
-"""
+GITHOOK_PRE_PUSH = load_template("git/.githooks/pre-push")
 
-GITHOOK_PRE_PUSH = """\
-#!/usr/bin/env bash
-set -e
-# skip in CI / when uv and python3 missing — semantic-release push must not fail on hook
-if [ "${HUSKY:-}" = "0" ]; then exit 0; fi
-if ! command -v uv >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then exit 0; fi
-# disable auto-fix with PREPUSH_AUTOFIX=0
-if [ "${PREPUSH_AUTOFIX:-1}" = "0" ]; then
-  _AUTOFIX=0
-else
-  _AUTOFIX=1
-fi
-# pre-push hook: ensure CHANGELOG.md Unreleased is up-to-date — auto-fixes with amend when stale
-while read -r local_ref local_sha remote_ref remote_sha; do
-  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
-  range="$remote_sha..$local_sha"
-  [ "$remote_sha" = "0000000000000000000000000000000000000000" ] && range="$local_sha"
-  if ! git log "$range" --pretty=%s --no-merges | grep -Eq '^(feat|fix|perf|revert|docs)(\\(.+\\))?!?: '; then
-    if ! git log "$range" --pretty=%B --no-merges | grep -q "BREAKING CHANGE:"; then
-      continue
-    fi
-  fi
-  tmp=$(mktemp)
-  cp CHANGELOG.md "$tmp" 2>/dev/null || touch "$tmp"
-  if command -v uv >/dev/null 2>&1; then
-    uv run python scripts/changelog-unreleased.py update >/dev/null 2>&1 || python3 scripts/changelog-unreleased.py update >/dev/null 2>&1 || true
-  else
-    python3 scripts/changelog-unreleased.py update >/dev/null 2>&1 || true
-  fi
-  if ! diff -q CHANGELOG.md "$tmp" >/dev/null; then
-    if [ "$_AUTOFIX" = "1" ]; then
-      echo "[pre-push] CHANGELOG.md [Unreleased] stale — auto-fixing..." >&2
-      git add CHANGELOG.md
-      if git rev-parse --verify HEAD >/dev/null 2>&1; then
-        if git commit --amend --no-edit --no-verify >/dev/null 2>&1; then
-          echo "[pre-push] amended HEAD $(git rev-parse --short HEAD) with updated CHANGELOG.md [Unreleased] — auto-pushing..." >&2
-          rm -f "$tmp"
-          # Schedule auto-retry after this hook aborts the current push.
-          # Use background job so the outer `git push` can exit cleanly (code 1) before retry.
-          # Retry re-enters this hook once (now Unreleased is clean) and succeeds.
-          echo "[pre-push] push aborted — auto-retrying in background..." >&2
-          ( sleep 0.5; git push </dev/null >&2 || git push --set-upstream origin HEAD </dev/null >&2 ) &
-          exit 1
-        fi
-      fi
-      echo "[pre-push] auto-fix failed — restoring original and blocking push" >&2
-    fi
-    cat >&2 <<'EOF'
-> [!warning] CHANGELOG.md [Unreleased] stale
-Visible conventional commit in push range but Unreleased not updated.
-Fix:
-  uv run python scripts/changelog-unreleased.py update
-  git add CHANGELOG.md
-  git commit -m 'chore: sync changelog unreleased section'  # hidden type required
-  # visible feat/fix/perf/revert/docs re-triggers the guard and loops forever
-  # or amend on a feature branch: git commit --amend --no-edit --no-verify && git push --force-with-lease
-  git push
-Bypass (human): git push --no-verify  or  PREPUSH_AUTOFIX=0 git push
-EOF
-    cp "$tmp" CHANGELOG.md
-    rm -f "$tmp"
-    exit 1
-  fi
-  rm -f "$tmp"
-done
-"""
+HUSKY_PRE_PUSH = load_template("git/.husky/pre-push")
 
-HUSKY_PRE_PUSH = """\
-#!/bin/sh
-# husky delegation — exec deterministic hook in .githooks
-# Keeps single source of truth in .githooks/pre-push; husky sets core.hooksPath=.husky
-# so this delegation ensures the changelog guard remains live under husky.
-exec .githooks/pre-push "$@"
-"""
+COMMITLINT_JS = load_template("git/commitlint.config.js")
 
-COMMITLINT_JS = 'export default { extends: ["@commitlint/config-conventional"] };\n'
+ISSUE_BUG_REPORT_YML = load_template("git/.github/ISSUE_TEMPLATE/01-bug_report.yml")
 
-ISSUE_BUG_REPORT_YML = """\
-name: "\U0001f41b Bug report"
-description: Concise, paste-complete repro \u2014 see #38 as exemplar
-title: "[bug] "
-labels: ["bug"]
-body:
-  - type: checkboxes
-    id: searched
-    attributes:
-      label: Is there an existing issue for this?
-      description: Please search to see if an issue already exists for the bug you encountered.
-      options:
-        - label: I have searched the existing issues
-          required: true
-  - type: textarea
-    id: summary
-    attributes:
-      label: Summary
-      description: One line \u2014 what broke + failure mode (e.g. trailingDups silently drops `}` \u2192 brace imbalance)
-      placeholder: "Plugin 0.5.0 \u2014 trailingDups removes replacement's last line \u2192 brace imbalance"
-    validations:
-      required: true
-  - type: textarea
-    id: environment
-    attributes:
-      label: Environment
-      description: plugin/app version, module/file, trigger command
-      placeholder: |
-        - Version: 0.5.0
-        - Module: lib/hashline/anchor-pipeline.js
-        - Trigger: edit with remove_from/remove_to
-      value: |
-        - Version:
-        - Module:
-        - Trigger:
-    validations:
-      required: true
-  - type: textarea
-    id: repro
-    attributes:
-      label: Steps to Reproduce
-      description: Minimal complete file + operation map + exact payload (paste-complete, prefer text over screenshots)
-      placeholder: |
-        1. Minimal file content (paste-complete):
-        ```cpp
-        void foo() { }
-        ```
-        2. Operation map / payload:
-        ```json
-        { "edits": [["<from>", "<to>", "<replacement_text>"]], "path": "D:\\test.txt" }
-        ```
-        3. Run: `...`
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-      description: What you expected to happen (paste expected file/diff)
-      placeholder: |
-        ```cpp
-        // 10 lines, brace-balanced
-        ```
-    validations:
-      required: true
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual behavior
-      description: What actually happened \u2014 quote diff / logs / autoFixes / balance delta
-      placeholder: |
-        ```json
-        {"kind":"trailing","removedLine":"\\t}"}
-        ```
-        brace balance -1
-      render: shell
-    validations:
-      required: true
-  - type: textarea
-    id: impact
-    attributes:
-      label: Impact & Trigger Conditions
-      description: When it fires, frequency, blast radius
-    validations:
-      required: false
-  - type: textarea
-    id: root-cause
-    attributes:
-      label: Root Cause / Suggested Fixes (optional)
-      description: Hypothesis + numbered alternatives with tradeoff (threshold / fail-closed / symmetric range)
-    validations:
-      required: false
-"""
+ISSUE_FEATURE_REQUEST_YML = load_template("git/.github/ISSUE_TEMPLATE/02-feature_request.yml")
 
-ISSUE_FEATURE_REQUEST_YML = """\
-name: "\u2728 Feature request"
-description: Suggest an idea \u2014 problem, proposal, alternatives
-title: "[feat] "
-labels: ["enhancement"]
-body:
-  - type: checkboxes
-    id: searched
-    attributes:
-      label: Is there an existing issue for this?
-      description: Please search to see if an issue already exists.
-      options:
-        - label: I have searched the existing issues
-          required: true
-  - type: textarea
-    id: problem
-    attributes:
-      label: Problem \u2014 is your request related to a problem?
-      description: What problem does this solve? Who is affected?
-      placeholder: "When doing X, I need Y but currently Z happens..."
-    validations:
-      required: true
-  - type: textarea
-    id: proposal
-    attributes:
-      label: Proposal \u2014 describe the solution you'd like
-      description: Concise proposal, API/UX sketch if applicable
-      placeholder: "Add `...` / change `...` so that ..."
-    validations:
-      required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
-      description: Other approaches you considered and why not
-    validations:
-      required: false
-  - type: textarea
-    id: context
-    attributes:
-      label: Additional context
-      description: Examples, prior art, links (e.g. similar issues, RFC)
-    validations:
-      required: false
-"""
+ISSUE_CONFIG_YML = load_template("git/.github/ISSUE_TEMPLATE/config.yml")
 
-ISSUE_CONFIG_YML = """\
-blank_issues_enabled: false
-contact_links:
-  - name: "Exemplar: well-structured bug report #38"
-    url: https://github.com/Rianico/dsh-better-edit/issues/38
-    about: Concise Summary \u2192 Environment \u2192 Repro \u2192 Expected/Actual \u2192 Impact \u2014 copy this structure
-  - name: "Ask a question \u2014 Discussions"
-    url: https://github.com/Rianico/dsh-better-edit/discussions
-    about: For questions/support, use Discussions instead of an issue
-"""
+PULL_REQUEST_TEMPLATE_MD = load_template("git/.github/pull_request_template.md")
 
-PULL_REQUEST_TEMPLATE_MD = """\
-<!-- markdownlint-disable MD041 -->
-
-## Summary
-
-<!-- 2-3 sentences: why this change, user-visible effect. -->
-
-**Impact**: <!-- X files (Y +, Z -) --> \u00b7 **Risk**: <!-- Low | Medium | High -->
-<!-- Risk: Low = docs/tests only; Medium = isolated feature/fix; High = cross-module contract, migration, or BREAKING CHANGE -->
-
-## What Changed
-
-<!-- Grouped by system/feature, not file list. Flag migrations / API / payload-contract changes. -->
-<!-- Example: - hashline: ... -->
-
--
-
-## Architecture
-
-<!-- Mermaid before/after only when structural seams, layering, or data-flow changes; delete section otherwise. -->
-
-```mermaid
-graph LR
-  A --> B
-```
-
-## Checklist
-
-- [ ] `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` green
-- [ ] Conventional Commits (`commitlint` + `husky`) \u2014 `npx commitlint --from=origin/main --to=HEAD`
-- [ ] `CHANGELOG.md` `## [Unreleased]` updated (if user-facing)
-- [ ] Docs / `docs/adr/` updated when seams or contracts change
-- [ ] No generated artifacts committed outside `.lsz/tmp`
-- [ ] Linked issue with `Closes #NN` (if applicable)
-"""
-
-CONTRIBUTING_MD_TMPL = """\
-# Contributing to {project_name}
-## Conventional commits
-- `feat[(scope)]: description` → MINOR, `fix[(scope)]:` → PATCH, `feat!:` / `BREAKING CHANGE:` → MAJOR
-- Other types `docs|style|refactor|perf|test|build|ci|chore|revert` hidden unless `!`
-- Scope is noun, description imperative present, lowercase, no period, ≤72 chars
-- Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
-## Changelog
-`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required, `diff -q` vs generated); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type (`feat`/`fix`/`docs` etc.) re-triggers the guard and loops forever. Hidden types `style|chore|refactor|test|build|ci` only appear when `!`/`BREAKING CHANGE`.
-## Reporting Issues
-Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` (blank issues disabled, `config.yml` links #38):
-| Intent | Template | Structure |
-|---|---|---|
-| **Bug** | `01-bug_report.yml` | **Exemplar #38**: Summary \u2192 Environment (Version/Module/Trigger) \u2192 Steps to Reproduce (paste-complete file + operation map + exact payload) \u2192 Expected vs Actual (quote diff/logs) \u2192 Impact & Trigger Conditions \u2192 Root Cause / Suggested Fixes (optional, numbered tradeoffs) |
-| **Feature** | `02-feature_request.yml` | Problem \u2192 Proposal \u2192 Alternatives \u2192 Additional context |
-- Bugs: paste-complete, prefer text over screenshots, include `read` hashes / payload and `autoFixes`/balance delta. Link #38 as style reference.
-- Features: state problem + proposal at minimum; alternatives optional.
-Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
-## Before PR
-`pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
-## Pull Requests
-Prefer topic branch \u2192 PR \u2192 squash merge. Keep one concern per PR; link the issue with `Closes #NN` in the description or commit footer.
-### Description
-PR body is auto-populated from `.github/pull_request_template.md` (GitHub PR template). Keep the four headings \u2014 delete `Architecture` when no structural change:
-- **Summary** \u2014 2-3 sentences on *why*, not what line changed. Include `**Impact**: X files (Y +, Z -) \u00b7 **Risk**: Low | Medium | High` (Low = docs/tests only; Medium = isolated feature/fix; High = cross-module contract, migration, or `BREAKING CHANGE`).
-- **What Changed** \u2014 grouped by system/feature (`hashline`, `anchors`, `session`, `payload`, `docs`, `ci`), not by file list. Flag migrations / API / `ADR-0007` payload `{{path, edits:[[h,h,t]]}}` / `CANON_VERSION` touches.
-- **Architecture** \u2014 Mermaid `graph LR` / `sequenceDiagram` before \u2192 after only for structural seams, layering, or data-flow changes.
-- **Checklist** \u2014 derived from change categories; start from the template checklist and add items as needed (e.g., benchmarks for perf, absorption notes for upstream sync).
-CI (`changelog-check.yml`, `verify`) must be green before requesting review.
-"""
-CONTRIBUTING_MD_TMPL_PYTHON = """\
-# Contributing to {project_name}
-## Conventional commits
-- `feat[(scope)]: description` → MINOR, `fix[(scope)]:` → PATCH, `feat!:` / `BREAKING CHANGE:` → MAJOR
-- Other types `docs|style|refactor|perf|test|build|ci|chore|revert` hidden unless `!`
-- Scope is noun, description imperative present, lowercase, no period, ≤72 chars
-- Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
-## Changelog
-`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type re-triggers the guard and loops forever. Hidden types only appear when `!`/`BREAKING CHANGE`.
-## Reporting Issues
-Pick the template that matches your intent \u2014 see `.github/ISSUE_TEMPLATE/` (blank issues disabled, `config.yml` links #38):
-| Intent | Template | Structure |
-|---|---|---|
-| **Bug** | `01-bug_report.yml` | **Exemplar #38**: Summary \u2192 Environment (Version/Module/Trigger) \u2192 Steps to Reproduce (paste-complete file + operation map + exact payload) \u2192 Expected vs Actual (quote diff/logs) \u2192 Impact & Trigger Conditions \u2192 Root Cause / Suggested Fixes (optional, numbered tradeoffs) |
-| **Feature** | `02-feature_request.yml` | Problem \u2192 Proposal \u2192 Alternatives \u2192 Additional context |
-- Bugs: paste-complete, prefer text over screenshots, include `read` hashes / payload and `autoFixes`/balance delta. Link #38 as style reference.
-- Features: state problem + proposal at minimum; alternatives optional.
-Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`. View exemplar with `gh issue view 38 --json title,body --repo Rianico/dsh-better-edit`.
-## Before PR
-`uv run ruff check . && uv run basedpyright && uv run pytest` must pass. See `AGENTS.md` for agent rules.
-## Pull Requests
-Prefer topic branch \u2192 PR \u2192 squash merge. Keep one concern per PR; link the issue with `Closes #NN`.
-### Description
-PR body is auto-populated from `.github/pull_request_template.md`. Keep the four headings \u2014 delete `Architecture` when no structural change:
-- **Summary** \u2014 2-3 sentences on *why*; include `**Impact**: X files (Y +, Z -) \u00b7 **Risk**: Low | Medium | High`.
-- **What Changed** \u2014 grouped by system/feature, not file list; flag migrations / API changes.
-- **Architecture** \u2014 Mermaid before \u2192 after only for structural/layering changes.
-- **Checklist** \u2014 start from template checklist; add category-specific items.
-CI (`changelog-check.yml`, `verify`) must be green before requesting review.
-"""
+CONTRIBUTING_MD_TMPL = load_template("shared/CONTRIBUTING.default.md")
+CONTRIBUTING_MD_TMPL_PYTHON = load_template("shared/CONTRIBUTING.python.md")
 
 
-
-CHANGELOG_MD = """\
-# Changelog
-All notable changes to this project will be documented in this file.
-"""
+CHANGELOG_MD = load_template("git/CHANGELOG.md")
 
 try:
     CHANGELOG_UNRELEASED_PY = (pathlib.Path(__file__).parent / "changelog-unreleased.py").read_text(
@@ -577,6 +177,23 @@ GIT_COMPONENTS: set[str] = {
 
 CI_COMPONENTS: set[str] = {
     "release-yml",  # .github/workflows/release.yml (ci variant)
+}
+
+# --update ownership contract. Generated infrastructure is refreshed byte-identically;
+# files the project owns are preserved and reported as NEXT actions. Keys are generated
+# basenames, values are the reason shown to the model.
+PROJECT_OWNED: dict[str, str] = {
+    "CHANGELOG.md": "release history — @semantic-release/changelog owns versioned sections",
+    "CONTRIBUTING.md": "mixed (project name + toolchain line) and language-variant",
+    "pyproject.toml": "project manifest — deps and tool config",
+    "Cargo.toml": "project manifest — deps and edition",
+    "package.json": "project manifest — deps and scripts",
+}
+
+# Components whose file belongs to another flavor's projection: an --update in this
+# flavor must not rewrite it (a Node/pnpm verify job would break a uv or cargo repo).
+FLAVOR_FOREIGN: dict[str, str] = {
+    "release-yml": "owned by the ci flavor — this flavor ships the Node/pnpm verify job"
 }
 
 
@@ -931,31 +548,7 @@ export function run(args: readonly string[]): void {{
 run(process.argv.slice(2));
 """
 
-CONTRIBUTING_MD_TMPL_TYPESCRIPT = """\
-# Contributing to {project_name}
-## Conventional commits
-- `feat[(scope)]: description` → MINOR, `fix[(scope)]:` → PATCH, `feat!:` / `BREAKING CHANGE:` → MAJOR
-- Other types `docs|style|refactor|perf|test|build|ci|chore|revert` hidden unless `!`
-- Scope is noun, description imperative present, lowercase, no period, ≤72 chars
-- Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
-## Changelog
-`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type re-triggers the guard and loops forever. Hidden types only appear when `!`/`BREAKING CHANGE`.
-## Reporting Issues
-Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (blank issues disabled).
-- Bugs: paste-complete, prefer text over screenshots.
-- Features: state problem + proposal at minimum; alternatives optional.
-## Before PR
-`pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
-## Pull Requests
-Prefer topic branch \u2192 PR \u2192 squash merge. Keep one concern per PR; link the issue with `Closes #NN`.
-### Description
-PR body is auto-populated from `.github/pull_request_template.md` (GitHub PR template). Keep the four headings \u2014 delete `Architecture` when no structural change:
-- **Summary** \u2014 2-3 sentences on *why*; include `**Impact**: X files (Y +, Z -) \u00b7 **Risk**: Low | Medium | High`.
-- **What Changed** \u2014 grouped by system/feature, not file list; flag migrations / API / payload-contract changes.
-- **Architecture** \u2014 Mermaid before \u2192 after only for structural seams.
-- **Checklist** \u2014 start from template checklist; add items as needed.
-CI (`changelog-check.yml`, `verify`) must be green before requesting review.
-"""
+CONTRIBUTING_MD_TMPL_TYPESCRIPT = load_template("shared/CONTRIBUTING.typescript.md")
 
 CI_PYTHON_VERIFY_YML = """\
 name: Verify and Release
@@ -1121,20 +714,25 @@ CI_PYTHON_VERIFY_YML = _expand_node_version(CI_PYTHON_VERIFY_YML)
 CI_PYTHON_COVERAGE_YML = _expand_node_version(CI_PYTHON_COVERAGE_YML)
 CI_RUST_VERIFY_YML = _expand_node_version(CI_RUST_VERIFY_YML)
 CI_RUST_COVERAGE_YML = _expand_node_version(CI_RUST_COVERAGE_YML)
-GH_ROUTER_SKILL = """---
+GH_ROUTER_SKILL_PATH = pathlib.Path(__file__).parent.parent.joinpath("..", "gh-router", "SKILL.md")
+GH_ROUTER_SKILL = (
+    GH_ROUTER_SKILL_PATH.read_text(encoding="utf-8")
+    if GH_ROUTER_SKILL_PATH.exists()
+    else """---
 name: gh-router
 description: >-
-  GitHub workflow router \u2014 release via dispatch and PR enhancement. Use when releasing, dispatching semantic-release, submitting or refining PRs. TRIGGER: release, dispatch, pr enhance, submit PR, refine PR
+  GitHub workflow router \u2014 release via dispatch, PR enhancement, and PR create/watch/merge. Use when releasing, dispatching semantic-release, submitting or refining PRs, or creating/merging PRs via gh api.
 argument-hint: |-
   gh-release [--dry-run] -- changelog and publish via dispatch
   pr-enhance [base|pr_url] -- PR description generation
+  pr-land [--watch --merge] -- create PR, watch checks, squash-merge
 metadata:
-  manage: [gh-release, pr-enhance]
+  manage: [gh-release, pr-land, pr-enhance]
 ---
 
 # GH Router
 
-GitHub workflow router. Model-invocable \u2014 dispatches to `gh-release` or `pr-enhance` via subskill load.
+GitHub workflow router. Model-invocable \u2014 dispatches to `gh-release`, `pr-land`, or `pr-enhance` via subskill load.
 
 ## Subskills
 
@@ -1142,9 +740,11 @@ GitHub workflow router. Model-invocable \u2014 dispatches to `gh-release` or `pr
 |----------|---------|
 | `gh-release` | `release`, dispatch semantic-release |
 | `pr-enhance` | `submit PR`, `refine PR` |
+| `pr-land` | `pr create`, `pr watch`, `pr merge`, `squash merge` |
 
 Load via `Read $SKILL_DIR/subskills/<name>/SKILL.md`.
 """
+)
 
 GH_RELEASE_SKILL = (
     pathlib.Path(__file__)
@@ -1156,7 +756,7 @@ GH_RELEASE_SKILL = (
     else """---
 name: gh-release
 description: >-
-  Release via semantic-release dispatch. Validates conventional commits, runs verification, dispatches publish. TRIGGER: release, dispatch, publish, dry-run
+  Release dispatch via semantic-release. Validates conventional commits and runs verification. Use when dispatching releases, publishing packages, or running dry-run release checks.
 argument-hint: |-
   "[--dry-run] -- dispatch semantic-release (dry-run previews version)"
 metadata:
@@ -1165,7 +765,7 @@ metadata:
 
 # GH Release
 
-Dispatch semantic-release from `main`.
+Dispatch semantic-release from `main` — version from `feat`/`fix`/`!` since last tag.
 """
 )
 
@@ -1179,7 +779,7 @@ PR_ENHANCE_SKILL = (
     else """---
 name: pr-enhance
 description: >-
-  Pull Request optimization expert. TRIGGER: submit PR, refine PR
+  Pull Request optimization expert. Generates comprehensive PR descriptions, diagrams, and checklists based on git diff analysis. Use when submitting a PR or refining a PR description.
 arguments: base_or_pr
 argument-hint: |-
   "[base|pr_url] -- base branch or PR URL"
@@ -1193,67 +793,64 @@ See gh-router.
 """
 )
 
+PR_LAND_SKILL = (
+    pathlib.Path(__file__)
+    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-land", "SKILL.md")
+    .read_text(encoding="utf-8")
+    if pathlib.Path(__file__)
+    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-land", "SKILL.md")
+    .exists()
+    else """---
+name: pr-land
+description: >-
+  Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
+arguments: title_or_branch
+argument-hint: |-
+  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge] [--draft]"
+metadata:
+  managed-by: gh-router
+---
+
+# PR — Create → Watch → Squash-Merge
+
+See gh-router. The harness ships `subskills/pr-land/scripts/pr.sh`; copy it from the harness when driving the loop deterministically.
+"""
+)
+
 
 def _write_gh_router(cwd: pathlib.Path, dry_run: bool) -> None:
     # Deterministic gh-router skill with subskills — mirrors current harness
     base = cwd / "skills" / "gh-router"
     write_file(base / "SKILL.md", GH_ROUTER_SKILL, dry_run)
     # Use current harness files as source if available, else fallback to embedded
-    for sub in ["gh-release", "pr-enhance"]:
-        src = (
-            pathlib.Path(__file__).parent.parent.parent
-            / "gh-router"
-            / "subskills"
-            / sub
-            / "SKILL.md"
-        )
+    embedded = {
+        "gh-release": GH_RELEASE_SKILL,
+        "pr-land": PR_LAND_SKILL,
+        "pr-enhance": PR_ENHANCE_SKILL,
+    }
+    for sub in ["gh-release", "pr-land", "pr-enhance"]:
+        sub_src = pathlib.Path(__file__).parent.parent.parent / "gh-router" / "subskills" / sub
+        skill = sub_src / "SKILL.md"
         # fallback to embedded already handled
-        if src.exists():
-            content = src.read_text(encoding="utf-8")
-            write_file(base / "subskills" / sub / "SKILL.md", content, dry_run)
+        if skill.exists():
+            write_file(
+                base / "subskills" / sub / "SKILL.md", skill.read_text(encoding="utf-8"), dry_run
+            )
         else:
-            content = GH_RELEASE_SKILL if sub == "gh-release" else PR_ENHANCE_SKILL
+            content = embedded.get(sub, "")
             if content.strip():
                 write_file(base / "subskills" / sub / "SKILL.md", content, dry_run)
-    # Scripts for gh-release (check/verify/dispatch) — copy if present
-    src_scripts = (
-        pathlib.Path(__file__).parent.parent.parent
-        / "gh-router"
-        / "subskills"
-        / "gh-release"
-        / "scripts"
-    )
-    if src_scripts.exists():
-        for p in src_scripts.iterdir():
+        # Scripts (check/verify/dispatch for gh-release, pr for pr-land, analyze for pr-enhance)
+        scripts = sub_src / "scripts"
+        if not scripts.exists():
+            continue
+        for p in scripts.iterdir():
             if p.is_file():
                 try:
-                    write_file(
-                        base / "subskills" / "gh-release" / "scripts" / p.name,
-                        p.read_text(encoding="utf-8"),
-                        dry_run,
-                    )
+                    dst = base / "subskills" / sub / "scripts" / p.name
+                    write_file(dst, p.read_text(encoding="utf-8"), dry_run)
                     if not dry_run:
-                        (base / "subskills" / "gh-release" / "scripts" / p.name).chmod(0o755)
-                except Exception:
-                    pass
-    src_pr_scripts = (
-        pathlib.Path(__file__).parent.parent.parent
-        / "gh-router"
-        / "subskills"
-        / "pr-enhance"
-        / "scripts"
-    )
-    if src_pr_scripts.exists():
-        for p in src_pr_scripts.iterdir():
-            if p.is_file():
-                try:
-                    write_file(
-                        base / "subskills" / "pr-enhance" / "scripts" / p.name,
-                        p.read_text(encoding="utf-8"),
-                        dry_run,
-                    )
-                    if not dry_run and p.suffix == ".py":
-                        (base / "subskills" / "pr-enhance" / "scripts" / p.name).chmod(0o755)
+                        dst.chmod(0o755)
                 except Exception:
                     pass
 
@@ -1305,6 +902,32 @@ def write_file(
     if is_mixed:
         print(f"WARNING: {path}: {warn_mixed}", file=sys.stderr)
     return True
+
+
+def preserve(path: pathlib.Path, reason: str) -> str:
+    """Report a project-owned file preserved by --update; returns its NEXT note."""
+    print(f"preserved  {path} ({reason})", file=sys.stderr)
+    return f"{path.name}: preserved — {reason}"
+
+
+def write_generated(
+    path: pathlib.Path,
+    content: str,
+    dry_run: bool,
+    *,
+    update: bool = False,
+    warn_mixed: str | None = None,
+) -> str | None:
+    """write_file, minus project-owned files when --update is running.
+
+    Update refreshes generated infrastructure byte-identically and preserves what
+    the project owns (see PROJECT_OWNED); the returned note feeds the NEXT block.
+    """
+    reason = PROJECT_OWNED.get(path.name) if update else None
+    if reason and path.exists():
+        return preserve(path, reason)
+    write_file(path, content, dry_run, warn_mixed=warn_mixed)
+    return None
 
 
 def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> None:
@@ -1453,14 +1076,23 @@ def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
 
 
 def do_git(
-    cwd: pathlib.Path, project_name: str, dry_run: bool, selected: set[str] | None = None
-) -> None:
+    cwd: pathlib.Path,
+    project_name: str,
+    dry_run: bool,
+    selected: set[str] | None = None,
+    update: bool = False,
+) -> list[str]:
     # finer granularity: default all, filtered by --only/--without/--components
     sel = selected if selected is not None else GIT_COMPONENTS
+    notes: list[str] = []
     if "releaserc" in sel:
         write_file(cwd / ".releaserc.json", RELEASERC_JSON, dry_run)
     if "release-yml" in sel:
-        write_file(cwd / ".github" / "workflows" / "release.yml", RELEASE_YML, dry_run)
+        rel = cwd / ".github" / "workflows" / "release.yml"
+        if update and rel.exists():
+            notes.append(preserve(rel, FLAVOR_FOREIGN["release-yml"]))
+        else:
+            write_file(rel, RELEASE_YML, dry_run)
     if "changelog-check" in sel:
         write_file(
             cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run
@@ -1479,7 +1111,9 @@ def do_git(
     if "commitlint" in sel:
         write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     if "changelog-md" in sel:
-        write_file(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run)
+        note = write_generated(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run, update=update)
+        if note:
+            notes.append(note)
     if "issue-templates" in sel:
         write_file(
             cwd / ".github" / "ISSUE_TEMPLATE" / "01-bug_report.yml", ISSUE_BUG_REPORT_YML, dry_run
@@ -1509,12 +1143,15 @@ def do_git(
                 pass
     if "contributing" in sel:
         contrib = CONTRIBUTING_MD_TMPL.format(project_name=project_name)
-        write_file(
+        note = write_generated(
             cwd / "CONTRIBUTING.md",
             contrib,
             dry_run,
+            update=update,
             warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
         )
+        if note:
+            notes.append(note)
     if "gitignore" in sel:
         append_gitignore(cwd / ".gitignore", GITIGNORE_GIT, dry_run)
     if "agents" in sel:
@@ -1527,11 +1164,18 @@ def do_git(
         _write_gh_router(cwd, dry_run)
     if "pre-push" in sel:
         patch_wt_hooks(cwd, dry_run)
+    return notes
 
 
 def do_python(
-    cwd: pathlib.Path, project_name: str, dry_run: bool, with_coverage: bool, threshold: int
-) -> None:
+    cwd: pathlib.Path,
+    project_name: str,
+    dry_run: bool,
+    with_coverage: bool,
+    threshold: int,
+    update: bool = False,
+) -> list[str]:
+    notes: list[str] = []
     write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
     pyproj = build_pyproject(project_name, with_coverage, threshold)
     warn = (
@@ -1539,12 +1183,15 @@ def do_python(
         if with_coverage
         else "mixed: {{project_name}} + description/readme — proofread package name and description."
     )
-    write_file(
+    note = write_generated(
         cwd / "pyproject.toml",
         pyproj,
         dry_run,
+        update=update,
         warn_mixed=warn,
     )
+    if note:
+        notes.append(note)
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_PYTHON_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
@@ -1552,22 +1199,32 @@ def do_python(
         dry_run,
     )
     contrib_py = CONTRIBUTING_MD_TMPL_PYTHON.format(project_name=project_name)
-    write_file(
+    note = write_generated(
         cwd / "CONTRIBUTING.md",
         contrib_py,
         dry_run,
+        update=update,
         warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
     )
+    if note:
+        notes.append(note)
     if with_coverage:
         print(
             f"NOTE: Python coverage wired — run `uv run pytest --cov --cov-fail-under={threshold}`",
             file=sys.stderr,
         )
+    return notes
 
 
 def do_rust(
-    cwd: pathlib.Path, project_name: str, dry_run: bool, with_coverage: bool, threshold: int
-) -> None:
+    cwd: pathlib.Path,
+    project_name: str,
+    dry_run: bool,
+    with_coverage: bool,
+    threshold: int,
+    update: bool = False,
+) -> list[str]:
+    notes: list[str] = []
     cargo_name = project_name.lower().replace("_", "-").replace(" ", "-")
     if cargo_name != project_name:
         print(
@@ -1579,12 +1236,15 @@ def do_rust(
     warn = "mixed: {{project_name}} normalized to kebab-case — proofread package name and edition."
     if with_coverage:
         warn += f" + coverage llvm-cov {threshold}%"
-    write_file(
+    note = write_generated(
         cwd / "Cargo.toml",
         cargo,
         dry_run,
+        update=update,
         warn_mixed=warn,
     )
+    if note:
+        notes.append(note)
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_RUST_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
@@ -1596,6 +1256,7 @@ def do_rust(
             f"NOTE: Rust coverage requires `cargo llvm-cov` (install: cargo install cargo-llvm-cov). Threshold {threshold}% enforced via `cargo llvm-cov report --fail-under-lines {threshold}`",
             file=sys.stderr,
         )
+    return notes
 
 
 def do_typescript(
@@ -1605,7 +1266,9 @@ def do_typescript(
     ts_variant: str,
     with_coverage: bool,
     threshold: int,
-) -> None:
+    update: bool = False,
+) -> list[str]:
+    notes: list[str] = []
     npm_name = _ts_normalize_name(project_name)
     if npm_name != project_name:
         print(
@@ -1617,12 +1280,15 @@ def do_typescript(
     warn = "mixed: {{project_name}} + description — proofread package name and description."
     if with_coverage:
         warn += f" + coverage @vitest/coverage-v8 {threshold}%"
-    write_file(
+    note = write_generated(
         cwd / "package.json",
         pkg_json,
         dry_run,
+        update=update,
         warn_mixed=warn,
     )
+    if note:
+        notes.append(note)
     write_file(cwd / "tsconfig.json", build_tsconfig(), dry_run)
     write_file(cwd / ".oxlintrc.json", OXLINT_JSON, dry_run)
     write_file(cwd / "scripts" / "oxlint-plugin-comment-gate.js", OXLINT_COMMENT_GATE_JS, dry_run)
@@ -1659,17 +1325,21 @@ def do_typescript(
         dry_run,
     )
     contrib_ts = CONTRIBUTING_MD_TMPL_TYPESCRIPT.format(project_name=project_name)
-    write_file(
+    note = write_generated(
         cwd / "CONTRIBUTING.md",
         contrib_ts,
         dry_run,
+        update=update,
         warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
     )
+    if note:
+        notes.append(note)
     if ts_variant == "pi-extension":
         print(
             "NOTE: pi-extension entry is ./src/index.ts (pi loads .ts directly, no build step) — proofread package.json `pi.extensions` path.",
             file=sys.stderr,
         )
+    return notes
 
 
 def do_ci(
@@ -1931,6 +1601,34 @@ def print_detect(cwd: pathlib.Path, as_json: bool) -> int:
     return 0
 
 
+def print_next_actions(cwd: pathlib.Path, notes: list[str]) -> None:
+    """Report what --update preserved and the concrete follow-up for each.
+
+    Detection supplies the runtime; the remaining calls are judgement, so they are
+    printed rather than guessed (see the Update section of the git subskill).
+    """
+    if not notes:
+        return
+    det = detect_project(cwd)
+    ci_variant = det["ci"]["variant"]  # type: ignore[index]
+    shape = det["inferred_shape"]
+    variant = ci_variant if ci_variant in {"python", "rust", "node"} else shape
+    follow_up: dict[str, str] = {
+        "release.yml": f"uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant {variant}",
+        "CONTRIBUTING.md": "hand-merge the 'Before PR' toolchain line (mixed file) — templates/shared/CONTRIBUTING.{default,python,typescript}.md",
+        "CHANGELOG.md": "nothing to do — @semantic-release/changelog owns versioned sections",
+        "pyproject.toml": "regenerate deliberately: --flavor python [--with-coverage --coverage-threshold N]",
+        "Cargo.toml": "regenerate deliberately: --flavor rust [--with-coverage --coverage-threshold N]",
+        "package.json": "regenerate deliberately: --flavor typescript [--ts-variant lib|cli|pi-extension]",
+    }
+    print("\nNEXT — undetermined, decide before acting:", file=sys.stderr)
+    for note in notes:
+        print(f"  - {note}", file=sys.stderr)
+        action = follow_up.get(note.split(":")[0].strip())
+        if action:
+            print(f"    → {action}", file=sys.stderr)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Deterministic scaffold generator")
     ap.add_argument(
@@ -1974,6 +1672,11 @@ def main() -> int:
         "--detect", action="store_true", help="detect project state and exit (no writes)"
     )
     ap.add_argument(
+        "--update",
+        action="store_true",
+        help="refresh generated infrastructure in place: project-owned files are preserved and reported as NEXT actions; implies --flavor git when --flavor is omitted",
+    )
+    ap.add_argument(
         "--only",
         default=None,
         help="only scaffold these components (comma-separated, e.g. 'pre-push,releaserc'); default all",
@@ -1999,10 +1702,11 @@ def main() -> int:
     cwd = pathlib.Path(args.cwd).resolve()
     if args.detect:
         return print_detect(cwd, as_json=True)
-    if args.flavor is None:
-        ap.error("--flavor is required unless --detect is used")
+    if args.flavor is None and not args.update:
+        ap.error("--flavor is required unless --update or --detect is used")
     project_name = args.project_name or infer_project_name(cwd)
-    flavor: str = args.flavor
+    flavor: str = args.flavor or "git"
+    update: bool = args.update
     dry_run: bool = args.dry_run
     with_coverage: bool = args.with_coverage
     threshold: int = args.coverage_threshold
@@ -2031,16 +1735,21 @@ def main() -> int:
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
+    notes: list[str] = []
     if flavor in ("git", "all"):
-        do_git(cwd, project_name, dry_run, selected=git_selected)
+        notes += do_git(cwd, project_name, dry_run, selected=git_selected, update=update)
     if flavor in ("python", "all"):
-        do_python(cwd, project_name, dry_run, with_coverage, threshold)
+        notes += do_python(cwd, project_name, dry_run, with_coverage, threshold, update=update)
     if flavor in ("rust", "all"):
-        do_rust(cwd, project_name, dry_run, with_coverage, threshold)
+        notes += do_rust(cwd, project_name, dry_run, with_coverage, threshold, update=update)
     if flavor in ("typescript", "all"):
-        do_typescript(cwd, project_name, dry_run, args.ts_variant, with_coverage, threshold)
+        notes += do_typescript(
+            cwd, project_name, dry_run, args.ts_variant, with_coverage, threshold, update=update
+        )
     if flavor == "ci":
         do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold, selected=ci_selected)
+    if update:
+        print_next_actions(cwd, notes)
 
     if dry_run:
         print(

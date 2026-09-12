@@ -1,5 +1,6 @@
 {
   "globs": ["**/*.md", "!**/node_modules/**"],
+  "ignores": ["skills/scaffold/templates/**"],
   "default": true,
   "MD009": { "br_spaces": 2, "strict": false },
   "MD013": false,

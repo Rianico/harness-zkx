@@ -1,0 +1,3 @@
+# Byte-contract templates — the scaffold ships these bytes verbatim.
+# Reformatting any file here silently changes generated projects.
+skills/scaffold/templates/
