@@ -129,6 +129,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **skill-authoring:** exclude legacy commands/ from the skill registry
+- **orchestrating:** drop stale architect and build-fix dependencies
+- **dynamic-workflow-wrapper:** fit description to the 300-char context-load budget
 - **skill-authoring:** rewrite only the exact flow-list item on rename
 - **gh-router:** resolve repo from push remote instead of gh repo view
 - **agents:** drop tools that never register in subagents
