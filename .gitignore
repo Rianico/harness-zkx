@@ -23,6 +23,8 @@
 
 # extra repo
 everything-claude-code/
+# external skill library (warpdotdev/common-skills) — scratch checkout; absorb by copy
+common-skills/
 
 # Environment files
 .env
