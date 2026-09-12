@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+- **herdr:** add herdr-pane pane-split helper
+- **herdr:** absorb the upstream Herdr skill into skills/
 - **writing-for-agents:** add human-facing prose and blind prose evals
 - **workflow:** support suggestions and feed-forward gotchas in converge-tasks
 - **resolve-merge-conflicts:** add intent discovery and uv execution
@@ -176,6 +178,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **herdr:** document the local herdr-pane helper
 - **skill-comply:** drop legacy commands/*.md from supported targets
 - **changelog:** sync unreleased section
 - **changelog:** sync unreleased section
