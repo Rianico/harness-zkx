@@ -1,0 +1,8 @@
+interface:
+  display_name: resolve-merge-conflicts
+  short_description: Extracts compact conflict hunks via Git plumbing and reconciles
+    dual author intent. Use when a merge, rebase, cherry-pick, or stash pop stops
+    on conflicts, when git status shows unmerged paths, or when files contain conflict
+    markers; not for clean branch merges or standard rebases.
+policy:
+  allow_implicit_invocation: true
