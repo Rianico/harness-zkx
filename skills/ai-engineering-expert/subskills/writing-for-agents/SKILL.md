@@ -25,7 +25,7 @@ Derive a one-sentence **goal** from the user's intent, artifacts, and prior chat
 - **Name it before you draft.** Write the goal down in one sentence (as `handoff` does with its Primary Goal) before choosing headings. If you delete a section and the goal still holds intact, delete it.
 - **Use the goal as the review bar.** A reviewer must be able to point to the goal sentence and audit each section: "does this serve the goal, or is it exposition?"
 - **Name the consumer, then the exclusion.** Who reads this — an agent mid-task, a reviewer, a maintainer, future you — decides what must _not_ appear: implementation detail in a product spec, confidential internals in a published page, restated environment in a skill, another repo's config in a template. Write the exclusion beside the goal; a document that leaks the wrong layer reads as authoritative and misleads.
-- **Pin each behavior with a concrete example.** For every branch or rule, give a before/after or given/when/then-shaped example — the example *is* the contract. A new agent should be able to map each example to a file:line without guessing.
+- **Pin each behavior with a concrete example.** For every branch or rule, give a before/after or given/when/then-shaped example — the example _is_ the contract. A new agent should be able to map each example to a file:line without guessing.
 - **Verify with fresh signals, not assertions.** Lints, typechecks, and tests are the authority; for qualitative fit, use a skeptic second read. Never trust "I did it" — trust the tool output that would go red if the claim were false.
 
 Keep the whole skill body inline when you teach a writer — the writer needs the full picture in one read. Splitting core guidance behind extra pointers adds round-trips and variance; reserve disclosure for branch-conditional depth, not for moves needed on every run. See [philosophy](references/philosophy.md) for the builder-facing mapping of these moves to their prior labels.
@@ -81,13 +81,13 @@ The strongest criteria are both checkable and exhaustive.
 
 Every claim about work describes something that ran, or says plainly that it did not. **Never write intent as though it were a result** — the reader cannot tell the difference, and a report that overstates is worse than a silent one.
 
-| Situation                      | What to write                                                                                                                                          |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Nothing ran                    | Say so, and name the command the reader or CI should run.                                                                                               |
-| CI produces the result         | Name the job and mark the outcome as an expectation ("expect one destroy and one create"), never as an observation.                                     |
-| Checks added but not run       | Say the checks are added and unrun, so nobody reads a list of tests as evidence they passed.                                                            |
-| You could not run it           | Name what it needs (device, credentials, environment) and the check you are asking the reader to make. Never cover a skip this way — if you could have run it, run it. |
-| Someone else recorded it       | Attribute it, or leave it out. Never restate it as your own observation.                                                                                |
+| Situation                | What to write                                                                                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nothing ran              | Say so, and name the command the reader or CI should run.                                                                                                              |
+| CI produces the result   | Name the job and mark the outcome as an expectation ("expect one destroy and one create"), never as an observation.                                                    |
+| Checks added but not run | Say the checks are added and unrun, so nobody reads a list of tests as evidence they passed.                                                                           |
+| You could not run it     | Name what it needs (device, credentials, environment) and the check you are asking the reader to make. Never cover a skip this way — if you could have run it, run it. |
+| Someone else recorded it | Attribute it, or leave it out. Never restate it as your own observation.                                                                                               |
 
 More than one can apply at once, and each fact appears once — repeating "this was not run" across three sections reads as hedging and buries the line that says what to run instead.
 
@@ -137,18 +137,18 @@ You win twice: fewer tokens, and a sharper hook for the agent to hang its thinki
 
 Name the mode when you cut; a named mode is easier to spot next time than a rule re-derived per draft.
 
-| Mode                            | Looks like                                                              | Cure                                                                                             |
-| ------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Sediment**                    | Stale layers nobody dares remove.                                       | Relevance-check each line; delete the sentence, not words from it.                               |
-| **Sprawl**                      | Long although every line is live.                                       | Move reference down the ladder; split by branch or sequence.                                     |
-| **Duplication**                 | One meaning in two places.                                              | Single source of truth; point instead of restating.                                              |
-| **Scattering**                  | One meaning fragmented across sections (duplication's inverse).         | Co-locate definition, rules, and caveats under one heading.                                      |
-| **No-op**                       | An instruction the model obeys by default.                              | Delete the sentence; if the point still fails to land, choose a stronger leading word.           |
-| **Negation**                    | A prohibition that activates the banned behaviour.                      | Prompt the positive target; keep a guardrail only where the positive cannot be phrased.          |
-| **Narrating the doc's history** | "This section was moved…", "an earlier version said…".                   | Describe the current state — the reader has one version, not your path to it.                    |
-| **Restating the environment**   | Script names, config values, or template bodies copied into prose.      | Point at the file or command; cache only what a lookup cannot show.                              |
-| **Grading the document**        | "Covers everything you need", "comprehensive rules".                     | State what it does; let coverage show itself.                                                    |
-| **Lecturing the reader**        | "Be careful with edge cases", "make sure error handling is correct".     | Point at the specific branch or decision; drop the generic advice.                               |
+| Mode                            | Looks like                                                           | Cure                                                                                    |
+| ------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Sediment**                    | Stale layers nobody dares remove.                                    | Relevance-check each line; delete the sentence, not words from it.                      |
+| **Sprawl**                      | Long although every line is live.                                    | Move reference down the ladder; split by branch or sequence.                            |
+| **Duplication**                 | One meaning in two places.                                           | Single source of truth; point instead of restating.                                     |
+| **Scattering**                  | One meaning fragmented across sections (duplication's inverse).      | Co-locate definition, rules, and caveats under one heading.                             |
+| **No-op**                       | An instruction the model obeys by default.                           | Delete the sentence; if the point still fails to land, choose a stronger leading word.  |
+| **Negation**                    | A prohibition that activates the banned behaviour.                   | Prompt the positive target; keep a guardrail only where the positive cannot be phrased. |
+| **Narrating the doc's history** | "This section was moved…", "an earlier version said…".               | Describe the current state — the reader has one version, not your path to it.           |
+| **Restating the environment**   | Script names, config values, or template bodies copied into prose.   | Point at the file or command; cache only what a lookup cannot show.                     |
+| **Grading the document**        | "Covers everything you need", "comprehensive rules".                 | State what it does; let coverage show itself.                                           |
+| **Lecturing the reader**        | "Be careful with edge cases", "make sure error handling is correct". | Point at the specific branch or decision; drop the generic advice.                      |
 
 ## Correct, complete, and teach in order
 
