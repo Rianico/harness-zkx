@@ -36,7 +36,9 @@ flowchart TD
 - **Anti-Laziness Criterion**: The implementation must solve the generalized problem, not just hardcode outputs to satisfy test fixtures.
 - **Red Flag (Shortcuts & Swallows)**: Reject hardcoded return values tailored to sample inputs, empty `catch`/`except` blocks, stubbed dummy branches, or unhandled `TODO` markers.
 - **State Invariant**: Domain models must make invalid states unrepresentable. Primitive obsession without validation invariants is rejected.
-- **Contract Fidelity**: Diff must satisfy the specified BDD intent without behavioral shortcuts or unrequested scope creep.
+- **Contract & Spec Fidelity**: Diff must satisfy concrete commitments from the product/tech spec (required behaviors, stated constraints, required validation/migration/compatibility steps).
+- **Scope Creep Guard**: Reject significant unrequested architectural scope, speculative scaffolding, or out-of-scope refactorings not mandated by the spec or task.
+- **Material Mismatch Criterion**: Flag spec drift only when material (missing required behavior, contradiction of spec decision, absent required validation/migration, or unplanned scope bloat).
 
 ### 3. Structural Topology (Clean Architecture & Boundary Seams)
 - **The Dependency Rule**: Source code dependencies point inward toward domain entities. Core business logic MUST NOT import delivery mechanisms (CLI, HTTP, ORM, frameworks, database drivers).
@@ -53,7 +55,8 @@ flowchart TD
    - Reviewer is strictly forbidden from editing files, fixing bugs, or rewriting code.
 2. **Scale by Risk (Coding-Protocol §1)**:
    - **Zero Nitpicks**: Skip all formatting, whitespace, syntax, or styling issues handled by linters.
-   - Surface only **`[BLOCKING]`** (contract breach, fake mock, security hole, unhandled failure) and **`[HIGH]`** (architectural leak, design drift, state corruption risk) issues.
+   - **Pragmatism Boundary**: Do not fail code over harmless implementation-level variations (e.g., naming, internal helper layout, low-level structure) if behavioral contracts, invariants, and refutable tests hold.
+   - Surface only **`[BLOCKING]`** (contract breach, fake mock, security hole, unhandled failure, material spec contradiction) and **`[HIGH]`** (architectural leak, design drift, state corruption risk, unplanned scope creep) issues.
 3. **Subagent-First Isolation**:
    - Run in a fresh subagent context with only diff, spec, and verification logs.
    - Do NOT inherit the author's conversational rationalizations (eliminates anchoring bias).

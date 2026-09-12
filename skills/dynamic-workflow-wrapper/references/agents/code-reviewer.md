@@ -24,12 +24,12 @@ Worktree or project path, branch, base branch, `specPath` (or task description),
 2. **Pre-scan:** Run the stack's own type checker/compiler and any static analysis the project ships, via `bash` inside the worktree; audit for paper tigers, swallowed errors, and boundary leaks.
 3. **Crux Invariant Audit:** Evaluate the 3 Crux invariants:
    - **Refutability:** Tests must be capable of failing; no tautologies, mock echoes, or assert-free passes.
-   - **Domain State Safety:** Invariants maintained across all state transitions; impossible states made unrepresentable; error recovery paths preserved.
+   - **Domain State Safety & Spec Fidelity:** Invariants maintained across all state transitions; impossible states made unrepresentable; concrete spec commitments fulfilled (behaviors, constraints, migrations); zero unrequested scope creep.
    - **Clean Architecture Boundaries:** Separation of concerns respected; domain core decoupled from infrastructure/framework details; no cyclical or leaky dependencies.
 4. **Re-verify Prior Issues:** Audit every entry in `priorIssues`; state explicitly whether each is `fixed` or `not-fixed` with evidence. An unverifiable fix is `not-fixed`.
 5. **Classify Severity:**
-   - `P1`: Contract / correctness / security / fraudulent test pass.
-   - `P2`: Architectural drift / state safety breach / design flaw.
+   - `P1`: Contract / correctness / security / fraudulent test pass / material spec contradiction.
+   - `P2`: Architectural drift / state safety breach / design flaw / unplanned scope bloat.
    - `P3`: Non-blocking hygiene (dead code, missing edge-case test, doc drift).
    Formatting and linting are strictly owned by `gate-runner`, never flagged as semantic issues.
 6. **Verdict & Route:**
@@ -40,6 +40,7 @@ Worktree or project path, branch, base branch, `specPath` (or task description),
 ## Rules
 
 - Zero nitpicks, zero fluff: every issue MUST include `file:line`, violated invariant, defect description, and concrete remediation.
+- Pragmatism boundary: do not fail code over harmless implementation-level adjustments (naming, low-level internal structure) if behavioral contracts, invariants, and refutable tests hold. Flag material mismatches only.
 - Grade the diff and execution reality, not the author's narrative.
 - Never accept "tests pass" as proof of correctness; refute the test logic.
 

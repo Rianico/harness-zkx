@@ -1,7 +1,7 @@
 {
   "version": 1,
   "agents": {
-    "code-reviewer.md": "70d81929a134d7eefc46599a0f953166b65f33a5883fdee1d6d2c4e0613977ac",
+    "code-reviewer.md": "4f842d0a43f496559fdab190ac9353eb310315bd3685b910d7e5aa909eb1d8da",
     "developer.md": "c34a382effb7d10ede0036c50c6b096937a5a259735e62f6c606e099501ead23",
     "gate-runner.md": "9642cbf066e06b1201ec70a4fbd48ea3fd4b99a8ee95f5a9a4badbf3f99d826b",
     "merger.md": "6d66cd029493d41bfffcf4bc3f6342bfae31c19b10015925a007f25a34b038bc",
@@ -11,7 +11,7 @@
     "references/resp-format.md": "3a4b8e3b494dc04b0beef189cc4e2e82948f6cea91cc2fedfb2066518dd9d686"
   },
   "compiled": {
-    "code-reviewer.md": "e709fd5f103305a71d637ea5629ba86d5c3dd3cbb8639464a3ec197e18fb65f7",
+    "code-reviewer.md": "1b068d1a4c6aae4b43f87f49165e8d92cae53cd5a27ccfadaf0c2d2e78fd3ceb",
     "developer.md": "96de2d7a97bbcf1a44260a6daf85564afef4a1c807f31eef05747bcb884ac5f5",
     "gate-runner.md": "b5af0b3bccb1d50284e1013efceb6ea8d3523e4e6339ed3e136c9ca685b75e38",
     "merger.md": "a0d6e9dfa53430d0d2699a9c8035c6a0f493382b515a3b7d1aeeb12627d8f44b",

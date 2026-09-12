@@ -74,6 +74,19 @@ except GatewayTimeoutError as err:
     raise PaymentProcessingFailed(f"Gateway unavailable: {err}") from err
 ```
 
+### Material Spec Drift & Scope Creep
+```python
+# REJECT (Material Drift): Spec demanded backward-compat migration fallback, but diff dropped it
+def load_session(session_id: str):
+    return new_store.load(session_id)  # Breaks legacy sessions without migration!
+
+# REJECT (Scope Creep): Ticket asked for bugfix in token refresh; diff rewrote auth caching layer
+# (Adds unreviewed risk, speculative abstractions, and unrequested diff bloat)
+
+# APPROVE (Pragmatic Tolerance): Internal helper name differs from draft sketch, but contracts and invariants hold
+def _normalize_token_expiry(token: Token) -> Timestamp: ...
+```
+
 ---
 
 ## 3. Structural Topology (Clean Architecture & Keel Boundaries)
