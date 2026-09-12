@@ -267,12 +267,20 @@ def _check_duplicate_skill_names(root_dir: Path) -> bool:
         # and the other is top-level legacy. Emit WARN, not FAIL, to keep gate green during cutover.
         has_managed = any(managed_flags)
         has_unmanaged = any(not f for f in managed_flags)
-        is_programming_migration = has_managed and has_unmanaged and any(
-            "programming-expert/subskills" in str(p) for p, m in zip(paths, managed_flags) if m  # noqa: B905
+        is_programming_migration = (
+            has_managed
+            and has_unmanaged
+            and any(
+                "programming-expert/subskills" in str(p)
+                for p, m in zip(paths, managed_flags, strict=True)
+                if m
+            )
         )
         if is_programming_migration:
             rels = [p.relative_to(root_dir) for p in paths]
-            print(f"LINT WARN: Skill name '{name}' has staged migration duplicate ({len(paths)} files) — managed subskill + legacy top-level:")
+            print(
+                f"LINT WARN: Skill name '{name}' has staged migration duplicate ({len(paths)} files) — managed subskill + legacy top-level:"
+            )
             for rel in rels:
                 print(f"  - {rel}")
             print("  → Retire legacy top-level after cutover to clear WARN.")

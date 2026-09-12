@@ -8,7 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-- **writing-for-agents:** add human-facing prose rules, blind prose evals, and report-what-ran contract
+- **writing-for-agents:** add human-facing prose and blind prose evals
+- **workflow:** support suggestions and feed-forward gotchas in converge-tasks
 - **resolve-merge-conflicts:** add intent discovery and uv execution
 - **code-review:** add spec drift and pragmatism boundaries
 - **workflow:** add converge-tasks workflow
@@ -129,9 +130,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+- **skill-authoring:** assert equal-length zip in duplicate-name check
+- **dynamic-workflow-wrapper:** fit description to the context-load budget
 - **skill-authoring:** exclude legacy commands/ from the skill registry
-- **orchestrating:** drop stale architect and build-fix dependencies
-- **dynamic-workflow-wrapper:** fit description to the 300-char context-load budget
+- **verification:** point writing sub-skill links at writing-for-agents
 - **skill-authoring:** rewrite only the exact flow-list item on rename
 - **gh-router:** resolve repo from push remote instead of gh repo view
 - **agents:** drop tools that never register in subagents
@@ -174,6 +176,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+- **skill-comply:** drop legacy commands/*.md from supported targets
+- **changelog:** sync unreleased section
+- **changelog:** sync unreleased section
+- **changelog:** sync unreleased section
 - **workflow-wrapper:** record worktree contract and allowlist reality
 - **rules:** refine mental-model and development-patterns
 - **rules:** prefer rg, fd, eza over grep, find, ls
@@ -228,7 +234,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Code Refactoring
 
+- **gh-router:** rename pr subskill to pr-land (BREAKING CHANGE)
 - **skills:** absorb architecture-expert into programming-expert (BREAKING CHANGE)
 - **skills:** consolidate language experts into programming-expert router (BREAKING CHANGE)
-- **gh-router:** rename `pr` subskill to `pr-land` (BREAKING CHANGE: subskill name and path changed)
 - **changelog:** adopt Option A PR guard + pre-push hook (BREAKING CHANGE)
