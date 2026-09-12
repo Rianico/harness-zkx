@@ -5,14 +5,14 @@ description: >-
 argument-hint: |-
   gh-release [--dry-run] -- changelog and publish via dispatch
   pr-enhance [base|pr_url] -- PR description generation
-  pr [--watch --merge] -- create PR, watch checks, squash-merge
+  pr-land [--watch --merge] -- create PR, watch checks, squash-merge
 metadata:
-  manage: [gh-release, pr-enhance, pr]
+  manage: [gh-release, pr-land, pr-enhance]
 ---
 
 # GH Router
 
-GitHub workflow router. Model-invocable — dispatches to `gh-release` or `pr-enhance` via subskill load.
+GitHub workflow router. Model-invocable — dispatches to `gh-release`, `pr-land`, or `pr-enhance` via subskill load.
 
 ## Subskills
 
@@ -20,6 +20,6 @@ GitHub workflow router. Model-invocable — dispatches to `gh-release` or `pr-en
 | ------------ | ------------------------------------ |
 | `gh-release` | `release`, dispatch semantic-release |
 | `pr-enhance` | `submit PR`, `refine PR`             |
-| `pr`         | `pr create`, `pr watch`, `pr merge`, `squash merge` |
+| `pr-land`    | `pr create`, `pr watch`, `pr merge`, `squash merge` |
 
 Load via `Read $SKILL_DIR/subskills/<name>/SKILL.md`.

@@ -1,5 +1,5 @@
 ---
-name: pr
+name: pr-land
 description: >-
   Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
 arguments: title_or_branch
