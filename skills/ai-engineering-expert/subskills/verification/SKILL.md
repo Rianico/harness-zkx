@@ -60,7 +60,7 @@ Write tests for bugs that were found, not just for code that works. AI tends to 
 3. Execute implementation
 4. Re-run evals, compare deltas
 
-> **Doc/writing verification:** Agent-document output (SKILL.md, AGENTS.md, CLAUDE.md) verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` + `context-check` and semantically via a Skeptic comparing prose to intent (see [writing sub-skill](../writing/SKILL.md)).
+> **Doc/writing verification:** Agent-document output (SKILL.md, AGENTS.md, CLAUDE.md) verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` + `context-check` and semantically via a Skeptic comparing prose to intent (see [writing sub-skill](../writing-for-agents/SKILL.md)). Prose for a human reader also runs that sub-skill's blind evals ([evals.json](../writing-for-agents/evals/evals.json)) — one fresh subagent per eval, assertions withheld.
 
 ## Runtime Trace Fixtures
 
@@ -70,4 +70,4 @@ For testing invocation class behavior against live Codex surfaces. See the conte
 
 [Sandbox testing patterns](references/sandbox-testing-patterns.md)
 [Eval-first development](references/eval-first-development.md)
-[Writing sub-skill](../writing/SKILL.md) -- writing output verifies via deterministic gate (lint/context-check) + Skeptic; load alongside this skill when docs are produced
+[Writing sub-skill](../writing-for-agents/SKILL.md) -- writing output verifies via deterministic gate (lint/context-check) + Skeptic, plus blind prose evals; load alongside this skill when docs are produced
