@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **scaffold:** make the generated gates pass, and stop bypassing them
 * **scaffold:** make both coverage gates achievable on a fresh tree
 * clear the findings the new toolchain surfaced
 * **ci:** pin this repo's own workflows to the same action table
@@ -29,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** record the gate-config contract
 * **scaffold:** record how each coverage gate is wired
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
