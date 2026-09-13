@@ -117,16 +117,21 @@ def test_cli_update_prints_next_actions_for_preserved_files(tmp_path, capsys):
 
 
 def test_update_preserves_shipped_source_files(tmp_path):
-    """`src/lib.rs` and `tests/test_smoke.py` are starting points the project edits, so
-    --update must report them as preserved rather than regenerating over real work."""
+    """`src/lib.rs`, the Python package and `tests/test_smoke.py` are starting points the project
+    edits, so --update must report them as preserved rather than regenerating over real work."""
     scaffold.do_rust(tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80)
     scaffold.do_python(tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80)
     lib = tmp_path / "src" / "lib.rs"
+    package = tmp_path / "src" / "demo" / "__init__.py"
     smoke = tmp_path / "tests" / "test_smoke.py"
     assert lib.read_text(encoding="utf-8") == scaffold.RUST_LIB_RS
-    assert smoke.read_text(encoding="utf-8") == scaffold.PY_TESTS_SMOKE
+    assert package.is_file(), "the flavor ships a covered package (src/<module>/__init__.py)"
+    assert smoke.read_text(encoding="utf-8") == scaffold.render_template(
+        "python/tests/test_smoke.py.j2", module="demo"
+    )
     edited = "//! my crate\n"
     lib.write_text(edited, encoding="utf-8")
+    package.write_text('"""mine"""\n', encoding="utf-8")
     smoke.write_text("def test_real() -> None:\n    assert True\n", encoding="utf-8")
 
     notes = scaffold.do_rust(
@@ -137,7 +142,9 @@ def test_update_preserves_shipped_source_files(tmp_path):
     )
 
     assert lib.read_text(encoding="utf-8") == edited
+    assert package.read_text(encoding="utf-8") == '"""mine"""\n'
     assert "test_real" in smoke.read_text(encoding="utf-8")
     joined = "\n".join(notes)
     assert "lib.rs" in joined
+    assert "__init__.py" in joined, "SOURCE_OWNED_PATTERNS must cover the computed package path"
     assert "test_smoke.py" in joined

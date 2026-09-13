@@ -1,0 +1,9 @@
+"""Smoke test — exercises the shipped package so `uv run pytest` and the coverage gate are
+meaningful from the first commit."""
+
+from {{ module }} import add
+
+
+def test_add_returns_the_sum() -> None:
+    """Replace with real tests; this proves the toolchain runs and the package imports."""
+    assert add(1, 2) == 3

@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import keyword
 import os
 import pathlib
 import re
@@ -41,8 +42,9 @@ from dataclasses import asdict, dataclass
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
-# Pinned GH Actions SHAs (single source) — every entry runs on node24, and the same table is
-# asserted against .github/workflows/*.yml by tests/scaffold/test_templates.py.
+# Pinned GH Actions SHAs (single source) — every JavaScript entry runs on node24
+# (taiki-e/install-action is composite), and the same table is asserted against
+# .github/workflows/*.yml by tests/scaffold/test_templates.py.
 SHA_TABLE = {
     "checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",  # actions/checkout v7.0.1
     "setup-node": "820762786026740c76f36085b0efc47a31fe5020",  # actions/setup-node v7.0.0
@@ -51,6 +53,7 @@ SHA_TABLE = {
     "pnpm-setup": "ea17c68df8912ef543352723c149a84f56e3d413",  # pnpm/action-setup v6.1.0
     "rust-cache": "6323deb102c322ba6fcbdcafc7e3dddab59af2b6",  # Swatinem/rust-cache v2.9.2
     "setup-uv": "bec219d24cd3e171d82865faccec33120bb574f4",  # astral-sh/setup-uv v10.1.0
+    "install-action": "3f74d7c16a4242f1c95561e98edc25d36adb4375",  # taiki-e/install-action v2.87.12
 }
 
 NODE_VERSION_NUM = "26"
@@ -181,7 +184,6 @@ PULL_REQUEST_TEMPLATE_MD = load_template("git/.github/pull_request_template.md")
 CHANGELOG_MD = load_template("git/CHANGELOG.md")
 
 # Other flavors' static artifacts — same contract, one byte source per flavor.
-PY_TESTS_SMOKE = load_template("python/tests/test_smoke.py")
 RUST_TOOLCHAIN_TOML = load_template("rust/rust-toolchain.toml")
 RUST_LIB_RS = load_template("rust/src/lib.rs")
 OXLINT_JSON = load_template("typescript/.oxlintrc.json")
@@ -246,6 +248,13 @@ FLAVOR_FOREIGN: dict[str, str] = {
 # latter; these paths are code a project grows by hand, so clobbering them would lose work no
 # template can regenerate. Keyed by repo-relative path, not basename: the map only earns its
 # keep if it is precise (a basename key would also swallow a project's own `src/other.ts`).
+# Same contract as SOURCE_OWNED, for paths whose directory segment is computed from the
+# project name — a static key cannot express `src/<module>/__init__.py`.
+SOURCE_OWNED_PATTERNS: dict[str, str] = {
+    "src/*/__init__.py": "package source — the starting point the project edits",
+}
+
+
 SOURCE_OWNED: dict[str, str] = {
     "src/index.ts": "project source — entry module, hand-grown after scaffold",
     "src/cli.ts": "project source — CLI entry, hand-grown after scaffold",
@@ -542,7 +551,17 @@ typeCheckingMode = "strict"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 {cov_section}"""
+
+
+def _py_module_name(project_name: str) -> str:
+    """`Demo Py` / `demo-py` -> `demo_py`: a module name is an identifier, so no `-`, no
+    leading digit, and not a keyword."""
+    name = re.sub(r"[^0-9a-zA-Z]+", "_", project_name).strip("_").lower()
+    if not name or name[0].isdigit() or keyword.iskeyword(name):
+        name = f"pkg_{name}"
+    return name
 
 
 def _ts_normalize_name(project_name: str) -> str:
@@ -1032,9 +1051,17 @@ def do_python(
 ) -> list[str]:
     notes: list[str] = []
     write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
-    note = write_source(cwd, "tests/test_smoke.py", PY_TESTS_SMOKE, dry_run, update=update)
-    if note:
-        notes.append(note)
+    module = _py_module_name(project_name)
+    for relative, content in (
+        (
+            f"src/{module}/__init__.py",
+            render_template("python/src/_pkg/__init__.py.j2", project_name=project_name),
+        ),
+        ("tests/test_smoke.py", render_template("python/tests/test_smoke.py.j2", module=module)),
+    ):
+        note = write_source(cwd, relative, content, dry_run, update=update)
+        if note:
+            notes.append(note)
     pyproj = build_pyproject(project_name, with_coverage, threshold)
     warn = (
         f"mixed: {{{{project_name}}}} + coverage gate {threshold}% — proofread name and fail_under"
@@ -1677,6 +1704,15 @@ def write_source(
     """
     path = cwd / relative
     reason = SOURCE_OWNED.get(relative)
+    if reason is None:
+        reason = next(
+            (
+                why
+                for pattern, why in SOURCE_OWNED_PATTERNS.items()
+                if pathlib.PurePosixPath(relative).match(pattern)
+            ),
+            None,
+        )
     if update and reason and path.exists():
         return REPORT.preserved(path, reason)
     write_file(path, content, dry_run)

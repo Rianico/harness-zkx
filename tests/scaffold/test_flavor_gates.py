@@ -10,6 +10,7 @@ Gates only exist for the combination the scaffold prescribes: `--flavor <lang>` 
 `--flavor ci --ci-variant <lang>` (`--flavor all` always ships the Node verify job).
 """
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,18 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT = REPO_ROOT / "skills" / "scaffold" / "scripts" / "scaffold.py"
+
+
+def _load(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+scaffold = _load("scaffold_mod_flavor_gates", SCRIPT)
 
 
 def _generate(target: Path, *invocations: list[str]) -> None:
@@ -76,3 +89,52 @@ def test_python_generated_files_stay_ruff_formattable(tmp_path: Path) -> None:
     _generate(tmp_path, ["--flavor", "python"])
     result = _run(tmp_path, [ruff, "format", "--check", "."])
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+
+# --- coverage variants: the wired command must exit 0 on a fresh tree --------
+
+
+def test_python_coverage_gate_passes_on_a_fresh_tree(tmp_path: Path) -> None:
+    """`--with-coverage` wires `uv run pytest --cov --cov-fail-under=<threshold>`, which needs
+    code to measure: the flavor ships `src/<module>/__init__.py`, so the gate is green instead
+    of failing at 0%."""
+    _generate(
+        tmp_path,
+        ["--flavor", "python", "--with-coverage", "--coverage-threshold", "80"],
+    )
+    assert (tmp_path / "src" / "demo" / "__init__.py").is_file(), "coverage has nothing to measure"
+    # the harness venv carries pytest-cov, so this is the shipped command minus the `uv run`
+    # wrapper — no network, and the tree's own pyproject supplies source/pythonpath/fail_under.
+    result = _run(
+        tmp_path,
+        [sys.executable, "-m", "pytest", "--cov", "--cov-fail-under=80", "-q"],
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "Total coverage: 100.00%" in result.stdout, result.stdout
+
+
+@pytest.mark.skipif(shutil.which("cargo-llvm-cov") is None, reason="needs cargo-llvm-cov on PATH")
+def test_rust_coverage_gate_passes_on_a_fresh_tree(tmp_path: Path) -> None:
+    _generate(tmp_path, ["--flavor", "rust", "--with-coverage", "--coverage-threshold", "80"])
+    for command in (
+        ["cargo", "llvm-cov", "--workspace", "--lcov", "--output-path", "lcov.info"],
+        ["cargo", "llvm-cov", "report", "--fail-under-lines", "80"],
+    ):
+        result = _run(tmp_path, command)
+        assert result.returncode == 0, f"{' '.join(command)}\n{result.stdout}\n{result.stderr}"
+
+
+def test_rust_coverage_job_installs_what_it_calls(tmp_path: Path) -> None:
+    """A bare runner has no `cargo llvm-cov` (`error: no such command: llvm-cov`): the job has
+    to install the crate and its `llvm-tools-preview` component before the first call."""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    _generate(tmp_path, ["--flavor", "ci", "--ci-variant", "rust", "--with-coverage"])
+    _generate(plain, ["--flavor", "ci", "--ci-variant", "rust"])
+    workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert f"taiki-e/install-action@{scaffold.SHA_TABLE['install-action']}" in workflow
+    first_call = workflow.index("cargo llvm-cov --workspace")
+    assert workflow.index("taiki-e/install-action") < first_call
+    assert workflow.index("llvm-tools-preview") < first_call
+    without = (plain / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "install-action" not in without, "the install step must stay scoped to coverage"

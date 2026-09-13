@@ -93,6 +93,12 @@ def _render_cases() -> dict[str, str]:
         "typescript/vitest.config.ts (threshold=75)": scaffold.render_template(
             "typescript/vitest.config.ts.j2", threshold=75
         ),
+        "python/src/_pkg/__init__.py (project_name=demo)": scaffold.render_template(
+            "python/src/_pkg/__init__.py.j2", project_name="demo"
+        ),
+        "python/tests/test_smoke.py (module=demo)": scaffold.render_template(
+            "python/tests/test_smoke.py.j2", module="demo"
+        ),
     }
     for variant in scaffold.CI_RUNTIMES:
         for coverage in (False, True):
@@ -115,7 +121,6 @@ RAW_SHA256: dict[str, str] = {
     "git/.releaserc.json": "8e4a562913c3c8276f6689046d5b92c862ffa79d5b08c04b284eea75e0c3570f",
     "git/CHANGELOG.md": "4606d1eff8d1e321a97fed364c36aeceb037dc8bdfcbb8bf099c9d5621e41a6a",
     "git/commitlint.config.js": "9c46dd6e2258b8783f57255cbcdd09fd13c0283069b281568806ba147df85340",
-    "python/tests/test_smoke.py": "5aea23c34b6b3982d3234f45a7d6a706890d7e089148aebc408ffc8f5fdb7839",
     "rust/rust-toolchain.toml": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
     "rust/src/lib.rs": "7ee751810675dd67935f48c90a0ff696035fd0b47d7520a00bc0772d3eff1813",
     "typescript/.oxfmtrc.json": "de9ec5a4f748493a84113f6f9881a3db585cc4e8a8bea2c83e3ba65c204e8fb3",
@@ -125,6 +130,7 @@ RAW_SHA256: dict[str, str] = {
     "typescript/tests/index.test.ts": "4b91f6158817cf7dd1b57a41472772e961106bdf34430690e17386b53e0df80f",
 }
 
+# Re-pin only when the byte change is intended — the failure message prints the new digests.
 RENDERED_SHA256: dict[str, str] = {
     "CONTRIBUTING.default (project_name=demo)": "3af4b4bbb29406a678a01bfc8cceadf576577db747680a7c4b0f8451451c2357",
     "CONTRIBUTING.python (project_name=demo)": "cc3105b590d9b9e6ee644bc72cf849d219f368effa4124f3ab8e526bce029a16",
@@ -133,7 +139,9 @@ RENDERED_SHA256: dict[str, str] = {
     "ci/release.yml[node]": "cc378280f3ceb3cec4d888176d2a907686a9e6646ca9398a878ddb3482f3fe78",
     "ci/release.yml[python+coverage]": "8bc7d287419260537a0eaeeb4f48bccc4db41edbe2763da4768e67d5f7d3d9f5",
     "ci/release.yml[python]": "cb56fa0d7da0c2d1b99e6772501f34baa5b3920fb67ac5b594c3502031c50f80",
-    "ci/release.yml[rust+coverage]": "2807a5f8adc7b0c0f042cbb66b3beafb6767b8991086dc89958e4ff0e369b6f4",
+    "ci/release.yml[rust+coverage]": "ae99bd882da02ce1b7cc9083e8ed1eeeb7ed27aeecb7517eebb7200587e80127",
+    "python/src/_pkg/__init__.py (project_name=demo)": "9907974c0023c1fb987d828ec2de408840a3cc8fd753b3573adb976ae4a83cd1",
+    "python/tests/test_smoke.py (module=demo)": "f5de38a8b16e5e306a3a8f2306055eee929119537933e4c9c6a3c24a44991466",
     "ci/release.yml[rust]": "ad12437b536a3cd6b8477578c856f5a423c1f19e086a5919ae71997f49a45a5e",
     "rust/Cargo.toml (project_name=demo-cli)": "506eabda9eef1b9f5bf528259059d3d866aa0dc3bd538d83174602f9e9f0d047",
     "typescript/src/index.ts (project_name=demo)": "dd66d9df929a39c2e17a8b6609c030e03b6d247d7dee0b22649654633708410f",
@@ -313,6 +321,7 @@ ACTION_TO_TABLE_KEY = {
     "pnpm/action-setup": "pnpm-setup",
     "Swatinem/rust-cache": "rust-cache",
     "astral-sh/setup-uv": "setup-uv",
+    "taiki-e/install-action": "install-action",
 }
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
