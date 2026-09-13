@@ -55,9 +55,7 @@ def test_pre_push_hook_fix_hint_uses_hidden_type():
 
 def test_contributing_templates_prescribe_hidden_sync():
     for name in ("default", "python", "typescript"):
-        tmpl = scaffold.render_template(
-            f"shared/CONTRIBUTING.{name}.md.j2", project_name="demo"
-        )
+        tmpl = scaffold.render_template(f"shared/CONTRIBUTING.{name}.md.j2", project_name="demo")
         assert SYNC_EXAMPLE in tmpl
         assert "loops forever" in tmpl
 

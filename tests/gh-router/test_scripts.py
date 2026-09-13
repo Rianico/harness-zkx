@@ -52,7 +52,9 @@ def test_changelog_sync_dry_run_decides_without_mutating() -> None:
         ).stdout
 
     before = changelog_status()
-    result = subprocess.run(["bash", str(script), "sync"], capture_output=True, text=True, cwd=REPO_ROOT)
+    result = subprocess.run(
+        ["bash", str(script), "sync"], capture_output=True, text=True, cwd=REPO_ROOT
+    )
     assert result.returncode in (0, 1), f"dry run failed unexpectedly: {result.stderr}"
     combined = (result.stdout + result.stderr).lower()
     assert "changelog.md" in combined, "verdict does not name the file it inspected"

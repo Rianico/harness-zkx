@@ -109,6 +109,7 @@ def render_template(rel: str, /, **context: object) -> str:
     except TemplateNotFound as exc:
         raise _template_missing(rel) from exc
 
+
 # ------------------------------------------------------------------ templates
 # Raw: shipped byte-for-byte — Jinja never parses these, so the `${{ … }}` expressions and
 # `${…}` expansions inside workflow YAML and shell stay untouched.
@@ -813,9 +814,7 @@ def do_git(
             except OSError:
                 pass
     if "contributing" in sel:
-        contrib = render_template(
-            "shared/CONTRIBUTING.default.md.j2", project_name=project_name
-        )
+        contrib = render_template("shared/CONTRIBUTING.default.md.j2", project_name=project_name)
         note = write_generated(
             cwd / "CONTRIBUTING.md",
             contrib,
@@ -871,9 +870,7 @@ def do_python(
         "### Runtime\nPython: uv + .python-version (3.14), run via uv run; see pyproject.toml\n",
         dry_run,
     )
-    contrib_py = render_template(
-        "shared/CONTRIBUTING.python.md.j2", project_name=project_name
-    )
+    contrib_py = render_template("shared/CONTRIBUTING.python.md.j2", project_name=project_name)
     note = write_generated(
         cwd / "CONTRIBUTING.md",
         contrib_py,
@@ -999,9 +996,7 @@ def do_typescript(
         "### Runtime\nTypeScript: pnpm v12 + .nvmrc (24) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json\n",
         dry_run,
     )
-    contrib_ts = render_template(
-        "shared/CONTRIBUTING.typescript.md.j2", project_name=project_name
-    )
+    contrib_ts = render_template("shared/CONTRIBUTING.typescript.md.j2", project_name=project_name)
     note = write_generated(
         cwd / "CONTRIBUTING.md",
         contrib_ts,

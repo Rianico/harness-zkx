@@ -30,7 +30,7 @@ brief output — do not re-derive it with `gh pr view`, `gh run list`, or `gh ap
 | Verify before releasing              | `gh-release/scripts/verify.sh`                  | one line per lint/typecheck/test                                                    |
 | Cut a release                        | `gh-release/scripts/dispatch.sh [--dry-run]`    | `✔ next version: vX` → `a: dispatch / b: hold` → quiet watch                        |
 | Confirm a release landed             | `gh-release/scripts/confirm.sh`                 | release + URL · tag→commit + reachability from base · base tip · changelog sections |
-| Sync the changelog after a merge     | `scripts/changelog.sh sync [--apply]`           | `rebuild would change N lines` · refuses >40 lines of formatter churn |
+| Sync the changelog after a merge     | `scripts/changelog.sh sync [--apply]`           | `rebuild would change N lines` · refuses >40 lines of formatter churn               |
 
 Run ids come from `scripts/ci.sh runs`, a PR's checks, or `gh run list`. All paths are relative to
 `$SKILL_DIR`; `--help` answers from the file header without `gh` or network.

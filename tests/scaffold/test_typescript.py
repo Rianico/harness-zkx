@@ -93,6 +93,7 @@ def test_ox_configs_are_valid_json():
     fmt = json.loads(scaffold.OXFMT_JSON)
     assert fmt["$schema"].endswith("oxfmt/configuration_schema.json")
 
+
 # --- generator + detect round-trip ----------------------------------------
 
 
