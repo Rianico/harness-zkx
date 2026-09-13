@@ -17,8 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **changelog:** emit `*` bullets to match semantic-release
+* **scaffold:** pin the changelog bullet style and keep it out of oxfmt
+* **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+
+### Documentation
+
+* **scaffold:** record the changelog bullet contract
 
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
 
