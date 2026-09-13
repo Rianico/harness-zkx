@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **scaffold:** report the run plan and self-check written output
 * **gh-router:** diagnostic scripts, changelog sync, and an exit-code fix (#21)
 * **scaffold:** add --update mode and extract static templates (#20)
 
@@ -23,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** document the self-reporting flags and source ownership
 * **scaffold:** record the changelog bullet contract
 
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
