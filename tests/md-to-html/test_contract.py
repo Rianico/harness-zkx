@@ -80,14 +80,16 @@ class TestContractSelfConsistency:
     """Every CSS class in rendered HTML must be documented in the contract."""
 
     @pytest.fixture(scope="class")
-    def rendered_classes(self):
+    @classmethod
+    def rendered_classes(cls):
         """Generate HTML from the full sample and extract all classes."""
         renderer = KamiRenderer(flavor="kami")
         html = renderer.render(SAMPLE_MD)
         return extract_all_classes(html)
 
     @pytest.fixture(scope="class")
-    def contract_manifest(self):
+    @classmethod
+    def contract_manifest(cls):
         return parse_required_classes(CONTRACT_PATH)
 
     def test_all_classes_documented(self, rendered_classes, contract_manifest):

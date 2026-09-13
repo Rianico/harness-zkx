@@ -243,7 +243,7 @@ def _format_path_with_tilde(path: Path | str) -> str:
     return path_str
 
 
-def _walk_skills_dir(skills_dir: Path, followlinks: bool = True) -> Generator[Path, None, None]:
+def _walk_skills_dir(skills_dir: Path, followlinks: bool = True) -> Generator[Path]:
     """Walk skills directory and yield all .md files."""
     for root, _, files in os.walk(skills_dir, followlinks=followlinks):
         root_path = Path(root)
