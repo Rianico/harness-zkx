@@ -8,17 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-- **scaffold:** add --update mode and extract static templates
+- **gh-router:** add state, ci and confirm diagnostic scripts
+- **scaffold:** add --update mode and extract static templates (#20)
 
 ### Bug Fixes
 
 - **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
-- **scaffold:** run pnpm coverage in the node CI coverage variant
-
-### Documentation
-
-- **scaffold:** document the Jinja template layer and CI fragment layout
-- **scaffold:** document template layout and update ownership
 
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
 
