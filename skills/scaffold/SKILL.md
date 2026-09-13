@@ -309,8 +309,26 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run                  # 
 uv run $SKILL_DIR/scripts/scaffold.py --update --cwd .                        # existing repo: refresh in place, preserve project-owned files, print NEXT
 ```
 
-- **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`.
+- **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`, `src/lib.rs`, `tests/test_smoke.py`.
 - **Mixed** (script writes skeleton + warns on stderr → proofread): `CONTRIBUTING.md` (`{{project_name}}` + Before PR line), `pyproject.toml`/`Cargo.toml` (name/description/edition; with `--with-coverage` also `fail_under`), `AGENTS.md` patch (keep 3 sections, verify pointer wording).
 
 - `$SKILL_DIR/scripts/scaffold.py` — deterministic source of truth (tool owns bytes); raw templates under `$SKILL_DIR/templates/<flavor>/<target path>` ship verbatim and `.j2` templates render through one Jinja `Environment` (the script's single PEP-723 dependency: `jinja2`); `tests/scaffold/test_templates.py` pins raw file hashes, layout/registry coherence and every rendered cell; preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor <git|python|rust|ci> --dry-run`; detect with `uv run $SKILL_DIR/scripts/scaffold.py --detect --cwd .` (JSON to stdout, summary to stderr)
 - `$SKILL_DIR/scripts/verify.sh` — deterministic gate runner (`--dry-run` + `validate-deps` + `npm ls`/`cargo` checks)
+
+### Adding a Flavor — Gate Contract
+
+A flavor is done when **every gate it wires passes on a freshly generated tree**. The generator owns the bytes; the flavor owns the commands that judge them — and the two disagree silently.
+
+1. **Run the gates on fresh output**, before any user edit: `--flavor <new>` plus `--flavor ci --ci-variant <new>`, then every `run:` line from the generated `release.yml`. Installed tools and plausible config are not evidence. Failure modes: a flavor wiring `cargo fmt`/`clippy`/`test` without shipping an `.rs` target dies on `failed to parse manifest: no targets specified`; one wiring `pytest` without a test exits 5; one whose gate formats bytes the emitter wrote by hand fails the format check.
+2. **Ship the minimum target each gate needs** — `src/lib.rs` for `cargo`, a smoke test for `pytest`/`vitest`, `go.mod` + a package for `go build`. `do_typescript` writes `src/index.ts` + `tests/index.test.ts` for exactly this reason; check the other flavors do the equivalent before wiring their gate.
+3. **Bytes a gate judges must be canonical for that gate's tool, pinned exactly** to the version the generated repo resolves, canonicalized after substitution at the single write seam — see `git-scaffolding` § Deterministic Artifacts for the oxfmt instance and the bump procedure.
+4. **Add the fresh-tree gate test with the flavor.** `tests/scaffold/test_oxfmt_canonical.py` is the pattern: generate, run the wired commands, assert exit 0. Rules 1–3 without this test are a hope, not a contract.
+
+| Flavor                 | Formatter (reach)                                        | Wired gates                                                        |
+| ---------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| typescript             | `oxfmt` — `json/yaml/md/toml/js/ts`; rejects `.py`/`.sh` | `oxlint .` · `oxfmt --check .` · `tsc --noEmit` · `vitest run`     |
+| python                 | `ruff format` (not wired — only `ruff check` is)         | `ruff check .` · `basedpyright` · `pytest`                         |
+| rust                   | `rustfmt` via `cargo fmt` (`.rs` only)                   | `cargo fmt --check` · `cargo clippy -- -D warnings` · `cargo test` |
+| go (not supported yet) | `gofmt`/`gofumpt` (`.go`)                                | `go vet ./...` · `gofmt -l .` · `go test ./...`                    |
+
+Order the dependency: pick the gate set first, derive the formatter's reach from it, let that reach decide which emitted files get canonicalized — never the reverse. A gate whose formatter is unwired (python) still judges bytes; it just never repairs them.

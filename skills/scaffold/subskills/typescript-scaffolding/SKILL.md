@@ -14,7 +14,7 @@ Projection of the scaffold spine onto TypeScript. Declared runtime is `pnpm v12`
 
 Per `development-patterns.md` §3:
 
-- Single-runtime TypeScript: `pnpm v12` (Rust native) owns version + deps; commit `.nvmrc` (`24`), `package.json` (`packageManager: pnpm@12.0.0`, `engines >=24`, `typescript >=7`, `vite >=8`, `oxlint` + `oxfmt`), `pnpm-lock.yaml`, `tsconfig.json`, `.oxlintrc.json` + `.oxfmtrc.json`.
+- Single-runtime TypeScript: `pnpm v12` (Rust native) owns version + deps; commit `.nvmrc` (`24`), `package.json` (`packageManager: pnpm@12.0.0`, `engines >=24`, `typescript >=7`, `vite >=8`, `oxlint`, `oxfmt` pinned to an exact version — `OXFMT_VERSION`, the same one the generator formats with), `pnpm-lock.yaml`, `tsconfig.json`, `.oxlintrc.json` + `.oxfmtrc.json`.
 - Multi-runtime (TS + Python/Rust): `asdf` + `.tool-versions`; `asdf install` syncs all; `pnpm` still owns Node deps.
 - Native toolchain goal: minimize agent feedback latency — `pnpm` (content-addressed + Rust), `tsc v7` (Go + parallel), `Vite v8` (Rolldown + Oxc), `Oxlint` (rules) + `Oxfmt` (format, Prettier fallback).
 

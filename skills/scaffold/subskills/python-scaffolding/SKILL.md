@@ -19,7 +19,7 @@ Per `development-patterns.md` §3:
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_pyproject` — computed, `PYTHON_VERSION`) plus `$SKILL_DIR/templates/shared/CONTRIBUTING.python.md.j2` (rendered) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
+Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_pyproject` — computed, `PYTHON_VERSION`, `PY_TESTS_SMOKE`) plus `$SKILL_DIR/templates/shared/CONTRIBUTING.python.md.j2` (rendered) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
 
 > Existing repo? `--update` refreshes generated files but preserves `pyproject.toml` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
 
@@ -28,7 +28,9 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>
 uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name> --dry-run
 ```
 
-Pure-deterministic: `.python-version` (`3.14`), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `__pycache__/.venv`).
+Pure-deterministic: `.python-version` (`3.14`), `tests/test_smoke.py` (raw template — the `verify` job's `uv run pytest` has nothing to collect without it, so it is what makes the gate green on day one), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `__pycache__/.venv`).
+
+Project-owned: `tests/test_smoke.py` is a starting point the project replaces, so `--update` preserves it (see `PROJECT_OWNED`).
 
 Mixed (script warns → proofread): `pyproject.toml` (`{{project_name}}`, description/readme), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
 

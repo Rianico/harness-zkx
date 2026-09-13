@@ -19,7 +19,7 @@ Per `development-patterns.md` §3:
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`RUST_TOOLCHAIN_TOML`, `CARGO_TOML_TMPL`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` to preview.
+Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`RUST_TOOLCHAIN_TOML`, `RUST_LIB_RS`, `CARGO_TOML_TMPL`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` to preview.
 
 > Existing repo? `--update` refreshes generated files but preserves `Cargo.toml` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
 
@@ -28,7 +28,9 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --project-name <name>
 uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --project-name <name> --dry-run
 ```
 
-Pure-deterministic: `rust-toolchain.toml` (`stable` + `rustfmt`/`clippy`), `.gitignore` dedup (`GITIGNORE_GIT` + `target/`).
+Pure-deterministic: `rust-toolchain.toml` (`stable` + `rustfmt`/`clippy`), `src/lib.rs` (raw template — the crate target `cargo fmt`/`clippy`/`test` need; without it all three fail with `no targets specified in the manifest`), `.gitignore` dedup (`GITIGNORE_GIT` + `target/`).
+
+Project-owned: `src/lib.rs` is the crate the project edits, so `--update` preserves it (see `PROJECT_OWNED`).
 
 Mixed (script warns → proofread): `Cargo.toml` (`{{project_name}}` normalized to kebab-case, edition `2021`), `AGENTS.md` `### Runtime` pointer. Script warns if name normalized and on `AGENTS.md` 3-section preservation.
 
