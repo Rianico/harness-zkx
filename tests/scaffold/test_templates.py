@@ -112,14 +112,14 @@ def _render_cases() -> dict[str, str]:
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RAW_SHA256: dict[str, str] = {
     "git/.githooks/pre-push": "de8caa1a501942aa208b50db1eabec5ecd54adb92272e131cd658ca3d05867dd",
-    "git/.github/ISSUE_TEMPLATE/01-bug_report.yml": "3fbe634b22982b9df5466b26e6bcebcc86a7c9560616275a3335e6a2f819f279",
+    "git/.github/ISSUE_TEMPLATE/01-bug_report.yml": "042c8a9647b165ef3c354cfd60e1a1b619b81b86f60bdc5fec65e324e061d676",
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
-    "git/.github/ISSUE_TEMPLATE/config.yml": "c1af6fc67ffa59cb4c87561165267bbd7e7b8d7a1763a61c7a4ff065e5cff59e",
-    "git/.github/pull_request_template.md": "d3d2216b8fd2e58f6e8de255ca9f20050916d2eb93c808989b3716e24e320c85",
+    "git/.github/ISSUE_TEMPLATE/config.yml": "27539305684d7673d88e80ec149c4ec9714da05a054b09fee67d56b8a7e5a820",
+    "git/.github/pull_request_template.md": "a6c4a5a99295d803693760bf33246e995c22c16b2c282caa1e52eb4fd667b603",
     "git/.github/workflows/changelog-check.yml": "bcc24d5a39359a2e2bac26039d172568bbd7c47f5dd6f9ad497d7d2a29419c7d",
     "git/.husky/pre-push": "4c08b6fe2b024a878970f2a74f22426460474d34d5d6a4f9115d1c2f3b62559f",
-    "git/.releaserc.json": "8e4a562913c3c8276f6689046d5b92c862ffa79d5b08c04b284eea75e0c3570f",
-    "git/CHANGELOG.md": "4606d1eff8d1e321a97fed364c36aeceb037dc8bdfcbb8bf099c9d5621e41a6a",
+    "git/.releaserc.json": "380cd48c0082fdbbad3fb439c6378840d5412a9d93368fee929a55672bc8225c",
+    "git/CHANGELOG.md": "eb242175379339814c7a91a1881f32f311970c549cfb01b468d99af7c04e67de",
     "git/commitlint.config.js": "9c46dd6e2258b8783f57255cbcdd09fd13c0283069b281568806ba147df85340",
     "rust/rust-toolchain.toml": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
     "rust/src/lib.rs": "7ee751810675dd67935f48c90a0ff696035fd0b47d7520a00bc0772d3eff1813",
@@ -132,8 +132,8 @@ RAW_SHA256: dict[str, str] = {
 
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RENDERED_SHA256: dict[str, str] = {
-    "CONTRIBUTING.default (project_name=demo)": "3af4b4bbb29406a678a01bfc8cceadf576577db747680a7c4b0f8451451c2357",
-    "CONTRIBUTING.python (project_name=demo)": "cc3105b590d9b9e6ee644bc72cf849d219f368effa4124f3ab8e526bce029a16",
+    "CONTRIBUTING.default (project_name=demo)": "dcf7372501cad68db54342a8e8f2e0e2dc2911485f38dc2bf2e09e51a14c91ea",
+    "CONTRIBUTING.python (project_name=demo)": "587df36cc0f73f107fdbc34b9bbb634b0cdf121656517798a17685a30bea178a",
     "CONTRIBUTING.typescript (project_name=demo)": "31dafc569c65f1dbca8137fce61b5ef168c83226cd271a6d74e2c73d0aa0417f",
     "ci/release.yml[node+coverage]": "30d4d7d031c9e48380bf66c62f60f506f393edc25caae96f2c6bc080f1883240",
     "ci/release.yml[node]": "56f1151ed60761d7e8364e151ddced3757b487c643a66b01e9e71a920d466296",
@@ -347,3 +347,29 @@ def test_action_pins_match_the_sha_table():
             seen.add(key)
     assert seen, "expected at least one SHA-pinned action"
     assert {"checkout", "setup-uv"} <= seen, f"workflows stopped pinning: {sorted(seen)}"
+
+
+# --- hygiene: what the scaffold ships names no other project ---------------------------
+
+# The `git` flavor's issue and PR templates were first lifted out of a sibling repo, and every
+# generated project inherits their issue links and internals verbatim — a URL into someone
+# else's tracker is worse than no link. The check spans the templates *and* the docs that
+# describe them, because the next copy-paste is what reintroduces the leak. `dsh-better-edit`
+# is the sibling; `harness-zkx` is this repo, so its slug is legitimate wherever it appears.
+FOREIGN_PROJECT_SLUGS = ("dsh-better-edit",)
+
+
+def test_shipped_bytes_name_no_foreign_project():
+    shipped = [TEMPLATES / rel for rel in _template_files()]
+    shipped += sorted(SKILL_DIR.rglob("*.md"))
+
+    offenders = sorted(
+        f"{path.relative_to(SKILL_DIR).as_posix()}: {slug}"
+        for path in shipped
+        for slug in FOREIGN_PROJECT_SLUGS
+        if slug in path.read_text(encoding="utf-8")
+    )
+    assert not offenders, (
+        "what the scaffold ships names the author's own project, and every generated repo "
+        "inherits it verbatim:\n" + "\n".join(offenders)
+    )
