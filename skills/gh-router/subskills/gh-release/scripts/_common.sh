@@ -54,7 +54,10 @@ phase_fail() {
 info()  { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_BLUE"   "→" "$*"; }
 ok()    { _log "$_C_GREEN"  "✔" "$*"; }
 warn()  { _log "$_C_YELLOW" "⚠" "$*"; }
-fail()  { _log "$_C_RED"    "✘" "$*"; }
+# fail — log and exit with the caller's code (default 1).
+# Without the exit, `cmd || fail … 3` kept running and reported success, so documented exit
+# codes never happened — a failed workflow watch returned 0.
+fail()  { local _code="${2:-1}"; _log "$_C_RED"    "✘" "$1"; exit "$_code"; }
 dim()   { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_DIM"    "·" "$*"; }
 step()  { [[ "$_QUIET" == "true" ]] && return 0; _log "$_C_CYAN"   "▸" "$*"; }
 
