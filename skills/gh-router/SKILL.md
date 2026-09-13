@@ -22,4 +22,14 @@ GitHub workflow router. Model-invocable — dispatches to `gh-release`, `pr-land
 | `pr-enhance` | `submit PR`, `refine PR`             |
 | `pr-land`    | `pr create`, `pr watch`, `pr merge`, `squash merge` |
 
+## Scripts (read-only, one call each)
+
+| Script               | Answers                                                      |
+| -------------------- | ------------------------------------------------------------ |
+| `scripts/state.sh`   | branch→base divergence, PR state + checks, changelog guard, base tip — 4 lines |
+| `scripts/ci.sh`      | `runs` (last N with step timings) · `why <run>` (failing step + log tail) · `watch <run>` |
+
+Prefer these over hand-rolled `gh pr view`/`gh run list`/`gh api …/jobs` plumbing: they exist
+because orientation and CI triage were costing a dozen shell calls per turn.
+
 Load via `Read $SKILL_DIR/subskills/<name>/SKILL.md`.
