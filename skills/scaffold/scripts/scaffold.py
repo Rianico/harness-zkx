@@ -36,6 +36,7 @@ SHA_TABLE = {
     "setup-node": "a0853c24544627f65ddf259abe73b1d18a591444",  # actions/setup-node v5
     "setup-python": "e797f83bcb11b83ae66e0230d6156d7c80228e7c",  # actions/setup-python v6
     "github-script": "ed597411d8f924073f98dfc5c65a23a2325f34cd",  # actions/github-script v8
+    "rust-cache": "6323deb102c322ba6fcbdcafc7e3dddab59af2b6",  # Swatinem/rust-cache v2.9.2
 }
 
 NODE_VERSION_NUM = "24"
@@ -971,7 +972,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: astral-sh/setup-uv@v5
-        with: {python-version: '3.14'}
+        with: {python-version: '3.14', enable-cache: true}
       - run: uv sync --group dev
       - run: uv run ruff check .
       - run: uv run basedpyright
@@ -988,7 +989,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
+        with: {node-version: __NODE_VERSION__, cache: npm}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -1011,7 +1012,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: astral-sh/setup-uv@v5
-        with: {python-version: '3.14'}
+        with: {python-version: '3.14', enable-cache: true}
       - run: uv sync --group dev
       - run: uv run ruff check .
       - run: uv run basedpyright
@@ -1028,7 +1029,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
+        with: {node-version: __NODE_VERSION__, cache: npm}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -1051,6 +1052,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
       - run: cargo test
@@ -1066,7 +1068,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
+        with: {node-version: __NODE_VERSION__, cache: npm}
       - run: npm ci
       - run: npx semantic-release
         env:
@@ -1089,6 +1091,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
       - run: cargo llvm-cov report --fail-under-lines 80
       - run: cargo fmt --check
@@ -1105,7 +1108,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with: {fetch-depth: 0}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5  # zizmor: ignore[cache-poisoning]
-        with: {node-version: __NODE_VERSION__}
+        with: {node-version: __NODE_VERSION__, cache: npm}
       - run: npm ci
       - run: npx semantic-release
         env:
