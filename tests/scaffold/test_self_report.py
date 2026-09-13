@@ -172,7 +172,6 @@ def test_self_check_flags_a_shell_syntax_error(tmp_path):
     assert any("shell syntax error" in f.detail for f in findings)
 
 
-
 def test_self_check_reports_dangling_reference_without_failing(tmp_path):
     hook = tmp_path / ".githooks" / "pre-push"
     hook.parent.mkdir(parents=True)
@@ -189,13 +188,12 @@ def test_self_check_reports_dangling_reference_without_failing(tmp_path):
 def test_self_check_resolves_router_references_under_subskills(tmp_path):
     root = tmp_path / "skills" / "gh-router"
     (root / "subskills" / "pr-land" / "scripts").mkdir(parents=True)
-    (root / "subskills" / "pr-land" / "scripts" / "pr.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / "subskills" / "pr-land" / "scripts" / "pr.sh").write_text(
+        "#!/bin/sh\n", encoding="utf-8"
+    )
     (root / "SKILL.md").write_text("| land | `pr-land/scripts/pr.sh` |\n", encoding="utf-8")
 
     assert scaffold.self_check([root / "SKILL.md"]) == []
-
-
-
 
 
 def test_pnpm_repo_gets_the_pnpm_lockfile_asset(tmp_path):
@@ -250,8 +248,13 @@ def test_update_preserves_hand_grown_sources(tmp_path):
         (tmp_path / rel).write_text(body, encoding="utf-8")
 
     notes = scaffold.do_typescript(
-        tmp_path, "demo", dry_run=False, ts_variant="pi-extension", with_coverage=True,
-        threshold=80, update=True,
+        tmp_path,
+        "demo",
+        dry_run=False,
+        ts_variant="pi-extension",
+        with_coverage=True,
+        threshold=80,
+        update=True,
     )
 
     for rel, body in mine.items():
@@ -262,7 +265,11 @@ def test_update_preserves_hand_grown_sources(tmp_path):
 
 def test_greenfield_typescript_run_still_ships_the_skeleton(tmp_path):
     scaffold.do_typescript(
-        tmp_path, "demo", dry_run=False, ts_variant="pi-extension", with_coverage=False,
+        tmp_path,
+        "demo",
+        dry_run=False,
+        ts_variant="pi-extension",
+        with_coverage=False,
         threshold=80,
     )
 
@@ -317,7 +324,9 @@ def test_merge_dry_run_writes_nothing(tmp_path):
 
 
 def test_write_contributing_names_the_missing_sections(tmp_path):
-    (tmp_path / "CONTRIBUTING.md").write_text("# Contributing to demo\n\n## Commits\n\nkeep\n", encoding="utf-8")
+    (tmp_path / "CONTRIBUTING.md").write_text(
+        "# Contributing to demo\n\n## Commits\n\nkeep\n", encoding="utf-8"
+    )
 
     note = scaffold.write_contributing(
         tmp_path, TEMPLATE_MD, dry_run=False, warn_mixed="mixed", update=True
@@ -351,7 +360,9 @@ def test_detect_findings_name_the_remedy(tmp_path):
         "## [1.0.0] - 2026-01-01\n\n# Changelog\n\nAll notable changes.\n", encoding="utf-8"
     )
     (tmp_path / ".github" / "workflows").mkdir(parents=True)
-    (tmp_path / ".github" / "workflows" / "changelog-check.yml").write_text("name: x\n", encoding="utf-8")
+    (tmp_path / ".github" / "workflows" / "changelog-check.yml").write_text(
+        "name: x\n", encoding="utf-8"
+    )
 
     data = scaffold.detect_project(tmp_path)
     areas = {f["area"] for f in data["findings"]}
@@ -369,7 +380,6 @@ def test_detect_census_counts_the_pr_template(tmp_path):
     data = scaffold.detect_project(tmp_path)
 
     assert data["files"][".github/pull_request_template.md"] is False
-
 
 
 def test_detect_reports_a_vendored_sibling_skill(tmp_path):
