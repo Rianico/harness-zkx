@@ -30,8 +30,19 @@ $SKILL_DIR/scripts/verify.sh
 $SKILL_DIR/scripts/dispatch.sh --dry-run   # preview only
 $SKILL_DIR/scripts/dispatch.sh             # preview → prompt → dispatch → quiet watch
 $SKILL_DIR/scripts/release-watch.sh --watch  # dispatch + poll (no preview), dumps logs on fail
+$SKILL_DIR/scripts/confirm.sh            # post-release verification (read-only, one call)
 ```
 
 ## Confirm
 
-`git log --oneline -5; git tag | tail -5; head -n 40 CHANGELOG.md`
+`$SKILL_DIR/scripts/confirm.sh` — one call, read-only:
+
+```
+release   v2.0.0 published 2026-09-12  <url>
+tag       v2.0.0 → 5ab33ddb (annotated) · reachable from main
+main      3175095f <subject>
+changelog ## [Unreleased] L7 · ## [2.0.0] L17
+```
+
+Exit 1 when the tag is not reachable from the base branch — the failure mode that hid a re-rooted
+history: 13 tags existed locally while `origin` had none, so every release planned `1.0.0`.

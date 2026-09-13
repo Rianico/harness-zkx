@@ -1,3 +1,7 @@
 # Byte-contract templates — the scaffold ships these bytes verbatim.
 # Reformatting any file here silently changes generated projects.
 skills/scaffold/templates/
+
+# semantic-release writes this file's bullets as `*`; prettier rewrites them to `-` on every
+# touch, and that whole-file churn then rides into unrelated commits.
+CHANGELOG.md
