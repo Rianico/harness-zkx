@@ -13,6 +13,10 @@ Each block locks down a defect that used to be invisible:
   `--update --flavor typescript` would have replaced a project's own code with a skeleton.
 - `--update` reported "hand-merge the 'Before PR' line" while the actually-missing sections
   (`Reporting Issues`, `Pull Requests`) went unnamed.
+- The harness repo's own `skills/` tree read as a *vendored* copy of a sibling skill, and the
+  remedy advised deleting the canonical source; detection now asks whether it is the source.
+- The CHANGELOG remedy named only `changelogTitle`, which alone strands a second title — the
+  fix is the file's first line plus the config.
 """
 
 from __future__ import annotations
@@ -371,7 +375,10 @@ def test_detect_findings_name_the_remedy(tmp_path):
     assert ".github/pull_request_template.md" in areas
     assert ".releaserc.json" in areas
     assert "CHANGELOG.md" in areas
-    assert "changelogTitle" in remedies  # the title is stranded mid-file
+    # One defect, two halves: the remedy must name the file edit *and* the config, because
+    # the config alone makes the plugin write a second title above the stranded one.
+    assert "move `# Changelog` to the FIRST line of CHANGELOG.md" in remedies
+    assert '"changelogTitle": "# Changelog"' in remedies
     assert data["changelog"]["title_at_top"] is False
     assert data["changelog"]["title_line"] == 3  # version heading, blank, then the title
 
@@ -393,6 +400,20 @@ def test_detect_reports_a_vendored_sibling_skill(tmp_path):
 
     assert "no longer manages" in finding["detail"]
     assert "git rm -r skills/gh-router" in finding["remedy"]
+
+
+def test_detect_does_not_call_the_harness_itself_vendored():
+    """The harness *is* the source of these skills, so its copy is the original.
+
+    `~/.agents/skills/<name>` symlinks back into this repo, so the unguarded finding advised
+    `git rm -r skills/gh-router` on the repo that owns the skill.
+    """
+    root = SKILL_DIR.parent.parent
+    assert (root / "skills" / "gh-router").is_dir(), "fixture drifted: the harness owns gh-router"
+
+    areas = {f["area"] for f in scaffold.detect_project(root)["findings"]}
+
+    assert "skills/gh-router" not in areas
 
 
 def test_detect_json_drops_the_human_summary(tmp_path, capsys):

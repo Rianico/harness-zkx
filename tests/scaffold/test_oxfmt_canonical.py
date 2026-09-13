@@ -58,7 +58,7 @@ def test_canonicalize_is_inert_until_the_run_enables_it():
 
 def test_unsupported_extensions_are_never_piped_to_the_formatter(monkeypatch, tmp_path):
     """oxfmt exits 1 with "Unsupported file type" on `.py`/`.sh`; the allowlist keeps them out."""
-    monkeypatch.setattr(scaffold, "_FORMATTER_ROOT", tmp_path)
+    monkeypatch.setattr(scaffold, "_formatter_root", tmp_path)
     assert scaffold.canonicalize(tmp_path / "x.py", "x = 1\n") == "x = 1\n"
     assert scaffold.canonicalize(tmp_path / "x.sh", "echo 1\n") == "echo 1\n"
 
