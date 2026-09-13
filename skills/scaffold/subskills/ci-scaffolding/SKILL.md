@@ -12,7 +12,7 @@ Owns the Git CI projection of the scaffold spine. Git owns the conventional-comm
 
 ## Deterministic Artifact — Tool Owns Bytes
 
-Source is `$SKILL_DIR/scripts/scaffold.py` (`RELEASE_YML`, `CI_PYTHON_VERIFY_YML`, `CI_RUST_VERIFY_YML`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant <node|python|rust> --dry-run` to preview.
+Source is `$SKILL_DIR/templates/ci/`: one base (`release.yml.j2`, `{% block verify required %}`) plus one fragment per runtime (`runtimes/<node|python|rust>.yml.j2`) rendered by `render_ci_release()`. Adding a runtime costs one fragment file plus one `CI_RUNTIMES` entry — the `--ci-variant` choices derive from that registry — and the coverage axis is a branch inside the fragment, so it costs no file. Run `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant <node|python|rust> --dry-run` to preview.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant node     # Node verify (default, same as git)
@@ -25,11 +25,11 @@ Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `che
 
 - On-demand dispatch is the default: `repository_dispatch` (`semantic-release`) + `workflow_dispatch` only — no `push: tags` auto-release.
 - Language-specific verify steps live in the variant; multi-runtime uses matrix (`needs: [verify-node, verify-python]`). See `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` for byte view.
-- **Version sync is automatic, neural.** `semantic-release` `prepare` (`@semantic-release/npm` with `npmPublish: false` by default + `@semantic-release/git` `assets: ["CHANGELOG.md","package.json","package-lock.json"]` for Node, `"Cargo.toml"`/`"pyproject.toml"` for Rust/Python via scaffold's `RELEASE_YML` variant — Node `private:false` + `NPM_TOKEN` to enable publish, Python/Rust use registry-native publish outside `npm`) bumps the deterministic artifact and pushes `vX.Y.Z`; no manual `npm version` / `cargo set-version` in the release prompt. `verify` is read-only — if `package.json:version` vs `git describe --tags` is behind, `BLOCK` and let the next `release` job fix it; don't hand-edit the version file in `Verification`.
+- **Version sync is automatic, neural.** `semantic-release` `prepare` (`@semantic-release/npm` with `npmPublish: false` by default + `@semantic-release/git` `assets: ["CHANGELOG.md","package.json","package-lock.json"]` for Node, `"Cargo.toml"`/`"pyproject.toml"` for Rust/Python via the scaffold's `--ci-variant` projection — Node `private:false` + `NPM_TOKEN` to enable publish, Python/Rust use registry-native publish outside `npm`) bumps the deterministic artifact and pushes `vX.Y.Z`; no manual `npm version` / `cargo set-version` in the release prompt. `verify` is read-only — if `package.json:version` vs `git describe --tags` is behind, `BLOCK` and let the next `release` job fix it; don't hand-edit the version file in `Verification`.
 
 ### Language-Specific Verify Steps
 
-- Node projection (default): `pnpm/action-setup@v4` (`run_install: false`) + `setup-node` (`cache: pnpm`) + `pnpm install --no-frozen-lockfile` + `pnpm run lint && pnpm run typecheck && pnpm test` on Node 24 inside `verify` (`--with-coverage` swaps the test step to `pnpm run coverage`). Never `corepack enable` — setup-node v5 probes pnpm before corepack shims exist. The `release` job runs `pnpm exec semantic-release` (never `dlx` — plugins resolve from local devDependencies, which the typescript flavor vendors).
+- Node projection (default): `pnpm/action-setup@v4` (`run_install: false`) + `setup-node` (`cache: pnpm`) + `pnpm install --no-frozen-lockfile` + `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` on Node 24 inside `verify` (`--with-coverage` runs `pnpm run coverage` instead — thresholds live in `vitest.config.ts`). Never `corepack enable` — setup-node v5 probes pnpm before corepack shims exist. The `release` job runs `pnpm exec semantic-release` (never `dlx` — plugins resolve from local devDependencies, which the typescript flavor vendors).
 - Python projection: replace the Node `pnpm ...` steps with `uv sync` + `uv run ruff check . && uv run basedpyright && uv run pytest` inside the same `verify` job (or a matrix job when multi-runtime).
 - Rust projection: `cargo fmt --check && cargo clippy -- -D warnings && cargo test` inside `verify`.
 - Multi-runtime: `asdf install` + matrix, or split jobs `verify-node`/`verify-python`/`verify-rust` with `needs: [verify-node, verify-python]` on `release`.

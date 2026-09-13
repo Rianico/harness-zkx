@@ -64,7 +64,7 @@ oxlint --disable-nested-config      # only cwd lookup
 oxlint --init                       # generate starter JSON
 ```
 
-Scaffold default (`OXLINT_JSON` in `scaffold.py`):
+Scaffold default (`templates/typescript/.oxlintrc.json` — `jsPlugins` + `harness/no-comments` override); minimal shape:
 
 ```json
 {

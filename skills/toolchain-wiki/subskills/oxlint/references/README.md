@@ -20,16 +20,16 @@ Preview:
 uv run $SKILL_DIR/../../scaffold/scripts/scaffold.py --flavor typescript --ts-variant lib --project-name my-lib --dry-run
 ```
 
-Generates (per `scaffold.py` → `OXLINT_JSON`, `build_package_json`):
+Generates (per `scaffold.py` → `build_package_json` + `templates/typescript/.oxlintrc.json`):
 
 - `.nvmrc` → `24`
 - `package.json` → `packageManager: pnpm@12.0.0`, `engines node >=24`, `typescript >=7`, `oxlint >=1`, `tsx >=4`, `@types/node >=24` (+ `@semantic-release/*` — see `scaffold.py:build_package_json`), scripts `lint: oxlint .`, `typecheck: tsc --noEmit`, `test: vitest run`
-- `.oxlintrc.json` → `{ "$schema": "./node_modules/oxlint/configuration_schema.json", "rules": {} }`
+- `.oxlintrc.json` → `$schema` + `jsPlugins: ["./scripts/oxlint-plugin-comment-gate.js"]` + `harness/no-comments: error` (off for tests/ per `overrides`)
 - `tsconfig.json` → strict, ESM NodeNext, ES2022, `types: ["node"]`
 
 Canonical for `scaffold/subskills/typescript-scaffolding` linter side — see `typescript-scaffolding` `depends-on: [toolchain-wiki]`. Single source; scaffold wrapper is pointer-only. Pair with `../oxfmt` for formatter.
 
-Raw snapshot files are self-contained; curated file is the 80% surface. For byte truth, read `scaffold.py`.
+Raw snapshot files are self-contained; curated file is the 80% surface. For byte truth, read `scaffold.py` + `templates/`.
 
 ## Verify gate (before push/PR)
 

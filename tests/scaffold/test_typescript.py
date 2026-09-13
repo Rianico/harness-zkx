@@ -71,7 +71,7 @@ def test_coverage_wiring():
     pkg = json.loads(scaffold.build_package_json("demo", "lib", True))
     assert pkg["scripts"]["coverage"] == "vitest run --coverage"
     assert "@vitest/coverage-v8" in pkg["devDependencies"]
-    cfg = scaffold.VITEST_CONFIG_TMPL.format(threshold=90)
+    cfg = scaffold.render_template("typescript/vitest.config.ts.j2", threshold=90)
     assert "lines: 90" in cfg and "functions: 90" in cfg
 
 
@@ -85,11 +85,13 @@ def test_tsconfig_base():
     assert tsconfig["include"] == ["src", "tests"]  # tests/ layout per branch-worktree-pr
 
 
-def test_biome_self_passing_style():
-    biome = json.loads(scaffold.BIOME_JSON)
-    assert biome["formatter"]["indentStyle"] == "space"
-    assert biome["formatter"]["indentWidth"] == 2
-
+def test_ox_configs_are_valid_json():
+    """Ox toolchain configs ship as templates (biome.json was dropped with biome)."""
+    lint = json.loads(scaffold.OXLINT_JSON)
+    assert lint["rules"]["harness/no-comments"] == "error"
+    assert lint["jsPlugins"] == ["./scripts/oxlint-plugin-comment-gate.js"]
+    fmt = json.loads(scaffold.OXFMT_JSON)
+    assert fmt["$schema"].endswith("oxfmt/configuration_schema.json")
 
 # --- generator + detect round-trip ----------------------------------------
 
@@ -154,13 +156,22 @@ def test_generate_then_detect(tmp_path):
 
 
 def test_node_ci_variant_is_pnpm_on_24():
-    assert "node-version: 24" in scaffold.RELEASE_YML
-    assert "node-version: 22" not in scaffold.RELEASE_YML
-    assert (
-        "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test"
-        in scaffold.RELEASE_YML
+    release_yml = scaffold.render_ci_release(
+        "node", with_coverage=False, threshold=scaffold.DEFAULT_COVERAGE_THRESHOLD
     )
-    assert "npm ci" not in scaffold.RELEASE_YML
+    assert "node-version: 24" in release_yml
+    assert "node-version: 22" not in release_yml
+    assert "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test" in release_yml
+    assert "npm ci" not in release_yml
+
+
+def test_node_coverage_variant_runs_the_coverage_script():
+    """Regression: the coverage cell was a no-op `.replace()` and ran `pnpm test` un-gated."""
+    plain = scaffold.render_ci_release("node", with_coverage=False, threshold=80)
+    covered = scaffold.render_ci_release("node", with_coverage=True, threshold=80)
+    assert "- run: pnpm run coverage" in covered
+    assert "pnpm run coverage" not in plain
+    assert covered != plain
 
 
 def test_python_flavor_untouched(tmp_path, capsys):
