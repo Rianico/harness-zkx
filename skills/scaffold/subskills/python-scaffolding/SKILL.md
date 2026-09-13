@@ -41,17 +41,18 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` (to
 1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>` (handles `--cwd`, infers name, normalizes, warns on mixed).
 2. Install: `uv sync --group dev` (pins `uv.lock`; `basedpyright` over `mypy` per `$SKILL_DIR/../basedpyright-expert/SKILL.md`).
 3. Proofread mixed warnings: `pyproject.toml` name/description, `AGENTS.md` 3-section preservation.
-4. Wire verification: `pytest`, `ruff check`, `basedpyright` via `uv run`.
-5. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` + `uv sync && uv run ruff check . && uv run basedpyright && uv run pytest`
+4. Wire verification: `ruff check`, `ruff format --check`, `basedpyright`, `pytest` via `uv run`.
+5. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` + `uv sync && uv run ruff check . && uv run ruff format --check . && uv run basedpyright && uv run pytest`
 
 > [!tip] Verification — before every push/PR
 >
-> - `uv run ruff check . && uv run basedpyright && uv run pytest` — if any fails → `BLOCKED`
+> - `uv run ruff check . && uv run ruff format --check . && uv run basedpyright && uv run pytest` — if any fails → `BLOCKED`
 > - Clean-build after `pyproject.toml` change; restart daemon after type-config change; clear test cache when stale
 
 ## Verification Split
 
-- Deterministic: `ruff`, `basedpyright`/`ty`, `pytest` — env truth is `uv run ...` exit code.
+- Deterministic: `ruff check`/`ruff format --check`, `basedpyright`/`ty`, `pytest` — env truth is `uv run ...` exit code.
+- `pyproject.toml` names its lint selection (`select = ["E", "F", "I", "UP", "B"]`, `ignore = ["E501"]`) because ruff's default is the tool's opinion — 413 rules in 0.16.7 and growing, which reds a generated repo on a lockfile bump nobody reviews; line length stays the formatter's call.
 - Semantic: API naming, module boundaries — verify via reviewer, not compiler.
 
 ## Grilling Selection
