@@ -1,8 +1,11 @@
+# Changelog
+
 <!-- markdownlint-configure-file { "MD004": { "style": "asterisk" } } -->
 <!-- Pin asterisk for this file only: semantic-release writes `*` bullets, so MD004's default
-     `consistent` would rewrite every generated line to `-` on any touch. See .prettierignore. -->
-
-# Changelog
+     `consistent` would rewrite every generated line to `-` on any touch. See .prettierignore.
+     The title stays on line 1: @semantic-release/changelog rewrites it in place only while the
+     file starts with the configured `changelogTitle` (see .releaserc.json), and prepends each
+     release's notes above it otherwise. -->
 
 All notable changes to this project will be documented in this file.
 
