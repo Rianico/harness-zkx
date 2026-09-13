@@ -49,8 +49,9 @@ def test_oxfmt_dependency_is_pinned_exactly():
 # --- the seam is inert unless a TypeScript flavor enables it ------------------
 
 
-def test_formatter_is_off_until_enabled():
-    """git/python/rust runs stay pure Python: no Node, no formatter, no config to satisfy."""
+def test_canonicalize_is_inert_until_the_run_enables_it():
+    """`main()` enables the formatter for every flavor; until it does, the seam is a no-op, which
+    is what lets the module be imported and unit-tested without Node."""
     path = Path("notes.md")
     assert scaffold.canonicalize(path, "# H\ntext\n") == "# H\ntext\n"
 
@@ -63,6 +64,70 @@ def test_unsupported_extensions_are_never_piped_to_the_formatter(monkeypatch, tm
 
 
 # --- the gate the generated CI runs -----------------------------------------
+
+
+def _scaffold(cwd: Path, *args: str) -> None:
+    subprocess.run(
+        [sys.executable, str(SCRIPT), *args, "--project-name", "demo", "--cwd", str(cwd)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("npx") is None, reason="needs Node/npx to run the pinned oxfmt")
+@pytest.mark.parametrize(
+    "sequence",
+    [
+        pytest.param([["--flavor", "git"], ["--flavor", "typescript"]], id="git-then-typescript"),
+        pytest.param(
+            [["--flavor", "git"], ["--flavor", "ci", "--ci-variant", "node"]],
+            id="git-then-ci-node",
+        ),
+        pytest.param(
+            [["--flavor", "python", "--with-coverage"], ["--flavor", "typescript"]],
+            id="python-then-typescript",
+        ),
+        pytest.param(
+            [["--flavor", "rust", "--with-coverage"], ["--flavor", "typescript"]],
+            id="rust-then-typescript",
+        ),
+        pytest.param(
+            [["--flavor", "typescript"], ["--flavor", "ci", "--ci-variant", "node"]],
+            id="typescript-then-ci-node",
+        ),
+        pytest.param(
+            [["--flavor", "ci", "--ci-variant", "node"], ["--flavor", "typescript"]],
+            id="ci-node-then-typescript",
+        ),
+        pytest.param(
+            [["--flavor", "all"], ["--update", "--flavor", "git"]], id="refresh-git-after-all"
+        ),
+        pytest.param(
+            [["--flavor", "all"], ["--update", "--flavor", "ci"]], id="refresh-ci-after-all"
+        ),
+    ],
+)
+def test_an_invocation_split_never_changes_the_bytes(monkeypatch, tmp_path, sequence):
+    """oxfmt's reach spans files several flavors own, so the bytes must not depend on how the run
+    was split. Reproduced before the fix: `--flavor all` then `--update --flavor git` left
+    `.releaserc.json` uncanonical, and `--flavor typescript` then `--flavor ci --ci-variant node`
+    left `release.yml` uncanonical — neither run had the formatter enabled, so the generated
+    `pnpm run format` gate went red on bytes no gate had judged. The check runs after *every*
+    invocation, so a flavor that emits uncanonical bytes is caught as the writer, not later."""
+    monkeypatch.delenv("SCAFFOLD_NO_FORMAT", raising=False)
+    for args in sequence:
+        _scaffold(tmp_path, *args)
+        if not (tmp_path / ".oxfmtrc.json").exists():
+            # No formatter config in the tree means no `pnpm run format` gate to satisfy yet.
+            continue
+        gate = subprocess.run(
+            ["npx", "--yes", f"oxfmt@{scaffold.OXFMT_VERSION}", "--check", "."],
+            cwd=str(tmp_path),
+            capture_output=True,
+            text=True,
+        )
+        assert gate.returncode == 0, f"after {' '.join(args)}\n{gate.stdout}{gate.stderr}"
 
 
 @pytest.mark.skipif(shutil.which("npx") is None, reason="needs Node/npx to run the pinned oxfmt")

@@ -1,11 +1,12 @@
 {% extends "ci/release.yml.j2" %}
 {% block verify %}
       - uses: actions/checkout@{{ shas.checkout }}
-        with: {fetch-depth: 0}
+        with: { fetch-depth: 0 }
       - uses: astral-sh/setup-uv@{{ shas['setup-uv'] }} # v10.1.0
-        with: {python-version: '3.14', enable-cache: true}
+        with: { python-version: '3.14', enable-cache: true }
       - run: uv sync --group dev
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run basedpyright
 {% if with_coverage %}
       - run: uv run pytest --cov --cov-report=term-missing --cov-report=lcov --cov-fail-under={{ threshold }}

@@ -34,6 +34,23 @@ def _run_main(*argv: str) -> int:
 # --- package.json builder -------------------------------------------------
 
 
+def test_dev_dependencies_stay_inside_reviewed_majors():
+    """`>=7` accepts v8, v9 and every major after — a generated repo could resolve a major nobody
+    reviewed, with no change on its side, and the failure surfaces as a red gate. `^7` keeps the
+    reviewed major while the committed lockfile pins the bytes (#26)."""
+    pkg = json.loads(scaffold.build_package_json("demo", "lib", with_coverage=True))
+    specs: dict[str, str] = pkg["devDependencies"]
+    assert specs["oxfmt"] == scaffold.OXFMT_VERSION, "the byte contract stays exact"
+    for name, spec in specs.items():
+        if name == "oxfmt":
+            continue  # the one exact pin, asserted above
+        assert ">=" not in spec, f"{name}: {spec!r} accepts every later major"
+        assert spec.startswith("^"), f"{name}: {spec!r} is not a caret range"
+    assert specs["conventional-changelog-conventionalcommits"] == "^9", (
+        "the writer constraint is a range, not a second bound"
+    )
+
+
 def test_lib_variant_fields():
     pkg = json.loads(scaffold.build_package_json("demo-lib", "lib", False))
     assert pkg["name"] == "demo-lib"

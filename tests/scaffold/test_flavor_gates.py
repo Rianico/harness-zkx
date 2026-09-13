@@ -11,6 +11,7 @@ Gates only exist for the combination the scaffold prescribes: `--flavor <lang>` 
 """
 
 import importlib.util
+import re
 import shutil
 import subprocess
 import sys
@@ -74,21 +75,55 @@ def test_python_gates_pass_on_a_fresh_tree(tmp_path: Path) -> None:
     assert (tmp_path / "tests" / "test_smoke.py").is_file(), "pytest needs a test to collect"
     for command in (
         [shutil.which("ruff") or "ruff", "check", "."],
+        [shutil.which("ruff") or "ruff", "format", "--check", "."],
         [sys.executable, "-m", "pytest", "-q"],
     ):
         result = _run(tmp_path, command)
         assert result.returncode == 0, f"{' '.join(command)}\n{result.stdout}\n{result.stderr}"
 
 
-def test_python_generated_files_stay_ruff_formattable(tmp_path: Path) -> None:
-    """`ruff format --check` is not a wired gate, so nothing repairs Python bytes; keep them
-    canonical anyway so wiring it later is a one-line change."""
-    ruff = shutil.which("ruff")
-    if ruff is None:
-        pytest.skip("needs ruff on PATH")
-    _generate(tmp_path, ["--flavor", "python"])
-    result = _run(tmp_path, [ruff, "format", "--check", "."])
-    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+def test_generated_pyproject_pins_the_lint_selection():
+    """`ruff check` inherits the tool's default selection when nothing is configured, and that
+    default is the tool's opinion: 413 rules in ruff 0.16.7, more each release. A generated repo
+    would then go red on a lockfile bump nobody could review — and it did, on the git flavor's own
+    `scripts/changelog-unreleased.py` (#31)."""
+    pyproject = scaffold.build_pyproject("demo", with_coverage=False, threshold=80)
+    assert "[tool.ruff.lint]" in pyproject
+    assert 'select = ["E", "F", "I", "UP", "B"]' in pyproject
+    assert 'ignore = ["E501"]' in pyproject, "line length belongs to the formatter"
+
+
+def test_python_gate_holds_with_the_git_flavor_present(tmp_path: Path) -> None:
+    """The git flavor ships `scripts/changelog-unreleased.py`, which lands inside the Python
+    gate's reach — a combination no earlier test generated. Run the wired commands on it."""
+    _generate(
+        tmp_path,
+        ["--flavor", "git"],
+        ["--flavor", "python", "--with-coverage", "--coverage-threshold", "80"],
+    )
+    assert (tmp_path / "scripts" / "changelog-unreleased.py").is_file()
+    for command in (
+        [shutil.which("ruff") or "ruff", "check", "."],
+        [shutil.which("ruff") or "ruff", "format", "--check", "."],
+        [sys.executable, "-m", "pytest", "--cov", "--cov-fail-under=80", "-q"],
+    ):
+        result = _run(tmp_path, command)
+        assert result.returncode == 0, f"{' '.join(command)}\n{result.stdout}\n{result.stderr}"
+
+
+@pytest.mark.parametrize("variant", ["node", "python", "rust"])
+def test_no_variant_disables_the_lockfile_guard(tmp_path: Path, variant: str) -> None:
+    """pnpm's CI default is frozen when a lockfile is present, so a stale lockfile fails loudly.
+    `--no-frozen-lockfile` re-resolves instead — and it silently masked the formatter drift that
+    motivated `OXFMT_VERSION`. The flag has no home in a generated job (#25)."""
+    _generate(tmp_path, ["--flavor", "ci", "--ci-variant", variant])
+    workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "--no-frozen-lockfile" not in workflow
+    installs = re.findall(r"^\s*- run: (pnpm install.*)$", workflow, re.MULTILINE)
+    if variant == "node":
+        assert installs == ["pnpm install"] * 2, installs
+    else:
+        assert installs == []
 
 
 # --- coverage variants: the wired command must exit 0 on a fresh tree --------

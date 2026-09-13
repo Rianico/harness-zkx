@@ -21,9 +21,9 @@ jobs:
     steps:
 {% block release %}
       - uses: actions/checkout@{{ shas.checkout }}
-        with: {fetch-depth: 0}
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@{{ shas['setup-node'] }} # v7.0.0  # zizmor: ignore[cache-poisoning]
-        with: {node-version: {{ node_version }}, cache: npm}
+        with: { node-version: {{ node_version }}, cache: npm }
       - run: npm ci
       - run: npx semantic-release
         env:
