@@ -111,3 +111,33 @@ def test_cli_update_prints_next_actions_for_preserved_files(tmp_path, capsys):
     assert "preserved" in err
     assert "CHANGELOG.md" in err
     assert "→" in err  # concrete follow-up, not just a warning
+
+
+# --- shipped source is the project's, not infrastructure ------------------------
+
+
+def test_update_preserves_shipped_source_files(tmp_path):
+    """`src/lib.rs` and `tests/test_smoke.py` are starting points the project edits, so
+    --update must report them as preserved rather than regenerating over real work."""
+    scaffold.do_rust(tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80)
+    scaffold.do_python(tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80)
+    lib = tmp_path / "src" / "lib.rs"
+    smoke = tmp_path / "tests" / "test_smoke.py"
+    assert lib.read_text(encoding="utf-8") == scaffold.RUST_LIB_RS
+    assert smoke.read_text(encoding="utf-8") == scaffold.PY_TESTS_SMOKE
+    edited = "//! my crate\n"
+    lib.write_text(edited, encoding="utf-8")
+    smoke.write_text("def test_real() -> None:\n    assert True\n", encoding="utf-8")
+
+    notes = scaffold.do_rust(
+        tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80, update=True
+    )
+    notes += scaffold.do_python(
+        tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80, update=True
+    )
+
+    assert lib.read_text(encoding="utf-8") == edited
+    assert "test_real" in smoke.read_text(encoding="utf-8")
+    joined = "\n".join(notes)
+    assert "lib.rs" in joined
+    assert "test_smoke.py" in joined

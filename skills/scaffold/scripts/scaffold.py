@@ -15,6 +15,7 @@ Usage:
   uv run $SKILL_DIR/scripts/scaffold.py --flavor ci [--project-name NAME] [--dry-run] [--with-coverage]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor all [--project-name NAME] [--dry-run] [--with-coverage]
   uv run $SKILL_DIR/scripts/scaffold.py --update [--flavor git|all] [--dry-run]  # refresh generated infrastructure in place; project-owned files are preserved and printed as NEXT actions
+  uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --no-format  # skip the oxfmt pass (no Node needed); the generated CI format gate stays red until `pnpm run format:fix`
 
 Information boundary: script emits byte-identical artifacts; for mixed
 deterministic+semantic files it writes the skeleton and warns on stderr
@@ -29,9 +30,12 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
 import pathlib
 import re
+import subprocess
 import sys
+import tempfile
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
@@ -47,6 +51,44 @@ SHA_TABLE = {
 
 NODE_VERSION_NUM = "24"
 NODE_VERSION = NODE_VERSION_NUM + "\n"
+
+# Formatter contract — the pinned formatter owns every byte it can reach.
+#
+# A generated TypeScript repo's CI gate is `oxfmt --check .` (package.json `format`), so
+# whatever this script writes must already be canonical for the version that repo resolves.
+# The pin is exact on purpose: formatter output is a byte contract, and upgrades reformat the
+# tree (0.15.0 left the generated files untouched; 0.17.0 rewrote seven). Bumping
+# OXFMT_VERSION means running tests/scaffold/test_oxfmt_canonical.py and committing whatever it
+# reformats — never a silent upgrade.
+OXFMT_VERSION = "0.67.0"
+# Extensions oxfmt accepts via --stdin-filepath; anything else must not be piped to it (it
+# exits 1 with "Unsupported file type for stdin-filepath").
+OXFMT_EXTENSIONS = frozenset(
+    {
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".ts",
+        ".tsx",
+        ".mts",
+        ".cts",
+        ".json",
+        ".jsonc",
+        ".css",
+        ".scss",
+        ".less",
+        ".html",
+        ".htm",
+        ".yaml",
+        ".yml",
+        ".md",
+        ".mdx",
+        ".toml",
+        ".graphql",
+        ".gql",
+    }
+)
 
 
 # ------------------------------------------------------------------ template rendering
@@ -135,7 +177,9 @@ PULL_REQUEST_TEMPLATE_MD = load_template("git/.github/pull_request_template.md")
 CHANGELOG_MD = load_template("git/CHANGELOG.md")
 
 # Other flavors' static artifacts — same contract, one byte source per flavor.
+PY_TESTS_SMOKE = load_template("python/tests/test_smoke.py")
 RUST_TOOLCHAIN_TOML = load_template("rust/rust-toolchain.toml")
+RUST_LIB_RS = load_template("rust/src/lib.rs")
 OXLINT_JSON = load_template("typescript/.oxlintrc.json")
 OXFMT_JSON = load_template("typescript/.oxfmtrc.json")
 OXLINT_COMMENT_GATE_JS = load_template("typescript/scripts/oxlint-plugin-comment-gate.js")
@@ -187,6 +231,10 @@ PROJECT_OWNED: dict[str, str] = {
     "pyproject.toml": "project manifest — deps and tool config",
     "Cargo.toml": "project manifest — deps and edition",
     "package.json": "project manifest — deps and scripts",
+    # Source the project immediately edits. Regenerating these on --update silently reverts
+    # real work (and `cargo fmt`/`clippy`/`test` need a target to act on at all).
+    "lib.rs": "crate source — the starting point the project edits",
+    "test_smoke.py": "smoke test — the project replaces it with real tests",
 }
 
 # Components whose file belongs to another flavor's projection: an --update in this
@@ -299,7 +347,7 @@ def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) 
     dev_deps: dict[str, str] = {
         "typescript": ">=7",
         "oxlint": ">=1",
-        "oxfmt": ">=0.15",
+        "oxfmt": OXFMT_VERSION,
         "vite": ">=8",
         "vitest": ">=4",
         "tsx": ">=4",
@@ -351,9 +399,6 @@ def build_tsconfig() -> str:
         "include": ["src", "tests"],
     }
     rendered = json.dumps(tsconfig, indent=2)
-    # oxfmt/biome compat — keep short arrays collapsed so formatter is green
-    rendered = rendered.replace('[\n    "src",\n    "tests"\n  ]', '["src", "tests"]')
-    rendered = rendered.replace('[\n      "node"\n    ]', '["node"]')
     return rendered + "\n"
 
 
@@ -527,10 +572,75 @@ def infer_project_name(cwd: pathlib.Path) -> str:
     return cwd.name
 
 
+class FormatterUnavailable(RuntimeError):
+    """The pinned formatter could not run, so the bytes it owns would ship uncanonical."""
+
+
+_FORMATTER_ROOT: pathlib.Path | None = None
+_FORMATTER_CONFIG: pathlib.Path | None = None
+_FORMATTER_TMP: tempfile.TemporaryDirectory[str] | None = None
+
+
+def enable_formatter(root: pathlib.Path) -> None:
+    """Let `canonicalize` run for this session.
+
+    Only the flavors that ship the oxfmt config and CI gate enable it; a git/python/rust
+    run has no formatter to satisfy and stays pure Python.
+    """
+    global _FORMATTER_ROOT
+    _FORMATTER_ROOT = root.resolve()
+    print(
+        f"formatting: oxfmt@{OXFMT_VERSION} owns the bytes it can reach (see OXFMT_VERSION)",
+        file=sys.stderr,
+    )
+
+
+def canonicalize(path: pathlib.Path, content: str) -> str:
+    """Return `content` exactly as the pinned formatter would write it.
+
+    This runs at the single write seam, so `--dry-run`, `--update` and the `unchanged`
+    compare all see canonical bytes; a formatter pass over the tree afterwards would make
+    the preview and the idempotence check disagree with what actually lands.
+    """
+    if _FORMATTER_ROOT is None or path.suffix.lower() not in OXFMT_EXTENSIONS:
+        return content
+    global _FORMATTER_CONFIG, _FORMATTER_TMP
+    if _FORMATTER_CONFIG is None:
+        # The shipped config, so the result never depends on whether .oxfmtrc.json has been
+        # written yet — and its ignorePatterns keep CHANGELOG.md (MD004 `*` pin) untouched.
+        _FORMATTER_TMP = tempfile.TemporaryDirectory(prefix="scaffold-oxfmt-")
+        _FORMATTER_CONFIG = pathlib.Path(_FORMATTER_TMP.name) / "oxfmtrc.json"
+        _FORMATTER_CONFIG.write_text(OXFMT_JSON, encoding="utf-8")
+    try:
+        rel = path.resolve().relative_to(_FORMATTER_ROOT)
+    except ValueError:
+        rel = pathlib.Path(path.name)
+    cmd = [
+        "npx",
+        "--yes",
+        f"oxfmt@{OXFMT_VERSION}",
+        "-c",
+        str(_FORMATTER_CONFIG),
+        "--stdin-filepath",
+        rel.as_posix(),
+    ]
+    try:
+        proc = subprocess.run(
+            cmd, input=content, capture_output=True, text=True, cwd=str(_FORMATTER_ROOT)
+        )
+    except OSError as exc:
+        raise FormatterUnavailable(f"{cmd[0]} not runnable: {exc}") from exc
+    if proc.returncode != 0:
+        detail = proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}"
+        raise FormatterUnavailable(f"oxfmt@{OXFMT_VERSION} failed on {rel}: {detail}")
+    return proc.stdout
+
+
 def write_file(
     path: pathlib.Path, content: str, dry_run: bool, *, warn_mixed: str | None = None
 ) -> bool:
     is_mixed = warn_mixed is not None
+    content = canonicalize(path, content)
     if dry_run:
         if path.exists():
             old = path.read_text(encoding="utf-8")
@@ -618,6 +728,10 @@ def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> N
 
 
 def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
+    # Canonicalize the snippet, never the whole file: an append must not reformat headings or
+    # prose the project already had. The junction stays canonical because the snippet opens
+    # with its own heading and the append below guarantees a blank line in front of it.
+    snippet = canonicalize(path, snippet.rstrip() + "\n")
     marker = snippet.strip().splitlines()[0][:40]
     if dry_run:
         if path.exists():
@@ -651,7 +765,7 @@ def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
         print(f"patched {path} (mixed)", file=sys.stderr)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(snippet.rstrip() + "\n", encoding="utf-8")
+        path.write_text(snippet, encoding="utf-8")
         print(f"wrote {path} (mixed)", file=sys.stderr)
     print(
         f"WARNING: {path}: proofread — keep existing 3 sections, verify pointer wording.",
@@ -849,6 +963,9 @@ def do_python(
 ) -> list[str]:
     notes: list[str] = []
     write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
+    note = write_generated(cwd / "tests" / "test_smoke.py", PY_TESTS_SMOKE, dry_run, update=update)
+    if note:
+        notes.append(note)
     pyproj = build_pyproject(project_name, with_coverage, threshold)
     warn = (
         f"mixed: {{{{project_name}}}} + coverage gate {threshold}% — proofread name and fail_under"
@@ -904,6 +1021,9 @@ def do_rust(
             file=sys.stderr,
         )
     write_file(cwd / "rust-toolchain.toml", RUST_TOOLCHAIN_TOML, dry_run)
+    note = write_generated(cwd / "src" / "lib.rs", RUST_LIB_RS, dry_run, update=update)
+    if note:
+        notes.append(note)
     cargo = render_template("rust/Cargo.toml.j2", project_name=cargo_name)
     warn = "mixed: {{project_name}} normalized to kebab-case — proofread package name and edition."
     if with_coverage:
@@ -1354,6 +1474,11 @@ def main() -> int:
         action="store_true",
         help="with --detect, emit JSON only (alias, JSON always to stdout)",
     )
+    ap.add_argument(
+        "--no-format",
+        action="store_true",
+        help="skip the pinned oxfmt pass over generated bytes (needs no Node; the generated CI format gate then stays red until `pnpm run format:fix`)",
+    )
     args = ap.parse_args()
 
     cwd = pathlib.Path(args.cwd).resolve()
@@ -1392,19 +1517,34 @@ def main() -> int:
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
+    if (
+        flavor in ("typescript", "all")
+        and not args.no_format
+        and not os.environ.get("SCAFFOLD_NO_FORMAT")
+    ):
+        enable_formatter(cwd)
     notes: list[str] = []
-    if flavor in ("git", "all"):
-        notes += do_git(cwd, project_name, dry_run, selected=git_selected, update=update)
-    if flavor in ("python", "all"):
-        notes += do_python(cwd, project_name, dry_run, with_coverage, threshold, update=update)
-    if flavor in ("rust", "all"):
-        notes += do_rust(cwd, project_name, dry_run, with_coverage, threshold, update=update)
-    if flavor in ("typescript", "all"):
-        notes += do_typescript(
-            cwd, project_name, dry_run, args.ts_variant, with_coverage, threshold, update=update
+    try:
+        if flavor in ("git", "all"):
+            notes += do_git(cwd, project_name, dry_run, selected=git_selected, update=update)
+        if flavor in ("python", "all"):
+            notes += do_python(cwd, project_name, dry_run, with_coverage, threshold, update=update)
+        if flavor in ("rust", "all"):
+            notes += do_rust(cwd, project_name, dry_run, with_coverage, threshold, update=update)
+        if flavor in ("typescript", "all"):
+            notes += do_typescript(
+                cwd, project_name, dry_run, args.ts_variant, with_coverage, threshold, update=update
+            )
+        if flavor == "ci":
+            do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold, selected=ci_selected)
+    except FormatterUnavailable as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        print(
+            "hint: oxfmt owns the bytes it can reach — install Node/npx, or pass --no-format to "
+            "emit template bytes unformatted (the generated CI format gate stays red)",
+            file=sys.stderr,
         )
-    if flavor == "ci":
-        do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold, selected=ci_selected)
+        return 2
     if update:
         print_next_actions(cwd, notes)
 

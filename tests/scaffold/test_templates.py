@@ -47,7 +47,16 @@ def _as_source(pins: dict[str, str]) -> str:
 
 
 def _template_files() -> list[str]:
-    return sorted(p.relative_to(TEMPLATES).as_posix() for p in TEMPLATES.rglob("*") if p.is_file())
+    """Template files, minus build litter git already ignores.
+
+    A tool that imports a template `.py` (pytest's assertion cache, ruff check) leaves a
+    `__pycache__` inside the tree; it is not a template, and it must not read as one.
+    """
+    return sorted(
+        p.relative_to(TEMPLATES).as_posix()
+        for p in TEMPLATES.rglob("*")
+        if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"
+    )
 
 
 def _raw_files() -> list[str]:
@@ -106,7 +115,9 @@ RAW_SHA256: dict[str, str] = {
     "git/.releaserc.json": "8e4a562913c3c8276f6689046d5b92c862ffa79d5b08c04b284eea75e0c3570f",
     "git/CHANGELOG.md": "4606d1eff8d1e321a97fed364c36aeceb037dc8bdfcbb8bf099c9d5621e41a6a",
     "git/commitlint.config.js": "9c46dd6e2258b8783f57255cbcdd09fd13c0283069b281568806ba147df85340",
+    "python/tests/test_smoke.py": "5aea23c34b6b3982d3234f45a7d6a706890d7e089148aebc408ffc8f5fdb7839",
     "rust/rust-toolchain.toml": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
+    "rust/src/lib.rs": "7ee751810675dd67935f48c90a0ff696035fd0b47d7520a00bc0772d3eff1813",
     "typescript/.oxfmtrc.json": "de9ec5a4f748493a84113f6f9881a3db585cc4e8a8bea2c83e3ba65c204e8fb3",
     "typescript/.oxlintrc.json": "af18217668580c6e3df7ede6481eb29df644a4f8929d5a9a15faec6a476a6d71",
     "typescript/scripts/oxlint-plugin-comment-gate.js": "9cbf8af3366f0e71f743c518c8ba31d5aed0144c7705ae76144a639673dd7484",
