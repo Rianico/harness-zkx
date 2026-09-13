@@ -31,7 +31,10 @@ import difflib
 import json
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
+from dataclasses import asdict, dataclass
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
@@ -170,7 +173,6 @@ GIT_COMPONENTS: set[str] = {
     "pr-template",  # .github/pull_request_template.md
     "contributing",  # CONTRIBUTING.md
     "agents",  # AGENTS.md patch
-    "gh-router",  # skills/gh-router
     "gitignore",  # .gitignore append
 }
 
@@ -194,6 +196,219 @@ PROJECT_OWNED: dict[str, str] = {
 FLAVOR_FOREIGN: dict[str, str] = {
     "release-yml": "owned by the ci flavor — this flavor ships the Node/pnpm verify job"
 }
+
+# Ownership of *source*, as opposed to generated infrastructure. --update refreshes the
+# latter; these paths are code a project grows by hand, so clobbering them would lose work no
+# template can regenerate. Keyed by repo-relative path, not basename: the map only earns its
+# keep if it is precise (a basename key would also swallow a project's own `src/other.ts`).
+SOURCE_OWNED: dict[str, str] = {
+    "src/index.ts": "project source — entry module, hand-grown after scaffold",
+    "src/cli.ts": "project source — CLI entry, hand-grown after scaffold",
+    "tests/index.test.ts": "project tests — scaffold smoke test, extended by the project",
+    "vitest.config.ts": "test config — coverage thresholds are project policy",
+}
+
+
+# ------------------------------------------------------------------ run report
+# A run reports itself in one of three modes. `verbose` is the historical per-file prose and
+# unified diffs (humans and the tests read it). `summary` collapses to one line per file plus
+# totals; `json` emits the plan as data. Suppressing prose in the last two is the point: the
+# plan *is* the payload, so a caller never greps diffs out of stdout to decide what to do.
+VERBOSE, SUMMARY, JSON_OUT = "verbose", "summary", "json"
+
+# What happened to one path — the vocabulary the summary, the JSON plan and `--check` share.
+UNCHANGED = "unchanged"  # already byte-identical to the template
+STALE = "stale"  # exists, differs from the template
+MISSING = "missing"  # absent, would be created
+PRESERVED = "preserved"  # project-owned, deliberately untouched
+PATCHED = "patched"  # append-only or section merge — existing lines never rewritten
+APPENDED = "appended"  # lines added to an existing file (.gitignore dedup)
+
+# Drift = the repo and the template disagree. Preservation is a decision, not drift.
+DRIFT_KINDS = frozenset({STALE, MISSING, PATCHED, APPENDED})
+
+
+@dataclass(frozen=True)
+class Entry:
+    """One path in the run plan. `detail` is the reason (preserved) or the edit (patched)."""
+
+    path: str
+    kind: str
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class Finding:
+    """A defect found while checking written bytes.
+
+    `blocking` separates "the bytes we just wrote do not parse or run" (our bug — exit 1)
+    from "a generated file points at something absent" (a gap in what the skill ships:
+    reported, never a reason to fail a project's update).
+    """
+
+    area: str
+    detail: str
+    remedy: str = ""
+    blocking: bool = True
+
+
+class Report:
+    """Collects what a run did and renders it once, in the mode the CLI selected."""
+
+    def __init__(self) -> None:
+        self.mode = VERBOSE
+        self.cwd = pathlib.Path()
+        self.entries: list[Entry] = []
+        self.findings: list[Finding] = []
+        self.notes: list[str] = []
+
+    def start(self, mode: str, cwd: pathlib.Path) -> None:
+        """Begin a run: the plan is per-run state, so a second run never inherits the first."""
+        self.mode = mode
+        self.cwd = cwd
+        self.entries = []
+        self.findings = []
+        self.notes = []
+
+    # --- rendering primitives: verbose only, so summary/json stay machine-readable ----
+
+    def out(self, text: str) -> None:
+        """Write an exact payload (diff, created content) to stdout — verbose only."""
+        if self.mode == VERBOSE:
+            sys.stdout.write(text)
+
+    def err(self, text: str, *, always: bool = False) -> None:
+        """Write a prose line to stderr; `always` for lines no mode may swallow."""
+        if always or self.mode == VERBOSE:
+            print(text, file=sys.stderr)
+
+    def _rel(self, path: pathlib.Path) -> str:
+        try:
+            return path.resolve().relative_to(self.cwd).as_posix()
+        except ValueError:  # outside the target repo — report the path as given
+            return path.as_posix()
+
+    def record(self, path: pathlib.Path, kind: str, detail: str = "") -> None:
+        self.entries.append(Entry(self._rel(path), kind, detail))
+
+    # --- file events: each records the kind and prints today's prose when verbose -----
+
+    def unchanged(self, path: pathlib.Path, label: str = "") -> None:
+        suffix = f" ({label})" if label else ""
+        self.err(f"unchanged  {path}{suffix}")
+        self.record(path, UNCHANGED, label)
+
+    def stale(self, path: pathlib.Path, diff: str) -> None:
+        self.out(diff)
+        self.record(path, STALE)
+
+    def missing(self, path: pathlib.Path, preview: str) -> None:
+        self.out(f"would create {path}:\n{preview}")
+        self.record(path, MISSING)
+
+    def wrote(self, path: pathlib.Path, *, mixed: bool = False, changed: bool = True) -> None:
+        self.err(f"wrote ({'mixed' if mixed else 'deterministic'}) {path}")
+        self.record(path, STALE if changed else UNCHANGED)
+
+    def preserved(self, path: pathlib.Path, reason: str) -> str:
+        """Report a project-owned file; returns the NEXT note naming it."""
+        self.err(f"preserved  {path} ({reason})")
+        self.record(path, PRESERVED, reason)
+        return f"{self._rel(path)}: preserved — {reason}"
+
+    def patched(
+        self, path: pathlib.Path, detail: str, message: str, *, stdout: bool = False
+    ) -> None:
+        """An append-only or section edit; `stdout` keeps a preview's historical stream."""
+        if stdout:
+            self.out(f"{message}\n")
+        else:
+            self.err(message)
+        self.record(path, PATCHED, detail)
+
+    def appended(
+        self, path: pathlib.Path, detail: str, message: str, *, stdout: bool = False
+    ) -> None:
+        if stdout:
+            self.out(f"{message}\n")
+        else:
+            self.err(message)
+        self.record(path, APPENDED, detail)
+
+    def note(self, message: str) -> None:
+        """Information the caller must see in every mode (a NOTE, not a file event)."""
+        self.notes.append(message)
+        self.err(message, always=True)
+
+    def finding(self, area: str, detail: str, remedy: str = "", *, blocking: bool = True) -> None:
+        self.findings.append(Finding(area, detail, remedy, blocking))
+        mark = "SELF-CHECK" if blocking else "WARNING (self-check)"
+        tail = f" — fix: {remedy}" if remedy else ""
+        self.err(f"{mark}: {area}: {detail}{tail}", always=True)
+
+    # --- rendering ------------------------------------------------------------------
+
+    @property
+    def drift_entries(self) -> list[Entry]:
+        return [e for e in self.entries if e.kind in DRIFT_KINDS]
+
+    @property
+    def blocking_findings(self) -> list[Finding]:
+        return [f for f in self.findings if f.blocking]
+
+    def paths_of(self, kinds: frozenset[str] | set[str]) -> list[pathlib.Path]:
+        """Existing files this run claims — the self-check's targets, real run or preview."""
+        found: list[pathlib.Path] = []
+        for entry in self.entries:
+            if entry.kind in kinds and (self.cwd / entry.path).is_file():
+                found.append(self.cwd / entry.path)
+        return found
+
+    def render_summary(self, header: str) -> None:
+        """One line per path that needs attention, then totals — the `--check` payload."""
+        print(header)
+        for entry in self.entries:
+            if entry.kind == UNCHANGED:
+                continue
+            detail = f" — {entry.detail}" if entry.detail else ""
+            print(f"{entry.kind:<10} {entry.path}{detail}")
+        counts: dict[str, int] = {}
+        for entry in self.entries:
+            counts[entry.kind] = counts.get(entry.kind, 0) + 1
+        tally = " · ".join(f"{counts[k]} {k}" for k in sorted(counts))
+        print(f"{tally or 'nothing to report'} · drift {len(self.drift_entries)}")
+
+    def plan(self, *, flavor: str, update: bool, dry_run: bool) -> dict[str, object]:
+        """The run as data — what `--json` prints instead of prose."""
+        return {
+            "cwd": str(self.cwd),
+            "flavor": flavor,
+            "update": update,
+            "dry_run": dry_run,
+            "drift": bool(self.drift_entries),
+            "entries": [asdict(e) for e in self.entries],
+            "findings": [asdict(f) for f in self.findings],
+            "notes": list(self.notes),
+        }
+
+
+REPORT = Report()
+
+
+def _declares_pnpm(cwd: pathlib.Path) -> bool:
+    """True when the repo's package manager is pnpm — the trigger for the lockfile patch.
+
+    Probed, not assumed: a lockfile, a `packageManager` field, or a workspace file. Without
+    this, the assets patch lived in the TypeScript flavor only, so refreshing a pnpm repo
+    with `--update` silently put `package-lock.json` back into the release assets.
+    """
+    if (cwd / "pnpm-lock.yaml").exists() or (cwd / "pnpm-workspace.yaml").exists():
+        return True
+    try:
+        pkg = (cwd / "package.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    return '"packageManager"' in pkg and "pnpm" in pkg
 
 
 def _parse_components(raw: str | None, available: set[str], flag: str) -> set[str] | None:
@@ -368,151 +583,10 @@ CI_RUNTIMES: dict[str, str] = {
     "python": "ci/runtimes/python.yml.j2",
     "rust": "ci/runtimes/rust.yml.j2",
 }
-GH_ROUTER_SKILL_PATH = pathlib.Path(__file__).parent.parent.joinpath("..", "gh-router", "SKILL.md")
-GH_ROUTER_SKILL = (
-    GH_ROUTER_SKILL_PATH.read_text(encoding="utf-8")
-    if GH_ROUTER_SKILL_PATH.exists()
-    else """---
-name: gh-router
-description: >-
-  GitHub workflow router \u2014 release via dispatch, PR enhancement, and PR create/watch/merge. Use when releasing, dispatching semantic-release, submitting or refining PRs, or creating/merging PRs via gh api.
-argument-hint: |-
-  gh-release [--dry-run] -- changelog and publish via dispatch
-  pr-enhance [base|pr_url] -- PR description generation
-  pr-land [--watch --merge] -- create PR, watch checks, squash-merge
-metadata:
-  manage: [gh-release, pr-land, pr-enhance]
----
-
-# GH Router
-
-GitHub workflow router. Model-invocable \u2014 dispatches to `gh-release`, `pr-land`, or `pr-enhance` via subskill load.
-
-## Subskills
-
-| Subskill | Trigger |
-|----------|---------|
-| `gh-release` | `release`, dispatch semantic-release |
-| `pr-enhance` | `submit PR`, `refine PR` |
-| `pr-land` | `pr create`, `pr watch`, `pr merge`, `squash merge` |
-
-Load via `Read $SKILL_DIR/subskills/<name>/SKILL.md`.
-"""
-)
-
-GH_RELEASE_SKILL = (
-    pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "gh-release", "SKILL.md")
-    .read_text(encoding="utf-8")
-    if pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "gh-release", "SKILL.md")
-    .exists()
-    else """---
-name: gh-release
-description: >-
-  Release dispatch via semantic-release. Validates conventional commits and runs verification. Use when dispatching releases, publishing packages, or running dry-run release checks.
-argument-hint: |-
-  "[--dry-run] -- dispatch semantic-release (dry-run previews version)"
-metadata:
-  managed-by: gh-router
----
-
-# GH Release
-
-Dispatch semantic-release from `main` — version from `feat`/`fix`/`!` since last tag.
-"""
-)
-
-PR_ENHANCE_SKILL = (
-    pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-enhance", "SKILL.md")
-    .read_text(encoding="utf-8")
-    if pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-enhance", "SKILL.md")
-    .exists()
-    else """---
-name: pr-enhance
-description: >-
-  Pull Request optimization expert. Generates comprehensive PR descriptions, diagrams, and checklists based on git diff analysis. Use when submitting a PR or refining a PR description.
-arguments: base_or_pr
-argument-hint: |-
-  "[base|pr_url] -- base branch or PR URL"
-metadata:
-  managed-by: gh-router
----
-
-# PR Enhance
-
-See gh-router.
-"""
-)
-
-PR_LAND_SKILL = (
-    pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-land", "SKILL.md")
-    .read_text(encoding="utf-8")
-    if pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-land", "SKILL.md")
-    .exists()
-    else """---
-name: pr-land
-description: >-
-  Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
-arguments: title_or_branch
-argument-hint: |-
-  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge] [--draft]"
-metadata:
-  managed-by: gh-router
----
-
-# PR — Create → Watch → Squash-Merge
-
-See gh-router. The harness ships `subskills/pr-land/scripts/pr.sh`; copy it from the harness when driving the loop deterministically.
-"""
-)
-
-
-def _write_gh_router(cwd: pathlib.Path, dry_run: bool) -> None:
-    # Deterministic gh-router skill with subskills — mirrors current harness
-    base = cwd / "skills" / "gh-router"
-    write_file(base / "SKILL.md", GH_ROUTER_SKILL, dry_run)
-    # Use current harness files as source if available, else fallback to embedded
-    embedded = {
-        "gh-release": GH_RELEASE_SKILL,
-        "pr-land": PR_LAND_SKILL,
-        "pr-enhance": PR_ENHANCE_SKILL,
-    }
-    for sub in ["gh-release", "pr-land", "pr-enhance"]:
-        sub_src = pathlib.Path(__file__).parent.parent.parent / "gh-router" / "subskills" / sub
-        skill = sub_src / "SKILL.md"
-        # fallback to embedded already handled
-        if skill.exists():
-            write_file(
-                base / "subskills" / sub / "SKILL.md", skill.read_text(encoding="utf-8"), dry_run
-            )
-        else:
-            content = embedded.get(sub, "")
-            if content.strip():
-                write_file(base / "subskills" / sub / "SKILL.md", content, dry_run)
-        # Scripts (check/verify/dispatch for gh-release, pr for pr-land, analyze for pr-enhance)
-        scripts = sub_src / "scripts"
-        if not scripts.exists():
-            continue
-        for p in scripts.iterdir():
-            if p.is_file():
-                try:
-                    dst = base / "subskills" / sub / "scripts" / p.name
-                    write_file(dst, p.read_text(encoding="utf-8"), dry_run)
-                    if not dry_run:
-                        dst.chmod(0o755)
-                except Exception:
-                    pass
 
 
 def infer_project_name(cwd: pathlib.Path) -> str:
     try:
-        import subprocess
-
         out = (
             subprocess.check_output(
                 ["git", "rev-parse", "--show-toplevel"], cwd=str(cwd), stderr=subprocess.DEVNULL
@@ -527,15 +601,21 @@ def infer_project_name(cwd: pathlib.Path) -> str:
     return cwd.name
 
 
+
 def write_file(
     path: pathlib.Path, content: str, dry_run: bool, *, warn_mixed: str | None = None
 ) -> bool:
+    """Write (or preview) one generated artifact and report it in the run plan.
+
+    Returns True when the file was written. Previews go through REPORT so `--summary`
+    and `--json` drop the prose and keep the plan instead.
+    """
     is_mixed = warn_mixed is not None
     if dry_run:
         if path.exists():
             old = path.read_text(encoding="utf-8")
             if old == content:
-                print(f"unchanged  {path}", file=sys.stderr)
+                REPORT.unchanged(path)
             else:
                 diff = difflib.unified_diff(
                     old.splitlines(keepends=True),
@@ -543,25 +623,25 @@ def write_file(
                     fromfile=str(path),
                     tofile=str(path) + " (new)",
                 )
-                sys.stdout.writelines(diff)
+                REPORT.stale(path, "".join(diff))
         else:
-            print(f"would create {path}:\n{content}", file=sys.stdout)
+            REPORT.missing(path, content)
         if is_mixed:
-            print(f"WARNING (dry-run): {path}: {warn_mixed}", file=sys.stderr)
+            REPORT.err(f"WARNING (dry-run): {path}: {warn_mixed}")
         return False
+    changed = not path.exists() or path.read_text(encoding="utf-8") != content
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    tag = "mixed" if is_mixed else "deterministic"
-    print(f"wrote ({tag}) {path}", file=sys.stderr)
+    REPORT.wrote(path, mixed=is_mixed, changed=changed)
     if is_mixed:
-        print(f"WARNING: {path}: {warn_mixed}", file=sys.stderr)
+        REPORT.err(f"WARNING: {path}: {warn_mixed}")
     return True
+
 
 
 def preserve(path: pathlib.Path, reason: str) -> str:
     """Report a project-owned file preserved by --update; returns its NEXT note."""
-    print(f"preserved  {path} ({reason})", file=sys.stderr)
-    return f"{path.name}: preserved — {reason}"
+    return REPORT.preserved(path, reason)
 
 
 def write_generated(
@@ -584,148 +664,144 @@ def write_generated(
     return None
 
 
+
 def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> None:
-    if dry_run:
-        existing: set[str] = set()
-        if path.exists():
-            existing = {
-                ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
-            }
-        missing = [e for e in entries if e not in existing]
-        if missing:
-            print(f"would append to {path}: {missing}", file=sys.stdout)
-        else:
-            print(f"unchanged  {path} (gitignore dedup)", file=sys.stderr)
-        return
-    existing_set: set[str] = set()
-    if path.exists():
-        text = path.read_text(encoding="utf-8")
-        existing_set = {ln.strip() for ln in text.splitlines() if ln.strip()}
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    missing = [e for e in entries if e not in existing_set]
+    """Add missing ignore lines; never rewrites what is already there."""
+    existed = path.exists()
+    existing: set[str] = set()
+    if existed:
+        existing = {ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()}
+    missing = [e for e in entries if e not in existing]
     if not missing:
-        print(f"unchanged  {path} (gitignore dedup)", file=sys.stderr)
+        REPORT.unchanged(path, "gitignore dedup")
         return
-    with path.open("a", encoding="utf-8") as f:
-        if path.exists() and path.stat().st_size > 0:
-            content = path.read_text(encoding="utf-8")
-            if not content.endswith("\n"):
-                f.write("\n")
-        for e in missing:
-            f.write(e + "\n")
-    print(f"appended ({len(missing)}) to {path}: {missing}", file=sys.stderr)
-
-
-def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
-    marker = snippet.strip().splitlines()[0][:40]
     if dry_run:
-        if path.exists():
-            text = path.read_text(encoding="utf-8")
-            if marker.strip("# ") in text or snippet.strip() in text:
-                print(f"unchanged  {path} (AGENTS patch present)", file=sys.stderr)
-            else:
-                print(f"would patch {path} with:\n{snippet}", file=sys.stdout)
-        else:
-            print(f"would create {path} with:\n{snippet}", file=sys.stdout)
-        print(
-            f"WARNING (dry-run): {path}: proofread — keep existing 3 sections, verify pointer wording.",
-            file=sys.stderr,
+        REPORT.appended(
+            path, f"would add {missing}", f"would append to {path}: {missing}", stdout=True
         )
         return
-    if path.exists():
-        text = path.read_text(encoding="utf-8")
-        if snippet.strip() in text or marker.strip("# ") in text:
-            print(f"unchanged  {path} (AGENTS patch present)", file=sys.stderr)
-            print(
-                f"WARNING: {path}: proofread — keep existing 3 sections, verify pointer wording.",
-                file=sys.stderr,
-            )
-            return
-        with path.open("a", encoding="utf-8") as f:
-            if not text.endswith("\n"):
-                f.write("\n")
-            if not text.endswith("\n\n"):
-                f.write("\n")
-            f.write(snippet.rstrip() + "\n")
-        print(f"patched {path} (mixed)", file=sys.stderr)
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(snippet.rstrip() + "\n", encoding="utf-8")
-        print(f"wrote {path} (mixed)", file=sys.stderr)
-    print(
-        f"WARNING: {path}: proofread — keep existing 3 sections, verify pointer wording.",
-        file=sys.stderr,
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        if existed and path.stat().st_size > 0:
+            content = path.read_text(encoding="utf-8")
+            if not content.endswith("\n"):
+                handle.write("\n")
+        for entry in missing:
+            handle.write(entry + "\n")
+    verb = "added" if existed else "created"
+    REPORT.appended(
+        path, f"{verb} {missing}", f"appended ({len(missing)}) to {path}: {missing}"
     )
 
 
+
+def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
+    """Append the runtime pointer when it is absent — never rewrites existing sections."""
+    marker = snippet.strip().splitlines()[0][:40]
+    proofread = "proofread — keep existing 3 sections, verify pointer wording."
+    if dry_run:
+        if path.exists():
+            body = path.read_text(encoding="utf-8")
+            if marker.strip("# ") in body or snippet.strip() in body:
+                REPORT.unchanged(path, "AGENTS patch present")
+            else:
+                REPORT.patched(
+                    path,
+                    "would append runtime pointer",
+                    f"would patch {path} with:\n{snippet}",
+                    stdout=True,
+                )
+        else:
+            REPORT.missing(path, snippet)
+        REPORT.err(f"WARNING (dry-run): {path}: {proofread}")
+        return
+    if path.exists():
+        body = path.read_text(encoding="utf-8")
+        if snippet.strip() in body or marker.strip("# ") in body:
+            REPORT.unchanged(path, "AGENTS patch present")
+            REPORT.err(f"WARNING: {path}: {proofread}")
+            return
+        with path.open("a", encoding="utf-8") as handle:
+            if not body.endswith("\n"):
+                handle.write("\n")
+            if not body.endswith("\n\n"):
+                handle.write("\n")
+            handle.write(snippet.rstrip() + "\n")
+        REPORT.patched(path, "appended runtime pointer", f"patched {path} (mixed)")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(snippet.rstrip() + "\n", encoding="utf-8")
+        REPORT.wrote(path, mixed=True, changed=True)
+    REPORT.err(f"WARNING: {path}: {proofread}")
+
+
+
 def patch_wt_hooks(cwd: pathlib.Path, dry_run: bool) -> None:
+    """Ensure worktrees get live hooks — `wt switch` clones a fresh checkout, not the config."""
     wt = cwd / ".config/wt.toml"
     if not wt.exists():
         return
     text = wt.read_text(encoding="utf-8")
     if "core.hooksPath" in text:
-        if dry_run:
-            print(f"unchanged  {wt} (hooksPath present)", file=sys.stderr)
-        else:
-            print(f"unchanged  {wt} (hooksPath present)", file=sys.stderr)
+        REPORT.unchanged(wt, "hooksPath present")
         return
     hook_line = 'setup-hooks = "git config core.hooksPath .githooks"'
     if dry_run:
-        print(f"would patch {wt} with {hook_line}", file=sys.stdout)
+        REPORT.patched(
+            wt, "would add setup-hooks", f"would patch {wt} with {hook_line}", stdout=True
+        )
         return
     if "[post-start]" in text:
-        lines = text.splitlines()
-        out: list[str] = []
+        lines: list[str] = []
         inserted = False
-        for line in lines:
-            out.append(line)
+        for line in text.splitlines():
+            lines.append(line)
             if not inserted and line.strip() == "[post-start]":
-                out.append(hook_line)
+                lines.append(hook_line)
                 inserted = True
         if not inserted:
-            out.append("[post-start]")
-            out.append(hook_line)
-        new_text = "\n".join(out) + "\n"
+            lines.extend(["[post-start]", hook_line])
+        new_text = "\n".join(lines) + "\n"
         new_text = new_text.replace("\n\n\n", "\n\n")
     else:
         new_text = text.rstrip() + "\n\n[post-start]\n" + hook_line + "\n"
     wt.write_text(new_text, encoding="utf-8")
-    print(f"patched {wt} with hooksPath", file=sys.stderr)
+    REPORT.patched(wt, "added setup-hooks", f"patched {wt} with hooksPath")
+
 
 
 def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
-    """pnpm contract: this flavor declares pnpm, so releaserc assets ship pnpm-lock.yaml."""
+    """pnpm contract: a repo that declares pnpm ships pnpm-lock.yaml in the release assets.
+
+    Gated on the repo, not on the flavor — the assets line is a property of the package
+    manager. Before this, only the TypeScript flavor patched it, so a pnpm repo refreshed
+    with `--update` silently put `package-lock.json` back into its release assets.
+    """
     path = cwd / ".releaserc.json"
-    if dry_run:
-        if path.exists():
-            text = path.read_text(encoding="utf-8")
-            if '"package-lock.json"' in text:
-                print(
-                    f"would patch {path}: package-lock.json \u2192 pnpm-lock.yaml (pnpm contract)",
-                    file=sys.stdout,
-                )
-            else:
-                print(f"unchanged  {path} (releaserc lockfile already pnpm)", file=sys.stderr)
-        else:
-            print(
-                f"NOTE (dry-run): no {path} \u2014 run git flavor first so the pnpm lockfile patch has a target",
-                file=sys.stderr,
-            )
-        return
     if not path.exists():
-        print(
-            f"NOTE: no {path} \u2014 skipping pnpm lockfile patch (run git flavor first)",
-            file=sys.stderr,
+        REPORT.err(
+            f"NOTE: no {path} — run the git flavor first so the pnpm lockfile patch has a target"
         )
         return
     text = path.read_text(encoding="utf-8")
     if '"package-lock.json"' not in text:
-        print(f"unchanged  {path} (releaserc lockfile already pnpm)", file=sys.stderr)
+        REPORT.unchanged(path, "releaserc lockfile already pnpm")
+        return
+    if not _declares_pnpm(cwd):
+        return
+    if dry_run:
+        REPORT.patched(
+            path,
+            "package-lock.json → pnpm-lock.yaml",
+            f"would patch {path}: package-lock.json → pnpm-lock.yaml (pnpm contract)",
+            stdout=True,
+        )
         return
     path.write_text(text.replace('"package-lock.json"', '"pnpm-lock.yaml"'), encoding="utf-8")
-    print(
-        f"patched {path}: package-lock.json \u2192 pnpm-lock.yaml (pnpm contract)", file=sys.stderr
+    REPORT.patched(
+        path,
+        "package-lock.json → pnpm-lock.yaml",
+        f"patched {path}: package-lock.json → pnpm-lock.yaml (pnpm contract)",
     )
 
 
@@ -741,18 +817,21 @@ def render_ci_release(variant: str, with_coverage: bool, threshold: int) -> str:
     )
 
 
+
 def do_git(
     cwd: pathlib.Path,
     project_name: str,
     dry_run: bool,
     selected: set[str] | None = None,
     update: bool = False,
+    merge_mixed: bool = False,
 ) -> list[str]:
+    """Ship the git contract: release config, workflows, hooks, changelog, router."""
     # finer granularity: default all, filtered by --only/--without/--components
     sel = selected if selected is not None else GIT_COMPONENTS
     notes: list[str] = []
     if "releaserc" in sel:
-        write_file(cwd / ".releaserc.json", RELEASERC_JSON, dry_run)
+        write_file(cwd / ".releaserc.json", releaserc_content(cwd), dry_run)
     if "release-yml" in sel:
         rel = cwd / ".github" / "workflows" / "release.yml"
         if update and rel.exists():
@@ -760,9 +839,7 @@ def do_git(
         else:
             write_file(
                 rel,
-                render_ci_release(
-                    "node", with_coverage=False, threshold=DEFAULT_COVERAGE_THRESHOLD
-                ),
+                render_ci_release("node", with_coverage=False, threshold=DEFAULT_COVERAGE_THRESHOLD),
                 dry_run,
             )
     if "changelog-check" in sel:
@@ -802,25 +879,22 @@ def do_git(
     legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
     if legacy_md.exists():
         if dry_run:
-            print(
-                f"would remove legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stdout
-            )
+            REPORT.out(f"would remove legacy {legacy_md} (migrated to 01-bug_report.yml)\n")
         else:
             try:
                 legacy_md.unlink()
-                print(
-                    f"removed legacy {legacy_md} (migrated to 01-bug_report.yml)", file=sys.stderr
-                )
+                REPORT.err(f"removed legacy {legacy_md} (migrated to 01-bug_report.yml)")
             except OSError:
                 pass
     if "contributing" in sel:
         contrib = render_template("shared/CONTRIBUTING.default.md.j2", project_name=project_name)
-        note = write_generated(
-            cwd / "CONTRIBUTING.md",
+        note = write_contributing(
+            cwd,
             contrib,
             dry_run,
-            update=update,
             warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
+            update=update,
+            merge_mixed=merge_mixed,
         )
         if note:
             notes.append(note)
@@ -832,8 +906,6 @@ def do_git(
             "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
             dry_run,
         )
-    if "gh-router" in sel:
-        _write_gh_router(cwd, dry_run)
     if "pre-push" in sel:
         patch_wt_hooks(cwd, dry_run)
     return notes
@@ -931,6 +1003,7 @@ def do_rust(
     return notes
 
 
+
 def do_typescript(
     cwd: pathlib.Path,
     project_name: str,
@@ -939,13 +1012,14 @@ def do_typescript(
     with_coverage: bool,
     threshold: int,
     update: bool = False,
+    merge_mixed: bool = False,
 ) -> list[str]:
+    """Ship the Node/pnpm toolchain projection: configs, entry skeleton, CONTRIBUTING."""
     notes: list[str] = []
     npm_name = _ts_normalize_name(project_name)
     if npm_name != project_name:
-        print(
-            f"WARNING: npm package name normalized to '{npm_name}' (from '{project_name}') — proofread package.json name.",
-            file=sys.stderr,
+        REPORT.err(
+            f"WARNING: npm package name normalized to '{npm_name}' (from '{project_name}') — proofread package.json name."
         )
     write_file(cwd / ".nvmrc", NODE_VERSION, dry_run)
     pkg_json = build_package_json(project_name, ts_variant, with_coverage)
@@ -953,11 +1027,7 @@ def do_typescript(
     if with_coverage:
         warn += f" + coverage @vitest/coverage-v8 {threshold}%"
     note = write_generated(
-        cwd / "package.json",
-        pkg_json,
-        dry_run,
-        update=update,
-        warn_mixed=warn,
+        cwd / "package.json", pkg_json, dry_run, update=update, warn_mixed=warn
     )
     if note:
         notes.append(note)
@@ -965,29 +1035,34 @@ def do_typescript(
     write_file(cwd / ".oxlintrc.json", OXLINT_JSON, dry_run)
     write_file(cwd / "scripts" / "oxlint-plugin-comment-gate.js", OXLINT_COMMENT_GATE_JS, dry_run)
     write_file(cwd / ".oxfmtrc.json", OXFMT_JSON, dry_run)
-    write_file(
-        cwd / "src" / "index.ts",
-        render_template("typescript/src/index.ts.j2", project_name=npm_name),
-        dry_run,
-    )
-    write_file(cwd / "tests" / "index.test.ts", INDEX_TEST_TS, dry_run)
+    for relative, content in (
+        ("src/index.ts", render_template("typescript/src/index.ts.j2", project_name=npm_name)),
+        ("tests/index.test.ts", INDEX_TEST_TS),
+    ):
+        entry_note = write_source(cwd, relative, content, dry_run, update=update)
+        if entry_note:
+            notes.append(entry_note)
     if ts_variant == "cli":
-        cli_path = cwd / "src" / "cli.ts"
-        write_file(cli_path, CLI_TS, dry_run)
+        note = write_source(cwd, "src/cli.ts", CLI_TS, dry_run, update=update)
+        if note:
+            notes.append(note)
         if not dry_run:
             try:
-                cli_path.chmod(0o755)
+                (cwd / "src" / "cli.ts").chmod(0o755)
             except OSError:
                 pass
     if with_coverage:
-        write_file(
-            cwd / "vitest.config.ts",
+        note = write_source(
+            cwd,
+            "vitest.config.ts",
             render_template("typescript/vitest.config.ts.j2", threshold=threshold),
             dry_run,
+            update=update,
         )
-        print(
-            f"NOTE: TypeScript coverage wired — run `pnpm run coverage` (fail_under lines/functions {threshold}%)",
-            file=sys.stderr,
+        if note:
+            notes.append(note)
+        REPORT.note(
+            f"NOTE: TypeScript coverage wired — run `pnpm run coverage` (fail_under lines/functions {threshold}%)"
         )
     patch_releaserc_lockfile(cwd, dry_run)
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
@@ -997,19 +1072,19 @@ def do_typescript(
         dry_run,
     )
     contrib_ts = render_template("shared/CONTRIBUTING.typescript.md.j2", project_name=project_name)
-    note = write_generated(
-        cwd / "CONTRIBUTING.md",
+    note = write_contributing(
+        cwd,
         contrib_ts,
         dry_run,
-        update=update,
         warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
+        update=update,
+        merge_mixed=merge_mixed,
     )
     if note:
         notes.append(note)
     if ts_variant == "pi-extension":
-        print(
-            "NOTE: pi-extension entry is ./src/index.ts (pi loads .ts directly, no build step) — proofread package.json `pi.extensions` path.",
-            file=sys.stderr,
+        REPORT.note(
+            "NOTE: pi-extension entry is ./src/index.ts (pi loads .ts directly, no build step) — proofread package.json `pi.extensions` path."
         )
     return notes
 
@@ -1078,11 +1153,13 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         ".gitignore": exists(".gitignore"),
         "CONTRIBUTING.md": exists("CONTRIBUTING.md"),
         "AGENTS.md": exists("AGENTS.md"),
+        ".github/pull_request_template.md": exists(".github/pull_request_template.md"),
     }
 
     pyproject = read_text("pyproject.toml")
     release_yml = read_text(".github/workflows/release.yml")
     changelog = read_text("CHANGELOG.md")
+    releaserc = read_text(".releaserc.json")
     tool_versions = read_text(".tool-versions")
     pkg_json = read_text("package.json")
     vitest_config = read_text("vitest.config.ts")
@@ -1149,6 +1226,11 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         files[".releaserc.json"] and files["CHANGELOG.md"] and files["commitlint.config.js"]
     )
     git_stale = files[".releaserc.json"] and not files[".github/workflows/changelog-check.yml"]
+    changelog_lines = changelog.splitlines()
+    title_line = next(
+        (n for n, line in enumerate(changelog_lines, 1) if line.strip() == "# Changelog"), 0
+    )
+    title_at_top = bool(changelog) and changelog.lstrip().startswith("# Changelog")
 
     if polyglot:
         inferred_shape = "polyglot"
@@ -1194,6 +1276,59 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         ),
     }
 
+    # Findings are the difference between a census and a task list: detection already knows
+    # these are wrong, so it names the remedy instead of making the caller re-derive it.
+    findings: list[dict[str, str]] = []
+
+    def finding(area: str, detail: str, remedy: str) -> None:
+        findings.append({"area": area, "detail": detail, "remedy": remedy})
+
+    scaffold_root = pathlib.Path(__file__).parent.parent
+    if git_stale:
+        finding(
+            ".github/workflows/changelog-check.yml",
+            "absent — the CHANGELOG guard has no CI half",
+            f"uv run {scaffold_root}/scripts/scaffold.py --update --only changelog-check",
+        )
+    if node_present and not files[".github/pull_request_template.md"]:
+        finding(
+            ".github/pull_request_template.md",
+            "absent — PR bodies lose the checklist and impact/risk line",
+            f"uv run {scaffold_root}/scripts/scaffold.py --update --only pr-template",
+        )
+    if changelog and not git_stale:
+        # Both defects are real and independent: a release needs the heading *and* a title the
+        # plugin can anchor on, so one must never mask the other.
+        if "## [Unreleased]" not in changelog:
+            finding(
+                "CHANGELOG.md",
+                "no `## [Unreleased]` section — the pre-push guard has nothing to update",
+                "uv run python scripts/changelog-unreleased.py update",
+            )
+        if not title_at_top:
+            finding(
+                "CHANGELOG.md",
+                f"`# Changelog` title sits at line {title_line}, so each release prepends its notes above it",
+                'set "changelogTitle": "# Changelog" on the @semantic-release/changelog plugin',
+            )
+    if files[".releaserc.json"] and '"package-lock.json"' in releaserc and _declares_pnpm(cwd):
+        finding(
+            ".releaserc.json",
+            "release assets name package-lock.json but the repo declares pnpm",
+            f"uv run {scaffold_root}/scripts/scaffold.py --update",
+        )
+    vendored_skill = cwd / "skills" / "gh-router"
+    if vendored_skill.exists():
+        # A sibling skill copied into a repo is a duplicate that drifts from the harness
+        # original; scaffold no longer writes it, and must not delete it either (it may be
+        # project content). Report the decision instead of guessing it.
+        finding(
+            "skills/gh-router",
+            "vendored copy of a harness skill — scaffold no longer manages this path",
+            "git rm -r skills/gh-router (pi discovers gh-router from ~/.agents/skills), "
+            "or keep it as project content",
+        )
+
     result: dict[str, object] = {
         "cwd": str(cwd),
         "project_name": infer_project_name(cwd),
@@ -1237,23 +1372,35 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         },
         "changelog": {
             "has_unreleased": "## [Unreleased]" in changelog if changelog else False,
+            "title_at_top": bool(changelog) and changelog.lstrip().startswith("# Changelog"),
+            "title_line": title_line,
         },
         "verify_gates": verify_gates,
+        "findings": findings,
     }
     return result
 
 
+
 def print_detect(cwd: pathlib.Path, as_json: bool) -> int:
+    """Census + findings. JSON always goes to stdout; `--json` drops the human summary."""
     data = detect_project(cwd)
-    json_str = json.dumps(data, indent=2, sort_keys=True)
-    print(json_str)
-    files = data["files"]  # type: ignore[assignment]
+    print(json.dumps(data, indent=2, sort_keys=True))
+    if as_json:
+        return 0
+    files = data["files"]
     print(f"\n# Detect summary for {cwd}", file=sys.stderr)
     print(f"shape={data['inferred_shape']} project={data['project_name']}", file=sys.stderr)
     present = [k for k, v in files.items() if v]  # type: ignore[union-attr]
     missing = [k for k, v in files.items() if not v]  # type: ignore[union-attr]
     print(f"present: {', '.join(present) if present else '(none)'}", file=sys.stderr)
     print(f"missing: {', '.join(missing) if missing else '(none)'}", file=sys.stderr)
+    findings = data["findings"]
+    if findings:
+        print(f"\nfindings ({len(findings)}):", file=sys.stderr)  # type: ignore[arg-type]
+        for item in findings:  # type: ignore[union-attr]
+            print(f"  - {item['area']}: {item['detail']}", file=sys.stderr)
+            print(f"    → {item['remedy']}", file=sys.stderr)
     return 0
 
 
@@ -1272,7 +1419,7 @@ def print_next_actions(cwd: pathlib.Path, notes: list[str]) -> None:
     variant = ci_variant if ci_variant in CI_RUNTIMES else shape
     follow_up: dict[str, str] = {
         "release.yml": f"uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant {variant}",
-        "CONTRIBUTING.md": "hand-merge the 'Before PR' toolchain line (mixed file) — templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2",
+        "CONTRIBUTING.md": "add the sections the note lists, or re-run with --merge-mixed to insert them (existing lines untouched) — templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2",
         "CHANGELOG.md": "nothing to do — @semantic-release/changelog owns versioned sections",
         "pyproject.toml": "regenerate deliberately: --flavor python [--with-coverage --coverage-threshold N]",
         "Cargo.toml": "regenerate deliberately: --flavor rust [--with-coverage --coverage-threshold N]",
@@ -1286,7 +1433,244 @@ def print_next_actions(cwd: pathlib.Path, notes: list[str]) -> None:
             print(f"    → {action}", file=sys.stderr)
 
 
+# ------------------------------------------------------------------ mixed files
+# CONTRIBUTING.md (and AGENTS.md) are project-owned *and* template-derived: the project's
+# wording wins, but the template's sections must not silently go missing. Parsing by `## `
+# heading keeps the merge additive — a missing section is inserted in template order and no
+# existing line is touched, so a human still proofreads prose instead of the tool rewriting it.
+SECTION_RE = re.compile(r"^## (?!#)(.+)$", re.MULTILINE)
+
+# `scripts/…` references a generated file must resolve: a hook or workflow that names a script
+# nobody ships fails at the worst moment, and the gap survives review because it spans files.
+REFERENCE_RE = re.compile(r"(?:[\w.-]+/)*scripts/[\w.-]+\.(?:sh|py)")
+
+SCRIPT_NAMES = {"pre-push", "pre-commit", "pre-merge-commit", "commit-msg", "post-commit"}
+
+
+def template_sections(text: str) -> list[tuple[str, str]]:
+    """Split a markdown template into (heading, body) pairs at `## ` level."""
+    matches = list(SECTION_RE.finditer(text))
+    sections: list[tuple[str, str]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections.append((match.group(1).strip(), text[match.start() : end].rstrip() + "\n"))
+    return sections
+
+
+def missing_sections(existing: str, template: str) -> list[str]:
+    """Template `## ` headings absent from the file, in template order."""
+    present = {heading for heading, _ in template_sections(existing)}
+    return [heading for heading, _ in template_sections(template) if heading not in present]
+
+
+def merge_missing_sections(path: pathlib.Path, template: str, dry_run: bool) -> bool:
+    """Insert the template's absent sections; every existing line survives verbatim.
+
+    Each missing section lands before the first existing section the template places after
+    it, else at the end — so the file keeps the template's order without a rewrite.
+    """
+    existing = path.read_text(encoding="utf-8")
+    wanted = template_sections(template)
+    order = {heading: index for index, (heading, _) in enumerate(wanted)}
+    present = [(match.group(1).strip(), match.start()) for match in SECTION_RE.finditer(existing)]
+    present_headings = {heading for heading, _ in present}
+    absent = [heading for heading, _ in wanted if heading not in present_headings]
+    if not absent:
+        REPORT.unchanged(path, "all template sections present")
+        return False
+    inserts: dict[int, list[str]] = {}
+    for heading, body in wanted:
+        if heading in present_headings:
+            continue
+        offset = len(existing)
+        for present_heading, present_offset in present:
+            if order[present_heading] > order[heading]:
+                offset = present_offset
+                break
+        inserts.setdefault(offset, []).append(body)
+    merged = existing
+    for offset in sorted(inserts, reverse=True):
+        block = "\n".join(part.rstrip("\n") for part in inserts[offset]) + "\n"
+        before = merged[:offset].rstrip("\n")
+        after = merged[offset:].lstrip("\n")
+        merged = f"{before}\n\n{block}\n{after}"
+    if not merged.endswith("\n"):
+        merged += "\n"
+    if dry_run:
+        diff = difflib.unified_diff(
+            existing.splitlines(keepends=True),
+            merged.splitlines(keepends=True),
+            fromfile=str(path),
+            tofile=str(path) + " (merged)",
+        )
+        REPORT.stale(path, "".join(diff))
+        return False
+    path.write_text(merged, encoding="utf-8")
+    REPORT.patched(
+        path, f"merged {', '.join(absent)}", f"merged {len(absent)} section(s) into {path} (mixed)"
+    )
+    return True
+
+
+def write_contributing(
+    cwd: pathlib.Path,
+    content: str,
+    dry_run: bool,
+    *,
+    warn_mixed: str,
+    update: bool = False,
+    merge_mixed: bool = False,
+) -> str | None:
+    """Write CONTRIBUTING.md, or report what a preserved copy is missing.
+
+    `--merge-mixed` is opt-in because prose is a semantic surface: the default path names
+    the absent sections and leaves the merge to judgement.
+    """
+    path = cwd / "CONTRIBUTING.md"
+    if not (update and path.exists()):
+        write_file(path, content, dry_run, warn_mixed=warn_mixed)
+        return None
+    reason = PROJECT_OWNED["CONTRIBUTING.md"]
+    absent = missing_sections(path.read_text(encoding="utf-8"), content)
+    if not absent:
+        return preserve(path, reason)
+    if merge_mixed:
+        merge_missing_sections(path, content, dry_run)
+        return None
+    return f"{path.name}: preserved — {reason}; missing template sections: {', '.join(absent)}"
+
+
+def releaserc_content(cwd: pathlib.Path) -> str:
+    """The release config this repo's package manager calls for.
+
+    `.releaserc.json` ships a `package-lock.json` asset (the npm default); a pnpm repo needs
+    `pnpm-lock.yaml` there. Resolving it *before* the write keeps `--check` honest — the plan
+    compares the repo against the bytes the run would really produce, not against the raw
+    template, so a pnpm repo stops reporting permanent drift.
+    """
+    if _declares_pnpm(cwd):
+        return RELEASERC_JSON.replace('"package-lock.json"', '"pnpm-lock.yaml"')
+    return RELEASERC_JSON
+
+
+def write_source(
+    cwd: pathlib.Path, relative: str, content: str, dry_run: bool, *, update: bool = False
+) -> str | None:
+    """Write generated source — unless --update is refreshing a repo that owns the file.
+
+    SOURCE_OWNED marks the difference between "the scaffold ships a starting point" and
+    "this repo owns the code": without it, `--update --flavor typescript` would replace a
+    project's entry point with a skeleton.
+    """
+    path = cwd / relative
+    reason = SOURCE_OWNED.get(relative)
+    if update and reason and path.exists():
+        return REPORT.preserved(path, reason)
+    write_file(path, content, dry_run)
+    return None
+
+
+# ------------------------------------------------------------------ self-check
+# What a run wrote must parse, run, and resolve. Everything here is deterministic and cheap:
+# in-process compile() for Python, `bash -n` for shell, json/yaml parsers for configs, an
+# exec-bit and a referenced-path probe. `blocking` separates our byte defects from a gap in
+# what the skill ships — the caller fails on the first and only reads the second.
+def _yaml_available() -> bool:
+    """pyyaml is optional: the script's PEP-723 env ships jinja2, so probe, don't assume."""
+    try:
+        import yaml  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _yaml_error(text: str) -> str | None:
+    import yaml
+
+    try:
+        yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        return f"invalid YAML: {str(exc)[:200]}"
+    return None
+
+
+def referenced_path_findings(path: pathlib.Path) -> list[Finding]:
+    """Report `scripts/x.sh` style references that resolve to nothing (non-blocking).
+
+    Resolved against the repo root: the only files that can raise this are generated hooks,
+    workflows and scripts, since scaffold writes no `SKILL.md` of its own.
+    """
+    findings: list[Finding] = []
+    for reference in sorted(set(REFERENCE_RE.findall(path.read_text(encoding="utf-8")))):
+        if not (REPORT.cwd / reference).is_file():
+            findings.append(
+                Finding(
+                    str(path),
+                    f"references absent path {reference!r}",
+                    f"ship {reference} or drop the reference",
+                    blocking=False,
+                )
+            )
+    return findings
+
+
+def self_check(targets: list[pathlib.Path]) -> list[Finding]:
+    """Validate the files a run claims: syntax, parseability, exec bit, referenced paths."""
+    findings: list[Finding] = []
+    yaml_ok = _yaml_available()
+    if not yaml_ok:
+        REPORT.note("NOTE (self-check): pyyaml unavailable — YAML parse skipped")
+    for path in targets:
+        if not path.is_file():
+            continue
+        suffix = path.suffix
+        is_script = suffix == ".sh" or path.name in SCRIPT_NAMES
+        checkable = is_script or suffix in {".py", ".json", ".yml", ".yaml"}
+        if not checkable:
+            continue
+        try:
+            body = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            findings.append(Finding(str(path), f"unreadable: {exc}", "check permissions/encoding"))
+            continue
+        if suffix == ".py":
+            try:
+                compile(body, str(path), "exec")
+            except SyntaxError as exc:
+                findings.append(
+                    Finding(str(path), f"python syntax error: {exc.msg} (line {exc.lineno})")
+                )
+        elif suffix == ".json":
+            try:
+                json.loads(body)
+            except json.JSONDecodeError as exc:
+                findings.append(Finding(str(path), f"invalid JSON: {exc.msg} (line {exc.lineno})"))
+        elif suffix in {".yml", ".yaml"} and yaml_ok:
+            error = _yaml_error(body)
+            if error:
+                findings.append(Finding(str(path), error))
+        if is_script:
+            bash = shutil.which("bash")
+            if bash is None:
+                REPORT.note("NOTE (self-check): bash unavailable — shell syntax skipped")
+            else:
+                proc = subprocess.run(
+                    [bash, "-n", str(path)], capture_output=True, text=True, check=False
+                )
+                if proc.returncode != 0:
+                    findings.append(
+                        Finding(str(path), f"shell syntax error: {proc.stderr.strip()[:200]}")
+                    )
+            if not path.stat().st_mode & 0o111:
+                findings.append(Finding(str(path), "not executable", f"chmod +x {path}"))
+        if is_script or suffix in {".yml", ".yaml"}:
+            findings.extend(referenced_path_findings(path))
+    return findings
+
+
+
 def main() -> int:
+    """Resolve the flags, run the requested flavors, report once, exit with the verdict."""
     ap = argparse.ArgumentParser(description="Deterministic scaffold generator")
     ap.add_argument(
         "--flavor",
@@ -1334,6 +1718,26 @@ def main() -> int:
         help="refresh generated infrastructure in place: project-owned files are preserved and reported as NEXT actions; implies --flavor git when --flavor is omitted",
     )
     ap.add_argument(
+        "--check",
+        action="store_true",
+        help="one-line-per-file drift report for the update plan; exit 1 when the repo has drifted (implies --update --dry-run --summary)",
+    )
+    ap.add_argument(
+        "--summary",
+        action="store_true",
+        help="collapse per-file reporting to one line each instead of diffs/prose",
+    )
+    ap.add_argument(
+        "--self-check",
+        action="store_true",
+        help="also validate the files this run claims (syntax, parse, exec bit, referenced paths); runs automatically after a real write",
+    )
+    ap.add_argument(
+        "--merge-mixed",
+        action="store_true",
+        help="with --update: insert CONTRIBUTING.md template sections that are missing; existing lines are never rewritten",
+    )
+    ap.add_argument(
         "--only",
         default=None,
         help="only scaffold these components (comma-separated, e.g. 'pre-push,releaserc'); default all",
@@ -1352,19 +1756,26 @@ def main() -> int:
     ap.add_argument(
         "--json",
         action="store_true",
-        help="with --detect, emit JSON only (alias, JSON always to stdout)",
+        help="emit the run plan (or the detect census) as JSON instead of prose",
     )
     args = ap.parse_args()
 
     cwd = pathlib.Path(args.cwd).resolve()
     if args.detect:
-        return print_detect(cwd, as_json=True)
-    if args.flavor is None and not args.update:
-        ap.error("--flavor is required unless --update or --detect is used")
+        return print_detect(cwd, as_json=args.json)
+    if args.flavor is None and not (args.update or args.check):
+        ap.error("--flavor is required unless --update, --check or --detect is used")
+    # --check is the read-only projection of --update: same plan, machine-readable verdict.
+    update: bool = args.update or args.check
+    dry_run: bool = args.dry_run or args.check
+    if args.json:
+        mode = JSON_OUT
+    elif args.summary or args.check:
+        mode = SUMMARY
+    else:
+        mode = VERBOSE
     project_name = args.project_name or infer_project_name(cwd)
     flavor: str = args.flavor or "git"
-    update: bool = args.update
-    dry_run: bool = args.dry_run
     with_coverage: bool = args.with_coverage
     threshold: int = args.coverage_threshold
 
@@ -1375,6 +1786,8 @@ def main() -> int:
     if not project_name or not project_name.strip():
         print("error: --project-name is required when cwd has no inferrable name", file=sys.stderr)
         return 2
+
+    REPORT.start(mode, cwd)
 
     # finer granularity: resolve selected components (git/ci)
     git_selected: set[str] | None = None
@@ -1394,25 +1807,58 @@ def main() -> int:
             return 2
     notes: list[str] = []
     if flavor in ("git", "all"):
-        notes += do_git(cwd, project_name, dry_run, selected=git_selected, update=update)
+        notes += do_git(
+            cwd,
+            project_name,
+            dry_run,
+            selected=git_selected,
+            update=update,
+            merge_mixed=args.merge_mixed,
+        )
     if flavor in ("python", "all"):
         notes += do_python(cwd, project_name, dry_run, with_coverage, threshold, update=update)
     if flavor in ("rust", "all"):
         notes += do_rust(cwd, project_name, dry_run, with_coverage, threshold, update=update)
     if flavor in ("typescript", "all"):
         notes += do_typescript(
-            cwd, project_name, dry_run, args.ts_variant, with_coverage, threshold, update=update
+            cwd,
+            project_name,
+            dry_run,
+            args.ts_variant,
+            with_coverage,
+            threshold,
+            update=update,
+            merge_mixed=args.merge_mixed,
         )
     if flavor == "ci":
         do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold, selected=ci_selected)
-    if update:
+
+    # A real write validates itself; a preview validates what it touched when asked.
+    check_targets = REPORT.paths_of({STALE, MISSING, PATCHED, APPENDED})
+    if check_targets and (args.self_check or not dry_run):
+        self_check(check_targets)
+
+    if update and mode == VERBOSE:
         print_next_actions(cwd, notes)
 
-    if dry_run:
+    if mode == SUMMARY:
+        REPORT.render_summary(
+            f"scaffold {'check' if args.check else 'plan'}: {cwd} "
+            f"(flavor {flavor}, {'update' if update else 'scaffold'}"
+            f"{', dry-run' if dry_run else ''})"
+        )
+    if mode == JSON_OUT:
+        print(json.dumps(REPORT.plan(flavor=flavor, update=update, dry_run=dry_run), indent=2, sort_keys=True))
+
+    if dry_run and mode == VERBOSE:
         print(
             "dry-run complete — no files written (warnings on stderr are expected for mixed files)",
             file=sys.stderr,
         )
+    if REPORT.blocking_findings:
+        return 1
+    if args.check and REPORT.drift_entries:
+        return 1
     return 0
 
 

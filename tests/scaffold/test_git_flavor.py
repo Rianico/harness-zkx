@@ -1,22 +1,27 @@
-"""Tests for the git flavor's gh-router projection.
+"""The git flavor's boundary: scaffold ships infrastructure, never another skill's bytes.
 
-Regression: the `pr` subskill was renamed to `pr-land` (breaking) and the
-harness dropped the legacy `TRIGGER:` description pseudo-syntax, but the git
-flavor kept generating the old two-subskill router — a retrofit would have
-deleted `pr-land` and re-introduced a description form `validate-deps` flags.
+Regression this locks down: `_write_gh_router` copied the `gh-router` skill — three subskills,
+their scripts, and embedded fallback literals for repos without the harness — into every
+scaffolded repo. The copy drifted from the harness original (the one found in the wild still
+pointed at `pr-land/scripts/pr.sh` through a path that had moved) and pi already discovers the
+skill from `~/.agents/skills`, so the duplicate bought nothing and cost a second source of
+truth. Scaffold now writes no `skills/` directory at all, and a pre-existing copy is a decision
+for the repo, never a silent refresh or delete.
+
+Flipped intent: this file used to assert that the projection was complete and well-formed.
 """
 
-import importlib.util
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "skills" / "scaffold"
+import importlib.util
+import pathlib
+import sys
+
+SKILL_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "skills" / "scaffold"
 SCRIPT = SKILL_DIR / "scripts" / "scaffold.py"
 
-SUBSKILLS = ["gh-release", "pr-land", "pr-enhance"]
 
-
-def _load(name: str, path: Path):
+def _load(name: str, path: pathlib.Path):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
@@ -28,47 +33,29 @@ def _load(name: str, path: Path):
 scaffold = _load("scaffold_mod_git_flavor", SCRIPT)
 
 
-# --- router projection declares all three subskills ---------------------------
+def test_git_flavor_exposes_no_skill_projection():
+    assert "gh-router" not in scaffold.GIT_COMPONENTS
+    for gone in ("_write_gh_router", "GH_ROUTER_SKILL", "GH_RELEASE_SKILL", "PR_LAND_SKILL"):
+        assert not hasattr(scaffold, gone), gone
 
 
-def test_router_skill_manages_all_subskills():
-    skill = scaffold.GH_ROUTER_SKILL
-    assert "manage: [gh-release, pr-land, pr-enhance]" in skill
-    assert "  pr-land [--watch --merge]" in skill
-    assert "| `pr-land`" in skill
+def test_git_run_writes_no_skills_directory(tmp_path):
+    scaffold.do_git(tmp_path, "demo", dry_run=False)
+
+    assert not (tmp_path / "skills").exists()
 
 
-def test_router_skill_has_no_legacy_trigger_syntax():
-    for skill in (scaffold.GH_ROUTER_SKILL, scaffold.GH_RELEASE_SKILL, scaffold.PR_ENHANCE_SKILL):
-        assert "TRIGGER:" not in skill
+def test_dry_run_does_not_offer_a_skill_projection(tmp_path, capsys):
+    scaffold.do_git(tmp_path, "demo", dry_run=True)
+
+    assert "gh-router" not in capsys.readouterr().out
 
 
-def test_subskill_loop_covers_pr_land():
-    src = SCRIPT.read_text(encoding="utf-8")
-    assert 'for sub in ["gh-release", "pr-land", "pr-enhance"]' in src
+def test_update_leaves_a_vendored_copy_to_the_project(tmp_path):
+    vendored = tmp_path / "skills" / "gh-router"
+    vendored.mkdir(parents=True)
+    (vendored / "SKILL.md").write_text("hand-kept copy\n", encoding="utf-8")
 
+    scaffold.do_git(tmp_path, "demo", dry_run=False, update=True)
 
-def test_pr_land_fallback_is_not_a_dead_link():
-    # non-harness target repos fall back to the embedded stub; the router still
-    # advertises pr-land, so the subskill file must exist
-    assert "name: pr-land" in scaffold.PR_LAND_SKILL
-
-
-# --- generated tree carries pr-land + executable scripts ----------------------
-
-
-def test_write_gh_router_emits_pr_land(tmp_path):
-    scaffold._write_gh_router(tmp_path, dry_run=False)
-    base = tmp_path / "skills" / "gh-router"
-    for sub in SUBSKILLS:
-        assert (base / "subskills" / sub / "SKILL.md").is_file(), sub
-    pr_sh = base / "subskills" / "pr-land" / "scripts" / "pr.sh"
-    assert pr_sh.is_file()
-    assert pr_sh.stat().st_mode & 0o111  # scripts stay executable
-
-
-def test_generated_router_skills_have_no_trigger_syntax(tmp_path):
-    scaffold._write_gh_router(tmp_path, dry_run=False)
-    base = tmp_path / "skills" / "gh-router"
-    for md in [base / "SKILL.md", *(base / "subskills" / sub / "SKILL.md" for sub in SUBSKILLS)]:
-        assert "TRIGGER:" not in md.read_text(encoding="utf-8"), md
+    assert (vendored / "SKILL.md").read_text(encoding="utf-8") == "hand-kept copy\n"
