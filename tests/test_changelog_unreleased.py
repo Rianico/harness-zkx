@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -101,3 +103,15 @@ def test_update_emits_the_same_bullet_style_as_semantic_release(tmp_path: Path) 
     updated = changelog.read_text(encoding="utf-8")
     assert "* **thing:** add a thing" in updated, updated
     assert "- **thing:**" not in updated, updated
+
+
+def test_repo_changelog_pins_md004_to_asterisk() -> None:
+    """This repo's own CHANGELOG.md pins the style it is written in.
+
+    The pin is what keeps pi-lens's markdown fixer from re-normalising the generated
+    sections to `-`; without it any markdown touch rewrites the whole file.
+    """
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    match = re.search(r"markdownlint-configure-file\s*(\{.*?\})\s*-->", changelog, re.DOTALL)
+    assert match is not None, "CHANGELOG.md lost its markdownlint-configure-file pin"
+    assert json.loads(match.group(1))["MD004"]["style"] == "asterisk"

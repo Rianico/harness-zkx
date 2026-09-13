@@ -1,3 +1,7 @@
+<!-- markdownlint-configure-file { "MD004": { "style": "asterisk" } } -->
+<!-- Pin asterisk for this file only: semantic-release writes `*` bullets, so MD004's default
+     `consistent` would rewrite every generated line to `-` on any touch. See .prettierignore. -->
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
