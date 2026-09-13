@@ -124,10 +124,12 @@ def commits_to_sections(commits: list[tuple[str, str]]) -> dict[str, list[str]]:
             if ctype in ("perf",) and breaking:
                 section = "Performance Improvements"
 
-        entry = f"- {m.group('subject').strip()}"
+        # `*` matches @semantic-release/changelog's notes body. Staying consistent keeps
+        # pi-lens's markdown fixer from normalising the generated section on every touch.
+        entry = f"* {m.group('subject').strip()}"
         scope = m.group("scope")
         if scope:
-            entry = f"- **{scope}:** {m.group('subject').strip()}"
+            entry = f"* **{scope}:** {m.group('subject').strip()}"
         if breaking:
             # annotate breaking
             entry += " (BREAKING CHANGE)"

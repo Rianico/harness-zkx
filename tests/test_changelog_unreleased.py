@@ -63,3 +63,41 @@ def test_clear_is_a_noop_without_an_unreleased_section(tmp_path: Path) -> None:
 
     assert _run("clear", "--changelog", str(changelog)).returncode == 0
     assert changelog.read_text(encoding="utf-8") == released_only
+
+
+def test_update_emits_the_same_bullet_style_as_semantic_release(tmp_path: Path) -> None:
+    """Entries use `*`, matching @semantic-release/changelog's notes body.
+
+    A mixed file makes pi-lens's markdown fixer normalise the whole generated section to the
+    style of the first bullet it meets, which rode ~230 lines of churn into unrelated commits.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    changelog = repo / "CHANGELOG.md"
+    _ = changelog.write_text(
+        "# Changelog\n\n## [Unreleased]\n\n## [1.0.0](x) (2026-01-01)\n\n* released\n",
+        encoding="utf-8",
+    )
+    setup: list[list[str]] = [
+        ["init", "-q"],
+        ["config", "user.email", "t@example.invalid"],
+        ["config", "user.name", "t"],
+        ["add", "-A"],
+        ["commit", "-qm", "chore: init"],
+        ["tag", "v1.0.0"],
+        ["commit", "-q", "--allow-empty", "-m", "feat(thing): add a thing"],
+    ]
+    for args in setup:
+        _ = subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "update", "--changelog", str(changelog)],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    updated = changelog.read_text(encoding="utf-8")
+    assert "* **thing:** add a thing" in updated, updated
+    assert "- **thing:**" not in updated, updated
