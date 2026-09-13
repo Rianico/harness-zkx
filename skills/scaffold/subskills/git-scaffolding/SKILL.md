@@ -51,21 +51,24 @@ Updating an existing repo is one command. It replaces every generated file byte-
 uv run $SKILL_DIR/scripts/scaffold.py --update --cwd .              # implies --flavor git
 uv run $SKILL_DIR/scripts/scaffold.py --update --flavor all --dry-run  # preview
 uv run $SKILL_DIR/scripts/scaffold.py --update --flavor python --with-coverage  # language files too
+uv run $SKILL_DIR/scripts/scaffold.py --check --cwd .                # verdict only: drift per file, exit 1 when not in sync
+uv run $SKILL_DIR/scripts/scaffold.py --update --merge-mixed         # also insert missing CONTRIBUTING.md sections
 ```
 
-Ownership is declared in `scaffold.py` (`PROJECT_OWNED`, `FLAVOR_FOREIGN`) — the tool replaces, the model never guesses:
+Ownership is declared in `scaffold.py` (`PROJECT_OWNED`, `SOURCE_OWNED`, `FLAVOR_FOREIGN`) — the tool replaces, the model never guesses:
 
 | Artifact                                                                                                                                                                                                                    | `--update` behaviour                                                 |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `.releaserc.json`, `changelog-check.yml`, `.githooks/pre-push`, `.husky/pre-push`, `scripts/changelog-unreleased.py`, `commitlint.config.js`, `.github/ISSUE_TEMPLATE/*`, `pull_request_template.md`, `skills/gh-router/**` | **replaced** byte-identically                                        |
 | `AGENTS.md`, `.gitignore`, `.config/wt.toml`                                                                                                                                                                                | patched (append-only / dedup, never rewrites)                        |
 | `CHANGELOG.md`, `CONTRIBUTING.md`, `pyproject.toml`, `Cargo.toml`, `package.json`                                                                                                                                           | **preserved** (data / mixed / project manifest)                      |
+| `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts` (TS flavor)                                                                                                                                         | **preserved** — hand-grown source; only a greenfield run writes the skeleton |
 | `.github/workflows/release.yml`                                                                                                                                                                                             | **preserved** in the git flavor — it is the `ci` flavor's projection |
 
 The printed `NEXT` block _is_ the remaining task. Work it in this order:
 
 1. **`release.yml`** — the git flavor ships a Node/pnpm verify job. Re-run detection's variant: `--flavor ci --ci-variant python|rust|node`; confirm `verify` runs the repo's real gate (`.config/wt.toml [pre-merge].gate` is the authority for the same commands).
-2. **`CONTRIBUTING.md`** — mixed file (project name + `## Before PR` toolchain line). Hand-merge the toolchain line from `templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2`; never regenerate it from the git flavor (that writes the pnpm line into a uv/cargo repo).
+2. **`CONTRIBUTING.md`** — mixed file (project name + `## Before PR` toolchain line). The note names the template sections the file is **missing**; add them, or re-run with `--merge-mixed` to insert exactly those sections (existing lines are never rewritten). Merge prose from `templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2`; never regenerate it from the git flavor (that writes the pnpm line into a uv/cargo repo).
 3. **`CHANGELOG.md`** — data, not projection. Nothing to do; `@semantic-release/changelog` owns versioned sections.
 4. **Manifests** (`pyproject.toml`, `Cargo.toml`, `package.json`) — regenerate only when the gate or deps changed, deliberately, with the language flavor + `--with-coverage`.
 5. **Language-variant files** — `--only`/`--without`/`--components` select git components only; language flavors write their whole file set. To refresh one language file, re-run that flavor deliberately, or edit its template under `$SKILL_DIR/templates/` — raw templates are pinned by file hash, `.j2` templates by rendered-output hash (both in `tests/scaffold/test_templates.py`); re-pin only when the byte change is intended.
@@ -99,6 +102,8 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 - `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update` via `.githooks/pre-push` + `.husky/pre-push` delegation) and `changelog-check.yml` (`pull_request` required); `release.yml` (`release` job) runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections (`@semantic-release/changelog` + `@semantic-release/npm` (`npmPublish: false` by default) + `@semantic-release/git`). Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type (`docs:` etc.) re-triggers the guard and loops forever. Bullets are `*`; the file's MD004 pin rewrites any other style on the next markdown touch.
 - `wt` worktrees: if `.config/wt.toml` exists, `scaffold` ensures `[post-start] setup-hooks = "git config core.hooksPath .githooks"` so `wt switch --create` clones get live pre-push without manual `git config`.
 - `@semantic-release/git` bumps `package.json` + `CHANGELOG.md` + commits + tags atomically; no manual `git tag` or manifest bump.
+- `.releaserc.json` release assets follow the repo, not the flavor: `pnpm-lock.yaml` when the repo declares pnpm (`pnpm-lock.yaml`, `pnpm-workspace.yaml` or `packageManager: pnpm`), else the template's `package-lock.json`. The swap is resolved before the write, so `--check` stays clean on a pnpm repo.
+- `--check` is the CI-shaped projection of `--update` (`--update --dry-run --summary`, exit 1 on drift) and `--self-check` validates what a run wrote (syntax, parse, exec bit, `scripts/…` references) — it runs automatically after a real write, because a generated workflow or hook that does not parse is a defect worth failing on.
 - For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`.
 
 ## References
