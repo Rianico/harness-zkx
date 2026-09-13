@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **scaffold:** report the run plan and self-check written output (#23)
 * **gh-router:** diagnostic scripts, changelog sync, and an exit-code fix (#21)
 * **scaffold:** add --update mode and extract static templates (#20)
 
