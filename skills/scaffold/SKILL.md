@@ -324,7 +324,7 @@ Every run reports once, in the mode the flags select. `--summary`/`--check` coll
 | `--self-check` | validate claimed files: `compile()` for `.py`, `bash -n` for shell/hooks, JSON/YAML parse, exec bit, and `scripts/…` references resolved; **runs automatically after a real write** |
 | `--merge-mixed` | insert the `## ` sections a preserved `CONTRIBUTING.md` is missing (never rewrites an existing line) |
 
-`--detect` now also returns `findings[]` (`area`, `detail`, `remedy`) naming stale changelog, missing PR template, a pnpm/npm lockfile mismatch, and router scripts that are referenced but absent — each with the command that fixes it. Blocking findings exit 1; a dangling reference only warns (it is a gap in what the skill ships, not in the target repo).
+`--detect` now also returns `findings[]` (`area`, `detail`, `remedy`) naming stale changelog, missing PR template, a pnpm/npm lockfile mismatch, and a vendored copy of a sibling skill — each with the command that fixes it. Blocking findings exit 1; a dangling reference only warns (it is a gap in what the skill ships, not in the target repo).
 
 - **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`.
 - **Mixed** (script writes skeleton + warns on stderr → proofread): `CONTRIBUTING.md` (`{{project_name}}` + Before PR line), `pyproject.toml`/`Cargo.toml` (name/description/edition; with `--with-coverage` also `fail_under`), `AGENTS.md` patch (keep 3 sections, verify pointer wording).

@@ -5,8 +5,8 @@ Each block locks down a defect that used to be invisible:
 
 - `--update --dry-run` reprinted unified diffs a caller had to grep; `--check` answers the same
   question in one line per file plus an exit code.
-- The generated router documented `scripts/state.sh|ci.sh|changelog.sh`, which the generator
-  never shipped — a gap between two files, so no single-file test caught it.
+- Scaffold vendored the sibling `gh-router` skill into every target repo, so the copy drifted
+  from the harness original — the defect was the projection, not the completeness of the copy.
 - `patch_releaserc_lockfile` was only reachable through the TypeScript flavor, so a pnpm repo
   refreshed with `--update` silently regained `package-lock.json` in its release assets.
 - `do_typescript` wrote `src/index.ts` / `tests/index.test.ts` unconditionally, so
@@ -172,14 +172,17 @@ def test_self_check_flags_a_shell_syntax_error(tmp_path):
     assert any("shell syntax error" in f.detail for f in findings)
 
 
+
 def test_self_check_reports_dangling_reference_without_failing(tmp_path):
-    skill = tmp_path / "skills" / "gh-router" / "SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text("| run | `scripts/ghost.sh` |\n", encoding="utf-8")
+    hook = tmp_path / ".githooks" / "pre-push"
+    hook.parent.mkdir(parents=True)
+    hook.write_text("#!/bin/sh\npython3 scripts/ghost.py\n", encoding="utf-8")
+    hook.chmod(0o755)
+    scaffold.REPORT.start(scaffold.VERBOSE, tmp_path)
 
-    findings = scaffold.self_check([skill])
+    findings = scaffold.self_check([hook])
 
-    assert [f.detail for f in findings] == ["references absent path 'scripts/ghost.sh'"]
+    assert [f.detail for f in findings] == ["references absent path 'scripts/ghost.py'"]
     assert not any(f.blocking for f in findings)
 
 
@@ -192,14 +195,7 @@ def test_self_check_resolves_router_references_under_subskills(tmp_path):
     assert scaffold.self_check([root / "SKILL.md"]) == []
 
 
-def test_self_check_accepts_a_generated_router(tmp_path):
-    scaffold._write_gh_router(tmp_path, dry_run=False)
-    router = tmp_path / "skills" / "gh-router" / "SKILL.md"
 
-    assert scaffold.self_check([router]) == []
-
-
-# --- ownership: pnpm asset, hand-grown source, shipped router scripts -----------
 
 
 def test_pnpm_repo_gets_the_pnpm_lockfile_asset(tmp_path):
@@ -276,16 +272,6 @@ def test_greenfield_typescript_run_still_ships_the_skeleton(tmp_path):
     assert (tmp_path / "tests" / "index.test.ts").read_text(encoding="utf-8") == (
         scaffold.INDEX_TEST_TS
     )
-
-
-def test_router_ships_the_scripts_its_table_names(tmp_path):
-    scaffold._write_gh_router(tmp_path, dry_run=False)
-    scripts = tmp_path / "skills" / "gh-router" / "scripts"
-
-    for name in ("state.sh", "ci.sh", "changelog.sh"):
-        path = scripts / name
-        assert path.is_file(), name
-        assert path.stat().st_mode & 0o111, f"{name} must stay executable"
 
 
 # --- mixed files: name the gap, then merge it only when asked ------------------
@@ -385,17 +371,18 @@ def test_detect_census_counts_the_pr_template(tmp_path):
     assert data["files"][".github/pull_request_template.md"] is False
 
 
-def test_detect_accepts_router_references_under_subskills(tmp_path):
-    """Regression: detect scanned only the router root, so `subskills/...` looked dangling."""
-    root = tmp_path / "skills" / "gh-router"
-    (root / "subskills" / "gh-release" / "scripts").mkdir(parents=True)
-    found = root / "subskills" / "gh-release" / "scripts" / "check.sh"
-    found.write_text("#!/bin/sh\n", encoding="utf-8")
-    (root / "SKILL.md").write_text("| check | `gh-release/scripts/check.sh` |\n", encoding="utf-8")
 
-    areas = {f["area"] for f in scaffold.detect_project(tmp_path)["findings"]}
+def test_detect_reports_a_vendored_sibling_skill(tmp_path):
+    """A copy scaffold did not write, and must not delete: report it as a decision."""
+    vendored = tmp_path / "skills" / "gh-router"
+    vendored.mkdir(parents=True)
+    (vendored / "SKILL.md").write_text("---\nname: gh-router\n---\n", encoding="utf-8")
 
-    assert "skills/gh-router/SKILL.md" not in areas
+    findings = scaffold.detect_project(tmp_path)["findings"]
+    finding = next(f for f in findings if f["area"] == "skills/gh-router")
+
+    assert "no longer manages" in finding["detail"]
+    assert "git rm -r skills/gh-router" in finding["remedy"]
 
 
 def test_detect_json_drops_the_human_summary(tmp_path, capsys):

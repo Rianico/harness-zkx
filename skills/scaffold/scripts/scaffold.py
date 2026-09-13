@@ -173,7 +173,6 @@ GIT_COMPONENTS: set[str] = {
     "pr-template",  # .github/pull_request_template.md
     "contributing",  # CONTRIBUTING.md
     "agents",  # AGENTS.md patch
-    "gh-router",  # skills/gh-router
     "gitignore",  # .gitignore append
 }
 
@@ -584,161 +583,6 @@ CI_RUNTIMES: dict[str, str] = {
     "python": "ci/runtimes/python.yml.j2",
     "rust": "ci/runtimes/rust.yml.j2",
 }
-GH_ROUTER_SKILL_PATH = pathlib.Path(__file__).parent.parent.joinpath("..", "gh-router", "SKILL.md")
-GH_ROUTER_SKILL = (
-    GH_ROUTER_SKILL_PATH.read_text(encoding="utf-8")
-    if GH_ROUTER_SKILL_PATH.exists()
-    else """---
-name: gh-router
-description: >-
-  GitHub workflow router \u2014 release via dispatch, PR enhancement, and PR create/watch/merge. Use when releasing, dispatching semantic-release, submitting or refining PRs, or creating/merging PRs via gh api.
-argument-hint: |-
-  gh-release [--dry-run] -- changelog and publish via dispatch
-  pr-enhance [base|pr_url] -- PR description generation
-  pr-land [--watch --merge] -- create PR, watch checks, squash-merge
-metadata:
-  manage: [gh-release, pr-land, pr-enhance]
----
-
-# GH Router
-
-GitHub workflow router. Model-invocable \u2014 dispatches to `gh-release`, `pr-land`, or `pr-enhance` via subskill load.
-
-## Subskills
-
-| Subskill | Trigger |
-|----------|---------|
-| `gh-release` | `release`, dispatch semantic-release |
-| `pr-enhance` | `submit PR`, `refine PR` |
-| `pr-land` | `pr create`, `pr watch`, `pr merge`, `squash merge` |
-
-Load via `Read $SKILL_DIR/subskills/<name>/SKILL.md`.
-"""
-)
-
-GH_RELEASE_SKILL = (
-    pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "gh-release", "SKILL.md")
-    .read_text(encoding="utf-8")
-    if pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "gh-release", "SKILL.md")
-    .exists()
-    else """---
-name: gh-release
-description: >-
-  Release dispatch via semantic-release. Validates conventional commits and runs verification. Use when dispatching releases, publishing packages, or running dry-run release checks.
-argument-hint: |-
-  "[--dry-run] -- dispatch semantic-release (dry-run previews version)"
-metadata:
-  managed-by: gh-router
----
-
-# GH Release
-
-Dispatch semantic-release from `main` — version from `feat`/`fix`/`!` since last tag.
-"""
-)
-
-PR_ENHANCE_SKILL = (
-    pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-enhance", "SKILL.md")
-    .read_text(encoding="utf-8")
-    if pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-enhance", "SKILL.md")
-    .exists()
-    else """---
-name: pr-enhance
-description: >-
-  Pull Request optimization expert. Generates comprehensive PR descriptions, diagrams, and checklists based on git diff analysis. Use when submitting a PR or refining a PR description.
-arguments: base_or_pr
-argument-hint: |-
-  "[base|pr_url] -- base branch or PR URL"
-metadata:
-  managed-by: gh-router
----
-
-# PR Enhance
-
-See gh-router.
-"""
-)
-
-PR_LAND_SKILL = (
-    pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-land", "SKILL.md")
-    .read_text(encoding="utf-8")
-    if pathlib.Path(__file__)
-    .parent.parent.joinpath("..", "gh-router", "subskills", "pr-land", "SKILL.md")
-    .exists()
-    else """---
-name: pr-land
-description: >-
-  Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
-arguments: title_or_branch
-argument-hint: |-
-  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge] [--draft]"
-metadata:
-  managed-by: gh-router
----
-
-# PR — Create → Watch → Squash-Merge
-
-See gh-router. The harness ships `subskills/pr-land/scripts/pr.sh`; copy it from the harness when driving the loop deterministically.
-"""
-)
-
-
-def _write_gh_router(cwd: pathlib.Path, dry_run: bool) -> None:
-    # Deterministic gh-router skill with subskills — mirrors current harness
-    base = cwd / "skills" / "gh-router"
-    write_file(base / "SKILL.md", GH_ROUTER_SKILL, dry_run)
-    # Use current harness files as source if available, else fallback to embedded
-    embedded = {
-        "gh-release": GH_RELEASE_SKILL,
-        "pr-land": PR_LAND_SKILL,
-        "pr-enhance": PR_ENHANCE_SKILL,
-    }
-    for sub in ["gh-release", "pr-land", "pr-enhance"]:
-        sub_src = pathlib.Path(__file__).parent.parent.parent / "gh-router" / "subskills" / sub
-        skill = sub_src / "SKILL.md"
-        # fallback to embedded already handled
-        if skill.exists():
-            write_file(
-                base / "subskills" / sub / "SKILL.md", skill.read_text(encoding="utf-8"), dry_run
-            )
-        else:
-            content = embedded.get(sub, "")
-            if content.strip():
-                write_file(base / "subskills" / sub / "SKILL.md", content, dry_run)
-        # Scripts (check/verify/dispatch for gh-release, pr for pr-land, analyze for pr-enhance)
-        scripts = sub_src / "scripts"
-        if not scripts.exists():
-            continue
-        for p in scripts.iterdir():
-            if p.is_file():
-                try:
-                    dst = base / "subskills" / sub / "scripts" / p.name
-                    write_file(dst, p.read_text(encoding="utf-8"), dry_run)
-                    if not dry_run:
-                        dst.chmod(0o755)
-                except Exception:
-                    pass
-    # Top-level scripts: the generated router's table points at `scripts/state.sh`,
-    # `scripts/ci.sh` and `scripts/changelog.sh`. Shipping the table without them leaves a
-    # generated skill that cannot run anything — and no test caught it because the gap is
-    # between two files. Copied from the same source as the subskill scripts.
-    harness_scripts = pathlib.Path(__file__).parent.parent.parent / "gh-router" / "scripts"
-    if harness_scripts.is_dir():
-        for script in sorted(harness_scripts.iterdir()):
-            if not script.is_file():
-                continue
-            try:
-                dst = base / "scripts" / script.name
-                write_file(dst, script.read_text(encoding="utf-8"), dry_run)
-                if not dry_run:
-                    dst.chmod(0o755)
-            except Exception:
-                pass
 
 
 def infer_project_name(cwd: pathlib.Path) -> str:
@@ -1062,8 +906,6 @@ def do_git(
             "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
             dry_run,
         )
-    if "gh-router" in sel:
-        _write_gh_router(cwd, dry_run)
     if "pre-push" in sel:
         patch_wt_hooks(cwd, dry_run)
     return notes
@@ -1475,23 +1317,17 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             "release assets name package-lock.json but the repo declares pnpm",
             f"uv run {scaffold_root}/scripts/scaffold.py --update",
         )
-    router_skill = cwd / "skills" / "gh-router" / "SKILL.md"
-    if router_skill.exists():
-        dangling = sorted(
-            {
-                reference
-                for reference in REFERENCE_RE.findall(router_skill.read_text(encoding="utf-8"))
-                if not any(
-                    (root / reference).is_file() for root in reference_roots(router_skill)
-                )
-            }
+    vendored_skill = cwd / "skills" / "gh-router"
+    if vendored_skill.exists():
+        # A sibling skill copied into a repo is a duplicate that drifts from the harness
+        # original; scaffold no longer writes it, and must not delete it either (it may be
+        # project content). Report the decision instead of guessing it.
+        finding(
+            "skills/gh-router",
+            "vendored copy of a harness skill — scaffold no longer manages this path",
+            "git rm -r skills/gh-router (pi discovers gh-router from ~/.agents/skills), "
+            "or keep it as project content",
         )
-        if dangling:
-            finding(
-                "skills/gh-router/SKILL.md",
-                f"references absent scripts: {', '.join(dangling)}",
-                f"uv run {scaffold_root}/scripts/scaffold.py --update --only gh-router",
-            )
 
     result: dict[str, object] = {
         "cwd": str(cwd),
@@ -1604,8 +1440,8 @@ def print_next_actions(cwd: pathlib.Path, notes: list[str]) -> None:
 # existing line is touched, so a human still proofreads prose instead of the tool rewriting it.
 SECTION_RE = re.compile(r"^## (?!#)(.+)$", re.MULTILINE)
 
-# `scripts/…` references a generated file must resolve — the router table is useless if the
-# scripts it names are absent, and that gap survives review because it lives across files.
+# `scripts/…` references a generated file must resolve: a hook or workflow that names a script
+# nobody ships fails at the worst moment, and the gap survives review because it spans files.
 REFERENCE_RE = re.compile(r"(?:[\w.-]+/)*scripts/[\w.-]+\.(?:sh|py)")
 
 SCRIPT_NAMES = {"pre-push", "pre-commit", "pre-merge-commit", "commit-msg", "post-commit"}
@@ -1758,28 +1594,15 @@ def _yaml_error(text: str) -> str | None:
     return None
 
 
-def reference_roots(path: pathlib.Path) -> list[pathlib.Path]:
-    """Where a file's relative `scripts/…` references resolve from.
-
-    A subskill's SKILL.md talks about its own directory *and* the skill root; a hook or a
-    workflow talks about the repo root.
-    """
-    if path.name == "SKILL.md":
-        roots = [path.parent]
-        if path.parent.parent.name == "subskills":
-            roots.append(path.parent.parent.parent)
-        # A router doc names scripts under its own `subskills/` too.
-        roots.extend(root / "subskills" for root in list(roots))
-        return roots
-    return [REPORT.cwd]
-
-
 def referenced_path_findings(path: pathlib.Path) -> list[Finding]:
-    """Report `scripts/x.sh` style references that resolve to nothing (non-blocking)."""
+    """Report `scripts/x.sh` style references that resolve to nothing (non-blocking).
+
+    Resolved against the repo root: the only files that can raise this are generated hooks,
+    workflows and scripts, since scaffold writes no `SKILL.md` of its own.
+    """
     findings: list[Finding] = []
-    roots = reference_roots(path)
     for reference in sorted(set(REFERENCE_RE.findall(path.read_text(encoding="utf-8")))):
-        if not any((root / reference).is_file() for root in roots):
+        if not (REPORT.cwd / reference).is_file():
             findings.append(
                 Finding(
                     str(path),
@@ -1802,7 +1625,7 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
             continue
         suffix = path.suffix
         is_script = suffix == ".sh" or path.name in SCRIPT_NAMES
-        checkable = is_script or suffix in {".py", ".json", ".yml", ".yaml"} or path.name == "SKILL.md"
+        checkable = is_script or suffix in {".py", ".json", ".yml", ".yaml"}
         if not checkable:
             continue
         try:
@@ -1840,7 +1663,7 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
                     )
             if not path.stat().st_mode & 0o111:
                 findings.append(Finding(str(path), "not executable", f"chmod +x {path}"))
-        if path.name == "SKILL.md" or is_script or suffix in {".yml", ".yaml"}:
+        if is_script or suffix in {".yml", ".yaml"}:
             findings.extend(referenced_path_findings(path))
     return findings
 
