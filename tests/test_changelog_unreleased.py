@@ -42,7 +42,7 @@ def test_clear_empties_the_block_but_keeps_its_heading(tmp_path: Path) -> None:
     CHANGELOG.md starting with `## [2.0.0]` and the `# Changelog` title stranded at the bottom.
     """
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text(RELEASED_CHANGELOG, encoding="utf-8")
+    _ = changelog.write_text(RELEASED_CHANGELOG, encoding="utf-8")
 
     result = _run("clear", "--changelog", str(changelog))
 
@@ -59,7 +59,7 @@ def test_clear_is_a_noop_without_an_unreleased_section(tmp_path: Path) -> None:
     """Nothing to clear: `clear` reports no change rather than rewriting the file."""
     changelog = tmp_path / "CHANGELOG.md"
     released_only = "# Changelog\n\n## [1.0.0](x) (2026-01-01)\n\n- done\n"
-    changelog.write_text(released_only, encoding="utf-8")
+    _ = changelog.write_text(released_only, encoding="utf-8")
 
     assert _run("clear", "--changelog", str(changelog)).returncode == 0
     assert changelog.read_text(encoding="utf-8") == released_only
