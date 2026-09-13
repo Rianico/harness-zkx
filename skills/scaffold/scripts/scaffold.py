@@ -41,17 +41,19 @@ from dataclasses import asdict, dataclass
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
-# Pinned GH Actions SHAs for Node 24 (single source) — keep in sync with .github/workflows/*.yml
+# Pinned GH Actions SHAs (single source) — every entry runs on node24, and the same table is
+# asserted against .github/workflows/*.yml by tests/scaffold/test_templates.py.
 SHA_TABLE = {
-    "checkout": "93cb6efe18208431cddfb8368fd83d5badbf9bfd",  # actions/checkout v5
-    "setup-node": "a0853c24544627f65ddf259abe73b1d18a591444",  # actions/setup-node v5
-    "setup-python": "e797f83bcb11b83ae66e0230d6156d7c80228e7c",  # actions/setup-python v6
-    "github-script": "ed597411d8f924073f98dfc5c65a23a2325f34cd",  # actions/github-script v8
-    "pnpm-setup": "b906affcce14559ad1aafd4ab0e942779e9f58b1",  # pnpm/action-setup v4
+    "checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",  # actions/checkout v7.0.1
+    "setup-node": "820762786026740c76f36085b0efc47a31fe5020",  # actions/setup-node v7.0.0
+    "setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",  # actions/setup-python v7.0.0
+    "github-script": "3a2844b7e9c422d3c10d287c895573f7108da1b3",  # actions/github-script v9.0.0
+    "pnpm-setup": "ea17c68df8912ef543352723c149a84f56e3d413",  # pnpm/action-setup v6.1.0
     "rust-cache": "6323deb102c322ba6fcbdcafc7e3dddab59af2b6",  # Swatinem/rust-cache v2.9.2
+    "setup-uv": "bec219d24cd3e171d82865faccec33120bb574f4",  # astral-sh/setup-uv v10.1.0
 }
 
-NODE_VERSION_NUM = "24"
+NODE_VERSION_NUM = "26"
 NODE_VERSION = NODE_VERSION_NUM + "\n"
 
 # Formatter contract — the pinned formatter owns every byte it can reach.
@@ -508,7 +510,7 @@ PYTHON_VERSION = "3.14\n"
 
 
 def build_pyproject(project_name: str, with_coverage: bool, threshold: int) -> str:
-    cov_deps = ', "pytest-cov>=5"' if with_coverage else ""
+    cov_deps = ', "pytest-cov>=7"' if with_coverage else ""
     cov_section = ""
     if with_coverage:
         cov_section = f"""
@@ -529,7 +531,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.11", "basedpyright>=1.30"{cov_deps}]
+dev = ["pytest>=9", "ruff>=0.16", "basedpyright>=1.40"{cov_deps}]
 
 [tool.ruff]
 line-length = 100
@@ -561,28 +563,31 @@ def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) 
         "oxlint": ">=1",
         "oxfmt": OXFMT_VERSION,
         "vite": ">=8",
-        "vitest": ">=4",
+        "vitest": ">=5",
         "tsx": ">=4",
-        "@types/node": ">=24",
+        "@types/node": ">=26",
         "@semantic-release/changelog": ">=7",
         "@semantic-release/commit-analyzer": ">=13",
         "@semantic-release/git": ">=11",
         "@semantic-release/github": ">=12",
         "@semantic-release/npm": ">=13",
         "@semantic-release/release-notes-generator": ">=14",
-        "conventional-changelog-conventionalcommits": ">=8",
+        # NOT the latest major: v10 needs conventional-changelog-writer@9+, and
+        # @semantic-release/release-notes-generator@14 still loads writer 8.4.0 — the
+        # release job then dies at the notes step. v9 is the newest major that renders.
+        "conventional-changelog-conventionalcommits": ">=9 <10",
         "semantic-release": ">=25",
     }
     if with_coverage:
         scripts["coverage"] = "vitest run --coverage"
-        dev_deps["@vitest/coverage-v8"] = ">=3"
+        dev_deps["@vitest/coverage-v8"] = ">=5"
     pkg: dict[str, object] = {
         "name": npm_name,
         "version": "0.1.0",
         "description": "",
         "type": "module",
-        "packageManager": "pnpm@12.0.0",
-        "engines": {"node": ">=24"},
+        "packageManager": "pnpm@12.4.1",
+        "engines": {"node": ">=26"},
         "scripts": scripts,
         "devDependencies": dev_deps,
     }
@@ -1177,7 +1182,7 @@ def do_typescript(
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
-        "### Runtime\nTypeScript: pnpm v12 + .nvmrc (24) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json\n",
+        "### Runtime\nTypeScript: pnpm v12 + .nvmrc (26) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json\n",
         dry_run,
     )
     contrib_ts = render_template("shared/CONTRIBUTING.typescript.md.j2", project_name=project_name)

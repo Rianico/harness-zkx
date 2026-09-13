@@ -110,7 +110,7 @@ RAW_SHA256: dict[str, str] = {
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
     "git/.github/ISSUE_TEMPLATE/config.yml": "c1af6fc67ffa59cb4c87561165267bbd7e7b8d7a1763a61c7a4ff065e5cff59e",
     "git/.github/pull_request_template.md": "d3d2216b8fd2e58f6e8de255ca9f20050916d2eb93c808989b3716e24e320c85",
-    "git/.github/workflows/changelog-check.yml": "36bc35ccb97a5f95a698e3ca0a12afbc3a0ad2c466a01e224d4dcc2b5647dbd3",
+    "git/.github/workflows/changelog-check.yml": "bcc24d5a39359a2e2bac26039d172568bbd7c47f5dd6f9ad497d7d2a29419c7d",
     "git/.husky/pre-push": "4c08b6fe2b024a878970f2a74f22426460474d34d5d6a4f9115d1c2f3b62559f",
     "git/.releaserc.json": "8e4a562913c3c8276f6689046d5b92c862ffa79d5b08c04b284eea75e0c3570f",
     "git/CHANGELOG.md": "4606d1eff8d1e321a97fed364c36aeceb037dc8bdfcbb8bf099c9d5621e41a6a",
@@ -129,13 +129,13 @@ RENDERED_SHA256: dict[str, str] = {
     "CONTRIBUTING.default (project_name=demo)": "3af4b4bbb29406a678a01bfc8cceadf576577db747680a7c4b0f8451451c2357",
     "CONTRIBUTING.python (project_name=demo)": "cc3105b590d9b9e6ee644bc72cf849d219f368effa4124f3ab8e526bce029a16",
     "CONTRIBUTING.typescript (project_name=demo)": "31dafc569c65f1dbca8137fce61b5ef168c83226cd271a6d74e2c73d0aa0417f",
-    "ci/release.yml[node+coverage]": "e3b1190fae6ccade3d0f35bc3ed3cbf79e6ba8cba90907fc8f23c9080f38bb97",
-    "ci/release.yml[node]": "efbb1c3028b8776dcf76d9e1f6a68a8d834ad7dc4a82b8469b3c63f0b8590aa7",
-    "ci/release.yml[python+coverage]": "11961e8a3fb773819d75ce1e4c6067f4a04a13337253171d8b53d184a8b559c3",
-    "ci/release.yml[python]": "f63a0a876b5f9b3ee215b07bf84d16411ffb70dc85e8abf56ca01465d8a5b867",
-    "ci/release.yml[rust+coverage]": "95d7d95bb89369f5eeec1b9fa2b5158427a450d4709ce5d4b219c0ea400a0fac",
-    "ci/release.yml[rust]": "f1cf3b306312f9235d99616a47dca9472429f3827601822d5829fbe42c9fae1d",
-    "rust/Cargo.toml (project_name=demo-cli)": "68e139adfc750f33851fe0778d8bdf199b37c23a8d2aee147c39d63d4fc4cc0c",
+    "ci/release.yml[node+coverage]": "b37876cb68397f28f18fd72d5f7c9b01cba5904ec274ef0871f825c7b9101162",
+    "ci/release.yml[node]": "cc378280f3ceb3cec4d888176d2a907686a9e6646ca9398a878ddb3482f3fe78",
+    "ci/release.yml[python+coverage]": "8bc7d287419260537a0eaeeb4f48bccc4db41edbe2763da4768e67d5f7d3d9f5",
+    "ci/release.yml[python]": "cb56fa0d7da0c2d1b99e6772501f34baa5b3920fb67ac5b594c3502031c50f80",
+    "ci/release.yml[rust+coverage]": "2807a5f8adc7b0c0f042cbb66b3beafb6767b8991086dc89958e4ff0e369b6f4",
+    "ci/release.yml[rust]": "ad12437b536a3cd6b8477578c856f5a423c1f19e086a5919ae71997f49a45a5e",
+    "rust/Cargo.toml (project_name=demo-cli)": "506eabda9eef1b9f5bf528259059d3d866aa0dc3bd538d83174602f9e9f0d047",
     "typescript/src/index.ts (project_name=demo)": "dd66d9df929a39c2e17a8b6609c030e03b6d247d7dee0b22649654633708410f",
     "typescript/vitest.config.ts (threshold=75)": "a175e6b0d7402032010f980086249c89968a5b393575f084126fd1645911b586",
 }
@@ -298,3 +298,43 @@ def test_ci_runtime_registry_drives_the_cli_choices():
     assert parser_choices.group(1).strip() == "list(CI_RUNTIMES)"
     for variant in scaffold.CI_RUNTIMES:
         assert (TEMPLATES / scaffold.CI_RUNTIMES[variant]).is_file(), variant
+
+
+# --- action pins ----------------------------------------------------------------
+
+# Which SHA_TABLE entry each action must use. The table is the single source, but the raw git
+# template and this repo's own workflows are hand-maintained, so nothing else stops them from
+# drifting behind it — and they did: four of six pins sat two majors back before this test.
+ACTION_TO_TABLE_KEY = {
+    "actions/checkout": "checkout",
+    "actions/setup-node": "setup-node",
+    "actions/setup-python": "setup-python",
+    "actions/github-script": "github-script",
+    "pnpm/action-setup": "pnpm-setup",
+    "Swatinem/rust-cache": "rust-cache",
+    "astral-sh/setup-uv": "setup-uv",
+}
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _pinned_actions(text: str) -> dict[str, str]:
+    """`uses: owner/action@<40-hex>` pairs; a floating ref (`@stable`) is not a pin."""
+    return dict(re.findall(r"uses:\s*(\S+?)@([0-9a-f]{40})\b", text))
+
+
+def test_action_pins_match_the_sha_table():
+    sources = [TEMPLATES / "git/.github/workflows/changelog-check.yml"]
+    sources += sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    seen: set[str] = set()
+    for path in sources:
+        for action, sha in _pinned_actions(path.read_text(encoding="utf-8")).items():
+            key = ACTION_TO_TABLE_KEY.get(action)
+            assert key, f"{path.name}: {action} is pinned but has no SHA_TABLE entry"
+            assert sha == scaffold.SHA_TABLE[key], (
+                f"{path.name}: {action} pinned to {sha}, yet SHA_TABLE[{key!r}] is "
+                f"{scaffold.SHA_TABLE[key]} — bump the table, never the caller"
+            )
+            seen.add(key)
+    assert seen, "expected at least one SHA-pinned action"
+    assert {"checkout", "setup-uv"} <= seen, f"workflows stopped pinning: {sorted(seen)}"

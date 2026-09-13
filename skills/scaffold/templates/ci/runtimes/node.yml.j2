@@ -1,10 +1,10 @@
 {% extends "ci/release.yml.j2" %}
 {% block verify %}
-      - uses: actions/checkout@{{ shas.checkout }} # v5
+      - uses: actions/checkout@{{ shas.checkout }} # v7.0.1
         with: {fetch-depth: 0}
-      - uses: pnpm/action-setup@{{ shas['pnpm-setup'] }} # v4
+      - uses: pnpm/action-setup@{{ shas['pnpm-setup'] }} # v6.1.0
         with: {run_install: false}
-      - uses: actions/setup-node@{{ shas['setup-node'] }} # v5  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@{{ shas['setup-node'] }} # v7.0.0  # zizmor: ignore[cache-poisoning]
         with: {node-version: {{ node_version }}, cache: pnpm}
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm audit --audit-level high
@@ -15,14 +15,14 @@
 {% endif %}
 {% endblock %}
 {% block release %}
-      - uses: actions/checkout@{{ shas.checkout }} # v5
+      - uses: actions/checkout@{{ shas.checkout }} # v7.0.1
         with: {fetch-depth: 0}
-      - uses: pnpm/action-setup@{{ shas['pnpm-setup'] }} # v4
+      - uses: pnpm/action-setup@{{ shas['pnpm-setup'] }} # v6.1.0
         with: {run_install: false}
-      - uses: actions/setup-node@{{ shas['setup-node'] }} # v5  # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-node@{{ shas['setup-node'] }} # v7.0.0  # zizmor: ignore[cache-poisoning]
         with: {node-version: {{ node_version }}, cache: pnpm}
-      - uses: actions/setup-python@{{ shas['setup-python'] }} # v6
-        with: {python-version: "3.12"}
+      - uses: actions/setup-python@{{ shas['setup-python'] }} # v7.0.0
+        with: {python-version: "3.14"}
       - name: Clear Unreleased section (handoff to semantic-release)
         run: python scripts/changelog-unreleased.py clear
       - run: pnpm install --no-frozen-lockfile

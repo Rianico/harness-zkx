@@ -38,8 +38,8 @@ def test_lib_variant_fields():
     pkg = json.loads(scaffold.build_package_json("demo-lib", "lib", False))
     assert pkg["name"] == "demo-lib"
     assert pkg["type"] == "module"
-    assert pkg["packageManager"] == "pnpm@12.0.0"
-    assert pkg["engines"] == {"node": ">=24"}
+    assert pkg["packageManager"] == "pnpm@12.4.1"
+    assert pkg["engines"] == {"node": ">=26"}
     assert pkg["main"] == "./src/index.ts"
     assert pkg["exports"] == {".": "./src/index.ts"}
     assert "bin" not in pkg and "pi" not in pkg
@@ -156,12 +156,12 @@ def test_generate_then_detect(tmp_path):
 # --- shared-spine guards ----------------------------------------------------
 
 
-def test_node_ci_variant_is_pnpm_on_24():
+def test_node_ci_variant_is_pnpm_on_the_declared_runtime():
     release_yml = scaffold.render_ci_release(
         "node", with_coverage=False, threshold=scaffold.DEFAULT_COVERAGE_THRESHOLD
     )
-    assert "node-version: 24" in release_yml
-    assert "node-version: 22" not in release_yml
+    assert f"node-version: {scaffold.NODE_VERSION_NUM}" in release_yml
+    assert "node-version: 24" not in release_yml
     assert "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test" in release_yml
     assert "npm ci" not in release_yml
 
