@@ -44,3 +44,12 @@ ignore = ["E501", "B007", "B023", "E741"]
 # pyrightconfig.json and ignores this file, so a section here is silently dead when the repo
 # sits inside a parent project that has one. Keep the gate's config where it is actually found.
 
+[tool.uv]
+# uv.lock records the index and the artifact URLs per package, so a machine-local mirror in the
+# global uv config (Aliyun here) would make every CI runner fetch every wheel - and the managed
+# CPython - from `mirrors.aliyun.com` over plain HTTP. Pin the canonical index for this repo.
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
