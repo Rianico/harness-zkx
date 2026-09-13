@@ -232,10 +232,6 @@ PROJECT_OWNED: dict[str, str] = {
     "pyproject.toml": "project manifest — deps and tool config",
     "Cargo.toml": "project manifest — deps and edition",
     "package.json": "project manifest — deps and scripts",
-    # Source the project immediately edits. Regenerating these on --update silently reverts
-    # real work (and `cargo fmt`/`clippy`/`test` need a target to act on at all).
-    "lib.rs": "crate source — the starting point the project edits",
-    "test_smoke.py": "smoke test — the project replaces it with real tests",
 }
 
 # Components whose file belongs to another flavor's projection: an --update in this
@@ -253,6 +249,8 @@ SOURCE_OWNED: dict[str, str] = {
     "src/cli.ts": "project source — CLI entry, hand-grown after scaffold",
     "tests/index.test.ts": "project tests — scaffold smoke test, extended by the project",
     "vitest.config.ts": "test config — coverage thresholds are project policy",
+    "src/lib.rs": "crate source — the starting point the project edits",
+    "tests/test_smoke.py": "smoke test — the project replaces it with real tests",
 }
 
 
@@ -746,7 +744,6 @@ def write_file(
     return True
 
 
-
 def preserve(path: pathlib.Path, reason: str) -> str:
     """Report a project-owned file preserved by --update; returns its NEXT note."""
     return REPORT.preserved(path, reason)
@@ -772,13 +769,14 @@ def write_generated(
     return None
 
 
-
 def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> None:
     """Add missing ignore lines; never rewrites what is already there."""
     existed = path.exists()
     existing: set[str] = set()
     if existed:
-        existing = {ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()}
+        existing = {
+            ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
+        }
     missing = [e for e in entries if e not in existing]
     if not missing:
         REPORT.unchanged(path, "gitignore dedup")
@@ -797,10 +795,7 @@ def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> N
         for entry in missing:
             handle.write(entry + "\n")
     verb = "added" if existed else "created"
-    REPORT.appended(
-        path, f"{verb} {missing}", f"appended ({len(missing)}) to {path}: {missing}"
-    )
-
+    REPORT.appended(path, f"{verb} {missing}", f"appended ({len(missing)}) to {path}: {missing}")
 
 
 def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
@@ -847,7 +842,6 @@ def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
     REPORT.err(f"WARNING: {path}: {proofread}")
 
 
-
 def patch_wt_hooks(cwd: pathlib.Path, dry_run: bool) -> None:
     """Ensure worktrees get live hooks — `wt switch` clones a fresh checkout, not the config."""
     wt = cwd / ".config/wt.toml"
@@ -879,7 +873,6 @@ def patch_wt_hooks(cwd: pathlib.Path, dry_run: bool) -> None:
         new_text = text.rstrip() + "\n\n[post-start]\n" + hook_line + "\n"
     wt.write_text(new_text, encoding="utf-8")
     REPORT.patched(wt, "added setup-hooks", f"patched {wt} with hooksPath")
-
 
 
 def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
@@ -929,7 +922,6 @@ def render_ci_release(variant: str, with_coverage: bool, threshold: int) -> str:
     )
 
 
-
 def do_git(
     cwd: pathlib.Path,
     project_name: str,
@@ -951,7 +943,9 @@ def do_git(
         else:
             write_file(
                 rel,
-                render_ci_release("node", with_coverage=False, threshold=DEFAULT_COVERAGE_THRESHOLD),
+                render_ci_release(
+                    "node", with_coverage=False, threshold=DEFAULT_COVERAGE_THRESHOLD
+                ),
                 dry_run,
             )
     if "changelog-check" in sel:
@@ -1033,7 +1027,7 @@ def do_python(
 ) -> list[str]:
     notes: list[str] = []
     write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
-    note = write_generated(cwd / "tests" / "test_smoke.py", PY_TESTS_SMOKE, dry_run, update=update)
+    note = write_source(cwd, "tests/test_smoke.py", PY_TESTS_SMOKE, dry_run, update=update)
     if note:
         notes.append(note)
     pyproj = build_pyproject(project_name, with_coverage, threshold)
@@ -1091,7 +1085,7 @@ def do_rust(
             file=sys.stderr,
         )
     write_file(cwd / "rust-toolchain.toml", RUST_TOOLCHAIN_TOML, dry_run)
-    note = write_generated(cwd / "src" / "lib.rs", RUST_LIB_RS, dry_run, update=update)
+    note = write_source(cwd, "src/lib.rs", RUST_LIB_RS, dry_run, update=update)
     if note:
         notes.append(note)
     cargo = render_template("rust/Cargo.toml.j2", project_name=cargo_name)
@@ -1121,7 +1115,6 @@ def do_rust(
     return notes
 
 
-
 def do_typescript(
     cwd: pathlib.Path,
     project_name: str,
@@ -1144,9 +1137,7 @@ def do_typescript(
     warn = "mixed: {{project_name}} + description — proofread package name and description."
     if with_coverage:
         warn += f" + coverage @vitest/coverage-v8 {threshold}%"
-    note = write_generated(
-        cwd / "package.json", pkg_json, dry_run, update=update, warn_mixed=warn
-    )
+    note = write_generated(cwd / "package.json", pkg_json, dry_run, update=update, warn_mixed=warn)
     if note:
         notes.append(note)
     write_file(cwd / "tsconfig.json", build_tsconfig(), dry_run)
@@ -1499,7 +1490,6 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
     return result
 
 
-
 def print_detect(cwd: pathlib.Path, as_json: bool) -> int:
     """Census + findings. JSON always goes to stdout; `--json` drops the human summary."""
     data = detect_project(cwd)
@@ -1786,7 +1776,6 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
     return findings
 
 
-
 def main() -> int:
     """Resolve the flags, run the requested flavors, report once, exit with the verdict."""
     ap = argparse.ArgumentParser(description="Deterministic scaffold generator")
@@ -1987,7 +1976,11 @@ def main() -> int:
             f"{', dry-run' if dry_run else ''})"
         )
     if mode == JSON_OUT:
-        print(json.dumps(REPORT.plan(flavor=flavor, update=update, dry_run=dry_run), indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                REPORT.plan(flavor=flavor, update=update, dry_run=dry_run), indent=2, sort_keys=True
+            )
+        )
 
     if dry_run and mode == VERBOSE:
         print(
