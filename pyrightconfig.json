@@ -1,0 +1,16 @@
+{
+  "include": ["skills", "tests", "lib", "scripts"],
+  "exclude": ["**/node_modules", "**/.venv", ".lsz"],
+  "allowedUntypedLibraries": ["markdown", "bs4", "pytest", "yaml", "pydantic", "requests", "html2text", "tz", "rich", "frontmatter"],
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false,
+  "reportMissingTypeStubs": false,
+  "reportOptionalMemberAccess": "warning",
+  "reportArgumentType": "warning",
+  "reportAttributeAccessIssue": "warning",
+  "reportReturnType": "warning",
+  "reportRedeclaration": "warning",
+  "reportUnknownVariableType": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownArgumentType": false
+}

@@ -1,0 +1,8 @@
+interface:
+  display_name: herdr
+  short_description: Herdr terminal-multiplexer reference for coding agents. Inspects
+    and drives panes, tabs, workspaces, and sibling agents, waits on test or server
+    output. Use when the user mentions Herdr or asks to drive panes or agents. Requires
+    HERDR_ENV=1; not for general background terminals or delegation.
+policy:
+  allow_implicit_invocation: true

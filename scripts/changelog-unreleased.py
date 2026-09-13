@@ -227,7 +227,10 @@ def clear_changelog(changelog: Path) -> bool:
     before, rest = content.split(UNRELEASED_HEADING, 1)
     m = VERSION_HEADING_RE.search(rest)
     after = rest[m.start() :] if m else ""
-    new_content = before.rstrip() + "\n\n" + after.lstrip()
+    # Keep the heading: @semantic-release/changelog anchors its insertion point on it, and
+    # prepends the new version above the file title (and stranded the title at the end) when it
+    # is missing - which is exactly what the v2.0.0 release did.
+    new_content = before.rstrip() + "\n\n" + UNRELEASED_HEADING + "\n\n" + after.lstrip()
     new_content = re.sub(r"\n{3,}", "\n\n", new_content).strip() + "\n"
     if new_content == content:
         return False

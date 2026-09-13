@@ -12,15 +12,45 @@ LOCK_PATH = SKILL_DIR / "references" / "agents.lock.json"
 INSTALL_SCRIPT = SKILL_DIR / "scripts" / "install-agents.mjs"
 
 
-def test_install_agents_check_passes():
-    """install-agents.mjs --check must exit 0, indicating all canonical agents are aligned."""
+def _install_agents_into(cwd: Path) -> Path:
+    """Install the roles into `cwd` and return the target dir the installer populated.
+
+    The installer resolves its target as `<git top-level>/.pi/agents`, and `.pi/` is gitignored:
+    a fresh checkout (CI) has no installed roles, so the tests must produce the state they assert
+    on instead of depending on developer-local installs.
+    """
+    probe = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=str(cwd), capture_output=True, text=True
+    )
+    assert probe.returncode != 0, (
+        f"refusing to install into {cwd}: it sits inside the repository at {probe.stdout.strip()}"
+    )
+
+    result = subprocess.run(
+        ["node", str(INSTALL_SCRIPT)], cwd=str(cwd), capture_output=True, text=True
+    )
+    assert result.returncode == 0, (
+        f"install-agents failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+    target_dir = cwd / ".pi" / "agents"
+    assert target_dir.is_dir(), f"installer did not populate {target_dir}:\nstdout: {result.stdout}"
+    return target_dir
+
+
+def test_install_agents_check_passes(tmp_path):
+    """install-agents.mjs --check must exit 0 once the installed roles match the lockfile."""
+    _install_agents_into(tmp_path)
+
     result = subprocess.run(
         ["node", str(INSTALL_SCRIPT), "--check"],
-        cwd=str(REPO_ROOT),
+        cwd=str(tmp_path),
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, f"install-agents --check failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"install-agents --check failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
 
 
 def test_agents_lock_matches_canonical_hashes():
@@ -36,14 +66,20 @@ def test_agents_lock_matches_canonical_hashes():
         content = agent_file.read_bytes()
         computed_sha = hashlib.sha256(content).hexdigest()
         assert agent_file.name in locked_agents, f"{agent_file.name} missing from agents.lock.json"
-        assert (
-            locked_agents[agent_file.name] == computed_sha
-        ), f"Hash mismatch for {agent_file.name} in agents.lock.json"
+        assert locked_agents[agent_file.name] == computed_sha, (
+            f"Hash mismatch for {agent_file.name} in agents.lock.json"
+        )
 
 
 def test_canonical_agent_frontmatters():
     """All canonical agent files must have valid name, description, tools, and systemPromptMode."""
-    expected_agents = ["developer.md", "gate-runner.md", "code-reviewer.md", "ticket-planner.md", "merger.md"]
+    expected_agents = [
+        "developer.md",
+        "gate-runner.md",
+        "code-reviewer.md",
+        "ticket-planner.md",
+        "merger.md",
+    ]
 
     for name in expected_agents:
         agent_file = CANONICAL_AGENTS_DIR / name
@@ -60,19 +96,24 @@ def test_canonical_agent_frontmatters():
         assert "tools:" in frontmatter
 
 
-def test_target_agents_have_inlined_output_contract():
-    """Target installed agents in .pi/agents must have expanded @include directives inlining the contract."""
-    target_dir = REPO_ROOT / ".pi" / "agents"
-    assert target_dir.exists(), f"Target directory {target_dir} does not exist"
+def test_target_agents_have_inlined_output_contract(tmp_path):
+    """Installed roles must carry @include directives expanded into inlined contracts."""
+    target_dir = _install_agents_into(tmp_path)
 
     inlined_agents = ["developer.md", "gate-runner.md", "code-reviewer.md", "merger.md"]
     for name in inlined_agents:
         target_file = target_dir / name
         assert target_file.exists(), f"Expected installed target agent {name} not found"
         text = target_file.read_text(encoding="utf-8")
-        assert "<!-- @include" not in text, f"{name} still contains unexpanded <!-- @include directive"
-        assert "# Subagent Response Format" in text, f"{name} does not contain inlined Subagent Response Format"
-        assert "## 1. Dual-Mode Representation" in text, f"{name} missing inlined Dual-Mode Representation"
+        assert "<!-- @include" not in text, (
+            f"{name} still contains unexpanded <!-- @include directive"
+        )
+        assert "# Subagent Response Format" in text, (
+            f"{name} does not contain inlined Subagent Response Format"
+        )
+        assert "## 1. Dual-Mode Representation" in text, (
+            f"{name} missing inlined Dual-Mode Representation"
+        )
 
 
 def test_agents_lock_tracks_includes_and_compiled():
@@ -87,3 +128,22 @@ def test_agents_lock_tracks_includes_and_compiled():
     computed_sha = hashlib.sha256(resp_format_path.read_bytes()).hexdigest()
     assert lock_data["includes"]["references/resp-format.md"] == computed_sha
 
+
+def test_check_flags_drift_instead_of_overwriting(tmp_path):
+    """A hand-edited installed role must read as drift, and --check must leave it untouched."""
+    target_dir = _install_agents_into(tmp_path)
+    target = target_dir / "developer.md"
+    edited = target.read_text(encoding="utf-8") + "\nlocal edit\n"
+    target.write_text(edited, encoding="utf-8")
+
+    result = subprocess.run(
+        ["node", str(INSTALL_SCRIPT), "--check"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2, (
+        f"expected drift to exit 2:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "drifted: developer.md" in result.stdout, result.stdout
+    assert target.read_text(encoding="utf-8") == edited, "drifted role was overwritten by --check"

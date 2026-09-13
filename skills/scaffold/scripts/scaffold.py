@@ -1271,7 +1271,8 @@ def print_next_actions(cwd: pathlib.Path, notes: list[str]) -> None:
     if not notes:
         return
     det = detect_project(cwd)
-    ci_variant = det["ci"]["variant"]  # type: ignore[index]
+    ci = det["ci"]
+    ci_variant = ci.get("variant") if isinstance(ci, dict) else None
     shape = det["inferred_shape"]
     variant = ci_variant if ci_variant in CI_RUNTIMES else shape
     follow_up: dict[str, str] = {

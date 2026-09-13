@@ -1,18 +1,19 @@
 ---
 description: >-
-  Native toolchain wiki router for JS/TS/Python — Oxlint/Oxfmt, Basedpyright, Worktrunk. Use when configuring linters, formatters, type checking, or managing parallel worktrees.
+  Native toolchain wiki router for JS/TS/Python — Oxlint/Oxfmt, Basedpyright, Worktrunk, Jinja. Use when configuring linters, formatters, type checking, parallel worktrees, or Jinja templates.
 metadata:
   manage:
     - oxlint
     - oxfmt
     - typecheck
     - worktrunk
+    - jinja
 name: toolchain-wiki
 ---
 
 # Toolchain Wiki
 
-Orchestration router for the native toolchain-wiki that minimizes agent feedback latency. Single-runtime `pnpm v12` + `TS 7` (Go) + `Vite 8` (Rolldown + Oxc) + `Basedpyright` (strict) + `Worktrunk` (branch-addressed worktrees) share one spine: **declared runtime → deterministic artifacts → verification gate**.
+Orchestration router for the native toolchain-wiki that minimizes agent feedback latency. Single-runtime `pnpm v12` + `TS 7` (Go) + `Vite 8` (Rolldown + Oxc) + `Basedpyright` (strict) + `Worktrunk` (branch-addressed worktrees) + `Jinja 3.1` (Python templates) share one spine: **declared runtime → deterministic artifacts → verification gate**.
 
 This skill owns **sequencing only** — no bytes. Each projection owns its bytes via `$SKILL_DIR/scripts/` or canonical skill.
 
@@ -25,6 +26,7 @@ Read the subskill that matches the task. Use `Read` (not `Skill` tool — subski
 | `oxfmt` | `$SKILL_DIR/subskills/oxfmt/SKILL.md` | Oxfmt config, CLI, embedded formatting, Prettier/Biome compat — [oxfmt](subskills/oxfmt/SKILL.md) |
 | `typecheck` | `$SKILL_DIR/subskills/typecheck/SKILL.md` | Basedpyright setup, strict mode, diagnostics, stubs — proxy to `programming-expert/subskills/basedpyright-expert` |
 | `worktrunk` | `$SKILL_DIR/subskills/worktrunk/SKILL.md` | Branch-addressed worktrees, hooks, `hash_port`, LLM commits — [worktrunk](subskills/worktrunk/SKILL.md) |
+| `jinja` | `$SKILL_DIR/subskills/jinja/SKILL.md` | Jinja 3.1 templates, `Environment`/loader config, filters/tests, autoescaping, extensions, sandbox — [jinja](subskills/jinja/SKILL.md) |
 
 Omitted domain loads only the spine above.
 
@@ -32,6 +34,7 @@ Omitted domain loads only the spine above.
 
 - **Runtime:** `pnpm v12` (`pnpm@12.0.0`, `.nvmrc 24`) for JS/TS, `uv` (`.python-version 3.14`) for Python, `wt` (branch-addressed) for worktrees. See `$SKILL_DIR/subskills/oxlint/SKILL.md` + `$SKILL_DIR/subskills/oxfmt/SKILL.md`, `programming-expert/subskills/basedpyright-expert/SKILL.md`, and `worktrunk` for owners.
 - **Verify gate:** `pnpm run lint` (`oxlint .`) + `pnpm run format --check` (`oxfmt --check .`) + `tsc --noEmit` (TS 7) + `basedpyright` (`reportAny` etc.) + `wt merge` pre-merge. Env truth is `pnpm run ...` / `basedpyright` / `wt list` exit code.
+- **Templating:** `jinja2` ≥3.1 (Python) — one `Environment` per app, `select_autoescape()` for markup, loader-backed templates, sandbox for untrusted input. Gate: `Environment().parse(src)` + a render smoke test; see `$SKILL_DIR/subskills/jinja/SKILL.md`.
 - **Performance goal:** native Rust/Go tooling — `oxlint` 50–100× ESLint, `oxfmt` 30× Prettier, `tsc v7` parallel, `basedpyright` tsgo, `wt hash_port` deterministic.
 
 ## Deterministic Gates
@@ -54,3 +57,4 @@ Tool owns bytes; model proofreads intent.
 - `scaffold` (`typescript-scaffolding`) `depends-on: [toolchain-wiki]` — TS flavor reuses `toolchain-wiki/subskills/oxlint/` (linter) + `toolchain-wiki/subskills/oxfmt/` (formatter).
 - `programming-expert` remains canonical for `basedpyright-expert`; `toolchain-wiki/subskills/typecheck/` is a proxy/index.
 - `worktrunk` is canonical via `toolchain-wiki/subskills/worktrunk/` — native worktree + `hash_port` + hooks; no proxy.
+- `jinja` is canonical via `toolchain-wiki/subskills/jinja/` — Jinja 3.1 language + API, raw snapshot in `references/jinja-raw/`.
