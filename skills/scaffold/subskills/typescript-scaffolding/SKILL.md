@@ -14,7 +14,7 @@ Projection of the scaffold spine onto TypeScript. Declared runtime is `pnpm v12`
 
 Per `development-patterns.md` §3:
 
-- Single-runtime TypeScript: `pnpm v12` (Rust native) owns version + deps; commit `.nvmrc` (`24`), `package.json` (`packageManager: pnpm@12.0.0`, `engines >=24`, `typescript >=7`, `vite >=8`, `oxlint`, `oxfmt` pinned to an exact version — `OXFMT_VERSION`, the same one the generator formats with), `pnpm-lock.yaml`, `tsconfig.json`, `.oxlintrc.json` + `.oxfmtrc.json`.
+- Single-runtime TypeScript: `pnpm v12` (Rust native) owns version + deps; commit `.nvmrc` (`26`), `package.json` (`packageManager: pnpm@12.4.1`, `engines >=26`, `typescript >=7`, `vite >=8`, `vitest >=5`, `@types/node >=26`, `oxlint`, `oxfmt` pinned to an exact version — `OXFMT_VERSION`, the same one the generator formats with), `pnpm-lock.yaml`, `tsconfig.json`, `.oxlintrc.json` + `.oxfmtrc.json`.
 - Multi-runtime (TS + Python/Rust): `asdf` + `.tool-versions`; `asdf install` syncs all; `pnpm` still owns Node deps.
 - Native toolchain goal: minimize agent feedback latency — `pnpm` (content-addressed + Rust), `tsc v7` (Go + parallel), `Vite v8` (Rolldown + Oxc), `Oxlint` (rules) + `Oxfmt` (format, Prettier fallback).
 
@@ -41,16 +41,16 @@ Variants (`--ts-variant`, default `lib`):
 
 Every variant ships `src/index.ts` + `tests/index.test.ts` (vitest smoke test, `tests/` layout per `branch-worktree-pr`) so `pnpm test` is green day one — same precedent as `cargo new`.
 
-Pure-deterministic: `.nvmrc` (`24`), `tsconfig.json` (`strict`, ESM `NodeNext`, `ES2022`, `types: ["node"]` — explicit because pnpm's symlinked `@types` defeats auto-inclusion; `include: ["src", "tests"]`), `.oxlintrc.json` (`harness/no-comments` via `jsPlugins: ["./scripts/oxlint-plugin-comment-gate.js"]` + `overrides` for `tests/**`, `**/*.test.ts` per ADR-0014) + `scripts/oxlint-plugin-comment-gate.js` (deterministic allowlist `SAFETY:|WHY:|Invariant:|See ADR-|via https://|TODO(#\d+):|HACK:|GHERKIN` + `/**` JSDoc) + `.oxfmtrc.json` (ox native; `oxfmt` formats JS/TS/JSX/TSX + JSON/YAML/Markdown, so `ignorePatterns: ["CHANGELOG.md"]` keeps it off the release changelog — `oxfmt` normalizes bullets to `-` and the file pins MD004 `*`), `src/*.ts` + `tests/*.ts`, `vitest.config.ts` (coverage only), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `node_modules/` + `dist/`). `biome.json` is deprecated — retained for compat, new projects use `oxlint`/`oxfmt`.
+Pure-deterministic: `.nvmrc` (`26`), `tsconfig.json` (`strict`, ESM `NodeNext`, `ES2022`, `types: ["node"]` — explicit because pnpm's symlinked `@types` defeats auto-inclusion; `include: ["src", "tests"]`), `.oxlintrc.json` (`harness/no-comments` via `jsPlugins: ["./scripts/oxlint-plugin-comment-gate.js"]` + `overrides` for `tests/**`, `**/*.test.ts` per ADR-0014) + `scripts/oxlint-plugin-comment-gate.js` (deterministic allowlist `SAFETY:|WHY:|Invariant:|See ADR-|via https://|TODO(#\d+):|HACK:|GHERKIN` + `/**` JSDoc) + `.oxfmtrc.json` (ox native; `oxfmt` formats JS/TS/JSX/TSX + JSON/YAML/Markdown, so `ignorePatterns: ["CHANGELOG.md"]` keeps it off the release changelog — `oxfmt` normalizes bullets to `-` and the file pins MD004 `*`), `src/*.ts` + `tests/*.ts`, `vitest.config.ts` (coverage only), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `node_modules/` + `dist/`). `biome.json` is deprecated — retained for compat, new projects use `oxlint`/`oxfmt`.
 
-Mixed (script warns → proofread): `package.json` (`{{project_name}}` normalized to lowercase kebab-case, description, `packageManager: pnpm@12.0.0`, deps `typescript>=7` + `vite>=8` + `oxlint`/`oxfmt` + `vitest>=4`), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
+Mixed (script warns → proofread): `package.json` (`{{project_name}}` normalized to lowercase kebab-case, description, `packageManager: pnpm@12.4.1`, deps `typescript>=7` + `vite>=8` + `oxlint`/`oxfmt` + `vitest>=5` + `@types/node>=26`), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
 
 Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` (tool owns bytes).
 
 ## Steps — Tool Owns Determinism
 
 1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant <lib|cli|pi-extension> --project-name <name>` (handles `--cwd`, infers name, normalizes, warns on mixed).
-2. Install: `pnpm install --no-frozen-lockfile` (corepack reads `packageManager: pnpm@12.0.0`; `--no-frozen-lockfile` because greenfield has no lockfile yet).
+2. Install: `pnpm install --no-frozen-lockfile` (corepack reads `packageManager: pnpm@12.4.1`; `--no-frozen-lockfile` because greenfield has no lockfile yet).
 3. Proofread mixed warnings: `package.json` name/description, `AGENTS.md` 3-section preservation.
 4. Wire verification: `pnpm run lint` (`oxlint .` with `harness/no-comments` allowlist — intercepts mismatched comments and outputs requirements `SAFETY:/WHY:/Invariant:/See ADR-/via https:///TODO(#\\d+):/HACK:/GHERKIN`), `pnpm run format --check` (`oxfmt --check .`), `pnpm run typecheck` (`tsc --noEmit`), `pnpm test` (`vitest run`) via `pnpm`. Loop is `edit → typecheck → lint → format → test/build → fix` with native latency.
 5. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` + `pnpm install && pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test`

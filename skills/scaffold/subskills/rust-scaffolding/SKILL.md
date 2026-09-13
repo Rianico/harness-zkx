@@ -32,7 +32,7 @@ Pure-deterministic: `rust-toolchain.toml` (`stable` + `rustfmt`/`clippy`), `src/
 
 Project-owned: `src/lib.rs` is the crate the project edits, so `--update` preserves it (see `PROJECT_OWNED`).
 
-Mixed (script warns → proofread): `Cargo.toml` (`{{project_name}}` normalized to kebab-case, edition `2021`), `AGENTS.md` `### Runtime` pointer. Script warns if name normalized and on `AGENTS.md` 3-section preservation.
+Mixed (script warns → proofread): `Cargo.toml` (`{{project_name}}` normalized to kebab-case, edition `2024`), `AGENTS.md` `### Runtime` pointer. Script warns if name normalized and on `AGENTS.md` 3-section preservation.
 
 Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` (tool owns bytes).
 

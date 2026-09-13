@@ -23,7 +23,7 @@ uv run $SKILL_DIR/../../scaffold/scripts/scaffold.py --flavor typescript --ts-va
 Generates (per `scaffold.py` → `OXFMT_JSON`, `build_package_json`):
 
 - `.nvmrc` → `24`
-- `package.json` → `packageManager: pnpm@12.0.0`, `engines node >=24`, `typescript >=7`, `oxfmt >=0.15`, `tsx >=4`, `@types/node >=24` (+ `@semantic-release/*` — see `scaffold.py:build_package_json`), scripts `format: oxfmt --check .`, `format:fix: oxfmt .`, `typecheck: tsc --noEmit`, `test: vitest run`
+- `package.json` → `packageManager: pnpm@12.4.1`, `engines node >=26`, `typescript >=7`, `oxfmt` pinned exactly (`OXFMT_VERSION`), `tsx >=4`, `@types/node >=26` (+ `@semantic-release/*` — see `scaffold.py:build_package_json`), scripts `format: oxfmt --check .`, `format:fix: oxfmt .`, `typecheck: tsc --noEmit`, `test: vitest run`
 - `.oxfmtrc.json` → `{ "$schema": "./node_modules/oxfmt/configuration_schema.json" }`
 - `tsconfig.json` → strict, ESM NodeNext, ES2022, `types: ["node"]`
 
@@ -39,7 +39,7 @@ pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
 # --check gate: oxfmt --check .  (fix locally: oxfmt .)
 ```
 
-CI verify job (`ci-scaffolding`, Node 24) runs the same steps on pnpm (`pnpm run coverage` when `--with-coverage` enabled).
+CI verify job (`ci-scaffolding`, Node 26) runs the same steps on pnpm (`pnpm run coverage` when `--with-coverage` enabled).
 
 ## Refreshing the snapshot
 

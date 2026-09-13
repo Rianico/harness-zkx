@@ -405,7 +405,7 @@ requires-python = ">=3.10"
 dependencies = ["pydantic>=2.0", "httpx>=0.27"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff", "basedpyright"]
+dev = ["pytest>=9", "ruff", "basedpyright"]
 
 [tool.setuptools.packages.find]  # if setuptools backend
 where = ["src"]

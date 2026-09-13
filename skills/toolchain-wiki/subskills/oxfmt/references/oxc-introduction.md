@@ -29,7 +29,7 @@ The Oxidation Compiler is a Rust-native collection of high-performance JS/TS too
 | Type              | `tsc --noEmit` (TS 7 Go native) | `tsconfig.json` (strict, ESM NodeNext)                              |
 | Test/Bundler      | `vitest` ≥4 + `vite` ≥8         | `vitest.config.ts`                                                  |
 
-Declared runtime is `pnpm v12` + `.nvmrc` (24) + `package.json` (`packageManager: pnpm@12.0.0`, `engines >=24`, `typescript >=7`, `tsx >=4`, `@types/node >=24` + `@semantic-release/*` — see `scaffold.py:build_package_json`). See `SKILL.md` → Deterministic Artifacts.
+Declared runtime is `pnpm v12` + `.nvmrc` (26) + `package.json` (`packageManager: pnpm@12.4.1`, `engines >=26`, `typescript >=7`, `tsx >=4`, `@types/node >=26` + `@semantic-release/*` — see `scaffold.py:build_package_json`). See `SKILL.md` → Deterministic Artifacts.
 
 Variants: `lib` (main/exports) · `cli` (bin + `pnpm dlx tsx` shebang) · `pi-extension` (pi.extensions). Coverage optional: `--with-coverage --coverage-threshold 80` adds `coverage` script + `vitest.config.ts`; CI then runs `pnpm run coverage`.
 

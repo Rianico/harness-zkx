@@ -32,7 +32,7 @@ Omitted domain loads only the spine above.
 
 ## Spine
 
-- **Runtime:** `pnpm v12` (`pnpm@12.0.0`, `.nvmrc 24`) for JS/TS, `uv` (`.python-version 3.14`) for Python, `wt` (branch-addressed) for worktrees. See `$SKILL_DIR/subskills/oxlint/SKILL.md` + `$SKILL_DIR/subskills/oxfmt/SKILL.md`, `programming-expert/subskills/basedpyright-expert/SKILL.md`, and `worktrunk` for owners.
+- **Runtime:** `pnpm v12` (`pnpm@12.4.1`, `.nvmrc 26`) for JS/TS, `uv` (`.python-version 3.14`) for Python, `wt` (branch-addressed) for worktrees. See `$SKILL_DIR/subskills/oxlint/SKILL.md` + `$SKILL_DIR/subskills/oxfmt/SKILL.md`, `programming-expert/subskills/basedpyright-expert/SKILL.md`, and `worktrunk` for owners.
 - **Verify gate:** `pnpm run lint` (`oxlint .`) + `pnpm run format --check` (`oxfmt --check .`) + `tsc --noEmit` (TS 7) + `basedpyright` (`reportAny` etc.) + `wt merge` pre-merge. Env truth is `pnpm run ...` / `basedpyright` / `wt list` exit code.
 - **Templating:** `jinja2` ≥3.1 (Python) — one `Environment` per app, `select_autoescape()` for markup, loader-backed templates, sandbox for untrusted input. Gate: `Environment().parse(src)` + a render smoke test; see `$SKILL_DIR/subskills/jinja/SKILL.md`.
 - **Performance goal:** native Rust/Go tooling — `oxlint` 50–100× ESLint, `oxfmt` 30× Prettier, `tsc v7` parallel, `basedpyright` tsgo, `wt hash_port` deterministic.

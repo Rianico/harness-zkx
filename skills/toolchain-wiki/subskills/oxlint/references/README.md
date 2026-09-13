@@ -23,7 +23,7 @@ uv run $SKILL_DIR/../../scaffold/scripts/scaffold.py --flavor typescript --ts-va
 Generates (per `scaffold.py` → `build_package_json` + `templates/typescript/.oxlintrc.json`):
 
 - `.nvmrc` → `24`
-- `package.json` → `packageManager: pnpm@12.0.0`, `engines node >=24`, `typescript >=7`, `oxlint >=1`, `tsx >=4`, `@types/node >=24` (+ `@semantic-release/*` — see `scaffold.py:build_package_json`), scripts `lint: oxlint .`, `typecheck: tsc --noEmit`, `test: vitest run`
+- `package.json` → `packageManager: pnpm@12.4.1`, `engines node >=26`, `typescript >=7`, `oxlint >=1`, `tsx >=4`, `@types/node >=26` (+ `@semantic-release/*` — see `scaffold.py:build_package_json`), scripts `lint: oxlint .`, `typecheck: tsc --noEmit`, `test: vitest run`
 - `.oxlintrc.json` → `$schema` + `jsPlugins: ["./scripts/oxlint-plugin-comment-gate.js"]` + `harness/no-comments: error` (off for tests/ per `overrides`)
 - `tsconfig.json` → strict, ESM NodeNext, ES2022, `types: ["node"]`
 
@@ -39,7 +39,7 @@ pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
 # --check gate: oxlint .  (fix locally: oxlint --fix .)
 ```
 
-CI verify job (`ci-scaffolding`, Node 24) runs the same steps on pnpm (`pnpm run coverage` when `--with-coverage` enabled).
+CI verify job (`ci-scaffolding`, Node 26) runs the same steps on pnpm (`pnpm run coverage` when `--with-coverage` enabled).
 
 ## Refreshing the snapshot
 

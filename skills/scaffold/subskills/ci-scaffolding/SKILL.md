@@ -21,7 +21,7 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant rust     # Rust v
 uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --dry-run
 ```
 
-Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `checkout@93cb6e...` + `setup-node@a0853c...` (v5, Node 24) + `setup-python@e797f8...` (v6), `zizmor: ignore` justified, `contents: read` → `release` escalates `write/id-token`, `needs: verify`).
+Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `checkout@3d3c42...` (v7.0.1) + `setup-node@820762...` (v7.0.0) + `setup-python@5fda3b...` (v7.0.0) + `setup-uv@bec219...` (v10.1.0) — every pinned action runs on node24; bump `SHA_TABLE` and the callers together (`tests/scaffold/test_templates.py` fails otherwise), `zizmor: ignore` justified, `contents: read` → `release` escalates `write/id-token`, `needs: verify`).
 
 - On-demand dispatch is the default: `repository_dispatch` (`semantic-release`) + `workflow_dispatch` only — no `push: tags` auto-release.
 - Language-specific verify steps live in the variant; multi-runtime uses matrix (`needs: [verify-node, verify-python]`). See `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` for byte view.
@@ -29,7 +29,7 @@ Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `che
 
 ### Language-Specific Verify Steps
 
-- Node projection (default): `pnpm/action-setup@v4` (`run_install: false`) + `setup-node` (`cache: pnpm`) + `pnpm install --no-frozen-lockfile` + `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` on Node 24 inside `verify` (`--with-coverage` runs `pnpm run coverage` instead — thresholds live in `vitest.config.ts`). Never `corepack enable` — setup-node v5 probes pnpm before corepack shims exist. The `release` job runs `pnpm exec semantic-release` (never `dlx` — plugins resolve from local devDependencies, which the typescript flavor vendors).
+- Node projection (default): `pnpm/action-setup@v6.1.0` (`run_install: false`) + `setup-node` (`cache: pnpm`) + `pnpm install --no-frozen-lockfile` + `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` on Node 26 inside `verify` (`--with-coverage` runs `pnpm run coverage` instead — thresholds live in `vitest.config.ts`). Never `corepack enable` — setup-node v7 probes pnpm before corepack shims exist. The `release` job runs `pnpm exec semantic-release` (never `dlx` — plugins resolve from local devDependencies, which the typescript flavor vendors).
 - Python projection: replace the Node `pnpm ...` steps with `uv sync` + `uv run ruff check . && uv run basedpyright && uv run pytest` inside the same `verify` job (or a matrix job when multi-runtime).
 - Rust projection: `cargo fmt --check && cargo clippy -- -D warnings && cargo test` inside `verify`.
 - Multi-runtime: `asdf install` + matrix, or split jobs `verify-node`/`verify-python`/`verify-rust` with `needs: [verify-node, verify-python]` on `release`.

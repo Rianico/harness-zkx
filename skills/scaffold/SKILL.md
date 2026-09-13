@@ -316,17 +316,17 @@ uv run $SKILL_DIR/scripts/scaffold.py --update --merge-mixed                  # 
 
 Every run reports once, in the mode the flags select. `--summary`/`--check` collapse prose to one line per file; `--json` emits the plan as data. **Do not parse diffs to decide what to do** — `--check` exits 1 on drift, so it is also a CI gate:
 
-| Flag | Effect |
-| ---- | ------ |
-| `--check` | `--update --dry-run --summary`: `stale`/`missing`/`patched`/`preserved` per file + `drift N`; exit 1 when drift > 0 |
-| `--summary` | same lines for any run; exit code unchanged |
-| `--json` | plan (`entries[]`, `findings[]`, `notes[]`, `drift`) on stdout; `--detect --json` drops the human summary |
-| `--self-check` | validate claimed files: `compile()` for `.py`, `bash -n` for shell/hooks, JSON/YAML parse, exec bit, and `scripts/…` references resolved; **runs automatically after a real write** |
-| `--merge-mixed` | insert the `## ` sections a preserved `CONTRIBUTING.md` is missing (never rewrites an existing line) |
+| Flag            | Effect                                                                                                                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--check`       | `--update --dry-run --summary`: `stale`/`missing`/`patched`/`preserved` per file + `drift N`; exit 1 when drift > 0                                                                 |
+| `--summary`     | same lines for any run; exit code unchanged                                                                                                                                         |
+| `--json`        | plan (`entries[]`, `findings[]`, `notes[]`, `drift`) on stdout; `--detect --json` drops the human summary                                                                           |
+| `--self-check`  | validate claimed files: `compile()` for `.py`, `bash -n` for shell/hooks, JSON/YAML parse, exec bit, and `scripts/…` references resolved; **runs automatically after a real write** |
+| `--merge-mixed` | insert the `##` sections a preserved `CONTRIBUTING.md` is missing (never rewrites an existing line)                                                                                 |
 
 `--detect` now also returns `findings[]` (`area`, `detail`, `remedy`) naming stale changelog, missing PR template, a pnpm/npm lockfile mismatch, and a vendored copy of a sibling skill — each with the command that fixes it. Blocking findings exit 1; a dangling reference only warns (it is a gap in what the skill ships, not in the target repo).
 
-- **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml, `src/lib.rs`, `tests/test_smoke.py`.
+- **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`, `src/lib.rs`, `tests/test_smoke.py`.
 - **Mixed** (script writes skeleton + warns on stderr → proofread): `CONTRIBUTING.md` (`{{project_name}}` + Before PR line), `pyproject.toml`/`Cargo.toml` (name/description/edition; with `--with-coverage` also `fail_under`), `AGENTS.md` patch (keep 3 sections, verify pointer wording).
 
 - `$SKILL_DIR/scripts/scaffold.py` — deterministic source of truth (tool owns bytes); raw templates under `$SKILL_DIR/templates/<flavor>/<target path>` ship verbatim and `.j2` templates render through one Jinja `Environment` (the script's single PEP-723 dependency: `jinja2`); `tests/scaffold/test_templates.py` pins raw file hashes, layout/registry coherence and every rendered cell; preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor <git|python|rust|ci> --dry-run`; detect with `uv run $SKILL_DIR/scripts/scaffold.py --detect --cwd .` (JSON to stdout, summary to stderr)
