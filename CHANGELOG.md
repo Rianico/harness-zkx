@@ -1,8 +1,11 @@
+# Changelog
+
 <!-- markdownlint-configure-file { "MD004": { "style": "asterisk" } } -->
 <!-- Pin asterisk for this file only: semantic-release writes `*` bullets, so MD004's default
-     `consistent` would rewrite every generated line to `-` on any touch. See .prettierignore. -->
-
-# Changelog
+     `consistent` would rewrite every generated line to `-` on any touch. See .prettierignore.
+     The title stays on line 1: @semantic-release/changelog rewrites it in place only while the
+     file starts with the configured `changelogTitle` (see .releaserc.json), and prepends each
+     release's notes above it otherwise. -->
 
 All notable changes to this project will be documented in this file.
 
@@ -18,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **toolchain:** align the asdf pins with the native version files
+* **changelog:** keep the version title on the first line
+* **scaffold:** correct what --detect reports and clear the checker's errors
+* **scaffold:** correct the git flavor's template bytes
 * **scaffold:** make the generated gates pass, and stop bypassing them
 * **scaffold:** make both coverage gates achievable on a fresh tree
 * clear the findings the new toolchain surfaced
@@ -30,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** record the contracts the templates now hold
 * **scaffold:** record the gate-config contract
 * **scaffold:** record how each coverage gate is wired
 * record the bumped toolchain and the preset/writer constraint

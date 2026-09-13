@@ -39,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import asdict, dataclass
+from typing import cast
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
@@ -679,9 +680,12 @@ class FormatterUnavailable(RuntimeError):
     """The pinned formatter could not run, so the bytes it owns would ship uncanonical."""
 
 
-_FORMATTER_ROOT: pathlib.Path | None = None
-_FORMATTER_CONFIG: pathlib.Path | None = None
-_FORMATTER_TMP: tempfile.TemporaryDirectory[str] | None = None
+# Module-private mutable state, not constants: `enable_formatter` sets the root for the run
+# and `canonicalize` memoizes the temp config it writes. Lowercase on purpose — pyright reads an
+# UPPERCASE name as a constant and rejects the reassignment (reportConstantRedefinition).
+_formatter_root: pathlib.Path | None = None
+_formatter_config: pathlib.Path | None = None
+_formatter_tmp: tempfile.TemporaryDirectory[str] | None = None
 
 
 def enable_formatter(root: pathlib.Path) -> None:
@@ -695,8 +699,8 @@ def enable_formatter(root: pathlib.Path) -> None:
     own `pnpm run format` gate went red on bytes no run had canonicalized.
     `--no-format` / `SCAFFOLD_NO_FORMAT=1` is the opt-out for a run without Node.
     """
-    global _FORMATTER_ROOT
-    _FORMATTER_ROOT = root.resolve()
+    global _formatter_root
+    _formatter_root = root.resolve()
     print(
         f"formatting: oxfmt@{OXFMT_VERSION} owns the bytes it can reach (see OXFMT_VERSION)",
         file=sys.stderr,
@@ -710,17 +714,17 @@ def canonicalize(path: pathlib.Path, content: str) -> str:
     compare all see canonical bytes; a formatter pass over the tree afterwards would make
     the preview and the idempotence check disagree with what actually lands.
     """
-    if _FORMATTER_ROOT is None or path.suffix.lower() not in OXFMT_EXTENSIONS:
+    if _formatter_root is None or path.suffix.lower() not in OXFMT_EXTENSIONS:
         return content
-    global _FORMATTER_CONFIG, _FORMATTER_TMP
-    if _FORMATTER_CONFIG is None:
+    global _formatter_config, _formatter_tmp
+    if _formatter_config is None:
         # The shipped config, so the result never depends on whether .oxfmtrc.json has been
         # written yet — and its ignorePatterns keep CHANGELOG.md (MD004 `*` pin) untouched.
-        _FORMATTER_TMP = tempfile.TemporaryDirectory(prefix="scaffold-oxfmt-")
-        _FORMATTER_CONFIG = pathlib.Path(_FORMATTER_TMP.name) / "oxfmtrc.json"
-        _FORMATTER_CONFIG.write_text(OXFMT_JSON, encoding="utf-8")
+        _formatter_tmp = tempfile.TemporaryDirectory(prefix="scaffold-oxfmt-")
+        _formatter_config = pathlib.Path(_formatter_tmp.name) / "oxfmtrc.json"
+        _formatter_config.write_text(OXFMT_JSON, encoding="utf-8")
     try:
-        rel = path.resolve().relative_to(_FORMATTER_ROOT)
+        rel = path.resolve().relative_to(_formatter_root)
     except ValueError:
         rel = pathlib.Path(path.name)
     cmd = [
@@ -728,13 +732,13 @@ def canonicalize(path: pathlib.Path, content: str) -> str:
         "--yes",
         f"oxfmt@{OXFMT_VERSION}",
         "-c",
-        str(_FORMATTER_CONFIG),
+        str(_formatter_config),
         "--stdin-filepath",
         rel.as_posix(),
     ]
     try:
         proc = subprocess.run(
-            cmd, input=content, capture_output=True, text=True, cwd=str(_FORMATTER_ROOT)
+            cmd, input=content, capture_output=True, text=True, cwd=str(_formatter_root)
         )
     except OSError as exc:
         raise FormatterUnavailable(f"{cmd[0]} not runnable: {exc}") from exc
@@ -1463,7 +1467,10 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             finding(
                 "CHANGELOG.md",
                 f"`# Changelog` title sits at line {title_line}, so each release prepends its notes above it",
-                'set "changelogTitle": "# Changelog" on the @semantic-release/changelog plugin',
+                "move `# Changelog` to the FIRST line of CHANGELOG.md AND set "
+                '"changelogTitle": "# Changelog" in .releaserc.json — @semantic-release/changelog '
+                "rewrites the title in place only while the file starts with it, and prepends "
+                "release notes above it otherwise (the pair is the fix)",
             )
     if files[".releaserc.json"] and '"package-lock.json"' in releaserc and _declares_pnpm(cwd):
         finding(
@@ -1471,8 +1478,12 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             "release assets name package-lock.json but the repo declares pnpm",
             f"uv run {scaffold_root}/scripts/scaffold.py --update",
         )
+    # The harness repo is the *source* of these skills — `~/.agents/skills/<name>` symlinks
+    # back into it — so `skills/<name>` there is the canonical copy. Reporting it as a vendored
+    # duplicate would advise deleting the original.
+    is_harness = scaffold_root.resolve() == (cwd / "skills" / "scaffold").resolve()
     vendored_skill = cwd / "skills" / "gh-router"
-    if vendored_skill.exists():
+    if vendored_skill.exists() and not is_harness:
         # A sibling skill copied into a repo is a duplicate that drifts from the harness
         # original; scaffold no longer writes it, and must not delete it either (it may be
         # project content). Report the decision instead of guessing it.
@@ -1541,17 +1552,20 @@ def print_detect(cwd: pathlib.Path, as_json: bool) -> int:
     print(json.dumps(data, indent=2, sort_keys=True))
     if as_json:
         return 0
-    files = data["files"]
+    # `detect_project` returns the census as `dict[str, object]` — one shape for JSON, prose and
+    # tests. Narrowing at the printer is the fix (the values are built right here); ignoring the
+    # unknown types only moved the guess into the checker.
+    files = cast("dict[str, bool]", data["files"])
     print(f"\n# Detect summary for {cwd}", file=sys.stderr)
     print(f"shape={data['inferred_shape']} project={data['project_name']}", file=sys.stderr)
-    present = [k for k, v in files.items() if v]  # type: ignore[union-attr]
-    missing = [k for k, v in files.items() if not v]  # type: ignore[union-attr]
+    present = [k for k, v in files.items() if v]
+    missing = [k for k, v in files.items() if not v]
     print(f"present: {', '.join(present) if present else '(none)'}", file=sys.stderr)
     print(f"missing: {', '.join(missing) if missing else '(none)'}", file=sys.stderr)
-    findings = data["findings"]
+    findings = cast("list[dict[str, str]]", data["findings"])
     if findings:
-        print(f"\nfindings ({len(findings)}):", file=sys.stderr)  # type: ignore[arg-type]
-        for item in findings:  # type: ignore[union-attr]
+        print(f"\nfindings ({len(findings)}):", file=sys.stderr)
+        for item in findings:
             print(f"  - {item['area']}: {item['detail']}", file=sys.stderr)
             print(f"    → {item['remedy']}", file=sys.stderr)
     return 0
