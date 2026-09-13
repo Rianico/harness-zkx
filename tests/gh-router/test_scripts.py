@@ -14,6 +14,7 @@ SCRIPTS = [
     REPO_ROOT / "skills/gh-router/scripts/state.sh",
     REPO_ROOT / "skills/gh-router/scripts/ci.sh",
     REPO_ROOT / "skills/gh-router/subskills/gh-release/scripts/confirm.sh",
+    REPO_ROOT / "skills/gh-router/scripts/changelog.sh",
 ]
 
 
@@ -36,3 +37,23 @@ def test_help_is_brief_and_does_not_need_the_network() -> None:
         assert result.returncode == 0, f"{script} --help failed: {result.stderr}"
         assert "Usage:" in result.stdout, f"{script} --help does not print a Usage line"
         assert len(result.stdout.splitlines()) <= 14, f"{script} --help is not brief"
+
+
+def test_changelog_sync_dry_run_decides_without_mutating() -> None:
+    """`changelog.sh sync` reports a verdict and touches nothing unless --apply is passed."""
+    script = REPO_ROOT / "skills/gh-router/scripts/changelog.sh"
+
+    def changelog_status() -> str:
+        return subprocess.run(
+            ["git", "status", "--porcelain", "--", "CHANGELOG.md"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        ).stdout
+
+    before = changelog_status()
+    result = subprocess.run(["bash", str(script), "sync"], capture_output=True, text=True, cwd=REPO_ROOT)
+    assert result.returncode in (0, 1), f"dry run failed unexpectedly: {result.stderr}"
+    combined = (result.stdout + result.stderr).lower()
+    assert "changelog.md" in combined, "verdict does not name the file it inspected"
+    assert changelog_status() == before, "dry run mutated the working tree"
