@@ -1,3 +1,19 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries link to related issues/PRs inline where tracked: `([#N](https://github.com/.../issues/N))` — entries with no tracked issue stay linkless.
+
+## [Unreleased]
+
+### Bug Fixes
+
+- **changelog:** keep the Unreleased heading semantic-release anchors on
+
+### Documentation
+
+- **changelog:** restore the header and section order after the 2.0.0 release
+
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
 
 ### ⚠ BREAKING CHANGES
@@ -256,9 +272,3 @@ Co-authored-by: Muse Spark <noreply@muse.spark>
 * **gh-router:** rename pr subskill to pr-land ([d535dfe](https://github.com/Rianico/harness-zkx/commit/d535dfe9e2e25edfc7abd5f5cc843b990c97ec39))
 * **skills:** absorb architecture-expert into programming-expert ([aa9d538](https://github.com/Rianico/harness-zkx/commit/aa9d5385717a7f5fe8a3a6ce594216a346d378ab))
 * **skills:** consolidate language experts into programming-expert router ([872a893](https://github.com/Rianico/harness-zkx/commit/872a89330281754fb7462f272d7cb19fa6ac18fb))
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries link to related issues/PRs inline where tracked: `([#N](https://github.com/.../issues/N))` — entries with no tracked issue stay linkless.
