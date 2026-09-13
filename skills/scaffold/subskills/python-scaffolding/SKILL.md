@@ -19,7 +19,7 @@ Per `development-patterns.md` §3:
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_pyproject` — computed, `PYTHON_VERSION`, `PY_TESTS_SMOKE`) plus `$SKILL_DIR/templates/shared/CONTRIBUTING.python.md.j2` (rendered) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
+Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_pyproject` — computed, `PYTHON_VERSION`, `_py_module_name`) plus the rendered `templates/python/src/_pkg/__init__.py.j2` and `templates/python/tests/test_smoke.py.j2`, `$SKILL_DIR/templates/shared/CONTRIBUTING.python.md.j2` (rendered) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
 
 > Existing repo? `--update` refreshes generated files but preserves `pyproject.toml` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
 
@@ -28,9 +28,9 @@ uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>
 uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name> --dry-run
 ```
 
-Pure-deterministic: `.python-version` (`3.14`), `tests/test_smoke.py` (raw template — the `verify` job's `uv run pytest` has nothing to collect without it, so it is what makes the gate green on day one), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `__pycache__/.venv`).
+Pure-deterministic: `.python-version` (`3.14`), `src/<module>/__init__.py` (rendered — the covered package, so `--with-coverage` measures code instead of failing at 0%; `pythonpath = ["src"]` in `pyproject.toml` is what makes it importable), `tests/test_smoke.py` (rendered — the `verify` job's `uv run pytest` has nothing to collect without it), `.gitignore` dedup additions (shared `GITIGNORE_GIT` + `__pycache__/.venv`).
 
-Project-owned: `tests/test_smoke.py` is a starting point the project replaces, so `--update` preserves it (see `PROJECT_OWNED`).
+Project-owned: `src/<module>/__init__.py` and `tests/test_smoke.py` are starting points the project replaces, so `--update` preserves them (see `SOURCE_OWNED` + `SOURCE_OWNED_PATTERNS` — the package path carries a computed directory name).
 
 Mixed (script warns → proofread): `pyproject.toml` (`{{project_name}}`, description/readme), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
 
@@ -56,7 +56,7 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` (to
 
 ## Grilling Selection
 
-If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>` to the generator. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --with-coverage --coverage-threshold 80 --project-name <name>`. Without Tests or with No coverage, omit the flag — `pyproject.toml` omits `pytest-cov` and `[tool.coverage.*]` and CI runs `uv run pytest` without `--cov`.
+If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>` to the generator. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --with-coverage --coverage-threshold 80 --project-name <name>`. Without Tests or with No coverage, omit the flag — `pyproject.toml` omits `pytest-cov` and `[tool.coverage.*]` and CI runs `uv run pytest` without `--cov`. `fail_under` is meaningful because the flavor ships a covered package: `tests/scaffold/test_flavor_gates.py` runs the wired `pytest --cov --cov-fail-under`.
 
 ## Relation to Other Subskills
 

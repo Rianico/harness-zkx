@@ -50,7 +50,7 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` (tool
 
 ## Grilling Selection
 
-If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>`. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --with-coverage --coverage-threshold 80`. Without coverage, generator writes plain `Cargo.toml`/`cargo test` path and omits `llvm-cov` wiring. Gate is optional leaf — config stays byte-identical.
+If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>`. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --with-coverage --coverage-threshold 80`. Without coverage, generator writes plain `Cargo.toml`/`cargo test` path and omits `llvm-cov` wiring — including its install steps: the coverage job installs `cargo-llvm-cov` (`taiki-e/install-action`, SHA-pinned) and the `llvm-tools-preview` component before the first call, because a bare runner has neither (`error: no such command: llvm-cov`). Gate is optional leaf — config stays byte-identical.
 
 ## Relation to Other Subskills
 
