@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
 
+### Documentation
+
+- **gh-router:** index every script as a common operation
+
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
 
 ### ⚠ BREAKING CHANGES
