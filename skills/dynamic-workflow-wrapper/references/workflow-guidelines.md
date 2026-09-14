@@ -59,6 +59,14 @@ Downstream nodes receive **pointers plus distilled values**: `specPath`, `worktr
 - The pass condition is `issues.length === 0 && gate.ok`. Zero means zero: no waivers, no "minor", no deferral.
 - Each round must carry the two isolation phases: `worktree-branch` (the copy is on the expected branch) and `root-untouched` (the session root gained no tracked change). They are the guards that make a per-node cwd contract enforceable without the runtime forwarding `cwd`.
 
+### Review & scope rules
+
+- **Scope creep vs. design deepening:**
+  - *Harmful Scope Creep (`P2`)*: Modifying repository tooling or CI (`.config/wt.toml`, workflows, hooks); unrequested public API/payload mutations; speculative generalization.
+  - *Permitted Design Deepening*: Submodule decomposition curing code smells (e.g. Divergent Change, God modules); internal cohesive helper extraction; `test/arch/` architectural or terminology regression tests. Reviewers must NEVER flag design deepening as scope creep.
+- **Review continuity:** Reviewers in round $N$ must honor remediations accepted from round $N-1$. Reviewers must never contradict prior-round guidance or ping-pong on architectural decisions unless a fatal correctness flaw (`P1`) is proven with a failing counterexample.
+- **Zero tooling tampering:** Subagents must never modify repository tooling, hooks, or CI configurations to bypass gate checks.
+
 ### Merge evidence
 
 Merging is the one node that mutates shared state, so its contract is stricter than the rest:

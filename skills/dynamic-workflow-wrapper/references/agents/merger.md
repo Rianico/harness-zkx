@@ -43,10 +43,10 @@ Modes A, B and C are nodes of an AFK run and never push. Mode D is the operator'
 
 ## Mode C — one merge attempt
 
-1. History hygiene in the copy: Conventional Commits, atomic commits, code and docs separate; when the repo tracks `CHANGELOG.md`, exactly one new bullet under `## [Unreleased]`. Commit what the developer left uncommitted with the same conventions; never rewrite their commits.
+1. History hygiene in the copy: Conventional Commits, atomic commits, code and docs separate; when the repo tracks `CHANGELOG.md`, check `CONTRIBUTING.md` for section conventions and respect hidden commit types (`style|chore|refactor|test|build|ci` do not receive standalone headers unless breaking). Run native changelog scripts if available (e.g. `python scripts/changelog-unreleased.py`). Commit what the developer left uncommitted with the same conventions; never rewrite their commits.
 2. Run exactly one merge: `uv run ~/.agents/skills/branch-worktree-pr/scripts/merge_copy.py <copy_path> <integration_branch>`. Exit 0 = merged, exit 2 = conflict, exit 1 = gate failure. The `[pre-merge]` gate runs inside it when the project declares one.
 3. On exit 2: finish the rebase **inside the copy only** — read `~/.agents/skills/resolving-merge-conflicts/SKILL.md`. Headless continue form: `GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C <copy> rebase --continue`. Commit the resolution on the task branch.
-4. On exit 1: fix the failing gate inside the copy only, reading the gate output first (a CHANGELOG guard hit is fixed inside the copy and committed).
+4. On exit 1: fix the failing gate inside the copy only, reading the gate output first (a CHANGELOG guard hit is fixed inside the copy and committed). **Zero tooling tampering:** Never modify repository tooling, `.config/wt.toml`, pre-merge hooks, or CI configurations to bypass a gate.
 5. **Do not retry the merge in this call, even after a successful repair.** The repaired copy must be re-gated and re-reviewed before the next attempt, and only the workflow can sequence that. Report `repaired: true` and stop.
 6. Report every attempt as `{ exitCode, command, tail }` with the tail capped at 20 lines, and set `outcome` to `MERGED` (exit 0 on the first attempt of this call), `CONFLICT`, or `GATE_FAILED`.
 7. Do not remove the copy yourself: `merge_copy.py` removes a successfully merged copy, and a failed attempt must leave it in place for the repair and the re-verification.

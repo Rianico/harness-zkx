@@ -594,7 +594,10 @@ for (const taskId of orderResult.order) {
         gotchasBlock(),
         `Implement the minimal change with a failing test first (TDD). Keep the change inside ${taskPath}.`,
         `Commit on \`${taskBranch}\` inside the worktree using Conventional Commits${task.issue ? ` and include \`Closes ${task.issue}\`` : ''}; keep code and docs in separate commits.`,
-        `The repository's pre-merge gate may require exactly one new bullet under \`## [Unreleased]\` in CHANGELOG.md — add it when the repo tracks a changelog and the task is user-visible.`,
+        `Strictly observe domain vocabulary in CONTEXT.md (_Avoid_: ...); never introduce banned synonyms in code, tests, or commit messages.`,
+        `Zero tooling tampering: never modify .config/wt.toml, CI workflows, or git hooks to bypass gate limits or commitlint rules.`,
+        `Multi-step state updates must be atomic in a single transaction (BEGIN IMMEDIATE); hybrid disk+db operations must surface desync warnings.`,
+        `The repository's pre-merge gate may require exactly one new bullet under \`## [Unreleased]\` in CHANGELOG.md — add it when the repo tracks a changelog and the task is user-visible (respecting CONTRIBUTING.md hidden types).`,
         `Never push. Return the schema with filesChanged (absolute worktree paths) and a summary that is the approach, not a status log.`
       ]
         .filter(Boolean)
@@ -650,7 +653,9 @@ for (const taskId of orderResult.order) {
         gotchasBlock(),
         `Diff under review — read it with \`git -C ${taskPath} diff ${taskBase}...HEAD\` plus \`git -C ${taskPath} log --oneline ${taskBase}..HEAD\`.`,
         `Touched files: ${JSON.stringify(Array.from(touchedFiles))}`,
-        `The deterministic gate passed. Focus exclusively on semantic correctness and invariant violations, and re-verify each issue from the previous round as fixed or not-fixed.`
+        `The deterministic gate passed. Focus exclusively on semantic correctness and invariant violations, and re-verify each issue from the previous round as fixed or not-fixed.`,
+        `Enforce the scope taxonomy: do NOT flag beneficial design deepening (submodule decompositions curing code smells, internal helper extractions, architecture/terminology test suites) as scope creep.`,
+        `Review stability: honor remedies accepted in prior rounds; do not reverse or contradict prior-round guidance unless a fatal correctness flaw (P1) is proven with a failing counterexample.`
       ]
         .filter(Boolean)
         .join('\n');

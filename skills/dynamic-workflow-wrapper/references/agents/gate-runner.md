@@ -43,9 +43,10 @@ If no `evalDir` is provided, detect the stack and run the native verification pi
   1. Test: `go test ./...`
   2. Lint: `golangci-lint run`
 
-### 3. Tree Cleanliness & Commit Hygiene
+### 3. Tree Cleanliness, Commit Hygiene & Domain Vocabulary
 - `git status --porcelain` — must be clean (only untracked throwaway files under `.lsz/` are tolerated).
 - When a base branch is given: `npx commitlint --from=origin/<base> --to=HEAD --verbose` (if commitlint config is present).
+- **Domain vocabulary check:** When `CONTEXT.md` exists, audit the task diff (`git diff <base>...HEAD`) to ensure no added code or tests introduce forbidden synonyms listed in `_Avoid_:`. Fail phase `domain-vocabulary` if forbidden terms appear in added lines.
 
 Cap every captured command output at 20 lines (head + tail) — keep large logs out of your return.
 
