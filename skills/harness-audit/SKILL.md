@@ -1,15 +1,6 @@
----
-name: harness-audit
-description: >-
-  Audits pi session JSONL for oversized bash outputs, analyses cause and triages refinable vs replaceable-by-tool vs filter vs keep for fix-or-gotcha decision. Use when trimming verbose results or hardening context-window bloat.
-arguments: target
-argument-hint: |-
-  <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file
-  [--threshold N] -- line threshold that marks a bash output as oversized (default: 20)
-  [--json] -- emit machine-readable JSON instead of text report
-  [--emit-filtered] -- write a filtered session copy alongside the report
-  [--keep-head-tail N] -- when truncating, keep first/last N lines (default: 10)
----
+______________________________________________________________________
+
+## name: harness-audit description: >- Audits pi session JSONL for oversized bash outputs, analyses cause and triages refinable vs replaceable-by-tool vs filter vs keep for fix-or-gotcha decision. Use when trimming verbose results or hardening context-window bloat. arguments: target argument-hint: |- <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file [--threshold N] -- line threshold that marks a bash output as oversized (default: 20) [--json] -- emit machine-readable JSON instead of text report [--emit-filtered] -- write a filtered session copy alongside the report [--keep-head-tail N] -- when truncating, keep first/last N lines (default: 10) disable-model-invocation: true
 
 # harness-audit
 
@@ -35,6 +26,7 @@ Exit `0` ok / `1` bad args / `2` not found.
 `audit.py` parses JSONL line-by-line (see [session-format](references/session-format.md)), pairs `bash` `toolCall`→`toolResult`, counts `toolResult.content[].text` via `splitlines()`. Only `toolName == "bash"` is measured. With `--with-context 3` (recommended for triage) it also attaches the next 3 turns (assistant `text` + subsequent `toolCall`/`toolResult` roles) after each oversized `toolResult` so you can see how the model reacted (summarized, re-dumped, looped, or recovered) — see `audit.py --help`.
 
 > **Tmp dump?** Not by default. `--with-context` inlines a bounded preview (first 120 chars × 3 turns, plus `role/type`) in the `--json` payload; enough for step 4 without extra I/O. Use `--dump-context <dir>` only when you need full bodies for deep dive — it writes one `oversized-<line>.json` per entry to the given tmp dir (not overwritten into the session) and prints the dir path.
+
 ### 3. Report (deterministic)
 
 ### 4. Analyse — why it overflowed (model)
@@ -49,12 +41,12 @@ Keep prose tight: `why / manageable / replaceable + tool` — no re-diagnosing s
 
 ### 5. Triage (model proposes, you decide)
 
-| Bucket | Signal | Default action |
-|---|---|---|
-| **A — Refine script** | Dump/search/poll in owned `skills/*/scripts/*` (or tight flag in managed invocation); repeat offender; manageable=Yes & owned | Edit the owning script: add bound flag (`-q`/`--max-count`/`| head`) or replace with scoped tool; add test in `tests/harness-audit/` if reusable; re-run `uv run ruff check` + `audit.py --with-context 3` to confirm `< threshold` |
-| **B — Replace bash with advanced command** | One-off exploratory bash that wasted context; manageable=Yes but unowned | Document mapping and switch next time: `ast_grep`/`lsp`/`read` handle; no script edit; optional one-line note in skill or `gotcha` if recurrent |
-| **C — Filter output** | Legitimately large but context-costly log | Keep bash, use `--emit-filtered` (or lower `keep_head_tail`) |
-| **D — Keep** | Rare/expected large, cost acceptable | No action |
+| Bucket                                     | Signal                                                                                                                        | Default action                                                                                                                                  |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — Refine script**                      | Dump/search/poll in owned `skills/*/scripts/*` (or tight flag in managed invocation); repeat offender; manageable=Yes & owned | Edit the owning script: add bound flag (`-q`/`--max-count`/\`                                                                                   |
+| **B — Replace bash with advanced command** | One-off exploratory bash that wasted context; manageable=Yes but unowned                                                      | Document mapping and switch next time: `ast_grep`/`lsp`/`read` handle; no script edit; optional one-line note in skill or `gotcha` if recurrent |
+| **C — Filter output**                      | Legitimately large but context-costly log                                                                                     | Keep bash, use `--emit-filtered` (or lower `keep_head_tail`)                                                                                    |
+| **D — Keep**                               | Rare/expected large, cost acceptable                                                                                          | No action                                                                                                                                       |
 
 Per entry: `bucket / confidence / cheapest fix / context saved`. Include simpler/no-change when credible; do not invent fixes when one path suffices (keel: bounded options).
 
@@ -74,6 +66,7 @@ On approval:
 - **Refine script:** edit producing script (not session), replace `bash cat|rg` with scoped tool, add test in `tests/harness-audit/` when reusable, re-run `uv run ruff check` + `audit.py`.
 - **Replace bash:** note advanced-tool mapping for next turn; no code change.
 - **Add to `rules/common/gotcha.md`:** only when violation creates meaningful context-window risk and check can change action (keel §6). New gotcha needs evidence rule detects planted violation, narrow scope, owner, removal condition. Otherwise prefer one-off fix. Default gotchas remain shrink-only; growth is boundary decision.
+
 ## Examples
 
 ```bash
