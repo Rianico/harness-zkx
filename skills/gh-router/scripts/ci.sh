@@ -32,7 +32,11 @@ esac
 [[ -n "$command" ]] || fail "usage: ci.sh <runs|why|watch> [args]" 2
 shift || true
 
-REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+# Resolve the repo from this checkout's push remote (never `gh repo view`, which can
+# point at an upstream/fork remote and 404 or act on the wrong project).
+if ! REPO=$(repo_slug); then
+  fail "could not determine repo slug (no GitHub remote for branch/origin)" 2
+fi
 
 # ---------------------------------------------------------------- runs
 

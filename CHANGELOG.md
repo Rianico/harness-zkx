@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **gh-router:** resolve the repo from the push remote, not gh repo view
 * **scaffold:** correct the templates and detection the scaffold ships (#32)
 * **scaffold:** make the generated gates pass, and stop bypassing them
 * **scaffold:** make both coverage gates achievable on a fresh tree
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **rules:** pin repo identity from the push remote
 * **scaffold:** record the gate-config contract
 * **scaffold:** record how each coverage gate is wired
 * record the bumped toolchain and the preset/writer constraint
