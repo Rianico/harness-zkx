@@ -46,9 +46,9 @@ Blocking signals are hard gates. Never skip, escape, or bypass any gate or verif
 
 **Don't:** `curl https://github.com/...` / `curl https://api.github.com/...` / `fetch` / `fetch_content` for GitHub hosts.
 
-**Do:** Use `gh` clients — `gh issue view <n> --json title,body --repo <owner/repo>`, `gh pr view`, `gh repo view`, `gh api repos/<owner>/<repo>/issues/<n>` (auth, rate-limit, JSON shape). For Actions: `gh run list --workflow <name>` to find, `gh run view <id>` to inspect, `gh run watch <id>` to wait for completion — never poll via `curl` or web fetch. `curl`/`fetch` only as fallback when `gh` unavailable or for non-GitHub hosts.
+**Do:** Use `gh` clients — `gh issue view <n> --json title,body --repo <owner/repo>`, `gh pr view --repo <owner/repo>`, `gh api repos/<owner>/<repo>/issues/<n>` (auth, rate-limit, JSON shape). In a multi-remote checkout always pass `--repo`: bare `gh repo view` resolves to the upstream/fork, not your push remote (see git-convention §2 — Repo identity). For Actions: `gh run list --repo <owner/repo> --workflow <name>` to find, `gh run view <id> --repo <owner/repo>` to inspect, `gh run watch <id> --repo <owner/repo>` to wait for completion — never poll via `curl` or web fetch. `curl`/`fetch` only as fallback when `gh` unavailable or for non-GitHub hosts.
 
-**Check:** No `curl`/`fetch` to `github.com`/`api.github.com` when `gh` is available; `gh` command appears in transcript for GitHub links and Actions progress.
+**Check:** No `curl`/`fetch` to `github.com`/`api.github.com` when `gh` is available; `gh` command appears in transcript for GitHub links and Actions progress; every repo-scoped `gh` call pins `--repo` in a multi-remote checkout.
 
 ---
 
