@@ -63,7 +63,7 @@ command -v python3 >/dev/null 2>&1 || fail "python3 not found" 3
 [[ -f scripts/changelog-unreleased.py ]] || fail "no scripts/changelog-unreleased.py in $ROOT" 3
 
 if [[ -z "$BASE" ]]; then
-  BASE="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)"
+  BASE="$(default_branch || true)"
   BASE="${BASE:-main}"
 fi
 if ! git rev-parse --verify -q "origin/$BASE" >/dev/null; then

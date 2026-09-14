@@ -90,5 +90,20 @@ repo_slug() {
   printf '%s' "$slug"
 }
 
+# default_branch — default branch of the repo this checkout pushes to.
+#
+# Same trap as repo_slug(): `gh repo view --json defaultBranchRef` resolves against the
+# upstream/fork in a multi-remote checkout, so the branch name can come from the wrong
+# project (e.g. upstream's master vs the fork's main). Resolve the slug from the push
+# remote first, then query that repo.
+#
+# Usage: BASE=$(default_branch) || BASE=main
+# Exit: 0 with branch name | 1 if unresolvable (caller supplies a fallback)
+default_branch() {
+  local repo
+  repo=$(repo_slug) || return 1
+  gh api "repos/$repo" --jq '.default_branch' 2>/dev/null || return 1
+}
+
 # Ensure errors show a clear marker before set -e exits
 trap 'fail "command failed: $BASH_COMMAND (line $LINENO)"' ERR
