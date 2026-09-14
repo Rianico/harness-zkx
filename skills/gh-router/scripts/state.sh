@@ -47,7 +47,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 2
 
 [[ -n "$HEAD_REF" ]] || HEAD_REF="$(git rev-parse --abbrev-ref HEAD)"
-[[ -n "$BASE" ]] || BASE="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || echo main)"
+[[ -n "$BASE" ]] || BASE="$(default_branch || echo main)"
 
 git fetch -q origin "$BASE" 2>/dev/null || true
 
