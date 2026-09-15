@@ -126,6 +126,32 @@ def calculate_discount(user: User, orders: list[Order]) -> float:
     return 0.0
 ```
 
+### Classitis & Gratuitous Shallow Layers
+
+```python
+# BAD: 5-line class wrapping a single function or shuffling fields
+class UserFetcher:
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def fetch(self, user_id: str) -> UserDTO:
+        return UserDTO.from_orm(self.db.get(user_id))
+
+class UserMapper:
+    @staticmethod
+    def to_view_model(dto: UserDTO) -> UserViewModel:
+        return UserViewModel(id=dto.id, name=dto.name)
+```
+
+**Fix:** Deep modules with first-class functions. Python modules are natural namespaces. A single cohesive function or deep service absorbing validation, caching, and persistence replaces multiple shallow boilerplate classes.
+
+```python
+# GOOD: Clean function or deep service absorbing complexity
+def get_user(db: Database, user_id: str) -> User:
+    """Fetches and validates user, absorbing caching and error mapping."""
+    ...
+```
+
 ## Error Handling Anti-Patterns
 
 ### Bare Exception Handling

@@ -24,12 +24,16 @@ You have invoked the Rust Expert Skill. This skill contains actionable checklist
 - **Error Handling:** Use the `?` operator and `Result` universally. Prefer libraries like `anyhow` for applications or `thiserror` for libraries.
 - **Enums over Booleans:** Use `enum` for state machines instead of multiple boolean flags.
 - **Concurrency:** Prefer message passing (`mpsc`) or `RwLock` over `Mutex` where applicable.
+- **Deep Modules & Narrow Public API:** Expose minimal `pub` items at crate/module boundaries; keep internal machinery `pub(crate)` or private. The module absorbs internal complexity (locks, buffer pools, caching, transaction boundaries) behind a clean API.
+- **Reject Classitis & Over-Abstraction:** Avoid gratuitous single-method structs and deep trait hierarchies. Prefer cohesive functions and enum pattern matching over speculative OOP-style trait abstractions. Keep cohesive logic intact; do not fragment algorithms into micro-helpers if it harms readability.
+- **Design Deepening vs. Scope Creep:** Decomposing large modules into internal child modules (`mod internal;`) to cure God files is permitted design deepening. Never widen `pub` exports or cargo features without mandate.
 > **Need Deep Knowledge?** Read `$SKILL_DIR/references/rust-patterns.md`.
 
 ### Testing & Verification
 - **Unit Tests:** Keep them in the same file inside a `#[cfg(test)]` module.
 - **Integration Tests:** Place them in the `tests/` directory at the project root.
 - **Mocks:** Use traits for dependency injection to allow mocking in tests.
+- **Refutation by Counterexample & Oracle Testing:** Supply concrete minimal failing inputs (`input -> expected vs observed`) when diagnosing defects. Verify state machines and combinatorial engines with small-input exhaustive tests or property-based tests (`proptest`).
 > **Need Deep Knowledge?** Read `$SKILL_DIR/references/rust-testing.md`.
 
 ## Instructions for the Agent

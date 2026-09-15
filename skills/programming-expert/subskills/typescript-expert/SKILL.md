@@ -97,10 +97,18 @@ Enforce when editing `*.ts`/`*.tsx`/`*.mts`.
 - **Monorepo** — Turborepo (<20 pkgs, speed) vs Nx (>50 pkgs, plugins) — see [[tooling#monorepo-matrix]]
 - **Migration** — `allowJs`/`checkJs` incremental, `ts-migrate`/`typesync`, ESM-first `"type":"module"` — see [[tooling#migration]]
 
+## Deep module design & architecture
+
+- **Reject Classitis & Layer Bloat:** In TypeScript/Node, avoid Java-style Enterprise Architecture with 5 shallow layers (`Controller → DTO → Service → Mapper → Repository → Entity`) where each layer merely shuffles fields. Functions, plain objects, and modules are first-class; avoid creating classes purely to wrap a single method.
+- **Narrow Public Surface, Deep Internals:** Public entrypoints (`index.ts`) expose a minimal, cohesive API (e.g. `resolve()`, `mutate()`). Internal modules absorb caching (LRU), CAS addressing, atomic transactions, and boundary normalization without leaking internal helper types.
+- **Design Deepening:** Submodule decomposition curing code smells (God files, Divergent Change, Shotgun Surgery) is permitted design deepening; never widen public barrel exports without mandate.
+- **Counterexample Refutation & Oracles:** Reviewers and implementers must provide concrete minimal failing inputs (`input -> expected vs observed`) to prove defects. Verify non-trivial state machines or combinatorial logic with minimal exhaustive small-input oracle tables or property-based tests.
+
 ## Code review checklist
 
 Apply exhaustively; every item is a blocker.
 
+- **Architecture:** narrow public API, zero shallow pass-through layers or Classitis; internal modules absorb complexity; multi-step mutations bound in single transactions; counterexamples provided for bug claims
 - **Type safety:** no implicit `any` (`unknown` instead), strict null checks, minimal `as`, generic constraints, discriminated unions, explicit public return types
 - **Best practices:** `interface` for shapes, const assertions, type guards over `as`, branded types for primitives, template literals where appropriate
 - **Performance:** no deep instantiation (>10 recursion), no hot-path mapped types, `skipLibCheck` set, references configured

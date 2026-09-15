@@ -330,6 +330,7 @@ async def test_fetch_with_timeout(): ...
 - Prefer real DB/queue in containers (`responses` for HTTP); minimize mocks to contracts.
 - Temporal workflows: `WorkflowEnvironment.start_time_skipping()` for unit, mock activities for integration, replay histories for determinism — see `[temporal-testing.md](references/temporal-testing.md)`.
 - Details: parametrization, `monkeypatch`, `freezegun` for time, property-based tests in `[testing-patterns.md](references/testing-patterns.md)`.
+- **Refutation by counterexample & small-input oracle tests:** When debugging or reviewing algorithmic or state-machine logic, supply a concrete minimal failing input (`input -> expected vs observed`). Test combinatorial logic or state machines with minimal exhaustive oracle tables or property-based tests (`hypothesis`).
 
 ## 9. Design & Project Structure
 
@@ -349,6 +350,9 @@ myapp/
 **Core rules:**
 
 - **KISS + SRP** — one reason to change; delete before you abstract; Rule of Three for premature abstraction.
+- **Deep modules over classitis** — Python functions and modules are first-class namespaces. Do not introduce classes solely to wrap a single function or create 5-line DTO mappers. A module with an explicit `__all__` should present a narrow, ergonomic interface while absorbing internal complexity (validation, atomic DB transactions, caching, error translation).
+- **Design deepening vs. scope creep** — decomposing monolithic files into private internal submodules (`_submodule.py` or `_internal/`) to cure Divergent Change or God modules is permitted design deepening. Add architectural regression tests (`tests/test_arch.py`) to enforce layering and boundary invariants. Never widen `__all__` or public exports without mandate.
+- **Transactional atomicity (`BEGIN IMMEDIATE`)** — multi-step state mutations across multiple models/tables must execute inside a single atomic transaction (`async with session.begin():`), never fragmented across loose commits. Hybrid disk+DB operations must report desyncs explicitly.
 - **Composition over inheritance** — combine behaviors; Protocols define the seam when you need polymorphism.
 - **Dependency injection** — constructor injection for testability; if `__init__` has 7+ params, the class is too large — split it.
 - **Explicit public API** — every package defines `__all__`; consumers import from the package, not internals.
@@ -382,7 +386,7 @@ ruff check --fix . && ruff format . && basedpyright
 
 **Anti-patterns checklist** (scan before merge):
 
-- Mutable defaults (`def f(x=[])` prohibited; use `None` sentinel or `Field(default_factory=list)`), late-binding closures in loops (`lambda i=i:` or `functools.partial`), unchained exceptions (`raise ... from e`), scattered timeout/retry, double retry, hardcoded secrets, leaking ORM models to API, mixed I/O+logic, bare `except Exception: pass`, aborted batches, unclosed resources, blocking sync calls in `async`, missing type hints, untyped collections — see `[anti-patterns.md](references/anti-patterns.md)`.
+- Classitis & shallow pass-through wrappers (classes wrapping a single function or 5-line DTO mapping layers), mutable defaults (`def f(x=[])` prohibited; use `None` sentinel or `Field(default_factory=list)`), late-binding closures in loops (`lambda i=i:` or `functools.partial`), unchained exceptions (`raise ... from e`), scattered timeout/retry, double retry, hardcoded secrets, leaking ORM models to API, mixed I/O+logic, bare `except Exception: pass`, aborted batches, unclosed resources, blocking sync calls in `async`, missing type hints, untyped collections — see `[anti-patterns.md](references/anti-patterns.md)`.
 
 ## 11. Packaging — `src` Layout, `pyproject.toml`, Distribution
 

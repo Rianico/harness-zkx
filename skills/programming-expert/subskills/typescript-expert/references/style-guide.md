@@ -53,6 +53,7 @@ user-invocable: false
 - Defer formatting to tooling
 - Prefer **named exports** over `export default` — keeps refactor renames and IDE auto-import in sync, and avoids the `default` re-naming drift you get with `import Foo from './foo'`. Reserve `export default` for files where the framework requires it (Next.js page/route/layout, React.lazy targets, config files like `vitest.config.ts`). The codebase still has many `export default` occurrences — that's historical debt, not a pattern to copy; do not model new code on existing `export default` usage outside the framework-required cases above
 - Before adding local helpers for common guards/parsing/normalization (record checks, string extraction, empty-string handling, timing helpers, JSON-safe utilities, etc.), search shared utility packages/directories first. If the helper already exists or clearly belongs there, import it from the shared utility module instead of duplicating tiny helpers across feature files.
+- **Deep modules over classitis:** Avoid creating shallow 5-line classes or DTO/mapper hierarchies that do nothing but shuffle properties between layers (e.g. Controller → DTO → Service → Mapper → Repo). Expose simple, narrow module APIs that absorb rich internal complexity (caching, transactions, validation, persistence) behind clean functions or minimal facades.
 
 ## UI and Theming
 

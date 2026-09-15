@@ -23,13 +23,16 @@ You have invoked the Go Expert Skill. This skill contains actionable checklists 
 - **Error Handling:** Check errors explicitly (`if err != nil`). Never use `panic` for expected error conditions.
 - **Concurrency:** Prefer channels for passing data. Use `sync.Mutex` or `sync.RWMutex` only when protecting shared state. Start goroutines safely and ensure they can exit to avoid leaks.
 - **Interfaces:** Define interfaces where they are *used*, not where they are implemented. Keep them small (1-2 methods).
+- **Deep Packages:** A package should be deep (Ousterhout) — minimal exported surface (`UpperCamelCase`), rich absorbed complexity. Avoid shallow `util` packages or multi-layer DTO/mapper shuffles.
+- **Design Deepening vs. Scope Creep:** Internal package decomposition (e.g. inside `internal/`) to cure God files is permitted design deepening. Never expand public exported symbols without mandate.
 - **Naming:** Use MixedCaps. Keep package names short, lowercase, and single-word.
 > **Need Deep Knowledge?** Read `$SKILL_DIR/references/golang-patterns.md`.
 
 ### Testing & Verification
-- **Test Structure:** Use Table-Driven Tests (`[]struct`) for robust unit testing.
+- **Test Structure & Oracles:** Use Table-Driven Tests (`[]struct`) as minimal input-output oracles verifying state transitions and edge cases.
 - **Subtests:** Run subtests using `t.Run()` for better isolation and naming.
 - **Mocks:** Generate mocks using `gomock` or implement simple mock structs directly in the test file.
+- **Counterexample Refutation:** When claiming an algorithmic defect, supply a concrete minimal table entry (`input -> expected vs observed`) proving the failure.
 > **Need Deep Knowledge?** Read `$SKILL_DIR/references/golang-testing.md`.
 
 ## Instructions for the Agent

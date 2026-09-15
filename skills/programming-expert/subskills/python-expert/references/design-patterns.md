@@ -33,6 +33,13 @@ Build behavior by combining objects, not extending classes.
 
 Wait until you have three instances before abstracting. Duplication is often better than premature abstraction.
 
+### 5. Deep Modules (Ousterhout)
+
+The best modules are deep: they provide a simple, narrow interface while absorbing significant internal complexity. Avoid shallow modules where the interface is nearly as complex as the implementation, or gratuitous 5-line classes that merely pass through data.
+- Expose narrow functions or minimal facades via `__all__`.
+- Absorb caching, atomic transactions, retries, and schema transformations internally.
+- Linus Torvalds rule: Keep cohesive functions intact; do not fracture them into gratuitous micro-helpers if doing so harms reading flow.
+
 ## Quick Start
 
 ```python
