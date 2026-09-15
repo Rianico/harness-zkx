@@ -1,7 +1,8 @@
 # Agent runtime directories
 .agents/
 .claude/agents/
-.lsz/
+.lsz/*
+!.lsz/config.yaml
 .pi/
 
 # Agent user-specific files (keep rules tracked)
