@@ -13,9 +13,12 @@ set -Eeuo pipefail
 shopt -s inherit_errexit 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../subskills/gh-release/scripts/_common.sh
-source "$SCRIPT_DIR/../subskills/gh-release/scripts/_common.sh"
-# _common.sh resets options; re-assert strictness after it.
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+# shellcheck source=../lib/log.sh
+source "$LIB_DIR/log.sh"
+# shellcheck source=../lib/repo.sh
+source "$LIB_DIR/repo.sh"
+# log.sh sets -uo pipefail; re-assert strictness after sourcing.
 set -Eeuo pipefail
 IFS=$'\n\t'
 

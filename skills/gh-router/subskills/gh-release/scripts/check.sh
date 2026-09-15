@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=_common.sh
-source "$SCRIPT_DIR/_common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../../../lib" && pwd)"
+# shellcheck source=../../../lib/log.sh
+source "$LIB_DIR/log.sh"
 
 phase 1 3 "Check — tree, branch, commits"
 

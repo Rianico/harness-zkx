@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=_common.sh
-source "$SCRIPT_DIR/_common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../../../lib" && pwd)"
+# shellcheck source=../../../lib/log.sh
+source "$LIB_DIR/log.sh"
+# shellcheck source=../../../lib/repo.sh
+source "$LIB_DIR/repo.sh"
 
 DRY="false"
 if [[ "${1:-}" == "--dry-run" ]]; then DRY="true"; fi
