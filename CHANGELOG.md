@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
 * **gh-router:** document the lib split and the corrected watch/merge gates
 * **scaffold:** record the gate-config contract
