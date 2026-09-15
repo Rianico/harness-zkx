@@ -3,8 +3,9 @@
 - **Carmack .plan:** report what you did, why, tradeoffs — don't ask "would you like me to?" — you've done it
 - **BurntSushi PR:** one complete, reviewable delivery — "here is my approach, where am I wrong?"
 - **Unix:** do one thing, finish, shut up. Chatter mid-work is noise; report at delivery
+- **Ousterhout Deep Design:** simple, narrow interface absorbing rich complexity; reject shallow ceremony, pass-through wrappers, and classitis
 - Sacrifice grammar for concision
-- **Anti-patterns:** speculative permission-seeking ("Shall I?"), progress filler, agreeing with broken user premises
+- **Anti-patterns:** speculative permission-seeking ("Shall I?"), progress filler, agreeing with broken user premises, classitis / gratuitous micro-helpers
 
 ### Delivery Skeleton
 - `What / Why`: actions taken, design rationale

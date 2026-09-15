@@ -26,13 +26,26 @@ data = config.model_dump(); langs = data.get("languages")
 
 When narrowing tangles, ask: why does this serialization exist here? Move it to the boundary. Prefer TypeScript over JS, Pydantic over `object`/`Any`.
 
-**Graded surfaces** — narrowest promise that satisfies use.
+**Graded surfaces & Deep design** — narrowest promise that satisfies use; simple interface absorbing rich complexity.
 
+- **Clean Architecture + Deep Design (division of labor):**
+  - *Macro-Topology (Clean Architecture / Uncle Bob):* Where the seam is drawn and inward dependency direction. Core domain policy is pure and knows nothing of outer delivery mechanisms (DB, HTTP, CLI).
+  - *Micro-Geometry (Deep Design / John Ousterhout):* Boundary interface must be as narrow and simple as possible, while the module absorbs deep internal complexity (validation, caching, atomic transactions, error recovery).
+  - *Anti-pattern: Classitis & Layer Bloat:* Reject gratuitous 5-line micro-helpers and shallow pass-through layers (e.g. Controller → DTO → Service → Mapper → Repository → Entity where layers merely shuffle fields).
+  - *Systems engineering exemplars:*
+    - **Unix:** File descriptor (`open`, `read`, `write`, `close`) hiding filesystems, sockets, and pipes behind an integer handle.
+    - **SQLite:** 6-function C API and amalgamation (`sqlite3.c`) hiding 150k lines of ACID B-trees, WAL, and bytecode VM.
+    - **Linux Kernel (Linus Torvalds):** Rejects breaking cohesive functions into gratuitous micro-helpers when it harms readability; prefers deep function-pointer tables (`struct file_operations`) over deep OOP inheritance hierarchies.
 - Cross-module → public contract (needs cutover plan).
 - Internal → private; don't widen to silence warning — move caller or seam.
 - Deprecation → internal-only: remove + update callers atomically (no deprecated mark). Public/cross-boundary: deprecate with shim + migration window, cutover plan before removal.
   SOLID at module seams, not per-line.
-_Check:_ public exports constrained to explicit interface or `__all__`.
+_Check:_ public exports constrained to explicit interface or `__all__`; no shallow pass-through wrappers.
+
+**Design deepening vs. scope creep taxonomy** — distinguish internal structural refactoring from unmandated scope expansion.
+- *Harmful Scope Creep (`P2`):* Unmandated public APIs, mutating payload schemas, unrequested user-visible parameters, or altering repo tooling/configs (`.config/wt.toml`, CI workflows, linter configs).
+- *Permitted Design Deepening:* Submodule decomposition curing code smells (Divergent Change, God files, Shotgun Surgery), extracting cohesive internal helpers, and adding architectural regression tests (`test/arch/`). Reviewers must never flag internal deepening as scope creep.
+_Check:_ refactoring changes zero public APIs or repo tool configs; internal decomposition accompanied by regression tests.
 
 **Ubiquitous language & domain glossary** — domain boundaries define canonical nouns and forbidden synonyms (`_Avoid_: ...`). Check the domain glossary (`CONTEXT.md`) before naming types, functions, parameter names, error messages, and commit messages; treat avoided synonyms as invariant violations, not stylistic preference.
 _Check:_ diff contains zero terms from `_Avoid_:` lists.
