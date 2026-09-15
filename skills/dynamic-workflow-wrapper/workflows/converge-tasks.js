@@ -35,6 +35,24 @@
  * Merge authority: the merger attempts the merge ONCE per call and never retries after a
  * repair. A repaired task copy must be re-verified (gate + review) before the next attempt, and
  * only this workflow can sequence that — so the attempt budget lives here, not in the role.
+ *
+ * Stagnation breaker: a round that reproduces the identical worktree diff AND the identical
+ * failing checks as the previous round cannot converge — the fault is in the eval script or the
+ * environment, not the code — so the loop stops immediately with `BLOCKED (eval-gate
+ * stagnation)` instead of burning the remaining round budget. The gate reports a `diff-hash`
+ * phase (`git diff <base>...HEAD | git hash-object --stdin`) purely so this is decidable.
+ *
+ * Timeouts: the workflow runtime exposes no clock (`Date.now()` is unavailable), so this script
+ * cannot measure a cumulative run budget. `runTimeoutMs` (default 2h) bounds every agent call in
+ * the run and `taskTimeoutMs` (opt-in) bounds each call belonging to one task; an explicit
+ * `runTimeoutMs: null` disables the ceiling. A true cumulative run budget is still the `workflow`
+ * tool's `agentTimeoutMs` input.
+ *
+ * Finalize changelog sync: after every task merges, a hand-drifted `## [Unreleased]` block makes
+ * the composite gate dirty the tree and marks a fully successful run `BLOCKED`. The final gate
+ * reports the drift as a read-only `changelog-check` phase; when that is the ONLY failing phase
+ * the workflow dispatches one idempotent `chore: sync changelog unreleased section` commit and
+ * re-runs the composite gate exactly once.
  */
 
 export const meta = {
@@ -47,12 +65,29 @@ export const meta = {
 const rawArgs = args && typeof args === 'object' ? args : {};
 const maxRounds = Number.isInteger(rawArgs.maxRounds) ? Math.max(1, Math.min(rawArgs.maxRounds, 10)) : 5;
 const maxMergeAttempts = Number.isInteger(rawArgs.maxMergeAttempts) ? Math.max(1, Math.min(rawArgs.maxMergeAttempts, 3)) : 2;
+// Per-agent timeouts. The runtime has no clock, so `runTimeoutMs` is a per-call ceiling, not a
+// cumulative budget (pass `agentTimeoutMs` to the workflow tool for that). 2h by default so a
+// hung subagent cannot run all night; `runTimeoutMs: null` disables the ceiling explicitly.
+const DEFAULT_RUN_TIMEOUT_MS = 7_200_000;
+const taskTimeoutMs = Number.isInteger(rawArgs.taskTimeoutMs) && rawArgs.taskTimeoutMs > 0 ? rawArgs.taskTimeoutMs : null;
+const runTimeoutMs =
+  rawArgs.runTimeoutMs === null
+    ? null
+    : Number.isInteger(rawArgs.runTimeoutMs) && rawArgs.runTimeoutMs > 0
+      ? rawArgs.runTimeoutMs
+      : DEFAULT_RUN_TIMEOUT_MS;
 const stackHint = typeof rawArgs.stack === 'string' && rawArgs.stack.trim() ? rawArgs.stack.trim() : null;
 const evalDir = typeof rawArgs.evalDir === 'string' && rawArgs.evalDir.trim() ? rawArgs.evalDir.trim() : null;
 const requestedBase = typeof rawArgs.base === 'string' && rawArgs.base.trim() ? rawArgs.base.trim() : 'main';
 const requestedIntegration = typeof rawArgs.integration === 'string' && rawArgs.integration.trim() ? rawArgs.integration.trim() : null;
 const requestedBranch = typeof rawArgs.branch === 'string' && rawArgs.branch.trim() ? rawArgs.branch.trim() : null;
 const root = typeof cwd === 'string' ? cwd : process.cwd();
+
+/** Attach the resolved timeout ceiling to an agent call, or leave it at the run default. */
+function callOptions(base, perTask = false) {
+  const timeoutMs = perTask ? (taskTimeoutMs ?? runTimeoutMs) : runTimeoutMs;
+  return timeoutMs === null ? base : { ...base, timeoutMs };
+}
 
 const knownGotchas = Array.isArray(rawArgs.knownGotchas)
   ? rawArgs.knownGotchas.filter(g => typeof g === 'string' && g.trim()).map(g => g.trim())
@@ -321,6 +356,31 @@ const mergeSchema = {
   required: ['summary', 'status', 'merged', 'outcome', 'attempts', 'repaired', 'integrationBranch', 'taskBranch', 'worktreePath', 'issues']
 };
 
+const changelogSyncSchema = {
+  type: 'object',
+  properties: {
+    summary: { type: 'string' },
+    status: { type: 'string', enum: ['COMPLETED', 'BLOCKED'] },
+    synced: { type: 'boolean' },
+    commands: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          command: { type: 'string' },
+          ok: { type: 'boolean' },
+          exitCode: { type: 'integer' },
+          tail: { type: 'string' }
+        },
+        required: ['command', 'ok']
+      }
+    },
+    issues: { type: 'array', items: { type: 'string' } },
+    suggestions: { type: 'array' }
+  },
+  required: ['summary', 'status', 'synced', 'issues']
+};
+
 // 3. Execution ledger
 const ledger = [];
 const taskRows = [];
@@ -334,6 +394,35 @@ function report(message) {
   log(`converge-tasks: ${message}`);
 }
 
+/** First phase carrying `name`, or undefined when the gate did not report it. */
+function phaseByName(result, name) {
+  const phases = result && Array.isArray(result.phases) ? result.phases : [];
+  return phases.find(phase => phase && phase.name === name);
+}
+
+/** Names of every non-green phase, in report order. */
+function failedPhaseNames(result) {
+  const phases = result && Array.isArray(result.phases) ? result.phases : [];
+  return phases.filter(phase => phase && phase.ok !== true).map(phase => String(phase.name));
+}
+
+/**
+ * Identity of a failed round: the worktree diff plus the exact failing checks. Two consecutive
+ * rounds with the same signature cannot converge — the code did not change and the same checks
+ * still fail — so the retry loop stops instead of burning the rest of the budget.
+ */
+function failureSignature(diffHash, failed) {
+  const detail = failed.map(phase => `${phase.name}=${String(phase.tail || '').trim()}`).join('|');
+  return `${diffHash}::${detail}`;
+}
+
+/** True when changelog drift is the ONLY reason the composite gate failed. */
+function changelogDriftOnly(result) {
+  if (!result || result.ok === true) return false;
+  const failed = failedPhaseNames(result);
+  return failed.length === 1 && failed[0] === 'changelog-check';
+}
+
 function taskWorkspace(task, worktreePath, branch, base) {
   return [
     `## Workspace contract (binding)`,
@@ -344,7 +433,8 @@ function taskWorkspace(task, worktreePath, branch, base) {
     `Therefore: prefix every shell command with \`cd ${worktreePath} && \` (or address the tree with \`git -C ${worktreePath}\`),`,
     `and pass absolute paths under ${worktreePath} to read/edit/write.`,
     `First command — \`cd ${worktreePath} && git rev-parse --abbrev-ref HEAD\` must print \`${branch}\`; if it does not, stop and return status BLOCKED.`,
-    `The session root must stay clean and on its own branch: \`git -C ${root} status --porcelain --untracked-files=no\` stays empty.`
+    `The session root must stay clean and on its own branch. Admit the tree with the ephemeral-tolerant check that ignores machine-generated caches, and export \`PYTHONDONTWRITEBYTECODE=1\` so Python never creates \`__pycache__\` here:`,
+    `  \`git -C ${worktreePath} status --porcelain --untracked-files=all | grep -vE '(__pycache__/|\\.pyc$|\\.DS_Store$|\\.lsz/)' || true\` must print nothing; \`git -C ${root} status --porcelain --untracked-files=no\` stays empty.`
   ].join('\n');
 }
 
@@ -372,6 +462,7 @@ const planPrompt = [
   `  - keep the same \`id\` and \`ref\`;`,
   `  - for \`kind: "issue"\`, read the real issue with \`gh issue view <n> --json title,body,labels --repo <owner/repo>\` and put the number in \`issue\`; do not guess its content;`,
   `  - write \`acceptance\` as the concrete, checkable criteria that BOTH the deterministic gate and the reviewer will use (3-6 bullets);`,
+  `  - every criterion that greps for a token, symbol, or identifier must anchor it with word boundaries (\`\\b<identifier>\\b\`, or \`rg -w\`) — a bare substring false-reds on unrelated symbols and burns the round budget; to measure added/removed lines use \`git diff --numstat\`, never a \`grep -cE '^-[^-]'\` style diff-line regex;`,
   `  - report \`dependsOn\` only for dependencies you can evidence (a shared file, a stated prerequisite, an issue link). Use task ids as they appear above.`,
   `You may read the repository to ground the criteria. Do not paste file bodies into your reply.`,
   `If a task reference is unintelligible, contradicts another task, or cannot be planned without a human decision, set status BLOCKED and say which one.`,
@@ -380,7 +471,7 @@ const planPrompt = [
   .filter(Boolean)
   .join('\n');
 
-const plan = await accept(planPrompt, { agentType: 'ticket-planner', label: 'plan', schema: planSchema });
+const plan = await accept(planPrompt, callOptions({ agentType: 'ticket-planner', label: 'plan', schema: planSchema }));
 recordSuggestions('ticket-planner', plan && plan.suggestions);
 const planRows = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
 const planIssues = plan && Array.isArray(plan.issues) ? plan.issues : [];
@@ -469,15 +560,15 @@ const prepPrompt = [
   ``,
   `Procedure — run each step and put the exact failing command plus its output in \`issues\` when one fails:`,
   ``,
-  `1. Admission: \`git status --porcelain\`. Untracked \`.lsz/\` entries are tolerated; any other output means the root is dirty → status BLOCKED, cleanRoot false.`,
+  `1. Admission: tolerate the untracked set every gate tolerates — machine-generated caches (\`__pycache__/\`, \`*.pyc\`, \`.DS_Store\`) and paths under \`.lsz/\`. Run \`git status --porcelain --untracked-files=all | grep -vE '(__pycache__/|\\.pyc$|\\.DS_Store$|\\.lsz/)' || true\`: any output means the root is dirty → status BLOCKED, cleanRoot false. Also \`export PYTHONDONTWRITEBYTECODE=1\` so a stray interpreter stops creating \`__pycache__\` mid-run.`,
   `2. Record \`git -C ${root} rev-parse --abbrev-ref HEAD\` as rootBranch — the session root's branch must NOT change during this run.`,
   `3. Resolve the base: if \`git rev-parse --verify ${requestedBase}\` succeeds, use ${requestedBase} with baseSource "requested". Otherwise fall back to the repository default branch (\`git rev-parse --abbrev-ref origin/HEAD\`) with baseSource "origin-head". If neither resolves → BLOCKED.`,
   `4. Record whether the project body wires the merge gate: \`rg -n '^\\[pre-merge\\]' .config/wt.toml\` (or \`grep -n\`) succeeds → preMergeHook true. This decides only whether merge attempts are composite-gated; the Finalize node re-runs the full stack gate on the integration worktree either way.`,
   integrationWanted
-    ? `5. Allocate the integration worktree in its OWN worktree — never in the session worktree, and never by checking out ${integrationBranch} in ${root}. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json\` for an entry whose \`branch\` equals ${integrationBranch} (reuse only as instructed above), otherwise \`wt switch --create ${integrationBranch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json\` and report integrationTool "wt". Fallback: \`git worktree add <repo-parent>/<repo-name>-<integration-slug> -b ${integrationBranch} <base>\` with integrationTool "git", reusing that path when it already exists.`
+    ? `5. Allocate the integration worktree in its OWN worktree — never in the session worktree, and never by checking out ${integrationBranch} in ${root}. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json 2>/dev/null\` for an entry whose \`branch\` equals ${integrationBranch} (reuse only as instructed above), otherwise \`wt switch --create ${integrationBranch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json 2>/dev/null\` and report integrationTool "wt". Always redirect stderr: wt prints a json-schema notice there, and merging it into stdout breaks jq. The payload is a bare array on schema 1 and an \`{ items: [...] }\` envelope on schema 2, with the path at \.path or \.worktree.path — accept both. Fallback: \`git worktree add <repo-parent>/<repo-name>-<integration-slug> -b ${integrationBranch} <base>\` with integrationTool "git", reusing that path when it already exists.`
     : `5. Report integrationBranch "", integrationPath "", integrationTool "none", integrationReused false — this single-task run merges nothing.`,
   integrationWanted
-    ? `6. Verify and report every path absolute: the integration path exists as a directory; \`git -C <path> rev-parse --abbrev-ref HEAD\` equals ${integrationBranch}; \`git -C <path> status --porcelain\` is empty. Any mismatch → BLOCKED.`
+    ? `6. Verify and report every path absolute: the integration path exists as a directory; \`git -C <path> rev-parse --abbrev-ref HEAD\` equals ${integrationBranch}; and the ephemeral-tolerant admission check from step 1 run against the integration path prints nothing. Any mismatch → BLOCKED.`
     : `6. Verify the session root is still clean and still on the branch you recorded.`,
   `7. Do not run package installs or build steps — worktrunk's copy-ignored hook handles gitignored state.`,
   ``,
@@ -486,7 +577,7 @@ const prepPrompt = [
   .filter(Boolean)
   .join('\n');
 
-const prep = await accept(prepPrompt, { agentType: 'merger', label: 'prepare', schema: prepSchema });
+const prep = await accept(prepPrompt, callOptions({ agentType: 'merger', label: 'prepare', schema: prepSchema }));
 recordSuggestions('prepare', prep && prep.suggestions);
 const integrationPath = prep && typeof prep.integrationPath === 'string' ? prep.integrationPath.trim() : '';
 const prepared = Boolean(prep) && prep.status === 'COMPLETED' && prep.cleanRoot === true && (!integrationWanted || integrationPath !== '');
@@ -549,15 +640,15 @@ for (const taskId of orderResult.order) {
     `Session root (must stay untouched, same branch): ${root}`,
     ``,
     `Procedure:`,
-    `1. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json\`; if an entry already has branch \`${task.branch}\`, reuse it (reused true) rather than recreating; otherwise \`wt switch --create ${task.branch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json\` and report tool "wt".`,
+    `1. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json 2>/dev/null\` (always redirect stderr — wt prints a json-schema notice there and merging it into stdout breaks jq; the payload is a bare array on schema 1 and an \`{ items: [...] }\` envelope on schema 2, so read \.path or \.worktree.path); if an entry already has branch \`${task.branch}\`, reuse it (reused true) rather than recreating; otherwise \`wt switch --create ${task.branch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json 2>/dev/null\` and report tool "wt".`
     `2. Fallback: \`git worktree add <repo-parent>/<repo-name>-<task-slug> -b ${task.branch} <base>\` where <task-slug> is the branch name with \`/\` replaced by \`-\`; reuse that path when it already exists as a worktree; tool "git".`,
-    `3. Verify and report absolute paths only: the path exists as a directory, \`git -C <path> rev-parse --abbrev-ref HEAD\` equals \`${task.branch}\`, and \`git -C <path> status --porcelain\` is empty. Any mismatch → status BLOCKED with worktreePath "".`,
+    `3. Verify and report absolute paths only: the path exists as a directory, \`git -C <path> rev-parse --abbrev-ref HEAD\` equals \`${task.branch}\`, and the ephemeral-tolerant check \`git -C <path> status --porcelain --untracked-files=all | grep -vE '(__pycache__/|\\.pyc$|\\.DS_Store$|\\.lsz/)' || true\` prints nothing. Any mismatch → status BLOCKED with worktreePath "".`,
     `4. Never check out, commit, merge, or push in the session root. Never push anywhere.`,
     ``,
     `Return the schema.`
   ].join('\n');
 
-  const alloc = await accept(allocPrompt, { agentType: 'merger', label: `alloc:${slugify(task.id, 24)}`, schema: allocSchema });
+  const alloc = await accept(allocPrompt, callOptions({ agentType: 'merger', label: `alloc:${slugify(task.id, 24)}`, schema: allocSchema }, true));
   recordSuggestions('allocate', alloc && alloc.suggestions);
   const taskPath = alloc && typeof alloc.worktreePath === 'string' ? alloc.worktreePath.trim() : '';
   const taskBranch = (alloc && alloc.branch) || task.branch;
@@ -574,6 +665,9 @@ for (const taskId of orderResult.order) {
 
   const workspace = taskWorkspace(task, taskPath, taskBranch, taskBase);
   let mergeAttempts = 0;
+  // Signature of the previous FAILED round (diff hash + failing checks); the stagnation breaker
+  // trips when two consecutive failed rounds share it.
+  let lastFailedSignature = '';
   report(`task ${task.id}: copy ready at ${taskPath} (branch ${taskBranch}, base ${taskBase})`);
 
   const outcome = await gate(
@@ -603,7 +697,7 @@ for (const taskId of orderResult.order) {
         .filter(Boolean)
         .join('\n');
 
-      const devResult = await accept(devPrompt, { agentType: 'developer', label: `dev:${slugify(task.id, 20)}:r${roundNumber}`, schema: devSchema });
+      const devResult = await accept(devPrompt, callOptions({ agentType: 'developer', label: `dev:${slugify(task.id, 20)}:r${roundNumber}`, schema: devSchema }, true));
       recordSuggestions('developer', devResult && devResult.suggestions);
 
       if (!devResult) {
@@ -628,22 +722,37 @@ for (const taskId of orderResult.order) {
         `Every run must include these two isolation checks, which fail the round when they fail:`,
         `  - \`git -C ${taskPath} rev-parse --abbrev-ref HEAD\` prints \`${taskBranch}\` (phase name "worktree-branch").`,
         `  - \`git -C ${root} status --porcelain --untracked-files=no\` is empty, i.e. no tracked change leaked into the session root (phase name "root-untouched").`,
+        `  - \`git -C ${taskPath} diff ${taskBase}...HEAD | git hash-object --stdin\` prints the worktree's diff hash as the FIRST line of this phase's tail (phase name "diff-hash", always ok). The workflow uses it to detect a stagnant round.`,
         `Then the stack gates: typecheck, tests, lint, format check, build. Return evidence as { command, ok, exitCode, tail } with tails capped at 20 lines.`,
         `Never fix anything yourself, never merge, never run \`wt merge\`, never push.`
       ]
         .filter(Boolean)
         .join('\n');
 
-      const gateResult = await accept(gatePrompt, { agentType: 'gate-runner', label: `gate:${slugify(task.id, 20)}:r${roundNumber}`, schema: gateSchema });
+      const gateResult = await accept(gatePrompt, callOptions({ agentType: 'gate-runner', label: `gate:${slugify(task.id, 20)}:r${roundNumber}`, schema: gateSchema }, true));
       recordSuggestions('gate-runner', gateResult && gateResult.suggestions);
       const failedPhases = (gateResult && Array.isArray(gateResult.phases) ? gateResult.phases : []).filter(phase => !phase.ok);
 
       if (!gateResult || gateResult.ok !== true || failedPhases.length > 0) {
         const diagnostics = failedPhases.map(phase => `Check '${phase.name}' failed (${phase.command}):\n${phase.tail || 'No output'}`).join('\n\n');
+        const diffHashPhase = phaseByName(gateResult, 'diff-hash');
+        const diffHash = diffHashPhase && typeof diffHashPhase.tail === 'string' ? diffHashPhase.tail.trim().split('\n')[0] : '';
+        if (diffHash) {
+          const signature = failureSignature(diffHash, failedPhases);
+          if (signature === lastFailedSignature) {
+            const feedback = `BLOCKED (eval-gate stagnation): round ${roundNumber} produced the identical worktree diff (${diffHash.slice(0, 12)}) and the identical failing checks as the previous round, so further rounds cannot converge — the fault is in the eval criteria or the environment, not the code.\n\n${diagnostics}`;
+            ledger.push({ taskId: task.id, round: roundNumber, stage: 'gate-runner', ok: false, stalled: true, feedback });
+            return { ok: false, stage: 'gate-runner', blocked: true, feedback };
+          }
+          lastFailedSignature = signature;
+        }
         const feedback = `Deterministic gate failed:\n${diagnostics || (gateResult && gateResult.summary) || 'Unknown test failure'}`;
         ledger.push({ taskId: task.id, round: roundNumber, stage: 'gate-runner', ok: false, feedback });
         return { ok: false, stage: 'gate-runner', feedback };
       }
+
+      // The gate went green, so the previous gate signature is no longer the round's state.
+      lastFailedSignature = '';
 
       const reviewPrompt = [
         `Audit the code changes of task (${task.id}) for Crux invariants (refutability, domain state safety, clean boundaries).`,
@@ -660,7 +769,7 @@ for (const taskId of orderResult.order) {
         .filter(Boolean)
         .join('\n');
 
-      const reviewResult = await accept(reviewPrompt, { agentType: 'code-reviewer', label: `review:${slugify(task.id, 20)}:r${roundNumber}`, schema: reviewSchema });
+      const reviewResult = await accept(reviewPrompt, callOptions({ agentType: 'code-reviewer', label: `review:${slugify(task.id, 20)}:r${roundNumber}`, schema: reviewSchema }, true));
       recordSuggestions('code-reviewer', reviewResult && reviewResult.suggestions);
       const blockerIssues = (reviewResult && Array.isArray(reviewResult.issues) ? reviewResult.issues : []).filter(issue => issue.severity === 'P1' || issue.severity === 'P2');
       const reviewPassed = reviewResult && reviewResult.route === 'continue' && blockerIssues.length === 0;
@@ -705,7 +814,7 @@ for (const taskId of orderResult.order) {
         `1. History hygiene in the copy: Conventional Commits, atomic, code and docs separate; when the repo tracks CHANGELOG.md exactly one new bullet under \`## [Unreleased]\`. Commit what the developer left uncommitted with the same conventions; never rewrite their commits.`,
         `2. Run exactly one merge: \`uv run ~/.agents/skills/branch-worktree-pr/scripts/merge_copy.py ${taskPath} ${integrationBranch}\` (or the same skill script resolved from this repository). Exit 0 = merged, exit 2 = conflict, exit 1 = gate failure. The project's \`[pre-merge]\` gate runs inside it when declared.`,
         `3. On exit 2: finish the rebase INSIDE ${taskPath} only, using the resolving-merge-conflicts skill. Headless continue form: \`GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C ${taskPath} rebase --continue\`. Commit the resolution on ${taskBranch}.`,
-        `4. On exit 1: fix the failing gate inside ${taskPath} only (read the gate output first; a CHANGELOG guard hit is fixed inside the copy and committed).`,
+        `4. On exit 1: fix the failing gate inside ${taskPath} only (read the gate output first; a CHANGELOG guard hit is fixed inside the copy and committed). \`merge_copy.py\` pre-checks commit body line lengths before merging and names the offending commit and line — reword that message (message-only, keeping its content) and commit, then retry.`,
         `5. Do NOT retry the merge in this call, even after a successful repair: the repaired copy must be re-gated and re-reviewed before the next attempt, and only the workflow can sequence that. Report \`repaired\` true and let the run re-verify.`,
         `6. Record EVERY attempt you made as { exitCode, command, tail } with the tail capped at 20 lines, and set \`outcome\`: MERGED (exit 0 on the first attempt of this call), CONFLICT, GATE_FAILED.`,
         `7. Never report whether re-verification is needed — the workflow derives that from the exit codes. Never edit the integration worktree, never \`--force\`, never raw \`git merge\`, never \`wt remove --force\`, never touch \`origin\`, never push, never open a PR. If the copy is missing or the integration branch is unreachable → BLOCKED, keep everything, report the failing command and its output.`,
@@ -713,7 +822,7 @@ for (const taskId of orderResult.order) {
         `Return the schema.`
       ].join('\n');
 
-      const mergeResult = await accept(mergePrompt, { agentType: 'merger', label: `merge:${slugify(task.id, 20)}:a${mergeAttempts}`, schema: mergeSchema });
+      const mergeResult = await accept(mergePrompt, callOptions({ agentType: 'merger', label: `merge:${slugify(task.id, 20)}:a${mergeAttempts}`, schema: mergeSchema }, true));
       recordSuggestions('merger', mergeResult && mergeResult.suggestions);
       const merges = mergeResult && Array.isArray(mergeResult.attempts) ? mergeResult.attempts : [];
       const nonZero = merges.filter(entry => Number(entry.exitCode) !== 0);
@@ -779,6 +888,7 @@ for (const taskId of orderResult.order) {
 phase('Finalize');
 
 let compositeGate = null;
+let finalizeChangelogSync = null;
 const mergedAny = taskRows.some(row => row.status === 'MERGED');
 
 if (integrationWanted && mergedAny && !haltedBy) {
@@ -793,16 +903,55 @@ if (integrationWanted && mergedAny && !haltedBy) {
     `pi-dynamic-workflows does not forward a per-agent cwd, so prefix every command with \`cd ${integrationPath} && \` or address the tree with \`git -C ${integrationPath}\`.`,
     `This is the verification a human will rely on before opening a pull request, so run the FULL suite on the integrated tree, not a subset:`,
     `  - phase "integration-branch": \`git -C ${integrationPath} rev-parse --abbrev-ref HEAD\` prints \`${integrationBranch}\`;`,
-    `  - phase "integration-clean": \`git -C ${integrationPath} status --porcelain\` is empty;`,
+    `  - phase "integration-clean": \`git -C ${integrationPath} status --porcelain --untracked-files=all | grep -vE '(__pycache__/|\\.pyc$|\\.DS_Store$|\\.lsz/)' || true\` prints nothing (machine-generated caches and \`.lsz/\` are tolerated);`,
     `  - phase "root-untouched": \`git -C ${root} status --porcelain --untracked-files=no\` is empty;`,
+    `  - phase "changelog-check": when BOTH \`CHANGELOG.md\` and \`scripts/changelog-unreleased.py\` exist, run \`uv run python scripts/changelog-unreleased.py check\` from the integration worktree and report it as a normal phase. It is READ-ONLY: exit 0 = in sync, exit 1 = drift. Never run \`update\`, never stage, never commit — the workflow repairs drift itself. Omit this phase when either file is absent.`,
     `  - then typecheck, tests, lint, format check, build from the project's own manifests.`,
     `Report every phase as { name, command, ok, exitCode, tail } with tails capped at 20 lines. Never fix anything yourself, never merge, never push.`
   ]
     .filter(Boolean)
     .join('\n');
 
-  compositeGate = await accept(finalPrompt, { agentType: 'gate-runner', label: 'final-gate', schema: gateSchema });
+  compositeGate = await accept(finalPrompt, callOptions({ agentType: 'gate-runner', label: 'final-gate', schema: gateSchema }));
   recordSuggestions('composite-gate', compositeGate && compositeGate.suggestions);
+
+  // A hand-drifted `## [Unreleased]` block used to mark a fully merged run BLOCKED. When the
+  // read-only changelog check is the ONLY failing phase the delivery is otherwise green, so sync
+  // the block in one idempotent hidden-type commit and re-run the composite gate exactly once.
+  if (changelogDriftOnly(compositeGate)) {
+    report('finalize: changelog drift is the only failing check — syncing and re-verifying once');
+    const syncPrompt = [
+      `You are the Finalize changelog-sync node of an AFK convergence run.`,
+      `Every task has already merged; the composite gate failed on no check except \`changelog-check\`, because the generated \`## [Unreleased]\` block drifted from CHANGELOG.md.`,
+      `Integration branch: ${integrationBranch}`,
+      `Integration worktree — work ONLY here: ${integrationPath}`,
+      `Session root — never touch: ${root}`,
+      gotchasBlock(),
+      ``,
+      `Procedure:`,
+      `1. Confirm the drift read-only first: \`cd ${integrationPath} && uv run python scripts/changelog-unreleased.py check\` (exit 1 means drift).`,
+      `2. Sync it: \`uv run python scripts/changelog-unreleased.py update\`.`,
+      `3. Commit ONLY CHANGELOG.md with the hidden-type subject exactly \`chore: sync changelog unreleased section\` — the hidden type is mandatory, because a visible-type sync commit re-enters the generated block and re-triggers the drift forever.`,
+      `4. Idempotence: when \`git -C ${integrationPath} status --porcelain -- CHANGELOG.md\` is already clean, make no commit and report synced false.`,
+      `5. Verify: re-run \`check\` (it must exit 0), and \`git -C ${integrationPath} status --porcelain\` must be empty apart from tolerated ephemeral cache entries.`,
+      `6. Never push, never touch \`origin\`, never edit a file other than CHANGELOG.md, never re-run a merge, never touch a task copy.`,
+      ``,
+      `Return the schema.`
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const syncResult = await accept(syncPrompt, callOptions({ agentType: 'merger', label: 'finalize-changelog-sync', schema: changelogSyncSchema }));
+    recordSuggestions('finalize-changelog-sync', syncResult && syncResult.suggestions);
+    finalizeChangelogSync = syncResult
+      ? { status: syncResult.status, synced: syncResult.synced === true, summary: syncResult.summary || '' }
+      : { status: 'BLOCKED', synced: false, summary: 'changelog-sync node returned no output' };
+    if (syncResult && syncResult.status === 'COMPLETED' && syncResult.synced === true) {
+      compositeGate = await accept(finalPrompt, callOptions({ agentType: 'gate-runner', label: 'final-recheck', schema: gateSchema }));
+      recordSuggestions('composite-gate-recheck', compositeGate && compositeGate.suggestions);
+    } else {
+      report('finalize: changelog-sync made no commit — not re-running the composite gate');
+    }
+  }
 }
 
 const compositeOk = !integrationWanted || !mergedAny ? true : Boolean(compositeGate && compositeGate.ok === true);
@@ -834,6 +983,9 @@ return {
   converged,
   maxRounds,
   maxMergeAttempts,
+  taskTimeoutMs,
+  runTimeoutMs,
+  finalizeChangelogSync,
   preMergeHook,
   base,
   baseSource,

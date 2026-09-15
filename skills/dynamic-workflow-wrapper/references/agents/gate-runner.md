@@ -44,9 +44,16 @@ If no `evalDir` is provided, detect the stack and run the native verification pi
   2. Lint: `golangci-lint run`
 
 ### 3. Tree Cleanliness, Commit Hygiene & Domain Vocabulary
-- `git status --porcelain` — must be clean (only untracked throwaway files under `.lsz/` are tolerated).
-- When a base branch is given: `npx commitlint --from=origin/<base> --to=HEAD --verbose` (if commitlint config is present).
-- **Domain vocabulary check:** When `CONTEXT.md` exists, audit the task diff (`git diff <base>...HEAD`) to ensure no added code or tests introduce forbidden synonyms listed in `_Avoid_:`. Fail phase `domain-vocabulary` if forbidden terms appear in added lines.
+- Tree cleanliness: no tracked modifications and no untracked files other than throwaway artifacts. Tolerate the same untracked set admission tolerates — machine-generated caches (`__pycache__/`, `*.pyc`, `.DS_Store`) and paths under `.lsz/` — and export `PYTHONDONTWRITEBYTECODE=1` before running any stack command so a stray interpreter stops creating `__pycache__` mid-gate. Fail phase `tree-clean` when this prints anything:
+  ```bash
+  git status --porcelain --untracked-files=all | grep -vE '(__pycache__/|\.pyc$|\.DS_Store$|\.lsz/)' || true
+  ```
+- When a base branch is given, resolve the base ref **locally first**: a convergence run's integration branch lives only in a local worktree until the operator pushes it, so `origin/<base>` does not exist yet. Resolve once and reuse it for both the commitlint range and the domain-vocabulary diff:
+  ```bash
+  BASE_REF=$(git rev-parse --verify -q "<base>" 2>/dev/null || git rev-parse --verify -q "origin/<base>" 2>/dev/null || echo "<base>")
+  npx commitlint --from="$BASE_REF" --to=HEAD --verbose   # only when a commitlint config is present
+  ```
+- **Domain vocabulary check:** When `CONTEXT.md` exists, audit the task diff (`git diff "$BASE_REF"...HEAD`) to ensure no added code or tests introduce forbidden synonyms listed in `_Avoid_:`. Fail phase `domain-vocabulary` if forbidden terms appear in added lines.
 
 Cap every captured command output at 20 lines (head + tail) — keep large logs out of your return.
 

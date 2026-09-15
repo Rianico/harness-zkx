@@ -136,9 +136,18 @@ def test_converge_tasks_supports_suggestions_and_known_gotchas():
     assert "recordSuggestions" in content
     assert "suggestions: { type: 'array' }" in content
 
-    for source in ("ticket-planner", "prepare", "allocate", "developer", "gate-runner", "code-reviewer", "merger"):
-        assert f"recordSuggestions('{source}'" in content, f"missing suggestion recording for {source}"
-
+    for source in (
+        "ticket-planner",
+        "prepare",
+        "allocate",
+        "developer",
+        "gate-runner",
+        "code-reviewer",
+        "merger",
+    ):
+        assert f"recordSuggestions('{source}'" in content, (
+            f"missing suggestion recording for {source}"
+        )
 
 
 DOCS_WITH_WORKFLOW_POINTERS = (
@@ -166,13 +175,132 @@ def test_documented_workflow_paths_exist():
         for name in sorted(referenced):
             assert (WORKFLOWS_DIR / name).exists(), f"{doc.name} points at missing workflows/{name}"
 
-    assert shipped <= set(WORKFLOW_PATH_PATTERN.findall((SKILL_DIR / "SKILL.md").read_text(encoding="utf-8"))), (
-        "every shipped workflow must be reachable from the routing table in SKILL.md"
-    )
+    assert shipped <= set(
+        WORKFLOW_PATH_PATTERN.findall((SKILL_DIR / "SKILL.md").read_text(encoding="utf-8"))
+    ), "every shipped workflow must be reachable from the routing table in SKILL.md"
 
 
 def test_no_dangling_ship_tasks_pointers():
     """The removed ship-tasks workflow must not survive as a pointer to nothing."""
     for doc in DOCS_WITH_WORKFLOW_POINTERS:
         content = doc.read_text(encoding="utf-8")
-        assert "ship-tasks" not in content, f"{doc.name} still references the retired ship-tasks workflow"
+        assert "ship-tasks" not in content, (
+            f"{doc.name} still references the retired ship-tasks workflow"
+        )
+
+
+# --- regression guards for the convergence-loop defects (issues #38, #40, #41, #42) -------------
+
+
+def _extract_functions(names: list[str]) -> str:
+    """Verbatim source of the named top-level functions, to exercise them outside the VM."""
+    content = read_workflow("converge-tasks.js")
+    chunks: list[str] = []
+    for name in names:
+        match = re.search(rf"function {name}\(.*?\n\}}\n", content, re.DOTALL)
+        assert match is not None, f"function {name}() not found in converge-tasks.js"
+        chunks.append(match.group(0))
+    return "\n".join(chunks)
+
+
+def _run_node(script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["node", "-e", script], capture_output=True, text=True)
+
+
+def test_converge_tasks_breaks_a_stagnant_round() -> None:
+    """Issue #42: an identical diff plus identical failures must stop the loop, not burn rounds."""
+    content = read_workflow("converge-tasks.js")
+
+    assert "diff-hash" in content, "the gate must report a worktree diff hash for the breaker"
+    assert "lastFailedSignature" in content
+    assert "BLOCKED (eval-gate stagnation)" in content
+    assert "stalled: true" in content, "the ledger must record the round as stalled"
+    # The signature must be cleared when the gate goes green, or a later failure re-trips it.
+    assert re.search(r"lastFailedSignature = '';", content), "the signature is never reset"
+
+
+def test_failure_signature_is_diff_and_error_identity() -> None:
+    """Two failing rounds are stagnant only when both the diff and the failing output match."""
+    source = _extract_functions(["failureSignature"])
+    script = (
+        source
+        + """
+const fails = [{ name: 'pytest', tail: '1 failed' }, { name: 'lint', tail: 'boom' }];
+const same = failureSignature('abc', fails);
+if (same !== failureSignature('abc', fails)) throw new Error('identical rounds differ');
+if (same === failureSignature('def', fails)) throw new Error('a new diff must break stagnation');
+if (same === failureSignature('abc', [{ name: 'pytest', tail: '2 failed' }])) {
+  throw new Error('a different failure must break stagnation');
+}
+"""
+    )
+    proc = _run_node(script)
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_changelog_drift_only_is_recognized() -> None:
+    """Issue #38: only a changelog-only failure may trigger the auto-sync repair."""
+    source = _extract_functions(["failedPhaseNames", "changelogDriftOnly"])
+    script = (
+        source
+        + """
+const drift = { ok: false, phases: [{ name: 'tests', ok: true }, { name: 'changelog-check', ok: false }] };
+const alsoFailing = { ok: false, phases: [{ name: 'tests', ok: false }, { name: 'changelog-check', ok: false }] };
+const green = { ok: true, phases: [{ name: 'changelog-check', ok: true }] };
+if (!changelogDriftOnly(drift)) throw new Error('changelog-only drift must be recognized');
+if (changelogDriftOnly(alsoFailing)) throw new Error('a real failure must not be repaired as drift');
+if (changelogDriftOnly(green)) throw new Error('a green gate is not drift');
+if (changelogDriftOnly(null)) throw new Error('missing output is not drift');
+"""
+    )
+    proc = _run_node(script)
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_converge_tasks_syncs_changelog_drift_once() -> None:
+    """Issue #38: the drift repair is one idempotent hidden-type commit, re-verified once."""
+    content = read_workflow("converge-tasks.js")
+
+    assert "changelog-check" in content, "the final gate must report drift read-only"
+    assert "changelog-unreleased.py check" in content
+    assert "It is READ-ONLY" in content, "the gate must detect drift without mutating the tree"
+    assert "finalize-changelog-sync" in content
+    assert "chore: sync changelog unreleased section" in content
+    assert "changelogDriftOnly" in content
+    assert "final-recheck" in content, "the composite gate must be re-run after the sync"
+    assert content.count("const syncResult = await accept") == 1, "exactly one sync dispatch"
+
+
+def test_converge_tasks_admission_tolerates_ephemeral_caches() -> None:
+    """Issue #40: ambient __pycache__ must not halt admission before round 1."""
+    content = read_workflow("converge-tasks.js")
+
+    assert "PYTHONDONTWRITEBYTECODE=1" in content
+    assert content.count("__pycache__/") >= 3, (
+        "prepare, allocate and workspace must all tolerate it"
+    )
+    assert "\\.pyc$" in content
+    # The strict tracked-only guard on the session root (no untracked files at all) survives.
+    assert "status --porcelain --untracked-files=no" in content
+
+
+def test_converge_tasks_identifiers_use_word_boundaries() -> None:
+    """Issue #41: criteria must anchor identifiers and count diffs with --numstat."""
+    content = read_workflow("converge-tasks.js")
+    assert "git diff --numstat" in content
+    assert "\\\\b<identifier>\\\\b" in content, "the plan prompt must demand word boundaries"
+
+
+def test_converge_tasks_caps_agent_calls_with_a_two_hour_default() -> None:
+    """Issue #42: the VM has no clock, so the cap is a per-agent ceiling with a 2h default."""
+    content = read_workflow("converge-tasks.js")
+
+    assert "rawArgs.taskTimeoutMs" in content
+    assert "rawArgs.runTimeoutMs" in content
+    assert "DEFAULT_RUN_TIMEOUT_MS = 7_200_000" in content, "the run cap defaults to 2h"
+    assert "rawArgs.runTimeoutMs === null" in content, "an explicit null must disable the cap"
+    assert "function callOptions(" in content
+    assert "timeoutMs" in content, "the resolved cap must reach agent()"
+    assert "Date.now(" not in strip_comments(content), "the VM forbids a clock"
+    # Every in-loop agent call must be capped through the helper, not constructed ad hoc.
+    assert content.count("callOptions({") >= 7

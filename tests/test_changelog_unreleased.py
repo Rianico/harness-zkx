@@ -105,6 +105,71 @@ def test_update_emits_the_same_bullet_style_as_semantic_release(tmp_path: Path) 
     assert "- **thing:**" not in updated, updated
 
 
+def _repo_with_a_visible_commit(tmp_path: Path, changelog_text: str) -> tuple[Path, Path]:
+    """Build a repo sitting one visible commit past v1.0.0, with the given CHANGELOG.md."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    changelog = repo / "CHANGELOG.md"
+    _ = changelog.write_text(changelog_text, encoding="utf-8")
+    setup: list[list[str]] = [
+        ["init", "-q"],
+        ["config", "user.email", "t@example.invalid"],
+        ["config", "user.name", "t"],
+        ["add", "-A"],
+        ["commit", "-qm", "chore: init"],
+        ["tag", "v1.0.0"],
+        ["commit", "-q", "--allow-empty", "-m", "feat(thing): add a thing"],
+    ]
+    for args in setup:
+        _ = subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+    return repo, changelog
+
+
+def test_check_reports_drift_without_mutating_the_file(tmp_path: Path) -> None:
+    """`check` is read-only: drift exits 1 with a diff and leaves the bytes on disk untouched.
+
+    This is the mode a convergence Finalize runs on the integration worktree. It must fail loud
+    on drift without producing the uncommitted diff that marked a fully-merged run BLOCKED.
+    """
+    stale = "# Changelog\n\n## [Unreleased]\n\n### Features\n\n* stale hand-written bullet\n"
+    repo, changelog = _repo_with_a_visible_commit(tmp_path, stale)
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "check", "--changelog", str(changelog)],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, result.stdout
+    assert "add a thing" in result.stderr, result.stderr
+    assert changelog.read_text(encoding="utf-8") == stale, "check must not rewrite the file"
+
+
+def test_check_is_in_sync_after_update(tmp_path: Path) -> None:
+    """`check` and `update` share one renderer, so check is green immediately after update."""
+    repo, changelog = _repo_with_a_visible_commit(
+        tmp_path, "# Changelog\n\n## [Unreleased]\n\n## [1.0.0](x) (2026-01-01)\n\n* released\n"
+    )
+
+    upd = subprocess.run(
+        [sys.executable, str(SCRIPT), "update", "--changelog", str(changelog)],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert upd.returncode == 0, upd.stderr
+
+    chk = subprocess.run(
+        [sys.executable, str(SCRIPT), "check", "--changelog", str(changelog)],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert chk.returncode == 0, chk.stderr
+    assert chk.stdout.strip() == "in sync"
+
+
 def test_repo_changelog_pins_md004_to_asterisk() -> None:
     """This repo's own CHANGELOG.md pins the style it is written in.
 

@@ -24,14 +24,14 @@ flowchart LR
 
 ## Command Modes
 
-| Mode | Purpose |
-|------|---------|
-| `define <feature> [source]` | Create acceptance criteria from source-of-truth, verify scripts, capture baseline |
-| `check <feature>` | Run criteria against current implementation |
-| `quick` | Run 6 standard quality phases without formal definition (Build, Types, Lint, Tests, Security, Diff) |
-| `report <feature>` | Produce comprehensive report with metrics |
-| `list` | Show all eval definitions and statuses |
-| `clean` | Remove old logs, keep last 10 runs per feature |
+| Mode                        | Purpose                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `define <feature> [source]` | Create acceptance criteria from source-of-truth, verify scripts, capture baseline                   |
+| `check <feature>`           | Run criteria against current implementation                                                         |
+| `quick`                     | Run 6 standard quality phases without formal definition (Build, Types, Lint, Tests, Security, Diff) |
+| `report <feature>`          | Produce comprehensive report with metrics                                                           |
+| `list`                      | Show all eval definitions and statuses                                                              |
+| `clean`                     | Remove old logs, keep last 10 runs per feature                                                      |
 
 **Source docs**: Pass any combination of design.md, plan, or other requirements. Eval criteria are derived from whatever sources are provided.
 
@@ -41,12 +41,12 @@ flowchart LR
 
 ### Stack Command Matrix
 
-| Stack | Build | Types | Lint | Tests |
-|-------|-------|-------|------|-------|
-| **Rust** (`Cargo.toml`) | `cargo check` | `cargo check --all-targets` | `cargo clippy -- -D warnings` | `cargo test` |
-| **TypeScript** (`package.json`) | `pnpm/npm run build` | `npx tsc --noEmit` | `pnpm/npm run lint` / `eslint` | `pnpm/npm test` |
-| **Python** (`pyproject.toml`) | `uv run python -m compileall .` | `uv run basedpyright` / `mypy` | `uv run ruff check .` | `uv run pytest` |
-| **Go** (`go.mod`) | `go build ./...` | `go vet ./...` | `golangci-lint run` | `go test ./...` |
+| Stack                           | Build                           | Types                          | Lint                           | Tests           |
+| ------------------------------- | ------------------------------- | ------------------------------ | ------------------------------ | --------------- |
+| **Rust** (`Cargo.toml`)         | `cargo check`                   | `cargo check --all-targets`    | `cargo clippy -- -D warnings`  | `cargo test`    |
+| **TypeScript** (`package.json`) | `pnpm/npm run build`            | `npx tsc --noEmit`             | `pnpm/npm run lint` / `eslint` | `pnpm/npm test` |
+| **Python** (`pyproject.toml`)   | `uv run python -m compileall .` | `uv run basedpyright` / `mypy` | `uv run ruff check .`          | `uv run pytest` |
+| **Go** (`go.mod`)               | `go build ./...`                | `go vet ./...`                 | `golangci-lint run`            | `go test ./...` |
 
 ### Quick Mode Output
 
@@ -67,31 +67,33 @@ Issues:
 ```
 
 **Routing Decision:**
+
 - `Overall: READY` + `Route: continue` → Proceed to PR
 - `Overall: NOT READY` + `Route: remediate` → Fix issues before PR
 
 ### Continuous Mode Guidance
 
 For long development sessions, run `eval-gate quick` every 15 minutes or after major changes:
+
 - After completing each function or component
 - Before moving to the next task
 - Before creating a PR
 
 ## Four Eval Types
 
-| Type | Checks | Example |
-|------|--------|---------|
-| **Capability** | New behavior the feature enables | "User can filter by date range" |
-| **Contract** | Externally visible shapes and interfaces | "API returns `{ status, data, error }`" |
-| **Negative** | Forbidden behavior must not occur | "No PII in logs" |
-| **Regression** | Existing behavior still works | "Old filter still works" |
+| Type           | Checks                                   | Example                                 |
+| -------------- | ---------------------------------------- | --------------------------------------- |
+| **Capability** | New behavior the feature enables         | "User can filter by date range"         |
+| **Contract**   | Externally visible shapes and interfaces | "API returns `{ status, data, error }`" |
+| **Negative**   | Forbidden behavior must not occur        | "No PII in logs"                        |
+| **Regression** | Existing behavior still works            | "Old filter still works"                |
 
 ### Capability Evals
 
 Test new behavior. Observable through code execution, tests, CLI commands, APIs, or environmental side effects.
 
-**CRITICAL: No Paper Tigers.** 
-Capability evals MUST be **Executable Assertions**. You are strictly forbidden from writing "Source Grep" evals that only check for substrings in the source code (e.g., `if 'logic' in file.read()`). An eval must prove that the goal was *achieved in the environment*, not just *promised in the code text*.
+**CRITICAL: No Paper Tigers.**
+Capability evals MUST be **Executable Assertions**. You are strictly forbidden from writing "Source Grep" evals that only check for substrings in the source code (e.g., `if 'logic' in file.read()`). An eval must prove that the goal was _achieved in the environment_, not just _promised in the code text_.
 
 **Threshold**: `pass@3 >= 0.90` (success within 3 attempts)
 
@@ -125,13 +127,14 @@ Test existing behavior remains intact. Prefer narrow deterministic checks over f
 ```
 
 **Directory selection:**
+
 1. `artifact_dir=<path>` → use exactly (orchestrator should pass `eval/run-[N]`)
 2. `topic_root=<path>` → use `[topic_root]/eval/run-1/`
-3. Default → `.lsz/{date}/{timestamp}_{topic}/eval/run-1/`
+3. Default → resolve it, never inline it: `uv run skills/eval-gate/scripts/artifact_paths.py resolve --kind eval --topic <topic> --run 1`. The layout (`base`, `pattern`, `kinds`) lives in `.lsz/config.yaml`; when that file is absent the documented defaults apply, so a repo that never adopted the config still works. `artifact_paths.py show` prints the effective config and its provenance.
 
 ## Dispatch Template
 
-```text
+````text
 Agent tool (general-purpose):
   description: "Run eval-gate workflow"
   prompt: |
@@ -228,35 +231,42 @@ Agent tool (general-purpose):
     - [brief issue 1, ≤10 words]
     - [brief issue 2]
     ```
-```
+````
 
 ## Definition Template
 
 ```markdown
 ## EVAL: feature-name
+
 Created: $(date)
 Source of truth: [pointer(s)]
 Eval directory: [eval_dir]
 
 ### Capability Evals
+
 - [ ] [Observable behavior]
 
 ### Contract Evals
+
 - [ ] [Interface/shape requirement]
 
 ### Negative Evals
+
 - [ ] [Forbidden behavior]
 
 ### Regression Evals
+
 - [ ] [Existing behavior preserved]
 
 ### Grader Assignment
+
 - [ ] Capability: [code|model|human]
 - [ ] Contract: [code|rule]
 - [ ] Negative: [code|model|human]
 - [ ] Regression: [code]
 
 ### Thresholds
+
 - Capability: pass@3 >= 0.90
 - Contract: pass@1 = 1.00
 - Negative: pass@1 = 1.00
@@ -299,7 +309,7 @@ When `defining` evals, you MUST create a single executable script (Python or Bas
 
 ### The Remediation Loop
 
-The `check` mode is the trigger for the **Remediation Loop**. 
+The `check` mode is the trigger for the **Remediation Loop**.
 
 1. **Failure Detection**: `eval-gate check` executes the consolidated script and detects a top-level `status: "fail"`.
 2. **Issue Aggregation**: All strings from the global `issues` array in the JSON output are written to `[eval_dir]/issues.md` (one actionable issue per line).
@@ -309,26 +319,55 @@ The `check` mode is the trigger for the **Remediation Loop**.
 
 ### Anti-Patterns
 
-| Wrong | Right |
-|-------|-------|
-| Running `check-types.py`, then `check-tests.py` | Running `run_evals.py` which calls all phases and aggregates |
-| Description: "Check if types are okay" | Script: `scripts/run_evals.py` (executable runner) |
-| Output: "It failed with some errors" | Output: `{"status": "fail", "issues": ["src/main.py:12: Type error..."]}` |
-| Remediation: "Look at the logs and fix it" | Remediation: Pass structured `issues.md` to worker node |
-| Relying on exit code 0 | Parsing `status: "pass"` from JSON output |
+| Wrong                                           | Right                                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------------------- |
+| Running `check-types.py`, then `check-tests.py` | Running `run_evals.py` which calls all phases and aggregates              |
+| Description: "Check if types are okay"          | Script: `scripts/run_evals.py` (executable runner)                        |
+| Output: "It failed with some errors"            | Output: `{"status": "fail", "issues": ["src/main.py:12: Type error..."]}` |
+| Remediation: "Look at the logs and fix it"      | Remediation: Pass structured `issues.md` to worker node                   |
+| Relying on exit code 0                          | Parsing `status: "pass"` from JSON output                                 |
+| `grep -cE '^-[^-]'` to count deleted diff lines | `git diff --numstat` (see [Assertion Patterns](#assertion-patterns))      |
+| `grep -c 'reServe'` to assert an identifier     | `grep -cE '\breServe\b'` / `rg -w 'reServe'`                              |
 
+---
+
+## Assertion Patterns
+
+Two pattern shapes false-red against a correct tree. Both are gates, so a false red burns the round budget and ends the task `BLOCKED` on work that was already done.
+
+### Word boundaries for tokens, symbols, and identifiers
+
+A substring match collides with any longer symbol containing it. Anchoring `ReServeGrant|reServe` also matches the legitimate locals `ensureServedSchema` and `reServed`, which reported 21 failures against a compliant tree.
+
+- Require `\b<identifier>\b` (or `rg -w`) for every token, symbol, and identifier assertion.
+- A criterion phrased as an exact identifier in the issue stays an exact identifier in the script.
+- Only drop the boundary when the criterion genuinely targets a substring (e.g. a renamed prefix family), and say so in the criterion's description.
+
+### Diff line counting
+
+Do not count diff additions or removals with a line regex. In unified diff format a deleted line beginning with `-` is prefixed with the diff marker, so `- File: ...` renders as `-- File: ...`, and `grep -cE '^-[^-]'` — which requires the character after the marker to not be a hyphen — counts it as zero. A correct two-line edit then evaluates as "0 deletions" and fails C4.
+
+Use `git diff --numstat` (or parse `--shortstat`) instead:
+
+```bash
+# added / deleted line counts for the change under test; -1 sentinel for binary files
+read -r ADDED DELETED _ < <(git -C "$WORKTREE" diff --numstat "$BASE_REF"...HEAD | awk '{a+=$1; d+=$2} END {print a+0, d+0, "-"}')
+```
+
+`--numstat` is content-based and indifferent to whether the changed line starts with `-`, `#`, or a Markdown bullet.
 ---
 
 ## Metric Reference
 
-| Check Type | Grader | Why |
-|------------|--------|-----|
-| Type errors, test pass/fail | Code/Script | Deterministic, repeatable |
-| Pattern matching (regex) | Rule | Exact match, no variance |
-| Code style, behavior quality | Model | Requires semantic understanding |
-| Security, architecture decisions | Human | Judgment required |
+| Check Type                       | Grader      | Why                             |
+| -------------------------------- | ----------- | ------------------------------- |
+| Type errors, test pass/fail      | Code/Script | Deterministic, repeatable       |
+| Pattern matching (regex)         | Rule        | Exact match, no variance        |
+| Code style, behavior quality     | Model       | Requires semantic understanding |
+| Security, architecture decisions | Human       | Judgment required               |
 
 **Key principles:**
+
 - Use scripts for deterministic checks (pass/fail is stable)
 - Use LLM for semantic analysis where judgment is needed
 - Never rely on LLM output for binary gate decisions — model responses are not stable

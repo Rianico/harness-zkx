@@ -7,15 +7,18 @@
 
 - update: generate notes from commits since last tag, place under Unreleased
 - clear:  remove Unreleased section before semantic-release takes over
+- check:  read-only drift check — exit 0 when in sync, 1 when `update` would rewrite (never writes)
 
 Usage:
   python scripts/changelog-unreleased.py update [--changelog CHANGELOG.md]
   python scripts/changelog-unreleased.py clear [--changelog CHANGELOG.md]
+  python scripts/changelog-unreleased.py check [--changelog CHANGELOG.md]
 """
 
 from __future__ import annotations
 
 import argparse
+import difflib
 import re
 import subprocess
 import sys
@@ -189,20 +192,29 @@ def render_unreleased(sections: dict[str, list[str]]) -> str:
     return "\n".join(lines).strip() + "\n\n"
 
 
-def update_changelog(changelog: Path) -> bool:
+def _normalize(text: str) -> str:
+    """Canonical file form: no triple blanks, single trailing newline."""
+    return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
+
+
+def render_updated_changelog(changelog: Path) -> str:
+    """Content `update` would write, as a pure function (never touches disk).
+
+    `update` and `check` both go through here, so a drift `check` reports is exactly the
+    rewrite `update` would make — the two can never disagree.
+    """
     tag = get_last_tag()
     commits = get_commits_since(tag)
     warn_if_visible_sync_head(commits)
     sections = commits_to_sections(commits)
     new_block = render_unreleased(sections)
 
-    if not changelog.exists():
-        changelog.write_text(
-            f"{HEADER}\n\nAll notable changes to this project will be documented in this file.\n\n",
-            encoding="utf-8",
+    if changelog.exists():
+        content = changelog.read_text(encoding="utf-8")
+    else:
+        content = (
+            f"{HEADER}\n\nAll notable changes to this project will be documented in this file.\n\n"
         )
-
-    content = changelog.read_text(encoding="utf-8")
 
     # ensure header exists
     if HEADER not in content:
@@ -228,24 +240,62 @@ def update_changelog(changelog: Path) -> bool:
     else:
         if not new_block.strip() or new_block.strip() == UNRELEASED_HEADING:
             # nothing to add
-            return False
-        # insert after header (after first HEADER line and following blank lines)
-        # simple: insert right after header's first paragraph
-        # find first "## [" after header
-        m = VERSION_HEADING_RE.search(content)
-        if m:
-            new_content = (
-                content[: m.start()].rstrip() + "\n\n" + new_block + content[m.start() :].lstrip()
-            )
+            new_content = content
         else:
-            new_content = content.rstrip() + "\n\n" + new_block
+            # insert after header (after first HEADER line and following blank lines)
+            # simple: insert right after header's first paragraph
+            # find first "## [" after header
+            m = VERSION_HEADING_RE.search(content)
+            if m:
+                new_content = (
+                    content[: m.start()].rstrip()
+                    + "\n\n"
+                    + new_block
+                    + content[m.start() :].lstrip()
+                )
+            else:
+                new_content = content.rstrip() + "\n\n" + new_block
 
-    if new_content == content:
+    return _normalize(new_content)
+
+
+def update_changelog(changelog: Path) -> bool:
+    """Rewrite CHANGELOG.md when it differs from the generated Unreleased block.
+
+    Idempotent: a second run over an in-sync file reports no change instead of churning
+    whitespace-only diffs.
+    """
+    new_content = render_updated_changelog(changelog)
+    current = _normalize(changelog.read_text(encoding="utf-8")) if changelog.exists() else ""
+    if new_content == current:
         return False
-    # normalize: ensure single trailing newline, no triple blanks
-    new_content = re.sub(r"\n{3,}", "\n\n", new_content).strip() + "\n"
     changelog.write_text(new_content, encoding="utf-8")
     return True
+
+
+def check_changelog(changelog: Path) -> tuple[bool, str]:
+    """Read-only drift check: (in_sync, report). Never writes, never stages, never commits.
+
+    Exit-code contract lives in `main()`: 0 when the file already matches what `update`
+    would write, 1 when it drifts (or is missing). A convergence Finalize can call this to
+    detect changelog drift without dirtying the integration worktree, which is what made
+    the composite gate fail after a fully successful batch.
+    """
+    if not changelog.exists():
+        return False, f"{changelog}: missing — `update` would create it"
+    current = _normalize(changelog.read_text(encoding="utf-8"))
+    expected = render_updated_changelog(changelog)
+    if current == expected:
+        return True, f"{changelog}: in sync"
+    diff = "".join(
+        difflib.unified_diff(
+            current.splitlines(keepends=True),
+            expected.splitlines(keepends=True),
+            fromfile=f"{changelog} (on disk)",
+            tofile=f"{changelog} (generated by update)",
+        )
+    )
+    return False, diff or f"{changelog}: drift"
 
 
 def clear_changelog(changelog: Path) -> bool:
@@ -270,7 +320,9 @@ def clear_changelog(changelog: Path) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Manage Unreleased section in CHANGELOG.md")
-    parser.add_argument("command", choices=["update", "clear"], help="update or clear Unreleased")
+    parser.add_argument(
+        "command", choices=["update", "clear", "check"], help="update, clear, or check Unreleased"
+    )
     parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
     args = parser.parse_args()
 
@@ -278,10 +330,19 @@ def main() -> int:
     if args.command == "update":
         changed = update_changelog(changelog)
         print("updated" if changed else "no change")
-    else:
+        return 0
+    if args.command == "clear":
         changed = clear_changelog(changelog)
         print("cleared" if changed else "no change")
-    return 0
+        return 0
+
+    # check — read-only; exit 1 so a gate can fail loud on drift without mutating the tree
+    in_sync, report = check_changelog(changelog)
+    if in_sync:
+        print("in sync")
+        return 0
+    print(report, file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

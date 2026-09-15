@@ -25,6 +25,11 @@ gate = "npm run lint && npm run typecheck && npm test && npx commitlint --from=o
 # gate = "uv run pytest && ruff check . && npx commitlint --from=origin/{{ default_branch }} --to=HEAD --verbose"
 
 [list]
+# NOTE: `wt list --format=json` schema is NOT settable here — `[list] json-schema` is a user
+# config key, and wt ignores it in project config (it emits a warning for the stray key).
+# Run `wt config update` to adopt schema 2 in ~/.config/worktrunk/config.toml; automation must
+# capture stderr separately (`2>/dev/null`) and accept both the bare array and the
+# `{ items: [...] }` envelope. `_lib.wt_list()` does both.
 # Per-worktree dev server URL preview in `wt list` — hash_port assigns 10000–19999 from branch hash.
 
 url = "http://localhost:{{ branch | hash_port }}"

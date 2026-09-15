@@ -17,7 +17,13 @@ from pathlib import Path
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import current_branch, print_err, run, wt_list  # pyright: ignore[reportImplicitRelativeImport]
+from _lib import (  # pyright: ignore[reportImplicitRelativeImport]
+    current_branch,
+    ensure_dependencies,
+    print_err,
+    run,
+    wt_list,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -26,6 +32,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("child_branch", help="Child branch feat/<name>--part")
     parser.add_argument("base_branch", help="Base branch map/<name> or feat/<name>")
+    _ = parser.add_argument(
+        "--skip-deps",
+        action="store_true",
+        help="Skip the dependency-health probe/repair after the copy",
+    )
+    _ = parser.add_argument(
+        "--force-deps",
+        action="store_true",
+        help="Run the frozen-lockfile install even when the dependency probe passes",
+    )
     return parser.parse_args(argv)
 
 
@@ -80,9 +96,20 @@ def main(argv: list[str] | None = None) -> None:
         print_err(f"copy check failed: {path_out} branch {cur_copy} != {child}")
         sys.exit(1)
 
+    # Dependency health: `wt step copy-ignored` can copy a node_modules skeleton whose
+    # symlinks and native .node bindings are broken, so the developer dies on its first test
+    # run (`Cannot find module '@vitest/utils/helpers'`) before writing a line. Probe and
+    # repair here, once, instead of paying a manual `pnpm install` in every task copy.
+    deps_note: str = "skipped (--skip-deps)"
+    if not args.skip_deps:
+        deps_ok, deps_note = ensure_dependencies(path_obj, force=args.force_deps)
+        if not deps_ok:
+            print_err(f"dependency repair failed in {path_out}: {deps_note}")
+            sys.exit(1)
+
     # Print absolute path to stdout (only path)
     print(str(path_obj.resolve()))
-    print(f"ok: copy {child} at {path_out} (base {base})", file=sys.stderr)
+    print(f"ok: copy {child} at {path_out} (base {base}, deps: {deps_note})", file=sys.stderr)
 
 
 if __name__ == "__main__":

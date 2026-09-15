@@ -1,0 +1,24 @@
+# Artifact storage — the single source of truth for generated run artifacts.
+#
+# Skills must not inline these paths. Resolve them instead:
+#   uv run skills/eval-gate/scripts/artifact_paths.py resolve --kind eval --topic <topic>
+#   uv run skills/eval-gate/scripts/artifact_paths.py show
+#
+# The dynamic-workflow-wrapper nodes call that script too: the workflow VM exposes no
+# filesystem access, so an agent resolves the path and passes it forward as `evalDir`.
+
+storage:
+  # Base directory for run artifacts. Relative paths resolve from the repo root.
+  base: .lsz
+
+  # Run directory layout under `base`. Placeholders: {date} {time} {topic} {kind}
+  pattern: "{date}/{time}_{topic}/{kind}"
+
+  # Logical kind -> directory name substituted into {kind}.
+  kinds:
+    eval: eval
+    tasks: tmp/tasks
+    pr: tmp
+
+  # Synthesized gates live outside the repo: they describe the machine, not the branch.
+  gate_store: ~/.pi/workflows/projects

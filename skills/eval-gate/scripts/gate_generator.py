@@ -19,6 +19,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+if str(Path(__file__).parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).parent))
+
+from artifact_paths import (  # noqa: E402  # pyright: ignore[reportImplicitRelativeImport]
+    load_config as load_storage_config,
+)
+
 
 @dataclass
 class CriterionCheck:
@@ -52,12 +59,16 @@ def get_project_slug_with_hash(repo_root: Path) -> str:
 
 
 def resolve_workflow_dir(repo_root: Path, topic: str, base_dir: Path | None = None) -> Path:
-    """Resolve destination directory under ~/.pi/workflows/projects/{project-hash}/{topic}."""
+    """Resolve the gate directory from the configured `storage.gate_store` + project slug.
+
+    The store is machine-local state, not a branch artifact, so it is configured in
+    `.lsz/config.yaml` rather than derived from the repo layout.
+    """
     if base_dir:
         target = Path(base_dir).resolve() / topic
     else:
         project_slug = get_project_slug_with_hash(repo_root)
-        target = Path.home() / ".pi" / "workflows" / "projects" / project_slug / topic
+        target = load_storage_config(repo_root).gate_store / project_slug / topic
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -70,7 +81,12 @@ def detect_stack(repo_root: Path) -> StackProfile:
     if (root / "Cargo.toml").exists():
         checks = [
             CriterionCheck("BUILD-01", "build", ["cargo", "check"], "Cargo compilation check"),
-            CriterionCheck("LINT-01", "lint", ["cargo", "clippy", "--", "-D", "warnings"], "Clippy linter (zero warnings)"),
+            CriterionCheck(
+                "LINT-01",
+                "lint",
+                ["cargo", "clippy", "--", "-D", "warnings"],
+                "Clippy linter (zero warnings)",
+            ),
             CriterionCheck("TEST-01", "test", ["cargo", "test"], "Cargo test suite"),
         ]
         return StackProfile("rust", "cargo", checks)
@@ -94,14 +110,24 @@ def detect_stack(repo_root: Path) -> StackProfile:
 
         checks = []
         if (root / "tsconfig.json").exists() and shutil.which("tsc"):
-            checks.append(CriterionCheck("TYPES-01", "types", ["npx", "tsc", "--noEmit"], "TypeScript compiler typecheck"))
+            checks.append(
+                CriterionCheck(
+                    "TYPES-01", "types", ["npx", "tsc", "--noEmit"], "TypeScript compiler typecheck"
+                )
+            )
         elif "build" in scripts:
-            checks.append(CriterionCheck("BUILD-01", "build", [pm, "run", "build"], f"{pm} build check"))
+            checks.append(
+                CriterionCheck("BUILD-01", "build", [pm, "run", "build"], f"{pm} build check")
+            )
 
         if "lint" in scripts:
-            checks.append(CriterionCheck("LINT-01", "lint", [pm, "run", "lint"], f"{pm} lint script"))
+            checks.append(
+                CriterionCheck("LINT-01", "lint", [pm, "run", "lint"], f"{pm} lint script")
+            )
         elif shutil.which("eslint"):
-            checks.append(CriterionCheck("LINT-01", "lint", ["npx", "eslint", "."], "ESLint style check"))
+            checks.append(
+                CriterionCheck("LINT-01", "lint", ["npx", "eslint", "."], "ESLint style check")
+            )
 
         if "test" in scripts:
             checks.append(CriterionCheck("TEST-01", "test", [pm, "test"], f"{pm} test suite"))
@@ -109,20 +135,34 @@ def detect_stack(repo_root: Path) -> StackProfile:
         return StackProfile("typescript", pm, checks)
 
     # 3. Python detection
-    if (root / "pyproject.toml").exists() or (root / "setup.py").exists() or (root / "requirements.txt").exists():
+    if (
+        (root / "pyproject.toml").exists()
+        or (root / "setup.py").exists()
+        or (root / "requirements.txt").exists()
+    ):
         has_uv = shutil.which("uv") is not None
         runner = ["uv", "run"] if has_uv else [sys.executable, "-m"]
 
         checks = []
         if shutil.which("basedpyright"):
-            checks.append(CriterionCheck("TYPES-01", "types", [*runner, "basedpyright"], "Basedpyright static types"))
+            checks.append(
+                CriterionCheck(
+                    "TYPES-01", "types", [*runner, "basedpyright"], "Basedpyright static types"
+                )
+            )
         elif shutil.which("mypy"):
-            checks.append(CriterionCheck("TYPES-01", "types", [*runner, "mypy", "."], "Mypy static types"))
+            checks.append(
+                CriterionCheck("TYPES-01", "types", [*runner, "mypy", "."], "Mypy static types")
+            )
 
         if shutil.which("ruff"):
             checks.append(CriterionCheck("LINT-01", "lint", ["ruff", "check", "."], "Ruff linter"))
 
-        checks.append(CriterionCheck("TEST-01", "test", [*runner, "pytest", "-q", "--tb=no"], "Pytest test suite"))
+        checks.append(
+            CriterionCheck(
+                "TEST-01", "test", [*runner, "pytest", "-q", "--tb=no"], "Pytest test suite"
+            )
+        )
 
         return StackProfile("python", "uv" if has_uv else "pip", checks)
 
@@ -241,7 +281,7 @@ def synthesize_gate_script(
                 cmd = cmd.split()
             checks.append(
                 CriterionCheck(
-                    id=c.get("id", f"CRIT-{len(checks)+1}"),
+                    id=c.get("id", f"CRIT-{len(checks) + 1}"),
                     phase=c.get("phase", "custom"),
                     command=cmd or ["true"],
                     description=c.get("description", c.get("intent", "")),
@@ -283,7 +323,7 @@ def synthesize_unified_gate(
         for a in custom_assertions:
             assertions.append(
                 SemanticAssertion(
-                    id=a.get("id", f"SEM-{len(assertions)+1}"),
+                    id=a.get("id", f"SEM-{len(assertions) + 1}"),
                     statement=a.get("statement", a.get("assertion", "")),
                     critical=a.get("critical", True),
                     category=a.get("category", "capability"),
@@ -292,16 +332,45 @@ def synthesize_unified_gate(
     else:
         # Default baseline assertions
         assertions = [
-            SemanticAssertion("SEM-01", "Implementation satisfies intent without mock-only passes", True, "refutability"),
-            SemanticAssertion("SEM-02", "Negative error paths and bad inputs are rejected gracefully", True, "negative"),
-            SemanticAssertion("SEM-03", "Clean Architecture boundary preserved (domain does not import delivery/infra)", True, "boundary"),
-            SemanticAssertion("SEM-04", "Implementation matches design.md contracts without SOT drift", True, "intent"),
+            SemanticAssertion(
+                "SEM-01",
+                "Implementation satisfies intent without mock-only passes",
+                True,
+                "refutability",
+            ),
+            SemanticAssertion(
+                "SEM-02",
+                "Negative error paths and bad inputs are rejected gracefully",
+                True,
+                "negative",
+            ),
+            SemanticAssertion(
+                "SEM-03",
+                "Clean Architecture boundary preserved (domain does not import delivery/infra)",
+                True,
+                "boundary",
+            ),
+            SemanticAssertion(
+                "SEM-04",
+                "Implementation matches design.md contracts without SOT drift",
+                True,
+                "intent",
+            ),
         ]
 
-    checks = stack.checks if not custom_checks else [
-        CriterionCheck(c.get("id", f"C-{i}"), c.get("phase", "custom"), c.get("command", ["true"]), c.get("description", ""))
-        for i, c in enumerate(custom_checks)
-    ]
+    checks = (
+        stack.checks
+        if not custom_checks
+        else [
+            CriterionCheck(
+                c.get("id", f"C-{i}"),
+                c.get("phase", "custom"),
+                c.get("command", ["true"]),
+                c.get("description", ""),
+            )
+            for i, c in enumerate(custom_checks)
+        ]
+    )
 
     gate_payload = {
         "gate_version": 2,
@@ -363,14 +432,16 @@ def grade_semantic_assertions(
         evidence = res.get("evidence", "none")
         reasoning = res.get("reasoning", "")
 
-        graded.append({
-            "id": aid,
-            "statement": statement,
-            "passed": passed,
-            "critical": critical,
-            "evidence": evidence,
-            "reasoning": reasoning,
-        })
+        graded.append(
+            {
+                "id": aid,
+                "statement": statement,
+                "passed": passed,
+                "critical": critical,
+                "evidence": evidence,
+                "reasoning": reasoning,
+            }
+        )
 
         if passed:
             passed_count += 1
@@ -456,10 +527,12 @@ def format_worker_feedback(ledger: dict[str, Any], active_issues: list[str]) -> 
     latest_history = ledger.get("history", [])[-1] if ledger.get("history") else {}
     regressions = latest_history.get("regressions", [])
     if regressions:
-        lines.extend([
-            "## 🚨 REGRESSION ALERT (Fix Immediately):",
-            "The following invariants passed in a prior loop but were BROKEN in the latest cycle:",
-        ])
+        lines.extend(
+            [
+                "## 🚨 REGRESSION ALERT (Fix Immediately):",
+                "The following invariants passed in a prior loop but were BROKEN in the latest cycle:",
+            ]
+        )
         for reg in regressions:
             lines.append(f"- [REGRESSION] {reg}")
         lines.append("")
@@ -473,21 +546,25 @@ def format_worker_feedback(ledger: dict[str, Any], active_issues: list[str]) -> 
 
     invariants = ledger.get("immutable_invariants", [])
     if invariants:
-        lines.extend([
-            "",
-            "## Preserved Invariants (Do Not Regress):",
-            "The following criteria passed in prior loops and MUST NOT be broken:",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Preserved Invariants (Do Not Regress):",
+                "The following criteria passed in prior loops and MUST NOT be broken:",
+            ]
+        )
         for inv in invariants:
             lines.append(f"- [INVARIANT] {inv}")
 
     best_commit = ledger.get("best_commit")
     best_score = ledger.get("best_score", 0)
     if best_commit:
-        lines.extend([
-            "",
-            f"## Autoresearch Checkpoint: Best score {best_score}/10 at git commit {best_commit[:8]}",
-        ])
+        lines.extend(
+            [
+                "",
+                f"## Autoresearch Checkpoint: Best score {best_score}/10 at git commit {best_commit[:8]}",
+            ]
+        )
 
     return "\n".join(lines)
 
@@ -498,39 +575,83 @@ def main() -> int:
 
     # detect
     detect_parser = subparsers.add_parser("detect", help="Detect repository toolchain stack")
-    detect_parser.add_argument("--repo-root", type=str, default=".", help="Root path of target repository")
+    detect_parser.add_argument(
+        "--repo-root", type=str, default=".", help="Root path of target repository"
+    )
 
     # resolve-dir
     res_parser = subparsers.add_parser("resolve-dir", help="Resolve ~/.pi/workflows/projects path")
-    res_parser.add_argument("--repo-root", type=str, default=".", help="Root path of target repository")
+    res_parser.add_argument(
+        "--repo-root", type=str, default=".", help="Root path of target repository"
+    )
     res_parser.add_argument("--topic", type=str, required=True, help="Topic / feature name")
     res_parser.add_argument("--base-dir", type=str, help="Optional base directory override")
 
     # generate-gate
-    gen_gate_parser = subparsers.add_parser("generate-gate", aliases=["generate"], help="Generate unified gate.json and run_evals.py")
-    gen_gate_parser.add_argument("--repo-root", type=str, default=".", help="Root path of target repository")
+    gen_gate_parser = subparsers.add_parser(
+        "generate-gate", aliases=["generate"], help="Generate unified gate.json and run_evals.py"
+    )
+    gen_gate_parser.add_argument(
+        "--repo-root", type=str, default=".", help="Root path of target repository"
+    )
     gen_gate_parser.add_argument("--topic", type=str, required=True, help="Topic / feature name")
-    gen_gate_parser.add_argument("--output-dir", type=str, help="Output directory override (defaults to ~/.pi path)")
-    gen_gate_parser.add_argument("--checks-json", type=str, help="Optional JSON file with custom checks")
-    gen_gate_parser.add_argument("--assertions-json", type=str, help="Optional JSON file with semantic assertions")
+    gen_gate_parser.add_argument(
+        "--output-dir", type=str, help="Output directory override (defaults to ~/.pi path)"
+    )
+    gen_gate_parser.add_argument(
+        "--checks-json", type=str, help="Optional JSON file with custom checks"
+    )
+    gen_gate_parser.add_argument(
+        "--assertions-json", type=str, help="Optional JSON file with semantic assertions"
+    )
 
     # grade-assertions
-    grade_parser = subparsers.add_parser("grade-assertions", help="Grade atomic boolean + CoT semantic assertions")
-    grade_parser.add_argument("--assertions", type=str, required=True, help="Path to gate.json or assertions.json")
-    grade_parser.add_argument("--grader-results", type=str, required=True, help="Path to grader results JSON")
-    grade_parser.add_argument("--output", type=str, help="Optional output path for graded results JSON")
+    grade_parser = subparsers.add_parser(
+        "grade-assertions", help="Grade atomic boolean + CoT semantic assertions"
+    )
+    grade_parser.add_argument(
+        "--assertions", type=str, required=True, help="Path to gate.json or assertions.json"
+    )
+    grade_parser.add_argument(
+        "--grader-results", type=str, required=True, help="Path to grader results JSON"
+    )
+    grade_parser.add_argument(
+        "--output", type=str, help="Optional output path for graded results JSON"
+    )
 
     # update-ledger
-    ledger_parser = subparsers.add_parser("update-ledger", help="Update regression ledger and emit worker feedback")
+    ledger_parser = subparsers.add_parser(
+        "update-ledger", help="Update regression ledger and emit worker feedback"
+    )
     ledger_parser.add_argument("--ledger-path", type=str, required=True, help="Path to ledger.json")
     ledger_parser.add_argument("--loop", type=int, required=True, help="Current loop iteration")
-    ledger_parser.add_argument("--floor-status", type=str, required=True, choices=["pass", "fail"], help="Floor status")
-    ledger_parser.add_argument("--semantic-score", type=int, required=True, help="Semantic score (1-10)")
-    ledger_parser.add_argument("--passed-items", type=str, default="[]", help="JSON array or comma-separated list of passed IDs")
-    ledger_parser.add_argument("--failed-items", type=str, default="[]", help="JSON array or comma-separated list of failed IDs")
+    ledger_parser.add_argument(
+        "--floor-status", type=str, required=True, choices=["pass", "fail"], help="Floor status"
+    )
+    ledger_parser.add_argument(
+        "--semantic-score", type=int, required=True, help="Semantic score (1-10)"
+    )
+    ledger_parser.add_argument(
+        "--passed-items",
+        type=str,
+        default="[]",
+        help="JSON array or comma-separated list of passed IDs",
+    )
+    ledger_parser.add_argument(
+        "--failed-items",
+        type=str,
+        default="[]",
+        help="JSON array or comma-separated list of failed IDs",
+    )
     ledger_parser.add_argument("--git-commit", type=str, default="", help="Current git commit hash")
-    ledger_parser.add_argument("--issues-file", type=str, help="Optional path to report.json or issues.json for active issues")
-    ledger_parser.add_argument("--emit-feedback", type=str, help="Optional output path for issues.md feedback")
+    ledger_parser.add_argument(
+        "--issues-file",
+        type=str,
+        help="Optional path to report.json or issues.json for active issues",
+    )
+    ledger_parser.add_argument(
+        "--emit-feedback", type=str, help="Optional output path for issues.md feedback"
+    )
 
     args = parser.parse_args()
 
@@ -549,9 +670,21 @@ def main() -> int:
         return 0
 
     if args.command in ("generate-gate", "generate"):
-        out_dir = Path(args.output_dir) if args.output_dir else resolve_workflow_dir(Path(args.repo_root), args.topic)
-        checks = json.loads(Path(args.checks_json).read_text(encoding="utf-8")) if args.checks_json else None
-        assertions = json.loads(Path(args.assertions_json).read_text(encoding="utf-8")) if args.assertions_json else None
+        out_dir = (
+            Path(args.output_dir)
+            if args.output_dir
+            else resolve_workflow_dir(Path(args.repo_root), args.topic)
+        )
+        checks = (
+            json.loads(Path(args.checks_json).read_text(encoding="utf-8"))
+            if args.checks_json
+            else None
+        )
+        assertions = (
+            json.loads(Path(args.assertions_json).read_text(encoding="utf-8"))
+            if args.assertions_json
+            else None
+        )
 
         gate_path, script_path = synthesize_unified_gate(
             repo_root=Path(args.repo_root),
@@ -598,6 +731,7 @@ def main() -> int:
         return 0
 
     if args.command == "update-ledger":
+
         def parse_items(raw: str) -> list[str]:
             raw = raw.strip()
             if raw.startswith("["):
