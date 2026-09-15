@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **changelog:** add a read-only check mode for Unreleased drift
 * **programming-expert:** synthesize deep design and propagate across subskills
 * **rules:** synthesize clean architecture, deep design, and scope taxonomy
 * **programming-expert:** sharpen description and polyglot principles
@@ -26,6 +27,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **agents:** harden the convergence role contracts
+* **converge-tasks:** break stagnation, cap agent calls, and sync changelog drift
+* **branch-worktree-pr:** harden admission, wt parsing, and dependency handoff
 * **gh-router:** split libs and harden PR gates
 * **gh-router:** split libs and harden PR gates
 * **gh-router:** give repo identity one authority and split shared code by concern (#35)
@@ -44,6 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **branch-worktree-pr:** document the hardened copy and merge shims
+* **eval-gate:** anchor identifier assertions and count diffs with --numstat
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
 * **gh-router:** document the lib split and the corrected watch/merge gates
