@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
+import textwrap
 from pathlib import Path
 
 if str(Path(__file__).parent) not in sys.path:
@@ -29,6 +32,10 @@ from _lib import print_err, run  # pyright: ignore[reportImplicitRelativeImport]
 # commitlint's conventional default for `body-max-line-length`. Only enforced when the repo
 # actually wires commitlint; a project without it must never be blocked by this pre-check.
 BODY_MAX_LINE = 100
+# A conventional-commit footer token (`Token: value`, `Token #value`, `BREAKING CHANGE:`).
+# commitlint bounds footers with footer-max-line-length, not body-max-line-length, so footers
+# are neither judged nor rewrapped here — rewrapping one can break its parser.
+FOOTER_RE = re.compile(r"^(?:BREAKING[ -]CHANGE|[A-Za-z][A-Za-z-]*)(?:: | #)")
 COMMITLINT_CONFIG_NAMES: tuple[str, ...] = (
     "commitlint.config.js",
     "commitlint.config.cjs",
@@ -49,6 +56,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     _ = parser.add_argument("copy_path", help="Absolute path to copy worktree")
     _ = parser.add_argument("target_branch", help="Target branch map/<name> or main")
+    _ = parser.add_argument(
+        "--no-wrap-commit-bodies",
+        action="store_true",
+        help="Report over-long commit bodies instead of wrapping them automatically",
+    )
     _ = parser.add_argument(
         "--body-max-line",
         type=int,
@@ -84,7 +96,7 @@ def commitlint_configured(cwd: Path) -> bool:
         return False
     try:
         data: object = json.loads(pkg.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return False
     return isinstance(data, dict) and "commitlint" in data
 
@@ -108,11 +120,128 @@ def commit_body_offenders(cwd: Path, target: str, limit: int) -> list[str]:
         if not record.strip():
             continue
         sha, _, body = record.partition("\x1f")
-        # line 1 is the subject; commitlint bounds it with header-max-length instead
+        # line 1 is the subject (bounded by header-max-length), and a footer token has its own
+        # rule, so only body lines are judged here
         for lineno, line in enumerate(body.splitlines()[1:], start=2):
-            if len(line) > limit:
+            if len(line) > limit and not FOOTER_RE.match(line.lstrip()):
                 offenders.append(f"{sha}:{lineno}: {len(line)} chars: {line[:80]}")
     return offenders
+
+
+
+
+def wrap_commit_message(text: str, limit: int) -> str:
+    """Wrap over-long body lines at `limit`, preserving the subject, footers, and blank lines.
+
+    Message-only: the subject is untouched (`header-max-length` bounds it, not this rule) and
+    footer tokens are left verbatim, so `BREAKING CHANGE:` parsing survives. A word longer than
+    the limit cannot be wrapped and is left alone for the caller's re-check to report.
+    """
+    lines = text.split("\n")
+    if not lines:
+        return text
+    out: list[str] = [lines[0]]
+    for line in lines[1:]:
+        if len(line) <= limit or FOOTER_RE.match(line.lstrip()):
+            out.append(line)
+            continue
+        indent = line[: len(line) - len(line.lstrip(" \t"))]
+        wrapped = textwrap.wrap(
+            line.strip(),
+            width=limit,
+            initial_indent=indent,
+            subsequent_indent=indent,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        out.extend(wrapped or [line])
+    return "\n".join(out)
+
+
+def _identity_env(cwd: Path, sha: str) -> dict[str, str] | None:
+    """Author/committer identity for a rewritten commit, so the rewrap keeps authorship."""
+    result = run(
+        ["git", "log", "-1", "--pretty=format:%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI", sha],
+        cwd=cwd,
+    )
+    if result.returncode != 0:
+        return None
+    parts = result.stdout.split("\x1f")
+    if len(parts) != 6:
+        return None
+    an, ae, ad, cn, ce, cd = parts
+    return {
+        **os.environ,
+        "GIT_AUTHOR_NAME": an,
+        "GIT_AUTHOR_EMAIL": ae,
+        "GIT_AUTHOR_DATE": ad,
+        "GIT_COMMITTER_NAME": cn,
+        "GIT_COMMITTER_EMAIL": ce,
+        "GIT_COMMITTER_DATE": cd,
+    }
+
+
+def rewrite_commit_bodies(cwd: Path, target: str, limit: int) -> tuple[bool, str]:
+    """Rewrite every commit body in `target..HEAD` so no line exceeds `limit`.
+
+    Message-only, via `git commit-tree` over the ORIGINAL trees: no replay, no conflicts, no
+    working-tree change - the branch is moved to an equivalent chain whose only difference is
+    the wrapped bodies. That is what makes an automatic repair safe before `wt merge`, which
+    would otherwise fail commitlint on the concatenated squash message.
+    """
+    revs = run(["git", "rev-list", "--reverse", f"{target}..HEAD"], cwd=cwd)
+    if revs.returncode != 0:
+        return False, f"could not list commits in {target}..HEAD: {revs.stderr.strip()}"
+    shas = [sha for sha in revs.stdout.split() if sha]
+    if not shas:
+        return True, "no commits in range"
+
+    branch_result = run(["git", "branch", "--show-current"], cwd=cwd)
+    branch = branch_result.stdout.strip()
+    if not branch:
+        return False, "detached HEAD - refusing to rewrite an anonymous branch"
+
+    parent_result = run(["git", "rev-parse", f"{target}^{{commit}}"], cwd=cwd)
+    if parent_result.returncode != 0:
+        return False, f"cannot resolve target {target}"
+    parent = parent_result.stdout.strip()
+    rewritten = 0
+
+    for sha in shas:
+        original_result = run(["git", "log", "-1", "--pretty=%B", sha], cwd=cwd)
+        tree_result = run(["git", "rev-parse", f"{sha}^{{tree}}"], cwd=cwd)
+        if original_result.returncode != 0 or tree_result.returncode != 0:
+            return False, f"could not read {sha[:12]}"
+        original = original_result.stdout
+        wrapped = wrap_commit_message(original, limit)
+        changed = wrapped != original
+        env = _identity_env(cwd, sha) if changed else None
+        created = run(
+            [
+                "git",
+                "commit-tree",
+                tree_result.stdout.strip(),
+                "-p",
+                parent,
+                "-m",
+                wrapped.rstrip("\n"),
+            ],
+            cwd=cwd,
+            env=env,
+        )
+        if created.returncode != 0:
+            return False, f"commit-tree failed for {sha[:12]}: {created.stderr.strip()}"
+        parent = created.stdout.strip()
+        if changed:
+            rewritten += 1
+
+    if rewritten == 0:
+        return True, "no commit body needed wrapping"
+
+    moved = run(["git", "update-ref", f"refs/heads/{branch}", parent], cwd=cwd)
+    if moved.returncode != 0:
+        return False, f"could not move {branch}: {moved.stderr.strip()}"
+    return True, f"wrapped {rewritten} commit message(s) on {branch}"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -133,22 +262,33 @@ def main(argv: list[str] | None = None) -> None:
         print_err(f"could not read branch in {copy_path}")
         sys.exit(1)
 
-    # Pre-check the squash message before `wt merge` builds it: the merge concatenates every
-    # task-branch commit body into ONE commit, so an over-long body line is a composite-gate
-    # failure the operator sees only at merge time. Fail loud with the offending line instead.
+    # `wt merge` squashes the task branch, concatenating every commit body into ONE message, so
+    # an over-long body line fails commitlint's body-max-line-length at merge time - long after
+    # the developer could have fixed it. Wrap bodies automatically (message-only) and fail loud
+    # only when a line cannot be wrapped.
     if not args.skip_commitlint_precheck and commitlint_configured(copy_path):
-        offenders = commit_body_offenders(copy_path, target, args.body_max_line)
+        limit = args.body_max_line
+        offenders = commit_body_offenders(copy_path, target, limit)
+        if offenders and not args.no_wrap_commit_bodies:
+            wrapped_ok, detail = rewrite_commit_bodies(copy_path, target, limit)
+            print_err(f"pre-check: {detail}")
+            if not wrapped_ok:
+                print_err(
+                    "  automatic wrapping failed; fix the commit messages by hand, then retry"
+                )
+                sys.exit(1)
+            offenders = commit_body_offenders(copy_path, target, limit)
         if offenders:
             print_err(
-                f"pre-check: {len(offenders)} commit body line(s) exceed {args.body_max_line} "
-                f"chars on {copy_branch}; `wt merge` squashes every body into one message, so "
-                "commitlint's body-max-line-length would fail the composite gate at merge time."
+                f"pre-check: {len(offenders)} commit body line(s) still exceed {limit} chars on "
+                f"{copy_branch}; `wt merge` squashes every body into one message, so commitlint's "
+                "body-max-line-length would fail the composite gate at merge time."
             )
             for item in offenders[:10]:
                 print_err(f"  {item}")
             print_err(
                 "  fix: reword the offending commit message(s) so each body line is "
-                f"<= {args.body_max_line} chars (message-only rewrite), then retry the merge."
+                f"<= {limit} chars (message-only rewrite), then retry the merge."
             )
             sys.exit(1)
 

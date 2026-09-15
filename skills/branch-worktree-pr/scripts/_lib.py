@@ -56,9 +56,13 @@ INSTALL_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    """Run a command with list args, no shell injection."""
-    return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+def run(
+    cmd: list[str],
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command with list args, no shell injection. `env` replaces the inherited env when given."""
+    return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
 
 
 def detect_stack_gate(cwd: Path | None = None) -> str | None:
