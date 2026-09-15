@@ -2,19 +2,19 @@
   "version": 1,
   "agents": {
     "code-reviewer.md": "2a0248aab65a72ef607eca2875f3bdf1bc04ff8a95b7fa437abe63634cf50397",
-    "developer.md": "89a4a7a1f46b05eccd61df0b775f59a3512d8ef0e9a9b381f02c030fc215441e",
-    "gate-runner.md": "f1e8bd2385220d68961df2d7c679e64e99bbddfaa86475cf620995ee248c805c",
-    "merger.md": "370b015eb32d9dca38a0e35790a8074cebf1308817084c78e0226f58fbd3c50e",
-    "ticket-planner.md": "fa1ae02190a636750b6c019a056e28ddd4532c70b1961e32dc9c758cb2321154"
+    "developer.md": "82b10aa98d6c8f5b07a3d9bd24c66e9757845b76b7dfa5878765cf2024e1b891",
+    "gate-runner.md": "40bd04e7d7948bf08ffc692912ab6f1c1d69ddc4e752b33ef40524e4b3616df9",
+    "merger.md": "15ae0e680af26558350d48b529e4428033038577df98a5a55d8d4b1f8462e0ab",
+    "ticket-planner.md": "d9788cd500a7185ea1a78e9f75523d72b33816316a59b121216814c4f4b7ed0d"
   },
   "includes": {
     "references/resp-format.md": "d008d22ac3f54d03bbdc242315a778a6dfb665b14e72d39ab584293325f3bf1f"
   },
   "compiled": {
     "code-reviewer.md": "30018568efb40ccdf514f31d309583613e0bf211dbc3595c8981463da4db4492",
-    "developer.md": "6160c9c0065dd30bc79931a93fc1939c2f8a28e8c40d6021f24d3f1ee6055c07",
-    "gate-runner.md": "f44bb5064c6bac62c4fbcccb009b32159764d521598bba5ba5946e927048103b",
-    "merger.md": "35eaaf684d723e1089b4a5dc16e1f2ccbfefc7f44b7856e88431c107394c7e7a",
-    "ticket-planner.md": "fa1ae02190a636750b6c019a056e28ddd4532c70b1961e32dc9c758cb2321154"
+    "developer.md": "cca13490bd41fa677032a06a0b3b79bd71d89f666e8b9c1532af6b02af98b4ae",
+    "gate-runner.md": "c214fb51c658f3a14f606bfc7cb1058382ffc4c0c371fda199f9a2a6d192ae54",
+    "merger.md": "76f0f30eaef1e20077e487d102f65afc01e4df8da223283122477fc9ac7f4dfc",
+    "ticket-planner.md": "d9788cd500a7185ea1a78e9f75523d72b33816316a59b121216814c4f4b7ed0d"
   }
 }
