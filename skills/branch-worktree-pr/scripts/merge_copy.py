@@ -17,6 +17,7 @@ Hunk work belongs to fixer via resolving-merge-conflicts skill.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -25,6 +26,22 @@ if str(Path(__file__).parent) not in sys.path:
 
 from _lib import print_err, run  # pyright: ignore[reportImplicitRelativeImport]
 
+# commitlint's conventional default for `body-max-line-length`. Only enforced when the repo
+# actually wires commitlint; a project without it must never be blocked by this pre-check.
+BODY_MAX_LINE = 100
+COMMITLINT_CONFIG_NAMES: tuple[str, ...] = (
+    "commitlint.config.js",
+    "commitlint.config.cjs",
+    "commitlint.config.mjs",
+    "commitlint.config.ts",
+    ".commitlintrc",
+    ".commitlintrc.json",
+    ".commitlintrc.js",
+    ".commitlintrc.cjs",
+    ".commitlintrc.yml",
+    ".commitlintrc.yaml",
+)
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
@@ -32,6 +49,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     _ = parser.add_argument("copy_path", help="Absolute path to copy worktree")
     _ = parser.add_argument("target_branch", help="Target branch map/<name> or main")
+    _ = parser.add_argument(
+        "--body-max-line",
+        type=int,
+        default=BODY_MAX_LINE,
+        help=f"Commit body line budget for the pre-check (default {BODY_MAX_LINE})",
+    )
+    _ = parser.add_argument(
+        "--skip-commitlint-precheck",
+        action="store_true",
+        help="Do not pre-check commit body line lengths before merging",
+    )
     return parser.parse_args(argv)
 
 
@@ -45,6 +73,46 @@ def git_porcelain(cwd: Path) -> list[str]:
 def git_status_text(cwd: Path) -> str:
     result = run(["git", "status"], cwd=cwd)
     return (result.stdout or "") + (result.stderr or "")
+
+
+def commitlint_configured(cwd: Path) -> bool:
+    """True when the repo wires commitlint — the only reason to police body line length."""
+    if any((cwd / name).is_file() for name in COMMITLINT_CONFIG_NAMES):
+        return True
+    pkg: Path = cwd / "package.json"
+    if not pkg.is_file():
+        return False
+    try:
+        data: object = json.loads(pkg.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(data, dict) and "commitlint" in data
+
+
+def commit_body_offenders(cwd: Path, target: str, limit: int) -> list[str]:
+    """Commits in `target..HEAD` whose body has a line longer than `limit`.
+
+    `wt merge` squashes the task branch, concatenating every commit body into ONE message. A
+    single over-long line anywhere in the task history therefore fails commitlint at merge
+    time - after the developer has moved on. Surface the exact commit and line before merging.
+    """
+    result = run(
+        ["git", "log", f"{target}..HEAD", "--no-merges", "--pretty=format:%h%x1f%B%x1e"],
+        cwd=cwd,
+    )
+    if result.returncode != 0:
+        return []
+    offenders: list[str] = []
+    for record in result.stdout.split("\x1e"):
+        record = record.lstrip("\n")
+        if not record.strip():
+            continue
+        sha, _, body = record.partition("\x1f")
+        # line 1 is the subject; commitlint bounds it with header-max-length instead
+        for lineno, line in enumerate(body.splitlines()[1:], start=2):
+            if len(line) > limit:
+                offenders.append(f"{sha}:{lineno}: {len(line)} chars: {line[:80]}")
+    return offenders
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -64,6 +132,25 @@ def main(argv: list[str] | None = None) -> None:
     if not copy_branch:
         print_err(f"could not read branch in {copy_path}")
         sys.exit(1)
+
+    # Pre-check the squash message before `wt merge` builds it: the merge concatenates every
+    # task-branch commit body into ONE commit, so an over-long body line is a composite-gate
+    # failure the operator sees only at merge time. Fail loud with the offending line instead.
+    if not args.skip_commitlint_precheck and commitlint_configured(copy_path):
+        offenders = commit_body_offenders(copy_path, target, args.body_max_line)
+        if offenders:
+            print_err(
+                f"pre-check: {len(offenders)} commit body line(s) exceed {args.body_max_line} "
+                f"chars on {copy_branch}; `wt merge` squashes every body into one message, so "
+                "commitlint's body-max-line-length would fail the composite gate at merge time."
+            )
+            for item in offenders[:10]:
+                print_err(f"  {item}")
+            print_err(
+                "  fix: reword the offending commit message(s) so each body line is "
+                f"<= {args.body_max_line} chars (message-only rewrite), then retry the merge."
+            )
+            sys.exit(1)
 
     print(f"-> merge {copy_branch} ({copy_path}) into {target}")
     # Absolute path + --stage tracked — keeps .lsz/.pi out, avoids cd bug

@@ -18,6 +18,11 @@ gate = "uv run ruff check . && uv run pytest -q"
 # gate = "uv run pytest && ruff check ."
 
 [list]
+# NOTE: `wt list --format=json` schema is NOT settable here — `[list] json-schema` is a user
+# config key, and wt ignores it in project config (it emits a warning for the stray key).
+# Run `wt config update` to adopt schema 2 in ~/.config/worktrunk/config.toml, or set
+# `[list] json-schema` there; `_lib.wt_list()` already parses both shapes and captures stderr
+# separately, so automation never depends on this setting.
 # Per-worktree dev server URL preview in `wt list` — hash_port assigns 10000–19999 from branch hash.
 url = "http://localhost:{{ branch | hash_port }}"
 
