@@ -111,8 +111,8 @@ Rows dimmed when safe to delete (`_` or `⊂`).
 wt list
 wt list --full
 wt list --branches
-wt list --format=json | jq '.[] | select(.is_current) | .branch'
-wt list --format=json | jq '.[] | select(.main_state == "integrated") | .branch'
+wt list --format=json 2>/dev/null | jq '(.items // .) | .[] | select(.worktree.current // .is_current) | .branch'
+wt list --format=json 2>/dev/null | jq '(.items // .) | .[] | select(.display.state == "integrated") | .branch'
 ```
 
 ### JSON fields

@@ -118,7 +118,7 @@ Then  it discloses to [[git-merge-pr]] — does not handle inline
 Run after each scenario:
 
 ```bash
-wt list --format=json | jq '.[].branch'
+wt list --format=json 2>/dev/null | jq '(.items // .) | .[].branch'
 uv run scripts/self_check.py feat/foo--auth "$COPY"  # inside copy — must exit 0
 git log --oneline --no-merges origin/main..HEAD | head
 gh pr view <N> --json number,baseRefName,body,state --jq .

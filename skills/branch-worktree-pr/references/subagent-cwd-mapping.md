@@ -24,7 +24,7 @@ If the tool lacks `cwd`, dispatch via a new session whose `cwd` is the sibling p
 ```bash
 # subagent tool shape is the source of truth — branch-worktree-pr never restates it
 # list siblings the model will target
-wt list --format=json | jq '.[] | {branch, path}'
+wt list --format=json 2>/dev/null | jq '(.items // .) | .[] | {branch, path: (.worktree.path // .path)}'
 # gate stays in wt
 cat .config/wt.toml | rg "pre-merge" -A 2
 ```

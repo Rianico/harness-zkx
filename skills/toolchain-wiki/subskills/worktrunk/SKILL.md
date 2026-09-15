@@ -54,8 +54,10 @@ Shortcuts (`^` `@` `-` `pr:{N}` `mr:{N}`) also work with `--base`. Full table in
 ```bash
 wt list                                        # human table (progressive)
 wt list --full                                 # + CI, diff stats, LLM summaries
-wt list --format=json | jq '.[] | select(.is_current)'
-wt list --format=json | jq '.[] | select(.main_state=="integrated") | .branch'  # safe to prune
+# Always 2>/dev/null: wt prints the json-schema notice on **stderr**, and `2>&1 | jq` breaks.
+# `.items // .` accepts both schemas (schema 1 bare array, schema 2 envelope).
+wt list --format=json 2>/dev/null | jq '(.items // .) | .[] | select(.worktree.current // .is_current)'
+wt list --format=json 2>/dev/null | jq '(.items // .) | .[] | select(.display.state == "integrated") | .branch'  # safe to prune
 ```
 
 Use `--format=json` in scripts and agents. Columns, status symbols and JSON fields: [basics](references/basics.md).
