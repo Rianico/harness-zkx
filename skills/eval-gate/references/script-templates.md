@@ -70,6 +70,12 @@ set -euo pipefail
 PATTERN="${1:-}"
 PATHS="${2:-src/}"
 EXCLUDE="${3:-}"  # Pipe-separated patterns to exclude
+# Word-boundary mode: ON by default for identifier/token assertions. A bare substring match
+# false-reds — `reServe` also matches `ensureServedSchema` and `reServed`. Set SUBSTRING=1 only
+# when the criterion genuinely targets a substring, and say so in the criterion description.
+SUBSTRING="${SUBSTRING:-0}"
+WORD_FLAG=""
+[ "$SUBSTRING" = "1" ] || WORD_FLAG="-w"
 
 if [ -z "$PATTERN" ]; then
     echo '{"status": "fail", "summary": "No pattern provided", "issues": ["Usage: script <pattern> <paths> <exclude_pattern>"]}'
@@ -78,9 +84,9 @@ fi
 
 # Build exclude filter
 if [ -n "$EXCLUDE" ]; then
-    MATCHES=$(rg "$PATTERN" $PATHS --type py -v "$EXCLUDE" || true)
+    MATCHES=$(rg $WORD_FLAG "$PATTERN" $PATHS --type py -v "$EXCLUDE" || true)
 else
-    MATCHES=$(rg "$PATTERN" $PATHS --type py || true)
+    MATCHES=$(rg $WORD_FLAG "$PATTERN" $PATHS --type py || true)
 fi
 
 if [ -z "$MATCHES" ]; then

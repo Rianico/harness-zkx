@@ -316,7 +316,35 @@ The `check` mode is the trigger for the **Remediation Loop**.
 | Output: "It failed with some errors" | Output: `{"status": "fail", "issues": ["src/main.py:12: Type error..."]}` |
 | Remediation: "Look at the logs and fix it" | Remediation: Pass structured `issues.md` to worker node |
 | Relying on exit code 0 | Parsing `status: "pass"` from JSON output |
+| `grep -cE '^-[^-]'` to count deleted diff lines | `git diff --numstat` (see [Assertion Patterns](#assertion-patterns)) |
+| `grep -c 'reServe'` to assert an identifier | `grep -cE '\breServe\b'` / `rg -w 'reServe'` |
 
+---
+
+## Assertion Patterns
+
+Two pattern shapes false-red against a correct tree. Both are gates, so a false red burns the round budget and ends the task `BLOCKED` on work that was already done.
+
+### Word boundaries for tokens, symbols, and identifiers
+
+A substring match collides with any longer symbol containing it. Anchoring `ReServeGrant|reServe` also matches the legitimate locals `ensureServedSchema` and `reServed`, which reported 21 failures against a compliant tree.
+
+- Require `\b<identifier>\b` (or `rg -w`) for every token, symbol, and identifier assertion.
+- A criterion phrased as an exact identifier in the issue stays an exact identifier in the script.
+- Only drop the boundary when the criterion genuinely targets a substring (e.g. a renamed prefix family), and say so in the criterion's description.
+
+### Diff line counting
+
+Do not count diff additions or removals with a line regex. In unified diff format a deleted line beginning with `- ` is prefixed with the diff marker, so `- File: ...` renders as `-- File: ...`, and `grep -cE '^-[^-]'` — which requires the character after the marker to not be a hyphen — counts it as zero. A correct two-line edit then evaluates as "0 deletions" and fails C4.
+
+Use `git diff --numstat` (or parse `--shortstat`) instead:
+
+```bash
+# added / deleted line counts for the change under test; -1 sentinel for binary files
+read -r ADDED DELETED _ < <(git -C "$WORKTREE" diff --numstat "$BASE_REF"...HEAD | awk '{a+=$1; d+=$2} END {print a+0, d+0, "-"}')
+```
+
+`--numstat` is content-based and indifferent to whether the changed line starts with `-`, `#`, or a Markdown bullet.
 ---
 
 ## Metric Reference
