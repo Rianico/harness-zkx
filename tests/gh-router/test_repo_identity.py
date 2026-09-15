@@ -1,9 +1,12 @@
-"""Regression tests for push-remote repo resolution (issue #33).
+"""Regression tests for push-remote repo identity (lib/repo.sh).
 
-`gh repo view` resolves to the upstream project in a multi-remote checkout, so a
-`repository_dispatch` — or a run lookup — targets the wrong repo. These tests pin the
-push-remote-first derivation in `_common.sh::repo_slug`, hermetically: no network, no gh
-auth, no dependence on the ambient checkout.
+`gh repo view` resolves to the upstream project in a multi-remote checkout, so a run lookup
+404s and a `repository_dispatch` fires a release workflow at the wrong repo (#33). These tests
+pin the push-remote-first derivation, hermetically: no network, no gh auth, no dependence on
+the ambient checkout.
+
+They also pin the module's *contract*, which is what makes it composable: stdout carries the
+value and nothing else, and failure is a non-zero exit rather than a printed diagnostic.
 """
 
 from __future__ import annotations
@@ -13,12 +16,12 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-COMMON = REPO_ROOT / "skills/gh-router/subskills/gh-release/scripts/_common.sh"
+REPO_LIB = REPO_ROOT / "skills/gh-router/lib/repo.sh"
 CI_SH = REPO_ROOT / "skills/gh-router/scripts/ci.sh"
 
 
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+    _ = subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
 
 
 def _init_checkout(tmp_path: Path) -> Path:
@@ -27,18 +30,21 @@ def _init_checkout(tmp_path: Path) -> Path:
     _git(repo, "init", "-q", "-b", "main")
     _git(repo, "config", "user.email", "t@example.com")
     _git(repo, "config", "user.name", "t")
-    (repo / "f").write_text("x\n")
+    _ = (repo / "f").write_text("x\n")
     _git(repo, "add", "f")
     _git(repo, "commit", "-qm", "init")
     return repo
 
 
-def _repo_slug(repo: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    repo: Path, body: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", "-c", f'source "{COMMON}"; repo_slug'],
+        ["bash", "-c", f'source "{REPO_LIB}"\n{body}'],
         cwd=repo,
         capture_output=True,
         text=True,
+        env={**os.environ, **(env or {})},
     )
 
 
@@ -49,7 +55,7 @@ def test_repo_slug_ignores_a_differently_named_upstream_remote(tmp_path: Path) -
     _git(repo, "remote", "add", "upstream", "git@github.com:Rianico/pi-better-edit.git")
     _git(repo, "config", "branch.main.remote", "origin")
 
-    result = _repo_slug(repo)
+    result = _run(repo, "repo_slug")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "Rianico/dsh-better-edit"
@@ -63,7 +69,7 @@ def test_repo_slug_honours_branch_push_remote(tmp_path: Path) -> None:
     _git(repo, "config", "branch.main.remote", "origin")
     _git(repo, "config", "branch.main.pushRemote", "fork")
 
-    result = _repo_slug(repo)
+    result = _run(repo, "repo_slug")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "Rianico/my-fork"
@@ -75,31 +81,53 @@ def test_repo_slug_parses_url_style_remotes(tmp_path: Path) -> None:
     _git(repo, "remote", "add", "origin", "https://github.com/Rianico/harness-zkx.git")
     _git(repo, "config", "branch.main.remote", "origin")
 
-    result = _repo_slug(repo)
+    result = _run(repo, "repo_slug")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "Rianico/harness-zkx"
 
 
-def test_repo_slug_fails_rather_than_returning_a_non_slug(tmp_path: Path) -> None:
-    """An unparseable remote must not leak through as a "slug"."""
+def test_failure_is_a_nonzero_exit_not_stdout_noise(tmp_path: Path) -> None:
+    """A resolvable-slug miss must not leak a diagnostic onto stdout.
+
+    Callers consume this module through command substitution (`REPO=$(repo_slug) || fail`), so
+    error text on stdout would silently become the "slug". This is why repo.sh installs no ERR
+    trap and prints nothing but the value.
+    """
     repo = _init_checkout(tmp_path)
-    # No remotes at all: every git lookup fails, so only the gh fallback could answer.
+    # No remotes, and a gh that always fails, so no derivation can succeed.
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir()
     stub_gh = stub_bin / "gh"
-    stub_gh.write_text("#!/usr/bin/env bash\nexit 1\n")
+    _ = stub_gh.write_text("#!/usr/bin/env bash\nexit 1\n")
     stub_gh.chmod(0o755)
-    # Invoke it the way _common.sh documents — assignment in a condition context. A bare
-    # `repo_slug` call trips the ERR trap, which is not how any caller uses it.
-    script = f'source "{COMMON}"\nif slug=$(repo_slug); then printf "%s" "$slug"; else exit 1; fi\n'
+    path = f"{stub_bin}:{os.environ['PATH']}"
 
-    result = subprocess.run(
-        ["bash", "-c", script],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        env={**os.environ, "PATH": f"{stub_bin}:{os.environ['PATH']}"},
+    slug = _run(
+        repo, "if slug=$(repo_slug); then printf '%s' \"$slug\"; else exit 1; fi", {"PATH": path}
+    )
+    assert slug.returncode != 0
+    assert slug.stdout.strip() == ""
+
+    # A bare call is equally safe: the module itself never writes to stdout on failure.
+    bare = _run(repo, "repo_slug", {"PATH": path})
+    assert bare.returncode != 0
+    assert bare.stdout.strip() == ""
+
+
+def test_default_branch_fails_cleanly_when_the_slug_cannot_be_resolved(tmp_path: Path) -> None:
+    """default_branch must propagate failure so callers keep their own fallback."""
+    repo = _init_checkout(tmp_path)
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    stub_gh = stub_bin / "gh"
+    _ = stub_gh.write_text("#!/usr/bin/env bash\nexit 1\n")
+    stub_gh.chmod(0o755)
+
+    result = _run(
+        repo,
+        "if base=$(default_branch); then printf '%s' \"$base\"; else exit 1; fi",
+        {"PATH": f"{stub_bin}:{os.environ['PATH']}"},
     )
 
     assert result.returncode != 0
