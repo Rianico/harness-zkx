@@ -43,9 +43,10 @@
  * phase (`git diff <base>...HEAD | git hash-object --stdin`) purely so this is decidable.
  *
  * Timeouts: the workflow runtime exposes no clock (`Date.now()` is unavailable), so this script
- * cannot measure a cumulative run budget. `taskTimeoutMs` bounds each agent call belonging to
- * one task; `runTimeoutMs` bounds every agent call in the run. Both are opt-in — pass them in
- * `args` — and a true run-level wall-clock cap is the `workflow` tool's `agentTimeoutMs` input.
+ * cannot measure a cumulative run budget. `runTimeoutMs` (default 2h) bounds every agent call in
+ * the run and `taskTimeoutMs` (opt-in) bounds each call belonging to one task; an explicit
+ * `runTimeoutMs: null` disables the ceiling. A true cumulative run budget is still the `workflow`
+ * tool's `agentTimeoutMs` input.
  *
  * Finalize changelog sync: after every task merges, a hand-drifted `## [Unreleased]` block makes
  * the composite gate dirty the tree and marks a fully successful run `BLOCKED`. The final gate
@@ -64,10 +65,17 @@ export const meta = {
 const rawArgs = args && typeof args === 'object' ? args : {};
 const maxRounds = Number.isInteger(rawArgs.maxRounds) ? Math.max(1, Math.min(rawArgs.maxRounds, 10)) : 5;
 const maxMergeAttempts = Number.isInteger(rawArgs.maxMergeAttempts) ? Math.max(1, Math.min(rawArgs.maxMergeAttempts, 3)) : 2;
-// Opt-in per-agent timeouts. The runtime has no clock, so `runTimeoutMs` is a per-call ceiling,
-// not a cumulative budget (pass `agentTimeoutMs` to the workflow tool for that).
+// Per-agent timeouts. The runtime has no clock, so `runTimeoutMs` is a per-call ceiling, not a
+// cumulative budget (pass `agentTimeoutMs` to the workflow tool for that). 2h by default so a
+// hung subagent cannot run all night; `runTimeoutMs: null` disables the ceiling explicitly.
+const DEFAULT_RUN_TIMEOUT_MS = 7_200_000;
 const taskTimeoutMs = Number.isInteger(rawArgs.taskTimeoutMs) && rawArgs.taskTimeoutMs > 0 ? rawArgs.taskTimeoutMs : null;
-const runTimeoutMs = Number.isInteger(rawArgs.runTimeoutMs) && rawArgs.runTimeoutMs > 0 ? rawArgs.runTimeoutMs : null;
+const runTimeoutMs =
+  rawArgs.runTimeoutMs === null
+    ? null
+    : Number.isInteger(rawArgs.runTimeoutMs) && rawArgs.runTimeoutMs > 0
+      ? rawArgs.runTimeoutMs
+      : DEFAULT_RUN_TIMEOUT_MS;
 const stackHint = typeof rawArgs.stack === 'string' && rawArgs.stack.trim() ? rawArgs.stack.trim() : null;
 const evalDir = typeof rawArgs.evalDir === 'string' && rawArgs.evalDir.trim() ? rawArgs.evalDir.trim() : null;
 const requestedBase = typeof rawArgs.base === 'string' && rawArgs.base.trim() ? rawArgs.base.trim() : 'main';
@@ -557,7 +565,7 @@ const prepPrompt = [
   `3. Resolve the base: if \`git rev-parse --verify ${requestedBase}\` succeeds, use ${requestedBase} with baseSource "requested". Otherwise fall back to the repository default branch (\`git rev-parse --abbrev-ref origin/HEAD\`) with baseSource "origin-head". If neither resolves → BLOCKED.`,
   `4. Record whether the project body wires the merge gate: \`rg -n '^\\[pre-merge\\]' .config/wt.toml\` (or \`grep -n\`) succeeds → preMergeHook true. This decides only whether merge attempts are composite-gated; the Finalize node re-runs the full stack gate on the integration worktree either way.`,
   integrationWanted
-    ? `5. Allocate the integration worktree in its OWN worktree — never in the session worktree, and never by checking out ${integrationBranch} in ${root}. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json\` for an entry whose \`branch\` equals ${integrationBranch} (reuse only as instructed above), otherwise \`wt switch --create ${integrationBranch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json\` and report integrationTool "wt". Fallback: \`git worktree add <repo-parent>/<repo-name>-<integration-slug> -b ${integrationBranch} <base>\` with integrationTool "git", reusing that path when it already exists.`
+    ? `5. Allocate the integration worktree in its OWN worktree — never in the session worktree, and never by checking out ${integrationBranch} in ${root}. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json 2>/dev/null\` for an entry whose \`branch\` equals ${integrationBranch} (reuse only as instructed above), otherwise \`wt switch --create ${integrationBranch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json 2>/dev/null\` and report integrationTool "wt". Always redirect stderr: wt prints a json-schema notice there, and merging it into stdout breaks jq. The payload is a bare array on schema 1 and an \`{ items: [...] }\` envelope on schema 2, with the path at \.path or \.worktree.path — accept both. Fallback: \`git worktree add <repo-parent>/<repo-name>-<integration-slug> -b ${integrationBranch} <base>\` with integrationTool "git", reusing that path when it already exists.`
     : `5. Report integrationBranch "", integrationPath "", integrationTool "none", integrationReused false — this single-task run merges nothing.`,
   integrationWanted
     ? `6. Verify and report every path absolute: the integration path exists as a directory; \`git -C <path> rev-parse --abbrev-ref HEAD\` equals ${integrationBranch}; and the ephemeral-tolerant admission check from step 1 run against the integration path prints nothing. Any mismatch → BLOCKED.`
@@ -632,7 +640,7 @@ for (const taskId of orderResult.order) {
     `Session root (must stay untouched, same branch): ${root}`,
     ``,
     `Procedure:`,
-    `1. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json\`; if an entry already has branch \`${task.branch}\`, reuse it (reused true) rather than recreating; otherwise \`wt switch --create ${task.branch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json\` and report tool "wt".`,
+    `1. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json 2>/dev/null\` (always redirect stderr — wt prints a json-schema notice there and merging it into stdout breaks jq; the payload is a bare array on schema 1 and an \`{ items: [...] }\` envelope on schema 2, so read \.path or \.worktree.path); if an entry already has branch \`${task.branch}\`, reuse it (reused true) rather than recreating; otherwise \`wt switch --create ${task.branch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json 2>/dev/null\` and report tool "wt".`
     `2. Fallback: \`git worktree add <repo-parent>/<repo-name>-<task-slug> -b ${task.branch} <base>\` where <task-slug> is the branch name with \`/\` replaced by \`-\`; reuse that path when it already exists as a worktree; tool "git".`,
     `3. Verify and report absolute paths only: the path exists as a directory, \`git -C <path> rev-parse --abbrev-ref HEAD\` equals \`${task.branch}\`, and the ephemeral-tolerant check \`git -C <path> status --porcelain --untracked-files=all | grep -vE '(__pycache__/|\\.pyc$|\\.DS_Store$|\\.lsz/)' || true\` prints nothing. Any mismatch → status BLOCKED with worktreePath "".`,
     `4. Never check out, commit, merge, or push in the session root. Never push anywhere.`,

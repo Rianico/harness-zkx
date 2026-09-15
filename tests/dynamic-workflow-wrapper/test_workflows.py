@@ -278,12 +278,14 @@ def test_converge_tasks_identifiers_use_word_boundaries() -> None:
     assert "\\\\b<identifier>\\\\b" in content, "the plan prompt must demand word boundaries"
 
 
-def test_converge_tasks_exposes_opt_in_timeouts() -> None:
-    """Issue #42: per-agent caps are opt-in because the VM exposes no clock."""
+def test_converge_tasks_caps_agent_calls_with_a_two_hour_default() -> None:
+    """Issue #42: the VM has no clock, so the cap is a per-agent ceiling with a 2h default."""
     content = read_workflow("converge-tasks.js")
 
     assert "rawArgs.taskTimeoutMs" in content
     assert "rawArgs.runTimeoutMs" in content
+    assert "DEFAULT_RUN_TIMEOUT_MS = 7_200_000" in content, "the run cap defaults to 2h"
+    assert "rawArgs.runTimeoutMs === null" in content, "an explicit null must disable the cap"
     assert "function callOptions(" in content
     assert "timeoutMs" in content, "the resolved cap must reach agent()"
     assert "Date.now(" not in strip_comments(content), "the VM forbids a clock"
