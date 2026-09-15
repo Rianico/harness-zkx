@@ -12,8 +12,11 @@
 
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../subskills/gh-release/scripts/_common.sh
-source "$SCRIPT_DIR/../subskills/gh-release/scripts/_common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+# shellcheck source=../lib/log.sh
+source "$LIB_DIR/log.sh"
+# shellcheck source=../lib/repo.sh
+source "$LIB_DIR/repo.sh"
 
 BASE=""
 HEAD_REF=""

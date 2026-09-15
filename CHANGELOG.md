@@ -24,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **gh-router:** give repo identity one authority and split shared code by concern (#35)
+* **gh-router:** give repo identity one authority and split shared code by concern
 * **gh-router:** resolve the repo from the push remote, not gh repo view (#34)
 * **scaffold:** correct the templates and detection the scaffold ships (#32)
 * **scaffold:** make the generated gates pass, and stop bypassing them
@@ -38,6 +40,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
+* **scaffold:** point the release-flow note at the corrected pr.sh gate
+* **gh-router:** document the lib split and the corrected watch/merge gates
 * **scaffold:** record the gate-config contract
 * **scaffold:** record how each coverage gate is wired
 * record the bumped toolchain and the preset/writer constraint

@@ -48,12 +48,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 > [!warning] CHANGELOG.md [Unreleased] stale
 Visible conventional commit in push range but Unreleased not updated.
 Fix:
-  uv run python scripts/changelog-unreleased.py update
-  git add CHANGELOG.md
-  git commit -m 'chore: sync changelog unreleased section'  # hidden type required
-  # visible feat/fix/perf/revert/docs re-triggers the guard and loops forever
-  # or amend on a feature branch: git commit --amend --no-edit --no-verify && git push --force-with-lease
-  git push
+  # Do NOT hand-edit CHANGELOG.md — just re-run the commit command directly.
+  # The hook auto-fixes (amends HEAD) and re-pushes on the next attempt.
+  git commit --amend --no-edit --no-verify && git push --force-with-lease
+  # or, if the change is not yet committed, simply re-run your original commit
+  # command (e.g. git commit -m 'feat: ...') — the hook updates Unreleased for you.
 Bypass (human): git push --no-verify  or  PREPUSH_AUTOFIX=0 git push
 EOF
     cp "$tmp" CHANGELOG.md
