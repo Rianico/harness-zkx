@@ -127,7 +127,7 @@ Test existing behavior remains intact. Prefer narrow deterministic checks over f
 **Directory selection:**
 1. `artifact_dir=<path>` → use exactly (orchestrator should pass `eval/run-[N]`)
 2. `topic_root=<path>` → use `[topic_root]/eval/run-1/`
-3. Default → `.lsz/{date}/{timestamp}_{topic}/eval/run-1/`
+3. Default → resolve it, never inline it: `uv run skills/eval-gate/scripts/artifact_paths.py resolve --kind eval --topic <topic> --run 1`. The layout (`base`, `pattern`, `kinds`) lives in `.lsz/config.yaml`; when that file is absent the documented defaults apply, so a repo that never adopted the config still works. `artifact_paths.py show` prints the effective config and its provenance.
 
 ## Dispatch Template
 
