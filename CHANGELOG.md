@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **gh-router:** give repo identity one authority and split shared code by concern (#35)
 * **gh-router:** give repo identity one authority and split shared code by concern
 * **gh-router:** resolve the repo from the push remote, not gh repo view (#34)
 * **scaffold:** correct the templates and detection the scaffold ships (#32)
