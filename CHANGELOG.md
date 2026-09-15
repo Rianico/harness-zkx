@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **programming-expert:** synthesize deep design and propagate across subskills
+* **rules:** synthesize clean architecture, deep design, and scope taxonomy
 * **programming-expert:** sharpen description and polyglot principles
 * **rules:** add domain vocabulary, atomicity, and anti-tampering
 * **workflow:** add scope taxonomy, review stability, and domain rules
