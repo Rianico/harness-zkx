@@ -17,10 +17,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=_common.sh
-source "$SCRIPT_DIR/_common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../../../lib" && pwd)"
+# shellcheck source=../../../lib/repo.sh
+source "$LIB_DIR/repo.sh"
 
-# Release repo from this checkout's push remote — see repo_slug() in _common.sh for why
+# Release repo from this checkout's push remote — see repo_slug() in lib/repo.sh for why
 # `gh repo view` is unsafe here (upstream/fork remote → wrong release target).
 if ! REPO=$(repo_slug); then
   echo "cannot resolve release repo slug (no GitHub remote for branch/origin)" >&2

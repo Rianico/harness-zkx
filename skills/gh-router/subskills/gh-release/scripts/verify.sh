@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=_common.sh
-source "$SCRIPT_DIR/_common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../../../lib" && pwd)"
+# shellcheck source=../../../lib/log.sh
+source "$LIB_DIR/log.sh"
 
 phase 2 3 "Verify — lint / typecheck / test"
 
 # detect repo type (silent — verbose only with GH_RELEASE_VERBOSE=1)
-if [[ -f package.json ]]; then
+# `package.json` alone is not a Node signal: a repo can carry one purely as a release-tooling
+# manifest (semantic-release deps, `private: true`, no `scripts`). Keying on the file alone
+# classified this harness as Node, so the phase aborted at `npm run lint` before ruff/pytest
+# ever ran — a preflight that could never pass on the repo that ships it.
+if [[ -f package.json ]] && grep -q '"scripts"[[:space:]]*:' package.json; then
   repo="node"
 elif [[ -f Cargo.toml ]]; then
   repo="rust"
@@ -57,27 +62,30 @@ if [[ "$repo" == "node" ]]; then
   fi
   [[ "${GH_RELEASE_VERBOSE:-0}" == "1" ]] && dim "pm: $pm"
   if [[ "$pm" == "pnpm" ]]; then
-    run_step "lint"      false pnpm run --silent lint
+    run_step "lint" false pnpm run --silent lint
     if grep -q '"format"[[:space:]]*:' package.json 2>/dev/null; then
-      run_step "format"    false pnpm run --silent format
+      run_step "format" false pnpm run --silent format
     fi
     run_step "typecheck" false pnpm run --silent typecheck
     if grep -q '"test:coverage"[[:space:]]*:' package.json 2>/dev/null; then
-      run_step "test"      false pnpm run --silent test:coverage
+      run_step "test" false pnpm run --silent test:coverage
     else
-      run_step "test"      false pnpm test
+      run_step "test" false pnpm test
     fi
   else
-    run_step "lint"      false npm run --silent lint
+    run_step "lint" false npm run --silent lint
     run_step "typecheck" false npm run --silent typecheck
-    run_step "test"      false npm test
+    run_step "test" false npm test
   fi
 elif [[ "$repo" == "rust" ]]; then
   run_step "clippy" false cargo clippy
-  run_step "test"   false cargo test
+  run_step "test" false cargo test
 else
-  run_step "ruff check" false ruff check .
-  run_step "pytest"     true uv run pytest -q
+  # `uv run` throughout: the python branch targets uv projects, so bare tool names are not on
+  # PATH, and the authoritative CI gate runs these same commands in this same order.
+  run_step "ruff check" false uv run ruff check .
+  run_step "basedpyright" false uv run basedpyright
+  run_step "pytest" true uv run pytest -q
 fi
 
 if [[ ${#PASSED[@]} -gt 0 ]]; then
