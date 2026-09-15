@@ -34,11 +34,18 @@ When narrowing tangles, ask: why does this serialization exist here? Move it to 
   SOLID at module seams, not per-line.
 _Check:_ public exports constrained to explicit interface or `__all__`.
 
+**Ubiquitous language & domain glossary** — domain boundaries define canonical nouns and forbidden synonyms (`_Avoid_: ...`). Check the domain glossary (`CONTEXT.md`) before naming types, functions, parameter names, error messages, and commit messages; treat avoided synonyms as invariant violations, not stylistic preference.
+_Check:_ diff contains zero terms from `_Avoid_:` lists.
+
+**Transactional atomicity** — multi-step state mutations spanning multiple records or tables must execute within a single atomic transaction (`BEGIN IMMEDIATE`), never fragmented into disjoint operations.
+_Check:_ state mutations across multiple tables/entities are bound inside one transaction block with rollback.
+
 ## 2. Guards — Errors, Security, Suppressions
 
 **Errors fail loud** — every path has explicit branch: handle, map to typed error, or propagate. Log cause, no secrets. Fail-fast at invariant boundary.
 - **Boundary translation:** catch library/transport exceptions at admission; map to internal domain error types. Never leak raw external exceptions into caller layers.
-_Check:_ no empty `except`/`catch`; every catch re-raises, returns `Result`/`Err`, or logs with context.
+- **Storage error transparency:** never swallow secondary storage or desync failures with silent logging (`console.error`). Return explicit status, warnings, or typed errors in result structures so callers can compensate or alert.
+_Check:_ no empty `except`/`catch`; every catch re-raises, returns `Result`/`Err`, or logs with context; hybrid disk+DB operations report desyncs.
 
 **Security — negative path designed**
 
@@ -72,6 +79,7 @@ _Guard rule:_ baselines shrink-only. Growth needs authority, narrow scope, owner
 
 **Verification closes the loop** — evidence, not stale green. Restart daemon after type/config changes; clean-build after refactors; clear test cache when stale; benchmark real path before performance claims.
 - **Deterministic vs. semantic split:** deterministic tools (compiler, linter, tests) are absolute blockers; never declare done on model claim alone. Semantic alignment requires adversarial verification (skeptic/reviewer subagent) or explicit BDD contract.
+- **Refutation by counterexample & oracle tests:** when claiming an invariant, state machine, or algorithmic defect, supply a concrete minimal failing input/scenario (`input -> expected vs observed`). Never accept or propose cosmetic heuristic patches without an executable counterexample proving the failure. Verify non-trivial state machines or combinatorial engines with minimal exhaustive small-input oracle tests or property tests.
 _Check:_ re-run failing signal from fresh state and confirm terminal invariant.
 
 ## 4. Context — Keep Lean

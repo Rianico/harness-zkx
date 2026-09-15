@@ -46,6 +46,6 @@
 ## 7. Reference
 
 - **Fan-out / hooks:** parallel & Wayfinder → `branch-worktree-pr` skill; ports/hooks/templates → `worktrunk-guide` + `.config/wt.toml`.
-- **Changelog (Keep-a-Changelog):** `# Changelog` → `## [Unreleased]` (top) → `## [X.Y.Z] - YYYY-MM-DD` newest first. Subsections `### Added | Changed | Fixed | Removed`, one imperative bullet each. Link `(owner/repo#N)` or `#N` when exists; no issue → linkless. Dates from release commit.
+- **Changelog (Keep-a-Changelog):** `# Changelog` → `## [Unreleased]` (top) → `## [X.Y.Z] - YYYY-MM-DD` newest first. Subsections `### Added | Changed | Fixed | Removed`, one imperative bullet each. Link `(owner/repo#N)` or `#N` when exists; no issue → linkless. Dates from release commit. Native toolchain priority: if the repo ships a changelog management script (e.g. `scripts/changelog-unreleased.py`), run it rather than hand-crafting markdown. Respect hidden-type rules (`style|chore|refactor|test|build|ci` do not receive section headers unless `!` or `BREAKING CHANGE`).
 - **README (brooks-lint):** header (logo → h1 → tagline → lang switcher → `•` nav → shields → banner) → quote + narrative → Why (3 para) → Quick Start (read→act→result) → benchmark (table + command + `> **Scope & honesty.**`) → tools / tree / roadmap `<details>` / contributing / license. Bump version badge each release.
 - **Locale:** `README.md` is English source; translations mirror structure exactly, code/JSON/Mermaid identical, reciprocal links at top. Keep in sync — stale number is bug.
