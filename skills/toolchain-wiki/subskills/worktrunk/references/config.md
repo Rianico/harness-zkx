@@ -198,7 +198,7 @@ wt config approvals clear --global
 
 - **Inline overrides `--config-set <toml>`** — global, repeatable, before/after subcommand; deep-merge tables, `wt --config-set list.full=true list` (0.61)
 - **Custom columns [experimental]** — `[list.custom-columns.<Header>]` minijinja over `branch`/`worktree_path`/`vars.*` + `{{ git.branch.* }}` (0.61-0.64); `[list] columns` ordered selection overrides `--full` presets (0.62-0.63), narrowed columns skip unused git probes (0.63)
-- **JSON schema 2** — `[list] json-schema = 2` envelope (`schema`, `repo.default_branch`, `collected`) with `null` pending vs absent not-requested; v1 default still (0.66), `wt config update` now writes `=2` (0.68)
+- **JSON schema 2** — `[list] json-schema = 2` envelope (`schema`, `repo.default_branch`, `collected`) with `null` pending vs absent not-requested; v1 default still (0.66), `wt config update` now writes `=2` (0.68). **User-config only:** `json-schema` cannot be set from a project `.config/wt.toml` — wt ignores the key there and warns (`Project config has key list.json-schema which belongs in user config`). Repo-local automation must therefore capture stderr separately (`2>/dev/null`) and accept both the bare array and the `{ items: [...] }` envelope rather than relying on a pin.
 - **User project-specific settings wildcard** — `[projects."git.company.example/*"]` least→most specific, sets `forge.platform/hostname` per-host (0.72); single host needs one entry not per-repo
 - **Worktree path template:** new `{{ remote_repo }}` (remote URL name vs `{{ repo }}` dir) (0.74), full filter list still in [automation](automation.md)
 - **`wt config show`**: prints project identifier `<host>/<owner>/<repo>` + GEMINI section + `identifier` JSON (0.53/0.56)

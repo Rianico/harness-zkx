@@ -158,6 +158,12 @@ wt switch --create feat/<slug>--store --base feat/<slug> --no-cd  # module B / t
 > COPY=$(uv run scripts/make_copy.py feat/<slug>--auth feat/<slug>)
 > # dispatcher: COPY=$(uv run scripts/worktree.py make-copy feat/<slug>--auth feat/<slug>)
 > ```
+>
+> The script also probes the copied dependency tree: `wt step copy-ignored` can copy a
+> `node_modules` skeleton whose store symlinks and native `.node` bindings are broken, which kills
+> the developer on its first test run. When the probe fails it runs the stack's frozen-lockfile
+> install (`pnpm install --frozen-lockfile`, `npm ci`, …) and exits non-zero if that fails.
+> `--skip-deps` skips the probe; `--force-deps` installs unconditionally.
 
 #### Dispatch table — one copy per ticket (feat fans out to modules)
 
@@ -224,6 +230,10 @@ uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>
 uv run $SKILL_DIR/scripts/worktree.py merge-copy <copy-path> <target>
 # router does: wt merge -C <absolute-copy-path> --stage tracked <target> --yes
 # then detects: rebase incomplete / Unmerged paths → conflict (exit 2), else gate fail (exit 1)
+# before merging it pre-checks (when the repo wires commitlint) that no commit body line that
+# will be squashed into the single merge message exceeds --body-max-line (default 100):
+# it prints the offending <sha>:<line> and exits 1, so the failure lands before the composite
+# gate instead of after. --skip-commitlint-precheck opts out.
 # check
 wt list --format=json 2>/dev/null | jq '.items // . | .[]? | {branch, path: (.worktree.path // .path), is_current: (.worktree.current // .is_current)}'
 git log --oneline <target> ^origin/main | head
