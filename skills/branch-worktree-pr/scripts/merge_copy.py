@@ -128,8 +128,6 @@ def commit_body_offenders(cwd: Path, target: str, limit: int) -> list[str]:
     return offenders
 
 
-
-
 def wrap_commit_message(text: str, limit: int) -> str:
     """Wrap over-long body lines at `limit`, preserving the subject, footers, and blank lines.
 

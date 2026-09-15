@@ -136,9 +136,18 @@ def test_converge_tasks_supports_suggestions_and_known_gotchas():
     assert "recordSuggestions" in content
     assert "suggestions: { type: 'array' }" in content
 
-    for source in ("ticket-planner", "prepare", "allocate", "developer", "gate-runner", "code-reviewer", "merger"):
-        assert f"recordSuggestions('{source}'" in content, f"missing suggestion recording for {source}"
-
+    for source in (
+        "ticket-planner",
+        "prepare",
+        "allocate",
+        "developer",
+        "gate-runner",
+        "code-reviewer",
+        "merger",
+    ):
+        assert f"recordSuggestions('{source}'" in content, (
+            f"missing suggestion recording for {source}"
+        )
 
 
 DOCS_WITH_WORKFLOW_POINTERS = (
@@ -166,16 +175,18 @@ def test_documented_workflow_paths_exist():
         for name in sorted(referenced):
             assert (WORKFLOWS_DIR / name).exists(), f"{doc.name} points at missing workflows/{name}"
 
-    assert shipped <= set(WORKFLOW_PATH_PATTERN.findall((SKILL_DIR / "SKILL.md").read_text(encoding="utf-8"))), (
-        "every shipped workflow must be reachable from the routing table in SKILL.md"
-    )
+    assert shipped <= set(
+        WORKFLOW_PATH_PATTERN.findall((SKILL_DIR / "SKILL.md").read_text(encoding="utf-8"))
+    ), "every shipped workflow must be reachable from the routing table in SKILL.md"
 
 
 def test_no_dangling_ship_tasks_pointers():
     """The removed ship-tasks workflow must not survive as a pointer to nothing."""
     for doc in DOCS_WITH_WORKFLOW_POINTERS:
         content = doc.read_text(encoding="utf-8")
-        assert "ship-tasks" not in content, f"{doc.name} still references the retired ship-tasks workflow"
+        assert "ship-tasks" not in content, (
+            f"{doc.name} still references the retired ship-tasks workflow"
+        )
 
 
 # --- regression guards for the convergence-loop defects (issues #38, #40, #41, #42) -------------
@@ -265,7 +276,9 @@ def test_converge_tasks_admission_tolerates_ephemeral_caches() -> None:
     content = read_workflow("converge-tasks.js")
 
     assert "PYTHONDONTWRITEBYTECODE=1" in content
-    assert content.count("__pycache__/") >= 3, "prepare, allocate and workspace must all tolerate it"
+    assert content.count("__pycache__/") >= 3, (
+        "prepare, allocate and workspace must all tolerate it"
+    )
     assert "\\.pyc$" in content
     # The strict tracked-only guard on the session root (no untracked files at all) survives.
     assert "status --porcelain --untracked-files=no" in content
