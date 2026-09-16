@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **dynamic-workflow-wrapper:** make the skill-resolution test CI-safe
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests
 * converge the nine blocking issues from the run ledger (#45) (BREAKING CHANGE)
 * **gh-router:** split libs and harden PR gates
