@@ -8,6 +8,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SKILL_DIR = REPO_ROOT / "skills" / "dynamic-workflow-wrapper"
 WORKFLOWS_DIR = SKILL_DIR / "workflows"
 
+# Mirrors pi-dynamic-workflows' DETERMINISM_BLOCKLIST, applied to the RAW script text:
+# a literal mention inside a comment is a hard SCRIPT_VALIDATION_ERROR, not a style nit.
+VM_DETERMINISM_BLOCKLIST = re.compile(
+    r"\bDate\s*\.\s*now\b|\bMath\s*\.\s*random\b|\bnew\s+Date\s*\(\s*\)"
+)
+
 # The runtime body already executes inside an async function; wrap it the same way to check syntax.
 NODE_SYNTAX_CHECKER = """
 const fs = require('node:fs');
@@ -54,11 +60,18 @@ def test_workflow_scripts_are_syntactically_valid():
 def test_workflow_scripts_avoid_vm_forbidden_globals():
     """The workflow VM provides no modules and no ambient nondeterminism."""
     for script_path in workflow_scripts():
-        stripped = strip_comments(script_path.read_text(encoding="utf-8"))
+        raw = script_path.read_text(encoding="utf-8")
+        stripped = strip_comments(raw)
         assert "import " not in stripped, f"{script_path.name} must not contain imports"
         assert "require(" not in stripped, f"{script_path.name} must not use require()"
-        assert "Date.now(" not in stripped, f"{script_path.name} must not use Date.now()"
-        assert "Math.random(" not in stripped, f"{script_path.name} must not use Math.random()"
+        # The runtime validates the raw script before it executes anything, so the
+        # determinism guard must not strip comments first — a mention in a comment
+        # still refuses the whole run.
+        match = VM_DETERMINISM_BLOCKLIST.search(raw)
+        assert match is None, (
+            f"{script_path.name} contains {match.group(0)!r}, which the runtime's "
+            "determinism blocklist rejects"
+        )
 
 
 def test_converge_tasks_declares_meta_and_phases():
