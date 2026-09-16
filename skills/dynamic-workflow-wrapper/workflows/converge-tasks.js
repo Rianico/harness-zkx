@@ -42,7 +42,7 @@
  * stagnation)` instead of burning the remaining round budget. The gate reports a `diff-hash`
  * phase (`git diff <base>...HEAD | git hash-object --stdin`) purely so this is decidable.
  *
- * Timeouts: the workflow runtime exposes no clock (`Date.now()` is unavailable), so this script
+ * Timeouts: the workflow runtime exposes no clock (the VM neuters `Date`), so this script
  * cannot measure a cumulative run budget. `runTimeoutMs` (default 2h) bounds every agent call in
  * the run and `taskTimeoutMs` (opt-in) bounds each call belonging to one task; an explicit
  * `runTimeoutMs: null` disables the ceiling. A true cumulative run budget is still the `workflow`
@@ -640,7 +640,7 @@ for (const taskId of orderResult.order) {
     `Session root (must stay untouched, same branch): ${root}`,
     ``,
     `Procedure:`,
-    `1. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json 2>/dev/null\` (always redirect stderr — wt prints a json-schema notice there and merging it into stdout breaks jq; the payload is a bare array on schema 1 and an \`{ items: [...] }\` envelope on schema 2, so read \.path or \.worktree.path); if an entry already has branch \`${task.branch}\`, reuse it (reused true) rather than recreating; otherwise \`wt switch --create ${task.branch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json 2>/dev/null\` and report tool "wt".`
+    `1. Prefer worktrunk when \`command -v wt\` succeeds AND \`.config/wt.toml\` exists: inspect \`wt list --format=json 2>/dev/null\` (always redirect stderr — wt prints a json-schema notice there and merging it into stdout breaks jq; the payload is a bare array on schema 1 and an \`{ items: [...] }\` envelope on schema 2, so read \.path or \.worktree.path); if an entry already has branch \`${task.branch}\`, reuse it (reused true) rather than recreating; otherwise \`wt switch --create ${task.branch} --base <base> --no-cd\`, then read the absolute \`path\` from \`wt list --format=json 2>/dev/null\` and report tool "wt".`,
     `2. Fallback: \`git worktree add <repo-parent>/<repo-name>-<task-slug> -b ${task.branch} <base>\` where <task-slug> is the branch name with \`/\` replaced by \`-\`; reuse that path when it already exists as a worktree; tool "git".`,
     `3. Verify and report absolute paths only: the path exists as a directory, \`git -C <path> rev-parse --abbrev-ref HEAD\` equals \`${task.branch}\`, and the ephemeral-tolerant check \`git -C <path> status --porcelain --untracked-files=all | grep -vE '(__pycache__/|\\.pyc$|\\.DS_Store$|\\.lsz/)' || true\` prints nothing. Any mismatch → status BLOCKED with worktreePath "".`,
     `4. Never check out, commit, merge, or push in the session root. Never push anywhere.`,
@@ -813,7 +813,7 @@ for (const taskId of orderResult.order) {
         `Procedure:`,
         `1. History hygiene in the copy: Conventional Commits, atomic, code and docs separate; when the repo tracks CHANGELOG.md exactly one new bullet under \`## [Unreleased]\`. Commit what the developer left uncommitted with the same conventions; never rewrite their commits.`,
         `2. Run exactly one merge: \`uv run ~/.agents/skills/branch-worktree-pr/scripts/merge_copy.py ${taskPath} ${integrationBranch}\` (or the same skill script resolved from this repository). Exit 0 = merged, exit 2 = conflict, exit 1 = gate failure. The project's \`[pre-merge]\` gate runs inside it when declared.`,
-        `3. On exit 2: finish the rebase INSIDE ${taskPath} only, using the resolving-merge-conflicts skill. Headless continue form: \`GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C ${taskPath} rebase --continue\`. Commit the resolution on ${taskBranch}.`,
+        `3. On exit 2: finish the rebase INSIDE ${taskPath} only, using the resolve-merge-conflicts skill. Headless continue form: \`GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C ${taskPath} rebase --continue\`. Commit the resolution on ${taskBranch}.`,
         `4. On exit 1: fix the failing gate inside ${taskPath} only (read the gate output first; a CHANGELOG guard hit is fixed inside the copy and committed). \`merge_copy.py\` pre-checks commit body line lengths before merging and names the offending commit and line — reword that message (message-only, keeping its content) and commit, then retry.`,
         `5. Do NOT retry the merge in this call, even after a successful repair: the repaired copy must be re-gated and re-reviewed before the next attempt, and only the workflow can sequence that. Report \`repaired\` true and let the run re-verify.`,
         `6. Record EVERY attempt you made as { exitCode, command, tail } with the tail capped at 20 lines, and set \`outcome\`: MERGED (exit 0 on the first attempt of this call), CONFLICT, GATE_FAILED.`,

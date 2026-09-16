@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -147,3 +148,30 @@ def test_check_flags_drift_instead_of_overwriting(tmp_path):
     )
     assert "drifted: developer.md" in result.stdout, result.stdout
     assert target.read_text(encoding="utf-8") == edited, "drifted role was overwritten by --check"
+
+
+def test_canonical_agent_skills_resolve():
+    """Every skill a role declares or points at must resolve to a real skill directory.
+
+    The declared `skills:` set is loaded when the agent is constructed, and the body's
+    `~/.agents/skills/<name>/...` pointers are opened at task time, so a stale name
+    fails at one point or the other: `resolving-merge-conflicts` shipped while the
+    canonical directory is `resolve-merge-conflicts`.
+    """
+    skill_roots = [REPO_ROOT / "skills", REPO_ROOT / ".agents" / "skills"]
+
+    def resolves(name):
+        return any((root / name).is_dir() for root in skill_roots)
+
+    for agent_file in sorted(CANONICAL_AGENTS_DIR.glob("*.md")):
+        text = agent_file.read_text(encoding="utf-8")
+        frontmatter = text.split("---\n")[1]
+
+        declared = re.search(r"^skills:\s*(.+)$", frontmatter, re.MULTILINE)
+        if declared is not None:
+            for name in (part.strip() for part in declared.group(1).split(",")):
+                if name:
+                    assert resolves(name), f"{agent_file.name} declares unknown skill {name!r}"
+
+        for name in sorted(set(re.findall(r"~/\.agents/skills/([A-Za-z0-9._-]+)/", text))):
+            assert resolves(name), f"{agent_file.name} points at unknown skill {name!r}"
