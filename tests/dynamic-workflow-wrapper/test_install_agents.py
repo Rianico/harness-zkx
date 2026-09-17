@@ -177,7 +177,9 @@ def test_canonical_agent_skills_resolve():
             # only stale when the local root exists to disprove it; without it (CI) it
             # is an unverifiable external harness skill, not a repo contract.
             if local_root.is_dir():
-                assert False, f"{agent_file.name} {what} unknown skill {name!r}"
+                raise AssertionError(
+                    f"{agent_file.name} {what} unknown skill {name!r}"
+                )
 
     for agent_file in sorted(CANONICAL_AGENTS_DIR.glob("*.md")):
         text = agent_file.read_text(encoding="utf-8")

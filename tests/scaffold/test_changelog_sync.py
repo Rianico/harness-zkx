@@ -48,8 +48,8 @@ def test_check_workflow_comment_body_uses_hidden_type():
 
 def test_pre_push_hook_fix_hint_uses_hidden_type():
     hook = scaffold.GITHOOK_PRE_PUSH
-    # the hook auto-fixes (amends HEAD) and re-pushes, so the hint tells the user
-    # to re-run their commit command rather than hand-editing CHANGELOG.md
+    # the hook auto-fixes (amends HEAD) and blocks the push with a warning,
+    # so the hint tells the user to re-run their commit/push rather than hand-editing CHANGELOG.md
     assert "Do NOT hand-edit CHANGELOG.md" in hook
     assert "re-run your original commit" in hook
     assert "git commit --amend --no-edit" in hook  # amend alternative retained

@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* stop background re-push after auto-amend
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
 * converge the nine blocking issues from the run ledger (#45) (BREAKING CHANGE)
 * **gh-router:** split libs and harden PR gates
@@ -46,7 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **scaffold:** add adr-scaffolding subskill
+* **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
 * **gh-router:** document the lib split and the corrected watch/merge gates

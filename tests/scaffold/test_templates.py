@@ -111,7 +111,7 @@ def _render_cases() -> dict[str, str]:
 
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RAW_SHA256: dict[str, str] = {
-    "git/.githooks/pre-push": "ebcef66609314c3afd2ab8d5406c3220d55adc05f288c1b1da99c91d0c5451cc",
+    "git/.githooks/pre-push": "916ee6b757394084dc092bfddb1d5e607dd6baff3c098d2ce46993f3cc22f85b",
     "git/.github/ISSUE_TEMPLATE/01-bug_report.yml": "042c8a9647b165ef3c354cfd60e1a1b619b81b86f60bdc5fec65e324e061d676",
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
     "git/.github/ISSUE_TEMPLATE/config.yml": "27539305684d7673d88e80ec149c4ec9714da05a054b09fee67d56b8a7e5a820",
