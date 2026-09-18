@@ -107,7 +107,7 @@ Report the assigned `runId` and confirm headless execution has started.
 
 ## Step 4 — Unified status tracking & reporting
 
-Monitor execution or await completion. The run result owns per-task evidence; the run ledger owns lifecycle. Return the Unified Status Table from those, never hand-authored:
+Monitor execution or await completion. The run result owns per-task evidence; the run ledger owns lifecycle. The workflow's `Report` phase renders the table below from that evidence — `converge-tasks` returns it as `result.report` when the run converges, and throws it as `[RUN FAILED] …` when it does not. Return the table from those, never hand-authored:
 
 ```markdown
 ### Workflow Run `<runId>` [<STATUS>]
@@ -132,6 +132,8 @@ Monitor execution or await completion. The run result owns per-task evidence; th
 | `DEFERRED` (task)  | Not attempted because an earlier task halted the run.                                                                     |
 | `BLOCKED`          | A node declared an impossible requirement, an unresolvable merge, or a scope violation; also a red final composite gate.  |
 | `EXHAUSTED`        | A task reached `maxRounds` without convergence, or exhausted `maxMergeAttempts`.                                          |
+
+**Exit contract.** `BLOCKED` and `EXHAUSTED` are *failing* run states, not results: the `Report` phase throws `[RUN FAILED] <report>`, the lifecycle records the run as `failed`, and the error text carries the status, the per-task table, the failing evidence, the delivery path and the next actions. A converged run returns the same report as `result.report`. Read the run status first, then the report — a batch a node halted can never be mistaken for delivered work. The workflow's own table carries the columns the run owns (rounds, merge attempts, crux review score, worktree); per-round gate detail lives in the ledger, so add it from there when an operator asks.
 
 **Done when** the final status is delivered, the delivery branch and worktree are named, and merge/PR ownership is returned to the user with `nextActions`.
 
