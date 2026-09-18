@@ -51,6 +51,7 @@ Read the subskill that matches the projection you need. Use `Read` (not `Skill` 
 | `rust`       | `$SKILL_DIR/subskills/rust-scaffolding/SKILL.md`       | `rust-toolchain.toml` + `cargo fmt/clippy/test` wiring — [rust-scaffolding](subskills/rust-scaffolding/SKILL.md)                                             |
 | `typescript` | `$SKILL_DIR/subskills/typescript-scaffolding/SKILL.md` | `pnpm` + `.nvmrc` + `package.json`/`tsconfig.json` wiring (`lib`/`cli`/`pi-extension`) — [typescript-scaffolding](subskills/typescript-scaffolding/SKILL.md) |
 | `ci`         | `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`         | GitHub Actions verify+release + on-demand dispatch — [ci-scaffolding](subskills/ci-scaffolding/SKILL.md)                                                     |
+| `adr`        | `$SKILL_DIR/subskills/adr-scaffolding/SKILL.md`        | `.adr-dir` pointer to `docs/adr` + `.gitignore` entry — [adr-scaffolding](subskills/adr-scaffolding/SKILL.md)                                                |
 
 Omitted flavor loads only the spine above. For interactive scaffolding, run **Explore First** then **Grilling** — explore detects, grilling confirms only ambiguous leaves.
 

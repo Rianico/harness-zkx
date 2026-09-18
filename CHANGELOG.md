@@ -26,8 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **dynamic-workflow-wrapper:** make the skill-resolution test CI-safe
-* **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests
+* **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
 * converge the nine blocking issues from the run ledger (#45) (BREAKING CHANGE)
 * **gh-router:** split libs and harden PR gates
 * **gh-router:** split libs and harden PR gates
@@ -47,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** add adr-scaffolding subskill
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
 * **gh-router:** document the lib split and the corrected watch/merge gates
