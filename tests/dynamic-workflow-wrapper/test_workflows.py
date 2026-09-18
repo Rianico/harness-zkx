@@ -82,7 +82,7 @@ def test_converge_tasks_declares_meta_and_phases():
     assert re.search(r"name: ['\"]converge-tasks['\"]", content), "meta.name must be converge-tasks"
     assert "description:" in content
 
-    for phase_title in ("Plan & Prepare", "Integrate & Gate", "Finalize"):
+    for phase_title in ("Plan & Prepare", "Integrate & Gate", "Finalize", "Report"):
         assert phase_title in content, f"phase {phase_title!r} is not declared"
         assert f"phase('{phase_title}')" in content or f'phase("{phase_title}")' in content
 
@@ -317,3 +317,78 @@ def test_converge_tasks_caps_agent_calls_with_a_two_hour_default() -> None:
     assert "Date.now(" not in strip_comments(content), "the VM forbids a clock"
     # Every in-loop agent call must be capped through the helper, not constructed ad hoc.
     assert content.count("callOptions({") >= 7
+
+
+# --- the Report phase and the failed-run exit contract -------------------------------------------
+
+
+def test_converge_tasks_fails_the_run_when_a_node_fails() -> None:
+    """A run whose node failed must exit with an error, not complete with a sad result."""
+    content = read_workflow("converge-tasks.js")
+
+    assert "phase('Report')" in content, "the Report phase must be entered"
+    assert "function buildRunReport(" in content
+    assert "if (!converged) {" in content, "the non-converged path must throw"
+    # Both run-level exits fail the run: the admission gate and the final Report phase. A third
+    # exit that silently returns a BLOCKED result would recreate the defect this guards.
+    assert content.count("throw new Error(`[RUN FAILED] ${") == 2, (
+        "every run-level exit must throw, so a blocked batch cannot read as a green run"
+    )
+    assert "report: runReport," in content, "a converged run still returns its report"
+
+
+def test_run_report_renders_the_unified_status_table() -> None:
+    """The Report phase renders from run evidence, deterministically and falsifiably."""
+    source = _extract_functions(["clip", "buildRunReport"])
+    script = (
+        source
+        + """
+const rows = [
+  { id: 'T-a', ref: 'do the thing', status: 'MERGED', rounds: 2, mergeAttempts: 1, reviewScore: 100, worktreePath: '/wt/a', issues: [] },
+  { id: 'T-b', ref: 'do the other thing', status: 'BLOCKED', rounds: 3, mergeAttempts: 1, reviewScore: 0, worktreePath: '/wt/b', issues: ['gate-runner: 1 failed'] }
+];
+const input = {
+  workflow: 'converge-tasks',
+  status: 'BLOCKED',
+  converged: false,
+  failure: '',
+  maxRounds: 5,
+  tasks: rows,
+  delivery: { mode: 'integration-branch', branch: 'dev/x', base: 'main', worktreePath: '/wt/integration' },
+  planIssues: [],
+  abortedTasks: ['T-b'],
+  compositeOk: false,
+  compositePhases: ['tests'],
+  nextActions: ['Resolve the reported block, then re-run.']
+};
+const text = buildRunReport(input);
+const checks = [
+  ['table header', '| Task | Status | Rounds | Merge | Crux Review | Worktree |'],
+  ['blocked task row', 'T-b'],
+  ['status column', '**BLOCKED**'],
+  ['delivery branch', '`dev/x`'],
+  ['row evidence', 'gate-runner: 1 failed'],
+  ['composite gate', 'composite gate: FAILED (tests)'],
+  ['halted batch', 'halted after: T-b'],
+  ['failure headline', 'did NOT converge'],
+  ['next actions', 'Next actions']
+];
+for (const [what, needle] of checks) {
+  if (!text.includes(needle)) throw new Error('report is missing ' + what + ': ' + needle);
+}
+if (buildRunReport(input) !== text) throw new Error('the report must be deterministic');
+const converged = buildRunReport({
+  ...input,
+  status: 'CONVERGED',
+  converged: true,
+  abortedTasks: [],
+  compositeOk: true,
+  compositePhases: []
+});
+if (converged === text) throw new Error('a converged run must not render like a blocked one');
+if (!converged.includes('The run converged')) throw new Error('the converged headline must say so');
+if (!converged.includes('1/2 task(s)')) throw new Error('the delivered count must come from the rows');
+"""
+    )
+    proc = _run_node(script)
+    assert proc.returncode == 0, proc.stderr
