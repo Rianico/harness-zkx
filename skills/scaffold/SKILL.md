@@ -303,6 +303,8 @@ silently chooses the destructive option and never escalates a one-field edit
 into a whole-file write. `--update` preserves project-owned files and reports
 them as NEXT actions; `ensure <op>` performs one confirmed field edit (absent
 adds minimally, present reports unchanged, invalid or ambiguous refuses).
+Package.json edits normalize to 2-space JSON (key order kept, non-ASCII kept
+literal, trailing-newline state kept).
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py ensure rust-dep --name tokio --version 1
