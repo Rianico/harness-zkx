@@ -58,7 +58,7 @@
 export const meta = {
   name: 'converge-tasks',
   description: 'AFK convergence loop over one or more tasks: per-task developer, deterministic gate, crux review, merged into a local integration branch — never pushes, never opens a PR',
-  phases: [{ title: 'Plan & Prepare' }, { title: 'Integrate & Gate' }, { title: 'Finalize' }]
+  phases: [{ title: 'Plan & Prepare' }, { title: 'Integrate & Gate' }, { title: 'Finalize' }, { title: 'Report' }]
 };
 
 // 1. Arguments
@@ -303,7 +303,7 @@ const reviewSchema = {
     summary: { type: 'string' },
     status: { type: 'string', enum: ['COMPLETED', 'BLOCKED'] },
     route: { type: 'string', enum: ['continue', 'remediate', 'blocked'] },
-    score: { type: 'integer' },
+    score: { type: 'integer', minimum: 0, maximum: 10 },
     artifacts: { type: 'array' },
     issues: {
       type: 'array',
@@ -394,6 +394,30 @@ function report(message) {
   log(`converge-tasks: ${message}`);
 }
 
+/**
+ * The stage ledger goes to the run log, not only to the return value: the report caps its evidence
+ * list for legibility and a failed run returns nothing at all, so the log is the one record every
+ * exit leaves behind (the runtime persists it with the run — see the run JSON's `logs`).
+ */
+function logLedger() {
+  if (ledger.length === 0) return;
+  report(
+    `stage ledger — ${ledger
+      .map(entry => `${entry.taskId || 'run'} r${entry.round} ${entry.stage}: ${entry.ok ? 'ok' : 'FAIL'}${entry.feedback ? ` — ${clip(entry.feedback, 160)}` : ''}`)
+      .join(' | ')}`
+  );
+}
+
+/**
+ * Friction observations ride in the returned result, so a failed run has to log them: the throw
+ * discards everything else the run learned about the environment.
+ */
+function logSuggestions() {
+  if (suggestions.length === 0) return;
+  const observed = suggestions.map(item => clip(item.suggestion || item.observation, 160)).filter(Boolean);
+  if (observed.length > 0) report(`friction suggestions — ${observed.join(' | ')}`);
+}
+
 /** First phase carrying `name`, or undefined when the gate did not report it. */
 function phaseByName(result, name) {
   const phases = result && Array.isArray(result.phases) ? result.phases : [];
@@ -421,6 +445,83 @@ function changelogDriftOnly(result) {
   if (!result || result.ok === true) return false;
   const failed = failedPhaseNames(result);
   return failed.length === 1 && failed[0] === 'changelog-check';
+}
+
+/**
+ * Normalizes one report value: single line, trimmed, clipped. Deterministic, so the same value
+ * always renders the same cell no matter how wild the failing output was.
+ */
+function clip(value, limit) {
+  const text = String(value === null || value === undefined ? '' : value)
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+/**
+ * A clipped value made safe for the markdown the report renders. Task ids, refs and worktree
+ * paths are operator- and planner-supplied, so one `|` would split a table cell and one backtick
+ * would close the code span around it — a single hostile value would shred the whole table.
+ */
+function cell(value, limit) {
+  return clip(value, limit).replace(/\|/g, '\\|').replace(/`/g, '\\`');
+}
+
+/**
+ * The Report phase's renderer: the operator-facing run summary, derived from the run's own
+ * evidence and never hand-authored (SKILL.md step 4). Pure and deterministic, so one run always
+ * renders one table. A run that did not converge throws this text, which is what turns a failed
+ * node into a FAILED RUN instead of a green run carrying a sad result.
+ */
+function buildRunReport(input) {
+  const rows = Array.isArray(input.tasks) ? input.tasks : [];
+  const delivery = input.delivery || {};
+  const delivered = rows.filter(row => row.status === 'MERGED' || row.status === 'CONVERGED').length;
+  const lines = [];
+  lines.push(`### Workflow Run \`${cell(input.workflow, 60)}\` [${cell(input.status, 24)}]`);
+  lines.push('');
+  lines.push(
+    `**Workflow**: \`${cell(input.workflow, 60)}\` | **Rounds**: ${input.maxRounds} per task | **Delivery**: \`${cell(delivery.branch, 72) || '(none)'}\` at ${cell(delivery.worktreePath, 120) || '(none)'} (mode \`${cell(delivery.mode, 40) || 'none'}\`, base \`${cell(delivery.base, 72) || 'unknown'}\`) — verified local branch, NOT pushed`
+  );
+  lines.push(
+    `**Delivered**: ${delivered}/${rows.length} task(s). ${input.converged ? 'The run converged; delivery is the operator step below.' : 'The run did NOT converge. Nothing was pushed.'}`
+  );
+  lines.push('');
+  lines.push('| Task | Status | Rounds | Merge | Crux Review (x/10) | Worktree |');
+  lines.push('| --- | --- | --- | --- | --- | --- |');
+  for (const row of rows) {
+    lines.push(
+      `| \`${cell(row.id, 32)}\` — ${cell(row.ref, 60)} | **${cell(row.status, 16)}** | ${row.rounds} | ${row.mergeAttempts} attempt(s) | ${Number.isInteger(row.reviewScore) ? `${row.reviewScore}/10` : '—'} | \`${cell(row.worktreePath, 72) || '—'}\` |`
+    );
+  }
+  const evidence = [];
+  if (input.failure) evidence.push(`- ${clip(input.failure, 300)}`);
+  for (const row of rows) {
+    if (row.status === 'MERGED' || row.status === 'CONVERGED') continue;
+    const rowIssues = Array.isArray(row.issues) ? row.issues : [];
+    for (const issue of rowIssues) evidence.push(`- \`${cell(row.id, 32)}\` (${cell(row.status, 16)}): ${clip(issue, 300)}`);
+  }
+  for (const issue of Array.isArray(input.planIssues) ? input.planIssues : []) evidence.push(`- plan: ${clip(issue, 300)}`);
+  if (input.compositeOk === false) {
+    const phases = Array.isArray(input.compositePhases) ? input.compositePhases : [];
+    evidence.push(`- composite gate: FAILED${phases.length > 0 ? ` (${phases.map(name => clip(name, 40)).join(', ')})` : ''}`);
+  }
+  if (Array.isArray(input.abortedTasks) && input.abortedTasks.length > 0) {
+    evidence.push(`- halted after: ${input.abortedTasks.map(id => clip(id, 32)).join(', ')}`);
+  }
+  if (evidence.length > 0) {
+    lines.push('');
+    lines.push('**Failing evidence**');
+    for (const item of evidence.slice(0, 8)) lines.push(item);
+    if (evidence.length > 8) lines.push(`- …and ${evidence.length - 8} more recorded stage(s); the report is capped at 8 bullets, the run log keeps every recorded stage.`);
+  }
+  const actions = Array.isArray(input.nextActions) ? input.nextActions : [];
+  if (actions.length > 0) {
+    lines.push('');
+    lines.push('**Next actions**');
+    for (const action of actions) lines.push(`- ${action}`);
+  }
+  return lines.join('\n');
 }
 
 function taskWorkspace(task, worktreePath, branch, base) {
@@ -528,20 +629,29 @@ const admissionFailure = planBlocked
 
 if (admissionFailure) {
   report(`planning failed — ${admissionFailure}`);
-  return {
+  // No task was attempted, so the failure is run-level. Attaching it to every row would repeat
+  // one sentence per task and crowd the report's evidence list out of the report.
+  const blockedRows = tasks.map(task => ({ id: task.id, ref: task.ref, kind: task.kind, status: 'BLOCKED', rounds: 0, mergeAttempts: 0, issues: [] }));
+  ledger.push({ taskId: null, round: 0, stage: 'plan', ok: false, feedback: admissionFailure });
+  phase('Report');
+  const blockedReport = buildRunReport({
+    workflow: 'converge-tasks',
     status: 'BLOCKED',
     converged: false,
+    failure: `admission: ${admissionFailure}`,
     maxRounds,
-    maxMergeAttempts,
-    tasks: tasks.map(task => ({ id: task.id, ref: task.ref, kind: task.kind, status: 'BLOCKED', rounds: 0, mergeAttempts: 0, issues: [admissionFailure] })),
-    delivery: { mode: integrationWanted ? 'integration-branch' : 'task-branch', branch: '', base: requestedBase, worktreePath: '', verified: false },
-    root,
-    ledger: [{ taskId: null, round: 0, stage: 'plan', ok: false, feedback: admissionFailure }],
+    tasks: blockedRows,
+    delivery: { mode: integrationWanted ? 'integration-branch' : 'task-branch', branch: requestedIntegration || '', base: requestedBase, worktreePath: '' },
     planIssues,
-    nextActions: ['Resolve the plan or dependency problem above, then re-run.'],
-    summary: `Blocked before any work: ${admissionFailure}`,
-    suggestions
-  };
+    abortedTasks: [],
+    compositeOk: null,
+    compositePhases: [],
+    nextActions: ['Resolve the plan or dependency problem above, then re-run.']
+  });
+  report(blockedReport);
+  logLedger();
+  logSuggestions();
+  throw new Error(`[RUN FAILED] ${blockedReport}`);
 }
 
 report(`plan complete — order: ${orderResult.order.join(' -> ')}`);
@@ -585,25 +695,29 @@ const prepared = Boolean(prep) && prep.status === 'COMPLETED' && prep.cleanRoot 
 if (!prepared) {
   const reason = (prep && prep.summary) || 'Prepare node failed to produce usable admission facts (no output from the subagent).';
   report(`prepare failed — ${reason}`);
-  return {
+  // Same guarantee as the plan gate: a run halted before round 1 throws, so the lifecycle reads
+  // `failed` instead of `completed` carrying a BLOCKED status field.
+  const deferredRows = tasks.map(task => ({ id: task.id, ref: task.ref, kind: task.kind, status: 'DEFERRED', rounds: 0, mergeAttempts: 0, issues: [] }));
+  ledger.push({ taskId: null, round: 0, stage: 'prepare', ok: false, feedback: reason });
+  phase('Report');
+  const prepareReport = buildRunReport({
+    workflow: 'converge-tasks',
     status: 'BLOCKED',
     converged: false,
+    failure: `prepare: ${reason}`,
     maxRounds,
-    maxMergeAttempts,
-    tasks: tasks.map(task => ({ id: task.id, ref: task.ref, kind: task.kind, status: 'DEFERRED', rounds: 0, mergeAttempts: 0, issues: [reason] })),
-    delivery: {
-      mode: integrationWanted ? 'integration-branch' : 'task-branch',
-      branch: integrationWanted ? integrationBranch : '',
-      base: (prep && prep.base) || requestedBase,
-      worktreePath: '',
-      verified: false
-    },
-    root,
-    ledger: [{ taskId: null, round: 0, stage: 'prepare', ok: false, feedback: reason }],
-    nextActions: ['Fix the admission failure above, then re-run.'],
-    summary: `Blocked before round 1: ${reason}`,
-    suggestions
-  };
+    tasks: deferredRows,
+    delivery: { mode: integrationWanted ? 'integration-branch' : 'task-branch', branch: '', base: (prep && prep.base) || requestedBase, worktreePath: '' },
+    planIssues,
+    abortedTasks: [],
+    compositeOk: null,
+    compositePhases: [],
+    nextActions: ['Fix the admission failure above, then re-run.']
+  });
+  report(prepareReport);
+  logLedger();
+  logSuggestions();
+  throw new Error(`[RUN FAILED] ${prepareReport}`);
 }
 
 const base = (prep && prep.base) || requestedBase;
@@ -781,7 +895,7 @@ for (const taskId of orderResult.order) {
         return { ok: false, stage: 'code-reviewer', feedback };
       }
 
-      const reviewScore = Number.isInteger(reviewResult.score) ? reviewResult.score : 0;
+      const reviewScore = Number.isInteger(reviewResult.score) ? reviewResult.score : null;
 
       if (!integrationWanted) {
         ledger.push({ taskId: task.id, round: roundNumber, stage: 'converged', ok: true, feedback: null, mergeAttempts: 0 });
@@ -872,7 +986,7 @@ for (const taskId of orderResult.order) {
     mergeAttempts: last && Number.isInteger(last.mergeAttempts) ? last.mergeAttempts : mergeAttempts,
     branch: taskBranch,
     worktreePath: taskPath,
-    reviewScore: last && Number.isInteger(last.reviewScore) ? last.reviewScore : 0,
+    reviewScore: last && Number.isInteger(last.reviewScore) ? last.reviewScore : null,
     issues
   });
 
@@ -978,6 +1092,40 @@ report(
   `finished: ${finalStatus} — ${taskRows.filter(row => row.status === 'MERGED' || row.status === 'CONVERGED').length}/${taskRows.length} task(s) delivered on ${deliveryBranch || 'no branch'}; never pushed`
 );
 
+// 7. Report — the operator-facing summary, and the run's single exit authority
+phase('Report');
+
+const runReport = buildRunReport({
+  workflow: 'converge-tasks',
+  status: finalStatus,
+  converged,
+  failure: '',
+  maxRounds,
+  tasks: taskRows,
+  delivery: {
+    mode: integrationWanted ? 'integration-branch' : 'task-branch',
+    branch: deliveryBranch,
+    base,
+    worktreePath: deliveryPath
+  },
+  planIssues,
+  abortedTasks,
+  compositeOk,
+  compositePhases: compositeGate && Array.isArray(compositeGate.phases) ? failedPhaseNames(compositeGate) : [],
+  nextActions
+});
+
+report(runReport);
+logLedger();
+
+// WHY: a node that failed is a FAILED RUN, not a green run carrying a sad result. The runtime
+// WHY: records this run as `failed` and persists the text, so a blocked batch can never be
+// WHY: mistaken for delivered work by whoever reads the lifecycle next.
+if (!converged) {
+  logSuggestions();
+  throw new Error(`[RUN FAILED] ${runReport}`);
+}
+
 return {
   status: finalStatus,
   converged,
@@ -1005,6 +1153,7 @@ return {
   abortedTasks,
   planIssues,
   ledger,
+  report: runReport,
   nextActions,
   summary: converged
     ? `${taskRows.length} task(s) converged and verified on ${deliveryBranch} (${integrationWanted ? 'integration branch' : 'task branch'}), base ${base}. Nothing was pushed and no pull request was opened — merge/PR ownership stays with the operator.`

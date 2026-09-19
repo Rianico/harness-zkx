@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **dynamic-workflow-wrapper:** fail a non-converged run
 * **programming-expert:** synthesize deep design and propagate across subskills
 * **rules:** synthesize clean architecture, deep design, and scope taxonomy
 * **programming-expert:** sharpen description and polyglot principles
@@ -26,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **dynamic-workflow-wrapper:** fail every run-level exit
 * stop background re-push after auto-amend
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
 * converge the nine blocking issues from the run ledger (#45) (BREAKING CHANGE)
@@ -47,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **dynamic-workflow-wrapper:** align the report contract with the emitted table
+* **dynamic-workflow-wrapper:** document the run exit contract
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
