@@ -574,3 +574,71 @@ def test_r3_git_skill_ownership_table_lists_ts_configs():
     assert "tsconfig.json" in text
     assert ".oxlintrc.json" in text
     assert ".oxfmtrc.json" in text
+
+
+# --- r4: round-3 review (string-aware python gate, byte-based write gate, shared name shape) ---
+def test_r4_python_string_fail_under_untouched(tmp_path: Path):
+    body = (
+        '[project]\ndescription = "fail_under = 80 stays in docs"\n\n'
+        "[tool.coverage.report]\nfail_under = 80\n"
+    )
+    (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "python", "--value", "90"]
+    )
+    assert rc == 0
+    out = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'description = "fail_under = 80 stays in docs"' in out
+    assert "fail_under = 90" in out
+
+
+def test_r4_python_other_section_fail_under_untouched(tmp_path: Path):
+    body = (
+        '[project]\nname = "demo"\n\n'
+        "[tool.coverage.report]\nfail_under = 80\n\n"
+        "[tool.other]\nfail_under = 70\n"
+    )
+    (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "python", "--value", "90"]
+    )
+    assert rc == 0
+    out = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert "[tool.other]\nfail_under = 70" in out
+
+
+def test_r4_ensure_main_self_check_runs_for_unchanged_named_crate(
+    tmp_path: Path, monkeypatch
+):
+    (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
+    seen: list = []
+    orig = scaffold.self_check
+
+    def spy(targets):
+        seen.extend(targets)
+        return orig(targets)
+
+    monkeypatch.setattr(scaffold, "self_check", spy)
+    rc = scaffold.ensure_main(["--cwd", str(tmp_path), "rust-dep", "--name", "unchanged"])
+    assert rc == 0
+    assert any(str(p).endswith("Cargo.toml") for p in seen)
+
+
+def test_r4_ts_script_bad_name_refused_unchanged(tmp_path: Path):
+    (tmp_path / "package.json").write_text(
+        '{"name": "demo", "scripts": {}}', encoding="utf-8"
+    )
+    before = (tmp_path / "package.json").read_bytes()
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "ts-script", "--name", "bad name!", "--cmd", "vitest run --coverage"]
+    )
+    assert rc == 1
+    assert (tmp_path / "package.json").read_bytes() == before
+
+
+def test_r4_detect_ignores_invalid_coverage_script_name(tmp_path: Path):
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"bad name!": "vitest run --coverage"}}), encoding="utf-8"
+    )
+    data = scaffold.detect_project(tmp_path)
+    assert data["typescript"]["coverage_script"] is None

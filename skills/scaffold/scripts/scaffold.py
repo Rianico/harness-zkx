@@ -1388,7 +1388,9 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             python_coverage_threshold = None
     rust_coverage = "llvm-cov" in release_yml or has_content("Cargo.toml", r"llvm-cov")
     # Name-agnostic: any script whose command matches vitest.*--coverage counts,
-    # whatever the key is called (coverage, test:coverage, cov, test).
+    # whatever the key is called (coverage, test:coverage, cov, test) — but only
+    # when the key itself has the shared coverage-script shape, so detect and
+    # generation (which falls back past invalid names) can never disagree.
     node_coverage_script: str | None = None
     try:
         _pkg_scripts = json.loads(pkg_json).get("scripts", {}) if pkg_json else {}
@@ -1399,6 +1401,7 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             if (
                 isinstance(_name, str)
                 and isinstance(_cmd, str)
+                and _is_coverage_script_name(_name)
                 and re.search(r"vitest.*--coverage", _cmd)
             ):
                 node_coverage_script = _name
@@ -1863,8 +1866,16 @@ def _cargo_dependencies_span(body: str) -> tuple[int, int] | None:
     return (start, end)
 
 
+_COVERAGE_SCRIPT_PATTERN = r"[A-Za-z0-9:_-]+"
+
+
+def _is_coverage_script_name(name: str) -> bool:
+    """Shared shape for coverage script names (ensure/detect/generation agree)."""
+    return re.fullmatch(_COVERAGE_SCRIPT_PATTERN, name) is not None
+
+
 def _validate_coverage_script(name: str) -> None:
-    if not re.fullmatch(r"[A-Za-z0-9:_-]+", name):
+    if not _is_coverage_script_name(name):
         raise EnsureError(
             f"invalid coverage script name {name!r}: must match ^[A-Za-z0-9:_-]+$"
         )
@@ -1908,24 +1919,52 @@ def _pep508_name(req: str) -> str:
     return re.split(r"[<>=!~;\s\[]", req.strip(), maxsplit=1)[0].strip()
 
 
-def _toml_code_part(line: str) -> str:
-    """Code before a TOML `#` comment (quote-aware, so `#` in strings survives)."""
-    in_single = in_double = False
-    escaped = False
-    for i, ch in enumerate(line):
-        if escaped:
-            escaped = False
-            continue
-        if ch == "\\" and in_double and not in_single:
-            escaped = True
-            continue
-        if ch == "'" and not in_double:
-            in_single = not in_single
-        elif ch == '"' and not in_single:
-            in_double = not in_double
-        elif ch == "#" and not in_single and not in_double:
-            return line[:i]
-    return line
+def _toml_code_mask(body: str) -> list[bool]:
+    """True per index for TOML code (False inside strings/comments)."""
+    mask = [True] * len(body)
+    i, n = 0, len(body)
+    while i < n:
+        ch = body[i]
+        if ch == "#":
+            j = body.find("\n", i)
+            j = n if j == -1 else j
+            for k in range(i, j):
+                mask[k] = False
+            i = j
+        elif body.startswith('"""', i) or body.startswith("'''", i):
+            quote = body[i : i + 3]
+            j = body.find(quote, i + 3)
+            j = n if j == -1 else j + 3
+            for k in range(i, j):
+                mask[k] = False
+            i = j
+        elif ch == '"':
+            mask[i] = False
+            i += 1
+            while i < n:
+                mask[i] = False
+                if body[i] == "\\":
+                    i += 2
+                    continue
+                if body[i] == '"':
+                    i += 1
+                    break
+                if body[i] == "\n":
+                    i += 1
+                    break
+                i += 1
+        elif ch == "'":
+            mask[i] = False
+            i += 1
+            while i < n and body[i] != "\n":
+                mask[i] = False
+                if body[i] == "'":
+                    i += 1
+                    break
+                i += 1
+        else:
+            i += 1
+    return mask
 
 
 def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
@@ -2034,6 +2073,10 @@ def ensure_ts_script(cwd: pathlib.Path, name: str, cmd: str, *, dry_run: bool = 
         raise EnsureError("empty script command")
     _reject_ts_control(name, "script name")
     _reject_ts_control(cmd, "script command")
+    if not _is_coverage_script_name(name):
+        raise EnsureError(
+            f"invalid script name {name!r}: must match ^[A-Za-z0-9:_-]+$"
+        )
     return _ensure_json_field(cwd, "package.json", "scripts", name, cmd, "script", dry_run=dry_run)
 
 
@@ -2049,22 +2092,40 @@ def ensure_coverage_threshold(
         error = _toml_syntax_error(path, body)
         if error:
             raise EnsureError(f"{path}: {error} — fix by hand first")
-        code_text = "\n".join(_toml_code_part(ln) for ln in body.splitlines())
-        if not re.search(r"fail_under\s*=\s*\d+", code_text):
+        code_text = "".join(
+            ch if ok else ("\n" if ch == "\n" else " ")
+            for ch, ok in zip(body, _toml_code_mask(body), strict=True)
+        )
+        sections: list[tuple[int, str]] = [
+            (m.start(), m.group(1).strip())
+            for m in re.finditer(r"(?m)^[ \t]*\[([^\]\n]+)\][ \t]*$", code_text)
+        ]
+
+        def _coverage_section(pos: int) -> bool:
+            name = ""
+            for start, sec in sections:
+                if start <= pos:
+                    name = sec
+                else:
+                    break
+            return name.startswith("tool.coverage")
+
+        hits = [
+            m
+            for m in re.finditer(r"(fail_under\s*=\s*)\d+", code_text)
+            if _coverage_section(m.start())
+        ]
+        if not hits:
             raise EnsureError(f"{path}: no coverage gate — run --flavor python --with-coverage first")
-        out_lines: list[str] = []
-        count = 0
-        for ln in body.splitlines(keepends=True):
-            ending = "\n" if ln.endswith("\n") else ""
-            core = ln[:-1] if ending else ln
-            code = _toml_code_part(core)
-            comment = core[len(code) :]
-            new_code, n = re.subn(r"(fail_under\s*=\s*)\d+", rf"\g<1>{value}", code)
-            count += n
-            out_lines.append(new_code + comment + ending)
-        new_body = "".join(out_lines)
-        if count < 1:
-            raise EnsureError(f"{path}: no coverage gate — run --flavor python --with-coverage first")
+        parts: list[str] = []
+        last = 0
+        for m in hits:
+            parts.append(body[last : m.start(1)])
+            parts.append(m.group(1))
+            parts.append(str(value))
+            last = m.end()
+        parts.append(body[last:])
+        new_body = "".join(parts)
         return _ensure_write(path, new_body, dry_run, f"set coverage fail_under to {value}")
     if flavor == "typescript":
         path = cwd / "vitest.config.ts"
@@ -2152,6 +2213,13 @@ def ensure_main(argv: list[str]) -> int:
     cov.add_argument("--value", type=int, required=True)
     args = ap.parse_args(argv)
     cwd = pathlib.Path(args.cwd).resolve()
+    # Write detection compares bytes, never prose: a value (e.g. a crate
+    # named `unchanged`) must not be able to silence the writer gate.
+    _watched = [
+        cwd / name
+        for name in ("Cargo.toml", "pyproject.toml", "package.json", "vitest.config.ts")
+    ]
+    before = {p: p.read_bytes() if p.is_file() else None for p in _watched}
     try:
         if args.op == "rust-dep":
             note = ensure_cargo_dep(cwd, args.name, args.version, dry_run=args.dry_run)
@@ -2184,7 +2252,7 @@ def ensure_main(argv: list[str]) -> int:
     except EnsureError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    if not args.dry_run and "unchanged" not in note and target.is_file():
+    if not args.dry_run and target.is_file() and before.get(target) != target.read_bytes():
         for finding in self_check([target]):
             mark = "SELF-CHECK" if finding.blocking else "WARNING (self-check)"
             tail = f" — fix: {finding.remedy}" if finding.remedy else ""
@@ -2541,7 +2609,7 @@ def main() -> int:
             _name = _detected.get("coverage_script") if isinstance(_detected, dict) else None
         except Exception:
             _name = None
-        if isinstance(_name, str) and re.fullmatch(r"[A-Za-z0-9:_-]+", _name):
+        if isinstance(_name, str) and _is_coverage_script_name(_name):
             coverage_script = _name
         else:
             coverage_script = "coverage"
