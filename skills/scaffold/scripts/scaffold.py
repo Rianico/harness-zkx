@@ -1393,8 +1393,11 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
     # generation (which falls back past invalid names) can never disagree.
     node_coverage_script: str | None = None
     try:
-        _pkg_scripts = json.loads(pkg_json).get("scripts", {}) if pkg_json else {}
+        _pkg_data = json.loads(pkg_json) if pkg_json else {}
+        _pkg_scripts = _pkg_data.get("scripts", {}) if isinstance(_pkg_data, dict) else {}
     except ValueError:
+        _pkg_scripts = {}
+    if not isinstance(_pkg_scripts, dict):
         _pkg_scripts = {}
     if isinstance(_pkg_scripts, dict):
         for _name, _cmd in _pkg_scripts.items():
@@ -1985,7 +1988,7 @@ def _toml_sections(code_text: str) -> list[tuple[int, str]]:
     """Header offsets with normalized table names, located on TOML code only."""
     return [
         (m.start(), _normalize_toml_section(m.group(1)))
-        for m in re.finditer(r"(?m)^[ \t]*\[([^\]\n]+)\][ \t]*$", code_text)
+        for m in re.finditer(r"(?m)^[ \t]*\[{1,2}([^\]\n\[]+)\]{1,2}[ \t]*$", code_text)
     ]
 
 

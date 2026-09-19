@@ -71,3 +71,31 @@ def test_f4_description_prose_threshold_stays_null(tmp_path: Path):
     data = scaffold.detect_project(tmp_path)
     assert data["typescript"]["coverage"] is False
     assert data["typescript"]["threshold"] is None
+
+
+def test_r2_array_of_tables_refuses_naming_table(tmp_path: Path, capsys):
+    body = '[project]\nname = "demo"\nversion = "0.1.0"\n\n[[tool.other]]\ndependencies=["x"]\n'
+    (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+    before = (tmp_path / "pyproject.toml").read_bytes()
+    rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", "httpx>=0.27"])
+    assert rc == 1
+    assert (tmp_path / "pyproject.toml").read_bytes() == before
+    assert "tool.other" in capsys.readouterr().err
+
+
+def test_r2_scripts_list_and_null_treated_as_absent(tmp_path: Path):
+    for scripts in ([], None):
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "demo", "scripts": scripts}), encoding="utf-8"
+        )
+        data = scaffold.detect_project(tmp_path)
+        assert data["typescript"]["coverage"] is False
+        assert data["typescript"]["threshold"] is None
+        assert data["typescript"]["coverage_script"] is None
+
+
+def test_r2_top_level_list_package_treated_as_absent(tmp_path: Path):
+    (tmp_path / "package.json").write_text("[]", encoding="utf-8")
+    data = scaffold.detect_project(tmp_path)
+    assert data["typescript"]["coverage"] is False
+    assert data["typescript"]["threshold"] is None
