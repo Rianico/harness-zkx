@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **scaffold:** support quoted py-dep keys and missing commas
 * **scaffold:** handle array tables and non-dict scripts
 * **scaffold:** close quote, table and prose gaps in ensure ops
 * **scaffold:** close string, status and name-shape gaps
@@ -54,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** declare py-dep input surface
 * **scaffold:** list preserved TS configs and release.yml guard
 * **scaffold:** disclose package.json 2-space normalization
 * **scaffold:** state per-field time-axis boundary contract
