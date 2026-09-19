@@ -329,23 +329,25 @@ def test_converge_tasks_fails_the_run_when_a_node_fails() -> None:
     assert "phase('Report')" in content, "the Report phase must be entered"
     assert "function buildRunReport(" in content
     assert "if (!converged) {" in content, "the non-converged path must throw"
-    # Both run-level exits fail the run: the admission gate and the final Report phase. A third
-    # exit that silently returns a BLOCKED result would recreate the defect this guards.
-    assert content.count("throw new Error(`[RUN FAILED] ${") == 2, (
-        "every run-level exit must throw, so a blocked batch cannot read as a green run"
+    # The converged return is the ONLY returning run-level exit. Every other run-level exit — the
+    # plan admission gate, the prepare admission gate and the Report phase — throws, so a halted
+    # batch can never read as a completed run carrying a sad status field.
+    assert len(re.findall(r"^return \{", content, re.M)) == 1, (
+        "exactly one run-level exit may return, and it is the converged one"
     )
+    assert content.count("[RUN FAILED]") >= 3, "every run-level exit must throw"
     assert "report: runReport," in content, "a converged run still returns its report"
 
 
 def test_run_report_renders_the_unified_status_table() -> None:
     """The Report phase renders from run evidence, deterministically and falsifiably."""
-    source = _extract_functions(["clip", "buildRunReport"])
+    source = _extract_functions(["clip", "cell", "buildRunReport"])
     script = (
         source
-        + """
+        + r"""
 const rows = [
-  { id: 'T-a', ref: 'do the thing', status: 'MERGED', rounds: 2, mergeAttempts: 1, reviewScore: 100, worktreePath: '/wt/a', issues: [] },
-  { id: 'T-b', ref: 'do the other thing', status: 'BLOCKED', rounds: 3, mergeAttempts: 1, reviewScore: 0, worktreePath: '/wt/b', issues: ['gate-runner: 1 failed'] }
+  { id: 'T-a', ref: 'do the thing', status: 'MERGED', rounds: 2, mergeAttempts: 1, reviewScore: 9, worktreePath: '/wt/a', issues: [] },
+  { id: 'T|b`c', ref: 'pipe | and `tick`', status: 'BLOCKED', rounds: 3, mergeAttempts: 1, reviewScore: null, worktreePath: '/wt/b', issues: ['gate-runner: 1 failed'] }
 ];
 const input = {
   workflow: 'converge-tasks',
@@ -356,25 +358,37 @@ const input = {
   tasks: rows,
   delivery: { mode: 'integration-branch', branch: 'dev/x', base: 'main', worktreePath: '/wt/integration' },
   planIssues: [],
-  abortedTasks: ['T-b'],
+  abortedTasks: ['T|b`c'],
   compositeOk: false,
   compositePhases: ['tests'],
   nextActions: ['Resolve the reported block, then re-run.']
 };
 const text = buildRunReport(input);
 const checks = [
-  ['table header', '| Task | Status | Rounds | Merge | Crux Review | Worktree |'],
-  ['blocked task row', 'T-b'],
+  ['table header', '| Task | Status | Rounds | Merge | Crux Review (x/10) | Worktree |'],
+  ['task row', 'do the thing'],
   ['status column', '**BLOCKED**'],
+  ['labeled review score', '9/10'],
+  ['unscored crux cell', '| — |'],
   ['delivery branch', '`dev/x`'],
   ['row evidence', 'gate-runner: 1 failed'],
   ['composite gate', 'composite gate: FAILED (tests)'],
-  ['halted batch', 'halted after: T-b'],
   ['failure headline', 'did NOT converge'],
   ['next actions', 'Next actions']
 ];
 for (const [what, needle] of checks) {
   if (!text.includes(needle)) throw new Error('report is missing ' + what + ': ' + needle);
+}
+// Operator- and planner-supplied values must not shred the markdown: an unescaped pipe splits a
+// table cell and an unescaped backtick closes the code span carrying the task id or worktree path.
+const table = text.split('\n').filter(line => line.startsWith('|')).join('\n');
+if (table.includes('T|b')) throw new Error('an unescaped pipe split a table cell');
+if (table.includes('b`c')) throw new Error('an unescaped backtick closed a code span in the table');
+const cellsOf = line => line.replace(/\\\|/g, '').split('|').length - 2;
+const tableLines = text.split('\n').filter(line => line.startsWith('|'));
+if (tableLines.length !== rows.length + 2) throw new Error('the table must carry one row per task plus its header');
+for (const line of tableLines) {
+  if (cellsOf(line) !== 6) throw new Error('a task value broke the table: ' + line);
 }
 if (buildRunReport(input) !== text) throw new Error('the report must be deterministic');
 const converged = buildRunReport({
@@ -388,6 +402,18 @@ const converged = buildRunReport({
 if (converged === text) throw new Error('a converged run must not render like a blocked one');
 if (!converged.includes('The run converged')) throw new Error('the converged headline must say so');
 if (!converged.includes('1/2 task(s)')) throw new Error('the delivered count must come from the rows');
+// A run halted before allocation never attempted a task, so the run-level failure is the whole
+// evidence — not the same sentence repeated once per task.
+const admission = buildRunReport({
+  ...input,
+  failure: 'admission: session root dirty',
+  tasks: rows.map(row => ({ ...row, status: 'DEFERRED', rounds: 0, mergeAttempts: 0, issues: [] })),
+  abortedTasks: [],
+  compositeOk: null,
+  compositePhases: []
+});
+const stated = admission.split('session root dirty').length - 1;
+if (stated !== 1) throw new Error('the run-level failure must be stated once, not once per task:\n' + admission);
 """
     )
     proc = _run_node(script)
