@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **scaffold:** add ensure ops and aliased coverage script handling
 * **programming-expert:** synthesize deep design and propagate across subskills
 * **rules:** synthesize clean architecture, deep design, and scope taxonomy
 * **programming-expert:** sharpen description and polyglot principles
@@ -47,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** document ensure ops in flavor subskills
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
