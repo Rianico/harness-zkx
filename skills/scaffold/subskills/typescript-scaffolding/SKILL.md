@@ -22,7 +22,7 @@ Per `development-patterns.md` §3:
 
 Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_package_json`, `build_tsconfig` — computed) plus `$SKILL_DIR/templates/typescript/`: raw `.oxlintrc.json`, `.oxfmtrc.json`, `scripts/oxlint-plugin-comment-gate.js`, `tests/index.test.ts`, `src/cli.ts`; rendered `src/index.ts.j2`, `vitest.config.ts.j2` — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` to preview.
 
-> Existing repo? `--update` refreshes generated files but preserves `package.json` (project manifest) **and your source** — `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts` are only written on a greenfield run; work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
+> Existing repo? `--update` refreshes generated files but preserves `package.json` (project manifest) **and your source**. Per-field edits (confirm value with user first): `scaffold.py ensure ts-dep --name <pkg> [--version <range>] [--no-dev]` / `ensure ts-script --name <s> --cmd "<cmd>"` — `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts` are only written on a greenfield run; work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --project-name <name>
@@ -67,7 +67,7 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run`
 
 ## Grilling Selection
 
-If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>` to the generator. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --with-coverage --coverage-threshold 80 --project-name <name>`. Without Tests or with No coverage, omit the flag — `package.json` omits the `coverage` script + `@vitest/coverage-v8`, no `vitest.config.ts`, and CI runs `pnpm test` without coverage. With the flag, `ci --ci-variant node` swaps the verify step to `pnpm run coverage` (thresholds owned by `vitest.config.ts`).
+If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>` to the generator. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --with-coverage --coverage-threshold 80 --project-name <name>`. Without Tests or with No coverage, omit the flag — `package.json` omits the `coverage` script + `@vitest/coverage-v8`, no `vitest.config.ts`, and CI runs `pnpm test` without coverage. With the flag, `ci --ci-variant node` swaps the verify step to `pnpm run <coverage-script>` (default `coverage`, `--coverage-script` overrides; thresholds owned by `vitest.config.ts`).
 
 ## Relation to Other Subskills
 

@@ -21,7 +21,7 @@ Per `development-patterns.md` §3:
 
 Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`RUST_TOOLCHAIN_TOML`, `RUST_LIB_RS`, `CARGO_TOML_TMPL`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` to preview.
 
-> Existing repo? `--update` refreshes generated files but preserves `Cargo.toml` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
+> Existing repo? `--update` refreshes generated files but preserves `Cargo.toml` (project manifest); work the printed NEXT list. Per-field edits (confirm value with user first): `scaffold.py ensure rust-dep --name <crate> [--version <req>]` — see `git-scaffolding/SKILL.md` § Update.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --project-name <name>
