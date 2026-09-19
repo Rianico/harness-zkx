@@ -1419,12 +1419,18 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         except ValueError:
             ts_coverage_threshold = None
     if ts_coverage_threshold is None:
-        m_inline = re.search(r"coverage\.thresholds\.lines=(\d+)", pkg_json)
-        if m_inline:
-            try:
-                ts_coverage_threshold = int(m_inline.group(1))
-            except ValueError:
-                ts_coverage_threshold = None
+        for _cmd in _pkg_scripts.values():
+            if not isinstance(_cmd, str):
+                continue
+            m_inline = re.search(r"coverage\.thresholds\.lines=(\d+)", _cmd)
+            if m_inline:
+                try:
+                    ts_coverage_threshold = int(m_inline.group(1))
+                except ValueError:
+                    ts_coverage_threshold = None
+                break
+    if not ts_coverage:
+        ts_coverage_threshold = None
     ci_coverage = (
         "--cov" in release_yml
         or "llvm-cov" in release_yml
@@ -1967,6 +1973,33 @@ def _toml_code_mask(body: str) -> list[bool]:
     return mask
 
 
+def _normalize_toml_section(name: str) -> str:
+    """Strip whitespace and surrounding quotes from a TOML table header."""
+    s = name.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'"):
+        s = s[1:-1].strip()
+    return s
+
+
+def _toml_sections(code_text: str) -> list[tuple[int, str]]:
+    """Header offsets with normalized table names, located on TOML code only."""
+    return [
+        (m.start(), _normalize_toml_section(m.group(1)))
+        for m in re.finditer(r"(?m)^[ \t]*\[([^\]\n]+)\][ \t]*$", code_text)
+    ]
+
+
+def _toml_section_at(sections: list[tuple[int, str]], pos: int) -> str:
+    """Table owning `pos`: the last header at or before it, else no table."""
+    name = ""
+    for start, sec in sections:
+        if start <= pos:
+            name = sec
+        else:
+            break
+    return name
+
+
 def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
     """Add one PEP 508 requirement to pyproject.toml `dependencies`; present ones untouched."""
     if '"' in req or "\n" in req or "\r" in req:
@@ -1979,36 +2012,85 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
     error = _toml_syntax_error(path, body)
     if error:
         raise EnsureError(f"{path}: {error} — fix by hand first")
-    lines = body.splitlines(keepends=True)
+    try:
+        data = tomllib.loads(body)
+    except tomllib.TOMLDecodeError as exc:
+        raise EnsureError(f"{path}: invalid TOML: {exc} — fix by hand first") from None
+    proj = data.get("project")
+    existing = proj.get("dependencies") if isinstance(proj, dict) else None
+    if isinstance(existing, list):
+        for item in existing:
+            if isinstance(item, str) and _pep508_name(item) == name:
+                return f"pyproject.toml: unchanged — dependency {name!r} already present"
+    mask = _toml_code_mask(body)
+    code_text = "".join(
+        ch if ok else ("\n" if ch == "\n" else " ")
+        for ch, ok in zip(body, mask, strict=True)
+    )
+    sections = _toml_sections(code_text)
+    lines_body = body.splitlines(keepends=True)
+    lines_code = code_text.splitlines(keepends=True)
+    offsets: list[int] = []
+    _off = 0
+    for _ln in lines_body:
+        offsets.append(_off)
+        _off += len(_ln)
     start = next(
-        (i for i, ln in enumerate(lines) if re.match(r"^dependencies\s*=\s*\[", ln)),
+        (
+            i
+            for i, ln in enumerate(lines_code)
+            if re.match(r"^\s*dependencies\s*=\s*\[", ln)
+            and _toml_section_at(sections, offsets[i]) == "project"
+        ),
         None,
     )
     if start is None:
-        raise EnsureError(f"{path}: no `dependencies = [...]` array — run --flavor python first")
-    inline = re.match(r"^dependencies\s*=\s*\[(.*)\]\s*$", lines[start].strip())
-    if inline is not None:
-        if re.search(rf'"{re.escape(name)}(?:"|[<>=!~;\s\[])', inline.group(1)):
-            return f"pyproject.toml: unchanged — dependency {name!r} already present"
-        inner = inline.group(1).strip()
-        kept = [f'    {inner.rstrip(",")},\n'] if inner else []
-        lines[start : start + 1] = ["dependencies = [\n", *kept, f'    "{req}",\n', "]\n"]
+        any_open = next(
+            re.finditer(r"dependencies\s*=\s*\[", code_text), None
+        )
+        if any_open is not None:
+            found = _toml_section_at(sections, any_open.start()) or "(no table)"
+            raise EnsureError(
+                f"{path}: no `dependencies` in [project]"
+                f" (found in [{found}])"
+                " — run --flavor python first or move the array"
+                " into [project] by hand"
+            )
+        raise EnsureError(
+            f"{path}: no `dependencies = [...]` array — run --flavor python first"
+        )
+    open_idx = lines_code[start].find("[")
+    close_idx = lines_code[start].find("]", open_idx + 1) if open_idx != -1 else -1
+    if open_idx != -1 and close_idx != -1:
+        inner = lines_body[start][open_idx + 1 : close_idx]
+        suffix = lines_body[start][close_idx + 1 :]
+        kept = [f'    {inner.strip().rstrip(",")},\n'] if inner.strip() else []
+        lines_body[start : start + 1] = [
+            "dependencies = [\n",
+            *kept,
+            f'    "{req}",\n',
+            "]" + suffix,
+        ]
     else:
         end = next(
             (
                 i
-                for i in range(start + 1, len(lines))
-                if re.match(r"^\s*\]\s*,?\s*$", lines[i])
+                for i in range(start + 1, len(lines_code))
+                if re.match(r"^\s*\]\s*,?\s*$", lines_code[i])
             ),
             None,
         )
         if end is None:
             raise EnsureError(f"{path}: `dependencies = [` never closes — fix by hand first")
-        span = "".join(lines[start : end + 1])
-        if re.search(rf'"{re.escape(name)}(?:"|[<>=!~;\s\[])', span):
-            return f"pyproject.toml: unchanged — dependency {name!r} already present"
-        lines[end:end] = [f'    "{req}",\n']
-    new_body = "".join(lines)
+        lines_body[end:end] = [f'    "{req}",\n']
+    new_body = "".join(lines_body)
+    try:
+        tomllib.loads(new_body)
+    except tomllib.TOMLDecodeError as exc:
+        raise EnsureError(
+            f"{path}: refusing edit that would write invalid TOML ({exc})"
+            " — fix by hand first"
+        ) from None
     return _ensure_write(path, new_body, dry_run, f'added dependency "{req}"')
 
 
@@ -2096,19 +2178,13 @@ def ensure_coverage_threshold(
             ch if ok else ("\n" if ch == "\n" else " ")
             for ch, ok in zip(body, _toml_code_mask(body), strict=True)
         )
-        sections: list[tuple[int, str]] = [
-            (m.start(), m.group(1).strip())
-            for m in re.finditer(r"(?m)^[ \t]*\[([^\]\n]+)\][ \t]*$", code_text)
-        ]
+        sections: list[tuple[int, str]] = _toml_sections(code_text)
 
         def _coverage_section(pos: int) -> bool:
-            name = ""
-            for start, sec in sections:
-                if start <= pos:
-                    name = sec
-                else:
-                    break
-            return name.startswith("tool.coverage")
+            name = _toml_section_at(sections, pos)
+            return name == "tool.coverage.report" or name.startswith(
+                "tool.coverage.report."
+            )
 
         hits = [
             m
@@ -2126,6 +2202,13 @@ def ensure_coverage_threshold(
             last = m.end()
         parts.append(body[last:])
         new_body = "".join(parts)
+        try:
+            tomllib.loads(new_body)
+        except tomllib.TOMLDecodeError as exc:
+            raise EnsureError(
+                f"{path}: refusing edit that would write invalid TOML ({exc})"
+                " — fix by hand first"
+            ) from None
         return _ensure_write(path, new_body, dry_run, f"set coverage fail_under to {value}")
     if flavor == "typescript":
         path = cwd / "vitest.config.ts"
