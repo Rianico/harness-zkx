@@ -15,7 +15,7 @@ Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head 
 
 ## Script
 
-`$SKILL_DIR/scripts/pr.sh` (755, `set -euo pipefail`, `GH_TOKEN` via `gh auth`). Repo identity and the check verdict come from the skill's shared modules — `../../../lib/repo.sh` (push remote first; `gh repo view` only as last resort) and `../../../lib/checks.sh` — so this script re-derives neither.
+`$SKILL_DIR/scripts/pr.sh` (755, `set -euo pipefail`, `GH_TOKEN` via `gh auth`). Repo identity and the check verdict come from the skill's shared modules — `$SKILL_DIR/../../lib/repo.sh` (push remote first; `gh repo view` only as last resort) and `$SKILL_DIR/../../lib/checks.sh` — so this script re-derives neither.
 
 ```bash
 uv run $SKILL_DIR/scripts/pr.sh --watch --merge --title "feat: …" --body-file tmp/pr_body.md
