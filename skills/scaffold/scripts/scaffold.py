@@ -576,7 +576,9 @@ def _ts_normalize_name(project_name: str) -> str:
     return project_name.lower().replace(" ", "-").replace("_", "-")
 
 
-def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) -> str:
+def build_package_json(
+    project_name: str, ts_variant: str, with_coverage: bool, coverage_script: str = "coverage"
+) -> str:
     npm_name = _ts_normalize_name(project_name)
     scripts: dict[str, str] = {
         "lint": "oxlint .",
@@ -607,7 +609,7 @@ def build_package_json(project_name: str, ts_variant: str, with_coverage: bool) 
         "semantic-release": "^25",
     }
     if with_coverage:
-        scripts["coverage"] = "vitest run --coverage"
+        scripts[coverage_script] = "vitest run --coverage"
         dev_deps["@vitest/coverage-v8"] = "^5"
     pkg: dict[str, object] = {
         "name": npm_name,
@@ -951,7 +953,9 @@ def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
     )
 
 
-def render_ci_release(variant: str, with_coverage: bool, threshold: int) -> str:
+def render_ci_release(
+    variant: str, with_coverage: bool, threshold: int, coverage_script: str = "coverage"
+) -> str:
     """Render .github/workflows/release.yml for one CI runtime variant."""
     return render_template(
         CI_RUNTIMES[variant],
@@ -960,6 +964,7 @@ def render_ci_release(variant: str, with_coverage: bool, threshold: int) -> str:
         gh_actions_token=GH_ACTIONS_TOKEN,
         with_coverage=with_coverage,
         threshold=threshold,
+        coverage_script=coverage_script,
     )
 
 
@@ -1094,6 +1099,9 @@ def do_python(
     )
     if note:
         notes.append(note)
+        notes.append(
+            "pyproject.toml: user-owned — per-field edits via `scaffold.py ensure py-dep --req ...` / `ensure coverage-threshold --flavor python --value N`"
+        )
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_PYTHON_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
@@ -1150,6 +1158,9 @@ def do_rust(
     )
     if note:
         notes.append(note)
+        notes.append(
+            "Cargo.toml: user-owned — per-field edits via `scaffold.py ensure rust-dep --name ... [--version ...]`"
+        )
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_RUST_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
@@ -1171,6 +1182,7 @@ def do_typescript(
     ts_variant: str,
     with_coverage: bool,
     threshold: int,
+    coverage_script: str = "coverage",
     update: bool = False,
     merge_mixed: bool = False,
 ) -> list[str]:
@@ -1182,13 +1194,16 @@ def do_typescript(
             f"WARNING: npm package name normalized to '{npm_name}' (from '{project_name}') — proofread package.json name."
         )
     write_file(cwd / ".nvmrc", NODE_VERSION, dry_run)
-    pkg_json = build_package_json(project_name, ts_variant, with_coverage)
+    pkg_json = build_package_json(project_name, ts_variant, with_coverage, coverage_script)
     warn = "mixed: {{project_name}} + description — proofread package name and description."
     if with_coverage:
         warn += f" + coverage @vitest/coverage-v8 {threshold}%"
     note = write_generated(cwd / "package.json", pkg_json, dry_run, update=update, warn_mixed=warn)
     if note:
         notes.append(note)
+        notes.append(
+            "package.json: user-owned — per-field edits via `scaffold.py ensure ts-dep/ts-script ...`"
+        )
     write_file(cwd / "tsconfig.json", build_tsconfig(), dry_run)
     write_file(cwd / ".oxlintrc.json", OXLINT_JSON, dry_run)
     write_file(cwd / "scripts" / "oxlint-plugin-comment-gate.js", OXLINT_COMMENT_GATE_JS, dry_run)
@@ -1220,7 +1235,7 @@ def do_typescript(
         if note:
             notes.append(note)
         REPORT.note(
-            f"NOTE: TypeScript coverage wired — run `pnpm run coverage` (fail_under lines/functions {threshold}%)"
+            f"NOTE: TypeScript coverage wired — run `pnpm run {coverage_script}` (fail_under lines/functions {threshold}%)"
         )
     patch_releaserc_lockfile(cwd, dry_run)
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
@@ -1254,14 +1269,17 @@ def do_ci(
     with_coverage: bool,
     threshold: int,
     selected: set[str] | None = None,
+    coverage_script: str = "coverage",
 ) -> None:
     sel = selected if selected is not None else CI_COMPONENTS
     if "release-yml" not in sel:
         return
-    content = render_ci_release(variant, with_coverage=with_coverage, threshold=threshold)
+    content = render_ci_release(
+        variant, with_coverage=with_coverage, threshold=threshold, coverage_script=coverage_script
+    )
     if variant == "node" and with_coverage:
         print(
-            "NOTE: Node/TS coverage runs `pnpm run coverage` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
+            f"NOTE: Node/TS coverage runs `pnpm run {coverage_script}` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
             file=sys.stderr,
         )
     write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
@@ -1345,9 +1363,14 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         "--cov" in release_yml
         or "llvm-cov" in release_yml
         or "fail-under" in release_yml
-        or "pnpm run coverage" in release_yml
+        or re.search(r"pnpm run \S*coverage", release_yml) is not None
     )
-    ts_coverage = "coverage" in vitest_config or "@vitest/coverage" in pkg_json
+    ts_coverage = (
+        "coverage" in vitest_config
+        or "@vitest/coverage" in pkg_json
+        or re.search(r'"[^"]*coverage[^"]*"\s*:\s*"[^"]*(?:--coverage|vitest)', pkg_json)
+        is not None
+    )
     ts_coverage_threshold: int | None = None
     m_ts = re.search(r"lines:\s*(\d+)", vitest_config)
     if m_ts:
@@ -1746,6 +1769,216 @@ def write_source(
     return None
 
 
+# ------------------------------------------------------------------ ensure ops
+# Per-field edits on user-owned manifests — the deterministic half of the
+# deterministic/semantic boundary. The script never rewrites these files wholesale
+# (see PROJECT_OWNED + write_generated); `scaffold.py ensure <op>` performs one named
+# field edit the model decided on, after confirming with the user when the value is
+# ambiguous. An absent field is added with minimal bytes; a present field is reported
+# unchanged, never rewritten. No state file: scaffold runs at low frequency, so every
+# op re-detects from disk and stays honest when the project edits by hand.
+
+
+class EnsureError(RuntimeError):
+    """A per-field edit the script refuses: missing file, missing section, bad value."""
+
+
+def _ensure_read(path: pathlib.Path, create_hint: str) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise EnsureError(f"{path}: no such file — {create_hint}") from None
+
+
+def _ensure_write(path: pathlib.Path, body: str, dry_run: bool, action: str) -> str:
+    if dry_run:
+        return f"{path.name}: would {action} (dry-run)"
+    path.write_text(body, encoding="utf-8")
+    return f"{path.name}: {action}"
+
+
+def ensure_cargo_dep(
+    cwd: pathlib.Path, name: str, version: str = "*", *, dry_run: bool = False
+) -> str:
+    """Add one entry under [dependencies] in Cargo.toml; existing entries never touched."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise EnsureError(f"invalid crate name {name!r}")
+    path = cwd / "Cargo.toml"
+    body = _ensure_read(path, "run --flavor rust first so there is a manifest to edit")
+    if re.search(rf"(?m)^\s*{re.escape(name)}\s*=", body):
+        return f"Cargo.toml: unchanged — dependency {name!r} already present"
+    entry = f'{name} = "{version}"'
+    section = re.search(r"(?m)^\[dependencies\]\s*$", body)
+    if section is None:
+        new_body = body.rstrip("\n") + f"\n\n[dependencies]\n{entry}\n"
+    else:
+        new_body = body[: section.end()] + f"\n{entry}" + body[section.end() :]
+    return _ensure_write(path, new_body, dry_run, f"added dependency {entry}")
+
+
+def _pep508_name(req: str) -> str:
+    return re.split(r"[<>=!~;\s\[]", req.strip(), maxsplit=1)[0].strip()
+
+
+def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
+    """Add one PEP 508 requirement to pyproject.toml `dependencies`; present ones untouched."""
+    name = _pep508_name(req)
+    if not name or not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+        raise EnsureError(f"invalid requirement {req!r}")
+    path = cwd / "pyproject.toml"
+    body = _ensure_read(path, "run --flavor python first so there is a manifest to edit")
+    lines = body.splitlines(keepends=True)
+    start = next(
+        (i for i, ln in enumerate(lines) if re.match(r"^dependencies\s*=\s*\[", ln)),
+        None,
+    )
+    if start is None:
+        raise EnsureError(f"{path}: no `dependencies = [...]` array — run --flavor python first")
+    inline = re.match(r"^dependencies\s*=\s*\[(.*)\]\s*$", lines[start].strip())
+    if inline is not None:
+        if re.search(rf'"{re.escape(name)}(?:"|[<>=!~;\s\[])', inline.group(1)):
+            return f"pyproject.toml: unchanged — dependency {name!r} already present"
+        inner = inline.group(1).strip()
+        kept = [f'    {inner.rstrip(",")},\n'] if inner else []
+        lines[start : start + 1] = ["dependencies = [\n", *kept, f'    "{req}",\n', "]\n"]
+    else:
+        end = next(
+            (
+                i
+                for i in range(start + 1, len(lines))
+                if re.match(r"^\s*\]\s*,?\s*$", lines[i])
+            ),
+            None,
+        )
+        if end is None:
+            raise EnsureError(f"{path}: `dependencies = [` never closes — fix by hand first")
+        span = "".join(lines[start : end + 1])
+        if re.search(rf'"{re.escape(name)}(?:"|[<>=!~;\s\[])', span):
+            return f"pyproject.toml: unchanged — dependency {name!r} already present"
+        lines[end:end] = [f'    "{req}",\n']
+    new_body = "".join(lines)
+    return _ensure_write(path, new_body, dry_run, f'added dependency "{req}"')
+
+
+def _ensure_json_field(
+    cwd: pathlib.Path,
+    filename: str,
+    section: str,
+    name: str,
+    value: str,
+    kind: str,
+    *,
+    dry_run: bool = False,
+) -> str:
+    """Add one key to a package.json object section. Key order preserved; whitespace
+    normalized through json round-trip — the result line says so."""
+    path = cwd / filename
+    raw = _ensure_read(path, "run --flavor typescript first so there is a manifest to edit")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise EnsureError(f"{path}: invalid JSON ({exc.msg}) — fix by hand first") from None
+    node = data.get(section)
+    if not isinstance(node, dict):
+        raise EnsureError(f"{path}: no `{section}` object — run --flavor typescript first")
+    if name in node:
+        return f"{filename}: unchanged — {kind} {name!r} already present"
+    node[name] = value
+    out = json.dumps(data, indent=2) + "\n"
+    return _ensure_write(path, out, dry_run, f"added {kind} {name!r} (whitespace normalized)")
+
+
+def ensure_ts_dep(
+    cwd: pathlib.Path, name: str, version: str = "*", *, dev: bool = True, dry_run: bool = False
+) -> str:
+    """Add one package.json dependency (devDependencies by default); present ones untouched."""
+    if not name.strip():
+        raise EnsureError("empty package name")
+    section = "devDependencies" if dev else "dependencies"
+    return _ensure_json_field(cwd, "package.json", section, name, version, "dependency", dry_run=dry_run)
+
+
+def ensure_ts_script(cwd: pathlib.Path, name: str, cmd: str, *, dry_run: bool = False) -> str:
+    """Add one package.json script; a present script is never overwritten."""
+    if not name.strip():
+        raise EnsureError("empty script name")
+    if not cmd.strip():
+        raise EnsureError("empty script command")
+    return _ensure_json_field(cwd, "package.json", "scripts", name, cmd, "script", dry_run=dry_run)
+
+
+def ensure_coverage_threshold(
+    cwd: pathlib.Path, flavor: str, value: int, *, dry_run: bool = False
+) -> str:
+    """Set the coverage fail-under field for one flavor; rust has no manifest field."""
+    if not 0 <= value <= 100:
+        raise EnsureError(f"invalid threshold {value}: must be 0-100")
+    if flavor == "python":
+        path = cwd / "pyproject.toml"
+        body = _ensure_read(path, "run --flavor python --with-coverage first")
+        if "fail_under" not in body:
+            raise EnsureError(f"{path}: no coverage gate — run --flavor python --with-coverage first")
+        new_body, count = re.subn(r"(fail_under\s*=\s*)\d+", rf"\g<1>{value}", body)
+        assert count >= 1
+        return _ensure_write(path, new_body, dry_run, f"set coverage fail_under to {value}")
+    if flavor == "typescript":
+        path = cwd / "vitest.config.ts"
+        body = _ensure_read(path, "run --flavor typescript --with-coverage first")
+        if "lines:" not in body:
+            raise EnsureError(f"{path}: no coverage thresholds — run --flavor typescript --with-coverage first")
+        new_body = re.sub(r"(lines:\s*)\d+", rf"\g<1>{value}", body)
+        new_body = re.sub(r"(functions:\s*)\d+", rf"\g<1>{value}", new_body)
+        return _ensure_write(path, new_body, dry_run, f"set coverage thresholds to {value}")
+    raise EnsureError(
+        "rust has no manifest threshold field — thresholds live in the CI verify step; "
+        "pass --coverage-threshold at scaffold time"
+    )
+
+
+def ensure_main(argv: list[str]) -> int:
+    """`scaffold.py ensure <op>`: one confirmed field edit on a user-owned manifest."""
+    ap = argparse.ArgumentParser(
+        prog="scaffold.py ensure",
+        description="Per-field edits on user-owned manifests (never wholesale rewrites)",
+    )
+    ap.add_argument("--cwd", default=".", help="target directory (default: .)")
+    ap.add_argument("--dry-run", action="store_true", help="report the edit without writing")
+    sub = ap.add_subparsers(dest="op", required=True)
+    rust_dep = sub.add_parser("rust-dep", help="add a Cargo.toml [dependencies] entry")
+    rust_dep.add_argument("--name", required=True)
+    rust_dep.add_argument("--version", default="*")
+    py_dep = sub.add_parser("py-dep", help="add a pyproject.toml dependency (PEP 508)")
+    py_dep.add_argument("--req", required=True, help='e.g. "httpx>=0.27"')
+    ts_dep = sub.add_parser("ts-dep", help="add a package.json dependency")
+    ts_dep.add_argument("--name", required=True)
+    ts_dep.add_argument("--version", default="*")
+    ts_dep.add_argument("--dev", action=argparse.BooleanOptionalAction, default=True)
+    ts_script = sub.add_parser("ts-script", help="add a package.json script")
+    ts_script.add_argument("--name", required=True)
+    ts_script.add_argument("--cmd", required=True)
+    cov = sub.add_parser("coverage-threshold", help="set the coverage fail-under field")
+    cov.add_argument("--flavor", choices=["python", "typescript"], required=True)
+    cov.add_argument("--value", type=int, required=True)
+    args = ap.parse_args(argv)
+    cwd = pathlib.Path(args.cwd).resolve()
+    try:
+        if args.op == "rust-dep":
+            print(ensure_cargo_dep(cwd, args.name, args.version, dry_run=args.dry_run))
+        elif args.op == "py-dep":
+            print(ensure_py_dep(cwd, args.req, dry_run=args.dry_run))
+        elif args.op == "ts-dep":
+            print(ensure_ts_dep(cwd, args.name, args.version, dev=args.dev, dry_run=args.dry_run))
+        elif args.op == "ts-script":
+            print(ensure_ts_script(cwd, args.name, args.cmd, dry_run=args.dry_run))
+        elif args.op == "coverage-threshold":
+            print(ensure_coverage_threshold(cwd, args.flavor, args.value, dry_run=args.dry_run))
+        else:
+            ap.error(f"unknown op {args.op}")
+    except EnsureError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
 # ------------------------------------------------------------------ self-check
 # What a run wrote must parse, run, and resolve. Everything here is deterministic and cheap:
 # in-process compile() for Python, `bash -n` for shell, json/yaml parsers for configs, an
@@ -1846,6 +2079,8 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
 
 def main() -> int:
     """Resolve the flags, run the requested flavors, report once, exit with the verdict."""
+    if len(sys.argv) > 1 and sys.argv[1] == "ensure":
+        return ensure_main(sys.argv[2:])
     ap = argparse.ArgumentParser(description="Deterministic scaffold generator")
     ap.add_argument(
         "--flavor",
@@ -1883,6 +2118,11 @@ def main() -> int:
         type=int,
         default=DEFAULT_COVERAGE_THRESHOLD,
         help="coverage fail-under threshold (default: 80)",
+    )
+    ap.add_argument(
+        "--coverage-script",
+        default="coverage",
+        help="package.json script name the coverage gate runs (default: coverage)",
     )
     ap.add_argument(
         "--detect", action="store_true", help="detect project state and exit (no writes)"
@@ -2010,11 +2250,20 @@ def main() -> int:
                 args.ts_variant,
                 with_coverage,
                 threshold,
+                args.coverage_script,
                 update=update,
                 merge_mixed=args.merge_mixed,
             )
         if flavor == "ci":
-            do_ci(cwd, dry_run, args.ci_variant, with_coverage, threshold, selected=ci_selected)
+            do_ci(
+                cwd,
+                dry_run,
+                args.ci_variant,
+                with_coverage,
+                threshold,
+                selected=ci_selected,
+                coverage_script=args.coverage_script,
+            )
 
         # A real write validates itself; a preview validates what it touched when asked.
         check_targets = REPORT.paths_of({STALE, MISSING, PATCHED, APPENDED})

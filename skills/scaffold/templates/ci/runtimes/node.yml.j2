@@ -9,7 +9,7 @@
       - run: pnpm install
       - run: pnpm audit --audit-level high
 {% if with_coverage %}
-      - run: pnpm run coverage
+      - run: pnpm run {{ coverage_script }}
 {% else %}
       - run: pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
 {% endif %}
