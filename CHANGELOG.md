@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **scaffold:** preserve release.yml on update and gate corrupt manifests
 * **scaffold:** enforce per-field boundary across ensure and detect
 * stop background re-push after auto-amend
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
@@ -49,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** disclose package.json 2-space normalization
 * **scaffold:** state per-field time-axis boundary contract
 * **scaffold:** document ensure ops in flavor subskills
 * **scaffold:** add adr-scaffolding subskill (#52)
