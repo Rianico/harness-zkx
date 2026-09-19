@@ -90,10 +90,11 @@ A run that did not converge is a **failed run**, not a completed one carrying a 
 
 - The `Report` phase renders the operator-facing summary from the run's own evidence. `buildRunReport` is pure and deterministic, so one run always renders one table, and the converged path returns it as `result.report`.
 - When the run did not converge, that same text is thrown as `new Error('[RUN FAILED] ' + report)`. The runtime records the run status as `failed` and persists the message as the run error, so the failure shows up in the lifecycle, the run JSON and the conversation — not only inside a `BLOCKED` result field that reads like a finished run.
-- **Every run-level exit throws.** The admission gate (`Plan & Prepare` → `Report`) and the final `Report` phase are the only two exits, and neither returns a non-converged result. A new early exit must throw too.
+- **Every run-level exit throws.** There are three: the plan admission gate, the prepare admission gate (a dirty session root, a failed base resolution, an unallocatable integration worktree), and the final `Report` phase. None returns a non-converged result — the converged return is the only exit that returns — so a new early exit must throw too, and `tests/dynamic-workflow-wrapper/test_workflows.py` pins that.
+- The throw discards the result payload, so an exit that holds evidence the payload used to carry (`ledger`, `suggestions`) reports it first: `logLedger()` and `logSuggestions()` put them in the run log, which the runtime persists with the run.
 - The thrown message carries what an operator needs: status, the per-task table, the failing evidence, the delivery branch and worktree (left in place), and `nextActions`.
 
-`log()` is progress, never an exit channel: only the throw decides the run's status.
+`log()` is progress, never an exit channel: only the throw decides the run's status. The report caps its evidence list at 8 bullets, so the full stage ledger is logged at the end of every run rather than only returned.
 
 ## Agents
 
@@ -138,4 +139,4 @@ Role files are installed into other repositories, so the role contract is a cros
 1. Syntax-check every workflow script in the runtime's async-body model — `uv run pytest tests/dynamic-workflow-wrapper -q` does this, plus the contract checks below.
 2. `node scripts/install-agents.mjs --check` — roles aligned, locked, and every dropped `agentType` still on the roster.
 3. Judge the change against this file: envelope intact, pointers not pasted content, evidence rules untouched (especially the merge table), budgets still bounded, and no node given a decision that deterministic evidence already owns.
-4. Fail the run: every run-level exit must throw `[RUN FAILED] <report>` when the run did not converge. A returning exit would read as a completed run with a sad result, which is the defect the Report phase was added to remove.
+4. Fail the run: every run-level exit must throw `[RUN FAILED] <report>` when the run did not converge — the converged return is the only exit allowed to return. A returning exit would read as a completed run with a sad result, which is the defect the Report phase was added to remove.

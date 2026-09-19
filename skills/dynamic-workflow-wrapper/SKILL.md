@@ -107,19 +107,23 @@ Report the assigned `runId` and confirm headless execution has started.
 
 ## Step 4 — Unified status tracking & reporting
 
-Monitor execution or await completion. The run result owns per-task evidence; the run ledger owns lifecycle. The workflow's `Report` phase renders the table below from that evidence — `converge-tasks` returns it as `result.report` when the run converges, and throws it as `[RUN FAILED] …` when it does not. Return the table from those, never hand-authored:
+Monitor execution or await completion. The run result owns per-task evidence; the run ledger owns lifecycle. The workflow's `Report` phase renders the table below from that evidence — `converge-tasks` returns it as `result.report` when the run converges, and throws it as `[RUN FAILED] …` when it does not. Return the table from those, never hand-authored. The run has no clock, so the table carries no duration:
 
 ```markdown
-### Workflow Run `<runId>` [<STATUS>]
+### Workflow Run `converge-tasks` [<STATUS>]
 
-**Workflow**: `converge-tasks` | **Rounds**: `<n>/<max>` per task | **Duration**: `<elapsed>`
-**Delivery**: `<branch>` at `<path>` (mode `<task-branch|integration-branch>`, base `<base>`) — verified local branch, NOT pushed
+**Workflow**: `converge-tasks` | **Rounds**: `<maxRounds>` per task | **Delivery**: `<branch>` at `<path>` (mode `<task-branch|integration-branch>`, base `<base>`) — verified local branch, NOT pushed
+**Delivered**: `<n>/<m>` task(s). `<The run converged; delivery is the operator step below. | The run did NOT converge. Nothing was pushed.>`
 
-| Task             | Status     | Rounds | Merge              | Deterministic Gate | Crux Review           | Worktree |
-| ---------------- | ---------- | ------ | ------------------ | ------------------ | --------------------- | -------- |
-| `<id>` — `<ref>` | **MERGED** | 2      | exit 0 (1 attempt) | PASS (pytest)      | PASS (0 issues, 9/10) | `<path>` |
+| Task             | Status     | Rounds | Merge        | Crux Review (x/10) | Worktree |
+| ---------------- | ---------- | ------ | ------------ | ------------------ | -------- |
+| `<id>` — `<ref>` | **MERGED** | 2      | 1 attempt(s) | 9/10               | `<path>` |
 
-**Next actions**:
+**Failing evidence** (present only when something failed)
+
+- `<run-level failure, or one bullet per failing task>`
+
+**Next actions**
 
 - `<verbatim result.nextActions>`
 ```
@@ -132,8 +136,7 @@ Monitor execution or await completion. The run result owns per-task evidence; th
 | `DEFERRED` (task)  | Not attempted because an earlier task halted the run.                                                                     |
 | `BLOCKED`          | A node declared an impossible requirement, an unresolvable merge, or a scope violation; also a red final composite gate.  |
 | `EXHAUSTED`        | A task reached `maxRounds` without convergence, or exhausted `maxMergeAttempts`.                                          |
-
-**Exit contract.** `BLOCKED` and `EXHAUSTED` are *failing* run states, not results: the `Report` phase throws `[RUN FAILED] <report>`, the lifecycle records the run as `failed`, and the error text carries the status, the per-task table, the failing evidence, the delivery path and the next actions. A converged run returns the same report as `result.report`. Read the run status first, then the report — a batch a node halted can never be mistaken for delivered work. The workflow's own table carries the columns the run owns (rounds, merge attempts, crux review score, worktree); per-round gate detail lives in the ledger, so add it from there when an operator asks.
+**Exit contract.** `BLOCKED` and `EXHAUSTED` are *failing* run states, not results: every run-level exit throws `[RUN FAILED] <report>` — the plan admission gate, the prepare admission gate, and the final `Report` phase — the lifecycle records the run as `failed`, and the error text carries the status, the per-task table, the failing evidence, the delivery path and the next actions. The converged return is the only exit that returns, and it returns the same report as `result.report`. Read the run status first, then the report — a batch a node halted can never be mistaken for delivered work. The workflow's own table carries the columns the run owns (rounds, merge attempts, crux review score out of 10, worktree); per-round gate detail and the friction suggestions go to the run log, which every exit writes to.
 
 **Done when** the final status is delivered, the delivery branch and worktree are named, and merge/PR ownership is returned to the user with `nextActions`.
 
