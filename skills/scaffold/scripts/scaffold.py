@@ -1984,6 +1984,81 @@ def _normalize_toml_section(name: str) -> str:
     return s
 
 
+def _toml_comment_start(line_wo_nl: str) -> int | None:
+    """Index of `#` opening a comment outside '...' and "...", else None."""
+    in_single = False
+    in_double = False
+    i, n = 0, len(line_wo_nl)
+    while i < n:
+        ch = line_wo_nl[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                in_double = False
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+        elif ch == '"':
+            in_double = True
+        elif ch == "#":
+            return i
+        i += 1
+    return None
+
+
+_PY_DEP_KEY_RE = re.compile(r"^[ \t]*(dependencies|\"dependencies\"|'dependencies')[ \t]*=[ \t]*\[")
+_HEADER_RAW_RE = re.compile(r"^[ \t]*\[{1,2}([^\]\n\[]+)\]{1,2}")
+
+
+def _py_dep_key_at(raw_line: str, mask_slice: list[bool]) -> bool:
+    """True when raw_line opens a dependencies array (bare or quoted key)."""
+    m = _PY_DEP_KEY_RE.match(raw_line)
+    if m is None:
+        return False
+    eq = raw_line.find("=", m.start(1))
+    br = raw_line.find("[", eq + 1 if eq != -1 else 0)
+    if eq == -1 or br == -1:
+        return False
+    if eq >= len(mask_slice) or br >= len(mask_slice):
+        return False
+    return bool(mask_slice[eq] and mask_slice[br])
+
+
+def _toml_sections_scan(
+    lines_body: list[str], mask: list[bool], offsets: list[int]
+) -> list[tuple[int, str]]:
+    """Headers from raw lines whose brackets are code, names normalized."""
+    sections: list[tuple[int, str]] = []
+    for i, raw in enumerate(lines_body):
+        m = _HEADER_RAW_RE.match(raw)
+        if m is None:
+            continue
+        off = offsets[i]
+        grp = m.group(0)
+        first_br = raw.find("[")
+        last_br = grp.rfind("]")
+        if first_br == -1 or last_br == -1:
+            continue
+        if off + first_br >= len(mask) or off + last_br >= len(mask):
+            continue
+        if not (mask[off + first_br] and mask[off + last_br]):
+            continue
+        rest = raw[m.end() :].rstrip("\r\n")
+        stripped = rest.strip()
+        if stripped and not stripped.startswith("#") and not stripped.startswith(";"):
+            continue
+        sections.append((off, _normalize_toml_section(m.group(1))))
+    return sections
+
+
 def _toml_sections(code_text: str) -> list[tuple[int, str]]:
     """Header offsets with normalized table names, located on TOML code only."""
     return [
@@ -2030,7 +2105,6 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
         ch if ok else ("\n" if ch == "\n" else " ")
         for ch, ok in zip(body, mask, strict=True)
     )
-    sections = _toml_sections(code_text)
     lines_body = body.splitlines(keepends=True)
     lines_code = code_text.splitlines(keepends=True)
     offsets: list[int] = []
@@ -2038,29 +2112,38 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
     for _ln in lines_body:
         offsets.append(_off)
         _off += len(_ln)
+    sections = _toml_sections_scan(lines_body, mask, offsets)
     start = next(
         (
             i
-            for i, ln in enumerate(lines_code)
-            if re.match(r"^\s*dependencies\s*=\s*\[", ln)
+            for i, raw in enumerate(lines_body)
+            if _py_dep_key_at(
+                raw, mask[offsets[i] : offsets[i] + len(raw)]
+            )
             and _toml_section_at(sections, offsets[i]) == "project"
         ),
         None,
     )
     if start is None:
-        any_open = next(
-            re.finditer(r"dependencies\s*=\s*\[", code_text), None
-        )
-        if any_open is not None:
-            found = _toml_section_at(sections, any_open.start()) or "(no table)"
+        other_table = ""
+        for i, raw in enumerate(lines_body):
+            if _py_dep_key_at(raw, mask[offsets[i] : offsets[i] + len(raw)]):
+                other_table = _toml_section_at(sections, offsets[i]) or "(no table)"
+                break
+        if other_table:
             raise EnsureError(
                 f"{path}: no `dependencies` in [project]"
-                f" (found in [{found}])"
-                " — run --flavor python first or move the array"
-                " into [project] by hand"
+                f" (found in [{other_table}])"
+                " — move the array into [project] by hand"
+            )
+        tables = sorted({sec for _, sec in sections if sec})
+        if "project" not in tables:
+            found = ", ".join(f"[{t}]" for t in tables) if tables else "no tables"
+            raise EnsureError(
+                f"{path}: no [project] table (found {found}) — fix by hand first"
             )
         raise EnsureError(
-            f"{path}: no `dependencies = [...]` array — run --flavor python first"
+            f"{path}: no `dependencies` key in [project] — fix by hand first"
         )
     open_idx = lines_code[start].find("[")
     close_idx = lines_code[start].find("]", open_idx + 1) if open_idx != -1 else -1
@@ -2085,6 +2168,32 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
         )
         if end is None:
             raise EnsureError(f"{path}: `dependencies = [` never closes — fix by hand first")
+        prev = None
+        for j in range(end - 1, start - 1, -1):
+            wo_nl = lines_body[j].rstrip("\r\n")
+            c_idx = _toml_comment_start(wo_nl)
+            code_j = wo_nl[:c_idx] if c_idx is not None else wo_nl
+            if not code_j.strip():
+                continue
+            if j == start:
+                br_j = code_j.find("[")
+                after = code_j[br_j + 1 :] if br_j != -1 else code_j
+                if not after.strip():
+                    continue
+            prev = j
+            break
+        if prev is not None:
+            raw_p = lines_body[prev]
+            nl = "\r\n" if raw_p.endswith("\r\n") else ("\n" if raw_p.endswith("\n") else "")
+            wo = raw_p.rstrip("\r\n")
+            c_idx = _toml_comment_start(wo)
+            if c_idx is not None:
+                code_p = wo[:c_idx]
+                comment_p = wo[c_idx:]
+                if not code_p.rstrip().endswith(","):
+                    lines_body[prev] = code_p.rstrip() + ", " + comment_p + nl
+            elif not wo.rstrip().endswith(","):
+                lines_body[prev] = wo.rstrip() + "," + nl
         lines_body[end:end] = [f'    "{req}",\n']
     new_body = "".join(lines_body)
     try:
@@ -2277,7 +2386,15 @@ def ensure_main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(
         prog="scaffold.py ensure",
         description="Per-field edits on user-owned manifests "
-        "(package.json edits normalize to 2-space JSON; never wholesale rewrites)",
+        "(package.json edits normalize to 2-space JSON; never wholesale rewrites). "
+        "py-dep contract — supported: a [project] table whose dependencies key is an "
+        "inline array or a multiline array, with or without a trailing comma, with either "
+        "TOML string quote; new entries are appended to that array, and an entry whose "
+        "distribution name is already present under either quote is reported unchanged "
+        "with exit 0. Refused without mutating the file: no [project] table, no dependencies "
+        "key inside it, a dependencies key belonging to any other table including an array "
+        "of tables, or an input the scanner cannot prove is [project].dependencies. Every "
+        "refusal exits non-zero, leaves the file byte-identical, and names what was found.",
     )
     ap.add_argument("--cwd", default=".", help="target directory (default: .)")
     ap.add_argument("--dry-run", action="store_true", help="report the edit without writing")
@@ -2285,7 +2402,18 @@ def ensure_main(argv: list[str]) -> int:
     rust_dep = sub.add_parser("rust-dep", help="add a Cargo.toml [dependencies] entry")
     rust_dep.add_argument("--name", required=True)
     rust_dep.add_argument("--version", default="*")
-    py_dep = sub.add_parser("py-dep", help="add a pyproject.toml dependency (PEP 508)")
+    py_dep = sub.add_parser(
+        "py-dep",
+        help="add a pyproject.toml dependency (PEP 508) — [project].dependencies inline/multiline only",
+        description="py-dep contract — supported: a [project] table whose dependencies key is an "
+        "inline array or a multiline array, with or without a trailing comma, with either "
+        "TOML string quote; new entries are appended to that array, and an entry whose "
+        "distribution name is already present under either quote is reported unchanged "
+        "with exit 0. Refused without mutating the file: no [project] table, no dependencies "
+        "key inside it, a dependencies key belonging to any other table including an array "
+        "of tables, or an input the scanner cannot prove is [project].dependencies. Every "
+        "refusal exits non-zero, leaves the file byte-identical, and names what was found.",
+    )
     py_dep.add_argument("--req", required=True, help='e.g. "httpx>=0.27"')
     ts_dep = sub.add_parser("ts-dep", help="add a package.json dependency")
     ts_dep.add_argument("--name", required=True)
