@@ -62,8 +62,8 @@ Ownership is declared in `scaffold.py` (`PROJECT_OWNED`, `SOURCE_OWNED`, `FLAVOR
 | `.releaserc.json`, `changelog-check.yml`, `.githooks/pre-push`, `.husky/pre-push`, `scripts/changelog-unreleased.py`, `commitlint.config.js`, `.github/ISSUE_TEMPLATE/*`, `pull_request_template.md` | **replaced** byte-identically                                                |
 | `AGENTS.md`, `.gitignore`, `.config/wt.toml`                                                                                                                                                         | patched (append-only / dedup, never rewrites)                                |
 | `CHANGELOG.md`, `CONTRIBUTING.md`, `pyproject.toml`, `Cargo.toml`, `package.json`                                                                                                                    | **preserved** (data / mixed / project manifest)                              |
-| `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts` (TS flavor)                                                                                                                  | **preserved** — hand-grown source; only a greenfield run writes the skeleton |
-| `.github/workflows/release.yml`                                                                                                                                                                      | **preserved** in the git flavor — it is the `ci` flavor's projection         |
+| `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts`, `tsconfig.json`, `.oxlintrc.json`, `.oxfmtrc.json` (TS flavor) | **preserved** — hand-grown source and adapted configs; only a greenfield run writes the skeleton |
+| `.github/workflows/release.yml`                                                                                                                                                                      | **preserved** in the git flavor — it is the `ci` flavor's projection; `do_ci` also preserves it on `--update` for `--flavor ci` and `--flavor all` |
 
 The printed `NEXT` block _is_ the remaining task. Work it in this order:
 
