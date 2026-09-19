@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **scaffold:** gate ensure edits on code-level matches
 * **scaffold:** preserve release.yml on update and gate corrupt manifests
 * **scaffold:** enforce per-field boundary across ensure and detect
 * stop background re-push after auto-amend
@@ -50,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** list preserved TS configs and release.yml guard
 * **scaffold:** disclose package.json 2-space normalization
 * **scaffold:** state per-field time-axis boundary contract
 * **scaffold:** document ensure ops in flavor subskills
