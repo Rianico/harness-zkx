@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **scaffold:** handle array tables and non-dict scripts
 * **scaffold:** close quote, table and prose gaps in ensure ops
 * **scaffold:** close string, status and name-shape gaps
 * **scaffold:** gate ensure edits on code-level matches
