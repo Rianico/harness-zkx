@@ -130,9 +130,28 @@ def test_ts_invalid_json_and_missing_section(tmp_path: Path):
     (tmp_path / "package.json").write_text("{nope", encoding="utf-8")
     with pytest.raises(scaffold.EnsureError):
         scaffold.ensure_ts_dep(tmp_path, "zod")
+    # Missing section policy: create it (like ensure rust-dep creates
+    # [dependencies]) — never advise re-running a whole flavor over
+    # project-owned files.
     (tmp_path / "package.json").write_text('{"name": "demo"}', encoding="utf-8")
-    with pytest.raises(scaffold.EnsureError):
+    note = scaffold.ensure_ts_script(tmp_path, "lint", "oxlint .")
+    assert "added" in note
+    data = json.loads((tmp_path / "package.json").read_text(encoding="utf-8"))
+    assert data["scripts"]["lint"] == "oxlint ."
+    (tmp_path / "package.json").write_text('{"name": "demo"}', encoding="utf-8")
+    assert "added" in scaffold.ensure_ts_dep(tmp_path, "zod", "^3")
+    data = json.loads((tmp_path / "package.json").read_text(encoding="utf-8"))
+    assert data["devDependencies"]["zod"] == "^3"
+
+
+def test_ts_non_object_section_refuses_with_narrow_hint(tmp_path: Path):
+    (tmp_path / "package.json").write_text(
+        json.dumps({"name": "demo", "scripts": "nope"}), encoding="utf-8"
+    )
+    with pytest.raises(scaffold.EnsureError) as excinfo:
         scaffold.ensure_ts_script(tmp_path, "lint", "oxlint .")
+    assert "--flavor" not in str(excinfo.value)
+    assert "by hand" in str(excinfo.value)
 
 
 # --- coverage-threshold ------------------------------------------------------
