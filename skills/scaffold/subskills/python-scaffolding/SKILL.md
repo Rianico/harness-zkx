@@ -34,6 +34,14 @@ Project-owned: `src/<module>/__init__.py` and `tests/test_smoke.py` are starting
 
 Mixed (script warns → proofread): `pyproject.toml` (`{{project_name}}`, description/readme), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
 
+### ensure py-dep input surface (declared)
+
+Supported: a `[project]` table whose `dependencies` key is an inline array or a multiline array, with or without a trailing comma, with either TOML string quote. New entries are appended to that array; an entry whose distribution name is already present, under either quote, is reported unchanged with exit 0.
+
+Refused without mutating the file: no `[project]` table, no `dependencies` key inside it, a `dependencies` key belonging to any other table including an array of tables, or an input the scanner cannot prove is `[project].dependencies`.
+
+Every refusal exits non-zero, leaves the file byte-identical, and names what was found rather than what to re-run. Anything outside this list is out of contract by construction.
+
 Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` (tool owns bytes).
 
 ## Steps — Tool Owns Determinism
