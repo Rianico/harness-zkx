@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 
 * **scaffold:** add ensure ops and aliased coverage script handling
+* **dynamic-workflow-wrapper:** fail every non-converged run exit (#55)
 * **programming-expert:** synthesize deep design and propagate across subskills
 * **rules:** synthesize clean architecture, deep design, and scope taxonomy
 * **programming-expert:** sharpen description and polyglot principles
