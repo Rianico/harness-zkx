@@ -1854,11 +1854,11 @@ def _ensure_write(path: pathlib.Path, body: str, dry_run: bool, action: str) -> 
 
 def _cargo_dependencies_span(body: str) -> tuple[int, int] | None:
     """Byte span of the [dependencies] section body (header line excluded)."""
-    header = re.search(r"(?m)^\[dependencies\]\s*$", body)
+    header = re.search(r"(?m)^\s*\[\s*dependencies\s*\]\s*(?:[#;].*)?$", body)
     if header is None:
         return None
     start = header.end()
-    nxt = re.search(r"(?m)^\[.*\]\s*$", body[start:])
+    nxt = re.search(r"(?m)^\s*\[.*\]\s*(?:[#;].*)?$", body[start:])
     end = start + nxt.start() if nxt else len(body)
     return (start, end)
 
@@ -1889,16 +1889,43 @@ def ensure_cargo_dep(
     ):
         return f"Cargo.toml: unchanged — dependency {name!r} already present"
     entry = f'{name} = "{version}"'
-    section = re.search(r"(?m)^\[dependencies\]\s*$", body)
+    section = re.search(r"(?m)^\s*\[\s*dependencies\s*\]\s*(?:[#;].*)?$", body)
     if section is None:
         new_body = body.rstrip("\n") + f"\n\n[dependencies]\n{entry}\n"
     else:
         new_body = body[: section.end()] + f"\n{entry}" + body[section.end() :]
+    try:
+        tomllib.loads(new_body)
+    except tomllib.TOMLDecodeError as exc:
+        raise EnsureError(
+            f"{path}: refusing edit that would write invalid TOML ({exc})"
+            " — fix by hand first"
+        ) from None
     return _ensure_write(path, new_body, dry_run, f"added dependency {entry}")
 
 
 def _pep508_name(req: str) -> str:
     return re.split(r"[<>=!~;\s\[]", req.strip(), maxsplit=1)[0].strip()
+
+
+def _toml_code_part(line: str) -> str:
+    """Code before a TOML `#` comment (quote-aware, so `#` in strings survives)."""
+    in_single = in_double = False
+    escaped = False
+    for i, ch in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_double and not in_single:
+            escaped = True
+            continue
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            return line[:i]
+    return line
 
 
 def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
@@ -1981,12 +2008,20 @@ def _ensure_json_field(
     return _ensure_write(path, out, dry_run, f"added {kind} {name!r} (whitespace normalized)")
 
 
+def _reject_ts_control(value: str, label: str) -> None:
+    """Refuse control chars that would mis-set package.json (mirrors cargo/py)."""
+    if "\n" in value or "\r" in value:
+        raise EnsureError(f"invalid {label} {value!r}: must not contain a newline")
+
+
 def ensure_ts_dep(
     cwd: pathlib.Path, name: str, version: str = "*", *, dev: bool = True, dry_run: bool = False
 ) -> str:
     """Add one package.json dependency (devDependencies by default); present ones untouched."""
     if not name.strip():
         raise EnsureError("empty package name")
+    _reject_ts_control(name, "package name")
+    _reject_ts_control(version, "version")
     section = "devDependencies" if dev else "dependencies"
     return _ensure_json_field(cwd, "package.json", section, name, version, "dependency", dry_run=dry_run)
 
@@ -1997,6 +2032,8 @@ def ensure_ts_script(cwd: pathlib.Path, name: str, cmd: str, *, dry_run: bool = 
         raise EnsureError("empty script name")
     if not cmd.strip():
         raise EnsureError("empty script command")
+    _reject_ts_control(name, "script name")
+    _reject_ts_control(cmd, "script command")
     return _ensure_json_field(cwd, "package.json", "scripts", name, cmd, "script", dry_run=dry_run)
 
 
@@ -2012,9 +2049,20 @@ def ensure_coverage_threshold(
         error = _toml_syntax_error(path, body)
         if error:
             raise EnsureError(f"{path}: {error} — fix by hand first")
-        if "fail_under" not in body:
+        code_text = "\n".join(_toml_code_part(ln) for ln in body.splitlines())
+        if not re.search(r"fail_under\s*=\s*\d+", code_text):
             raise EnsureError(f"{path}: no coverage gate — run --flavor python --with-coverage first")
-        new_body, count = re.subn(r"(fail_under\s*=\s*)\d+", rf"\g<1>{value}", body)
+        out_lines: list[str] = []
+        count = 0
+        for ln in body.splitlines(keepends=True):
+            ending = "\n" if ln.endswith("\n") else ""
+            core = ln[:-1] if ending else ln
+            code = _toml_code_part(core)
+            comment = core[len(code) :]
+            new_code, n = re.subn(r"(fail_under\s*=\s*)\d+", rf"\g<1>{value}", code)
+            count += n
+            out_lines.append(new_code + comment + ending)
+        new_body = "".join(out_lines)
         if count < 1:
             raise EnsureError(f"{path}: no coverage gate — run --flavor python --with-coverage first")
         return _ensure_write(path, new_body, dry_run, f"set coverage fail_under to {value}")
@@ -2024,24 +2072,51 @@ def ensure_coverage_threshold(
         error = _ts_syntax_error(body)
         if error:
             raise EnsureError(f"{path}: invalid TypeScript ({error}) — fix by hand first")
-        if "lines:" not in body:
+        mask = _ts_code_mask(body)
+        if _ts_code_match(r"lines:\s*\d+", body, mask) is None:
             raise EnsureError(f"{path}: no coverage thresholds — run --flavor typescript --with-coverage first")
         new_body = body
         for key in ("lines", "functions", "branches", "statements"):
-            updated, count = re.subn(rf"({key}:\s*)\d+", rf"\g<1>{value}", new_body)
-            if count >= 1:
-                new_body = updated
+            mask = _ts_code_mask(new_body)
+            code_matches = [
+                m
+                for m in re.finditer(rf"({key}:\s*)\d+", new_body)
+                if all(mask[m.start() : m.end()])
+            ]
+            if code_matches:
+                parts: list[str] = []
+                last = 0
+                for m in code_matches:
+                    parts.append(new_body[last : m.start(1)])
+                    parts.append(m.group(1))
+                    parts.append(str(value))
+                    last = m.end()
+                parts.append(new_body[last:])
+                new_body = "".join(parts)
             else:
-                m = re.search(r"(thresholds\s*:\s*\{)([^}]*)\}", new_body)
-                if m is None:
+                mask = _ts_code_mask(new_body)
+                head = _ts_code_match(r"thresholds\s*:\s*\{", new_body, mask)
+                if head is None:
                     raise EnsureError(
                         f"{path}: threshold `{key}` untouched — no `thresholds: {{...}}` block to extend; add `{key}: {value}` by hand"
                     )
-                inner = m.group(2).rstrip()
+                tail = next(
+                    (
+                        i
+                        for i in range(head.end(), len(new_body))
+                        if new_body[i] == "}" and mask[i]
+                    ),
+                    None,
+                )
+                if tail is None:
+                    raise EnsureError(
+                        f"{path}: threshold `{key}` untouched — no `thresholds: {{...}}` block to extend; add `{key}: {value}` by hand"
+                    )
+                inner = new_body[head.end() : tail].rstrip()
                 sep = "" if not inner.strip() else ("" if inner.rstrip().endswith(",") else ",")
                 insertion = f"{sep} {key}: {value}" if inner.strip() else f" {key}: {value} "
                 new_body = (
-                    new_body[: m.start(2)] + m.group(2).rstrip() + insertion + new_body[m.end(2) :]
+                    new_body[: head.end()] + new_body[head.end() : tail].rstrip() + insertion + new_body[tail:]
                 )
         return _ensure_write(path, new_body, dry_run, f"set coverage thresholds to {value}")
     raise EnsureError(
@@ -2174,6 +2249,51 @@ def _strip_ts_noise(body: str) -> str:
             out.append(ch)
             i += 1
     return "".join(out)
+
+
+def _ts_code_mask(body: str) -> list[bool]:
+    """True per index for TS code (False inside comments/strings)."""
+    mask = [True] * len(body)
+    i, n = 0, len(body)
+    while i < n:
+        ch = body[i]
+        nxt = body[i + 1] if i + 1 < n else ""
+        if ch == "/" and nxt == "/":
+            j = body.find("\n", i)
+            j = n if j == -1 else j
+            for k in range(i, j):
+                mask[k] = False
+            i = j
+        elif ch == "/" and nxt == "*":
+            j = body.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            for k in range(i, j):
+                mask[k] = False
+            i = j
+        elif ch in ("'", '"', "`"):
+            quote = ch
+            mask[i] = False
+            i += 1
+            while i < n:
+                mask[i] = False
+                if body[i] == "\\":
+                    i += 2
+                    continue
+                if body[i] == quote:
+                    i += 1
+                    break
+                i += 1
+        else:
+            i += 1
+    return mask
+
+
+def _ts_code_match(pattern: str, body: str, mask: list[bool]) -> re.Match[str] | None:
+    """First regex match fully inside TS code (comments/strings excluded)."""
+    for m in re.finditer(pattern, body):
+        if all(mask[m.start() : m.end()]):
+            return m
+    return None
 
 
 def _ts_syntax_error(body: str) -> str | None:

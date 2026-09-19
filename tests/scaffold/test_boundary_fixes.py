@@ -495,3 +495,82 @@ def test_r2_ensure_help_discloses_json_normalization(capsys):
 def test_r2_skill_discloses_json_normalization():
     text = SKILL_MD.read_text(encoding="utf-8")
     assert "2-space JSON" in text
+
+
+# --- r3: prior-round P1/P2 (falsifiable: revert fix -> fail) ---
+def test_r3_cargo_trailing_comment_no_duplicate(tmp_path: Path):
+    body = '[package]\nname = "demo"\nversion = "0.1.0"\n\n[dependencies] # comment\nserde = "1"\n'
+    (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
+    rc = scaffold.ensure_main(["--cwd", str(tmp_path), "rust-dep", "--name", "tokio"])
+    assert rc == 0
+    out = (tmp_path / "Cargo.toml").read_text(encoding="utf-8")
+    import tomllib as _toml
+
+    _toml.loads(out)
+    assert out.count("[dependencies]") == 1
+    assert 'tokio = "*"' in out.split("[dependencies]")[1].split("[")[0]
+
+
+def test_r3_cargo_dev_comment_bleed_adds_to_dependencies(tmp_path: Path):
+    body = (
+        '[package]\nname = "demo"\nversion = "0.1.0"\n\n'
+        '[dependencies]\nserde = "1"\n\n'
+        '[dev-dependencies] # comment\ntokio = "1"\n'
+    )
+    (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
+    note = scaffold.ensure_cargo_dep(tmp_path, "tokio", "1")
+    assert "added dependency" in note
+    out = (tmp_path / "Cargo.toml").read_text(encoding="utf-8")
+    dep_span = out.split("[dependencies]")[1].split("[")[0]
+    assert 'tokio = "1"' in dep_span
+
+
+def test_r3_python_comment_only_fail_under_refuses(tmp_path: Path):
+    bad = '[project]\nname = "demo"\n# fail_under = 80\n'
+    (tmp_path / "pyproject.toml").write_text(bad, encoding="utf-8")
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "python", "--value", "90"]
+    )
+    assert rc == 1
+    assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == bad
+
+
+def test_r3_typescript_comment_only_thresholds_refuses(tmp_path: Path):
+    bad = "// thresholds: { lines: 80 }\nexport default {};\n"
+    (tmp_path / "vitest.config.ts").write_text(bad, encoding="utf-8")
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "typescript", "--value", "90"]
+    )
+    assert rc == 1
+    assert (tmp_path / "vitest.config.ts").read_text(encoding="utf-8") == bad
+
+
+def test_r3_ts_newline_version_refused_unchanged(tmp_path: Path):
+    (tmp_path / "package.json").write_text(
+        '{"name": "demo", "devDependencies": {}, "scripts": {}}', encoding="utf-8"
+    )
+    before = (tmp_path / "package.json").read_bytes()
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "ts-dep", "--name", "zod", "--version", "a\nb"]
+    )
+    assert rc == 1
+    assert (tmp_path / "package.json").read_bytes() == before
+
+
+def test_r3_ts_newline_script_name_refused_unchanged(tmp_path: Path):
+    (tmp_path / "package.json").write_text(
+        '{"name": "demo", "devDependencies": {}, "scripts": {}}', encoding="utf-8"
+    )
+    before = (tmp_path / "package.json").read_bytes()
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "ts-script", "--name", "bad\nname", "--cmd", "echo hi"]
+    )
+    assert rc == 1
+    assert (tmp_path / "package.json").read_bytes() == before
+
+
+def test_r3_git_skill_ownership_table_lists_ts_configs():
+    text = (SKILL_DIR / "subskills" / "git-scaffolding" / "SKILL.md").read_text(encoding="utf-8")
+    assert "tsconfig.json" in text
+    assert ".oxlintrc.json" in text
+    assert ".oxfmtrc.json" in text
