@@ -15,7 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-* **dynamic-workflow-wrapper:** fail a non-converged run
+* **scaffold:** add ensure ops and aliased coverage script handling
+* **dynamic-workflow-wrapper:** fail every non-converged run exit (#55)
 * **programming-expert:** synthesize deep design and propagate across subskills
 * **rules:** synthesize clean architecture, deep design, and scope taxonomy
 * **programming-expert:** sharpen description and polyglot principles
@@ -27,7 +28,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **dynamic-workflow-wrapper:** fail every run-level exit
+* **scaffold:** support quoted py-dep keys and missing commas
+* **scaffold:** handle array tables and non-dict scripts
+* **scaffold:** close quote, table and prose gaps in ensure ops
+* **scaffold:** close string, status and name-shape gaps
+* **scaffold:** gate ensure edits on code-level matches
+* **scaffold:** preserve release.yml on update and gate corrupt manifests
+* **scaffold:** enforce per-field boundary across ensure and detect
 * stop background re-push after auto-amend
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
 * converge the nine blocking issues from the run ledger (#45) (BREAKING CHANGE)
@@ -49,8 +56,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **dynamic-workflow-wrapper:** align the report contract with the emitted table
-* **dynamic-workflow-wrapper:** document the run exit contract
+* **scaffold:** declare py-dep input surface
+* **scaffold:** list preserved TS configs and release.yml guard
+* **scaffold:** disclose package.json 2-space normalization
+* **scaffold:** state per-field time-axis boundary contract
+* **scaffold:** document ensure ops in flavor subskills
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate

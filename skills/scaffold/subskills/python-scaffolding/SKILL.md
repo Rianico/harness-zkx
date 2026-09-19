@@ -21,7 +21,7 @@ Per `development-patterns.md` §3:
 
 Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_pyproject` — computed, `PYTHON_VERSION`, `_py_module_name`) plus the rendered `templates/python/src/_pkg/__init__.py.j2` and `templates/python/tests/test_smoke.py.j2`, `$SKILL_DIR/templates/shared/CONTRIBUTING.python.md.j2` (rendered) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` to preview.
 
-> Existing repo? `--update` refreshes generated files but preserves `pyproject.toml` (project manifest); work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
+> Existing repo? `--update` refreshes generated files but preserves `pyproject.toml` (project manifest); work the printed NEXT list. Per-field edits (confirm value with user first): `scaffold.py ensure py-dep --req "<pep508>"` / `ensure coverage-threshold --flavor python --value N` — see `git-scaffolding/SKILL.md` § Update.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor python --project-name <name>
@@ -33,6 +33,14 @@ Pure-deterministic: `.python-version` (`3.14`), `src/<module>/__init__.py` (rend
 Project-owned: `src/<module>/__init__.py` and `tests/test_smoke.py` are starting points the project replaces, so `--update` preserves them (see `SOURCE_OWNED` + `SOURCE_OWNED_PATTERNS` — the package path carries a computed directory name).
 
 Mixed (script warns → proofread): `pyproject.toml` (`{{project_name}}`, description/readme), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
+
+### ensure py-dep input surface (declared)
+
+Supported: a `[project]` table whose `dependencies` key is an inline array or a multiline array, with or without a trailing comma, with either TOML string quote. New entries are appended to that array; an entry whose distribution name is already present, under either quote, is reported unchanged with exit 0.
+
+Refused without mutating the file: no `[project]` table, no `dependencies` key inside it, a `dependencies` key belonging to any other table including an array of tables, or an input the scanner cannot prove is `[project].dependencies`.
+
+Every refusal exits non-zero, leaves the file byte-identical, and names what was found rather than what to re-run. Anything outside this list is out of contract by construction.
 
 Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` (tool owns bytes).
 
