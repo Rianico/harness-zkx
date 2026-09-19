@@ -294,6 +294,28 @@ Native tool still owns deps — `asdf` syncs, it does not replace `uv`/`cargo`/`
 
 ## Deterministic Generation — Tool Owns Bytes
 
+### Boundary contract — per field, on a time axis
+
+Run 1 (field absent) means the tool writes byte-identical bytes with no model
+judgment. Run 2 and later (field present) means the project owns the file and
+the model decides replace / update one field / untouched — the tool never
+silently chooses the destructive option and never escalates a one-field edit
+into a whole-file write. `--update` preserves project-owned files and reports
+them as NEXT actions; `ensure <op>` performs one confirmed field edit (absent
+adds minimally, present reports unchanged, invalid or ambiguous refuses).
+
+```bash
+uv run $SKILL_DIR/scripts/scaffold.py ensure rust-dep --name tokio --version 1
+uv run $SKILL_DIR/scripts/scaffold.py ensure py-dep --req "httpx>=0.27"
+uv run $SKILL_DIR/scripts/scaffold.py ensure ts-dep --name zod --version "^3"
+uv run $SKILL_DIR/scripts/scaffold.py ensure ts-script --name coverage --cmd "vitest run --coverage"
+uv run $SKILL_DIR/scripts/scaffold.py ensure coverage-threshold --flavor python --value 90
+```
+
+`--coverage-script` names the package.json script the coverage gate runs
+(default: detected script, else `coverage`); it reaches the rendered workflow
+through `do_ci` for `--flavor ci` and `--flavor all`.
+
 Do not hand-copy templates. Run the generator — it emits byte-identical artifacts and warns on mixed files:
 
 ```bash
