@@ -27,7 +27,8 @@ byte-identical bytes with no model judgment; run 2 and later (field present) mea
 project owns the file and the model decides replace / update one field / untouched.
 `--update` preserves project-owned files and reports them as NEXT actions;
 `ensure <op>` performs one confirmed field edit (absent adds minimally, present reports
-unchanged, invalid or ambiguous refuses) and never rewrites a file wholesale.
+unchanged, invalid or ambiguous refuses) and never rewrites file semantics wholesale
+(package.json edits normalize to 2-space JSON; key order kept, non-ASCII kept literal).
 
 Information boundary: script emits byte-identical artifacts; for mixed
 deterministic+semantic files it writes the skeleton and warns on stderr
@@ -50,6 +51,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from dataclasses import asdict, dataclass
 from typing import cast
 
@@ -1291,10 +1293,14 @@ def do_ci(
     threshold: int,
     selected: set[str] | None = None,
     coverage_script: str = "coverage",
-) -> None:
+    update: bool = False,
+) -> list[str]:
     sel = selected if selected is not None else CI_COMPONENTS
     if "release-yml" not in sel:
-        return
+        return []
+    rel = cwd / ".github" / "workflows" / "release.yml"
+    if update and rel.exists():
+        return [preserve(rel, FLAVOR_FOREIGN["release-yml"])]
     content = render_ci_release(
         variant, with_coverage=with_coverage, threshold=threshold, coverage_script=coverage_script
     )
@@ -1304,6 +1310,7 @@ def do_ci(
             file=sys.stderr,
         )
     write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
+    return []
 
 
 def detect_project(cwd: pathlib.Path) -> dict[str, object]:
@@ -1873,6 +1880,9 @@ def ensure_cargo_dep(
         raise EnsureError(f"invalid version {version!r}: must not contain a quote or newline")
     path = cwd / "Cargo.toml"
     body = _ensure_read(path, "run --flavor rust first so there is a manifest to edit")
+    error = _toml_syntax_error(path, body)
+    if error:
+        raise EnsureError(f"{path}: {error} — fix by hand first")
     span = _cargo_dependencies_span(body)
     if span is not None and re.search(
         rf"(?m)^\s*{re.escape(name)}\s*=", body[span[0] : span[1]]
@@ -1900,6 +1910,9 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
         raise EnsureError(f"invalid requirement {req!r}")
     path = cwd / "pyproject.toml"
     body = _ensure_read(path, "run --flavor python first so there is a manifest to edit")
+    error = _toml_syntax_error(path, body)
+    if error:
+        raise EnsureError(f"{path}: {error} — fix by hand first")
     lines = body.splitlines(keepends=True)
     start = next(
         (i for i, ln in enumerate(lines) if re.match(r"^dependencies\s*=\s*\[", ln)),
@@ -1996,6 +2009,9 @@ def ensure_coverage_threshold(
     if flavor == "python":
         path = cwd / "pyproject.toml"
         body = _ensure_read(path, "run --flavor python --with-coverage first")
+        error = _toml_syntax_error(path, body)
+        if error:
+            raise EnsureError(f"{path}: {error} — fix by hand first")
         if "fail_under" not in body:
             raise EnsureError(f"{path}: no coverage gate — run --flavor python --with-coverage first")
         new_body, count = re.subn(r"(fail_under\s*=\s*)\d+", rf"\g<1>{value}", body)
@@ -2005,6 +2021,9 @@ def ensure_coverage_threshold(
     if flavor == "typescript":
         path = cwd / "vitest.config.ts"
         body = _ensure_read(path, "run --flavor typescript --with-coverage first")
+        error = _ts_syntax_error(body)
+        if error:
+            raise EnsureError(f"{path}: invalid TypeScript ({error}) — fix by hand first")
         if "lines:" not in body:
             raise EnsureError(f"{path}: no coverage thresholds — run --flavor typescript --with-coverage first")
         new_body = body
@@ -2035,7 +2054,8 @@ def ensure_main(argv: list[str]) -> int:
     """`scaffold.py ensure <op>`: one confirmed field edit on a user-owned manifest."""
     ap = argparse.ArgumentParser(
         prog="scaffold.py ensure",
-        description="Per-field edits on user-owned manifests (never wholesale rewrites)",
+        description="Per-field edits on user-owned manifests "
+        "(package.json edits normalize to 2-space JSON; never wholesale rewrites)",
     )
     ap.add_argument("--cwd", default=".", help="target directory (default: .)")
     ap.add_argument("--dry-run", action="store_true", help="report the edit without writing")
@@ -2122,6 +2142,63 @@ def _yaml_error(text: str) -> str | None:
     return None
 
 
+def _strip_ts_noise(body: str) -> str:
+    """Drop TS comments and string/template literal contents (escape-aware).
+
+    Template `${...}` code is treated as opaque: dropping balanced code keeps
+    the balance verdict, while literal brackets inside strings no longer skew it.
+    """
+    out: list[str] = []
+    i, n = 0, len(body)
+    while i < n:
+        ch = body[i]
+        nxt = body[i + 1] if i + 1 < n else ""
+        if ch == "/" and nxt == "/":
+            j = body.find("\n", i)
+            i = n if j == -1 else j
+        elif ch == "/" and nxt == "*":
+            j = body.find("*/", i + 2)
+            i = n if j == -1 else j + 2
+        elif ch in ("'", '"', "`"):
+            out.append(" ")
+            i += 1
+            while i < n:
+                if body[i] == "\\":
+                    i += 2
+                    continue
+                if body[i] == ch:
+                    i += 1
+                    break
+                i += 1
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+def _ts_syntax_error(body: str) -> str | None:
+    """Lightweight TS parse probe: bracket balance without needing Node."""
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: list[str] = []
+    for ch in _strip_ts_noise(body):
+        if ch in "([{":
+            stack.append(ch)
+        elif ch in pairs:
+            if not stack or stack.pop() != pairs[ch]:
+                return f"unbalanced {ch!r}"
+    if stack:
+        return f"unbalanced {stack[-1]!r}"
+    return None
+
+
+def _toml_syntax_error(path: pathlib.Path, body: str) -> str | None:
+    try:
+        tomllib.loads(body)
+    except tomllib.TOMLDecodeError as exc:
+        return f"invalid TOML: {exc}"
+    return None
+
+
 def referenced_path_findings(path: pathlib.Path) -> list[Finding]:
     """Report `scripts/x.sh` style references that resolve to nothing (non-blocking).
 
@@ -2153,7 +2230,7 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
             continue
         suffix = path.suffix
         is_script = suffix == ".sh" or path.name in SCRIPT_NAMES
-        checkable = is_script or suffix in {".py", ".json", ".yml", ".yaml"}
+        checkable = is_script or suffix in {".py", ".json", ".yml", ".yaml", ".toml", ".ts"}
         if not checkable:
             continue
         try:
@@ -2177,6 +2254,14 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
             error = _yaml_error(body)
             if error:
                 findings.append(Finding(str(path), error))
+        elif suffix == ".toml":
+            error = _toml_syntax_error(path, body)
+            if error:
+                findings.append(Finding(str(path), error))
+        elif suffix == ".ts":
+            error = _ts_syntax_error(body)
+            if error:
+                findings.append(Finding(str(path), f"invalid TypeScript: {error}"))
         if is_script:
             bash = shutil.which("bash")
             if bash is None:
@@ -2397,7 +2482,7 @@ def main() -> int:
                 merge_mixed=args.merge_mixed,
             )
         if flavor in ("ci", "all"):
-            do_ci(
+            notes += do_ci(
                 cwd,
                 dry_run,
                 args.ci_variant,
@@ -2405,6 +2490,7 @@ def main() -> int:
                 threshold,
                 selected=ci_selected,
                 coverage_script=coverage_script,
+                update=update,
             )
 
         # A real write validates itself; a preview validates what it touched when asked.

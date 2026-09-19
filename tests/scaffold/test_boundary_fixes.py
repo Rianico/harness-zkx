@@ -374,3 +374,124 @@ def test_12_next_hints_are_runnable():
     assert "uv run $SKILL_DIR/scripts/scaffold.py ensure rust-dep" in src
     assert "uv run $SKILL_DIR/scripts/scaffold.py ensure ts-dep" in src
     assert "per-field edits via `scaffold.py ensure" not in src
+
+
+# --- r2 P1-A: do_ci honors --update (release.yml preserved, not clobbered) ---
+def test_r2_ci_update_preserves_release_yml(tmp_path: Path):
+    assert (
+        _run_main(
+            "--flavor", "ci", "--ci-variant", "node", "--project-name", "demo",
+            "--cwd", str(tmp_path),
+        )
+        == 0
+    )
+    rel = tmp_path / ".github" / "workflows" / "release.yml"
+    rel.write_text(
+        rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8"
+    )
+    assert (
+        _run_main(
+            "--flavor", "ci", "--ci-variant", "node", "--update", "--cwd", str(tmp_path)
+        )
+        == 0
+    )
+    assert "# CUSTOM MARKER" in rel.read_text(encoding="utf-8")
+
+
+def test_r2_do_ci_update_returns_preserve_note(tmp_path: Path):
+    assert (
+        _run_main(
+            "--flavor", "ci", "--ci-variant", "node", "--project-name", "demo",
+            "--cwd", str(tmp_path),
+        )
+        == 0
+    )
+    rel = tmp_path / ".github" / "workflows" / "release.yml"
+    rel.write_text(
+        rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8"
+    )
+    notes = scaffold.do_ci(tmp_path, False, "node", False, 80, update=True)
+    assert any("release.yml" in note for note in notes)
+    assert "# CUSTOM MARKER" in rel.read_text(encoding="utf-8")
+
+
+def test_r2_all_update_preserves_release_yml(tmp_path: Path):
+    assert _run_main("--flavor", "all", "--project-name", "demo", "--cwd", str(tmp_path)) == 0
+    rel = tmp_path / ".github" / "workflows" / "release.yml"
+    rel.write_text(
+        rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8"
+    )
+    assert (
+        _run_main("--flavor", "all", "--project-name", "demo", "--update", "--cwd", str(tmp_path))
+        == 0
+    )
+    assert "# CUSTOM MARKER" in rel.read_text(encoding="utf-8")
+
+
+# --- r2 P1-B: self_check parses .toml/.ts; ensure refuses corrupt files ---
+def test_r2_self_check_flags_invalid_toml(tmp_path: Path):
+    bad = tmp_path / "Cargo.toml"
+    bad.write_text("INVALID [[[\n", encoding="utf-8")
+    findings = scaffold.self_check([bad])
+    assert any("invalid TOML" in f.detail and f.blocking for f in findings)
+
+
+def test_r2_self_check_flags_unbalanced_ts(tmp_path: Path):
+    bad = tmp_path / "vitest.config.ts"
+    bad.write_text("INVALID(((\n", encoding="utf-8")
+    findings = scaffold.self_check([bad])
+    assert any("unbalanced" in f.detail and f.blocking for f in findings)
+
+
+def test_r2_self_check_accepts_valid_toml_and_ts(tmp_path: Path):
+    good_toml = tmp_path / "Cargo.toml"
+    good_toml.write_text(
+        '[package]\nname = "demo"\nversion = "0.1.0"\n\n[dependencies]\n', encoding="utf-8"
+    )
+    good_ts = tmp_path / "index.ts"
+    good_ts.write_text(
+        'export const greeting: string = `hello ${"world"}`;\n', encoding="utf-8"
+    )
+    assert not [f for f in scaffold.self_check([good_toml, good_ts]) if f.blocking]
+
+
+def test_r2_ensure_rust_dep_refuses_invalid_toml_unchanged(tmp_path: Path):
+    bad = '[package\nname = "demo"\n\n[dependencies]\nserde = "1"\n'
+    (tmp_path / "Cargo.toml").write_text(bad, encoding="utf-8")
+    rc = scaffold.ensure_main(["--cwd", str(tmp_path), "rust-dep", "--name", "tokio"])
+    assert rc == 1
+    assert (tmp_path / "Cargo.toml").read_text(encoding="utf-8") == bad
+
+
+def test_r2_ensure_py_dep_refuses_invalid_toml_unchanged(tmp_path: Path):
+    bad = '[project\nname = "demo"\ndependencies = []\n'
+    (tmp_path / "pyproject.toml").write_text(bad, encoding="utf-8")
+    rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", "httpx>=0.27"])
+    assert rc == 1
+    assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == bad
+
+
+def test_r2_ensure_threshold_refuses_invalid_ts_unchanged(tmp_path: Path):
+    bad = (
+        "export default { test: { coverage: { thresholds: "
+        "{ lines: 80, functions: 80 } } } ;\n((("
+    )
+    (tmp_path / "vitest.config.ts").write_text(bad, encoding="utf-8")
+    rc = scaffold.ensure_main(
+        ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "typescript", "--value", "90"]
+    )
+    assert rc == 1
+    assert (tmp_path / "vitest.config.ts").read_text(encoding="utf-8") == bad
+
+
+# --- r2 P2: JSON normalization is disclosed, not silent ---
+def test_r2_ensure_help_discloses_json_normalization(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        scaffold.ensure_main(["--help"])
+    assert excinfo.value.code == 0
+    assert "2-space JSON" in capsys.readouterr().out
+
+
+def test_r2_skill_discloses_json_normalization():
+    text = SKILL_MD.read_text(encoding="utf-8")
+    assert "2-space JSON" in text
