@@ -28,14 +28,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **changelog:** union unreleased entries instead of regenerating
-* **scaffold:** support quoted py-dep keys and missing commas
-* **scaffold:** handle array tables and non-dict scripts
-* **scaffold:** close quote, table and prose gaps in ensure ops
-* **scaffold:** close string, status and name-shape gaps
-* **scaffold:** gate ensure edits on code-level matches
-* **scaffold:** preserve release.yml on update and gate corrupt manifests
-* **scaffold:** enforce per-field boundary across ensure and detect
+* **changelog:** supersede a squashed entry with its numbered form
+* **changelog:** union unreleased entries instead of regenerating (#60)
 * **gh-router:** anchor subskill shared-lib refs to $SKILL_DIR (#57)
 * stop background re-push after auto-amend
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
@@ -55,15 +49,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** pin the changelog bullet style and keep it out of oxfmt
 * **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+* **scaffold:** support quoted py-dep keys and missing commas
+* **scaffold:** handle array tables and non-dict scripts
+* **scaffold:** close quote, table and prose gaps in ensure ops
+* **scaffold:** close string, status and name-shape gaps
+* **scaffold:** gate ensure edits on code-level matches
+* **scaffold:** preserve release.yml on update and gate corrupt manifests
+* **scaffold:** enforce per-field boundary across ensure and detect
 
 ### Documentation
 
-* **changelog:** restore the entries the regeneration erased
-* **scaffold:** declare py-dep input surface
-* **scaffold:** list preserved TS configs and release.yml guard
-* **scaffold:** disclose package.json 2-space normalization
-* **scaffold:** state per-field time-axis boundary contract
-* **scaffold:** document ensure ops in flavor subskills
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
@@ -73,6 +68,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
 * **scaffold:** record the changelog bullet contract
+* **changelog:** restore the entries the regeneration erased
+* **scaffold:** declare py-dep input surface
+* **scaffold:** list preserved TS configs and release.yml guard
+* **scaffold:** disclose package.json 2-space normalization
+* **scaffold:** state per-field time-axis boundary contract
+* **scaffold:** document ensure ops in flavor subskills
 
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
 

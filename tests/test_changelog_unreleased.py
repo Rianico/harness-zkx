@@ -238,3 +238,28 @@ def test_check_stays_green_with_preserved_extra_bullets(tmp_path: Path) -> None:
 
     assert chk.returncode == 0, chk.stderr
     assert chk.stdout.strip() == "in sync"
+
+
+def test_update_supersedes_a_branch_entry_with_its_numbered_form(tmp_path: Path) -> None:
+    """GitHub appends `(#N)` on squash, so one change must not survive as two entries.
+
+    A branch generates `* **thing:** add a thing` while the PR number does not exist yet;
+    the merge regenerates it as `* **thing:** add a thing (#99)`. The numbered form carries
+    the provenance, so it supersedes the branch form instead of sitting beside it.
+    """
+    repo, changelog = _repo_with_a_visible_commit(
+        tmp_path, "# Changelog\n\n## [Unreleased]\n\n### Features\n\n* **thing:** add a thing\n"
+    )
+    _ = subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "--amend", "-m", "feat(thing): add a thing (#99)"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+    result = _run_in(repo, changelog, "update")
+
+    assert result.returncode == 0, result.stderr
+    updated = changelog.read_text(encoding="utf-8")
+    assert updated.count("add a thing") == 1, updated
+    assert "* **thing:** add a thing (#99)" in updated
