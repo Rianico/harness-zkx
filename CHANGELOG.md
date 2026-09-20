@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **herdr:** order the helper sections by workflow
 * **herdr:** correct the handoff guidance to lead with the label
 * **herdr:** document herdr-overview and the name/label split
 * **herdr:** document the herdr-prompt helper
