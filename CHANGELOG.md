@@ -28,8 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **ci:** run the changelog check on main pushes
-* **gitignore:** scope the ADR pointer ignore to the repo root
+* **repo:** check changelog on main and correct the ADR pointer ignore (#62)
 * **scaffold:** stop flagging an absent project-owned path as drift (#58)
 * **changelog:** supersede a squashed entry with its numbered form (#61)
 * **changelog:** union unreleased entries instead of regenerating (#60)
@@ -52,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** pin the changelog bullet style and keep it out of oxfmt
 * **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+* **ci:** run the changelog check on main pushes
+* **gitignore:** scope the ADR pointer ignore to the repo root
 * **scaffold:** support quoted py-dep keys and missing commas
 * **scaffold:** handle array tables and non-dict scripts
 * **scaffold:** close quote, table and prose gaps in ensure ops
@@ -62,7 +63,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **scaffold:** drop the false adr-dir template claim
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
 * **scaffold:** record the changelog bullet contract
+* **scaffold:** drop the false adr-dir template claim
 * **scaffold:** state the ownership rule and the coverage-script contract
 * **changelog:** restore the entries the regeneration erased
 * **scaffold:** declare py-dep input surface
