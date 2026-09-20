@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **herdr:** add herdr-overview for a compact session view
 * **herdr:** add herdr-prompt for byte-exact payload delivery
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
 * **dynamic-workflow-wrapper:** fail every non-converged run exit (#55)
@@ -66,6 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **herdr:** document herdr-overview and the name/label split
 * **herdr:** document the herdr-prompt helper
 * **herdr:** apply progressive disclosure and document transcript reads
 * **scaffold:** add adr-scaffolding subskill (#52)
