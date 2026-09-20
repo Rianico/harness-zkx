@@ -180,3 +180,86 @@ def test_repo_changelog_pins_md004_to_asterisk() -> None:
     match = re.search(r"markdownlint-configure-file\s*(\{.*?\})\s*-->", changelog, re.DOTALL)
     assert match is not None, "CHANGELOG.md lost its markdownlint-configure-file pin"
     assert json.loads(match.group(1))["MD004"]["style"] == "asterisk"
+
+
+SQUASHED_PR_ENTRY = "* bullet from a squashed PR"
+SQUASH_SURVIVOR_CHANGELOG = (
+    "# Changelog\n\n## [Unreleased]\n\n### Bug Fixes\n\n" + SQUASHED_PR_ENTRY + "\n"
+)
+
+
+def _run_in(repo: Path, changelog: Path, command: str) -> subprocess.CompletedProcess[str]:
+    """Run `command` with cwd=repo so the fixture's own tag history resolves."""
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), command, "--changelog", str(changelog)],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_update_preserves_unreleased_bullets_without_a_backing_commit(tmp_path: Path) -> None:
+    """`update` unions instead of regenerating, so another branch's entries survive.
+
+    A squash-merge erases the commits behind a merged PR's Unreleased entries. Regenerating
+    the block from `git log` alone silently deletes them - which is how one PR dropped seven
+    entries another had written. A preserved entry is unreleased work, not drift.
+    """
+    repo, changelog = _repo_with_a_visible_commit(tmp_path, SQUASH_SURVIVOR_CHANGELOG)
+
+    result = _run_in(repo, changelog, "update")
+
+    assert result.returncode == 0, result.stderr
+    updated = changelog.read_text(encoding="utf-8")
+    assert SQUASHED_PR_ENTRY in updated, "another branch's Unreleased entry was erased"
+    assert "* **thing:** add a thing" in updated, "the commit-derived entry was not added"
+
+
+def test_update_is_idempotent_once_bullets_are_preserved(tmp_path: Path) -> None:
+    """Union converges in one pass: the second `update` reports no change and no churn."""
+    repo, changelog = _repo_with_a_visible_commit(tmp_path, SQUASH_SURVIVOR_CHANGELOG)
+    assert _run_in(repo, changelog, "update").returncode == 0
+    once = changelog.read_text(encoding="utf-8")
+    assert SQUASHED_PR_ENTRY in once, "premise: the preserved entry must survive"
+
+    second = _run_in(repo, changelog, "update")
+
+    assert second.stdout.strip() == "no change", second.stdout
+    assert changelog.read_text(encoding="utf-8") == once
+
+
+def test_check_stays_green_with_preserved_extra_bullets(tmp_path: Path) -> None:
+    """A preserved entry is not drift - `check` fails only on a missing commit-derived one."""
+    repo, changelog = _repo_with_a_visible_commit(tmp_path, SQUASH_SURVIVOR_CHANGELOG)
+    assert _run_in(repo, changelog, "update").returncode == 0
+    assert SQUASHED_PR_ENTRY in changelog.read_text(encoding="utf-8")
+
+    chk = _run_in(repo, changelog, "check")
+
+    assert chk.returncode == 0, chk.stderr
+    assert chk.stdout.strip() == "in sync"
+
+
+def test_update_supersedes_a_branch_entry_with_its_numbered_form(tmp_path: Path) -> None:
+    """GitHub appends `(#N)` on squash, so one change must not survive as two entries.
+
+    A branch generates `* **thing:** add a thing` while the PR number does not exist yet;
+    the merge regenerates it as `* **thing:** add a thing (#99)`. The numbered form carries
+    the provenance, so it supersedes the branch form instead of sitting beside it.
+    """
+    repo, changelog = _repo_with_a_visible_commit(
+        tmp_path, "# Changelog\n\n## [Unreleased]\n\n### Features\n\n* **thing:** add a thing\n"
+    )
+    _ = subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "--amend", "-m", "feat(thing): add a thing (#99)"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+    result = _run_in(repo, changelog, "update")
+
+    assert result.returncode == 0, result.stderr
+    updated = changelog.read_text(encoding="utf-8")
+    assert updated.count("add a thing") == 1, updated
+    assert "* **thing:** add a thing (#99)" in updated

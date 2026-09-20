@@ -48,6 +48,8 @@ CONVENTIONAL_RE = re.compile(
 )
 
 VERSION_HEADING_RE = re.compile(r"^## \[[^\]]+\].*", re.MULTILINE)
+SECTION_HEADING_RE = re.compile(r"^###\s+(?P<name>.+?)\s*$")
+BULLET_RE = re.compile(r"^[*+-]\s+\S")
 
 
 def run(cmd: list[str]) -> str:
@@ -169,25 +171,95 @@ def commits_to_sections(commits: list[tuple[str, str]]) -> dict[str, list[str]]:
     return sections
 
 
+def parse_unreleased_sections(content: str) -> dict[str, list[str]]:
+    """Parse the on-disk Unreleased block into {section: [entry, ...]}, order preserved.
+
+    Only the block's own `### Section` headings and bullets are modelled. Each bullet is
+    kept verbatim so `update` never rewrites an entry it did not author.
+    """
+    if UNRELEASED_HEADING not in content:
+        return {}
+    _, rest = content.split(UNRELEASED_HEADING, 1)
+    version = VERSION_HEADING_RE.search(rest)
+    block = rest[: version.start()] if version else rest
+
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in block.splitlines():
+        heading = SECTION_HEADING_RE.match(line)
+        if heading:
+            current = heading.group("name")
+            sections.setdefault(current, [])
+            continue
+        if current is not None and BULLET_RE.match(line):
+            sections[current].append(line.rstrip())
+    return sections
+
+
+_ANNOTATION_RE = re.compile(r"\s*\(#\d+\)\s*$|\s*\(BREAKING CHANGE\)\s*$")
+
+
+def entry_identity(entry: str) -> str:
+    """Entry text with its trailing `(#N)` / `(BREAKING CHANGE)` annotations removed.
+
+    GitHub appends `(#N)` when it squashes a PR, so the entry a branch generated and the
+    one regenerated after the merge differ by that suffix alone. Matching on identity lets
+    the named form supersede the branch form instead of the change appearing twice.
+    """
+    text = entry.strip()
+    if text[:1] in "*+-":
+        text = text[1:].strip()
+    while True:
+        trimmed = _ANNOTATION_RE.sub("", text).rstrip()
+        if trimmed == text:
+            return text
+        text = trimmed
+
+
+def merge_unreleased(
+    existing: dict[str, list[str]], generated: dict[str, list[str]]
+) -> dict[str, list[str]]:
+    """Union: keep every on-disk entry, prepend only what the commits newly justify.
+
+    Regenerating alone deletes entries whose commits a squash-merge erased, so an entry
+    already on disk is never dropped. An entry the merge re-issued under its squashed name
+    (same identity, `(#N)` added) is superseded rather than duplicated. New entries arrive
+    newest-first (`git log` order) ahead of the preserved ones, and a section with nothing
+    new is returned untouched - which is what makes `update` idempotent.
+    """
+    merged = {section: list(entries) for section, entries in existing.items()}
+    for section, entries in generated.items():
+        bucket = merged.setdefault(section, [])
+        superseded = {entry_identity(entry) for entry in entries}
+        kept = [entry for entry in bucket if entry_identity(entry) not in superseded]
+        present = {entry_identity(entry) for entry in kept}
+        fresh = [entry for entry in entries if entry_identity(entry) not in present]
+        merged[section] = fresh + kept
+    return merged
+
+
 def render_unreleased(sections: dict[str, list[str]]) -> str:
     if not sections:
         return ""
-    # order by presetConfig.types order
-    order = [v[0] for v in TYPE_SECTIONS.values()]
-    # dedupe order preserving first occurrence
-    seen: set[str] = set()
+    # canonical order by presetConfig.types order, then any section the file already carried
     ordered_keys: list[str] = []
-    for k in order:
-        if k not in seen:
-            seen.add(k)
-            ordered_keys.append(k)
+    seen: set[str] = set()
+    for key in (value[0] for value in TYPE_SECTIONS.values()):
+        if key in sections and key not in seen:
+            seen.add(key)
+            ordered_keys.append(key)
+    for key in sections:
+        if key not in seen:
+            seen.add(key)
+            ordered_keys.append(key)
     lines: list[str] = [UNRELEASED_HEADING, ""]
     for key in ordered_keys:
-        if key not in sections:
+        entries = sections[key]
+        if not entries:
             continue
         lines.append(f"### {key}")
         lines.append("")
-        lines.extend(sections[key])
+        lines.extend(entries)
         lines.append("")
     return "\n".join(lines).strip() + "\n\n"
 
@@ -206,8 +278,7 @@ def render_updated_changelog(changelog: Path) -> str:
     tag = get_last_tag()
     commits = get_commits_since(tag)
     warn_if_visible_sync_head(commits)
-    sections = commits_to_sections(commits)
-    new_block = render_unreleased(sections)
+    generated = commits_to_sections(commits)
 
     if changelog.exists():
         content = changelog.read_text(encoding="utf-8")
@@ -219,6 +290,10 @@ def render_updated_changelog(changelog: Path) -> str:
     # ensure header exists
     if HEADER not in content:
         content = f"{HEADER}\n\n" + content
+
+    # Union rather than regenerate: an entry whose commits a squash-merge erased stays put.
+    sections = merge_unreleased(parse_unreleased_sections(content), generated)
+    new_block = render_unreleased(sections)
 
     if UNRELEASED_HEADING in content:
         # replace existing Unreleased block (from heading to next version heading or EOF)
