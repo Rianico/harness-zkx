@@ -63,6 +63,26 @@ if args[:2] == ["workspace", "list"]:
     print(json.dumps(payload))
     raise SystemExit(0)
 
+if args[:2] == ["pane", "rename"]:
+    if state.get("pane_rename_error"):
+        print(json.dumps({"error": state["pane_rename_error"], "id": "cli:pane:rename"}), file=sys.stderr)
+        raise SystemExit(1)
+    pane_id = args[2]
+    label = None if "--clear" in args else " ".join(args[3:])
+    payload = {"id": "cli:pane:rename", "result": {"pane": {"pane_id": pane_id, "label": label}}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
+if args[:2] == ["agent", "rename"]:
+    if state.get("agent_rename_error"):
+        print(json.dumps({"error": state["agent_rename_error"], "id": "cli:agent:rename"}), file=sys.stderr)
+        raise SystemExit(1)
+    target = args[2]
+    name = None if "--clear" in args else args[3]
+    payload = {"id": "cli:agent:rename", "result": {"agent": {"pane_id": target, "name": name}}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
 if args[:2] == ["agent", "prompt"]:
     if state.get("prompt_error"):
         print(json.dumps({"error": state["prompt_error"], "id": "cli:agent:prompt"}), file=sys.stderr)
