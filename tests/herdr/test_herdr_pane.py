@@ -11,6 +11,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import herdr_cli
 import herdr_pane
 import pytest
 
@@ -77,20 +78,20 @@ def test_build_split_argv_rejects_bad_ratio() -> None:
 
 def test_refuses_without_herdr_env(stub: StubHarness) -> None:
     done = stub.run("vertical", env={"HERDR_ENV": None})
-    assert done.returncode == herdr_pane.EXIT_USAGE
+    assert done.returncode == herdr_cli.EXIT_USAGE
     assert "HERDR_ENV" in done.stderr
     assert stub.calls() == []
 
 
 def test_refuses_when_herdr_missing_from_path(stub: StubHarness) -> None:
     done = stub.run("vertical", env={"PATH": "/nonexistent", "HERDR_BIN_PATH": None})
-    assert done.returncode == herdr_pane.EXIT_USAGE
+    assert done.returncode == herdr_cli.EXIT_USAGE
     assert "not found on PATH" in done.stderr
 
 
 def test_unknown_direction_is_usage_error(stub: StubHarness) -> None:
     done = stub.run("diagonal")
-    assert done.returncode == herdr_pane.EXIT_USAGE
+    assert done.returncode == herdr_cli.EXIT_USAGE
     assert "unknown direction" in done.stderr
     assert stub.splits() == []
 
@@ -100,7 +101,7 @@ def test_unknown_direction_is_usage_error(stub: StubHarness) -> None:
 
 def test_vertical_stacks_down(stub: StubHarness) -> None:
     done = stub.run("vertical")
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.splits()
     assert call[0] == str(stub.herdr)
     assert flag_value(call, "--direction") == "down"
@@ -111,7 +112,7 @@ def test_vertical_stacks_down(stub: StubHarness) -> None:
 
 def test_horizontal_places_right(stub: StubHarness) -> None:
     done = stub.run("horizontal")
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.splits()
     assert flag_value(call, "--direction") == "right"
 
@@ -119,7 +120,7 @@ def test_horizontal_places_right(stub: StubHarness) -> None:
 @pytest.mark.parametrize(("word", "expected"), [("v", "down"), ("under", "down"), ("h", "right")])
 def test_short_aliases_reach_herdr(stub: StubHarness, word: str, expected: str) -> None:
     done = stub.run(word)
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert flag_value(stub.splits()[0], "--direction") == expected
 
 
@@ -128,13 +129,13 @@ def test_short_aliases_reach_herdr(stub: StubHarness, word: str, expected: str) 
 
 def test_auto_prefers_right_for_wide_pane(stub: StubHarness) -> None:
     done = stub.run(state={"current": "w9:p1", "rect": {"width": 170, "height": 45}})
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert flag_value(stub.splits()[0], "--direction") == "right"
 
 
 def test_auto_prefers_down_for_tall_pane(stub: StubHarness) -> None:
     done = stub.run(state={"current": "w9:p1", "rect": {"width": 40, "height": 45}})
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert flag_value(stub.splits()[0], "--direction") == "down"
 
 
@@ -156,7 +157,7 @@ def test_focus_flag_targets_new_pane(stub: StubHarness) -> None:
 
 def test_explicit_pane_skips_caller_lookup(stub: StubHarness) -> None:
     done = stub.run("vertical", "--pane", "w9:p7")
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert flag_value(stub.splits()[0], "--pane") == "w9:p7"
     assert all(call[1:3] != ["pane", "current"] for call in stub.calls())
     assert "caller=w9:p7" in done.stdout
@@ -174,7 +175,7 @@ def test_cwd_ratio_and_env_are_forwarded(stub: StubHarness, tmp_path: Path) -> N
         "--env",
         "BAZ=1",
     )
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     call = stub.splits()[0]
     assert flag_value(call, "--cwd") == str(tmp_path)
     assert flag_value(call, "--ratio") == "0.3"
@@ -189,27 +190,27 @@ def test_default_cwd_comes_from_pwd_env(stub: StubHarness) -> None:
 
 def test_missing_cwd_is_rejected(stub: StubHarness) -> None:
     done = stub.run("vertical", "--cwd", str(stub.tmp_path / "nope"))
-    assert done.returncode == herdr_pane.EXIT_USAGE
+    assert done.returncode == herdr_cli.EXIT_USAGE
     assert "not an existing directory" in done.stderr
     assert stub.splits() == []
 
 
 def test_malformed_env_pair_is_rejected(stub: StubHarness) -> None:
     done = stub.run("vertical", "--env", "FOO")
-    assert done.returncode == herdr_pane.EXIT_USAGE
+    assert done.returncode == herdr_cli.EXIT_USAGE
     assert "malformed" in done.stderr
     assert stub.splits() == []
 
 
 def test_json_prints_raw_response(stub: StubHarness) -> None:
     done = stub.run("vertical", "--json")
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert json.loads(done.stdout)["result"]["pane"]["pane_id"] == "w9:pNEW"
 
 
 def test_dry_run_prints_command_without_splitting(stub: StubHarness) -> None:
     done = stub.run("horizontal", "--dry-run")
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.splits() == []
     assert str(stub.herdr) in done.stdout
     assert "pane split" in done.stdout
@@ -221,14 +222,14 @@ def test_dry_run_prints_command_without_splitting(stub: StubHarness) -> None:
 
 def test_herdr_split_failure_is_reported(stub: StubHarness) -> None:
     done = stub.run("vertical", state={**DEFAULT_STATE, "split_error": "no space"})
-    assert done.returncode == herdr_pane.EXIT_HERDR
+    assert done.returncode == herdr_cli.EXIT_HERDR
     assert "no space" in done.stderr
     assert "Traceback" not in done.stderr
 
 
 def test_unusable_split_response_is_reported(stub: StubHarness) -> None:
     done = stub.run("vertical", state={**DEFAULT_STATE, "split_pane": {"tab_id": "w9:t1"}})
-    assert done.returncode == herdr_pane.EXIT_HERDR
+    assert done.returncode == herdr_cli.EXIT_HERDR
     assert "result.pane.pane_id" in done.stderr
 
 
@@ -254,5 +255,5 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
         cwd=tmp_path,
         env={"HOME": os.environ.get("HOME", ""), "PATH": os.environ.get("PATH", "")},
     )
-    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert "usage: herdr-pane" in done.stdout
