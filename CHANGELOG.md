@@ -28,9 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **ci:** run the changelog check on main pushes
+* **gitignore:** scope the ADR pointer ignore to the repo root
+* **scaffold:** stop flagging an absent project-owned path as drift (#58)
 * **changelog:** supersede a squashed entry with its numbered form (#61)
 * **changelog:** union unreleased entries instead of regenerating (#60)
-* **scaffold:** stop flagging an absent project-owned path as drift
 * **gh-router:** anchor subskill shared-lib refs to $SKILL_DIR (#57)
 * stop background re-push after auto-amend
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
@@ -60,7 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **scaffold:** state the ownership rule and the coverage-script contract
+* **scaffold:** drop the false adr-dir template claim
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
@@ -70,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
 * **scaffold:** record the changelog bullet contract
+* **scaffold:** state the ownership rule and the coverage-script contract
 * **changelog:** restore the entries the regeneration erased
 * **scaffold:** declare py-dep input surface
 * **scaffold:** list preserved TS configs and release.yml guard
