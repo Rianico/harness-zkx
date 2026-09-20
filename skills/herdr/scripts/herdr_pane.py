@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
 """herdr-pane — create one Herdr pane from one direction argument.
 
 Confirms the caller lives inside a Herdr-managed pane (``HERDR_ENV=1``), resolves the
