@@ -37,6 +37,8 @@ With `--wait`, a prompt sent from a non-working state must produce observed `wor
 
 Without `--until`, standalone `agent wait` uses the same settled-state defaults as `agent prompt --wait`.
 
+Read the outcome two ways. A *rejection* is a client error: `agent_blocked` arrives as `{"error":{"code":"agent_blocked","message":"…"},"id":"cli:agent:prompt"}` on stderr with exit status 1, and nothing was sent. A *settled* wait is a success: `--wait` that matches `blocked` exits 0 with `result.agent.agent_status = "blocked"`, meaning the prompt was delivered and the target now awaits input. Inspect the returned state, not just the exit status.
+
 ## Read sources and formats
 
 Use the read source that matches the task:

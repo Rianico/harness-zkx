@@ -105,7 +105,7 @@ Submit work through the agent surface:
 herdr agent prompt reviewer "Review the current diff and report only actionable findings." --wait --timeout 120000
 ```
 
-`agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter as one ordered submission. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`; use `--until` only for a state-specific workflow, such as waiting for an already-running agent to request input:
+`agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter as one ordered submission. For multi-line or metacharacter-heavy payloads, deliver through the `herdr-prompt` helper below instead of quoting the text at the shell. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`; use `--until` only for a state-specific workflow, such as waiting for an already-running agent to request input:
 
 ```bash
 herdr agent wait reviewer --until blocked --timeout 120000
@@ -185,3 +185,16 @@ uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal --dry-run  # print the herd
 `HERDR_ENV=1` is still required; `uv` supplies the interpreter declared in the script's PEP 723 block. `~/.local/bin/herdr-pane` is an optional convenience symlink to the same script.
 
 Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`. Exit `0` ok, `1` herdr failure, `2` usage or missing precondition. Tests: `tests/herdr/`.
+
+## Local helper — `herdr-prompt` (not upstream)
+
+Deliver a prompt payload verbatim when shell escaping is the hazard: multi-line briefs, code fences, `$`, backticks, quotes. The payload reaches `herdr agent prompt` as one argv element, so nothing is interpolated or re-quoted:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 120000
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file - < brief.md
+git diff | uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --wait
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dry-run
+```
+
+Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Exit `0` accepted, `1` herdr failure, `2` usage or missing precondition, `3` the agent needs human input (`agent_blocked`, or `--wait` settled on `blocked`). `--dry-run` prints the exact argv as a JSON array and submits nothing. Tests: `tests/herdr/`.
