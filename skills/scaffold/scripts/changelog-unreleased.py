@@ -196,22 +196,45 @@ def parse_unreleased_sections(content: str) -> dict[str, list[str]]:
     return sections
 
 
+_ANNOTATION_RE = re.compile(r"\s*\(#\d+\)\s*$|\s*\(BREAKING CHANGE\)\s*$")
+
+
+def entry_identity(entry: str) -> str:
+    """Entry text with its trailing `(#N)` / `(BREAKING CHANGE)` annotations removed.
+
+    GitHub appends `(#N)` when it squashes a PR, so the entry a branch generated and the
+    one regenerated after the merge differ by that suffix alone. Matching on identity lets
+    the named form supersede the branch form instead of the change appearing twice.
+    """
+    text = entry.strip()
+    if text[:1] in "*+-":
+        text = text[1:].strip()
+    while True:
+        trimmed = _ANNOTATION_RE.sub("", text).rstrip()
+        if trimmed == text:
+            return text
+        text = trimmed
+
+
 def merge_unreleased(
     existing: dict[str, list[str]], generated: dict[str, list[str]]
 ) -> dict[str, list[str]]:
     """Union: keep every on-disk entry, prepend only what the commits newly justify.
 
     Regenerating alone deletes entries whose commits a squash-merge erased, so an entry
-    already on disk is never dropped. New entries arrive newest-first (`git log` order)
-    ahead of the preserved ones, and a section with nothing new is returned untouched -
-    which is what makes `update` idempotent.
+    already on disk is never dropped. An entry the merge re-issued under its squashed name
+    (same identity, `(#N)` added) is superseded rather than duplicated. New entries arrive
+    newest-first (`git log` order) ahead of the preserved ones, and a section with nothing
+    new is returned untouched - which is what makes `update` idempotent.
     """
     merged = {section: list(entries) for section, entries in existing.items()}
     for section, entries in generated.items():
         bucket = merged.setdefault(section, [])
-        present = set(bucket)
-        fresh = [entry for entry in entries if entry not in present]
-        merged[section] = fresh + bucket
+        superseded = {entry_identity(entry) for entry in entries}
+        kept = [entry for entry in bucket if entry_identity(entry) not in superseded]
+        present = {entry_identity(entry) for entry in kept}
+        fresh = [entry for entry in entries if entry_identity(entry) not in present]
+        merged[section] = fresh + kept
     return merged
 
 
