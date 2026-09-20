@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **dynamic-workflow-wrapper:** repair inert skill load path in role definitions
 * **repo:** check changelog on main and correct the ADR pointer ignore (#62)
 * **scaffold:** stop flagging an absent project-owned path as drift (#58)
 * **changelog:** supersede a squashed entry with its numbered form (#61)
@@ -63,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **dynamic-workflow-wrapper:** correct the skills frontmatter contract
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
