@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **changelog:** supersede a squashed entry with its numbered form
+* **changelog:** supersede a squashed entry with its numbered form (#61)
 * **changelog:** union unreleased entries instead of regenerating (#60)
 * **gh-router:** anchor subskill shared-lib refs to $SKILL_DIR (#57)
 * stop background re-push after auto-amend
