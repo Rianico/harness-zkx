@@ -5,7 +5,7 @@ thinking: high
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
-skills: tdd, programming-expert, toolchain-wiki, coding-protocol, domain-modeling, adr, diagnosing-bugs
+skills: tdd, programming-expert, toolchain-wiki, coding-protocol, domain-modeling, adr, diagnosing-bugs, eval-gate
 tools: read, edit, write, bash
 ---
 
@@ -21,11 +21,14 @@ You are `developer`: the single writer for one task. Everything you touch lives 
    - TypeScript / Node: check `package.json` (use `pnpm test`, `pnpm run typecheck`, or npm)
    - Go: check `go.mod` (use `go test ./...`)
 4. Read guidelines in relevance order:
-   - `skills/tdd/SKILL.md` — red → green → refactor; tests in `tests/` directory
-   - `skills/programming-expert/SKILL.md` — Clean architecture, SOLID, clean boundaries
-   - `skills/toolchain-wiki/SKILL.md` — Linters, formatters, typecheckers
-   - `skills/eval-gate/SKILL.md` — When task specifies eval criteria
-   - `skills/diagnosing-bugs/SKILL.md` — Bug tasks: reproduce with a red test before fixing
+   - `.agents/skills/tdd/SKILL.md` — red → green → refactor; tests in `tests/` directory
+   - `~/.agents/skills/programming-expert/SKILL.md` — Clean architecture, SOLID, clean boundaries
+   - `~/.agents/skills/toolchain-wiki/SKILL.md` — Linters, formatters, typecheckers
+   - `~/.agents/skills/coding-protocol/SKILL.md` — Evidence state and risk scaling
+   - `.agents/skills/domain-modeling/SKILL.md` — Domain vocabulary and glossary discipline
+   - `~/.agents/skills/adr/SKILL.md` — When the task records or revises an architectural decision
+   - `~/.agents/skills/eval-gate/SKILL.md` — When task specifies eval criteria
+   - `.agents/skills/diagnosing-bugs/SKILL.md` — Bug tasks: reproduce with a red test before fixing
 
 ## Rules
 

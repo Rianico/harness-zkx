@@ -153,10 +153,14 @@ def test_check_flags_drift_instead_of_overwriting(tmp_path):
 def test_canonical_agent_skills_resolve():
     """Every skill a role declares or points at must resolve to a real skill directory.
 
-    The declared `skills:` set is loaded when the agent is constructed, and the body's
-    `~/.agents/skills/<name>/...` pointers are opened at task time, so a stale name
-    fails at one point or the other: `resolving-merge-conflicts` shipped while the
-    canonical directory is `resolve-merge-conflicts`.
+    The runtime binds only `tools`, `disallowedTools`, `model`, `isolation`, and the
+    body prompt: the `skills:` frontmatter is parsed-but-ignored, so a role's body
+    pointers are the ONLY load path. A pointer is opened at task time, so a stale
+    name fails there: `resolving-merge-conflicts` shipped while the canonical
+    directory is `resolve-merge-conflicts`.
+
+    Because the pointer is the load path, every declared skill must also be pointed
+    at in the body — a declared-but-unpointed name never loads.
     """
     # `.agents/skills` is gitignored (local harness only), so it is absent in CI. A
     # referenced skill must resolve to a tracked root (`skills/`) or, when the local
@@ -181,15 +185,28 @@ def test_canonical_agent_skills_resolve():
                     f"{agent_file.name} {what} unknown skill {name!r}"
                 )
 
+    # Both the user-scoped `~/.agents/skills/<name>/` form and the project-scoped
+    # `.agents/skills/<name>/` form are valid load paths; match either.
+    pointer_re = re.compile(r"(?:~/)?\.agents/skills/([A-Za-z0-9._-]+)/")
+
     for agent_file in sorted(CANONICAL_AGENTS_DIR.glob("*.md")):
         text = agent_file.read_text(encoding="utf-8")
         frontmatter = text.split("---\n")[1]
+        body = text.split("---\n", 2)[2]
+
+        pointed = set(pointer_re.findall(body))
 
         declared = re.search(r"^skills:\s*(.+)$", frontmatter, re.MULTILINE)
         if declared is not None:
-            for name in (part.strip() for part in declared.group(1).split(",")):
-                if name:
-                    check(name, "declares")
+            names = [part.strip() for part in declared.group(1).split(",") if part.strip()]
+            for name in names:
+                check(name, "declares")
+                # The body pointer is the load path: a declared name with no pointer
+                # never reaches the subagent, so the declaration is dead config.
+                assert name in pointed, (
+                    f"{agent_file.name} declares {name!r} but never points at it in the body; "
+                    f"the `skills:` field is inert, so the body pointer is the only load path"
+                )
 
-        for name in sorted(set(re.findall(r"~/\\.agents/skills/([A-Za-z0-9._-]+)/", text))):
+        for name in sorted(pointed):
             check(name, "points at")
