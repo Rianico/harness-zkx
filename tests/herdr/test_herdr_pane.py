@@ -7,127 +7,21 @@ touched: the stub records the argv it received and replays canned JSON.
 import json
 import os
 import shutil
-import stat
 import subprocess
-import sys
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable
 from pathlib import Path
 
+import herdr_pane
 import pytest
 
-SCRIPTS_DIR = (Path(__file__).parent.parent.parent / "skills" / "herdr" / "scripts").resolve()
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-import herdr_pane  # noqa: E402
+from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness, flag_value
 
 SCRIPT = SCRIPTS_DIR / "herdr_pane.py"
 
-STUB_SOURCE = '''#!/usr/bin/env python3
-"""Fake herdr for tests: append argv to STUB_HERDR_LOG, replay STUB_HERDR_STATE."""
-
-import json
-import os
-import sys
-from pathlib import Path
-
-argv = sys.argv
-with Path(os.environ["STUB_HERDR_LOG"]).open("a") as log:
-    log.write(json.dumps(argv) + "\\n")
-args = argv[1:]
-
-state = json.loads(Path(os.environ["STUB_HERDR_STATE"]).read_text())
-
-if args[:2] == ["pane", "current"]:
-    print(json.dumps({"result": {"pane": {"pane_id": state["current"]}}}))
-    raise SystemExit(0)
-
-if args[:2] == ["pane", "layout"]:
-    pane_id = args[args.index("--pane") + 1]
-    print(json.dumps({"result": {"layout": {"panes": [{"pane_id": pane_id, "rect": state["rect"]}]}}}))
-    raise SystemExit(0)
-
-if args[:2] == ["pane", "split"]:
-    if state.get("split_error"):
-        print(json.dumps({"error": state["split_error"]}), file=sys.stderr)
-        raise SystemExit(1)
-    pane = state.get("split_pane", {"pane_id": "w9:pNEW", "tab_id": "w9:t1", "cwd": "/tmp"})
-    print(json.dumps({"result": {"pane": pane}}))
-    raise SystemExit(0)
-
-print(json.dumps({"error": "unexpected argv: " + " ".join(args)}), file=sys.stderr)
-raise SystemExit(1)
-'''
-
-DEFAULT_STATE = {"current": "w9:p1", "rect": {"width": 100, "height": 40}}
-
-
-@dataclass(frozen=True)
-class StubHarness:
-    """A temp PATH containing a fake `herdr`, plus the run/log helpers around it."""
-
-    tmp_path: Path
-    bin_dir: Path
-    log_path: Path
-    state_path: Path
-
-    @property
-    def herdr(self) -> Path:
-        return self.bin_dir / "herdr"
-
-    def calls(self) -> list[list[str]]:
-        if not self.log_path.exists():
-            return []
-        return [json.loads(line) for line in self.log_path.read_text().splitlines() if line]
-
-    def splits(self) -> list[list[str]]:
-        return [call for call in self.calls() if call[1:3] == ["pane", "split"]]
-
-    def run(
-        self,
-        *args: str,
-        state: Mapping[str, object] | None = None,
-        env: Mapping[str, str | None] | None = None,
-    ) -> subprocess.CompletedProcess[str]:
-        _ = self.state_path.write_text(
-            json.dumps(dict(state if state is not None else DEFAULT_STATE))
-        )
-        full_env: dict[str, str] = {
-            "PATH": f"{self.bin_dir}:{os.environ.get('PATH', '')}",
-            "HERDR_ENV": "1",
-            "PWD": str(self.tmp_path),
-            "STUB_HERDR_LOG": str(self.log_path),
-            "STUB_HERDR_STATE": str(self.state_path),
-        }
-        for key, value in (env or {}).items():
-            if value is None:
-                _ = full_env.pop(key, None)
-            else:
-                full_env[key] = value
-        return subprocess.run(
-            [sys.executable, str(SCRIPT), *args],
-            capture_output=True,
-            text=True,
-            env=full_env,
-            check=False,
-        )
-
 
 @pytest.fixture
-def stub(tmp_path: Path) -> StubHarness:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    herdr = bin_dir / "herdr"
-    _ = herdr.write_text(STUB_SOURCE)
-    herdr.chmod(herdr.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    harness = StubHarness(tmp_path, bin_dir, tmp_path / "calls.jsonl", tmp_path / "state.json")
-    _ = harness.state_path.write_text(json.dumps(DEFAULT_STATE))
-    return harness
-
-
-def flag_value(call: Sequence[str], flag: str) -> str:
-    return call[list(call).index(flag) + 1]
+def stub(stub_factory: Callable[[Path], StubHarness]) -> StubHarness:
+    return stub_factory(SCRIPT)
 
 
 # ── unit: pure helpers ──────────────────────────────────────────────────────────────
