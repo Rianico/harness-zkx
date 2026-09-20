@@ -19,8 +19,8 @@
 ## npx skills
 .skills-lock.json
 
-# ADR
-.adr-dir
+# ADR — root pointer only; a blanket rule hides a stray copy at any depth
+/.adr-dir
 
 # extra repo
 everything-claude-code/
