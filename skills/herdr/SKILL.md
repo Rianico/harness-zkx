@@ -75,27 +75,34 @@ herdr agent list
 
 Creation responses expose the IDs to use next. `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`; `tab create` returns `.result.tab` and `.result.root_pane`; `pane split` returns the new pane as `.result.pane`.
 
-## Name a target and hand off
+## Name a target, then hand off
 
-Herdr has two kinds of names, and only one of them is addressable:
+A person reads a pane's **label** off the pane border, so that is the name they will say when they ask you to hand something off. But no command accepts a label as a target. The **agent name** is the addressable handle, and it is cleared when that agent exits.
 
-- `herdr agent rename <TARGET> <NAME>` sets an **agent name** — `[a-z][a-z0-9_-]{0,31}`, unique among live agents, and accepted anywhere an agent target is (`prompt`, `wait`, `read`, `send-keys`).
-- `herdr pane rename <PANE_ID> [LABEL]...` sets a **pane label** — multi-word, shown by the overview and `pane list`, but **not** accepted as a target. Use it for human orientation only.
-
-Name an agent you already have, or name it as you start it:
+So give both the same string, in one command:
 
 ```bash
-herdr agent rename w1:p2 reviewer      # adopt a pane the user started by hand
-herdr agent start reviewer --kind pi --pane w1:p3
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer    # this pane's label and its agent name
 ```
 
-Then hand work to it by name — no ids, no quoting:
+`herdr-label` labels the calling pane and names its agent identically, so the name a person sees is the name you can address. It takes `--pane <id>` for another pane, `--label-only` when a multi-word label or an existing agent name must survive, and `--clear` to drop both.
+
+When a person says "hand off to <name>", pass that name straight to the prompt helper:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 120000
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" --label "review pane" --file brief.md --wait --timeout 120000
 ```
 
-`herdr agent rename <TARGET> --clear` drops a name; `herdr pane rename <PANE_ID> --clear` drops a label. The full split, including which command returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
+`--label` matches a pane label exactly. Labels are not unique — two panes may carry the same one — so an ambiguous label fails with the candidate pane ids listed instead of guessing.
+
+Underlying commands, if you drive them directly:
+
+- `herdr pane rename <PANE_ID> [LABEL]... [--clear]` — the visible label; multi-word; **not** addressable.
+- `herdr agent rename <TARGET> <NAME>|--clear` — the addressable name; `[a-z][a-z0-9_-]{0,31}`, unique among live agents.
+- `herdr agent start <NAME> --kind <kind> --pane <id>` — name an agent as you create it.
+
+The full split, including which response returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Start and coordinate an agent
 
@@ -202,7 +209,7 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 
 ## Local helpers (not upstream)
 
-Three scripts in `$SKILL_DIR/scripts/`, run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+Four scripts in `$SKILL_DIR/scripts/`, run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
@@ -215,7 +222,6 @@ uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
 ```
-
 ### `herdr-pane` — split the calling pane
 
 The whole env-check → resolve → split sequence, as one command:
@@ -241,6 +247,23 @@ git diff | uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --wait
 uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dry-run
 ```
 
-Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. `--dry-run` prints the exact argv as a JSON array and submits nothing.
+Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as a JSON array and submits nothing.
 
-Tests for all three: `tests/herdr/`.
+### `herdr-label` — the one name that is both visible and addressable
+
+Sets the pane label (what a person sees on the border) and the agent name (what a command accepts) to the same string:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer            # label + agent name
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --pane w1:p2
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --label-only  # multi-word label, agent untouched
+uv run "$SKILL_DIR/scripts/herdr_label.py" --clear             # drop both
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --json
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --dry-run   # print the calls, rename nothing
+```
+
+Refuses an agent name that breaks `[a-z][a-z0-9_-]{0,31}` or that another live agent already holds, and validates before renaming anything so a rejected name never leaves a half-applied label. A pane with no agent is labelled only.
+
+Refuses a name that breaks the agent-name pattern or that another live agent already holds, and validates before renaming anything, so a rejected name never leaves a half-applied label. A pane with no agent is labelled only; a pane with an agent needs `--label-only` for a multi-word label.
+
+Tests for all four: `tests/herdr/`.

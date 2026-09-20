@@ -29,16 +29,20 @@ Agent commands accept either a unique live agent name or the pane ID currently h
 
 ## Names, labels, and targets
 
-Two kinds of names exist, and only one of them is addressable:
+Two kinds of names exist, and they disagree about who can use them:
 
-| command | sets | accepted as a target | returned by |
+| command | sets | where it shows | accepted as a target |
 | --- | --- | --- | --- |
-| `herdr agent rename <TARGET> <NAME>` | agent `name` | **yes** — `agent prompt`, `wait`, `read`, `send-keys`, `focus` | `agent list`, `agent get` |
-| `herdr pane rename <PANE_ID> [LABEL]...` | pane `label` | **no** — `pane get <label>` fails with `pane_not_found` | `pane list`, `pane get`, `pane current` |
+| `herdr pane rename <PANE_ID> [LABEL]...` | pane `label` | the **pane border** — the name a person reads off the screen | **no** — `pane get <label>` fails with `pane_not_found` |
+| `herdr agent rename <TARGET> <NAME>` | agent `name` | only through `ui.show_agent_labels_on_pane_borders`, and only when no manual label is set | **yes** — `agent prompt`, `wait`, `read`, `send-keys`, `focus` |
 
-Both take `--clear` to drop the value, and a pane label may be several words. Use a label for human orientation only: it is discoverable, but you must read the pane id beside it to act.
+The label is durable: it belongs to the pane and outlives the agent. The name is an alias for the current agent in that pane and is cleared when that agent exits, is released, or is replaced — the upstream docs say plainly that it "does not permanently rename the pane".
 
-The split shows up in the response shapes. `PaneInfo` carries `label` and never the agent `name`; `AgentInfo` carries `name` and never `label`. Joining the two by `pane_id` is what `herdr-overview` does, and it is why one `pane list` cannot answer "who is in this pane, by name".
+Labels are **not unique**: `pane rename` accepts the same label on any number of panes. A name must match `[a-z][a-z0-9_-]{0,31}` and be unique among live agents. Both take `--clear`, and a label may be several words.
+
+Because a person names what they can see, `herdr-label` sets both to the same string, and `herdr-prompt --label` resolves an exact label to its pane id, failing with the candidate pane ids when several panes carry it.
+
+No single response answers "which pane is this, by name": `PaneInfo` carries `label` and never the agent `name`; `AgentInfo` carries `name` and never `label`. Joining the two by `pane_id` is what `herdr-overview` does.
 
 ## Agent start and prompt semantics
 
