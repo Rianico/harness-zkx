@@ -55,7 +55,15 @@ printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_TAB_ID" "$HERDR_PANE_ID"
 
 Prefer `--current` when a pane command should target the calling pane. Omitting a target may use the UI-focused pane, which can belong to the user or another client.
 
-Discover live state with:
+Orient with one compact view: pane ids, agent kinds, agent names, labels, and cwd, grouped by workspace.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_overview.py"            # YAML when piped, table on a terminal
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab      # only the calling tab
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --current  # only the calling pane
+```
+
+Drop to the raw lists when you need a field the view omits:
 
 ```bash
 herdr workspace list
@@ -66,6 +74,28 @@ herdr agent list
 ```
 
 Creation responses expose the IDs to use next. `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`; `tab create` returns `.result.tab` and `.result.root_pane`; `pane split` returns the new pane as `.result.pane`.
+
+## Name a target and hand off
+
+Herdr has two kinds of names, and only one of them is addressable:
+
+- `herdr agent rename <TARGET> <NAME>` sets an **agent name** — `[a-z][a-z0-9_-]{0,31}`, unique among live agents, and accepted anywhere an agent target is (`prompt`, `wait`, `read`, `send-keys`).
+- `herdr pane rename <PANE_ID> [LABEL]...` sets a **pane label** — multi-word, shown by the overview and `pane list`, but **not** accepted as a target. Use it for human orientation only.
+
+Name an agent you already have, or name it as you start it:
+
+```bash
+herdr agent rename w1:p2 reviewer      # adopt a pane the user started by hand
+herdr agent start reviewer --kind pi --pane w1:p3
+```
+
+Then hand work to it by name — no ids, no quoting:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 120000
+```
+
+`herdr agent rename <TARGET> --clear` drops a name; `herdr pane rename <PANE_ID> --clear` drops a label. The full split, including which command returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Start and coordinate an agent
 
@@ -170,9 +200,25 @@ Prefer `--source recent-unwrapped` for logs and transcripts. The other read sour
 
 Never take a consent-gated or irreversible action — closing others' workspaces or tabs, `--trust-repository`, `herdr server stop`, killing the Herdr process — without explicit user intent. Read `$SKILL_DIR/references/safety-rules.md` before acting on any of them.
 
-## Local helper — `herdr-pane` (not upstream)
+## Local helpers (not upstream)
 
-The whole env-check → resolve → split sequence above, as one command. Run it through the repo's declared runtime so no PATH setup is required:
+Three scripts in `$SKILL_DIR/scripts/`, run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+
+### `herdr-overview` — the session at a glance
+
+Panes grouped by workspace with the id, agent kind, agent name, label, and cwd: YAML when stdout is not a terminal, an aligned table when it is. The calling pane is marked `*` and the calling workspace header `, current`.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --workspace     # only the calling workspace
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling tab
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
+```
+
+### `herdr-pane` — split the calling pane
+
+The whole env-check → resolve → split sequence, as one command:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical          # stack a pane below the caller (--direction down)
@@ -182,13 +228,11 @@ uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical --focus --ratio 0.3 --env FOO
 uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal --dry-run  # print the herdr command, split nothing
 ```
 
-`HERDR_ENV=1` is still required; `uv` supplies the interpreter declared in the script's PEP 723 block. `~/.local/bin/herdr-pane` is an optional convenience symlink to the same script.
+Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`.
 
-Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`. Exit `0` ok, `1` herdr failure, `2` usage or missing precondition. Tests: `tests/herdr/`.
+### `herdr-prompt` — deliver a payload verbatim
 
-## Local helper — `herdr-prompt` (not upstream)
-
-Deliver a prompt payload verbatim when shell escaping is the hazard: multi-line briefs, code fences, `$`, backticks, quotes. The payload reaches `herdr agent prompt` as one argv element, so nothing is interpolated or re-quoted:
+For multi-line briefs, code fences, `$`, backticks, and quotes: the payload reaches `herdr agent prompt` as one argv element, so nothing is interpolated or re-quoted.
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 120000
@@ -197,4 +241,6 @@ git diff | uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --wait
 uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dry-run
 ```
 
-Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Exit `0` accepted, `1` herdr failure, `2` usage or missing precondition, `3` the agent needs human input (`agent_blocked`, or `--wait` settled on `blocked`). `--dry-run` prints the exact argv as a JSON array and submits nothing. Tests: `tests/herdr/`.
+Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. `--dry-run` prints the exact argv as a JSON array and submits nothing.
+
+Tests for all three: `tests/herdr/`.

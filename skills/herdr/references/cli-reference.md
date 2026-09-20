@@ -27,6 +27,19 @@ Most control commands return JSON. Read identifiers and state from those respons
 
 Agent commands accept either a unique live agent name or the pane ID currently hosting that agent. They do not accept terminal IDs or bare agent-kind labels. Names must match `[a-z][a-z0-9_-]{0,31}` and be unique among live agents. A name follows the current pane occupant and is cleared when that agent exits, is released, or is replaced.
 
+## Names, labels, and targets
+
+Two kinds of names exist, and only one of them is addressable:
+
+| command | sets | accepted as a target | returned by |
+| --- | --- | --- | --- |
+| `herdr agent rename <TARGET> <NAME>` | agent `name` | **yes** — `agent prompt`, `wait`, `read`, `send-keys`, `focus` | `agent list`, `agent get` |
+| `herdr pane rename <PANE_ID> [LABEL]...` | pane `label` | **no** — `pane get <label>` fails with `pane_not_found` | `pane list`, `pane get`, `pane current` |
+
+Both take `--clear` to drop the value, and a pane label may be several words. Use a label for human orientation only: it is discoverable, but you must read the pane id beside it to act.
+
+The split shows up in the response shapes. `PaneInfo` carries `label` and never the agent `name`; `AgentInfo` carries `name` and never `label`. Joining the two by `pane_id` is what `herdr-overview` does, and it is why one `pane list` cannot answer "who is in this pane, by name".
+
 ## Agent start and prompt semantics
 
 A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Startup defaults to a 30-second timeout.
