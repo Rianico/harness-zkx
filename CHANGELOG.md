@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 * **changelog:** supersede a squashed entry with its numbered form (#61)
 * **changelog:** union unreleased entries instead of regenerating (#60)
+* **scaffold:** stop flagging an absent project-owned path as drift
 * **gh-router:** anchor subskill shared-lib refs to $SKILL_DIR (#57)
 * stop background re-push after auto-amend
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
@@ -59,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** state the ownership rule and the coverage-script contract
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
