@@ -47,6 +47,22 @@ if args[:2] == ["pane", "split"]:
     print(json.dumps({"result": {"pane": pane}}))
     raise SystemExit(0)
 
+if args[:2] == ["pane", "list"]:
+    payload = {"id": "cli:pane:list", "result": {"panes": state["panes"], "type": "pane_list"}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
+if args[:2] == ["agent", "list"]:
+    payload = {"id": "cli:agent:list", "result": {"agents": state.get("agents", []), "type": "agent_list"}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
+if args[:2] == ["workspace", "list"]:
+    agents = state.get("workspaces", [])
+    payload = {"id": "cli:workspace:list", "result": {"workspaces": agents, "type": "workspace_list"}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
 if args[:2] == ["agent", "prompt"]:
     if state.get("prompt_error"):
         print(json.dumps({"error": state["prompt_error"], "id": "cli:agent:prompt"}), file=sys.stderr)
@@ -59,7 +75,31 @@ print(json.dumps({"error": "unexpected argv: " + " ".join(args)}), file=sys.stde
 raise SystemExit(1)
 '''
 
-DEFAULT_STATE = {"current": "w9:p1", "rect": {"width": 100, "height": 40}}
+DEFAULT_STATE = {
+    "current": "w9:p1",
+    "rect": {"width": 100, "height": 40},
+    "workspaces": [{"workspace_id": "w9", "label": "harness", "number": 1}],
+    "agents": [{"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}],
+    "panes": [
+        {
+            "pane_id": "w9:p1",
+            "tab_id": "w9:t1",
+            "workspace_id": "w9",
+            "agent": "pi",
+            "agent_status": "working",
+            "cwd": "/tmp/harness",
+        },
+        {
+            "pane_id": "w9:p2",
+            "tab_id": "w9:t1",
+            "workspace_id": "w9",
+            "agent": None,
+            "agent_status": "unknown",
+            "cwd": "/tmp/scratch",
+            "label": "scratch pad",
+        },
+    ],
+}
 
 
 @dataclass(frozen=True)
