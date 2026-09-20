@@ -25,30 +25,11 @@ When the check passes, the `herdr` binary in `PATH` talks to the current session
 
 ## Learn the current CLI
 
-The installed binary is the authority for command syntax. Start with:
-
-```bash
-herdr --help
-```
-
-Then print the relevant command group by running the group without a subcommand:
-
-```bash
-herdr agent
-herdr pane
-herdr workspace
-herdr tab
-herdr worktree
-herdr terminal
-herdr notification
-herdr integration
-herdr session
-herdr machine
-```
-
-Do not run bare `herdr` for discovery; it launches or attaches the TUI. Do not probe a mutating nested command by omitting arguments. Commands such as `herdr workspace create` are valid with defaults and will execute.
+The installed binary is the authority for command syntax. Start with `herdr --help`, then print a command group by running the group without a subcommand (`herdr agent`, `herdr pane`, and the rest). Do not run bare `herdr` for discovery; it launches the TUI. Do not probe a mutating nested command by omitting arguments — commands such as `herdr workspace create` are valid with defaults and will execute.
 
 Most control commands return JSON. Read identifiers and state from those responses instead of predicting them.
+
+The full command-group inventory, read sources, and connection profiles live in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Understand layout, panes, and agents
 
@@ -60,19 +41,11 @@ Choose the primitive that matches the job:
 
 A pane exists whether or not it contains an agent. `agent start` requires an existing available shell pane and never creates, splits, or moves layout. Use pane commands for ordinary processes. Use agent commands when Herdr must validate agent identity or interpret `idle`, `working`, `blocked`, `done`, and `unknown` lifecycle states.
 
-Agent commands accept either a unique live agent name or the pane ID currently hosting that agent. They do not accept terminal IDs or bare agent-kind labels. Names must match `[a-z][a-z0-9_-]{0,31}` and be unique among live agents. A name follows the current pane occupant and is cleared when that agent exits, is released, or is replaced.
-
-`idle` and `done` both mean the agent is ready for input. The CLI/API uses the server's seen state to distinguish them; explicit focus commands mark the target seen, while reads do not. Each TUI client tracks viewed completions independently, so its Done badge can differ from the CLI or another client's badge. `blocked` means Herdr recognized an approval or question UI. `unknown` means an agent is present but Herdr cannot classify it confidently; it does not prove completion.
+Agent commands accept either a unique live agent name or the pane ID currently hosting that agent — not terminal IDs or bare agent-kind labels. `idle` and `done` both mean ready for input, `blocked` means an approval or question UI, and `unknown` does not prove completion. Full lifecycle and naming rules live in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Use IDs and caller context
 
-Public IDs are opaque stable handles:
-
-- workspace: `w1`
-- tab: `w1:t1`
-- pane: `w1:p1`
-
-Closed tab and pane IDs are not reused. A pane moved into another workspace receives a new workspace-qualified pane ID. After `pane move`, continue with `.result.move_result.pane.pane_id` or the live agent name. The old value is reported as `.result.move_result.previous_pane_id`; only the moved process's inherited caller context keeps resolving that old ID, so do not use it as a general agent target.
+Public IDs are opaque stable handles: workspace `w1`, tab `w1:t1`, pane `w1:p1`.
 
 Herdr injects the caller's context into each managed pane:
 
@@ -82,7 +55,15 @@ printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_TAB_ID" "$HERDR_PANE_ID"
 
 Prefer `--current` when a pane command should target the calling pane. Omitting a target may use the UI-focused pane, which can belong to the user or another client.
 
-Discover live state with:
+Orient with one compact view: pane ids, agent kinds, agent names, labels, and cwd, grouped by workspace.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_overview.py"            # YAML when piped, table on a terminal
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab      # only the calling tab
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --current  # only the calling pane
+```
+
+Drop to the raw lists when you need a field the view omits:
 
 ```bash
 herdr workspace list
@@ -92,11 +73,36 @@ herdr pane list --workspace "$HERDR_WORKSPACE_ID"
 herdr agent list
 ```
 
-Creation responses expose the IDs to use next. `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`. `tab create` returns `.result.tab` and `.result.root_pane`. `pane split` returns the new pane as `.result.pane`.
+Creation responses expose the IDs to use next. `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`; `tab create` returns `.result.tab` and `.result.root_pane`; `pane split` returns the new pane as `.result.pane`.
 
-IDs and live agent names are scoped to one server. Two saved SSH machines can both have `w1:p1` or an agent named `reviewer`. Selecting a machine in the TUI does not retarget commands running in your pane: they still use the inherited session and socket context. Run remote control commands on the intended host with its explicit session, and rediscover IDs there.
+## Name a target, then hand off
 
-`herdr machine list` lists saved connection profiles, not a cross-machine pane inventory; add `--json` for scripts. Only add, remove, enable, or disable profiles when the user asks. Removing a profile disconnects the client but does not stop remote sessions. Adding a machine uses the remote default session unless `--remote-session` is explicitly supplied. Setup asks before stopping an incompatible server and defaults to No; do not approve replacement without the user's consent. Experimental handoff is not part of `machine add`.
+A person reads a pane's **label** off the pane border, so that is the name they will say when they ask you to hand something off. But no command accepts a label as a target. The **agent name** is the addressable handle, and it is cleared when that agent exits.
+
+So give both the same string, in one command:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer    # this pane's label and its agent name
+```
+
+`herdr-label` labels the calling pane and names its agent identically, so the name a person sees is the name you can address. It takes `--pane <id>` for another pane, `--label-only` when a multi-word label or an existing agent name must survive, and `--clear` to drop both.
+
+When a person says "hand off to <name>", pass that name straight to the prompt helper:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 120000
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" --label "review pane" --file brief.md --wait --timeout 120000
+```
+
+`--label` matches a pane label exactly. Labels are not unique — two panes may carry the same one — so an ambiguous label fails with the candidate pane ids listed instead of guessing.
+
+Underlying commands, if you drive them directly:
+
+- `herdr pane rename <PANE_ID> [LABEL]... [--clear]` — the visible label; multi-word; **not** addressable.
+- `herdr agent rename <TARGET> <NAME>|--clear` — the addressable name; `[a-z][a-z0-9_-]{0,31}`, unique among live agents.
+- `herdr agent start <NAME> --kind <kind> --pane <id>` — name an agent as you create it.
+
+The full split, including which response returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Start and coordinate an agent
 
@@ -108,7 +114,7 @@ Honor a direction requested by the user. Otherwise inspect the caller pane:
 herdr pane layout --pane "$HERDR_PANE_ID"
 ```
 
-Split a wide pane to the right and a narrow or tall pane down. Avoid repeated same-direction splits that create unusably narrow columns or short rows. Keep the user's focus in the calling pane and explicitly preserve the caller's working directory:
+Split a wide pane to the right and a narrow or tall pane down. Avoid repeated same-direction splits that create unusably narrow columns or short rows. Keep the user's focus in the calling pane and preserve the caller's working directory:
 
 ```bash
 herdr pane split --current --direction right --cwd "$PWD" --no-focus
@@ -122,13 +128,13 @@ An available shell pane must be at its interactive prompt, with the shell itself
 herdr agent start reviewer --kind codex --pane <returned-pane-id>
 ```
 
-Use the kind requested by the user. Run `herdr agent` to inspect the installed kind list and options. Pass native agent arguments only after `--`:
+Use the kind requested by the user; run `herdr agent` to inspect the installed kind list and options. Pass native agent arguments only after `--`:
 
 ```bash
 herdr agent start reviewer --kind codex --pane <returned-pane-id> -- <agent-args...>
 ```
 
-A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Wait until the agent becomes idle before prompting it. Startup defaults to a 30-second timeout.
+A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Wait until the agent becomes idle before prompting it.
 
 Submit work through the agent surface:
 
@@ -136,17 +142,13 @@ Submit work through the agent surface:
 herdr agent prompt reviewer "Review the current diff and report only actionable findings." --wait --timeout 120000
 ```
 
-`agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter as one ordered submission. It reports successful submission only after both have been written; that alone does not prove the agent started a turn. The submit delay grows with prompt size for Codex on Windows. It rejects an agent already waiting at an approval or question dialog with `agent_blocked` before sending any input. Inspect the blocked UI and ask the user before answering it. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`.
-
-With `--wait`, a prompt sent from a non-working state must produce observed `working` or `blocked` activity. After submission, Herdr waits up to five seconds for that activity; unrelated `idle`, `done`, or session changes do not satisfy this gate. It returns `agent_prompt_stalled` if no activity is observed, or `timeout` if the caller's timeout expires first. The caller timeout includes submission time. Without a timeout, the settled-state wait is indefinite after activity is observed. This wait tracks lifecycle state, not an individual turn; if the agent is already working, completion of the active turn may satisfy it.
-
-Use `--until` only for a state-specific workflow, such as waiting for an already-running agent to request input:
+`agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter as one ordered submission. For multi-line or metacharacter-heavy payloads, deliver through the `herdr-prompt` helper below instead of quoting the text at the shell. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`; use `--until` only for a state-specific workflow, such as waiting for an already-running agent to request input:
 
 ```bash
 herdr agent wait reviewer --until blocked --timeout 120000
 ```
 
-Without `--until`, standalone `agent wait` uses the same settled-state defaults as `agent prompt --wait`.
+The submission-failure semantics (`agent_blocked`, `agent_prompt_stalled`, `timeout`) and the `--wait` activity gate live in `$SKILL_DIR/references/cli-reference.md`.
 
 Use logical keys for interactive agent UI controls:
 
@@ -155,14 +157,26 @@ herdr agent send-keys reviewer esc
 herdr agent send-keys reviewer ctrl+c
 ```
 
-Herdr validates all keys before writing any bytes. Read the result through the resolved agent:
+Herdr validates all keys before writing any bytes.
+
+### Observe an agent deterministically
+
+`herdr agent get <target>` returns the agent's session record, which includes a transcript the agent itself owns. Read the transcript path and then the file directly:
 
 ```bash
-herdr agent get reviewer
+transcript=$(herdr agent get reviewer | jq -r '.result.agent.agent_session.value')
+tail -n 40 "$transcript"
+```
+
+`agent_session.value` is a filesystem path (`kind: "path"`), for example `~/.pi/agent/sessions/<workspace>/<timestamp>_<uuid>.jsonl`. It holds the complete turn history, unlike a terminal snapshot, which clips once rendered rows scroll off or the agent uses the terminal's alternate screen.
+
+Fall back to the terminal view only when the record carries no `agent_session` path:
+
+```bash
 herdr agent read reviewer --source recent-unwrapped --lines 120
 ```
 
-If a wait fails or returns `blocked`, inspect `agent get` and `agent read` before deciding what input to send. A timeout or stalled response does not prove the prompt was never delivered; do not blindly submit it again. Use the pane surface only when raw terminal control is intentional.
+If a wait fails or returns `blocked`, inspect `agent get` and the transcript before deciding what input to send. A timeout or stalled response does not prove the prompt was never delivered; do not blindly submit it again. Use the pane surface only when raw terminal control is intentional.
 
 ## Run an ordinary command in another pane
 
@@ -182,44 +196,73 @@ herdr pane read <returned-pane-id> --source recent-unwrapped --lines 120
 
 `pane run` atomically sends command text and Enter. `pane wait-output` searches the selected snapshot immediately, so output that already exists can match. Use `--match <text>` for a literal substring or `--regex <pattern>` for a Rust regular expression. Omitting `--timeout` allows an indefinite wait.
 
-Use the read source that matches the task:
-
-- `visible`: the currently rendered viewport.
-- `recent`: recent rendered output, including soft wraps.
-- `recent-unwrapped`: recent output with soft wraps joined; prefer it for logs and transcripts.
-- `detection`: the plain-text bottom-buffer snapshot used for agent detection.
-
-Use `--format ansi` when colors and terminal styling are evidence. Otherwise use text.
-
-`--lines` asks Herdr for more rows from the pane's available screen and host scrollback. If increasing it does not reveal more of a completed response, the pane is probably running the agent on the terminal's alternate screen. Rows that leave the alternate screen do not enter Herdr's host scrollback, so a larger line count cannot recover them.
-
-After that failed read, ask the agent to write its complete response as Markdown in a temporary directory and reply only with the file path, then read the file directly. Use this only as a fallback; do not request file output in the initial prompt.
+Prefer `--source recent-unwrapped` for logs and transcripts. The other read sources, `--format ansi`, and the alternate-screen limit on `--lines` live in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Safety and coordination rules
 
 - Use `--no-focus` for background work unless the user asked to switch context.
 - Use `--current`, an explicit pane ID, or a unique agent name. Do not rely on another client's focused pane.
 - Parse IDs from JSON responses. Do not derive them from sidebar order or examples.
-- Client and server versions can differ after an update. Check `herdr status` before relying on new server features. A missing method is not permission to stop or upgrade a server.
 - CLI server errors are JSON on stderr with exit status 1. CLI syntax errors exit with status 2.
-- Where a repository declares a worktree tool (`wt.toml` / `.config/wt.toml`), create worktrees through it rather than `herdr worktree` — repo hooks, port allocation, and the pre-merge gate run only there (see [[branch-worktree-pr]]).
 
-> [!warning] Consent-gated or irreversible actions
-> - Do not close workspaces, tabs, panes, or sessions you did not create unless the user explicitly asked. `workspace close --group` closes the primary workspace and its linked worktree workspaces; never add it merely to bypass `workspace_group_close_required`.
-> - Use `--trust-repository` only after the user has verified the repository. It grants per-request Git trust; it is not a routine retry for a failed worktree command.
-> - Never run `herdr server stop` from an active session unless the user explicitly intends to stop the server and its pane processes.
-> - Never kill the main Herdr process. Use named test sessions for experiments that need an isolated server.
+Never take a consent-gated or irreversible action — closing others' workspaces or tabs, `--trust-repository`, `herdr server stop`, killing the Herdr process — without explicit user intent. Read `$SKILL_DIR/references/safety-rules.md` before acting on any of them.
 
-## Local helper — `herdr-pane` (not upstream)
+## Local helpers (not upstream)
 
-The whole env-check → resolve → split sequence above, as one command: `skills/herdr/scripts/herdr_pane.py`, on PATH as `herdr-pane` (`~/.local/bin/herdr-pane` symlinks to the repo script).
+Four scripts in `$SKILL_DIR/scripts/`, run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+
+### `herdr-overview` — the session at a glance
+
+Panes grouped by workspace with the id, agent kind, agent name, label, and cwd: YAML when stdout is not a terminal, an aligned table when it is. The calling pane is marked `*` and the calling workspace header `, current`.
 
 ```bash
-herdr-pane vertical            # stack a pane below the caller (--direction down)
-herdr-pane horizontal          # place a pane right of the caller (--direction right)
-herdr-pane                     # caller wider than tall -> right, else down
-herdr-pane vertical --focus --ratio 0.3 --env FOO=bar --cwd /tmp
-herdr-pane horizontal --dry-run    # print the herdr command, split nothing
+uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --workspace     # only the calling workspace
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling tab
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
 ```
 
-Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`. Exit `0` ok, `1` herdr failure, `2` usage or missing precondition. Tests: `tests/herdr/`.
+### `herdr-label` — the one name that is both visible and addressable
+
+Sets the pane label (what a person sees on the border) and the agent name (what a command accepts) to the same string:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer            # label + agent name
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --pane w1:p2
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --label-only  # multi-word label, agent untouched
+uv run "$SKILL_DIR/scripts/herdr_label.py" --clear             # drop both
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --json
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --dry-run   # print the calls, rename nothing
+```
+
+Refuses a name that breaks the agent-name pattern or that another live agent already holds, and validates before renaming anything, so a rejected name never leaves a half-applied label. A pane with no agent is labelled only; a pane with an agent needs `--label-only` for a multi-word label.
+
+### `herdr-pane` — split the calling pane
+
+The whole env-check → resolve → split sequence, as one command:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical          # stack a pane below the caller (--direction down)
+uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal        # place a pane right of the caller (--direction right)
+uv run "$SKILL_DIR/scripts/herdr_pane.py"                   # caller wider than tall -> right, else down
+uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical --focus --ratio 0.3 --env FOO=bar --cwd /tmp
+uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal --dry-run  # print the herdr command, split nothing
+```
+
+Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`.
+
+### `herdr-prompt` — deliver a payload verbatim
+
+For multi-line briefs, code fences, `$`, backticks, and quotes: the payload reaches `herdr agent prompt` as one argv element, so nothing is interpolated or re-quoted.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 120000
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file - < brief.md
+git diff | uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --wait
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dry-run
+```
+
+Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as a JSON array and submits nothing.
+
+Tests for all four: `tests/herdr/`.

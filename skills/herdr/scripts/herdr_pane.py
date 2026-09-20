@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
 """herdr-pane — create one Herdr pane from one direction argument.
 
 Confirms the caller lives inside a Herdr-managed pane (``HERDR_ENV=1``), resolves the
@@ -15,20 +19,25 @@ Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herd
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shlex
-import shutil
-import subprocess
-import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
 
-EXIT_OK = 0
-EXIT_HERDR = 1
-EXIT_USAGE = 2
+# Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
+from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
+    EXIT_OK,
+    HerdrError,
+    UsageError,
+    current_pane_id,
+    find_herdr,
+    guard,
+    payload_field,
+    require_herdr_env,
+    run_herdr_checked,
+    text_field,
+)
 
 DIRECTION_ALIASES = {
     "vertical": "down",
@@ -63,14 +72,6 @@ class Options:
     no_focus: bool = False
     json: bool = False
     dry_run: bool = False
-
-
-class UsageError(Exception):
-    """Caller misuse or a missing precondition (exit status 2)."""
-
-
-class HerdrError(Exception):
-    """`herdr` could not be run or answered with an unusable response (exit status 1)."""
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -119,20 +120,6 @@ def normalize_direction(token: str) -> str:
     return direction
 
 
-def require_herdr_env(env: Mapping[str, str]) -> None:
-    if env.get("HERDR_ENV") != "1":
-        raise UsageError("not inside a Herdr-managed pane (HERDR_ENV!=1); refusing session control")
-
-
-def find_herdr(env: Mapping[str, str]) -> str:
-    found = shutil.which("herdr", path=env.get("PATH"))
-    if found is None:
-        found = env.get("HERDR_BIN_PATH") or None
-    if found is None:
-        raise UsageError("herdr not found on PATH (HERDR_BIN_PATH unset)")
-    return found
-
-
 def resolve_cwd(requested: str | None, env: Mapping[str, str]) -> str:
     cwd = requested or env.get("PWD") or os.getcwd()
     if not Path(cwd).is_dir():
@@ -140,59 +127,8 @@ def resolve_cwd(requested: str | None, env: Mapping[str, str]) -> str:
     return cwd
 
 
-def run_herdr(argv: Sequence[str], env: Mapping[str, str]) -> str:
-    try:
-        done = subprocess.run(
-            list(argv),
-            capture_output=True,
-            text=True,
-            check=False,
-            env=dict(env),
-        )
-    except OSError as exc:
-        raise HerdrError(f"cannot run {argv[0]}: {exc}") from exc
-    if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
-        raise HerdrError(f"{shlex.join(argv)} failed: {detail}")
-    return done.stdout
-
-
-def load_payload(raw: str) -> object:
-    """Decode a herdr JSON response, or explain what was unreadable."""
-    try:
-        # json.loads is Any-typed; keep the response an unvalidated object until narrowed.
-        decoded = cast(object, json.loads(raw))
-    except json.JSONDecodeError as exc:
-        raise HerdrError(f"herdr returned non-JSON output: {raw.strip()[:200]!r}") from exc
-    return decoded
-
-
-def payload_field(raw: str, *path: str) -> object:
-    """Read a nested field from a herdr JSON response, or explain what was missing."""
-    value = load_payload(raw)
-    for key in path:
-        if not isinstance(value, dict) or key not in value:
-            raise HerdrError(f"herdr response missing {'.'.join(path)}: {raw.strip()[:200]}")
-        value = value[key]
-    return value
-
-
-def text_field(raw: str, *path: str) -> str:
-    value = payload_field(raw, *path)
-    if not isinstance(value, str) or not value:
-        raise HerdrError(f"herdr response field {'.'.join(path)} is not a non-empty string")
-    return value
-
-
-def resolve_pane_id(explicit: str | None, herdr: str, env: Mapping[str, str]) -> str:
-    if explicit:
-        return explicit
-    raw = run_herdr([herdr, "pane", "current", "--current"], env)
-    return text_field(raw, "result", "pane", "pane_id")
-
-
 def pane_size(pane_id: str, herdr: str, env: Mapping[str, str]) -> tuple[int, int]:
-    raw = run_herdr([herdr, "pane", "layout", "--pane", pane_id], env)
+    raw = run_herdr_checked([herdr, "pane", "layout", "--pane", pane_id], env)
     panes = payload_field(raw, "result", "layout", "panes")
     if not isinstance(panes, list):
         raise HerdrError(f"pane layout is not a pane list: {raw.strip()[:200]}")
@@ -251,7 +187,7 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
     cwd = resolve_cwd(options.cwd, env)
-    caller = resolve_pane_id(options.pane, herdr, env)
+    caller = options.pane or current_pane_id(herdr, env)
     direction = (
         normalize_direction(options.direction)
         if options.direction
@@ -269,7 +205,7 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
     if options.dry_run:
         print(shlex.join(argv))
         return EXIT_OK
-    raw = run_herdr(argv, env)
+    raw = run_herdr_checked(argv, env)
     if options.json:
         print(raw, end="" if raw.endswith("\n") else "\n")
         return EXIT_OK
@@ -284,14 +220,7 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     env_map = dict(os.environ if env is None else env)
     options = build_parser().parse_args(argv, namespace=Options())
-    try:
-        return split_pane(options, env_map)
-    except UsageError as exc:
-        print(f"herdr-pane: {exc}", file=sys.stderr)
-        return EXIT_USAGE
-    except HerdrError as exc:
-        print(f"herdr-pane: {exc}", file=sys.stderr)
-        return EXIT_HERDR
+    return guard("herdr-pane", lambda: split_pane(options, env_map))
 
 
 if __name__ == "__main__":
