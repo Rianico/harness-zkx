@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **changelog:** union unreleased entries instead of regenerating
 * **scaffold:** support quoted py-dep keys and missing commas
 * **scaffold:** handle array tables and non-dict scripts
 * **scaffold:** close quote, table and prose gaps in ensure ops
@@ -57,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **changelog:** restore the entries the regeneration erased
 * **scaffold:** declare py-dep input surface
 * **scaffold:** list preserved TS configs and release.yml guard
 * **scaffold:** disclose package.json 2-space normalization
