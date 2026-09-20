@@ -38,7 +38,7 @@ echo "docs/adr" > .adr-dir
 
 - Do not duplicate `.gitignore` handling — the git flavor owns the append-only/dedup seam (`append_gitignore`); this subskill adds the single `.adr-dir` entry to that seam.
 - ADR lifecycle (create/link/supersede/list/read) is the `adr` skill's domain, not this one. This subskill only wires the path.
-- The default ADR directory is `docs/adr`, matching the scaffold template `templates/git/.adr-dir` and the harness `CONTEXT.md` + `docs/adr/` single-context layout.
+- The default ADR directory is `docs/adr`, matching the harness `CONTEXT.md` + `docs/adr/` single-context layout. The pointer is written per repo (steps 1-2); it is not a scaffold template, so a nested `.adr-dir` is debris rather than content.
 
 ## Arguments
 
