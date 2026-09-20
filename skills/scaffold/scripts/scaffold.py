@@ -1813,11 +1813,14 @@ def releaserc_content(cwd: pathlib.Path) -> str:
 def write_source(
     cwd: pathlib.Path, relative: str, content: str, dry_run: bool, *, update: bool = False
 ) -> str | None:
-    """Write generated source — unless --update is refreshing a repo that owns the file.
+    """Write generated source — never on --update, when the repo owns the path.
 
-    SOURCE_OWNED marks the difference between "the scaffold ships a starting point" and
-    "this repo owns the code": without it, `--update --flavor typescript` would replace a
-    project's entry point with a skeleton.
+    SOURCE_OWNED/SOURCE_OWNED_PATTERNS mark the difference between "the scaffold ships a
+    starting point" and "this repo owns the code": without them, `--update --flavor
+    typescript` would replace a project's entry point with a skeleton. Ownership is a
+    property of the path, not of the file being present — a repo that renamed `tests/` to
+    `test/` or replaced its smoke test has not drifted, so run >= 2 preserves the path
+    whether or not it is there. Only run 1 (plain generation) writes the bytes.
     """
     path = cwd / relative
     reason = SOURCE_OWNED.get(relative)
@@ -1830,8 +1833,9 @@ def write_source(
             ),
             None,
         )
-    if update and reason and path.exists():
-        return REPORT.preserved(path, reason)
+    if update and reason:
+        suffix = "" if path.exists() else " (absent here; project-owned, not recreated)"
+        return REPORT.preserved(path, f"{reason}{suffix}")
     write_file(path, content, dry_run)
     return None
 

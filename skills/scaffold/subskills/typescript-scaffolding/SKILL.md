@@ -22,7 +22,7 @@ Per `development-patterns.md` §3:
 
 Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_package_json`, `build_tsconfig` — computed) plus `$SKILL_DIR/templates/typescript/`: raw `.oxlintrc.json`, `.oxfmtrc.json`, `scripts/oxlint-plugin-comment-gate.js`, `tests/index.test.ts`, `src/cli.ts`; rendered `src/index.ts.j2`, `vitest.config.ts.j2` — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` to preview.
 
-> Existing repo? `--update` refreshes generated files but preserves `package.json` (project manifest) **and your source**. Per-field edits (confirm value with user first): `scaffold.py ensure ts-dep --name <pkg> [--version <range>] [--no-dev]` / `ensure ts-script --name <s> --cmd "<cmd>"` — `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts` are only written on a greenfield run; work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
+> Existing repo? `--update` refreshes generated files but preserves `package.json` (project manifest) **and your source**. Per-field edits (confirm value with user first): `scaffold.py ensure ts-dep --name <pkg> [--version <range>] [--no-dev]` / `ensure ts-script --name <s> --cmd "<cmd>"` — `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts` are project-owned: written only on a greenfield run, and never re-created afterwards, so a path that is absent because you renamed or replaced it (`test/` instead of `tests/`) reads `preserved`, not drift, and `--check` stays green on the fork. Work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
 
 ```bash
 uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --project-name <name>
