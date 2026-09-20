@@ -6,6 +6,7 @@ touched: the stub records the argv it received and replays canned JSON.
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -335,3 +336,29 @@ def test_unusable_split_response_is_reported(stub: StubHarness) -> None:
     done = stub.run("vertical", state={**DEFAULT_STATE, "split_pane": {"tab_id": "w9:t1"}})
     assert done.returncode == herdr_pane.EXIT_HERDR
     assert "result.pane.pane_id" in done.stderr
+
+
+# ── metadata: PEP 723 conformance ────────────────────────────────────────────────────
+
+
+def test_pep723_metadata_precedes_docstring() -> None:
+    header = SCRIPT.read_text().split('"""', 1)[0]
+    assert header.startswith("#!/usr/bin/env python3\n")
+    assert "# /// script" in header
+    assert 'requires-python = ">=3.12"' in header
+    assert "dependencies = []" in header
+    assert header.rstrip().endswith("# ///")
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for the PEP 723 runner")
+def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None:
+    done = subprocess.run(
+        ["uv", "run", str(SCRIPT), "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env={"HOME": os.environ.get("HOME", ""), "PATH": os.environ.get("PATH", "")},
+    )
+    assert done.returncode == herdr_pane.EXIT_OK, done.stderr
+    assert "usage: herdr-pane" in done.stdout
