@@ -148,3 +148,95 @@ def test_update_preserves_shipped_source_files(tmp_path):
     assert "lib.rs" in joined
     assert "__init__.py" in joined, "SOURCE_OWNED_PATTERNS must cover the computed package path"
     assert "test_smoke.py" in joined
+
+
+# --- ownership follows the path, not the file's presence (issue #51) ------------
+
+
+def test_update_never_recreates_an_absent_project_owned_path(tmp_path):
+    """A repo that renamed `tests/` to `test/` owns its tests: --update must not restore one.
+
+    Presence is not the ownership signal. Without this the fork is re-flagged as drift on
+    every `--check`, and `--update` writes a skeleton back into a project that deliberately
+    has none.
+    """
+    scaffold.do_typescript(
+        tmp_path, "demo", dry_run=False, ts_variant="lib", with_coverage=False, threshold=80
+    )
+    moved = tmp_path / "tests" / "index.test.ts"
+    assert moved.is_file()
+    (tmp_path / "tests").rename(tmp_path / "test")
+
+    notes = scaffold.do_typescript(
+        tmp_path,
+        "demo",
+        dry_run=False,
+        ts_variant="lib",
+        with_coverage=False,
+        threshold=80,
+        update=True,
+    )
+
+    assert not (tmp_path / "tests").exists(), "an absent project-owned path is not drift"
+    joined = "\n".join(notes)
+    assert "index.test.ts" in joined
+    assert "not recreated" in joined
+
+
+def test_owned_pattern_paths_get_the_same_rule(tmp_path):
+    """`SOURCE_OWNED_PATTERNS` (a computed package dir) is not presence-keyed either."""
+    scaffold.do_python(tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80)
+    package = tmp_path / "src" / "demo" / "__init__.py"
+    assert package.is_file()
+    package.unlink()
+
+    scaffold.do_python(
+        tmp_path, "demo", dry_run=False, with_coverage=False, threshold=80, update=True
+    )
+
+    assert not package.exists()
+
+
+def test_check_is_green_when_a_project_owned_path_was_renamed(tmp_path, capsys):
+    """The acceptance for the fork: `--check` exits 0 on an intentional one."""
+    scaffold.do_typescript(
+        tmp_path, "demo", dry_run=False, ts_variant="lib", with_coverage=False, threshold=80
+    )
+    (tmp_path / "tests").rename(tmp_path / "test")
+    sys.argv = [
+        "scaffold.py",
+        "--check",
+        "--flavor",
+        "typescript",
+        "--ts-variant",
+        "lib",
+        "--project-name",
+        "demo",
+        "--cwd",
+        str(tmp_path),
+    ]
+
+    assert scaffold.main() == 0
+    captured = capsys.readouterr()
+    assert "drift 0" in captured.out + captured.err
+
+
+def test_check_still_reports_drift_for_a_repo_that_was_never_scaffolded(tmp_path, capsys):
+    """The guard for the rule above: ownership must not mask a repo with nothing in it."""
+    sys.argv = [
+        "scaffold.py",
+        "--check",
+        "--flavor",
+        "typescript",
+        "--ts-variant",
+        "lib",
+        "--project-name",
+        "demo",
+        "--cwd",
+        str(tmp_path),
+    ]
+
+    assert scaffold.main() == 1
+    captured = capsys.readouterr()
+    assert "missing" in captured.out + captured.err
+    assert "AGENTS.md" in captured.out + captured.err
