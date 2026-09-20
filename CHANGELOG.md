@@ -28,6 +28,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **ci:** run the changelog check on main pushes
+* **gitignore:** scope the ADR pointer ignore to the repo root
 * **changelog:** supersede a squashed entry with its numbered form (#61)
 * **changelog:** union unreleased entries instead of regenerating (#60)
 * **gh-router:** anchor subskill shared-lib refs to $SKILL_DIR (#57)
@@ -59,6 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **scaffold:** drop the false adr-dir template claim
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
