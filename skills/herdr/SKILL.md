@@ -222,6 +222,22 @@ uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
 ```
+
+### `herdr-label` — the one name that is both visible and addressable
+
+Sets the pane label (what a person sees on the border) and the agent name (what a command accepts) to the same string:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer            # label + agent name
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --pane w1:p2
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --label-only  # multi-word label, agent untouched
+uv run "$SKILL_DIR/scripts/herdr_label.py" --clear             # drop both
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --json
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --dry-run   # print the calls, rename nothing
+```
+
+Refuses a name that breaks the agent-name pattern or that another live agent already holds, and validates before renaming anything, so a rejected name never leaves a half-applied label. A pane with no agent is labelled only; a pane with an agent needs `--label-only` for a multi-word label.
+
 ### `herdr-pane` — split the calling pane
 
 The whole env-check → resolve → split sequence, as one command:
@@ -248,22 +264,5 @@ uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dr
 ```
 
 Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as a JSON array and submits nothing.
-
-### `herdr-label` — the one name that is both visible and addressable
-
-Sets the pane label (what a person sees on the border) and the agent name (what a command accepts) to the same string:
-
-```bash
-uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer            # label + agent name
-uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --pane w1:p2
-uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --label-only  # multi-word label, agent untouched
-uv run "$SKILL_DIR/scripts/herdr_label.py" --clear             # drop both
-uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --json
-uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --dry-run   # print the calls, rename nothing
-```
-
-Refuses an agent name that breaks `[a-z][a-z0-9_-]{0,31}` or that another live agent already holds, and validates before renaming anything so a rejected name never leaves a half-applied label. A pane with no agent is labelled only.
-
-Refuses a name that breaks the agent-name pattern or that another live agent already holds, and validates before renaming anything, so a rejected name never leaves a half-applied label. A pane with no agent is labelled only; a pane with an agent needs `--label-only` for a multi-word label.
 
 Tests for all four: `tests/herdr/`.
