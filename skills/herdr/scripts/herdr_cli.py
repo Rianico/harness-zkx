@@ -10,7 +10,6 @@ instead of three.
 
 from __future__ import annotations
 
-import argparse
 import errno
 import json
 import shlex
@@ -97,6 +96,19 @@ def payload_field(raw: str, *path: str) -> object:
     return value
 
 
+def entries(raw: str, *path: str) -> list[Mapping[str, object]]:
+    """Read a list of objects from a herdr response, or explain what was wrong."""
+    value = payload_field(raw, *path)
+    if not isinstance(value, list):
+        raise HerdrError(f"herdr response {'.'.join(path)} is not a list: {raw.strip()[:200]}")
+    found: list[Mapping[str, object]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            raise HerdrError(f"herdr response {'.'.join(path)} has a non-object entry: {item!r}")
+        found.append(item)
+    return found
+
+
 def text_field(raw: str, *path: str) -> str:
     value = payload_field(raw, *path)
     if not isinstance(value, str) or not value:
@@ -104,14 +116,24 @@ def text_field(raw: str, *path: str) -> str:
     return value
 
 
-def optional_text_field(raw: str, *path: str) -> str | None:
-    """Read a nullable string field; a missing path is also None."""
-    value: object = decode_response(raw)
-    for key in path:
-        if not isinstance(value, dict) or key not in value:
-            return None
-        value = value[key]
+def entry_text(entry: Mapping[str, object], key: str, *, where: str) -> str:
+    """Read a required string field from one list entry."""
+    value = entry.get(key)
+    if not isinstance(value, str) or not value:
+        raise HerdrError(f"{where} has no usable {key!r}")
+    return value
+
+
+def entry_optional_text(entry: Mapping[str, object], key: str) -> str | None:
+    """Read a nullable string field from one list entry; absence is None."""
+    value = entry.get(key)
     return value if isinstance(value, str) and value else None
+
+
+def current_pane_id(herdr: str, env: Mapping[str, str]) -> str:
+    """Resolve the calling pane through `herdr pane current --current`."""
+    raw = run_herdr_checked([herdr, "pane", "current", "--current"], env)
+    return text_field(raw, "result", "pane", "pane_id")
 
 
 def error_code(stderr: str) -> str | None:
@@ -141,10 +163,3 @@ def guard(prog: str, action: Callable[[], int]) -> int:
     except HerdrError as exc:
         print(f"{prog}: {exc}", file=sys.stderr)
         return EXIT_HERDR
-
-
-def parse_args(
-    parser: argparse.ArgumentParser, argv: Sequence[str] | None, options: object
-) -> None:
-    """Fill a typed options namespace; argparse owns validation and its exit status 2."""
-    _ = parser.parse_args(argv, namespace=options)

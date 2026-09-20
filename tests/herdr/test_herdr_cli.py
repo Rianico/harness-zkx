@@ -50,13 +50,34 @@ def test_text_field_rejects_an_empty_string() -> None:
     ("value", "expected"),
     [("x", "x"), ("", None), (None, None), (7, None)],
 )
-def test_optional_text_field_tolerates_absence(value: object, expected: str | None) -> None:
-    raw = json.dumps({"result": {"pane": {"label": value}}})
-    assert herdr_cli.optional_text_field(raw, "result", "pane", "label") == expected
+def test_entry_optional_text_tolerates_absence(value: object, expected: str | None) -> None:
+    assert herdr_cli.entry_optional_text({"label": value}, "label") == expected
 
 
-def test_optional_text_field_missing_path_is_none() -> None:
-    assert herdr_cli.optional_text_field(json.dumps({"result": {}}), "result", "pane", "x") is None
+def test_entry_optional_text_missing_key_is_none() -> None:
+    assert herdr_cli.entry_optional_text({}, "label") is None
+
+
+def test_entry_text_requires_a_non_empty_string() -> None:
+    assert herdr_cli.entry_text({"pane_id": "w9:p1"}, "pane_id", where="pane") == "w9:p1"
+    with pytest.raises(herdr_cli.HerdrError, match="has no usable 'pane_id'"):
+        _ = herdr_cli.entry_text({"pane_id": ""}, "pane_id", where="pane")
+
+
+def test_entries_reads_a_list_of_objects() -> None:
+    raw = json.dumps({"result": {"panes": [{"pane_id": "w9:p1"}, {"pane_id": "w9:p2"}]}})
+    found = herdr_cli.entries(raw, "result", "panes")
+    assert [entry["pane_id"] for entry in found] == ["w9:p1", "w9:p2"]
+
+
+def test_entries_rejects_a_non_list() -> None:
+    with pytest.raises(herdr_cli.HerdrError, match="is not a list"):
+        _ = herdr_cli.entries(json.dumps({"result": {"panes": {}}}), "result", "panes")
+
+
+def test_entries_rejects_a_non_object_entry() -> None:
+    with pytest.raises(herdr_cli.HerdrError, match="non-object entry"):
+        _ = herdr_cli.entries(json.dumps({"result": {"panes": [1]}}), "result", "panes")
 
 
 def test_guard_maps_usage_errors_to_exit_usage(capsys: pytest.CaptureFixture[str]) -> None:

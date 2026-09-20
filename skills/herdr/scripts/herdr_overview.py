@@ -35,11 +35,12 @@ from dataclasses import dataclass, replace
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
     EXIT_OK,
-    HerdrError,
     UsageError,
+    entries,
+    entry_optional_text,
+    entry_text,
     find_herdr,
     guard,
-    payload_field,
     require_herdr_env,
     run_herdr_checked,
 )
@@ -134,30 +135,6 @@ def build_parser() -> argparse.ArgumentParser:
 # ── admission: herdr JSON -> typed rows ──────────────────────────────────────────────
 
 
-def _entries(raw: str, *path: str) -> list[Mapping[str, object]]:
-    value = payload_field(raw, *path)
-    if not isinstance(value, list):
-        raise HerdrError(f"herdr response {'.'.join(path)} is not a list: {raw.strip()[:200]}")
-    entries: list[Mapping[str, object]] = []
-    for item in value:
-        if not isinstance(item, Mapping):
-            raise HerdrError(f"herdr response {'.'.join(path)} holds a non-object entry: {item!r}")
-        entries.append(item)
-    return entries
-
-
-def _text(entry: Mapping[str, object], key: str, *, where: str) -> str:
-    value = entry.get(key)
-    if not isinstance(value, str) or not value:
-        raise HerdrError(f"{where} has no usable {key!r}")
-    return value
-
-
-def _optional_text(entry: Mapping[str, object], key: str) -> str | None:
-    value = entry.get(key)
-    return value if isinstance(value, str) and value else None
-
-
 def _optional_int(entry: Mapping[str, object], key: str) -> int | None:
     value = entry.get(key)
     if isinstance(value, bool) or not isinstance(value, int):
@@ -168,18 +145,21 @@ def _optional_int(entry: Mapping[str, object], key: str) -> int | None:
 def parse_workspaces(raw: str) -> dict[str, tuple[str | None, int | None]]:
     """Read workspace label and number, keyed by workspace id."""
     workspaces: dict[str, tuple[str | None, int | None]] = {}
-    for entry in _entries(raw, "result", "workspaces"):
-        workspace_id = _text(entry, "workspace_id", where="workspace list entry")
-        workspaces[workspace_id] = (_optional_text(entry, "label"), _optional_int(entry, "number"))
+    for entry in entries(raw, "result", "workspaces"):
+        workspace_id = entry_text(entry, "workspace_id", where="workspace list entry")
+        workspaces[workspace_id] = (
+            entry_optional_text(entry, "label"),
+            _optional_int(entry, "number"),
+        )
     return workspaces
 
 
 def parse_agent_names(raw: str) -> dict[str, str]:
     """Read the agent name herdr tracks per pane; `pane list` never carries it."""
     names: dict[str, str] = {}
-    for entry in _entries(raw, "result", "agents"):
-        pane_id = _optional_text(entry, "pane_id")
-        name = _optional_text(entry, "name")
+    for entry in entries(raw, "result", "agents"):
+        pane_id = entry_optional_text(entry, "pane_id")
+        name = entry_optional_text(entry, "name")
         if pane_id and name:
             names[pane_id] = name
     return names
@@ -190,18 +170,18 @@ def parse_panes(
     agent_names: Mapping[str, str],
 ) -> tuple[Pane, ...]:
     panes: list[Pane] = []
-    for entry in _entries(raw, "result", "panes"):
-        pane_id = _text(entry, "pane_id", where="pane list entry")
+    for entry in entries(raw, "result", "panes"):
+        pane_id = entry_text(entry, "pane_id", where="pane list entry")
         panes.append(
             Pane(
                 pane_id=pane_id,
-                tab_id=_text(entry, "tab_id", where=f"pane {pane_id}"),
-                workspace_id=_text(entry, "workspace_id", where=f"pane {pane_id}"),
-                agent=_optional_text(entry, "agent"),
-                agent_status=_optional_text(entry, "agent_status"),
+                tab_id=entry_text(entry, "tab_id", where=f"pane {pane_id}"),
+                workspace_id=entry_text(entry, "workspace_id", where=f"pane {pane_id}"),
+                agent=entry_optional_text(entry, "agent"),
+                agent_status=entry_optional_text(entry, "agent_status"),
                 name=agent_names.get(pane_id),
-                label=_optional_text(entry, "label"),
-                cwd=_optional_text(entry, "cwd"),
+                label=entry_optional_text(entry, "label"),
+                cwd=entry_optional_text(entry, "cwd"),
                 current=False,
             )
         )

@@ -30,6 +30,7 @@ from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
     EXIT_OK,
     HerdrError,
     UsageError,
+    current_pane_id,
     find_herdr,
     guard,
     payload_field,
@@ -126,13 +127,6 @@ def resolve_cwd(requested: str | None, env: Mapping[str, str]) -> str:
     return cwd
 
 
-def resolve_pane_id(explicit: str | None, herdr: str, env: Mapping[str, str]) -> str:
-    if explicit:
-        return explicit
-    raw = run_herdr_checked([herdr, "pane", "current", "--current"], env)
-    return text_field(raw, "result", "pane", "pane_id")
-
-
 def pane_size(pane_id: str, herdr: str, env: Mapping[str, str]) -> tuple[int, int]:
     raw = run_herdr_checked([herdr, "pane", "layout", "--pane", pane_id], env)
     panes = payload_field(raw, "result", "layout", "panes")
@@ -193,7 +187,7 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
     cwd = resolve_cwd(options.cwd, env)
-    caller = resolve_pane_id(options.pane, herdr, env)
+    caller = options.pane or current_pane_id(herdr, env)
     direction = (
         normalize_direction(options.direction)
         if options.direction
