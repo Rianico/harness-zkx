@@ -18,7 +18,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **herdr:** let herdr-prompt target a pane by its label
 * **herdr:** add herdr-label to name a pane and its agent together
 * **herdr:** add herdr-overview for a compact session view
-* **herdr:** add herdr-prompt for byte-exact payload delivery
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
 * **dynamic-workflow-wrapper:** fail every non-converged run exit (#55)
 * **programming-expert:** synthesize deep design and propagate across subskills
@@ -29,10 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** report the run plan and self-check written output (#23)
 * **gh-router:** diagnostic scripts, changelog sync, and an exit-code fix (#21)
 * **scaffold:** add --update mode and extract static templates (#20)
+* **herdr:** add herdr-prompt for byte-exact payload delivery
 
 ### Bug Fixes
 
-* **herdr:** conform herdr_pane.py to PEP 723
+* **herdr:** repair the herdr skill's link, invocation, and observation gaps (#68)
 * **dynamic-workflow-wrapper:** repair inert skill load path in role definitions (#63)
 * **repo:** check changelog on main and correct the ADR pointer ignore (#62)
 * **scaffold:** stop flagging an absent project-owned path as drift (#58)
@@ -57,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** pin the changelog bullet style and keep it out of oxfmt
 * **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+* **herdr:** conform herdr_pane.py to PEP 723
 * **ci:** run the changelog check on main pushes
 * **gitignore:** scope the ADR pointer ignore to the repo root
 * **scaffold:** support quoted py-dep keys and missing commas
@@ -72,8 +73,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **herdr:** order the helper sections by workflow
 * **herdr:** correct the handoff guidance to lead with the label
 * **herdr:** document herdr-overview and the name/label split
-* **herdr:** document the herdr-prompt helper
-* **herdr:** apply progressive disclosure and document transcript reads
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
@@ -83,6 +82,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
 * **scaffold:** record the changelog bullet contract
+* **herdr:** document the herdr-prompt helper
+* **herdr:** apply progressive disclosure and document transcript reads
 * **dynamic-workflow-wrapper:** correct the skills frontmatter contract
 * **scaffold:** drop the false adr-dir template claim
 * **scaffold:** state the ownership rule and the coverage-script contract
