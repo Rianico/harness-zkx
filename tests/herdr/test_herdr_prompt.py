@@ -270,6 +270,85 @@ def test_other_herdr_error_exits_herdr(stub: StubHarness, tmp_path: Path) -> Non
     assert "Traceback" not in done.stderr
 
 
+# ── integration: --label resolves what a person reads off the pane ──────────────────
+
+
+def ambiguous_state() -> dict[str, object]:
+    panes = [
+        {
+            "pane_id": pane_id,
+            "tab_id": "w9:t1",
+            "workspace_id": "w9",
+            "agent": agent,
+            "agent_status": "idle",
+            "cwd": f"/tmp/{pane_id}",
+            "label": "review",
+        }
+        for pane_id, agent in (("w9:p1", "pi"), ("w9:p2", "agy"))
+    ]
+    return {**DEFAULT_STATE, "panes": panes}
+
+
+def test_label_resolves_to_the_pane_id(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("--label", "scratch pad", "--file", str(payload_file(tmp_path, "hi")))
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stdout.startswith("prompted w9:p2  bytes=2")
+    (call,) = stub.prompts()
+    assert call[3] == "w9:p2"
+
+
+def test_label_dry_run_shows_the_resolved_pane_id(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "--label", "scratch pad", "--file", str(payload_file(tmp_path, "hi")), "--dry-run"
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    assert json.loads(done.stdout)[3] == "w9:p2"
+
+
+def test_an_ambiguous_label_lists_the_candidates(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "--label",
+        "review",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        state=ambiguous_state(),
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "ambiguous" in done.stderr
+    assert "w9:p1" in done.stderr
+    assert "w9:p2" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_an_unknown_label_is_rejected(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("--label", "nope", "--file", str(payload_file(tmp_path, "hi")))
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "no pane carries the label" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_target_and_label_together_are_rejected(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "reviewer", "--label", "scratch pad", "--file", str(payload_file(tmp_path, "hi"))
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not both" in done.stderr
+
+
+def test_an_explicit_target_alone_is_accepted(stub: StubHarness) -> None:
+    done = stub.run("reviewer", stdin="hi")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts()[0][3] == "reviewer"
+
+
+def test_a_missing_target_is_rejected_before_reading_the_payload(stub: StubHarness) -> None:
+    done = stub.run()
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "pass TARGET" in done.stderr
+    assert stub.prompts() == []
+
+
 # ── metadata: PEP 723 conformance ────────────────────────────────────────────────────
 
 

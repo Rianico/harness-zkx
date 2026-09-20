@@ -13,6 +13,11 @@ survive byte-for-byte.
     herdr-prompt reviewer --file brief.md --wait --timeout 120000
     herdr-prompt reviewer --file - < brief.md
     git diff | herdr-prompt reviewer --wait
+    herdr-prompt --label "review pane" --file brief.md --wait
+
+TARGET is an agent name or pane id. `--label` takes an exact pane label instead, which is
+what a person reads off the pane border; labels are not unique, so an ambiguous one fails
+with the candidates listed.
 
 Exit status: 0 accepted (``--wait`` settled without needing input), 1 herdr failure,
 2 usage or missing precondition, 3 the agent needs human input (``agent_blocked``, or
@@ -38,11 +43,14 @@ from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
     HerdrError,
     UsageError,
     decode_response,
+    entries,
+    entry_optional_text,
     error_code,
     find_herdr,
     guard,
     require_herdr_env,
     run_herdr,
+    run_herdr_checked,
 )
 
 STDIN = "-"
@@ -55,7 +63,8 @@ PROMPT_STATES = "idle, working, blocked, done, or unknown"
 class Options:
     """CLI options; `argparse` writes into this typed namespace."""
 
-    target: str = ""
+    target: str | None = None
+    label: str | None = None
     file: str | None = None
     wait: bool = False
     until: list[str] = field(default_factory=list)
@@ -73,7 +82,12 @@ def build_parser() -> argparse.ArgumentParser:
             "3 the agent needs human input"
         ),
     )
-    _ = parser.add_argument("target", metavar="TARGET", help="agent name or pane id")
+    _ = parser.add_argument("target", nargs="?", metavar="TARGET", help="agent name or pane id")
+    _ = parser.add_argument(
+        "--label",
+        metavar="LABEL",
+        help="exact pane label to resolve to a pane id, instead of TARGET",
+    )
     _ = parser.add_argument(
         "--file",
         metavar="PATH",
@@ -162,13 +176,44 @@ def settled_state(raw: str) -> str | None:
     return state if isinstance(state, str) and state else None
 
 
+def resolve_label(herdr: str, label: str, env: Mapping[str, str]) -> str:
+    """Resolve an exact pane label to its pane id; labels are not unique, so ambiguity fails."""
+    raw = run_herdr_checked([herdr, "pane", "list"], env)
+    matches = [entry for entry in entries(raw, "result", "panes") if entry.get("label") == label]
+    if not matches:
+        raise UsageError(f"no pane carries the label {label!r}; run herdr-overview to list labels")
+    if len(matches) > 1:
+        candidates = ", ".join(
+            f"{entry_optional_text(entry, 'pane_id') or '?'} "
+            f"({entry_optional_text(entry, 'agent') or 'no agent'})"
+            for entry in matches
+        )
+        raise UsageError(f"label {label!r} is ambiguous: {candidates}; pass the pane id instead")
+    pane_id = entry_optional_text(matches[0], "pane_id")
+    if not pane_id:
+        raise HerdrError("the labelled pane has no pane_id")
+    return pane_id
+
+
+def resolve_target(options: Options, herdr: str, env: Mapping[str, str]) -> str:
+    """Pick the prompt target: an explicit TARGET, or the pane carrying --label."""
+    if options.target and options.label:
+        raise UsageError("pass either TARGET or --label, not both")
+    if options.label:
+        return resolve_label(herdr, options.label, env)
+    if options.target:
+        return options.target
+    raise UsageError("pass TARGET (agent name or pane id) or --label")
+
+
 def prompt_agent(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
+    target = resolve_target(options, herdr, env)
     payload = read_payload(options.file)
     argv = build_prompt_argv(
         herdr,
-        options.target,
+        target,
         payload,
         wait=options.wait,
         until=options.until,
@@ -193,7 +238,7 @@ def prompt_agent(options: Options, env: Mapping[str, str]) -> int:
     else:
         size = len(payload.encode("utf-8"))
         suffix = f"  state={state}" if state else ""
-        print(f"prompted {options.target}  bytes={size}{suffix}")
+        print(f"prompted {target}  bytes={size}{suffix}")
     return EXIT_BLOCKED if state == BLOCKED else EXIT_OK
 
 
