@@ -18,11 +18,11 @@ from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
 
 SCRIPT = SCRIPTS_DIR / "herdr_prompt.py"
 
-METACHARS = '''Do NOT expand: $HOME `whoami` "$(date)" 'single' \\backslash
+METACHARS = """Do NOT expand: $HOME `whoami` "$(date)" 'single' \\backslash
 line2 → unicode ✓
 ```bash
 echo "code fence survived"
-```'''
+```"""
 
 
 @pytest.fixture
@@ -244,9 +244,7 @@ def test_json_prints_raw_response(stub: StubHarness, tmp_path: Path) -> None:
 
 
 def test_dry_run_prints_exact_argv_without_prompting(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run(
-        "reviewer", "--file", str(payload_file(tmp_path)), "--dry-run", "--wait"
-    )
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--dry-run", "--wait")
     assert done.returncode == herdr_prompt.EXIT_OK, done.stderr
     assert stub.prompts() == []
     argv = json.loads(done.stdout)
