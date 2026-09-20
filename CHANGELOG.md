@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **herdr:** let herdr-prompt target a pane by its label
+* **herdr:** add herdr-label to name a pane and its agent together
 * **herdr:** add herdr-overview for a compact session view
 * **herdr:** add herdr-prompt for byte-exact payload delivery
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
@@ -67,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **herdr:** correct the handoff guidance to lead with the label
 * **herdr:** document herdr-overview and the name/label split
 * **herdr:** document the herdr-prompt helper
 * **herdr:** apply progressive disclosure and document transcript reads
