@@ -30,3 +30,8 @@ graph LR
 - [ ] Docs / `docs/adr/` updated when seams or contracts change
 - [ ] No generated artifacts committed outside `.lsz/tmp`
 - [ ] Linked issue with `Closes #NN` (if applicable)
+
+<!-- Related issues: list each on its own line below (never comma-separated: "Closes #1, #2" fails to close #2).
+Closes #123
+Closes #456
+-->
