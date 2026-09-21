@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **skills/harness-audit:** deterministic category, dump-context payload, regex robustness
 * **harness-audit:** restore frontmatter and repair triage table (#87)
 * **scaffold:** update PR template with closing directives (#86)
 * **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)

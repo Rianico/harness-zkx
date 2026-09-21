@@ -5,10 +5,8 @@ description: >-
 arguments: target
 argument-hint: |-
   <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file
-  [--threshold N] -- line threshold that marks a bash output as oversized (default: 20)
-  [--json] -- emit machine-readable JSON instead of text report
-  [--emit-filtered] -- write a filtered session copy alongside the report
-  [--keep-head-tail N] -- when truncating, keep first/last N lines (default: 10)
+  audit.py: [--threshold N] [--json] [--emit-filtered] [--keep-head-tail N]
+  audit_edits.py: [--json] [--with-context N] [--dump-context <dir>]
 disable-model-invocation: true
 ---
 
@@ -57,7 +55,7 @@ Keep prose tight: `why / manageable / replaceable + tool` — no re-diagnosing s
 | **A — Refine script**                      | Dump/search/poll in owned `skills/*/scripts/*` (or tight flag in managed invocation); repeat offender; manageable=Yes & owned | Edit the owning script: add bound flag (`-q`/`--max-count`/`\| head`) or replace with scoped tool; add test in `tests/harness-audit/` if reusable; re-run `uv run ruff check` + `audit.py --with-context 3` to confirm `< threshold` |
 | **B — Replace bash with advanced command** | One-off exploratory bash that wasted context; manageable=Yes but unowned                                                      | Document mapping and switch next time: `ast_grep`/`lsp`/`read` handle; no script edit; optional one-line note in skill or `gotcha` if recurrent                                                                                      |
 | **C — Filter output**                      | Legitimately large but context-costly log                                                                                     | Keep bash, use `--emit-filtered` (or lower `keep_head_tail`)                                                                                                                                                                         |
-| **D — Keep**                               | Rare/expected large, cost acceptable                                                                                          | No action                                                                                                                                                                                                                            |
+| **D — Keep**                               | Rare/expected large, cost acceptable                                                                                          | No action |
 
 Per entry: `bucket / confidence / cheapest fix / context saved`. Include simpler/no-change when credible; do not invent fixes when one path suffices (keel: bounded options).
 
@@ -93,9 +91,10 @@ Report: total `edit` calls, successes, failures, failure rate, breakdown by code
 | # | Signal | Fix |
 | - | ------ | --- |
 | **N — numeric line number** | `numeric_anchors` non-empty (`"833"`, `"125"`) | Never pass line numbers; `read` the file to obtain a lease, then use the served hash |
-| **H — hallucinated anchor** | `E_UNKNOWN_ANCHOR` without numeric signal; model inspected via `sed -n`/`grep -n` but never called `read` | `read` before `edit` — anchors require a lease |
+| **H — hallucinated anchor** | `E_UNKNOWN_ANCHOR` / `E_STALE_ANCHOR` / `E_UNSERVED_RANGE` without numeric signal; model inspected via `sed -n`/`grep -n` but never called `read` | `read` before `edit` — anchors require a lease |
 | **F — foreign / leaked anchor** | `E_FOREIGN_ANCHOR`; `served for` path differs from target | Re-check file identity per edit in multi-file turns; re-`read` the target file |
 | **B — batch abort** | `E_BATCH_ABORT` (overlapping spans in one `edits[]`) | Split into disjoint spans or sequential calls |
+| **M — malformed anchor** | `E_MALFORMED_ANCHOR` (empty / wrong-shape anchor value) | Fix the anchor value at the call site; never synthesize hash strings |
 | **T — target lost** | `E_TARGET_LOST` (anchor deleted in an earlier turn) | Re-`read` and re-target; don't reuse anchors across mutations |
 
 Per failure: `category / confidence / cheapest fix`. Done when every failure has a category and the model shows a corrected retry (fresh `read` → valid anchors) or an explicit keep.
@@ -123,4 +122,4 @@ uv run $SKILL_DIR/scripts/audit_edits.py <session-id-or-path> --json
 
 ## Completion
 
-Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed, **and** user has chosen `A/B/C/D` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count.
+Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed, **and** user has chosen `A/B/C/D` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count. For edit audit: done when every edit failure has deterministic `category` N/H/F/B/T/M (or `?` with a stated reason), and the model proposes a corrected retry (read before edit, separate spans, re-read after mutation) or an explicit keep.

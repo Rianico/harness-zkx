@@ -28,9 +28,8 @@ from pydantic import BaseModel, Field, ValidationError  # pyright: ignore[report
 
 CODE_RE = re.compile(r"\b(E_[A-Z_]+)\b")
 QUOTED_RE = re.compile(r'"([^"]+)"')
-SERVED_FOR_RE = re.compile(r"served for (\S+?)[;\s]")
+SERVED_FOR_RE = re.compile(r"served for ([^;\s]+)")
 NUMERIC_RE = re.compile(r"^\d+$")
-THREE_DIGIT_RE = re.compile(r"^\d{3}$")
 
 KNOWN_CODES = (
     "E_UNKNOWN_ANCHOR",
@@ -39,6 +38,8 @@ KNOWN_CODES = (
     "E_BATCH_ABORT",
     "E_TARGET_LOST",
 )
+# Domain codes observed in the wild but outside the core set above.
+EXTRA_CODES = ("E_STALE_ANCHOR", "E_UNSERVED_RANGE")
 
 
 # ── Pydantic domain models ──
@@ -56,6 +57,7 @@ class EditFailure(BaseModel):
     toolCallId: str
     file: str
     code: str
+    category: str = "?"
     anchors: list[str] = Field(default_factory=list)
     numeric_anchors: list[str] = Field(default_factory=list)
     foreign_served_for: str | None = None
@@ -151,7 +153,9 @@ def _preview_for_msg(msg: dict[str, Any]) -> str:
                     cmd = ""
                     args = it.get("arguments") or {}
                     if isinstance(args, dict):
-                        cmd = str(args.get("command") or args.get("cmd") or args.get("file") or "")[:80]
+                        cmd = str(args.get("command") or args.get("cmd") or args.get("file") or "")[
+                            :80
+                        ]
                     return f"toolCall:{it.get('name')}:{cmd}".replace("\n", " ⏎ ")
         return str(msg.get("role", ""))[:120]
     except Exception:
@@ -194,6 +198,20 @@ def classify(text: str) -> str:
     return "E_NO_CODE" if text else "E_EMPTY_RESULT"
 
 
+def categorize(code: str, numeric_anchors: list[str], is_leak: bool) -> str:
+    """Deterministic triage bucket: N/F/B/T/M/H, '?' when unrecognized."""
+    if numeric_anchors:
+        return "N"
+    if is_leak or code == "E_FOREIGN_ANCHOR":
+        return "F"
+    direct = {"E_BATCH_ABORT": "B", "E_TARGET_LOST": "T", "E_MALFORMED_ANCHOR": "M"}
+    if code in direct:
+        return direct[code]
+    if code in ("E_UNKNOWN_ANCHOR", *EXTRA_CODES):
+        return "H"
+    return "?"
+
+
 def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
     calls: dict[str, dict[str, Any]] = {}
     failures: list[dict[str, Any]] = []
@@ -205,11 +223,9 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
     by_file: dict[str, int] = {}
     numeric_anchor_failures = 0
     foreign_leak_failures = 0
-    try:
-        fp = path.open("r", encoding="utf-8", errors="replace")
-    except OSError as exc:
-        eprint(f"cannot open {path}: {exc}")
-        sys.exit(2)
+    unknown_codes: set[str] = set()
+    full_by_line: dict[int, list[dict[str, Any]]] = {}
+    fp = path.open("r", encoding="utf-8", errors="replace")
     with fp:
         for idx, raw in enumerate(fp, start=1):
             record_count = idx
@@ -254,6 +270,8 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                     success_count += 1
                     continue
                 code = classify(text)
+                if code not in (*KNOWN_CODES, *EXTRA_CODES, "E_NO_CODE", "E_EMPTY_RESULT"):
+                    unknown_codes.add(code)
                 by_code[code] = by_code.get(code, 0) + 1
                 call = calls.get(tc_id)
                 if call is None and "|" in tc_id:
@@ -263,7 +281,7 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                 if call:
                     file = call.get("file") or ""
                 if not file:
-                    pm = re.search(r"\((/[^)]+)\)", text)
+                    pm = re.search(r"\(([^)]+)\)", text)
                     if pm:
                         file = pm.group(1)
                 if file:
@@ -278,9 +296,9 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                 if numeric:
                     numeric_anchor_failures += 1
                 served_for: str | None = None
-                sm = SERVED_FOR_RE.search(text)
-                if sm:
-                    served_for = sm.group(1).rstrip(";,")
+                served_matches = SERVED_FOR_RE.findall(text)
+                if served_matches:
+                    served_for = served_matches[-1].rstrip(";,.")
                 is_leak = code == "E_FOREIGN_ANCHOR" or (
                     served_for is not None and file and served_for != file
                 )
@@ -292,6 +310,7 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                         "toolCallId": tc_id,
                         "file": file,
                         "code": code,
+                        "category": categorize(code, numeric, bool(is_leak)),
                         "anchors": seen,
                         "numeric_anchors": numeric,
                         "foreign_served_for": served_for if is_leak else None,
@@ -348,8 +367,10 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                         }
                     )
             f["next_turns"] = ctx
-            f["_next_full"] = [
-                line_to_preview[ln]["full"] for ln in [c["jsonl_line"] for c in ctx] if ln in line_to_preview
+            full_by_line[f["jsonl_line"]] = [
+                line_to_preview[ln]["full"]
+                for ln in [c["jsonl_line"] for c in ctx]
+                if ln in line_to_preview
             ]
     typed_failures: list[EditFailure] = []
     for f in failures:
@@ -361,6 +382,8 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
             eprint(f"validation error at line {f.get('jsonl_line')}: {ve}")
             raise
     failure_count = len(typed_failures)
+    for _code in sorted(unknown_codes):
+        eprint(f"warning: unrecognized edit error code {_code!r} (not in KNOWN_CODES); categorized as '?'")
     audit_raw = {
         "session_path": str(path),
         "session_file": path.name,
@@ -375,6 +398,7 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
         "numeric_anchor_failures": numeric_anchor_failures,
         "foreign_leak_failures": foreign_leak_failures,
         "failures": [o.model_dump() for o in typed_failures],
+        "full_context_by_line": full_by_line,
     }
     try:
         EditAuditResult.model_validate(audit_raw)
@@ -411,16 +435,18 @@ def format_text(audit: dict[str, Any]) -> str:
             f"foreign-leak failures: {audit['foreign_leak_failures']}"
         )
         lines.append("")
-        lines.append(f"{'#':>3}  {'jsonl':>5}  {'code':<18}  file / anchors")
+        lines.append(f"{'#':>3}  {'jsonl':>5}  {'cat':<3}  {'code':<18}  file / anchors")
         lines.append("─" * 72)
         for i, f in enumerate(audit["failures"], start=1):
             anchors = ",".join(f["anchors"][:4])
             if len(f["anchors"]) > 4:
                 anchors += ",…"
             target = f["file"] or "(unknown file)"
-            lines.append(f"{i:>3}  {f['jsonl_line']:>5}  {f['code']:<18}  {target} [{anchors}]")
+            lines.append(f"{i:>3}  {f['jsonl_line']:>5}  {f.get('category', '?'):<3}  {f['code']:<18}  {target} [{anchors}]")
             if f.get("numeric_anchors"):
-                lines.append(f"       numeric anchors (line numbers?): {','.join(f['numeric_anchors'])}")
+                lines.append(
+                    f"       numeric anchors (line numbers?): {','.join(f['numeric_anchors'])}"
+                )
             if f.get("foreign_served_for"):
                 lines.append(f"       served for: {f['foreign_served_for']}")
         lines.append("")
@@ -453,38 +479,46 @@ def main() -> None:
         "--dump-context",
         type=str,
         default=None,
-        help="write per-failure context JSON to dir (requires --with-context >0)",
+        help="write per-failure context JSON to dir (implies --with-context 3 when unset)",
     )
     args = ap.parse_args()
-    if args.with_context < 0:
+    if args.with_context < 0 and args.dump_context is None:
         eprint("error: --with-context must be >= 0")
         sys.exit(1)
+    if args.dump_context is not None and args.with_context <= 0:
+        args.with_context = 3
+        eprint("note: --dump-context implies --with-context 3")
     resolved = resolve_session(args.target)
     if resolved is None:
         eprint(f"error: no session found for target {args.target!r}")
-        eprint("hint: pass an absolute path to a *.jsonl file, or a session id like 01a03e51-b378-786f-819d-f570bc26497c")
+        eprint(
+            "hint: pass an absolute path to a *.jsonl file, or a session id like 01a03e51-b378-786f-819d-f570bc26497c"
+        )
         eprint("searched: $PI_SESSIONS_DIR (if set) and ~/.pi/agent/sessions/")
         sys.exit(2)
     if not resolved.is_file():
         eprint(f"error: resolved path is not a file: {resolved}")
         sys.exit(2)
-    audit = scan(resolved, with_context=args.with_context)
-    will_dump = args.dump_context is not None and args.with_context > 0
+    try:
+        audit = scan(resolved, with_context=args.with_context)
+    except OSError as exc:
+        eprint(f"error: cannot read {resolved}: {exc}")
+        sys.exit(2)
+    full_by_line = audit.pop("full_context_by_line", {})
+    will_dump = args.dump_context is not None
     if will_dump:
         assert args.dump_context is not None
         dump_dir = Path(args.dump_context).expanduser()
         dump_dir.mkdir(parents=True, exist_ok=True)
         for f in audit["failures"]:
-            full_ctx = f.get("_next_full") or []
+            full_ctx = full_by_line.get(f["jsonl_line"], [])
             out = dump_dir / f"edit-failure-{f['jsonl_line']}.json"
             payload = {
-                "failure": {k: v for k, v in f.items() if not k.startswith("_")},
+                "failure": f,
                 "next_turns_full": full_ctx,
             }
             out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         audit["dump_context_dir"] = str(dump_dir.resolve())
-    for f in audit["failures"]:
-        f.pop("_next_full", None)
     if args.as_json:
         json.dump(dict(audit), sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
