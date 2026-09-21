@@ -1,7 +1,7 @@
 ---
 name: harness-audit
 description: >-
-  Audits pi session JSONL for oversized bash outputs, analyses cause and triages refinable vs replaceable-by-tool vs filter vs keep for fix-or-gotcha decision. Use when trimming verbose results or hardening context-window bloat.
+  Audits pi session JSONL for oversized bash outputs and edit tool failures, analyses cause and triages refinable vs replaceable-by-tool vs filter vs keep for fix-or-gotcha decision. Use when trimming verbose results, hardening context-window bloat, or diagnosing hash-anchor edit rejections.
 arguments: target
 argument-hint: |-
   <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file
@@ -14,8 +14,9 @@ disable-model-invocation: true
 
 # harness-audit
 
-Deterministic scan for oversized `bash` tool results **plus** constructive triage. Scan identifies candidates; the model analyses, triages, and discusses fixes with you — including whether to refine scripts or add a `rules/` guard. Read-only by default; filtered output is opt-in.
+Deterministic scan for oversized `bash` tool results **plus** constructive triage, **and** a second workload for `edit` tool failures (hash-anchor rejections). Scan identifies candidates; the model analyses, triages, and discusses fixes with you — including whether to refine scripts or add a `rules/` guard. Read-only by default; filtered output is opt-in.
 
+Two workloads: `audit.py` (bash oversized output) and `audit_edits.py` (edit failures). Both resolve the target the same way (§1) and support `--json` plus `--with-context N`.
 ## Workflow
 
 ### 1. Resolve target
@@ -77,6 +78,28 @@ On approval:
 - **Replace bash:** note advanced-tool mapping for next turn; no code change.
 - **Add to `rules/common/gotcha.md`:** only when violation creates meaningful context-window risk and check can change action (keel §6). New gotcha needs evidence rule detects planted violation, narrow scope, owner, removal condition. Otherwise prefer one-off fix. Default gotchas remain shrink-only; growth is boundary decision.
 
+## Edit audit workload
+
+`audit_edits.py` parses JSONL line-by-line (see [session-format](references/session-format.md)), pairs `edit` `toolCall`→`toolResult` (exact id, then `|` prefix/suffix fallback), and classifies rejections by domain error code. Read-only; exit `0` ok / `1` bad args / `2` not found.
+
+```bash
+uv run $SKILL_DIR/scripts/audit_edits.py <session-id-or-path> [--json] [--with-context 3] [--dump-context <dir>]
+```
+
+Report: total `edit` calls, successes, failures, failure rate, breakdown by code (`E_UNKNOWN_ANCHOR`, `E_FOREIGN_ANCHOR`, `E_MALFORMED_ANCHOR`, `E_BATCH_ABORT`, `E_TARGET_LOST`), per-file counts, plus two pattern flags — `numeric_anchor_failures` (anchors matching `/^\d+$/`, i.e. line numbers passed as hashes) and `foreign_leak_failures` (anchor served for a different file than the target). With `--with-context 3` (recommended for triage) each failure carries the next 3 turns so you can see how the model reacted (re-read and retried, looped, or abandoned).
+
+### Triage categories for edit failures
+
+| # | Signal | Fix |
+| - | ------ | --- |
+| **N — numeric line number** | `numeric_anchors` non-empty (`"833"`, `"125"`) | Never pass line numbers; `read` the file to obtain a lease, then use the served hash |
+| **H — hallucinated anchor** | `E_UNKNOWN_ANCHOR` without numeric signal; model inspected via `sed -n`/`grep -n` but never called `read` | `read` before `edit` — anchors require a lease |
+| **F — foreign / leaked anchor** | `E_FOREIGN_ANCHOR`; `served for` path differs from target | Re-check file identity per edit in multi-file turns; re-`read` the target file |
+| **B — batch abort** | `E_BATCH_ABORT` (overlapping spans in one `edits[]`) | Split into disjoint spans or sequential calls |
+| **T — target lost** | `E_TARGET_LOST` (anchor deleted in an earlier turn) | Re-`read` and re-target; don't reuse anchors across mutations |
+
+Per failure: `category / confidence / cheapest fix`. Done when every failure has a category and the model shows a corrected retry (fresh `read` → valid anchors) or an explicit keep.
+
 ## Examples
 
 ```bash
@@ -88,6 +111,14 @@ uv run $SKILL_DIR/scripts/audit.py 01a07730-d9be-73cc-b7b1-a8caa2187f49 --thresh
 
 # Machine-readable + produce filtered copy
 uv run $SKILL_DIR/scripts/audit.py 01a07730-d9be-73cc-b7b1-a8caa2187f49 --json --emit-filtered --keep-head-tail 8
+```
+
+```bash
+# Edit failures for the same session
+uv run $SKILL_DIR/scripts/audit_edits.py 01a07730-d9be-73cc-b7b1-a8caa2187f49 --with-context 3
+
+# Machine-readable
+uv run $SKILL_DIR/scripts/audit_edits.py <session-id-or-path> --json
 ```
 
 ## Completion
