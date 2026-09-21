@@ -29,7 +29,9 @@ MERGE_STATE_INTERVAL=2
 BASE=""
 HEAD_REF=""
 TITLE=""
+TITLE_SUPPLIED=0
 BODY=""
+BODY_SUPPLIED=0
 BODY_FILE=""
 WATCH=0
 MERGE=0
@@ -52,14 +54,17 @@ parse_args() {
       ;;
     --title)
       TITLE="$2"
+      TITLE_SUPPLIED=1
       shift 2
       ;;
     --body)
       BODY="$2"
+      BODY_SUPPLIED=1
       shift 2
       ;;
     --body-file)
       BODY_FILE="$2"
+      BODY_SUPPLIED=1
       shift 2
       ;;
     --watch)
@@ -108,9 +113,12 @@ resolve_head() {
 
 resolve_title_and_body() {
   [[ -n "$TITLE" ]] || TITLE=$(git log -1 --pretty=%s)
-  if [[ -n "$BODY_FILE" ]]; then BODY=$(cat "$BODY_FILE"); fi
-  if [[ -z "$BODY" ]]; then
-    if [[ -f .github/pull_request_template.md ]]; then BODY=$(cat .github/pull_request_template.md); else BODY=""; fi
+  if [[ -n "$BODY_FILE" ]]; then
+    if [[ ! -f "$BODY_FILE" || ! -r "$BODY_FILE" ]]; then
+      echo "body file not found or not readable: $BODY_FILE" >&2
+      exit 2
+    fi
+    BODY=$(cat "$BODY_FILE")
   fi
 }
 
@@ -137,12 +145,33 @@ create_or_reuse_pr() {
   if [[ -n "$existing" && "$existing" != "null" ]]; then
     NUM="$existing"
     echo "found existing PR #$NUM" >&2
-    if [[ -n "$TITLE" || -n "$BODY" ]]; then
-      gh api "repos/$REPO/pulls/$NUM" -X PATCH -f title="$TITLE" -f body="$BODY" >/dev/null || true
+    local patch_args=() updated_fields=()
+    if [[ $TITLE_SUPPLIED -eq 1 ]]; then
+      patch_args+=(-f title="$TITLE")
+      updated_fields+=("title")
+    else
+      local existing_title
+      existing_title=$(gh api "repos/$REPO/pulls/$NUM" --jq '.title // empty' 2>/dev/null || echo "")
+      [[ -n "$existing_title" ]] && TITLE="$existing_title"
+    fi
+    if [[ $BODY_SUPPLIED -eq 1 ]]; then
+      patch_args+=(-f body="$BODY")
+      updated_fields+=("body")
+    else
+      BODY=$(gh api "repos/$REPO/pulls/$NUM" --jq '.body // ""' 2>/dev/null || echo "")
+    fi
+    if [[ ${#patch_args[@]} -gt 0 ]]; then
+      gh api "repos/$REPO/pulls/$NUM" -X PATCH "${patch_args[@]}" >/dev/null || true
+      local fields_str
+      fields_str=$(IFS=', '; echo "${updated_fields[*]}")
+      echo "updating PR #$NUM: $fields_str" >&2
     fi
     return 0
   fi
   if [[ $DRAFT -eq 1 ]]; then draft_flag="true"; fi
+  if [[ $BODY_SUPPLIED -eq 0 && -z "$BODY" && -f .github/pull_request_template.md ]]; then
+    BODY=$(cat .github/pull_request_template.md)
+  fi
   # `--jq` replaces the previous external `jq -r .number`, so this script needs only gh + git.
   resp=$(gh api "repos/$REPO/pulls" -X POST -f title="$TITLE" -f head="$HEAD_REF" -f base="$BASE" \
     -f body="$BODY" -F draft="$draft_flag" --jq '.number')
@@ -174,9 +203,70 @@ dump_failure_logs() {
   gh pr checks "$NUM" --repo "$REPO" 2>&1 | tail -n 50 >&2 || true
 }
 
+pr_conflict_verdict() {
+  local mergeable="${1:-}" state="${2:-}"
+  case "$mergeable" in
+  false | CONFLICTING)
+    printf 'conflicting'
+    return 0
+    ;;
+  esac
+  case "$state" in
+  dirty | DIRTY)
+    printf 'conflicting'
+    return 0
+    ;;
+  behind | BEHIND)
+    printf 'behind'
+    return 0
+    ;;
+  unknown | UNKNOWN | "")
+    printf 'unknown'
+    return 0
+    ;;
+  *)
+    if [[ "$mergeable" == "null" || -z "$mergeable" ]]; then
+      printf 'unknown'
+    else
+      printf 'clean'
+    fi
+    ;;
+  esac
+}
+
+check_conflicts() {
+  local line mergeable state url files tries=3 verdict=""
+  while ((tries-- > 0)); do
+    line=$(gh api "repos/$REPO/pulls/$NUM" --jq '[(if .mergeable == null then "null" else (.mergeable|tostring) end), (.mergeable_state // "unknown"), (.html_url // "")] | @tsv' 2>/dev/null || echo "")
+    [[ -n "$line" ]] || return 0
+    IFS=$'\t' read -r mergeable state url <<<"$line"
+    verdict=$(pr_conflict_verdict "$mergeable" "$state")
+    if [[ "$verdict" != "unknown" ]]; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "$verdict" == "conflicting" ]]; then
+    files=$(gh pr view "$NUM" --repo "$REPO" --json files --jq '[.files[].path] | join(" ")' 2>/dev/null || echo "")
+    echo "PR $url" >&2
+    echo "conflicting: mergeable=$mergeable merge_state_status=$state" >&2
+    [[ -n "$files" ]] && echo "files: $files" >&2
+    echo "resolve: merge or rebase origin/$BASE into the head branch, then re-run" >&2
+    return 1
+  fi
+  if [[ "$verdict" == "behind" ]]; then
+    echo "warning: head branch is behind $BASE" >&2
+  fi
+  return 0
+}
+
 watch_checks() {
   local i verdict
   for ((i = 1; i <= POLL_TRIES; i++)); do
+    if ! check_conflicts; then
+      return 1
+    fi
     verdict=$(checks_payload | checks_verdict)
     case "$verdict" in
     success)
@@ -200,10 +290,20 @@ watch_checks() {
 }
 
 # squash_message — body of the squash commit. Defaults to the PR body, which is where the
-# `Co-authored-by` trailer lives. The previous hardcoded "Squash merge <head> → <base>" dropped
-# that provenance, which git-convention requires to survive a squash. A named function so the
-# regression test can call it without opening a pull request.
-squash_message() { printf '%s' "$BODY"; }
+# `Co-authored-by` trailer lives. If the PR body is empty or identical to the repo's PR
+# template, returns empty so GitHub squash-merge defaults to commit subjects.
+squash_message() {
+  local template=""
+  if [[ -f .github/pull_request_template.md ]]; then
+    template=$(cat .github/pull_request_template.md)
+  fi
+  local trimmed_body="${BODY%"${BODY##*[![:space:]]}"}"
+  local trimmed_template="${template%"${template##*[![:space:]]}"}"
+  if [[ -z "$trimmed_body" || ( -n "$trimmed_template" && "$trimmed_body" == "$trimmed_template" ) ]]; then
+    return 0
+  fi
+  printf '%s' "$BODY"
+}
 
 merge_pr() {
   local i state=""
@@ -219,10 +319,13 @@ merge_pr() {
     echo "refusing to merge: mergeable_state=$state (not clean)" >&2
     return 1
   fi
-  gh api "repos/$REPO/pulls/$NUM/merge" -X PUT \
-    -f merge_method=squash \
-    -f commit_title="$TITLE (#$NUM)" \
-    -f commit_message="$(squash_message)" >/dev/null
+  local merge_args=(-f merge_method=squash -f commit_title="$TITLE (#$NUM)")
+  local msg
+  msg=$(squash_message)
+  if [[ -n "$msg" ]]; then
+    merge_args+=(-f commit_message="$msg")
+  fi
+  gh api "repos/$REPO/pulls/$NUM/merge" -X PUT "${merge_args[@]}" >/dev/null
   echo "merged #$NUM (squash) to $BASE" >&2
 }
 
@@ -237,7 +340,6 @@ main() {
 
   if [[ $WATCH -eq 1 ]]; then
     if ! watch_checks; then
-      echo "watch failed — fix and re-run: pr.sh --watch --merge (or git push then re-run)" >&2
       exit 1
     fi
   fi
