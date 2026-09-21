@@ -33,8 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **gh-router/pr-land:** prevent reuse body overwrite and conflict timeout
-* **gh-router/ci:** fix SyntaxError on Python <3.12 in ci.sh why (#72)
+* **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)
 * **herdr:** repair the herdr skill's link, invocation, and observation gaps (#68)
 * **dynamic-workflow-wrapper:** repair inert skill load path in role definitions (#63)
 * **repo:** check changelog on main and correct the ADR pointer ignore (#62)
@@ -60,6 +59,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** pin the changelog bullet style and keep it out of oxfmt
 * **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+* **gh-router/pr-land:** prevent reuse body overwrite and conflict timeout
+* **gh-router/ci:** fix SyntaxError on Python <3.12 in ci.sh why (#72)
 * **herdr:** conform herdr_pane.py to PEP 723
 * **ci:** run the changelog check on main pushes
 * **gitignore:** scope the ADR pointer ignore to the repo root
@@ -73,6 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **git-convention:** codify standalone issue-closing directives
 * **rules:** stop recommending Obsidian wikilinks in markdown
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
