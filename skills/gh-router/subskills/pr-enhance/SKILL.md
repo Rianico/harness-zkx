@@ -44,8 +44,10 @@ When invoked via `/pr-enhance [base|pr_url]` (default: inferred from context —
 
    [review checklist derived from categories]
 
-   ```
+   <!-- Closing directives: one issue per line with keyword (never comma-separated like "Closes #1, #2") -->
+   Closes #NN
+   ````
 
-   ```
+   Extract related issue numbers from the branch name, commit messages, or user request. Always emit them on standalone lines at the bottom (`Closes #NN` / `Fixes #NN`) so GitHub links and auto-closes them upon merge.
 
 3. **Review** — present draft, await approval, then create PR and clean tmp artifacts.
