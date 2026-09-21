@@ -115,7 +115,7 @@ RAW_SHA256: dict[str, str] = {
     "git/.github/ISSUE_TEMPLATE/01-bug_report.yml": "042c8a9647b165ef3c354cfd60e1a1b619b81b86f60bdc5fec65e324e061d676",
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
     "git/.github/ISSUE_TEMPLATE/config.yml": "27539305684d7673d88e80ec149c4ec9714da05a054b09fee67d56b8a7e5a820",
-    "git/.github/pull_request_template.md": "a6c4a5a99295d803693760bf33246e995c22c16b2c282caa1e52eb4fd667b603",
+    "git/.github/pull_request_template.md": "820682054cba7303639cac2fd8508a80c0a7bfed82148469a7a05ad76a4be0a4",
     "git/.github/workflows/changelog-check.yml": "bcc24d5a39359a2e2bac26039d172568bbd7c47f5dd6f9ad497d7d2a29419c7d",
     "git/.husky/pre-push": "4c08b6fe2b024a878970f2a74f22426460474d34d5d6a4f9115d1c2f3b62559f",
     "git/.releaserc.json": "380cd48c0082fdbbad3fb439c6378840d5412a9d93368fee929a55672bc8225c",
