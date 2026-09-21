@@ -33,6 +33,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **gh-router/pr-land:** prevent reuse body overwrite and conflict timeout
+* **gh-router/ci:** fix SyntaxError on Python <3.12 in ci.sh why (#72)
 * **herdr:** repair the herdr skill's link, invocation, and observation gaps (#68)
 * **dynamic-workflow-wrapper:** repair inert skill load path in role definitions (#63)
 * **repo:** check changelog on main and correct the ADR pointer ignore (#62)
