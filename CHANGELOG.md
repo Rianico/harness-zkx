@@ -33,7 +33,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **scaffold:** update PR template with closing directives
+* **harness-audit:** restore frontmatter and repair triage table
+* **scaffold:** update PR template with closing directives (#86)
 * **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)
 * **herdr:** repair the herdr skill's link, invocation, and observation gaps (#68)
 * **dynamic-workflow-wrapper:** repair inert skill load path in role definitions (#63)
