@@ -548,15 +548,16 @@ finalize_squash_message() {
   build_squash_message "$msg" "$merger" "$tsv"
 }
 
-# is_fallback_body — true when $BODY would not become the squash message
+# is_fallback_body <body> — true when <body> would not become the squash message
 # (squash_message maps empty and template-identical bodies to no commit_message).
 is_fallback_body() {
-  [[ -z "$BODY" ]] && return 0
+  local body="$1"
+  [[ -z "$body" ]] && return 0
   local tmpl=""
   if [[ -f .github/pull_request_template.md ]]; then
     tmpl=$(cat .github/pull_request_template.md)
   fi
-  [[ -n "$tmpl" && "$BODY" == "$tmpl" ]]
+  [[ -n "$tmpl" && "$body" == "$tmpl" ]]
 }
 
 # check_trailers — --check dry run: run the same gates the merge runs, then print the
@@ -571,7 +572,7 @@ check_trailers() {
   NUM="$found"
   BODY=$(gh api "repos/$REPO/pulls/$NUM" --jq '.body // ""' 2>/dev/null || echo "")
   # Mirror the merge: a fallback body is never sent, so there is nothing to gate.
-  if is_fallback_body; then
+  if is_fallback_body "$BODY"; then
     echo "commit_message will be omitted (body empty or repo template); GitHub builds the squash message"
     return 0
   fi
