@@ -357,9 +357,14 @@ list_contains() {
   printf '%s\n' "$1" | grep -Fxq -- "$2"
 }
 
-# is_trailer_line <line> / is_closing_line <line> — classifiers for the splice.
+# is_trailer_line <line> / is_closing_line <line> — classifiers for the splice. A closing
+# line is a *reference* line (keyword plus #N), never a bare verb: ordinary prose like
+# "Fixes the parser" must not split a section.
 is_trailer_line() { printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*co-authored-by:'; }
-is_closing_line() { printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*(closes?|closed|fixes?|fixed|resolves?|resolved|refs?)([^[:alnum:]_]|$)'; }
+is_closing_line() {
+  printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*(closes?|closed|fixes?|fixed|resolves?|resolved|refs?)([^[:alnum:]_]|$)' || return 1
+  printf '%s' "${1:-}" | grep -qE '#[0-9]|GH-[0-9]'
+}
 
 # pr_co_author_trailers <merger-login> — stdin `login<TAB>name<TAB>email` rows (the commits
 # endpoint shape, see merge_pr), stdout one `Co-authored-by:` line per distinct author
@@ -408,7 +413,7 @@ pr_co_author_trailers() {
 
 # insert_trailers — stdin new trailer lines, $BODY in, spliced message on stdout. Existing
 # body trailers are deduped (first occurrence wins) and moved with the new ones ahead of
-# the first Closes/Fixes/Resolves/Refs line (appended at end when none). Prints $BODY
+# the first Closes/Fixes/Resolves/Refs reference line (appended at end when none). Prints $BODY
 # byte-identical when there is nothing to add, dedupe, or move.
 insert_trailers() {
   local new_text line key seen existing_block stripped
@@ -502,16 +507,17 @@ refuse_long_lines() {
   fi
 }
 
-# finalize_squash_message <msg> — token gate, trailer splice, length gate. stdout the
-# message, stderr the announcement of appended trailers. Returns 1 on any refusal.
-finalize_squash_message() {
+# build_squash_message <msg> <merger-login> <commits-tsv> — token gate, trailer splice,
+# length gate. stdout the message, stderr the announcement of appended trailers.
+# Returns 1 on any refusal. Pure apart from $BODY stewardship: fetchers stay outside.
+build_squash_message() {
   local msg merger tsv new final old_body
   msg="${1:-}"
+  merger="${2:-}"
+  tsv="${3:-}"
   if ! printf '%s' "$msg" | refuse_raw_token; then
     return 1
   fi
-  merger=$(gh api user --jq .login 2>/dev/null || echo "")
-  tsv=$(gh api "repos/$REPO/pulls/$NUM/commits" --jq '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv' 2>/dev/null || echo "")
   old_body="$BODY"
   BODY="$msg"
   new=$(printf '%s' "$tsv" | pr_co_author_trailers "$merger")
@@ -528,9 +534,23 @@ finalize_squash_message() {
   printf '%s' "$final"
 }
 
-# check_trailers — --check dry run: print the trailers a merge would append (no PR created).
+# finalize_squash_message <msg> — fetch authorship evidence, then build. A failed
+# enumeration is distinct from an empty commit list: refuse rather than merge silent.
+finalize_squash_message() {
+  local msg merger tsv
+  msg="${1:-}"
+  merger=$(gh api user --jq .login 2>/dev/null || echo "")
+  if ! tsv=$(gh api "repos/$REPO/pulls/$NUM/commits" --jq '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv'); then
+    echo "refusing squash message: could not enumerate PR #$NUM commit authors (check network / GH_TOKEN scopes); re-run rather than merge without attribution" >&2
+    return 1
+  fi
+  build_squash_message "$msg" "$merger" "$tsv"
+}
+
+# check_trailers — --check dry run: run the same gates the merge runs, then print the
+# trailers a merge would append (no PR created, no merge call).
 check_trailers() {
-  local merger tsv found trailers
+  local merger tsv found new
   found=$(gh api "repos/$REPO/pulls?head=${REPO%%/*}:$HEAD_REF&state=open" --jq '.[0].number' 2>/dev/null || echo "")
   if [[ -z "$found" || "$found" == "null" ]]; then
     echo "no open PR for head $HEAD_REF" >&2
@@ -539,10 +559,16 @@ check_trailers() {
   NUM="$found"
   BODY=$(gh api "repos/$REPO/pulls/$NUM" --jq '.body // ""' 2>/dev/null || echo "")
   merger=$(gh api user --jq .login 2>/dev/null || echo "")
-  tsv=$(gh api "repos/$REPO/pulls/$NUM/commits" --jq '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv' 2>/dev/null || echo "")
-  trailers=$(printf '%s' "$tsv" | pr_co_author_trailers "$merger")
-  if [[ -n "$trailers" ]]; then
-    printf '%s\n' "$trailers"
+  if ! tsv=$(gh api "repos/$REPO/pulls/$NUM/commits" --jq '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv'); then
+    echo "refusing --check: could not enumerate PR #$NUM commit authors (check network / GH_TOKEN scopes); re-run" >&2
+    return 1
+  fi
+  if ! build_squash_message "$BODY" "$merger" "$tsv" >/dev/null; then
+    return 1
+  fi
+  new=$(printf '%s' "$tsv" | pr_co_author_trailers "$merger")
+  if [[ -n "$new" ]]; then
+    printf '%s\n' "$new"
   else
     echo "no co-author trailers would be appended for #$NUM" >&2
   fi
@@ -550,6 +576,18 @@ check_trailers() {
 
 merge_pr() {
   local i state=""
+  local header="$TITLE (#$NUM)"
+  # Header gate (issue 4): commitlint caps the header at 100, same as the body lines.
+  if ((${#header} > SQUASH_LINE_MAX)); then
+    echo "refusing squash merge: commit title exceeds $SQUASH_LINE_MAX chars (${#header}): $header" >&2
+    echo "remediation: shorten the PR title, then re-run" >&2
+    return 1
+  fi
+  # The token gate runs even when the body won't become the message: a raw template
+  # body means the replace-or-delete decision was never made.
+  if ! printf '%s' "$BODY" | refuse_raw_token; then
+    return 1
+  fi
   for ((i = 1; i <= MERGE_STATE_TRIES; i++)); do
     state=$(gh api "repos/$REPO/pulls/$NUM" --jq .mergeable_state 2>/dev/null || echo unknown)
     if [[ "$state" == "clean" ]]; then break; fi
@@ -583,7 +621,7 @@ main() {
   resolve_title_and_body
   resolve_repo
   if [[ $CHECK -eq 1 ]]; then
-    check_trailers
+    check_trailers || exit "$?"
     exit 0
   fi
   resolve_base
