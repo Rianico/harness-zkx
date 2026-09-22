@@ -15,6 +15,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **skills/herdr:** support prompt broadcast and wait-timeout exit path
+* **skills/herdr:** add herdr-transcript session extractor
+* **skills/herdr:** add herdr-wait polling barrier helper
 * **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
 * **herdr:** add herdr-overview and one name for panes and their agents (#69)
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
@@ -78,6 +81,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **skills/herdr:** document fan-out barrier and transcript patterns
 * **git-convention:** codify standalone issue-closing directives (#85)
 * **rules:** stop recommending Obsidian wikilinks in markdown
 * **scaffold:** add adr-scaffolding subskill (#52)

@@ -194,7 +194,9 @@ def format_table(snaps: Sequence[Snapshot]) -> str:
             widths[index] = max(widths[index], len(cell))
     lines = ["  ".join(cell.ljust(widths[index]) for index, cell in enumerate(header)).rstrip()]
     for row in rows:
-        lines.append("  ".join(cell.ljust(widths[index]) for index, cell in enumerate(row)).rstrip())
+        lines.append(
+            "  ".join(cell.ljust(widths[index]) for index, cell in enumerate(row)).rstrip()
+        )
     return "\n".join(lines)
 
 

@@ -31,7 +31,10 @@ PI_LINES = [
     },
     {
         "type": "message",
-        "message": {"role": "assistant", "content": [{"type": "text", "text": "Verdict: ship it."}]},
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Verdict: ship it."}],
+        },
     },
 ]
 
@@ -101,9 +104,7 @@ def test_line_message_skips_tool_only_and_garbage() -> None:
 
 
 def test_select_filters_role_and_last() -> None:
-    messages = herdr_transcript.extract_messages(
-        "\n".join(json.dumps(line) for line in PI_LINES)
-    )
+    messages = herdr_transcript.extract_messages("\n".join(json.dumps(line) for line in PI_LINES))
     assert [item.text for item in herdr_transcript.select(messages, role="user", last=False)] == [
         "review the diff"
     ]
@@ -117,17 +118,13 @@ def test_select_filters_role_and_last() -> None:
 
 
 def test_last_prints_latest_assistant_response(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run(
-        "reviewer", "--last", state=session_state(session_file(tmp_path, PI_LINES))
-    )
+    done = stub.run("reviewer", "--last", state=session_state(session_file(tmp_path, PI_LINES)))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert done.stdout.strip() == "Verdict: ship it."
 
 
 def test_claude_session_extracts_clean_text(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run(
-        "reviewer", "--last", state=session_state(session_file(tmp_path, CLAUDE_LINES))
-    )
+    done = stub.run("reviewer", "--last", state=session_state(session_file(tmp_path, CLAUDE_LINES)))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert done.stdout.strip() == "Summary here."
 
