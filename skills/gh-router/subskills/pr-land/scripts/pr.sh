@@ -478,11 +478,27 @@ insert_trailers() {
   printf '%s' "$out"
 }
 
-# refuse_raw_token — stdin message; refuses a body still holding the template token.
+# refuse_raw_token — stdin message; refuses a body still holding the template
+# placeholder. The placeholder is an HTML comment block, so only a token inside a
+# comment counts: prose merely mentioning the token name passes. Tracks comment
+# state line by line, so a token on a later line of the block is still caught.
 refuse_raw_token() {
   local text
   text=$(cat)
-  if printf '%s' "$text" | grep -qF -- "$CODE_AUTHORS_TOKEN"; then
+  if printf '%s' "$text" | awk '
+    {
+      line = $0
+      while (match(line, /<!--|-->/)) {
+        before = substr(line, 1, RSTART - 1)
+        tok = substr(line, RSTART, RLENGTH)
+        if (incomment && index(before, "CODE_AUTHORS")) found = 1
+        if (tok == "<!--") incomment = 1
+        else incomment = 0
+        line = substr(line, RSTART + RLENGTH)
+      }
+      if (incomment && index(line, "CODE_AUTHORS")) found = 1
+    }
+    END { exit !found }'; then
     echo "refusing squash message: raw $CODE_AUTHORS_TOKEN token still present" >&2
     echo "remediation: replace the token with Co-authored-by lines for outside contributors (or delete the block), then re-run" >&2
     return 1
