@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-* **skills/harness-audit:** add workload for edit tool error audit and analysis
+* **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
 * **herdr:** add herdr-overview and one name for panes and their agents (#69)
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
 * **dynamic-workflow-wrapper:** fail every non-converged run exit (#55)
@@ -34,7 +34,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **skills/harness-audit:** deterministic category, dump-context payload, regex robustness
 * **harness-audit:** restore frontmatter and repair triage table (#87)
 * **scaffold:** update PR template with closing directives (#86)
 * **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)
@@ -63,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** pin the changelog bullet style and keep it out of oxfmt
 * **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+* **skills/harness-audit:** deterministic category, dump-context payload, regex robustness
 * **gh-router/pr-land:** prevent reuse body overwrite and conflict timeout
 * **gh-router/ci:** fix SyntaxError on Python <3.12 in ci.sh why (#72)
 * **herdr:** conform herdr_pane.py to PEP 723
