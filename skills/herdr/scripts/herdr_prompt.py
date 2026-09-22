@@ -11,17 +11,22 @@ flags. No shell is involved, so quotes, backticks, ``$``, newlines, and code fen
 survive byte-for-byte.
 
     herdr-prompt reviewer --file brief.md --wait --timeout 120000
+    herdr-prompt reviewer worker --file brief.md --no-wait
     herdr-prompt reviewer --file - < brief.md
     git diff | herdr-prompt reviewer --wait
     herdr-prompt --label "review pane" --file brief.md --wait
 
-TARGET is an agent name or pane id. `--label` takes an exact pane label instead, which is
+TARGET is one or more agent names or pane ids; every target receives the same
+payload verbatim. `--label` takes an exact pane label instead, which is
 what a person reads off the pane border; labels are not unique, so an ambiguous one fails
-with the candidates listed.
+with the candidates listed. `--no-wait` dispatches without waiting and fails
+when combined with `--wait`.
 
 Exit status: 0 accepted (``--wait`` settled without needing input), 1 herdr failure,
-2 usage or missing precondition, 3 the agent needs human input (``agent_blocked``, or
-``--wait`` settled on ``blocked``).
+2 usage or missing precondition, 3 a target needs human input (``agent_blocked``, or
+``--wait`` settled on ``blocked``), 4 the prompt was delivered but ``--wait``
+timed out first — the agent is still working, so resume with ``herdr-wait``
+instead of resubmitting.
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
 """
@@ -57,16 +62,22 @@ STDIN = "-"
 BLOCKED = "blocked"
 BLOCKED_CODE = "agent_blocked"
 PROMPT_STATES = "idle, working, blocked, done, or unknown"
+TIMEOUT_CODE = "timeout"
+EXIT_WAIT_TIMEOUT = 4
 
+
+class WaitTimeout(Exception):
+    """Prompt delivered but `--wait` timed out; the agent is still working (exit 4)."""
 
 @dataclass
 class Options:
     """CLI options; `argparse` writes into this typed namespace."""
 
-    target: str | None = None
+    targets: list[str] = field(default_factory=list)
     label: str | None = None
     file: str | None = None
     wait: bool = False
+    no_wait: bool = False
     until: list[str] = field(default_factory=list)
     timeout: int | None = None
     json: bool = False
@@ -79,10 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Submit a byte-exact prompt payload to a Herdr agent (no shell involved).",
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
-            "3 the agent needs human input"
+            "3 a target needs human input, 4 prompt delivered but the wait timed out"
         ),
     )
-    _ = parser.add_argument("target", nargs="?", metavar="TARGET", help="agent name or pane id")
+    _ = parser.add_argument(
+        "targets", nargs="*", metavar="TARGET", help="agent names or pane ids (one or more)"
+    )
     _ = parser.add_argument(
         "--label",
         metavar="LABEL",
@@ -97,6 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--wait",
         action="store_true",
         help="wait for the first settled state after submission",
+    )
+    _ = parser.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="dispatch without waiting; fails when combined with --wait",
     )
     _ = parser.add_argument(
         "--until",
@@ -195,22 +213,32 @@ def resolve_label(herdr: str, label: str, env: Mapping[str, str]) -> str:
     return pane_id
 
 
-def resolve_target(options: Options, herdr: str, env: Mapping[str, str]) -> str:
-    """Pick the prompt target: an explicit TARGET, or the pane carrying --label."""
-    if options.target and options.label:
-        raise UsageError("pass either TARGET or --label, not both")
+def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> list[str]:
+    """Pick the prompt targets: explicit TARGETs, or the pane carrying --label."""
     if options.label:
-        return resolve_label(herdr, options.label, env)
-    if options.target:
-        return options.target
-    raise UsageError("pass TARGET (agent name or pane id) or --label")
+        if options.targets:
+            raise UsageError("pass either TARGETs or --label, not both")
+        return [resolve_label(herdr, options.label, env)]
+    if not options.targets:
+        raise UsageError("pass TARGET (agent name or pane id) or --label")
+    if len(set(options.targets)) != len(options.targets):
+        raise UsageError("duplicate TARGETs; list each agent once")
+    return list(options.targets)
+
+@dataclass
+class Dispatch:
+    """Per-target outcome of a broadcast prompt."""
+
+    target: str
+    state: str | None = None
+    wait_timed_out: bool = False
+    blocked: bool = False
 
 
-def prompt_agent(options: Options, env: Mapping[str, str]) -> int:
-    require_herdr_env(env)
-    herdr = find_herdr(env)
-    target = resolve_target(options, herdr, env)
-    payload = read_payload(options.file)
+def prompt_one(
+    herdr: str, target: str, payload: str, options: Options, env: Mapping[str, str]
+) -> Dispatch:
+    """Deliver the payload to one target, mapping herdr's answer onto a Dispatch."""
     argv = build_prompt_argv(
         herdr,
         target,
@@ -221,15 +249,20 @@ def prompt_agent(options: Options, env: Mapping[str, str]) -> int:
     )
     if options.dry_run:
         print(json.dumps(argv))
-        return EXIT_OK
+        return Dispatch(target)
 
     done = run_herdr(argv, env)
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
-        if error_code(done.stderr) == BLOCKED_CODE:
-            print(f"herdr-prompt: {detail}", file=sys.stderr)
-            return EXIT_BLOCKED
-        raise HerdrError(f"herdr agent prompt failed: {detail}")
+        code = error_code(done.stderr)
+        if code == BLOCKED_CODE:
+            print(f"herdr-prompt: {target}: {detail}", file=sys.stderr)
+            return Dispatch(target, blocked=True)
+        if code == TIMEOUT_CODE:
+            # Not a dispatch failure: the prompt was accepted and the agent is
+            # working; only the wait ran out. Reported as exit 4, never exit 1.
+            return Dispatch(target, wait_timed_out=True)
+        raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
     _ = decode_response(done.stdout)
     state = settled_state(done.stdout)
@@ -239,14 +272,43 @@ def prompt_agent(options: Options, env: Mapping[str, str]) -> int:
         size = len(payload.encode("utf-8"))
         suffix = f"  state={state}" if state else ""
         print(f"prompted {target}  bytes={size}{suffix}")
-    return EXIT_BLOCKED if state == BLOCKED else EXIT_OK
+    return Dispatch(target, state=state, blocked=state == BLOCKED)
 
+
+def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
+    if options.wait and options.no_wait:
+        raise UsageError("pass either --wait or --no-wait, not both")
+    require_herdr_env(env)
+    herdr = find_herdr(env)
+    targets = resolve_targets(options, herdr, env)
+    payload = read_payload(options.file)
+    dispatches = [prompt_one(herdr, target, payload, options, env) for target in targets]
+    blocked = sorted(dispatch.target for dispatch in dispatches if dispatch.blocked)
+    if blocked:
+        names = ", ".join(blocked)
+        print(f"herdr-prompt: {names} need human input (blocked)", file=sys.stderr)
+        return EXIT_BLOCKED
+    timed_out = sorted(dispatch.target for dispatch in dispatches if dispatch.wait_timed_out)
+    if timed_out:
+        names = ", ".join(timed_out)
+        if options.timeout is not None:
+            hint = f"still working after {options.timeout}ms (wait timed out)"
+        else:
+            hint = "still working when the wait timed out"
+        raise WaitTimeout(
+            f"prompt delivered to {names} but {hint}; "
+            f"resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
+        )
+    return EXIT_OK
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     env_map = dict(os.environ if env is None else env)
     options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-prompt", lambda: prompt_agent(options, env_map))
-
+    try:
+        return guard("herdr-prompt", lambda: prompt_agents(options, env_map))
+    except WaitTimeout as exc:
+        print(f"herdr-prompt: {exc}", file=sys.stderr)
+        return EXIT_WAIT_TIMEOUT
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -373,3 +373,78 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert "usage: herdr-prompt" in done.stdout
+
+
+# ── integration: broadcast, --no-wait, and wait-timeout ─────────────────────────
+
+
+def test_broadcast_delivers_same_payload_to_every_target(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        "worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (first, second) = stub.prompts()
+    assert (first[3], second[3]) == ("worker1", "worker2")
+    assert first[4] == second[4] == "hi"
+    assert "prompted worker1" in done.stdout
+    assert "prompted worker2" in done.stdout
+
+
+def test_wait_and_no_wait_together_are_rejected(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "reviewer", "--file", str(payload_file(tmp_path, "hi")), "--wait", "--no-wait"
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not both" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_duplicate_broadcast_targets_are_rejected(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("reviewer", "reviewer", "--file", str(payload_file(tmp_path, "hi")))
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "duplicate" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_wait_timeout_is_exit_4_not_herdr_error(stub: StubHarness, tmp_path: Path) -> None:
+    error = {"code": "timeout", "message": "wait timed out after 120000ms"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--wait",
+        "--timeout",
+        "120000",
+        state={**DEFAULT_STATE, "prompt_error": error},
+    )
+    assert done.returncode == herdr_prompt.EXIT_WAIT_TIMEOUT
+    assert done.returncode != herdr_cli.EXIT_HERDR
+    assert "prompt delivered to reviewer" in done.stderr
+    assert "herdr-wait reviewer" in done.stderr
+    assert "instead of resubmitting" in done.stderr
+
+
+def test_broadcast_blocked_reports_exit_blocked(stub: StubHarness, tmp_path: Path) -> None:
+    error = {"code": "agent_blocked", "message": "agent reviewer is blocked"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        state={**DEFAULT_STATE, "prompt_error": error},
+    )
+    assert done.returncode == herdr_cli.EXIT_BLOCKED
+    assert "need human input" in done.stderr
+
+
+def test_broadcast_dry_run_prints_one_argv_per_target(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        "worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run"
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    argv_lines = [json.loads(line) for line in done.stdout.splitlines()]
+    assert [argv[3] for argv in argv_lines] == ["worker1", "worker2"]
