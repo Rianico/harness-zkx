@@ -134,7 +134,7 @@ Use the kind requested by the user; run `herdr agent` to inspect the installed k
 herdr agent start reviewer --kind codex --pane <returned-pane-id> -- <agent-args...>
 ```
 
-A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Wait until the agent becomes idle before prompting it.
+A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Wait until the agent settles (`idle` or `done`) before prompting it.
 
 Submit work through the agent surface:
 
@@ -147,7 +147,7 @@ herdr agent prompt reviewer "Review the current diff and report only actionable 
 ```bash
 herdr agent wait reviewer --until blocked --timeout 120000
 ```
-
+> [!warning] Never wait on a background agent with `--until idle` alone. Background completions settle to `done`, not `idle`, so the wait ignores the completion event and hangs (#83). Omit `--until` (defaults to `idle`, `done`, `blocked`) or pass `--until idle --until done`, and always set `--timeout` so no wait outlives the turn.
 The submission-failure semantics (`agent_blocked`, `agent_prompt_stalled`, `timeout`) and the `--wait` activity gate live in `$SKILL_DIR/references/cli-reference.md`.
 
 Use logical keys for interactive agent UI controls:
@@ -177,6 +177,28 @@ herdr agent read reviewer --source recent-unwrapped --lines 120
 ```
 
 If a wait fails or returns `blocked`, inspect `agent get` and the transcript before deciding what input to send. A timeout or stalled response does not prove the prompt was never delivered; do not blindly submit it again. Use the pane surface only when raw terminal control is intentional.
+
+## Coordinate several agents
+
+Canonical fan-out lifecycle: dispatch → verbatim prompts → barrier wait → transcript extraction → iterative convergence.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker1 worker2 --file brief.md --no-wait
+uv run "$SKILL_DIR/scripts/herdr_wait.py" worker1 worker2 --timeout 300000
+uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
+```
+
+`herdr-prompt --wait` blocks on one agent, so fan-out always dispatches with `--no-wait` and converges on one `herdr-wait` barrier. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. The barrier exits 3 the moment any target needs input — unblock it, then re-enter the barrier for the rest.
+
+### Sibling-reviewer pattern
+
+Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and barrier-wait both. Agent arguments go after `--` (`agent start reviewer --kind codex --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
+
+### Banned: sleep/timer polling loops
+
+Never `sleep`, `schedule`, or loop `herdr agent read` to poll for completion. Snapshot polling clips on alternate-screen agents, burns context, and re-enacts the #83 hang. Use `herdr-wait` (state barrier) for agents and `herdr pane wait-output --match` (content match) for commands.
+
+Deep CLI semantics (wait activity gate, rejection vs settled outcomes, read sources) live in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Run an ordinary command in another pane
 
@@ -209,7 +231,7 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 
 ## Local helpers (not upstream)
 
-Four scripts in `$SKILL_DIR/scripts/`, run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+Six scripts in `$SKILL_DIR/scripts/`, run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
@@ -263,6 +285,27 @@ git diff | uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --wait
 uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dry-run
 ```
 
-Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as a JSON array and submits nothing.
+Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Accepts several TARGETs for one broadcast (`herdr-prompt worker1 worker2 --file brief.md --no-wait`); `--no-wait` dispatches without waiting and is rejected alongside `--wait`. A `--wait` that times out after delivery exits 4 — prompt accepted, agent still working — so resume with `herdr-wait` instead of resubmitting; only a true dispatch failure exits 1. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as one JSON array per target and submits nothing.
+### `herdr-wait` — one barrier over many agents
 
-Tests for all four: `tests/herdr/`.
+Polls `herdr agent get <target>` per target on a short tick — never concurrent `herdr agent wait` subprocesses (blind to the #83 event bug) and never `sleep` loops. Barrier mode waits for ALL targets; `--any` returns when ANY settles:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_wait.py" action1 action2 --timeout 300000
+uv run "$SKILL_DIR/scripts/herdr_wait.py" review1 review2 --any
+uv run "$SKILL_DIR/scripts/herdr_wait.py" action1 action2 --json
+```
+
+Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
+
+### `herdr-transcript` — clean text from the session file
+
+Resolves `agent_session.value` via `herdr agent get <target>` and extracts assistant text from the session JSONL (Pi and Claude Code shapes), skipping spinners, status bars, and tool-call noise. Prefer it over `herdr agent read`, whose terminal snapshot clips on alternate-screen agents:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --last
+uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role user
+uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role all --json
+```
+
+Tests for all six: `tests/herdr/`.
