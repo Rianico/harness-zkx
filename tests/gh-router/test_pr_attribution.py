@@ -40,7 +40,9 @@ fi
 for arg in "$@"; do
   case "$arg" in
     user) printf '%s\\n' "$MERGER_LOGIN"; exit 0 ;;
-    *pulls/7/commits*) printf '%s' "$COMMITS_TSV"; exit 0 ;;
+    *pulls/7/commits*)
+      if [[ "$COMMITS_FAIL" == "1" ]]; then echo "api error: rate limited" >&2; exit 1; fi
+      printf '%s' "$COMMITS_TSV"; exit 0 ;;
     .mergeable_state) printf 'clean\\n'; exit 0 ;;
     *pulls/7/merge*)
       for a in "$@"; do
@@ -64,6 +66,7 @@ exit 3
         "CAPTURE": str(tmp_path / "commit_message.txt"),
         "MERGER_LOGIN": "me",
         "COMMITS_TSV": "",
+        "COMMITS_FAIL": "0",
         "PR_BODY": "",
         "PR_NUMBER": NUM,
         "OBSERVE_TSV": "",
@@ -76,7 +79,7 @@ def trailers_source(tsv, merger="me", body="notes"):
     return (
         f'source "{PR_SH}"; '
         f'if printf \'%s\' "$TSV" | BODY="$BODY_ARG" pr_co_author_trailers "{merger}"; '
-        'then echo RC=0; else echo RC=$?; fi'
+        "then echo RC=0; else echo RC=$?; fi"
     )
 
 
@@ -130,6 +133,42 @@ def splice(body, new):
     return run_bash(
         f'source "{PR_SH}"; printf \'%s\' "$NEW" | BODY="$BODY_ARG" insert_trailers',
         {"BODY_ARG": body, "NEW": new},
+    )
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("Closes #12", "MATCH"),
+        ("Closes #160", "MATCH"),
+        ("Fixes owner/repo#3", "MATCH"),
+        ("Fixes the parser edge case", "NOMATCH"),
+        ("Fixed the cache bug", "NOMATCH"),
+        ("Refs the design doc", "NOMATCH"),
+        ("resolves ambiguity here", "NOMATCH"),
+        ("- Closes #9", "NOMATCH"),
+    ],
+)
+def test_is_closing_line_requires_issue_reference(line, expected):
+    # R2: a closing line is a reference line (keyword plus #N), not a bare verb.
+    r = run_bash(
+        f'source "{PR_SH}"; if is_closing_line "$L"; then echo MATCH; else echo NOMATCH; fi',
+        {"L": line},
+    )
+    assert r.returncode == 0
+    assert r.stdout.strip() == expected
+
+
+def test_prose_verbs_do_not_attract_trailers():
+    # R2 repro: the Summary sentence starts with "Closes" but carries no reference.
+    body = (
+        "## Summary\n\nCloses the attribution gap.\n\nFixes the parser edge case.\n\nCloses #160\n"
+    )
+    r = splice(body, "Co-authored-by: W <w@x>")
+    assert r.returncode == 0
+    assert r.stdout == (
+        "## Summary\n\nCloses the attribution gap.\n\n"
+        "Fixes the parser edge case.\n\nCo-authored-by: W <w@x>\n\nCloses #160\n"
     )
 
 
@@ -234,10 +273,10 @@ def test_finalize_superseding_body_dedupes_to_one_trailer(tmp_path):
     assert r.stdout.count("Co-authored-by:") == 1
 
 
-def run_merge(env, body):
+def run_merge(env, body, title="feat: x"):
     return run_bash(
-        f'source "{PR_SH}"; REPO=t/r; NUM={NUM}; TITLE="feat: x"; BASE=main; BODY="$B"; merge_pr',
-        {**env, "B": body},
+        f'source "{PR_SH}"; REPO=t/r; NUM={NUM}; TITLE="$T"; BASE=main; BODY="$B"; merge_pr',
+        {**env, "B": body, "T": title},
     )
 
 
@@ -260,6 +299,44 @@ def test_merge_pr_appends_contributor_trailer(tmp_path):
     captured = open(env["CAPTURE"]).read()
     assert "Co-authored-by: Wf Zyx <wf@x.io>" in captured
     assert captured.index("Co-authored-by:") < captured.index("Closes #12")
+
+
+def test_merge_refuses_when_commit_enumeration_fails(tmp_path):
+    # R1: a failed commits call is not an empty commit list — refuse loudly,
+    # never merge silently unattributed.
+    env = make_gh_mock(tmp_path, COMMITS_FAIL="1", COMMITS_TSV="ghuser\tWf Zyx\twf@x.io")
+    r = run_merge(env, "Summary.\n\nCloses #12\n")
+    assert r.returncode != 0
+    assert "could not enumerate" in r.stderr
+    assert not os.path.exists(env["CAPTURE"])
+    assert "pulls/7/merge" not in open(env["GH_LOG"]).read()
+
+
+def test_merge_refuses_raw_token_body_before_api_call(tmp_path):
+    # R8: the token gate runs on the fetched body unconditionally — even a body
+    # that would never become the squash message.
+    env = make_gh_mock(tmp_path, COMMITS_TSV="me\tMe\tme@x.io")
+    r = run_merge(env, "intro\n\n<!-- CODE_AUTHORS: fill me -->\n")
+    assert r.returncode != 0
+    assert "CODE_AUTHORS" in r.stderr
+    assert not os.path.exists(env["CAPTURE"])
+    assert not os.path.exists(env["GH_LOG"]) or "pulls/7" not in open(env["GH_LOG"]).read()
+
+
+def test_merge_refuses_overlong_title_before_api_call(tmp_path):
+    # R4: header "<title> (#7)" at 106 chars exceeds commitlint header-max-length.
+    env = make_gh_mock(tmp_path, COMMITS_TSV="me\tMe\tme@x.io")
+    r = run_merge(env, "Solo.\n", title="x" * 101)
+    assert r.returncode != 0
+    assert "exceeds 100 chars" in r.stderr
+    assert not os.path.exists(env["GH_LOG"]) or "pulls/7" not in open(env["GH_LOG"]).read()
+
+
+def test_merge_accepts_title_at_exact_limit(tmp_path):
+    env = make_gh_mock(tmp_path, COMMITS_TSV="me\tMe\tme@x.io")
+    r = run_merge(env, "Solo.\n", title="x" * 95)  # 95 + " (#7)" = 100
+    assert r.returncode == 0
+    assert os.path.exists(env["CAPTURE"])
 
 
 def test_merge_pr_refuses_before_api_call_on_long_line(tmp_path):
@@ -293,6 +370,28 @@ def test_check_dry_run_reports_when_nothing_to_append(tmp_path):
     assert "no co-author trailers" in r.stderr
 
 
+def test_check_refuses_long_line_body(tmp_path):
+    # R3: the dry run runs the same gates as the merge — no green dry run
+    # where the merge would refuse.
+    env = make_gh_mock(
+        tmp_path,
+        COMMITS_TSV="ghuser\tWf Zyx\twf@x.io\nme\tMe\tme@x.io",
+        PR_BODY="ok\n" + "x" * 120 + "\n",
+    )
+    r = run_bash(f'bash "{PR_SH}" --check --head feat-x', env)
+    assert r.returncode != 0
+    assert r.stdout == ""
+    assert "exceed" in r.stderr
+
+
+def test_check_refuses_raw_token_body(tmp_path):
+    env = make_gh_mock(tmp_path, PR_BODY="intro\n\n<!-- CODE_AUTHORS -->\n")
+    r = run_bash(f'bash "{PR_SH}" --check --head feat-x', env)
+    assert r.returncode != 0
+    assert r.stdout == ""
+    assert "CODE_AUTHORS" in r.stderr
+
+
 # --- pr-refine script ---
 
 
@@ -321,7 +420,14 @@ def test_refine_observe_reports_deterministic_flow(tmp_path):
     assert "flow=B" in r.stdout
 
 
-# --- pr-refine routing eval: trigger phrasings must hit the frontmatter ---
+# --- pr-refine routing eval: trigger phrasings must hit discriminating tokens ---
+# Each phrasing names the tokens that distinguish it from a generic "PR" mention;
+# the eval asserts those exact tokens, so a description containing only "pr" fails.
+REQUIRED_TOKENS = {
+    "merge then refine and push": {"refine", "push"},
+    "refine the PR": {"refine"},
+    "take over this PR": {"take", "over"},
+}
 
 STOPWORDS = {
     "merge",
@@ -356,26 +462,27 @@ def tokens(s):
     return {t for t in re.split(r"[^a-z0-9]+", s.lower()) if t and t not in STOPWORDS}
 
 
-@pytest.mark.parametrize(
-    "phrasing",
-    ["merge then refine and push", "refine the PR", "take over this PR"],
-)
+@pytest.mark.parametrize("phrasing", list(REQUIRED_TOKENS))
 def test_pr_refine_triggers_catch_contributor_pr_phrasings(phrasing):
     desc = skill_description(
-        os.path.join(
-            REPO_ROOT, "skills", "gh-router", "subskills", "pr-refine", "SKILL.md"
-        )
+        os.path.join(REPO_ROOT, "skills", "gh-router", "subskills", "pr-refine", "SKILL.md")
     )
-    overlap = tokens(phrasing) & tokens(desc)
-    assert overlap, f"{phrasing!r} shares no trigger token with pr-refine description"
+    required = REQUIRED_TOKENS[phrasing]
+    assert required <= tokens(desc), (
+        f"{phrasing!r} needs {sorted(required)} in the pr-refine description"
+    )
     assert len(desc) <= 300
+
+
+def test_generic_pr_token_alone_satisfies_no_phrasing():
+    # R7 negative case: the generic token must not carry any phrasing.
+    for phrasing, required in REQUIRED_TOKENS.items():
+        assert not {"pr"} >= required, f"{phrasing!r} is satisfied by 'pr' alone"
 
 
 def test_pr_refine_frontmatter_declares_negative_space():
     desc = skill_description(
-        os.path.join(
-            REPO_ROOT, "skills", "gh-router", "subskills", "pr-refine", "SKILL.md"
-        )
+        os.path.join(REPO_ROOT, "skills", "gh-router", "subskills", "pr-refine", "SKILL.md")
     )
     assert "pr-enhance" in desc
     assert "pr-land" in desc
