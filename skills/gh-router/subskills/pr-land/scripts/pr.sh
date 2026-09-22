@@ -358,12 +358,13 @@ list_contains() {
 }
 
 # is_trailer_line <line> / is_closing_line <line> — classifiers for the splice. A closing
-# line is a *reference* line (keyword plus #N), never a bare verb: ordinary prose like
-# "Fixes the parser" must not split a section.
+# line is a *directive* line: keyword, optional colon, then the reference right away
+# ("Closes #12", "Closes: #12", "Fixes owner/repo#3", "Closes GH-12"). Prose that
+# puts words between the keyword and the reference ("Fixes the cache (#42) by …")
+# is not a directive and must not split a section.
 is_trailer_line() { printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*co-authored-by:'; }
 is_closing_line() {
-  printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*(closes?|closed|fixes?|fixed|resolves?|resolved|refs?)([^[:alnum:]_]|$)' || return 1
-  printf '%s' "${1:-}" | grep -qE '#[0-9]|GH-[0-9]'
+  printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*(closes?|closed|fixes?|fixed|resolves?|resolved|refs?)[[:space:]]*:?[[:space:]]+(#[0-9]|GH-[0-9]|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9])'
 }
 
 # pr_co_author_trailers <merger-login> — stdin `login<TAB>name<TAB>email` rows (the commits
@@ -583,11 +584,8 @@ merge_pr() {
     echo "remediation: shorten the PR title, then re-run" >&2
     return 1
   fi
-  # The token gate runs even when the body won't become the message: a raw template
-  # body means the replace-or-delete decision was never made.
-  if ! printf '%s' "$BODY" | refuse_raw_token; then
-    return 1
-  fi
+  # Template and empty bodies never reach the token gate: squash_message maps them
+  # to no commit_message, so GitHub builds the message (and its own attribution).
   for ((i = 1; i <= MERGE_STATE_TRIES; i++)); do
     state=$(gh api "repos/$REPO/pulls/$NUM" --jq .mergeable_state 2>/dev/null || echo unknown)
     if [[ "$state" == "clean" ]]; then break; fi
