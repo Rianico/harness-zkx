@@ -367,12 +367,31 @@ is_closing_line() { printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*(closes?|clos
 # $BODY (case-insensitive); dedupes by lowercase email keeping first occurrence. An empty
 # merger login credits everyone — redundant trailers are harmless, missing ones are not.
 pr_co_author_trailers() {
-  local merger_key login name email key seen existing tsv
+  local merger_key login name email key seen existing tsv row
   merger_key=$(printf '%s' "${1:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
   existing=$(printf '%s' "$BODY" | existing_trailer_emails)
   seen=""
   tsv=$(cat)
-  while IFS=$'\t' read -r login name email || [[ -n "${login:-}${name:-}${email:-}" ]]; do
+  # Split on tabs by hand: `read` drops a leading empty field, which would shift an
+  # unlinked author's name/email left and silently skip them.
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    login=""
+    if [[ "$row" == $'\t'* ]]; then
+      row="${row#$'\t'}"
+    elif [[ "$row" == *$'\t'* ]]; then
+      login="${row%%$'\t'*}"
+      row="${row#*$'\t'}"
+    else
+      continue
+    fi
+    if [[ "$row" == *$'\t'* ]]; then
+      name="${row%%$'\t'*}"
+      email="${row#*$'\t'}"
+    else
+      name="$row"
+      email=""
+    fi
     login=$(printf '%s' "$login" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
     name="${name#"${name%%[![:space:]]*}"}"
     name="${name%"${name##*[![:space:]]}"}"
