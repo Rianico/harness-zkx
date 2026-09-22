@@ -35,3 +35,7 @@ graph LR
 Closes #123
 Closes #456
 -->
+
+<!-- CODE_AUTHORS: replace with `Co-authored-by: Name <email>` lines for each outside
+     contributor whose commits this PR carries, or delete this block. The merge step
+     refuses a body that still contains the raw `CODE_AUTHORS` token. -->
