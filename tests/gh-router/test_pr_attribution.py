@@ -44,6 +44,7 @@ for arg in "$@"; do
       if [[ "$COMMITS_FAIL" == "1" ]]; then echo "api error: rate limited" >&2; exit 1; fi
       printf '%s' "$COMMITS_TSV"; exit 0 ;;
     .mergeable_state) printf 'clean\\n'; exit 0 ;;
+    '[.maintainer_can_modify,'*) printf '%s' "$OBSERVE_TSV"; exit 0 ;;
     *pulls/7/merge*)
       for a in "$@"; do
         case "$a" in
@@ -435,16 +436,23 @@ def test_refine_lint_body_refuses_token_and_accepts_clean(tmp_path):
     assert "body ok" in r.stdout
 
 
-def test_refine_observe_reports_deterministic_flow(tmp_path):
-    env = make_gh_mock(tmp_path, OBSERVE_TSV="true\tfeat-x\tfork/repo\twf\tmain")
+@pytest.mark.parametrize(
+    ("tsv", "flow"),
+    [
+        ("false\to/r\to/r", "flow=A"),  # same-repo head: flag false, push anyway
+        ("true\tfork/r\to/r", "flow=A"),  # fork, maintainer can modify
+        ("false\tfork/r\to/r", "flow=B"),  # fork, cannot modify
+        ("false\t\to/r", "flow=B"),  # deleted fork: null head repo
+    ],
+)
+def test_refine_observe_routes_on_repo_not_flag_alone(tmp_path, tsv, flow):
+    # R10: maintainerCanModify is false for same-repo branches — Flow A iff the
+    # flag is true OR the head repo is the base repo.
+    env = make_gh_mock(tmp_path, OBSERVE_TSV=tsv)
     r = run_bash(f'bash "{REFINE_SH}" observe 157', env)
     assert r.returncode == 0
-    assert "maintainerCanModify=true" in r.stdout
-    assert "flow=A" in r.stdout
-    env = make_gh_mock(tmp_path, OBSERVE_TSV="false\tfeat-x\tfork/repo\twf\tmain")
-    r = run_bash(f'bash "{REFINE_SH}" observe 157', env)
-    assert r.returncode == 0
-    assert "flow=B" in r.stdout
+    assert "maintainerCanModify=" in r.stdout
+    assert flow in r.stdout
 
 
 # --- pr-refine routing eval: trigger phrasings must hit discriminating tokens ---

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # refine.sh — take over and refine a contributor's PR (Flow A or B).
 # Usage: scripts/refine.sh observe NUM | checkout NUM | lint-body --body-file FILE
-#   observe  : deterministic gate — prints maintainerCanModify, head, author, base, and the
+#   observe  : deterministic gate — prints maintainerCanModify, head/base repos, and the
 #              resulting flow (A = push onto their branch, B = superseding PR). No judgment.
+#              Same-repo heads always take Flow A: maintainerCanModify is false for
+#              in-repo branches (it only means anything for forks), and you already
+#              hold the push access pr-land demands.
 #   checkout : check out the contributor's head intact (never rewrite their history).
 #   lint-body: refuse a body still holding the raw CODE_AUTHORS token or a line over
 #              100 chars (commitlint body-max-line-length) — same gates pr-land enforces.
@@ -19,23 +22,37 @@ source "$PR_SH"
 usage() { sed -n '2,9p' "$0"; }
 
 observe_pr() {
-  local num="${1:-}" payload can_modify head_ref head_repo author base
+  local num="${1:-}" payload can_modify head_repo base_repo repo
   if [[ ! "$num" =~ ^[0-9]+$ ]]; then
     echo "usage: refine.sh observe NUM" >&2
     return 2
   fi
-  payload=$(gh pr view "$num" --json maintainerCanModify,headRefName,headRepository,author,baseRefName \
-    --jq '[.maintainerCanModify, .headRefName, .headRepository.nameWithOwner, .author.login, .baseRefName] | @tsv' 2>/dev/null || echo "")
-  if [[ -z "$payload" ]]; then
-    echo "observe: gh pr view $num failed" >&2
+  if ! repo=$(repo_slug); then
+    echo "observe: cannot resolve repo slug" >&2
     return 1
   fi
-  IFS=$'\t' read -r can_modify head_ref head_repo author base <<<"$payload"
+  # REST: `gh pr view --json` has no baseRepository field. An empty head repo
+  # (deleted fork) keeps Flow B.
+  payload=$(gh api "repos/$repo/pulls/$num" \
+    --jq '[.maintainer_can_modify, (.head.repo.full_name // ""), .base.repo.full_name] | @tsv' 2>/dev/null || echo "")
+  if [[ -z "$payload" ]]; then
+    echo "observe: gh api repos/$repo/pulls/$num failed" >&2
+    return 1
+  fi
+  # Split by hand: `read` drops leading empty fields, which would shift a null
+  # head repo (deleted fork) into the wrong column on display.
+  if [[ "$payload" != *$'\t'*$'\t'* ]]; then
+    echo "observe: unexpected response shape" >&2
+    return 1
+  fi
+  can_modify="${payload%%$'\t'*}"
+  head_repo="${payload#*$'\t'}"
+  base_repo="${head_repo#*$'\t'}"
+  head_repo="${head_repo%%$'\t'*}"
   echo "maintainerCanModify=$can_modify"
-  echo "head=$head_repo:$head_ref"
-  echo "author=$author"
-  echo "base=$base"
-  if [[ "$can_modify" == "true" ]]; then
+  echo "headRepo=$head_repo"
+  echo "baseRepo=$base_repo"
+  if [[ "$can_modify" == "true" || (-n "$head_repo" && "$head_repo" == "$base_repo") ]]; then
     echo "flow=A (push refinements onto their branch, merge their PR via pr-land)"
   else
     echo "flow=B (merge their head intact into your branch, open a superseding PR)"
