@@ -116,6 +116,30 @@ def test_barrier_accepts_background_done_without_until(stub: StubHarness) -> Non
     assert "done" in done.stdout
 
 
+def test_revision_zero_settled_state_is_held(stub: StubHarness) -> None:
+    """False-positive done with revision 0 (agy, unrecognized) must not settle."""
+    state = settled_state(a={"agent_status": "done", "revision": "0"})
+    done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
+    assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
+    assert "revision 0" in done.stderr
+    assert "timed out" in done.stderr
+
+
+def test_int_revision_zero_is_held(stub: StubHarness) -> None:
+    """Numeric revision 0 normalizes to "0" and is held as well."""
+    state = settled_state(a={"agent_status": "idle", "revision": 0})
+    done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
+    assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
+    assert "revision 0" in done.stderr
+
+
+def test_is_recognized_gate() -> None:
+    assert herdr_wait.is_recognized(herdr_wait.Snapshot("a", "done", revision="r1"))
+    assert herdr_wait.is_recognized(herdr_wait.Snapshot("a", "done", revision=None))
+    assert not herdr_wait.is_recognized(herdr_wait.Snapshot("a", "done", revision="0"))
+    assert not herdr_wait.is_recognized(herdr_wait.Snapshot("a", "idle", revision="0"))
+
+
 def test_any_exits_on_first_settled_target(stub: StubHarness) -> None:
     state = settled_state(a={"agent_status": "working"}, b={"agent_status": "done"})
     done = stub.run("a", "b", "--any", "--interval", "0.01", state=state)

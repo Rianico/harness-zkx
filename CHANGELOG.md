@@ -15,9 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-* **skills/herdr:** support prompt broadcast and wait-timeout exit path
-* **skills/herdr:** add herdr-transcript session extractor
-* **skills/herdr:** add herdr-wait polling barrier helper
+* **skills/herdr:** add wait barrier and transcript helpers (#93)
 * **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
 * **herdr:** add herdr-overview and one name for panes and their agents (#69)
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
@@ -30,6 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** report the run plan and self-check written output (#23)
 * **gh-router:** diagnostic scripts, changelog sync, and an exit-code fix (#21)
 * **scaffold:** add --update mode and extract static templates (#20)
+* **skills/herdr:** support prompt broadcast and wait-timeout exit path
+* **skills/herdr:** add herdr-transcript session extractor
+* **skills/herdr:** add herdr-wait polling barrier helper
 * **herdr:** let herdr-prompt target a pane by its label
 * **herdr:** add herdr-label to name a pane and its agent together
 * **herdr:** add herdr-overview for a compact session view
@@ -37,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **skills/herdr:** hold unrecognized settled states, fall back to pane read (#94)
 * **harness-audit:** restore frontmatter and repair triage table (#87)
 * **scaffold:** update PR template with closing directives (#86)
 * **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)
@@ -81,7 +83,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **skills/herdr:** document fan-out barrier and transcript patterns
+* **agent-rules:** clarify skill_dir resolves to the containing skill.md directory
 * **git-convention:** codify standalone issue-closing directives (#85)
 * **rules:** stop recommending Obsidian wikilinks in markdown
 * **scaffold:** add adr-scaffolding subskill (#52)
@@ -93,6 +95,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
 * **scaffold:** record the changelog bullet contract
+* **skills/herdr:** note agy recognition limits and barrier re-entry
+* **skills/herdr:** document fan-out barrier and transcript patterns
 * **herdr:** order the helper sections by workflow
 * **herdr:** correct the handoff guidance to lead with the label
 * **herdr:** document herdr-overview and the name/label split

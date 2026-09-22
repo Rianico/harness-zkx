@@ -10,12 +10,16 @@ concurrent ``herdr agent wait`` subprocesses. Polling re-reads state on every ti
 so it is immune to the upstream event-blindness bug behind #83, where an
 event-driven ``agent wait --until idle`` never wakes: background agents settle to
 ``done`` (not ``idle``), and a later ``seen`` flip to ``idle`` emits no event.
+Polling still trusts the state feed, so a false-positive ``idle``/``done`` with
+revision 0 and no session (weak recognition, seen on agy panes whose status bar
+still reads WORKING) is held, not settled: the barrier keeps waiting and warns.
 
     herdr-wait action1 action2 --timeout 300000   # barrier: ALL settle (default)
     herdr-wait review1 review2 --any              # reactive: ANY settles
     herdr-wait action1 action2 --json             # machine-readable summary
 
 Settled means ``idle``, ``done``, or ``blocked`` unless ``--until`` narrows it.
+A wanted state with revision 0 is not settled (agent unrecognized); it is held.
 ``blocked`` always exits 3 (the agent needs human input, matching herdr-prompt).
 A watchdog ``--timeout`` (default 300s) always applies; expiry exits 1 naming the
 unsettled targets.
@@ -160,7 +164,12 @@ def snapshot_agent(herdr: str, target: str, env: Mapping[str, str]) -> Snapshot:
     status = agent.get("agent_status")
     if not isinstance(status, str) or not status:
         raise HerdrError(f"herdr agent get {target} returned no agent_status")
-    revision = agent.get("revision")
+    revision_raw = agent.get("revision")
+    revision: str | None = None
+    if isinstance(revision_raw, str) and revision_raw:
+        revision = revision_raw
+    elif isinstance(revision_raw, int) and revision_raw >= 0:
+        revision = str(revision_raw)
     session_raw = agent.get("agent_session")
     session: str | None = None
     if isinstance(session_raw, dict):
@@ -170,9 +179,19 @@ def snapshot_agent(herdr: str, target: str, env: Mapping[str, str]) -> Snapshot:
     return Snapshot(
         target=target,
         status=status,
-        revision=revision if isinstance(revision, str) and revision else None,
+        revision=revision,
         session=session,
     )
+
+
+def is_recognized(snap: Snapshot) -> bool:
+    """Revision 0 means Herdr has not recognized an agent turn yet.
+
+    Seen on agy panes: `agent get` reports idle/done with revision 0 and no
+    session while the pane status bar still reads WORKING. Such a record is
+    held, never settled.
+    """
+    return snap.revision != "0"
 
 
 def format_table(snaps: Sequence[Snapshot]) -> str:
@@ -237,6 +256,7 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
     start = time.monotonic()
     deadline = start + options.timeout / 1000.0
     snaps: list[Snapshot] = []
+    warned: set[str] = set()
     while True:
         now = time.monotonic()
         snaps = [snapshot_agent(herdr, target, env) for target in options.targets]
@@ -250,7 +270,17 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
             names = ", ".join(blocked)
             print(f"herdr-wait: {names} need human input (blocked)", file=sys.stderr)
             return EXIT_BLOCKED
-        matched = [snap.target for snap in snaps if snap.status in wanted]
+        held = sorted(
+            snap.target for snap in snaps if snap.status in wanted and not is_recognized(snap)
+        )
+        for target in held:
+            if target not in warned:
+                warned.add(target)
+                print(
+                    f"herdr-wait: {target} reports settled with revision 0 (unrecognized); still waiting",
+                    file=sys.stderr,
+                )
+        matched = [snap.target for snap in snaps if snap.status in wanted and is_recognized(snap)]
         if options.any and matched:
             emit(snaps, as_json=options.json)
             return EXIT_OK
