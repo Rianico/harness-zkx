@@ -5,9 +5,10 @@ description: >-
 argument-hint: |-
   gh-release [--dry-run] -- changelog and publish via dispatch
   pr-enhance [base|pr_url] -- PR description generation
+  pr-refine <number> -- take over a contributor's PR (Flow A/B), then hand to pr-land
   pr-land [--watch --merge] -- create PR, watch checks, squash-merge
 metadata:
-  manage: [gh-release, pr-land, pr-enhance]
+  manage: [gh-release, pr-land, pr-enhance, pr-refine]
 ---
 
 # GH Router
@@ -37,11 +38,12 @@ Run ids come from `scripts/ci.sh runs`, a PR's checks, or `gh run list`. All pat
 
 ## Subskills (load for the deep flow)
 
-| Subskill     | Owns                                          | Trigger                              |
-| ------------ | --------------------------------------------- | ------------------------------------ |
-| `gh-release` | check → verify → preview → dispatch → confirm | `release`, dispatch semantic-release |
-| `pr-land`    | create → watch checks → squash-merge          | `pr create`, `pr watch`, `pr merge`  |
-| `pr-enhance` | PR description and diagram generation         | `submit PR`, `refine PR`             |
+| Subskill     | Owns                                          | Trigger                                              |
+| ------------ | --------------------------------------------- | ---------------------------------------------------- |
+| `gh-release` | check → verify → preview → dispatch → confirm | `release`, dispatch semantic-release                 |
+| `pr-land`    | create → watch checks → squash-merge          | `pr create`, `pr watch`, `pr merge`                  |
+| `pr-enhance` | own-PR description and diagram generation     | `submit PR`, own-PR prose                            |
+| `pr-refine`  | refine / take over someone's PR up to push    | `refine`, `take over`, `supersede`, land someone's PR |
 
 Read `$SKILL_DIR/subskills/<name>/SKILL.md` for flags, exit codes and failure contracts.
 

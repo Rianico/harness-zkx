@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **pr-land:** rebuild co-author trailers on squash-merge
 * **skills/herdr:** add wait barrier and transcript helpers (#93)
 * **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
 * **herdr:** add herdr-overview and one name for panes and their agents (#69)
@@ -38,6 +39,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **pr-land:** scope token gate to the HTML comment placeholder
+* **pr-land:** --check mirrors the squash fallback
+* **pr-refine:** route same-repo heads to Flow A
+* **pr-land:** directive-adjacent closing lines, gate scoped to message
+* **pr-land:** fail closed on attribution evidence, gate header and token
+* **pr-land:** credit commit authors with no linked GitHub login
 * **skills/herdr:** hold unrecognized settled states, fall back to pane read (#94)
 * **harness-audit:** restore frontmatter and repair triage table (#87)
 * **scaffold:** update PR template with closing directives (#86)
@@ -83,6 +90,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **pr-enhance:** disambiguate own-PR prose trigger
+* **pr-land:** token gate applies only when body becomes the message
+* **gh-router:** --check runs merge gates, unconditional token gate
+* **gh-router:** authorship token, pr-refine skill, and router wiring
 * **agent-rules:** clarify skill_dir resolves to the containing skill.md directory
 * **git-convention:** codify standalone issue-closing directives (#85)
 * **rules:** stop recommending Obsidian wikilinks in markdown
