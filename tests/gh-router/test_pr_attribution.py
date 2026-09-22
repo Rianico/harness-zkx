@@ -244,6 +244,25 @@ def test_long_line_refused_with_numbers_then_wrapped_retry_passes():
     assert "RC=0" in r.stdout
 
 
+def test_raw_token_gate_ignores_prose_mentions():
+    # The placeholder is an HTML comment block; prose naming the token passes.
+    r = run_bash(
+        f'source "{PR_SH}"; if printf \'%s\' "$B" | refuse_raw_token; then echo RC=0; else echo RC=$?; fi',
+        {"B": "raw CODE_AUTHORS template tokens are refused"},
+    )
+    assert r.returncode == 0
+    assert "RC=0" in r.stdout
+
+
+def test_raw_token_gate_catches_later_line_of_comment_block():
+    r = run_bash(
+        f'source "{PR_SH}"; if printf \'%s\' "$B" | refuse_raw_token; then echo RC=0; else echo RC=$?; fi',
+        {"B": "<!-- authorship\nCODE_AUTHORS left here\n-->"},
+    )
+    assert r.returncode == 0
+    assert "RC=1" in r.stdout
+
+
 def test_raw_token_refused_with_remediation():
     r = run_bash(
         f'source "{PR_SH}"; if printf \'%s\' "$B" | refuse_raw_token; then echo RC=0; else echo RC=$?; fi',
