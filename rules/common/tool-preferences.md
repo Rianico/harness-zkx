@@ -6,6 +6,7 @@
 - **Search:** `rg` > `grep`/`grep -r` — ripgrep (respects `.gitignore`, faster, scope with `--glob`/`-g`/`--type`)
 - **File discovery:** `fd` > `find` — respects ignores, simpler `fd <pattern> <path>`; use `fd --type f`/`--type d`
 - **Listing:** `eza` > `ls`/`tree` — `eza -la` / `eza --tree` (icons, git); fallback `ls`/`tree` when `eza` unavailable
+- **Skill paths:** `$SKILL_DIR` always means the directory containing the SKILL.md being read — for a subskill doc, the subskill dir itself, never the parent skill root. Same-named skills can exist globally and repo-locally; prefer the repo-local copy when cwd is that repo.
 
 ## Runtimes — native tool owns version + deps; commit version file
 
