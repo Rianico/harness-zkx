@@ -39,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **pr-land:** --check mirrors the squash fallback
+* **pr-refine:** route same-repo heads to Flow A
 * **pr-land:** directive-adjacent closing lines, gate scoped to message
 * **pr-land:** fail closed on attribution evidence, gate header and token
 * **pr-land:** credit commit authors with no linked GitHub login
@@ -87,6 +89,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **pr-enhance:** disambiguate own-PR prose trigger
 * **pr-land:** token gate applies only when body becomes the message
 * **gh-router:** --check runs merge gates, unconditional token gate
 * **gh-router:** authorship token, pr-refine skill, and router wiring
