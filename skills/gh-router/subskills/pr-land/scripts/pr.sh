@@ -548,6 +548,17 @@ finalize_squash_message() {
   build_squash_message "$msg" "$merger" "$tsv"
 }
 
+# is_fallback_body — true when $BODY would not become the squash message
+# (squash_message maps empty and template-identical bodies to no commit_message).
+is_fallback_body() {
+  [[ -z "$BODY" ]] && return 0
+  local tmpl=""
+  if [[ -f .github/pull_request_template.md ]]; then
+    tmpl=$(cat .github/pull_request_template.md)
+  fi
+  [[ -n "$tmpl" && "$BODY" == "$tmpl" ]]
+}
+
 # check_trailers — --check dry run: run the same gates the merge runs, then print the
 # trailers a merge would append (no PR created, no merge call).
 check_trailers() {
@@ -559,6 +570,11 @@ check_trailers() {
   fi
   NUM="$found"
   BODY=$(gh api "repos/$REPO/pulls/$NUM" --jq '.body // ""' 2>/dev/null || echo "")
+  # Mirror the merge: a fallback body is never sent, so there is nothing to gate.
+  if is_fallback_body; then
+    echo "commit_message will be omitted (body empty or repo template); GitHub builds the squash message"
+    return 0
+  fi
   merger=$(gh api user --jq .login 2>/dev/null || echo "")
   if ! tsv=$(gh api "repos/$REPO/pulls/$NUM/commits" --jq '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv'); then
     echo "refusing --check: could not enumerate PR #$NUM commit authors (check network / GH_TOKEN scopes); re-run" >&2

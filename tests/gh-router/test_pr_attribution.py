@@ -398,6 +398,17 @@ def test_check_dry_run_reports_when_nothing_to_append(tmp_path):
     assert "no co-author trailers" in r.stderr
 
 
+def test_check_template_body_reports_fallback(tmp_path):
+    # R11: a pristine-template body never becomes the message — the dry run says
+    # so and exits 0 instead of refusing where the merge proceeds.
+    template = open(os.path.join(REPO_ROOT, ".github", "pull_request_template.md")).read()
+    env = make_gh_mock(tmp_path, COMMITS_TSV="ghuser\tWf Zyx\twf@x.io", PR_BODY=template)
+    r = run_bash(f'bash "{PR_SH}" --check --head feat-x', env)
+    assert r.returncode == 0
+    assert "omitted" in r.stdout
+    assert "Co-authored-by" not in r.stdout
+
+
 def test_check_refuses_long_line_body(tmp_path):
     # R3: the dry run runs the same gates as the merge — no green dry run
     # where the merge would refuse.
