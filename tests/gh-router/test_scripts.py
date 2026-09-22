@@ -20,8 +20,8 @@ SCRIPTS = [
     GH_ROUTER / "subskills/gh-release/scripts/confirm.sh",
     GH_ROUTER / "scripts/changelog.sh",
     GH_ROUTER / "subskills/pr-land/scripts/pr.sh",
+    GH_ROUTER / "subskills/pr-refine/scripts/refine.sh",
 ]
-
 
 def test_scripts_exist_and_are_executable() -> None:
     for script in SCRIPTS:
