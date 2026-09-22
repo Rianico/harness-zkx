@@ -34,11 +34,13 @@ Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEA
    merge step rebuilds it first: one `Co-authored-by` trailer per distinct PR commit
    author except the merger (PR author included; dedupe by lowercase email, skipping
    emails already trailered case-insensitively), spliced ahead of the first
-   `Closes`/`Fixes`/`Resolves`/`Refs` line. A body still holding the raw `CODE_AUTHORS`
-   template token, or any line over 100 chars (`commitlint` `body-max-line-length`), is
-   refused pre-merge with line numbers and remediation — whenever the PR body is fetched
-   for a merge, including a pristine template body that never becomes the squash message.
-   `--check` runs the same gates the merge runs (token, trailers, length) and prints the
+   `Closes`/`Fixes`/`Resolves`/`Refs` directive line. The token and length gates run
+   only on a body that actually becomes the squash message: a body still holding the
+   raw `CODE_AUTHORS` template token, or any line over 100 chars (`commitlint`
+   `body-max-line-length`), is refused pre-merge with line numbers and remediation.
+   An empty body, or one identical to the repo template, omits `commit_message` as
+   before and falls back to commit subjects — the token can never reach a commit that
+   way. `--check` runs the same gates the merge runs (token, trailers, length) and prints the
    trailers that would be appended; it creates nothing.
 
 Fail-loud, no secrets in logs. Re-trigger is model-driven: script returns failure info, model edits, pushes, and re-runs `--watch --merge`. Exit: `0` ok · `1` checks failed or merge refused · `2` usage / unusable head ref. PR URL on stdout, progress on stderr.
