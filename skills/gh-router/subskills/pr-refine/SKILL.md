@@ -1,7 +1,7 @@
 ---
 name: pr-refine
 description: >-
-  Contributor-PR takeover pushing refinements onto their branch (Flow A) or opening an intact-history superseding PR (Flow B). Use when asked to refine, take over, supersede, or land someone's PR with local changes. Not for own-PR prose (pr-enhance) or watching/merging (pr-land).
+  Contributor-PR takeover: push refinements onto their branch (Flow A) or open an intact-history superseding PR (Flow B). Use when asked to refine, take over, supersede, or land someone's PR with local changes. Not for own-PR prose (pr-enhance) or watching/merging (pr-land).
 arguments: pr_number
 argument-hint: |-
   "<number> -- contributor PR to refine, take over, or supersede"

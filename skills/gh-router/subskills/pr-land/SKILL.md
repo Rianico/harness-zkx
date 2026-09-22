@@ -36,7 +36,9 @@ Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEA
    emails already trailered case-insensitively), spliced ahead of the first
    `Closes`/`Fixes`/`Resolves`/`Refs` line. A body still holding the raw `CODE_AUTHORS`
    template token, or any line over 100 chars (`commitlint` `body-max-line-length`), is
-   refused pre-merge with line numbers and remediation. `--check` dry-runs the trailer
-   computation: it prints the trailers a merge would append and creates nothing.
+   refused pre-merge with line numbers and remediation — whenever the PR body is fetched
+   for a merge, including a pristine template body that never becomes the squash message.
+   `--check` runs the same gates the merge runs (token, trailers, length) and prints the
+   trailers that would be appended; it creates nothing.
 
 Fail-loud, no secrets in logs. Re-trigger is model-driven: script returns failure info, model edits, pushes, and re-runs `--watch --merge`. Exit: `0` ok · `1` checks failed or merge refused · `2` usage / unusable head ref. PR URL on stdout, progress on stderr.
