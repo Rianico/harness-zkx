@@ -124,6 +124,13 @@ if args[:2] == ["agent", "get"]:
     print(json.dumps({"id": "cli:agent:get", "result": {"agent": agent, "type": "agent"}}))
     raise SystemExit(0)
 
+if args[:2] == ["agent", "read"]:
+    if state.get("agent_read_error"):
+        print(json.dumps({"error": state["agent_read_error"], "id": "cli:agent:read"}), file=sys.stderr)
+        raise SystemExit(1)
+    print(state.get("agent_read_text", ""))
+    raise SystemExit(0)
+
 print(json.dumps({"error": "unexpected argv: " + " ".join(args)}), file=sys.stderr)
 raise SystemExit(1)
 '''

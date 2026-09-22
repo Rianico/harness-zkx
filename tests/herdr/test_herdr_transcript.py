@@ -154,10 +154,27 @@ def test_json_prints_role_text_pairs(stub: StubHarness, tmp_path: Path) -> None:
     ]
 
 
-def test_missing_session_path_suggests_agent_read(stub: StubHarness) -> None:
-    done = stub.run("reviewer", "--last", state={**DEFAULT_STATE, "agent_get": {}})
+def test_missing_session_path_falls_back_to_agent_read(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {},
+        "agent_read_text": "pane verdict: still working",
+    }
+    done = stub.run("reviewer", "--last", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "still working" in done.stdout
+    assert "reading pane instead" in done.stderr
+
+
+def test_agent_read_failure_is_herdr_error(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {},
+        "agent_read_error": {"code": "agent_not_found", "message": "nope"},
+    }
+    done = stub.run("reviewer", "--last", state=state)
     assert done.returncode == herdr_cli.EXIT_HERDR
-    assert "agent read reviewer" in done.stderr
+    assert "agent read reviewer failed" in done.stderr
 
 
 def test_empty_match_is_herdr_error(stub: StubHarness, tmp_path: Path) -> None:

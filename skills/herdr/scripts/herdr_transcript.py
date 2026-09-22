@@ -19,8 +19,8 @@ blocks; only ``text`` blocks are kept.
     herdr-transcript review1 --role user           # filter to one role
     herdr-transcript review1 --role all --json     # full conversation as JSON
 
-Exit status: 0 extracted, 1 herdr failure or nothing to extract,
-2 usage or missing precondition.
+Exit status: 0 extracted (session file, or pane snapshot when the record carries
+no session path), 1 herdr failure or nothing to extract, 2 usage or missing precondition.
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
 """
@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -43,6 +44,7 @@ from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
     find_herdr,
     guard,
     require_herdr_env,
+    run_herdr,
     run_herdr_checked,
 )
 
@@ -55,6 +57,8 @@ class Options:
     last: bool = False
     role: str = "assistant"
     json: bool = False
+    lines: int = 120
+    source: str = "recent-unwrapped"
 
 
 @dataclass
@@ -82,6 +86,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="keep only this role ('all' keeps every role; default assistant)",
     )
     _ = parser.add_argument("--json", action="store_true", help="print messages as a JSON array")
+    _ = parser.add_argument(
+        "--lines",
+        type=int,
+        default=120,
+        metavar="N",
+        help="pane snapshot rows for the no-session fallback (default 120)",
+    )
+    _ = parser.add_argument(
+        "--source",
+        default="recent-unwrapped",
+        metavar="SOURCE",
+        help="pane snapshot source for the no-session fallback",
+    )
     return parser
 
 
@@ -107,6 +124,20 @@ def resolve_session(herdr: str, target: str, env: Mapping[str, str]) -> str:
             f"herdr agent read {target} --source recent-unwrapped --lines 120"
         )
     return path
+
+
+def fallback_agent_read(
+    herdr: str, target: str, env: Mapping[str, str], *, source: str, lines: int
+) -> int:
+    """Print the pane snapshot when the agent owns no session file."""
+    done = run_herdr(
+        [herdr, "agent", "read", target, "--source", source, "--lines", str(lines)], env
+    )
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
+        raise HerdrError(f"herdr agent read {target} failed: {detail}")
+    print(done.stdout, end="" if done.stdout.endswith("\n") else "\n")
+    return EXIT_OK
 
 
 def block_text(content: object) -> str | None:
@@ -178,7 +209,17 @@ def transcript(options: Options, env: Mapping[str, str]) -> int:
     if not options.role.strip():
         raise UsageError("--role must not be blank (use 'all' for every role)")
     herdr = find_herdr(env)
-    path = resolve_session(herdr, options.target, env)
+    if options.lines <= 0:
+        raise UsageError("--lines must be positive")
+    try:
+        path = resolve_session(herdr, options.target, env)
+    except HerdrError as exc:
+        if "no agent_session path" not in str(exc):
+            raise
+        print(f"herdr-transcript: {exc}; reading pane instead", file=sys.stderr)
+        return fallback_agent_read(
+            herdr, options.target, env, source=options.source, lines=options.lines
+        )
     try:
         with open(path, encoding="utf-8") as handle:
             raw = handle.read()

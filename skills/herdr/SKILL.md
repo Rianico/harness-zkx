@@ -176,7 +176,7 @@ Fall back to the terminal view only when the record carries no `agent_session` p
 herdr agent read reviewer --source recent-unwrapped --lines 120
 ```
 
-If a wait fails or returns `blocked`, inspect `agent get` and the transcript before deciding what input to send. A timeout or stalled response does not prove the prompt was never delivered; do not blindly submit it again. Use the pane surface only when raw terminal control is intentional.
+If a wait fails or returns `blocked`, inspect `agent get` and the transcript before deciding what input to send. If a wait exits settled yet the pane still shows WORKING, re-enter the barrier and read the pane — the state feed is not a trustworthy completion signal on weakly-recognized (agy, revision 0, no session) panes; never poll it with a grep/read loop. A timeout or stalled response does not prove the prompt was never delivered; do not blindly submit it again. Use the pane surface only when raw terminal control is intentional.
 
 ## Coordinate several agents
 
@@ -296,11 +296,11 @@ uv run "$SKILL_DIR/scripts/herdr_wait.py" review1 review2 --any
 uv run "$SKILL_DIR/scripts/herdr_wait.py" action1 action2 --json
 ```
 
-Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
+Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING) is held, never settled: the barrier warns and keeps waiting. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
 
 ### `herdr-transcript` — clean text from the session file
 
-Resolves `agent_session.value` via `herdr agent get <target>` and extracts assistant text from the session JSONL (Pi and Claude Code shapes), skipping spinners, status bars, and tool-call noise. Prefer it over `herdr agent read`, whose terminal snapshot clips on alternate-screen agents:
+Resolves `agent_session.value` via `herdr agent get <target>` and extracts assistant text from the session JSONL (Pi and Claude Code shapes), skipping spinners, status bars, and tool-call noise. With no `agent_session` path it falls back to the pane snapshot itself (`herdr agent read <target> --source recent-unwrapped --lines 120`; tune with `--source`/`--lines`). Prefer it over bare `herdr agent read`, whose terminal snapshot clips on alternate-screen agents:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --last
