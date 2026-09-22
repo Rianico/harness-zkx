@@ -141,11 +141,15 @@ def splice(body, new):
     [
         ("Closes #12", "MATCH"),
         ("Closes #160", "MATCH"),
+        ("Closes: #12", "MATCH"),
+        ("Closes GH-12", "MATCH"),
         ("Fixes owner/repo#3", "MATCH"),
         ("Fixes the parser edge case", "NOMATCH"),
         ("Fixed the cache bug", "NOMATCH"),
         ("Refs the design doc", "NOMATCH"),
         ("resolves ambiguity here", "NOMATCH"),
+        ("Resolves the ambiguity noted in #88.", "NOMATCH"),
+        ("Fixes the cache (#42) by keying per root.", "NOMATCH"),
         ("- Closes #9", "NOMATCH"),
     ],
 )
@@ -157,6 +161,17 @@ def test_is_closing_line_requires_issue_reference(line, expected):
     )
     assert r.returncode == 0
     assert r.stdout.strip() == expected
+
+
+def test_issue_citing_prose_does_not_attract_trailers():
+    # R2-residual: prose citing an issue number mid-paragraph is not a directive.
+    body = "Summary cites #88 in passing.\n\nFixes the cache (#42) by keying.\n\nCloses #160\n"
+    r = splice(body, "Co-authored-by: W <w@x>")
+    assert r.returncode == 0
+    assert r.stdout == (
+        "Summary cites #88 in passing.\n\n"
+        "Fixes the cache (#42) by keying.\n\nCo-authored-by: W <w@x>\n\nCloses #160\n"
+    )
 
 
 def test_prose_verbs_do_not_attract_trailers():
@@ -312,15 +327,27 @@ def test_merge_refuses_when_commit_enumeration_fails(tmp_path):
     assert "pulls/7/merge" not in open(env["GH_LOG"]).read()
 
 
-def test_merge_refuses_raw_token_body_before_api_call(tmp_path):
-    # R8: the token gate runs on the fetched body unconditionally — even a body
-    # that would never become the squash message.
+def test_merge_template_body_falls_back_to_subjects(tmp_path):
+    # R9(a): the default invocation stamps the template (with CODE_AUTHORS) as the
+    # body; squash_message maps it to no commit_message, so the merge proceeds and
+    # GitHub builds the message with its own attribution.
+    env = make_gh_mock(tmp_path, COMMITS_TSV="ghuser\tWf Zyx\twf@x.io")
+    template = open(os.path.join(REPO_ROOT, ".github", "pull_request_template.md")).read()
+    assert "CODE_AUTHORS" in template
+    r = run_merge(env, template)
+    assert r.returncode == 0
+    assert not os.path.exists(env["CAPTURE"])
+    assert "pulls/7/merge" in open(env["GH_LOG"]).read()
+
+
+def test_merge_token_bearing_body_refused(tmp_path):
+    # R9(a): the token gate applies exactly when the body becomes the message.
     env = make_gh_mock(tmp_path, COMMITS_TSV="me\tMe\tme@x.io")
     r = run_merge(env, "intro\n\n<!-- CODE_AUTHORS: fill me -->\n")
     assert r.returncode != 0
     assert "CODE_AUTHORS" in r.stderr
     assert not os.path.exists(env["CAPTURE"])
-    assert not os.path.exists(env["GH_LOG"]) or "pulls/7" not in open(env["GH_LOG"]).read()
+    assert "pulls/7/merge" not in open(env["GH_LOG"]).read()
 
 
 def test_merge_refuses_overlong_title_before_api_call(tmp_path):
@@ -462,22 +489,26 @@ def tokens(s):
     return {t for t in re.split(r"[^a-z0-9]+", s.lower()) if t and t not in STOPWORDS}
 
 
+def matches_required(phrasing, description):
+    return REQUIRED_TOKENS[phrasing] <= tokens(description)
+
+
 @pytest.mark.parametrize("phrasing", list(REQUIRED_TOKENS))
 def test_pr_refine_triggers_catch_contributor_pr_phrasings(phrasing):
     desc = skill_description(
         os.path.join(REPO_ROOT, "skills", "gh-router", "subskills", "pr-refine", "SKILL.md")
     )
-    required = REQUIRED_TOKENS[phrasing]
-    assert required <= tokens(desc), (
-        f"{phrasing!r} needs {sorted(required)} in the pr-refine description"
+    assert matches_required(phrasing, desc), (
+        f"{phrasing!r} needs {sorted(REQUIRED_TOKENS[phrasing])} in the pr-refine description"
     )
     assert len(desc) <= 300
 
 
 def test_generic_pr_token_alone_satisfies_no_phrasing():
-    # R7 negative case: the generic token must not carry any phrasing.
-    for phrasing, required in REQUIRED_TOKENS.items():
-        assert not {"pr"} >= required, f"{phrasing!r} is satisfied by 'pr' alone"
+    # R7 negative case, run through the same helper against a synthetic
+    # description: refutable — weakening any REQUIRED set to {"pr"} fails it.
+    for phrasing in REQUIRED_TOKENS:
+        assert not matches_required(phrasing, "pr"), f"{phrasing!r} is satisfied by 'pr' alone"
 
 
 def test_pr_refine_frontmatter_declares_negative_space():
