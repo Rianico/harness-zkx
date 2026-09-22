@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **pr-land:** scope token gate to the HTML comment placeholder
 * **pr-land:** --check mirrors the squash fallback
 * **pr-refine:** route same-repo heads to Flow A
 * **pr-land:** directive-adjacent closing lines, gate scoped to message
