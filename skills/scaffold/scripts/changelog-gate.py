@@ -24,6 +24,7 @@ Usage:
   uv run scripts/changelog-gate.py ledger --pr 96 --landing squash
   uv run scripts/changelog-gate.py ledger --pr 96 --landing merge --base main
   uv run scripts/changelog-gate.py ledger --update-baseline   # seed or shrink the debt record
+  uv run scripts/changelog-gate.py ledger --waiver "reason recorded in the PR body"
 """
 
 from __future__ import annotations
@@ -241,6 +242,8 @@ def write_baseline(path: Path, entries: list[str], existing: set[str] | None) ->
                     fixable=False,
                 )
             )
+    # A header-only file is the terminal state: it tolerates nothing, and unlike a deleted file it
+    # stages cleanly in release tooling that globs assets rather than staging removals.
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join([*BASELINE_NOTE, *sorted(recorded)]) + "\n", encoding="utf-8")
     return findings
@@ -460,6 +463,11 @@ def main(argv: list[str] | None = None) -> int:
         "--baseline", default=str(DEFAULT_BASELINE), help="recorded unattributed identities"
     )
     parser.add_argument("--update-baseline", action="store_true", help="seed or shrink it")
+    parser.add_argument(
+        "--waiver",
+        default=None,
+        help="recorded reason to accept fixable findings; never rescues a needs-human one",
+    )
     args = parser.parse_args(argv)
 
     if args.check == "ticket":
@@ -482,11 +490,22 @@ def main(argv: list[str] | None = None) -> int:
             args.update_baseline,
         )
 
+    if args.waiver is not None and not args.waiver.strip():
+        findings = [Finding("waiver", "--waiver needs a written reason", fixable=False)]
+
+    waived: list[Finding] = []
+    blocking: list[Finding] = []
     for finding in findings:
+        (waived if args.waiver and finding.fixable else blocking).append(finding)
+    for finding in waived:
+        print(f"[waived] [{finding.check}] {finding.detail}", file=sys.stderr)
+    for finding in blocking:
         print(f"[{finding.check}] {finding.detail}", file=sys.stderr)
-    if not findings:
-        print(f"{args.check}: pass")
-    return exit_code(findings)
+    if args.waiver:
+        print(f"waiver recorded: {args.waiver.strip()}", file=sys.stderr)
+    if not blocking:
+        print(f"{args.check}: pass" + (" (waived)" if waived else ""))
+    return exit_code(blocking)
 
 
 if __name__ == "__main__":

@@ -386,7 +386,6 @@ def test_update_baseline_seeds_then_only_shrinks(tmp_path: Path) -> None:
         tmp_path,
         _ledger("* **thing:** add a thing", "* **thing:** add another thing"),
         ["feat(thing): a (#1)"],
-
     )
 
     path = repo / ".config" / "changelog-unattributed-baseline.txt"
@@ -411,6 +410,64 @@ def test_update_baseline_seeds_then_only_shrinks(tmp_path: Path) -> None:
     recorded = path.read_text(encoding="utf-8")
     assert "add a thing" in recorded
     assert "another thing" not in recorded
+
+
+def test_update_baseline_leaves_a_header_only_file_once_nothing_is_tolerated(
+    tmp_path: Path,
+) -> None:
+    """The migration ends: a header-only file tolerates nothing and stages cleanly."""
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): a (#1)"])
+    path = repo / ".config" / "changelog-unattributed-baseline.txt"
+    assert _run(repo, "ledger", "--update-baseline").returncode == 0
+    assert "add a thing" in path.read_text(encoding="utf-8")
+
+    _ = (repo / "CHANGELOG.md").write_text(_ledger("* **thing:** a thing (#1)"), encoding="utf-8")
+    emptied = _run(repo, "ledger", "--update-baseline")
+
+    assert emptied.returncode == 0, emptied.stderr
+    remaining = [
+        line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith("#")
+    ]
+    assert remaining == []
+
+
+# --- the recorded waiver -------------------------------------------------------------------
+
+
+def test_ledger_waives_a_fixable_finding_with_a_written_reason(tmp_path: Path) -> None:
+    """The escape is changelog-scoped and recorded, not a blanket bypass."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#1)", "* **thing:** add a thing (#1)"),
+        ["feat(thing): a (#1)"],
+    )
+
+    blocked = _ledger_check(repo)
+    assert blocked.returncode == 1, blocked.stderr
+
+    waived = _run(repo, "ledger", "--waiver", "accepted: the duplicate retires next release")
+
+    assert waived.returncode == 0, waived.stderr
+    assert "(waived)" in waived.stdout
+    assert "waiver recorded: accepted: the duplicate retires next release" in waived.stderr
+
+
+def test_ledger_waiver_does_not_rescue_a_needs_human_finding(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, None, ["feat(thing): a (#1)"])
+
+    result = _run(repo, "ledger", "--waiver", "because I said so")
+
+    assert result.returncode == 2, result.stderr
+    assert "missing" in result.stderr
+
+
+def test_ledger_refuses_an_empty_waiver(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["feat(thing): a (#1)"])
+
+    result = _run(repo, "ledger", "--waiver", "   ")
+
+    assert result.returncode == 2, result.stderr
+    assert "needs a written reason" in result.stderr
 
 
 MEASURED_LEDGER = """\
