@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **changelog-gate:** add a recorded waiver and a terminal baseline state
 * **scaffold:** ship the changelog ledger gate alongside the generator
 * **changelog-gate:** record the unattributed migration as a shrink-only baseline
 * **changelog-gate:** account for entries by landing PR, not by scope
@@ -94,6 +95,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **adr:** define the recorded waiver and the baseline's lifecycle
 * **adr:** record the migration baseline and point pr-refine at §5
 * **adr:** account for the ledger by landing PR
 * **adr:** gate the ledger on declared landing and pre-merge curation
