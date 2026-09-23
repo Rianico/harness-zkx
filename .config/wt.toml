@@ -13,6 +13,10 @@ setup-hooks = "git config core.hooksPath .githooks"
 # Authoritative for this skill: every merge must pass this gate.
 # Default recommendation: typecheck + tests. Extend per project (build, lint, diff-check).
 gate = "uv run ruff check . && uv run pytest -q"
+# Ticket boundary (ADR-0016): `wt` runs pre-merge hooks *after* the squash, so HEAD is the single
+# squashed commit and `{{ target }}` is the branch it lands on. The subject must be conventional
+# and project exactly one well-formed ledger entry.
+changelog = "uv run scripts/changelog-gate.py ticket --base {{ target }}"
 # Examples for other stacks:
 # gate = "cargo test && cargo clippy"
 # gate = "uv run pytest && ruff check ."
