@@ -141,6 +141,7 @@ def parse_commit_log(log: str) -> list[tuple[str, str]]:
 
 def commits_to_sections(commits: list[tuple[str, str]]) -> dict[str, list[str]]:
     sections: dict[str, list[str]] = {}
+    seen: dict[str, set[str]] = {}
     for subject, body in commits:
         m = CONVENTIONAL_RE.match(subject)
         if not m:
@@ -168,6 +169,13 @@ def commits_to_sections(commits: list[tuple[str, str]]) -> dict[str, list[str]]:
             # annotate breaking
             entry += " (BREAKING CHANGE)"
 
+        # One commit per identity: a branch commit and its squash share a subject, and the
+        # ledger's unit is the entry, not the commit that minted it.
+        identities = seen.setdefault(section, set())
+        identity = entry_identity(entry)
+        if identity in identities:
+            continue
+        identities.add(identity)
         sections.setdefault(section, []).append(entry)
 
     return sections
