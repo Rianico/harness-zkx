@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # pr.sh — create pull request, watch every check, squash-merge (deterministic bytes)
-# Usage: scripts/pr.sh [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft]
+# Usage: scripts/pr.sh [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check]
 #   --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
 #   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
-# Squash body defaults to the PR body, so the Co-authored-by provenance trailer survives the squash.
+#   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
+# Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
+# except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
+# script rebuilds it). A body still holding the raw CODE_AUTHORS template token, or any line
+# over 100 chars (commitlint body-max-line-length), is refused pre-merge.
 # Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
 # Exit: 0 ok | 1 checks failed or merge refused | 2 usage or unusable head ref
 set -euo pipefail
@@ -26,18 +30,26 @@ POLL_INTERVAL=10
 MERGE_STATE_TRIES=5
 MERGE_STATE_INTERVAL=2
 
+# Attribution rebuild (squash-merge provenance): the merge API consumes commit_message
+# verbatim, so GitHub never appends its own co-author trailers when this script merges.
+CODE_AUTHORS_TOKEN="CODE_AUTHORS"
+SQUASH_LINE_MAX=100
+
 BASE=""
 HEAD_REF=""
 TITLE=""
+TITLE_SUPPLIED=0
 BODY=""
+BODY_SUPPLIED=0
 BODY_FILE=""
 WATCH=0
 MERGE=0
+CHECK=0
 DRAFT=0
 REPO=""
 NUM=""
 
-usage() { sed -n '2,10p' "$0"; }
+usage() { sed -n '2,11p' "$0"; }
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -52,14 +64,17 @@ parse_args() {
       ;;
     --title)
       TITLE="$2"
+      TITLE_SUPPLIED=1
       shift 2
       ;;
     --body)
       BODY="$2"
+      BODY_SUPPLIED=1
       shift 2
       ;;
     --body-file)
       BODY_FILE="$2"
+      BODY_SUPPLIED=1
       shift 2
       ;;
     --watch)
@@ -76,6 +91,14 @@ parse_args() {
       ;;
     --no-merge)
       MERGE=0
+      shift
+      ;;
+    --check)
+      CHECK=1
+      shift
+      ;;
+    --no-check)
+      CHECK=0
       shift
       ;;
     --draft)
@@ -108,9 +131,12 @@ resolve_head() {
 
 resolve_title_and_body() {
   [[ -n "$TITLE" ]] || TITLE=$(git log -1 --pretty=%s)
-  if [[ -n "$BODY_FILE" ]]; then BODY=$(cat "$BODY_FILE"); fi
-  if [[ -z "$BODY" ]]; then
-    if [[ -f .github/pull_request_template.md ]]; then BODY=$(cat .github/pull_request_template.md); else BODY=""; fi
+  if [[ -n "$BODY_FILE" ]]; then
+    if [[ ! -f "$BODY_FILE" || ! -r "$BODY_FILE" ]]; then
+      echo "body file not found or not readable: $BODY_FILE" >&2
+      exit 2
+    fi
+    BODY=$(cat "$BODY_FILE")
   fi
 }
 
@@ -137,12 +163,33 @@ create_or_reuse_pr() {
   if [[ -n "$existing" && "$existing" != "null" ]]; then
     NUM="$existing"
     echo "found existing PR #$NUM" >&2
-    if [[ -n "$TITLE" || -n "$BODY" ]]; then
-      gh api "repos/$REPO/pulls/$NUM" -X PATCH -f title="$TITLE" -f body="$BODY" >/dev/null || true
+    local patch_args=() updated_fields=()
+    if [[ $TITLE_SUPPLIED -eq 1 ]]; then
+      patch_args+=(-f title="$TITLE")
+      updated_fields+=("title")
+    else
+      local existing_title
+      existing_title=$(gh api "repos/$REPO/pulls/$NUM" --jq '.title // empty' 2>/dev/null || echo "")
+      [[ -n "$existing_title" ]] && TITLE="$existing_title"
+    fi
+    if [[ $BODY_SUPPLIED -eq 1 ]]; then
+      patch_args+=(-f body="$BODY")
+      updated_fields+=("body")
+    else
+      BODY=$(gh api "repos/$REPO/pulls/$NUM" --jq '.body // ""' 2>/dev/null || echo "")
+    fi
+    if [[ ${#patch_args[@]} -gt 0 ]]; then
+      gh api "repos/$REPO/pulls/$NUM" -X PATCH "${patch_args[@]}" >/dev/null || true
+      local fields_str
+      fields_str=$(IFS=', '; echo "${updated_fields[*]}")
+      echo "updating PR #$NUM: $fields_str" >&2
     fi
     return 0
   fi
   if [[ $DRAFT -eq 1 ]]; then draft_flag="true"; fi
+  if [[ $BODY_SUPPLIED -eq 0 && -z "$BODY" && -f .github/pull_request_template.md ]]; then
+    BODY=$(cat .github/pull_request_template.md)
+  fi
   # `--jq` replaces the previous external `jq -r .number`, so this script needs only gh + git.
   resp=$(gh api "repos/$REPO/pulls" -X POST -f title="$TITLE" -f head="$HEAD_REF" -f base="$BASE" \
     -f body="$BODY" -F draft="$draft_flag" --jq '.number')
@@ -174,9 +221,70 @@ dump_failure_logs() {
   gh pr checks "$NUM" --repo "$REPO" 2>&1 | tail -n 50 >&2 || true
 }
 
+pr_conflict_verdict() {
+  local mergeable="${1:-}" state="${2:-}"
+  case "$mergeable" in
+  false | CONFLICTING)
+    printf 'conflicting'
+    return 0
+    ;;
+  esac
+  case "$state" in
+  dirty | DIRTY)
+    printf 'conflicting'
+    return 0
+    ;;
+  behind | BEHIND)
+    printf 'behind'
+    return 0
+    ;;
+  unknown | UNKNOWN | "")
+    printf 'unknown'
+    return 0
+    ;;
+  *)
+    if [[ "$mergeable" == "null" || -z "$mergeable" ]]; then
+      printf 'unknown'
+    else
+      printf 'clean'
+    fi
+    ;;
+  esac
+}
+
+check_conflicts() {
+  local line mergeable state url files tries=3 verdict=""
+  while ((tries-- > 0)); do
+    line=$(gh api "repos/$REPO/pulls/$NUM" --jq '[(if .mergeable == null then "null" else (.mergeable|tostring) end), (.mergeable_state // "unknown"), (.html_url // "")] | @tsv' 2>/dev/null || echo "")
+    [[ -n "$line" ]] || return 0
+    IFS=$'\t' read -r mergeable state url <<<"$line"
+    verdict=$(pr_conflict_verdict "$mergeable" "$state")
+    if [[ "$verdict" != "unknown" ]]; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "$verdict" == "conflicting" ]]; then
+    files=$(gh pr view "$NUM" --repo "$REPO" --json files --jq '[.files[].path] | join(" ")' 2>/dev/null || echo "")
+    echo "PR $url" >&2
+    echo "conflicting: mergeable=$mergeable merge_state_status=$state" >&2
+    [[ -n "$files" ]] && echo "files: $files" >&2
+    echo "resolve: merge or rebase origin/$BASE into the head branch, then re-run" >&2
+    return 1
+  fi
+  if [[ "$verdict" == "behind" ]]; then
+    echo "warning: head branch is behind $BASE" >&2
+  fi
+  return 0
+}
+
 watch_checks() {
   local i verdict
   for ((i = 1; i <= POLL_TRIES; i++)); do
+    if ! check_conflicts; then
+      return 1
+    fi
     verdict=$(checks_payload | checks_verdict)
     case "$verdict" in
     success)
@@ -200,13 +308,317 @@ watch_checks() {
 }
 
 # squash_message — body of the squash commit. Defaults to the PR body, which is where the
-# `Co-authored-by` trailer lives. The previous hardcoded "Squash merge <head> → <base>" dropped
-# that provenance, which git-convention requires to survive a squash. A named function so the
-# regression test can call it without opening a pull request.
-squash_message() { printf '%s' "$BODY"; }
+# `Co-authored-by` trailer lives. If the PR body is empty or identical to the repo's PR
+# template, returns empty so GitHub squash-merge defaults to commit subjects.
+squash_message() {
+  local template=""
+  if [[ -f .github/pull_request_template.md ]]; then
+    template=$(cat .github/pull_request_template.md)
+  fi
+  local trimmed_body="${BODY%"${BODY##*[![:space:]]}"}"
+  local trimmed_template="${template%"${template##*[![:space:]]}"}"
+  if [[ -z "$trimmed_body" || ( -n "$trimmed_template" && "$trimmed_body" == "$trimmed_template" ) ]]; then
+    return 0
+  fi
+  printf '%s' "$BODY"
+}
+
+# --- Squash attribution ---
+#
+# GitHub auto-credits every PR commit author on squash ONLY when it builds the message.
+# merge_pr() supplies commit_message explicitly, so GitHub uses it verbatim and the safety
+# net stays off: these functions rebuild it. pr_co_author_trailers enumerates commit
+# authors (merger excluded); insert_trailers splices trailers ahead of closing lines and
+# normalizes pasted duplicates; refuse_raw_token / refuse_long_lines gate the result.
+# All pure functions read the message on stdin (or $BODY) and print it on stdout, so the
+# tests can pin them without gh or a network. No arrays: /usr/bin/env bash may be 3.2.
+
+# trailer_email_key <line> — lowercase email of a Co-authored-by trailer line, else empty.
+trailer_email_key() {
+  local key
+  key=$(printf '%s' "${1:-}" | grep -iE '^[[:space:]]*co-authored-by:' | sed -nE 's/^[^<]*<([^<>]+)>.*$/\1/p' | tr '[:upper:]' '[:lower:]' | head -n 1 || true)
+  printf '%s' "$key"
+}
+
+# existing_trailer_emails — lowercase emails of every Co-authored-by line on stdin.
+existing_trailer_emails() {
+  local line key
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    key=$(trailer_email_key "$line")
+    if [[ -n "$key" ]]; then
+      printf '%s\n' "$key"
+    fi
+  done || true
+}
+
+# list_contains <newline-list> <key> — exact-line membership (keys pre-folded by callers).
+list_contains() {
+  [[ -n "${2:-}" ]] || return 1
+  printf '%s\n' "$1" | grep -Fxq -- "$2"
+}
+
+# is_trailer_line <line> / is_closing_line <line> — classifiers for the splice. A closing
+# line is a *directive* line: keyword, optional colon, then the reference right away
+# ("Closes #12", "Closes: #12", "Fixes owner/repo#3", "Closes GH-12"). Prose that
+# puts words between the keyword and the reference ("Fixes the cache (#42) by …")
+# is not a directive and must not split a section.
+is_trailer_line() { printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*co-authored-by:'; }
+is_closing_line() {
+  printf '%s' "${1:-}" | grep -qiE '^[[:space:]]*(closes?|closed|fixes?|fixed|resolves?|resolved|refs?)[[:space:]]*:?[[:space:]]+(#[0-9]|GH-[0-9]|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9])'
+}
+
+# pr_co_author_trailers <merger-login> — stdin `login<TAB>name<TAB>email` rows (the commits
+# endpoint shape, see merge_pr), stdout one `Co-authored-by:` line per distinct author
+# except the merger. Skips rows with empty name/email and emails already trailered in
+# $BODY (case-insensitive); dedupes by lowercase email keeping first occurrence. An empty
+# merger login credits everyone — redundant trailers are harmless, missing ones are not.
+pr_co_author_trailers() {
+  local merger_key login name email key seen existing tsv row
+  merger_key=$(printf '%s' "${1:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  existing=$(printf '%s' "$BODY" | existing_trailer_emails)
+  seen=""
+  tsv=$(cat)
+  # Split on tabs by hand: `read` drops a leading empty field, which would shift an
+  # unlinked author's name/email left and silently skip them.
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    login=""
+    if [[ "$row" == $'\t'* ]]; then
+      row="${row#$'\t'}"
+    elif [[ "$row" == *$'\t'* ]]; then
+      login="${row%%$'\t'*}"
+      row="${row#*$'\t'}"
+    else
+      continue
+    fi
+    if [[ "$row" == *$'\t'* ]]; then
+      name="${row%%$'\t'*}"
+      email="${row#*$'\t'}"
+    else
+      name="$row"
+      email=""
+    fi
+    login=$(printf '%s' "$login" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+    name="${name#"${name%%[![:space:]]*}"}"
+    name="${name%"${name##*[![:space:]]}"}"
+    email=$(printf '%s' "$email" | tr -d '[:space:]')
+    key=$(printf '%s' "$email" | tr '[:upper:]' '[:lower:]')
+    [[ -n "$name" && -n "$email" ]] || continue
+    [[ -z "$merger_key" || "$login" != "$merger_key" ]] || continue
+    if list_contains "$seen" "$key"; then continue; fi
+    if list_contains "$existing" "$key"; then continue; fi
+    if [[ -z "$seen" ]]; then seen="$key"; else seen="${seen}"$'\n'"${key}"; fi
+    printf 'Co-authored-by: %s <%s>\n' "$name" "$email"
+  done <<<"$tsv" || true
+}
+
+# insert_trailers — stdin new trailer lines, $BODY in, spliced message on stdout. Existing
+# body trailers are deduped (first occurrence wins) and moved with the new ones ahead of
+# the first Closes/Fixes/Resolves/Refs reference line (appended at end when none). Prints $BODY
+# byte-identical when there is nothing to add, dedupe, or move.
+insert_trailers() {
+  local new_text line key seen existing_block stripped
+  local dupes=0 below=0 closing_seen=0
+  new_text=$(cat)
+  seen=""
+  existing_block=""
+  stripped=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if is_trailer_line "$line"; then
+      key=$(trailer_email_key "$line")
+      if [[ -n "$key" ]]; then
+        if list_contains "$seen" "$key"; then
+          dupes=1
+        else
+          if [[ -z "$seen" ]]; then seen="$key"; else seen="${seen}"$'\n'"${key}"; fi
+          if [[ -z "$existing_block" ]]; then existing_block="$line"; else existing_block="${existing_block}"$'\n'"${line}"; fi
+        fi
+        if ((closing_seen)); then below=1; fi
+        continue
+      fi
+    fi
+    if ((closing_seen == 0)) && is_closing_line "$line"; then closing_seen=1; fi
+    if [[ -z "$stripped" ]]; then stripped="$line"; else stripped="${stripped}"$'\n'"${line}"; fi
+  done <<<"$BODY" || true
+  if [[ -z "$new_text" && $dupes -eq 0 && $below -eq 0 ]]; then
+    printf '%s' "$BODY"
+    return 0
+  fi
+  local before after found all out
+  before=""
+  after=""
+  found=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if ((found == 0)) && is_closing_line "$line"; then
+      found=1
+      if [[ -z "$after" ]]; then after="$line"; else after="${after}"$'\n'"${line}"; fi
+    elif ((found == 0)); then
+      if [[ -z "$before" ]]; then before="$line"; else before="${before}"$'\n'"${line}"; fi
+    else
+      after="${after}"$'\n'"${line}"
+    fi
+  done <<<"$stripped" || true
+  all="$existing_block"
+  if [[ -n "$new_text" ]]; then
+    if [[ -z "$all" ]]; then all="$new_text"; else all="${all}"$'\n'"${new_text}"; fi
+  fi
+  while [[ "$before" == *$'\n' ]]; do before="${before%$'\n'}"; done
+  while [[ "$after" == *$'\n' ]]; do after="${after%$'\n'}"; done
+  while [[ "$after" == $'\n'* ]]; do after="${after#$'\n'}"; done
+  out="$before"
+  if [[ -n "$all" ]]; then
+    if [[ -n "$out" ]]; then out="${out}"$'\n\n'"${all}"; else out="$all"; fi
+    if [[ -n "$after" ]]; then out="${out}"$'\n\n'"${after}"; fi
+  else
+    if [[ -n "$after" ]]; then
+      if [[ -n "$out" ]]; then out="${out}"$'\n'"${after}"; else out="$after"; fi
+    fi
+  fi
+  if [[ "$BODY" == *$'\n' ]]; then out="${out}"$'\n'; fi
+  printf '%s' "$out"
+}
+
+# refuse_raw_token — stdin message; refuses a body still holding the template
+# placeholder. The placeholder is an HTML comment block, so only a token inside a
+# comment counts: prose merely mentioning the token name passes. Tracks comment
+# state line by line, so a token on a later line of the block is still caught.
+refuse_raw_token() {
+  local text
+  text=$(cat)
+  if printf '%s' "$text" | awk '
+    {
+      line = $0
+      while (match(line, /<!--|-->/)) {
+        before = substr(line, 1, RSTART - 1)
+        tok = substr(line, RSTART, RLENGTH)
+        if (incomment && index(before, "CODE_AUTHORS")) found = 1
+        if (tok == "<!--") incomment = 1
+        else incomment = 0
+        line = substr(line, RSTART + RLENGTH)
+      }
+      if (incomment && index(line, "CODE_AUTHORS")) found = 1
+    }
+    END { exit !found }'; then
+    echo "refusing squash message: raw $CODE_AUTHORS_TOKEN token still present" >&2
+    echo "remediation: replace the token with Co-authored-by lines for outside contributors (or delete the block), then re-run" >&2
+    return 1
+  fi
+}
+
+# refuse_long_lines — stdin message; refuses lines over SQUASH_LINE_MAX with numbers.
+refuse_long_lines() {
+  local text line bad lineno
+  text=$(cat)
+  bad=""
+  lineno=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+    if ((${#line} > SQUASH_LINE_MAX)); then
+      if [[ -z "$bad" ]]; then bad="$lineno"; else bad="${bad} ${lineno}"; fi
+    fi
+  done <<<"$text" || true
+  if [[ -n "$bad" ]]; then
+    echo "refusing squash message: lines exceed $SQUASH_LINE_MAX chars: $bad" >&2
+    echo "remediation: wrap the listed lines, then re-run" >&2
+    return 1
+  fi
+}
+
+# build_squash_message <msg> <merger-login> <commits-tsv> — token gate, trailer splice,
+# length gate. stdout the message, stderr the announcement of appended trailers.
+# Returns 1 on any refusal. Pure apart from $BODY stewardship: fetchers stay outside.
+build_squash_message() {
+  local msg merger tsv new final old_body
+  msg="${1:-}"
+  merger="${2:-}"
+  tsv="${3:-}"
+  if ! printf '%s' "$msg" | refuse_raw_token; then
+    return 1
+  fi
+  old_body="$BODY"
+  BODY="$msg"
+  new=$(printf '%s' "$tsv" | pr_co_author_trailers "$merger")
+  BODY="$msg"
+  final=$(printf '%s' "$new" | insert_trailers)
+  BODY="$old_body"
+  if ! printf '%s' "$final" | refuse_long_lines; then
+    return 1
+  fi
+  if [[ -n "$new" ]]; then
+    echo "appended trailers:" >&2
+    printf '%s\n' "$new" >&2
+  fi
+  printf '%s' "$final"
+}
+
+# finalize_squash_message <msg> — fetch authorship evidence, then build. A failed
+# enumeration is distinct from an empty commit list: refuse rather than merge silent.
+finalize_squash_message() {
+  local msg merger tsv
+  msg="${1:-}"
+  merger=$(gh api user --jq .login 2>/dev/null || echo "")
+  if ! tsv=$(gh api "repos/$REPO/pulls/$NUM/commits" --jq '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv'); then
+    echo "refusing squash message: could not enumerate PR #$NUM commit authors (check network / GH_TOKEN scopes); re-run rather than merge without attribution" >&2
+    return 1
+  fi
+  build_squash_message "$msg" "$merger" "$tsv"
+}
+
+# is_fallback_body <body> — true when <body> would not become the squash message
+# (squash_message maps empty and template-identical bodies to no commit_message).
+is_fallback_body() {
+  local body="$1"
+  [[ -z "$body" ]] && return 0
+  local tmpl=""
+  if [[ -f .github/pull_request_template.md ]]; then
+    tmpl=$(cat .github/pull_request_template.md)
+  fi
+  [[ -n "$tmpl" && "$body" == "$tmpl" ]]
+}
+
+# check_trailers — --check dry run: run the same gates the merge runs, then print the
+# trailers a merge would append (no PR created, no merge call).
+check_trailers() {
+  local merger tsv found new
+  found=$(gh api "repos/$REPO/pulls?head=${REPO%%/*}:$HEAD_REF&state=open" --jq '.[0].number' 2>/dev/null || echo "")
+  if [[ -z "$found" || "$found" == "null" ]]; then
+    echo "no open PR for head $HEAD_REF" >&2
+    return 2
+  fi
+  NUM="$found"
+  BODY=$(gh api "repos/$REPO/pulls/$NUM" --jq '.body // ""' 2>/dev/null || echo "")
+  # Mirror the merge: a fallback body is never sent, so there is nothing to gate.
+  if is_fallback_body "$BODY"; then
+    echo "commit_message will be omitted (body empty or repo template); GitHub builds the squash message"
+    return 0
+  fi
+  merger=$(gh api user --jq .login 2>/dev/null || echo "")
+  if ! tsv=$(gh api "repos/$REPO/pulls/$NUM/commits" --jq '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv'); then
+    echo "refusing --check: could not enumerate PR #$NUM commit authors (check network / GH_TOKEN scopes); re-run" >&2
+    return 1
+  fi
+  if ! build_squash_message "$BODY" "$merger" "$tsv" >/dev/null; then
+    return 1
+  fi
+  new=$(printf '%s' "$tsv" | pr_co_author_trailers "$merger")
+  if [[ -n "$new" ]]; then
+    printf '%s\n' "$new"
+  else
+    echo "no co-author trailers would be appended for #$NUM" >&2
+  fi
+}
 
 merge_pr() {
   local i state=""
+  local header="$TITLE (#$NUM)"
+  # Header gate (issue 4): commitlint caps the header at 100, same as the body lines.
+  if ((${#header} > SQUASH_LINE_MAX)); then
+    echo "refusing squash merge: commit title exceeds $SQUASH_LINE_MAX chars (${#header}): $header" >&2
+    echo "remediation: shorten the PR title, then re-run" >&2
+    return 1
+  fi
+  # Template and empty bodies never reach the token gate: squash_message maps them
+  # to no commit_message, so GitHub builds the message (and its own attribution).
   for ((i = 1; i <= MERGE_STATE_TRIES; i++)); do
     state=$(gh api "repos/$REPO/pulls/$NUM" --jq .mergeable_state 2>/dev/null || echo unknown)
     if [[ "$state" == "clean" ]]; then break; fi
@@ -219,10 +631,18 @@ merge_pr() {
     echo "refusing to merge: mergeable_state=$state (not clean)" >&2
     return 1
   fi
-  gh api "repos/$REPO/pulls/$NUM/merge" -X PUT \
-    -f merge_method=squash \
-    -f commit_title="$TITLE (#$NUM)" \
-    -f commit_message="$(squash_message)" >/dev/null
+  local merge_args=(-f merge_method=squash -f commit_title="$TITLE (#$NUM)")
+  local msg
+  msg=$(squash_message)
+  if [[ -n "$msg" ]]; then
+    # Explicit commit_message disables GitHub's auto-attribution, so the trailers are
+    # rebuilt here; any refusal aborts before the merge API call.
+    if ! msg=$(finalize_squash_message "$msg"); then
+      return 1
+    fi
+    merge_args+=(-f commit_message="$msg")
+  fi
+  gh api "repos/$REPO/pulls/$NUM/merge" -X PUT "${merge_args[@]}" >/dev/null
   echo "merged #$NUM (squash) to $BASE" >&2
 }
 
@@ -231,13 +651,16 @@ main() {
   resolve_head
   resolve_title_and_body
   resolve_repo
+  if [[ $CHECK -eq 1 ]]; then
+    check_trailers || exit "$?"
+    exit 0
+  fi
   resolve_base
   create_or_reuse_pr
   echo "PR $(pr_url)"
 
   if [[ $WATCH -eq 1 ]]; then
     if ! watch_checks; then
-      echo "watch failed — fix and re-run: pr.sh --watch --merge (or git push then re-run)" >&2
       exit 1
     fi
   fi

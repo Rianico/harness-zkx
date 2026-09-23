@@ -20,6 +20,7 @@ SCRIPTS = [
     GH_ROUTER / "subskills/gh-release/scripts/confirm.sh",
     GH_ROUTER / "scripts/changelog.sh",
     GH_ROUTER / "subskills/pr-land/scripts/pr.sh",
+    GH_ROUTER / "subskills/pr-refine/scripts/refine.sh",
 ]
 
 
@@ -81,17 +82,23 @@ def test_every_script_sources_only_libs_that_exist() -> None:
         text = script.read_text()
         for match in re.finditer(r'^source "\$LIB_DIR/([^"]+)"', text, re.MULTILINE):
             lib = LIBS / match.group(1)
-            assert lib.is_file(), f"{script.relative_to(REPO_ROOT)} sources missing lib/{match.group(1)}"
+            assert lib.is_file(), (
+                f"{script.relative_to(REPO_ROOT)} sources missing lib/{match.group(1)}"
+            )
             wired += 1
         if "LIB_DIR" in text:
-            assert 'LIB_DIR="$(cd' in text, f"{script.relative_to(REPO_ROOT)} uses LIB_DIR without defining it"
+            assert 'LIB_DIR="$(cd' in text, (
+                f"{script.relative_to(REPO_ROOT)} uses LIB_DIR without defining it"
+            )
     assert wired >= 8, f"expected the scripts to source lib/, found {wired} wiring sites"
 
 
 def test_no_script_sources_the_retired_common_helper() -> None:
     """`_common.sh` was retired into lib/{log,repo}.sh; nothing may reference it again."""
     for script in _shell_scripts():
-        assert "_common.sh" not in script.read_text(), f"{script.relative_to(REPO_ROOT)} references the retired helper"
+        assert "_common.sh" not in script.read_text(), (
+            f"{script.relative_to(REPO_ROOT)} references the retired helper"
+        )
 
 
 def test_pure_libs_install_no_trap_and_log_nothing() -> None:
@@ -105,5 +112,38 @@ def test_pure_libs_install_no_trap_and_log_nothing() -> None:
         # Match statements, not prose: these modules document that they install no trap.
         assert not re.search(r"^\s*trap\s", text, re.MULTILINE), f"lib/{name} installs a trap"
         assert not re.search(r"^\s*_log\s", text, re.MULTILINE), f"lib/{name} logs"
-        assert not re.search(r"^\s*set\s+-", text, re.MULTILINE), f"lib/{name} changes shell options"
+        assert not re.search(r"^\s*set\s+-", text, re.MULTILINE), (
+            f"lib/{name} changes shell options"
+        )
 
+
+def test_ci_why_python_syntax_and_formatting() -> None:
+    """Inline python in ci.sh must parse without SyntaxError on all supported Pythons.
+
+    Regression test for issue #72: backslash in f-string expression caused SyntaxError on <3.12.
+    """
+    import ast
+
+    ci_sh = GH_ROUTER / "scripts/ci.sh"
+    text = ci_sh.read_text()
+    snippets: list[str] = [m.group(1) for m in re.finditer(r"python3 -c '([^']+)'", text)]
+    assert len(snippets) >= 2, (
+        f"expected at least 2 inline python snippets in ci.sh, found {len(snippets)}"
+    )
+
+    for snippet in snippets:
+        _ = ast.parse(snippet)
+
+    # Execute the why snippet specifically with mock failure data
+    why_snippet: str = [s for s in snippets if "bad.append" in s][0]
+    mock_input = (
+        '{"jobs": [{"name": "verify", "steps": [{"name": "lint", "conclusion": "failure"}]}]}'
+    )
+    proc = subprocess.run(
+        ["python3", "-c", why_snippet],
+        input=mock_input,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert proc.stdout.strip() == "verify › lint"

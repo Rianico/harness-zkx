@@ -112,7 +112,7 @@ bad=[]
 for j in d.get("jobs") or []:
     for s in j.get("steps") or []:
         if (s.get("conclusion") or "") in ("failure","timed_out","cancelled"):
-            bad.append(f"{j[\"name\"]} › {s[\"name\"]}")
+            bad.append("{} › {}".format(j["name"], s["name"]))
 print("\n".join(bad) if bad else "no failing step found")
 ' | while IFS= read -r line; do step "$line"; done
 

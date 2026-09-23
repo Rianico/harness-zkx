@@ -30,6 +30,19 @@ Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEA
 
 1. **Create/reuse** — `GET pulls?head=owner:HEAD` → reuse `number` + `PATCH title/body` if exists, else `POST pulls` → `number` + `html_url`
 2. **Watch** (if `--watch`) — every check-run *and* commit status counts: `gh pr checks --json name,bucket` → `checks_verdict`. `success` → continue; `failure` (`fail`/`cancel`) → `gh run view $RUN_ID --log` tail 200 + `gh pr checks` dump → `exit 1`; anything else — `pending`, an unrecognised bucket, or no checks reported yet — keeps polling to 60×10s, then times out. Never green on a partial verdict: the old name allowlist (`verify`/`check`/`changelog-check`) reported success off one check while others were still running.
-3. **Merge** (if `--merge`) — always requires a green watch (even with `--no-watch`), then polls `pulls/$NUM mergeable_state` (5×2s) and **refuses** unless `clean` → `PUT pulls/$NUM/merge merge_method=squash`. The squash body defaults to the PR body, so the `Co-authored-by` provenance trailer survives the squash; `commit_title` is `<title> (#N)`.
+3. **Merge** (if `--merge`) — always requires a green watch (even with `--no-watch`), then polls `pulls/$NUM mergeable_state` (5×2s) and **refuses** unless `clean` → `PUT pulls/$NUM/merge merge_method=squash`. The squash body defaults to the PR body, preserving both the `Co-authored-by` provenance trailer and closing directives (`Closes #NN` on standalone lines), so GitHub auto-closes linked issues when the squash commit lands on the base branch; `commit_title` is `<title> (#N)`. If the PR body is empty or identical to the repo template, `commit_message` is omitted to fall back to commit subjects.
+
+   An explicit `commit_message` disables GitHub's own co-author auto-attribution, so the
+   merge step rebuilds it first: one `Co-authored-by` trailer per distinct PR commit
+   author except the merger (PR author included; dedupe by lowercase email, skipping
+   emails already trailered case-insensitively), spliced ahead of the first
+   `Closes`/`Fixes`/`Resolves`/`Refs` directive line. The token and length gates run
+   only on a body that actually becomes the squash message: a body still holding the
+   raw `CODE_AUTHORS` template token, or any line over 100 chars (`commitlint`
+   `body-max-line-length`), is refused pre-merge with line numbers and remediation.
+   An empty body, or one identical to the repo template, omits `commit_message` as
+   before and falls back to commit subjects — the token can never reach a commit that
+   way. `--check` runs the same gates the merge runs (token, trailers, length) and prints the
+   trailers that would be appended; it creates nothing.
 
 Fail-loud, no secrets in logs. Re-trigger is model-driven: script returns failure info, model edits, pushes, and re-runs `--watch --merge`. Exit: `0` ok · `1` checks failed or merge refused · `2` usage / unusable head ref. PR URL on stdout, progress on stderr.

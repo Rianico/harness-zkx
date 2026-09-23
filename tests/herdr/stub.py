@@ -90,6 +90,46 @@ if args[:2] == ["agent", "prompt"]:
     agent = {"agent": "pi", "agent_status": state.get("prompt_status", "idle")}
     print(json.dumps({"id": "cli:agent:prompt", "result": {"agent": agent, "type": "agent_prompted"}}))
     raise SystemExit(0)
+if args[:2] == ["agent", "get"]:
+    target = args[2] if len(args) > 2 else ""
+    if state.get("agent_get_error"):
+        print(json.dumps({"error": state["agent_get_error"], "id": "cli:agent:get"}), file=sys.stderr)
+        raise SystemExit(1)
+    seq = state.get("agent_get_seq", {}).get(target)
+    static = state.get("agent_get", {}).get(target, {})
+    if seq is not None:
+        prior = -1
+        try:
+            with Path(os.environ["STUB_HERDR_LOG"]).open() as log:
+                for line in log:
+                    try:
+                        logged = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if logged[1:4] == ["agent", "get", target]:
+                        prior += 1
+        except FileNotFoundError:
+            prior = 0
+        status = seq[min(max(prior, 0), len(seq) - 1)]
+    else:
+        status = static.get("agent_status", "working")
+    agent = {
+        "name": target,
+        "agent": "pi",
+        "agent_status": status,
+        "revision": static.get("revision", "r1"),
+    }
+    if static.get("session"):
+        agent["agent_session"] = {"kind": "path", "value": static["session"]}
+    print(json.dumps({"id": "cli:agent:get", "result": {"agent": agent, "type": "agent"}}))
+    raise SystemExit(0)
+
+if args[:2] == ["agent", "read"]:
+    if state.get("agent_read_error"):
+        print(json.dumps({"error": state["agent_read_error"], "id": "cli:agent:read"}), file=sys.stderr)
+        raise SystemExit(1)
+    print(state.get("agent_read_text", ""))
+    raise SystemExit(0)
 
 print(json.dumps({"error": "unexpected argv: " + " ".join(args)}), file=sys.stderr)
 raise SystemExit(1)

@@ -36,7 +36,16 @@
   - Scope `(<noun>)`; description imperative, lowercase, no period, ≤72 (50 ideal).
   - Footer `Token: value` or `Token #value`; `BREAKING CHANGE` uppercase (alias `BREAKING-CHANGE`).
   - Ex: `feat(auth): add worktree pre-merge gate` · `fix(api)!: drop legacy field` + `BREAKING CHANGE: removes field x` / `Closes #12`
-- **Provenance — a squash loses ancestry, add `Co-authored-by: Name <email>`:**
+- **Issue closing directives (PR body & commit footers):**
+  - Use GitHub closing keywords: `Closes #NN` or `Fixes #NN` (supported: `close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved`).
+  - **Standalone lines required:** Each issue must have its own keyword on its own line:
+    ```
+    Closes #71
+    Closes #72
+    ```
+  - **Anti-pattern:** Never comma-separate or combine (`Closes #71, #72` or `Closes #71 and #72`) — GitHub's parser only recognizes the token immediately following the keyword; trailing numbers remain unlinked and open.
+  - In PR descriptions, place closing directives at the bottom (under Checklist or `## Related Issues`). Because `pr.sh` inherits the PR body as the squash message, this automatically carries into the base commit and auto-closes all linked issues upon merge.
+- **Provenance — squash loses ancestry, add `Co-authored-by: Name <email>`:**
   - Applies to squash landing only; a merge commit preserves the authors' own commits, so no trailer is needed.
   - AI: one trailer per model — `Co-authored-by: <model> <noreply@ai>`
   - Fork: `git fetch origin pull/<id>/head && git merge --no-ff FETCH_HEAD` → squash must include `Co-authored-by: Original Author <email>` + `Refs: GH#<id>` / `Closes #<id>`
