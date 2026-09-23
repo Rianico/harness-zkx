@@ -14,12 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **changelog-gate:** gate the ledger on attribution and ship it through scaffold (#96)
 
-* **changelog-gate:** add a recorded waiver and a terminal baseline state
-* **scaffold:** ship the changelog ledger gate alongside the generator
-* **changelog-gate:** record the unattributed migration as a shrink-only baseline
-* **changelog-gate:** account for entries by landing PR, not by scope
-* **changelog-gate:** enforce the deterministic floor for ledger entries
 * **gh-router:** squash-merge attribution and contributor-PR refine flow (#95)
 * **skills/herdr:** add wait barrier and transcript helpers (#93)
 * **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
@@ -45,9 +41,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **scaffold:** load the sibling scripts without redefining a constant
-* **changelog:** mint one entry per identity, not per commit
-* **changelog-gate:** let --update-baseline shrink in a tree with new entries
 * **skills/herdr:** hold unrecognized settled states, fall back to pane read (#94)
 * **harness-audit:** restore frontmatter and repair triage table (#87)
 * **scaffold:** update PR template with closing directives (#86)
@@ -96,14 +89,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **adr:** define the recorded waiver and the baseline's lifecycle
-* **adr:** record the migration baseline and point pr-refine at §5
-* **adr:** account for the ledger by landing PR
-* **adr:** gate the ledger on declared landing and pre-merge curation
-* **adr:** correct the ledger gate's floor, cap, and ceiling trigger
 * **agent-rules:** clarify skill_dir resolves to the containing skill.md directory
 * **git-convention:** codify standalone issue-closing directives (#85)
-* **adr:** gate the changelog with a floor and an adversarial ceiling
 * **rules:** stop recommending Obsidian wikilinks in markdown
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
