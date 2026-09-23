@@ -8,7 +8,7 @@
 Deterministic scaffold generator — tool owns bytes, model owns intent.
 
 Usage:
-  uv run $SKILL_DIR/scripts/scaffold.py --flavor git [--project-name NAME] [--dry-run] [--only pre-push|releaserc|...] [--without ...] [--components ...]
+  uv run $SKILL_DIR/scripts/scaffold.py --flavor git [--project-name NAME] [--dry-run] [--only changelog-check|releaserc|...] [--without ...] [--components ...]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor python [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor rust [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
   uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript [--ts-variant lib|cli|pi-extension] [--project-name NAME] [--dry-run] [--with-coverage --coverage-threshold 80]
@@ -182,10 +182,6 @@ RELEASERC_JSON = load_template("git/.releaserc.json")
 
 CHANGELOG_CHECK_YML = load_template("git/.github/workflows/changelog-check.yml")
 
-GITHOOK_PRE_PUSH = load_template("git/.githooks/pre-push")
-
-HUSKY_PRE_PUSH = load_template("git/.husky/pre-push")
-
 COMMITLINT_JS = load_template("git/commitlint.config.js")
 
 ISSUE_BUG_REPORT_YML = load_template("git/.github/ISSUE_TEMPLATE/01-bug_report.yml")
@@ -229,7 +225,6 @@ GIT_COMPONENTS: set[str] = {
     "releaserc",  # .releaserc.json
     "release-yml",  # .github/workflows/release.yml (git variant)
     "changelog-check",  # .github/workflows/changelog-check.yml
-    "pre-push",  # .githooks/pre-push + .husky/pre-push + wt hook
     "changelog-script",  # scripts/changelog-unreleased.py
     "commitlint",  # commitlint.config.js
     "changelog-md",  # CHANGELOG.md
@@ -492,9 +487,6 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
         return None
     # allow comma-separated, plus alias normalization for pre-push vs pre_push, changelog vs changelog-script, etc.
     alias = {
-        "hooks": "pre-push",
-        "hook": "pre-push",
-        "pre_push": "pre-push",
         "changelog": "changelog-md",
         "script": "changelog-script",
         "templates": "issue-templates",
@@ -904,39 +896,6 @@ def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
     REPORT.err(f"WARNING: {path}: {proofread}")
 
 
-def patch_wt_hooks(cwd: pathlib.Path, dry_run: bool) -> None:
-    """Ensure worktrees get live hooks — `wt switch` clones a fresh checkout, not the config."""
-    wt = cwd / ".config/wt.toml"
-    if not wt.exists():
-        return
-    text = wt.read_text(encoding="utf-8")
-    if "core.hooksPath" in text:
-        REPORT.unchanged(wt, "hooksPath present")
-        return
-    hook_line = 'setup-hooks = "git config core.hooksPath .githooks"'
-    if dry_run:
-        REPORT.patched(
-            wt, "would add setup-hooks", f"would patch {wt} with {hook_line}", stdout=True
-        )
-        return
-    if "[post-start]" in text:
-        lines: list[str] = []
-        inserted = False
-        for line in text.splitlines():
-            lines.append(line)
-            if not inserted and line.strip() == "[post-start]":
-                lines.append(hook_line)
-                inserted = True
-        if not inserted:
-            lines.extend(["[post-start]", hook_line])
-        new_text = "\n".join(lines) + "\n"
-        new_text = new_text.replace("\n\n\n", "\n\n")
-    else:
-        new_text = text.rstrip() + "\n\n[post-start]\n" + hook_line + "\n"
-    wt.write_text(new_text, encoding="utf-8")
-    REPORT.patched(wt, "added setup-hooks", f"patched {wt} with hooksPath")
-
-
 def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
     """pnpm contract: a repo that declares pnpm ships pnpm-lock.yaml in the release assets.
 
@@ -1075,11 +1034,9 @@ def do_git(
     if "agents" in sel:
         patch_agents(
             cwd / "AGENTS.md",
-            "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nGit hooks: `git config core.hooksPath .githooks` (or `npm install` with husky → `.husky` delegates to `.githooks`) so pre-push CHANGELOG guard is live on fresh clone/worktree.\n",
+            "### Contribution\nConventional commits & changelog: see CONTRIBUTING.md\nThe changelog ledger is gated in CI (`changelog-check.yml`): every entry names the PR that landed it, and the release job retires the migration baseline.\n",
             dry_run,
         )
-    if "pre-push" in sel:
-        patch_wt_hooks(cwd, dry_run)
     return notes
 
 
@@ -1355,8 +1312,6 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         ".github/workflows/changelog-check.yml": exists(".github/workflows/changelog-check.yml"),
         "CHANGELOG.md": exists("CHANGELOG.md"),
         "commitlint.config.js": exists("commitlint.config.js"),
-        ".githooks/pre-push": exists(".githooks/pre-push"),
-        ".husky/pre-push": exists(".husky/pre-push"),
         ".gitignore": exists(".gitignore"),
         "CONTRIBUTING.md": exists("CONTRIBUTING.md"),
         "AGENTS.md": exists("AGENTS.md"),
@@ -1552,7 +1507,7 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         if "## [Unreleased]" not in changelog:
             finding(
                 "CHANGELOG.md",
-                "no `## [Unreleased]` section — the pre-push guard has nothing to update",
+                "no `## [Unreleased]` section — the ledger floor has nothing to check",
                 "uv run python scripts/changelog-unreleased.py update",
             )
         if not title_at_top:
@@ -1597,7 +1552,6 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             "has_releaserc": files[".releaserc.json"] or files[".releaserc.js"],
             "has_changelog": files["CHANGELOG.md"],
             "has_changelog_check": files[".github/workflows/changelog-check.yml"],
-            "has_hooks": files[".githooks/pre-push"] or files[".husky/pre-push"],
         },
         "runtimes": {
             "python": python_present,
@@ -1704,7 +1658,7 @@ SECTION_RE = re.compile(r"^## (?!#)(.+)$", re.MULTILINE)
 # nobody ships fails at the worst moment, and the gap survives review because it spans files.
 REFERENCE_RE = re.compile(r"(?:[\w.-]+/)*scripts/[\w.-]+\.(?:sh|py)")
 
-SCRIPT_NAMES = {"pre-push", "pre-commit", "pre-merge-commit", "commit-msg", "post-commit"}
+SCRIPT_NAMES = {"pre-commit", "pre-merge-commit", "commit-msg", "post-commit"}
 
 
 def template_sections(text: str) -> list[tuple[str, str]]:
@@ -2774,7 +2728,7 @@ def main() -> int:
     ap.add_argument(
         "--only",
         default=None,
-        help="only scaffold these components (comma-separated, e.g. 'pre-push,releaserc'); default all",
+        help="only scaffold these components (comma-separated, e.g. 'changelog-check,releaserc'); default all",
     )
     ap.add_argument(
         "--without",

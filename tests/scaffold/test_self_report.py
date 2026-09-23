@@ -45,7 +45,7 @@ def _load(name: str, path: pathlib.Path):
 
 scaffold = _load("scaffold_mod_self_report", SCRIPT)
 
-STALE_HOOK = "stale-hook\n"
+STALE_FILE = "stale-hook\n"
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +59,7 @@ def _seed_repo(cwd: pathlib.Path) -> None:
     (cwd / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
     (cwd / ".githooks").mkdir(parents=True, exist_ok=True)
     (cwd / "CHANGELOG.md").write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
-    (cwd / ".githooks" / "pre-push").write_text(STALE_HOOK, encoding="utf-8")
+    (cwd / "commitlint.config.js").write_text(STALE_FILE, encoding="utf-8")
 
 
 def _run_main(*argv: str) -> int:
@@ -89,7 +89,7 @@ def test_check_reports_drift_and_fails_the_run(tmp_path, capsys):
 
     assert _run_main("--check", "--cwd", str(tmp_path)) == 1
     out = capsys.readouterr().out
-    assert "stale      .githooks/pre-push" in out
+    assert "stale      commitlint.config.js" in out
     assert "missing    .github/pull_request_template.md" in out
     assert "drift " in out
 
@@ -98,7 +98,7 @@ def test_check_writes_nothing(tmp_path):
     _seed_repo(tmp_path)
     _run_main("--check", "--cwd", str(tmp_path))
 
-    assert (tmp_path / ".githooks" / "pre-push").read_text(encoding="utf-8") == STALE_HOOK
+    assert (tmp_path / "commitlint.config.js").read_text(encoding="utf-8") == STALE_FILE
     assert not (tmp_path / ".releaserc.json").exists()
 
 
@@ -118,7 +118,7 @@ def test_summary_drops_the_diff_payload(tmp_path, capsys):
     _run_main("--update", "--dry-run", "--summary", "--cwd", str(tmp_path))
     out = capsys.readouterr().out
 
-    assert "stale      .githooks/pre-push" in out
+    assert "stale      commitlint.config.js" in out
     assert "@@" not in out  # no unified diff a caller would have to parse
     assert "\ndiff" not in out
 
@@ -132,7 +132,7 @@ def test_json_plan_is_machine_readable(tmp_path, capsys):
     assert plan["dry_run"] is True and plan["update"] is True
     assert plan["drift"] is True
     kinds = {(entry["path"], entry["kind"]) for entry in plan["entries"]}
-    assert (".githooks/pre-push", "stale") in kinds
+    assert ("commitlint.config.js", "stale") in kinds
     assert (".github/pull_request_template.md", "missing") in kinds
     assert all({"kind", "area", "detail", "remedy"} <= set(f) for f in plan["findings"])
 
@@ -153,7 +153,7 @@ def test_self_check_flags_broken_bytes_as_blocking(tmp_path):
     bad_py.write_text("def f(:\n", encoding="utf-8")
     bad_json = tmp_path / "broken.json"
     bad_json.write_text("{not json", encoding="utf-8")
-    bare_hook = tmp_path / "pre-push"
+    bare_hook = tmp_path / "pre-commit"
     bare_hook.write_text("#!/bin/sh\ntrue\n", encoding="utf-8")
     bare_hook.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
@@ -177,8 +177,8 @@ def test_self_check_flags_a_shell_syntax_error(tmp_path):
 
 
 def test_self_check_reports_dangling_reference_without_failing(tmp_path):
-    hook = tmp_path / ".githooks" / "pre-push"
-    hook.parent.mkdir(parents=True)
+    hook = tmp_path / "pre-commit"
+    hook.parent.mkdir(parents=True, exist_ok=True)
     hook.write_text("#!/bin/sh\npython3 scripts/ghost.py\n", encoding="utf-8")
     hook.chmod(0o755)
     scaffold.REPORT.start(scaffold.VERBOSE, tmp_path)

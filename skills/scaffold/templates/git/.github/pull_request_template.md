@@ -22,6 +22,10 @@ graph LR
   A --> B
 ```
 
+## Landing
+
+Landing: squash <!-- or: Landing: merge — see git-convention §5 -->
+
 ## Checklist
 
 - [ ] Formatter, linter, typecheck, and tests green (exact commands in `CONTRIBUTING.md`)
