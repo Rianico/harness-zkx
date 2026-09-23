@@ -15,9 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-* **pr-land:** rebuild co-author trailers on squash-merge
-* **skills/herdr:** add wait barrier and transcript helpers (#93)
-* **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
+* **changelog-gate:** account for entries by landing PR, not by scope
+* **changelog-gate:** enforce the deterministic floor for ledger entries
 * **herdr:** add herdr-overview and one name for panes and their agents (#69)
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
 * **dynamic-workflow-wrapper:** fail every non-converged run exit (#55)
@@ -29,6 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** report the run plan and self-check written output (#23)
 * **gh-router:** diagnostic scripts, changelog sync, and an exit-code fix (#21)
 * **scaffold:** add --update mode and extract static templates (#20)
+* **pr-land:** rebuild co-author trailers on squash-merge
+* **skills/herdr:** add wait barrier and transcript helpers (#93)
+* **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
 * **skills/herdr:** support prompt broadcast and wait-timeout exit path
 * **skills/herdr:** add herdr-transcript session extractor
 * **skills/herdr:** add herdr-wait polling barrier helper
@@ -39,16 +41,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **pr-land:** scope token gate to the HTML comment placeholder
-* **pr-land:** --check mirrors the squash fallback
-* **pr-refine:** route same-repo heads to Flow A
-* **pr-land:** directive-adjacent closing lines, gate scoped to message
-* **pr-land:** fail closed on attribution evidence, gate header and token
-* **pr-land:** credit commit authors with no linked GitHub login
-* **skills/herdr:** hold unrecognized settled states, fall back to pane read (#94)
-* **harness-audit:** restore frontmatter and repair triage table (#87)
-* **scaffold:** update PR template with closing directives (#86)
-* **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)
 * **herdr:** repair the herdr skill's link, invocation, and observation gaps (#68)
 * **dynamic-workflow-wrapper:** repair inert skill load path in role definitions (#63)
 * **repo:** check changelog on main and correct the ADR pointer ignore (#62)
@@ -74,6 +66,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** pin the changelog bullet style and keep it out of oxfmt
 * **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+* **pr-land:** scope token gate to the HTML comment placeholder
+* **pr-land:** --check mirrors the squash fallback
+* **pr-refine:** route same-repo heads to Flow A
+* **pr-land:** directive-adjacent closing lines, gate scoped to message
+* **pr-land:** fail closed on attribution evidence, gate header and token
+* **pr-land:** credit commit authors with no linked GitHub login
+* **skills/herdr:** hold unrecognized settled states, fall back to pane read (#94)
+* **harness-audit:** restore frontmatter and repair triage table (#87)
+* **scaffold:** update PR template with closing directives (#86)
+* **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)
 * **skills/harness-audit:** deterministic category, dump-context payload, regex robustness
 * **gh-router/pr-land:** prevent reuse body overwrite and conflict timeout
 * **gh-router/ci:** fix SyntaxError on Python <3.12 in ci.sh why (#72)
@@ -90,13 +92,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **pr-enhance:** disambiguate own-PR prose trigger
-* **pr-land:** token gate applies only when body becomes the message
-* **gh-router:** --check runs merge gates, unconditional token gate
-* **gh-router:** authorship token, pr-refine skill, and router wiring
-* **agent-rules:** clarify skill_dir resolves to the containing skill.md directory
-* **git-convention:** codify standalone issue-closing directives (#85)
-* **rules:** stop recommending Obsidian wikilinks in markdown
+* **adr:** account for the ledger by landing PR
+* **adr:** gate the ledger on declared landing and pre-merge curation
+* **adr:** correct the ledger gate's floor, cap, and ceiling trigger
+* **adr:** gate the changelog with a floor and an adversarial ceiling
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
 * **scaffold:** point the release-flow note at the corrected pr.sh gate
@@ -106,6 +105,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
 * **scaffold:** record the changelog bullet contract
+* **pr-enhance:** disambiguate own-PR prose trigger
+* **pr-land:** token gate applies only when body becomes the message
+* **gh-router:** --check runs merge gates, unconditional token gate
+* **gh-router:** authorship token, pr-refine skill, and router wiring
+* **agent-rules:** clarify skill_dir resolves to the containing skill.md directory
+* **git-convention:** codify standalone issue-closing directives (#85)
+* **rules:** stop recommending Obsidian wikilinks in markdown
 * **skills/herdr:** note agy recognition limits and barrier re-entry
 * **skills/herdr:** document fan-out barrier and transcript patterns
 * **herdr:** order the helper sections by workflow
