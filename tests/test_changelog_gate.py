@@ -53,7 +53,9 @@ def _ledger_check(repo: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_ledger_passes_on_a_well_formed_ledger(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#1)"), ["feat(thing): add a thing (#1)"])
+    repo = _repo(
+        tmp_path, _ledger("* **thing:** add a thing (#1)"), ["feat(thing): add a thing (#1)"]
+    )
 
     result = _ledger_check(repo)
 
@@ -323,6 +325,89 @@ def test_ledger_needs_a_human_when_pr_is_given_without_landing(tmp_path: Path) -
     assert "--pr needs --landing" in result.stderr
 
 
+# --- the migration baseline ---------------------------------------------------------------
+
+
+def _baseline(repo: Path, *identities: str) -> Path:
+    path = repo / ".config" / "changelog-unattributed-baseline.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text("\n".join(identities) + "\n", encoding="utf-8")
+    return path
+
+
+def test_ledger_accepts_a_baselined_unattributed_entry(tmp_path: Path) -> None:
+    """Recorded debt is tolerated."""
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): a (#1)"])
+    _ = _baseline(repo, "**thing:** add a thing")
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_needs_a_human_when_the_baseline_is_missing(tmp_path: Path) -> None:
+    """Deleting the baseline is not a reset: the debt stops being tolerated."""
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "entry carries no (#N)" in result.stderr
+
+
+def test_ledger_blocks_growth_beyond_the_baseline(tmp_path: Path) -> None:
+    """A new unattributed entry is growth: the baseline may not absorb it."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing", "* **thing:** add another thing"),
+        ["feat(thing): a (#1)"],
+    )
+    _ = _baseline(repo, "**thing:** add a thing")
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "entry carries no (#N): '**thing:** add another thing'" in result.stderr
+
+
+def test_ledger_blocks_a_stale_baseline_line(tmp_path: Path) -> None:
+    """A line whose entry is gone is authority waiting to be reused, so it must be pruned."""
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#1)"), ["feat(thing): a (#1)"])
+    _ = _baseline(repo, "**thing:** a thing that is gone")
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "no longer match an unattributed entry" in result.stderr
+
+
+def test_update_baseline_seeds_then_only_shrinks(tmp_path: Path) -> None:
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing", "* **thing:** add another thing"),
+        ["feat(thing): a (#1)"],
+    )
+
+    seeded = _run(repo, "ledger", "--update-baseline")
+    assert seeded.returncode == 0, seeded.stderr
+    assert _ledger_check(repo).returncode == 0
+
+    _ = (repo / "CHANGELOG.md").write_text(
+        _ledger("* **thing:** add a thing", "* **thing:** add another thing", "* **thing:** third"),
+        encoding="utf-8",
+    )
+    grown = _run(repo, "ledger", "--update-baseline")
+    assert grown.returncode == 2, grown.stderr
+    assert "refusing to grow the baseline" in grown.stderr
+
+    _ = (repo / "CHANGELOG.md").write_text(_ledger("* **thing:** add a thing"), encoding="utf-8")
+    shrunk = _run(repo, "ledger", "--update-baseline")
+    assert shrunk.returncode == 0, shrunk.stderr
+    recorded = (repo / ".config" / "changelog-unattributed-baseline.txt").read_text(encoding="utf-8")
+    assert "add a thing" in recorded
+    assert "another thing" not in recorded
+
+
 MEASURED_LEDGER = """\
 # Changelog
 
@@ -389,6 +474,7 @@ def test_ticket_passes_for_one_conventional_commit(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "ticket: pass"
+
 
 def test_ticket_blocks_a_non_conventional_subject(tmp_path: Path) -> None:
     repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["added a thing"])

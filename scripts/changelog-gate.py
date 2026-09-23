@@ -13,7 +13,8 @@ Read-only: a failing run never writes the worktree, the target branch, or CHANGE
           integrity, duplicate-identity, placeholder, and provenance checks, and no PR may
           have produced more entries than it had commits. On `main` every entry must resolve
           to a landing commit; at the PR boundary pass `--pr`/`--landing`, and that PR is
-          covered by its declared landing instead.
+          covered by its declared landing instead. Unattributed entries recorded in `--baseline`
+          are tolerated debt, and the baseline may only shrink.
 
 Exit codes: 0 pass · 1 blocked/fixable · 2 blocked/needs human.
 
@@ -22,6 +23,7 @@ Usage:
   uv run scripts/changelog-gate.py ledger [--changelog CHANGELOG.md]
   uv run scripts/changelog-gate.py ledger --pr 96 --landing squash
   uv run scripts/changelog-gate.py ledger --pr 96 --landing merge --base main
+  uv run scripts/changelog-gate.py ledger --update-baseline   # seed or shrink the debt record
 """
 
 from __future__ import annotations
@@ -68,6 +70,13 @@ PLACEHOLDER_RE = re.compile(r"\bTBD\b|\bTODO\b|<[^>]+>")
 ATTRIBUTION_RE = re.compile(r"\(#(?P<pr>\d+)\)\s*$")
 PR_REF_RE = re.compile(r"#(\d+)")
 KNOWN_SECTIONS = frozenset(section for section, _ in GEN.TYPE_SECTIONS.values())
+# The migration's record of entries that predate attribution. Shrink-only: growth needs a
+# human, not a flag, so `--update-baseline` refuses to add a line.
+DEFAULT_BASELINE = Path(".config/changelog-unattributed-baseline.txt")
+BASELINE_NOTE = (
+    "# Unattributed ledger entries allowed by ADR-0016's migration. Shrink-only: delete a line",
+    "# when its entry gains (#N) or is removed; never add one.",
+)
 
 
 @dataclass(frozen=True)
@@ -193,15 +202,75 @@ def landing_commits() -> dict[str, int]:
     return landings
 
 
+def unattributed(entries: list[str]) -> set[str]:
+    """Identities of entries that name no PR — the migration's debt class."""
+    return {GEN.entry_identity(entry) for entry in entries if attributed_pr(entry) is None}
+
+
+def read_baseline(path: Path) -> set[str] | None:
+    """The recorded debt, or None when there is no baseline file."""
+    if not path.exists():
+        return None
+    return {
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+
+
+def write_baseline(path: Path, entries: list[str], existing: set[str] | None) -> list[Finding]:
+    """Seed the baseline, or shrink it. Growth needs a human, not a flag."""
+    present = unattributed(entries)
+    if existing is not None:
+        additions = sorted(present - existing)
+        if additions:
+            return [
+                Finding(
+                    "baseline",
+                    f"refusing to grow the baseline by {len(additions)} line(s): {additions[0]!r}",
+                    fixable=False,
+                )
+            ]
+        present = existing & present
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join([*BASELINE_NOTE, *sorted(present)]) + "\n", encoding="utf-8")
+    return []
+
+
+def check_baseline(entries: list[str], baseline: set[str] | None) -> list[Finding]:
+    """A baseline may only shrink: a line whose entry is gone is authority waiting to be reused."""
+    if baseline is None:
+        return []
+    stale = sorted(baseline - unattributed(entries))
+    if not stale:
+        return []
+    return [
+        Finding(
+            "baseline",
+            f"{len(stale)} baseline line(s) no longer match an unattributed entry, "
+            f"e.g. {stale[0]!r}; --update-baseline shrinks it",
+        )
+    ]
+
+
 def check_provenance(
-    entries: list[str], landings: dict[str, int], current_pr: str | None
+    entries: list[str],
+    landings: dict[str, int],
+    current_pr: str | None,
+    baseline: set[str] | None = None,
 ) -> list[Finding]:
-    """Every entry names a PR, and that PR's landing commit is reachable from HEAD."""
+    """Every entry names a PR, and that PR's landing commit is reachable from HEAD.
+
+    An identity recorded in the baseline is tolerated debt: it predates attribution, and the
+    baseline may only shrink. Anything else unattributed is growth, and fails.
+    """
     findings: list[Finding] = []
     for entry in entries:
         ref = attributed_pr(entry)
         identity = GEN.entry_identity(entry)
         if ref is None:
+            if baseline is not None and identity in baseline:
+                continue
             findings.append(Finding("provenance", f"entry carries no (#N): {identity!r}"))
         elif ref == current_pr:
             continue
@@ -241,7 +310,12 @@ def check_attribution(
 
 
 def check_ledger(
-    changelog: Path, base: str | None = None, landing: str | None = None, pr: str | None = None
+    changelog: Path,
+    base: str | None = None,
+    landing: str | None = None,
+    pr: str | None = None,
+    baseline_path: Path = DEFAULT_BASELINE,
+    update_baseline: bool = False,
 ) -> list[Finding]:
     """The ledger checks. Reads; never writes.
 
@@ -264,6 +338,10 @@ def check_ledger(
     sections = GEN.parse_unreleased_sections(content)
     findings += check_duplicates(sections)
     entries = [entry for group in sections.values() for entry in group]
+    baseline = read_baseline(baseline_path)
+    if update_baseline:
+        return write_baseline(baseline_path, entries, baseline)
+    findings += check_baseline(entries, baseline)
 
     if not GEN.run(["git", "rev-parse", "--verify", "--quiet", "HEAD"]):
         return findings + [
@@ -290,11 +368,13 @@ def check_ledger(
         allowance = _count(counted)
 
     landings = landing_commits()
-    findings += check_provenance(entries, landings, pr)
+    findings += check_provenance(entries, landings, pr, baseline)
     findings += check_attribution(entries, landings, pr, allowance)
 
-    if pr is not None and landing == "squash" and not any(
-        attributed_pr(entry) == pr for entry in entries
+    if (
+        pr is not None
+        and landing == "squash"
+        and not any(attributed_pr(entry) == pr for entry in entries)
     ):
         findings.append(
             Finding("landing", f"a squash landing carries exactly one entry; #{pr} carries none")
@@ -362,9 +442,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Deterministic changelog-ledger floor (ADR-0016)")
     parser.add_argument("check", choices=["ticket", "ledger"], help="which boundary to check")
     parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
-    parser.add_argument("--base", default=None, help="base ref: the merge target, or the PR's target")
+    parser.add_argument(
+        "--base", default=None, help="base ref: the merge target, or the PR's target"
+    )
     parser.add_argument("--pr", default=None, help="this PR's number, for the PR-boundary run")
     parser.add_argument("--landing", choices=["squash", "merge"], default=None)
+    parser.add_argument(
+        "--baseline", default=str(DEFAULT_BASELINE), help="recorded unattributed identities"
+    )
+    parser.add_argument("--update-baseline", action="store_true", help="seed or shrink it")
     args = parser.parse_args(argv)
 
     if args.check == "ticket":
@@ -378,7 +464,14 @@ def main(argv: list[str] | None = None) -> int:
     elif args.pr is not None and args.landing is None:
         findings = [Finding("landing", "--pr needs --landing (the declaration)", fixable=False)]
     else:
-        findings = check_ledger(Path(args.changelog), args.base, args.landing, args.pr)
+        findings = check_ledger(
+            Path(args.changelog),
+            args.base,
+            args.landing,
+            args.pr,
+            Path(args.baseline),
+            args.update_baseline,
+        )
 
     for finding in findings:
         print(f"[{finding.check}] {finding.detail}", file=sys.stderr)
