@@ -122,18 +122,20 @@ def get_commits_since(tag: str) -> list[tuple[str, str]]:
         else:
             range_spec = "HEAD"
 
-    log = run(["git", "log", range_spec, "--pretty=format:%s%n%b%x00%x00", "--no-merges"])
-    if not log:
-        return []
-    # commits separated by double null
-    raw_commits = [c.strip() for c in log.split("\x00\x00") if c.strip()]
+    return parse_commit_log(
+        run(["git", "log", range_spec, "--pretty=format:%s%n%b%x00%x00", "--no-merges"])
+    )
+
+
+def parse_commit_log(log: str) -> list[tuple[str, str]]:
+    """Parse `%s%n%b%x00%x00` output into (subject, body) pairs, order preserved."""
     commits: list[tuple[str, str]] = []
-    for raw in raw_commits:
-        parts = raw.split("\n", 1)
-        subject = parts[0].strip()
-        body = parts[1] if len(parts) > 1 else ""
-        if subject:
-            commits.append((subject, body))
+    for raw in (chunk.strip() for chunk in log.split("\x00\x00")):
+        if not raw:
+            continue
+        subject, _, body = raw.partition("\n")
+        if subject.strip():
+            commits.append((subject.strip(), body))
     return commits
 
 
