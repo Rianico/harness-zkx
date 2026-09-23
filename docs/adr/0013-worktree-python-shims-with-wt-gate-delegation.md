@@ -8,6 +8,8 @@ Accepted
 
 Implements [Worktree Workflow](../../CONTEXT.md#worktree-workflow) and [Respect Tool Feedback](../../CONTEXT.md#respect-tool-feedback)
 
+Relates from [16. Changelog Ledger Gate with Deterministic Floor and Adversarial Accounting](0016-changelog-ledger-gate-with-deterministic-floor-and-adversarial-accounting.md)
+
 ## Context
 
 `skills/branch-worktree-pr` shipped 6 bash/python helpers (`create_target.sh`, `make_copy.sh`, `merge_copy.sh`, `open_pr.sh`, `claim_gate.py`, `verify_parent.py` + `check_history.py`) that drifted: `merge_copy.sh` hardcoded `npm run typecheck && npm test`, `verify_parent.py` read `.config/wt.toml [pre-merge].gate` with `npm` fallback, `wt-template.toml` documented `cargo`/`uv` only as comments. Bash path-guessing (`refs/heads` vs `[branch]`) and `shell=True` injection made typing and polyglot (rust/python/typescript) impossible. Grilling revealed `wt.toml` is template until copied via `wt config create --project`, and `wt merge` is the final deterministic gate — not the orchestrator. The choice was: one comprehensive Python CLI that absorbs `wt`, one monolith that absorbs shims, or thin Python shims sharing a typed lib.

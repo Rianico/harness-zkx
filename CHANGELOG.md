@@ -15,7 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-* **pr-land:** rebuild co-author trailers on squash-merge
+* **changelog-gate:** add a recorded waiver and a terminal baseline state
+* **scaffold:** ship the changelog ledger gate alongside the generator
+* **changelog-gate:** record the unattributed migration as a shrink-only baseline
+* **changelog-gate:** account for entries by landing PR, not by scope
+* **changelog-gate:** enforce the deterministic floor for ledger entries
+* **gh-router:** squash-merge attribution and contributor-PR refine flow (#95)
 * **skills/herdr:** add wait barrier and transcript helpers (#93)
 * **skills/harness-audit:** add workload for edit tool error audit and analysis (#90)
 * **herdr:** add herdr-overview and one name for panes and their agents (#69)
@@ -29,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** report the run plan and self-check written output (#23)
 * **gh-router:** diagnostic scripts, changelog sync, and an exit-code fix (#21)
 * **scaffold:** add --update mode and extract static templates (#20)
+* **pr-land:** rebuild co-author trailers on squash-merge
 * **skills/herdr:** support prompt broadcast and wait-timeout exit path
 * **skills/herdr:** add herdr-transcript session extractor
 * **skills/herdr:** add herdr-wait polling barrier helper
@@ -39,12 +45,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **pr-land:** scope token gate to the HTML comment placeholder
-* **pr-land:** --check mirrors the squash fallback
-* **pr-refine:** route same-repo heads to Flow A
-* **pr-land:** directive-adjacent closing lines, gate scoped to message
-* **pr-land:** fail closed on attribution evidence, gate header and token
-* **pr-land:** credit commit authors with no linked GitHub login
+* **scaffold:** load the sibling scripts without redefining a constant
+* **changelog:** mint one entry per identity, not per commit
+* **changelog-gate:** let --update-baseline shrink in a tree with new entries
 * **skills/herdr:** hold unrecognized settled states, fall back to pane read (#94)
 * **harness-audit:** restore frontmatter and repair triage table (#87)
 * **scaffold:** update PR template with closing directives (#86)
@@ -60,9 +63,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
 * converge the nine blocking issues from the run ledger (#45) (BREAKING CHANGE)
 * **gh-router:** split libs and harden PR gates
-* **gh-router:** split libs and harden PR gates
 * **gh-router:** give repo identity one authority and split shared code by concern (#35)
-* **gh-router:** give repo identity one authority and split shared code by concern
 * **gh-router:** resolve the repo from the push remote, not gh repo view (#34)
 * **scaffold:** correct the templates and detection the scaffold ships (#32)
 * **scaffold:** make the generated gates pass, and stop bypassing them
@@ -74,9 +75,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** pin the changelog bullet style and keep it out of oxfmt
 * **changelog:** emit * bullets to match semantic-release (#22)
 * **changelog:** keep the Unreleased heading semantic-release anchors on (#19)
+* **pr-land:** scope token gate to the HTML comment placeholder
+* **pr-land:** --check mirrors the squash fallback
+* **pr-refine:** route same-repo heads to Flow A
+* **pr-land:** directive-adjacent closing lines, gate scoped to message
+* **pr-land:** fail closed on attribution evidence, gate header and token
+* **pr-land:** credit commit authors with no linked GitHub login
 * **skills/harness-audit:** deterministic category, dump-context payload, regex robustness
 * **gh-router/pr-land:** prevent reuse body overwrite and conflict timeout
-* **gh-router/ci:** fix SyntaxError on Python <3.12 in ci.sh why (#72)
 * **herdr:** conform herdr_pane.py to PEP 723
 * **ci:** run the changelog check on main pushes
 * **gitignore:** scope the ADR pointer ignore to the repo root
@@ -90,12 +96,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **pr-enhance:** disambiguate own-PR prose trigger
-* **pr-land:** token gate applies only when body becomes the message
-* **gh-router:** --check runs merge gates, unconditional token gate
-* **gh-router:** authorship token, pr-refine skill, and router wiring
+* **adr:** define the recorded waiver and the baseline's lifecycle
+* **adr:** record the migration baseline and point pr-refine at §5
+* **adr:** account for the ledger by landing PR
+* **adr:** gate the ledger on declared landing and pre-merge curation
+* **adr:** correct the ledger gate's floor, cap, and ceiling trigger
 * **agent-rules:** clarify skill_dir resolves to the containing skill.md directory
 * **git-convention:** codify standalone issue-closing directives (#85)
+* **adr:** gate the changelog with a floor and an adversarial ceiling
 * **rules:** stop recommending Obsidian wikilinks in markdown
 * **scaffold:** add adr-scaffolding subskill (#52)
 * **scaffold:** tell models to re-run the commit instead of hand-editing CHANGELOG
@@ -106,6 +114,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * record the bumped toolchain and the preset/writer constraint
 * **scaffold:** record the flavor gate contract
 * **scaffold:** record the changelog bullet contract
+* **pr-enhance:** disambiguate own-PR prose trigger
+* **pr-land:** token gate applies only when body becomes the message
+* **gh-router:** --check runs merge gates, unconditional token gate
+* **gh-router:** authorship token, pr-refine skill, and router wiring
 * **skills/herdr:** note agy recognition limits and barrier re-entry
 * **skills/herdr:** document fan-out barrier and transcript patterns
 * **herdr:** order the helper sections by workflow

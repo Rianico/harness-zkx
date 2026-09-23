@@ -263,3 +263,20 @@ def test_update_supersedes_a_branch_entry_with_its_numbered_form(tmp_path: Path)
     updated = changelog.read_text(encoding="utf-8")
     assert updated.count("add a thing") == 1, updated
     assert "* **thing:** add a thing (#99)" in updated
+
+
+def test_update_mints_one_entry_for_a_subject_that_repeats(tmp_path: Path) -> None:
+    """A branch commit and its squash share a subject; the ledger's unit is the entry."""
+    repo, changelog = _repo_with_a_visible_commit(tmp_path, RELEASED_CHANGELOG)
+    _ = subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "feat(thing): add a thing"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+    result = _run_in(repo, changelog, "update")
+
+    assert result.returncode == 0, result.stderr
+    updated = changelog.read_text(encoding="utf-8")
+    assert updated.count("* **thing:** add a thing") == 1, updated

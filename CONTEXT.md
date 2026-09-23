@@ -150,11 +150,11 @@ _Avoid_: raw `git worktree add`
 
 **Copy**:
 Ephemeral child worktree `feat/<slug>--<phase>` for one ticket part, merged via `wt merge <parent>` from inside the copy.
-_Avoid_: sibling branch, parent-side merge
+_Avoid_: sibling branch, parent-side merge, sub tree, child branch
 
 **Target**:
 Parent branch (`feat/<slug>` or `map/<slug>`) created in place via `git switch -c` at session cwd; children are `wt` siblings.
-_Avoid_: `wt switch --create` for target
+_Avoid_: `wt switch --create` for target, dev tree, parent branch
 
 ## Loop & Graph Engineering
 
@@ -177,4 +177,42 @@ _Avoid_: Unbounded while-true loops, unassisted self-review.
 **Gate Synthesis**:
 The automated generation of project-native verification runners (`run_evals.sh` or `run_evals.py`) by `eval-gate` based on discovered repo toolchains (Rust, TypeScript, Python, Go) and declarative criteria.
 _Avoid_: Hardcoded per-stack runner scripts in caller skills.
+
+## Changelog Ledger
+
+**Changelog Ledger**:
+The `## [Unreleased]` block of `CHANGELOG.md` — the accumulating record of changes that have landed but not been released.
+_Avoid_: unreleased section, release notes, digest.
+
+**Changelog Entry**:
+One bullet under a ledger section: an optional scope, then the change.
+_Avoid_: bullet, line, item.
+
+**Changelog Digest**:
+The rendered ledger body presented to the Semantic Ceiling, and the load-bearing input to Changelog Curation.
+_Avoid_: notes, changelog text.
+
+**Changelog Generator**:
+The tool that writes the ledger from commit subjects (`changelog-unreleased.py update` / `clear`).
+_Avoid_: floor, gate, check.
+
+**Changelog Floor**:
+The non-LLM checker over the ledger. Distinct from the Changelog Generator: the floor never writes.
+_Avoid_: generator, sync check.
+
+**Changelog Curation**:
+The Semantic Ceiling's act on the digest — rewriting, merging, and retitling entries so the digest represents the change set rather than replaying it.
+_Avoid_: sorting, tidying, cleanup, pruning.
+
+**Ticket-Boundary Check**:
+The deterministic floor run by `wt merge` on the single squashed commit: its subject is conventional and projects exactly one well-formed Changelog Entry.
+_Avoid_: Tier 1, pre-merge gate.
+
+**PR-Boundary Check**:
+The floor and the Semantic Ceiling at the PR boundary — accounting, provenance, and well-formedness checks, then Changelog Curation.
+_Avoid_: Tier 2, PR gate.
+
+**Landing**:
+How a PR's commits enter the base branch — a squash commit, or a merge commit that preserves them — declared per PR before the Changelog Digest is curated, because a squash destroys the subjects a multi-entry digest rests on.
+_Avoid_: merge method, integration.
 

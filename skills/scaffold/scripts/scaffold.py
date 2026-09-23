@@ -207,14 +207,16 @@ OXLINT_COMMENT_GATE_JS = load_template("typescript/scripts/oxlint-plugin-comment
 INDEX_TEST_TS = load_template("typescript/tests/index.test.ts")
 CLI_TS = load_template("typescript/src/cli.ts")
 
-try:
-    CHANGELOG_UNRELEASED_PY = (pathlib.Path(__file__).parent / "changelog-unreleased.py").read_text(
-        encoding="utf-8"
-    )
-except FileNotFoundError:
-    CHANGELOG_UNRELEASED_PY = (
-        "#!/usr/bin/env python3\n# managed by scaffold — see scripts/changelog-unreleased.py\n"
-    )
+def _load_sibling_script(name: str) -> str:
+    """A script shipped next to scaffold.py, or the marker-only stub when it is absent."""
+    try:
+        return (pathlib.Path(__file__).parent / name).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return f"#!/usr/bin/env python3\n# managed by scaffold — see scripts/{name}\n"
+
+
+CHANGELOG_UNRELEASED_PY = _load_sibling_script("changelog-unreleased.py")
+CHANGELOG_GATE_PY = _load_sibling_script("changelog-gate.py")
 
 GITIGNORE_GIT = [".lsz/", ".pi/", "coverage/"]
 
@@ -1026,6 +1028,7 @@ def do_git(
                 pass
     if "changelog-script" in sel:
         write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
+        write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
     if "commitlint" in sel:
         write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     if "changelog-md" in sel:

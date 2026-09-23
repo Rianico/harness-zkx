@@ -23,8 +23,10 @@
         with: { node-version: {{ node_version }}, cache: pnpm }
       - uses: actions/setup-python@{{ shas['setup-python'] }} # v7.0.0
         with: { python-version: "3.14" }
-      - name: Clear Unreleased section (handoff to semantic-release)
-        run: python scripts/changelog-unreleased.py clear
+      - name: Clear Unreleased section and retire the migration baseline
+        run: |
+          python scripts/changelog-unreleased.py clear
+          python scripts/changelog-gate.py ledger --update-baseline
       - run: pnpm install
       - run: pnpm exec semantic-release
         env:

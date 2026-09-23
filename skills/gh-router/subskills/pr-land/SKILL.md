@@ -13,6 +13,8 @@ metadata:
 
 Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head sha blank`). Complements `pr-enhance` (description) — this subskill owns the `POST pulls` → `poll every check` → `PUT merge squash` loop.
 
+**Ledger and landing.** The landing is declared before curation and `pr-land` reads it to select the merge method. The ledger obligation for each PR scenario — which artifacts it carries, on which surface — lives in `rules/common/git-convention.md` §5; the design is ADR-0016. The checks live in `scripts/changelog-gate.py`: invoke them, never restate them.
+
 ## Script
 
 `$SKILL_DIR/scripts/pr.sh` (755, `set -euo pipefail`, `GH_TOKEN` via `gh auth`). Repo identity and the check verdict come from the skill's shared modules — `$SKILL_DIR/../../lib/repo.sh` (push remote first; `gh repo view` only as last resort) and `$SKILL_DIR/../../lib/checks.sh` — so this script re-derives neither.

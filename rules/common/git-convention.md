@@ -28,7 +28,9 @@
 
 ## 5. Commits
 
-- **Atomic inside, squash outside:** atomic bisectable commits inside topic; squash fixup/typo churn on merge to base. `code` and `docs` MUST be separate commits — never mix code + docs in one commit, even in same PR.
+- **Atomic inside, declared landing outside:** atomic bisectable commits inside the topic. Landing is declared per PR in the PR body (`Landing: squash|merge`) before the changelog digest is curated: **squash** when the PR's commits are one change plus its docs and follow-up fixes, **merge** when it carries several changes. `pr-land` reads the declaration and selects the merge method; a squash destroys the subjects a multi-entry digest rests on, so the digest must be written to match what was declared (ADR-0016). `code` and `docs` MUST be separate commits — never mix code + docs in one commit, even in same PR.
+- **Ledger obligation, by scenario.** Every PR that lands a change carries a ledger entry for it, attributed to that PR (`(#N)`). **Own PR:** the entry is born in the ticket squash (`update` in the `Copy`), the digest is curated at the PR boundary, and the landing is declared in the PR body. **Refined contributor PR** (`pr-refine`): the maintainer carries the entry — Flow A pushes it onto their branch, Flow B ships it in the superseding PR — and declares the landing with a `landing:merge` / `landing:squash` label. **Unrefined contributor PR:** out of scope; no entry is minted and none is expected. An architectural decision adds an ADR on the same surface: the ledger and the ADR are the artifacts a contributor's branch cannot carry. Checks live in `scripts/changelog-gate.py` (ADR-0016) — never restate them.
+- **Escape and debt.** A `blocked` gate is waived only with a recorded reason: `scripts/changelog-gate.py ledger --waiver "<reason>"`, written in the PR body's accounting section. It accepts fixable findings and never a needs-human one, and `wt merge --no-hooks` is not it — that empties the hook plan and skips `ruff` + `pytest` too. The unattributed baseline `.config/changelog-unattributed-baseline.txt` is a bridge, not a record: it shrinks as entries gain `(#N)`, the release job runs `--update-baseline` right after `clear` in the same commit, and a baseline that has not shrunk across two releases is drift.
 - **Conventional (Conventional Commits 1.0.0 + semver):** `type[(scope)][!]: description`
   - Blank line → body (what/why) → blank line → footer(s).
   - `feat` = MINOR, `fix` = PATCH, `!` / `BREAKING CHANGE:` = MAJOR; other types (`docs|style|refactor|perf|test|build|ci|chore|revert`) no bump unless breaking.
@@ -45,6 +47,7 @@
   - **Anti-pattern:** Never comma-separate or combine (`Closes #71, #72` or `Closes #71 and #72`) — GitHub's parser only recognizes the token immediately following the keyword; trailing numbers remain unlinked and open.
   - In PR descriptions, place closing directives at the bottom (under Checklist or `## Related Issues`). Because `pr.sh` inherits the PR body as the squash message, this automatically carries into the base commit and auto-closes all linked issues upon merge.
 - **Provenance — squash loses ancestry, add `Co-authored-by: Name <email>`:**
+  - Applies to squash landing only; a merge commit preserves the authors' own commits, so no trailer is needed.
   - AI: one trailer per model — `Co-authored-by: <model> <noreply@ai>`
   - Fork: `git fetch origin pull/<id>/head && git merge --no-ff FETCH_HEAD` → squash must include `Co-authored-by: Original Author <email>` + `Refs: GH#<id>` / `Closes #<id>`
 
