@@ -81,6 +81,10 @@ blocks the merge and leaves the worktree and the target unchanged.
   attribution: `squash ⟹ exactly one entry attributed to this PR`; `merge ⟹ 1 ≤ entries(#N) ≤
   commits(PR)`. Without this, a squashed PR raises its scopes' entry counts while contributing no
   commits, and `main` fails the accounting bound by construction.
+- *Recorded waiver.* The only escape from `blocked` is `--waiver "<reason>"`. It accepts fixable
+  findings and prints them with the reason; it never rescues a needs-human finding, and an empty
+  reason is refused. The reason is written in the PR body's accounting section, so the bypass is
+  visible rather than silent, and everything else — `ruff`, `pytest` — still runs.
 - *Provenance.* Every `(#N)` in the ledger must appear in a reachable commit subject — the squash
   subject, or the merge subject `Merge pull request #N from …`, which the generator's own
   `--no-merges` read skips. The check verifies that a number exists, not that it is the right
@@ -153,11 +157,13 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
   the main worktree, `.git/worktrees/<name>` for a linked one, measured on git 2.55), so a raw path
   yields two counters and lets a capped branch be re-run from the other location with a fresh count.
   The `[post-start]` hook clears the counter.
-- **The human override is not defined.** A cap trip leaves no changelog-scoped escape:
-  `wt merge --no-hooks` skips the whole gate, not the changelog check — it sets `verify = false`
-  and yields an empty hook plan (worktrunk 0.76.0, `src/commands/merge.rs`), so the `ruff` and
-  `pytest` commands in `[pre-merge]` do not run either, and declining the hook-approval prompt has
-  the same effect. The override must be defined explicitly rather than pointed at that flag.
+- **The override is a recorded waiver, not a flag.** A cap trip's escape is `--waiver "<reason>"`,
+  changelog-scoped and printed into the job log. `wt merge --no-hooks` is not it: it sets
+  `verify = false` and yields an empty hook plan (worktrunk 0.76.0, `src/commands/merge.rs`), so
+  `ruff` and `pytest` skip too, and declining the hook-approval prompt has the same effect. The
+  waiver needs no second human — it exists to make the bypass visible, and a second approver would
+  make it unreachable in a single-maintainer repo, recreating the deadlock the counter reset
+  removed. A waiver that becomes routine is drift.
 - **The scaffold owns the bytes.** `changelog-check.yml`, `.githooks/pre-push`, `.husky/pre-push`,
   `.releaserc.json`, and `scripts/changelog-unreleased.py` are replaced byte-identically by
   `scaffold --update` and hash-pinned in `tests/scaffold/test_templates.py`; `changelog-check.yml`
@@ -175,11 +181,13 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
   mechanically verified; coverage rests on the Skeptic being independent and the accounting being
   visible in the PR. The landing declaration is a judgement nothing verifies before the irreversible
   act; the floor can only check the digest against what was declared.
-- **The migration is recorded, not hidden.** At `e3badd92` the ledger carries 74 unattributed
-  entries, two duplicate identities, and one `(#N)` that resolves to nothing. The floor reports
-  them; nothing here removes them, and shrinking the ledger is a human decision. A shrink-only
-  baseline (`.config/changelog-unattributed-baseline.txt`, `--update-baseline`, which refuses to
-  grow) records the 74 as tolerated debt so the gate can be enabled now, while any *new*
-  unattributed entry still fails. With it, `main`'s residual is three lines: the two duplicate
-  pairs and the unresolvable number.
+- **The migration is recorded, and it is a bridge, not a record.** At `e3badd92` the ledger carries
+  74 unattributed entries (72 distinct identities), two duplicate identities, and one `(#N)` that
+  resolves to nothing. A shrink-only baseline (`.config/changelog-unattributed-baseline.txt`,
+  `--update-baseline`) records 71 identities as tolerated debt so the gate can be enabled now, while
+  any *new* unattributed entry still fails. It cannot be permanent: a release empties `[Unreleased]`
+  and every baselined identity with it, so the release job runs `--update-baseline` immediately
+  after `clear` in the same commit, and the file is header-only once the migration is paid down. A
+  baseline that has not shrunk across two releases is drift. Nothing here removes the debt —
+  shrinking the ledger stays a human decision.
 - `.githooks/pre-push` loses its subject and is removed with the guard it serves.
