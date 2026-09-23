@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **scaffold:** ship the changelog ledger gate alongside the generator
 * **changelog-gate:** record the unattributed migration as a shrink-only baseline
 * **changelog-gate:** account for entries by landing PR, not by scope
 * **changelog-gate:** enforce the deterministic floor for ledger entries
