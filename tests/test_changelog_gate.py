@@ -107,7 +107,9 @@ def test_ledger_blocks_an_entry_outside_any_section(tmp_path: Path) -> None:
 
 def test_ledger_blocks_an_unknown_section(tmp_path: Path) -> None:
     repo = _repo(
-        tmp_path, _ledger("* **thing:** add a thing", section="Nonsense"), ["feat(thing): add a thing"]
+        tmp_path,
+        _ledger("* **thing:** add a thing", section="Nonsense"),
+        ["feat(thing): add a thing"],
     )
 
     result = _ledger_check(repo)
@@ -178,7 +180,9 @@ def test_ledger_blocks_a_tbd_placeholder(tmp_path: Path) -> None:
 
 
 def test_ledger_blocks_an_angle_bracket_placeholder(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** <describe the thing>"), ["feat(thing): add a thing"])
+    repo = _repo(
+        tmp_path, _ledger("* **thing:** <describe the thing>"), ["feat(thing): add a thing"]
+    )
 
     result = _ledger_check(repo)
 

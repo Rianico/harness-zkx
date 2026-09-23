@@ -240,7 +240,9 @@ def check_squash(base: str) -> list[Finding]:
         return [Finding("conventional-subject", f"not a conventional subject: {subject!r}")]
 
     projected = [
-        entry for entries in GEN.commits_to_sections([(subject, body)]).values() for entry in entries
+        entry
+        for entries in GEN.commits_to_sections([(subject, body)]).values()
+        for entry in entries
     ]
     if len(projected) != 1:
         return [
