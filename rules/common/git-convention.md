@@ -28,14 +28,15 @@
 
 ## 5. Commits
 
-- **Atomic inside, squash outside:** atomic bisectable commits inside topic; squash fixup/typo churn on merge to base. `code` and `docs` MUST be separate commits — never mix code + docs in one commit, even in same PR.
+- **Atomic inside, declared landing outside:** atomic bisectable commits inside the topic. Landing is declared per PR in the PR body (`Landing: squash|merge`) before the changelog digest is curated: **squash** when the PR's commits are one change plus its docs and follow-up fixes, **merge** when it carries several changes. `pr-land` reads the declaration and selects the merge method; a squash destroys the subjects a multi-entry digest rests on, so the digest must be written to match what was declared (ADR-0016). `code` and `docs` MUST be separate commits — never mix code + docs in one commit, even in same PR.
 - **Conventional (Conventional Commits 1.0.0 + semver):** `type[(scope)][!]: description`
   - Blank line → body (what/why) → blank line → footer(s).
   - `feat` = MINOR, `fix` = PATCH, `!` / `BREAKING CHANGE:` = MAJOR; other types (`docs|style|refactor|perf|test|build|ci|chore|revert`) no bump unless breaking.
   - Scope `(<noun>)`; description imperative, lowercase, no period, ≤72 (50 ideal).
   - Footer `Token: value` or `Token #value`; `BREAKING CHANGE` uppercase (alias `BREAKING-CHANGE`).
   - Ex: `feat(auth): add worktree pre-merge gate` · `fix(api)!: drop legacy field` + `BREAKING CHANGE: removes field x` / `Closes #12`
-- **Provenance — squash loses ancestry, add `Co-authored-by: Name <email>`:**
+- **Provenance — a squash loses ancestry, add `Co-authored-by: Name <email>`:**
+  - Applies to squash landing only; a merge commit preserves the authors' own commits, so no trailer is needed.
   - AI: one trailer per model — `Co-authored-by: <model> <noreply@ai>`
   - Fork: `git fetch origin pull/<id>/head && git merge --no-ff FETCH_HEAD` → squash must include `Co-authored-by: Original Author <email>` + `Refs: GH#<id>` / `Closes #<id>`
 
