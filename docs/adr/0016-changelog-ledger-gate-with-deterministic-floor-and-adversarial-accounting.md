@@ -175,8 +175,11 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
   mechanically verified; coverage rests on the Skeptic being independent and the accounting being
   visible in the PR. The landing declaration is a judgement nothing verifies before the irreversible
   act; the floor can only check the digest against what was declared.
-- **The existing ghosts are not retired by this decision.** At `e3badd92` the ledger carries 74
-  unattributed entries and two duplicate identities. The floor reports them; nothing here removes
-  them, and shrinking the ledger is a human decision. Attribution is the honest fix — each entry
-  can name the PR that landed it — and it is the prerequisite for a green `main`-side run.
+- **The migration is recorded, not hidden.** At `e3badd92` the ledger carries 74 unattributed
+  entries, two duplicate identities, and one `(#N)` that resolves to nothing. The floor reports
+  them; nothing here removes them, and shrinking the ledger is a human decision. A shrink-only
+  baseline (`.config/changelog-unattributed-baseline.txt`, `--update-baseline`, which refuses to
+  grow) records the 74 as tolerated debt so the gate can be enabled now, while any *new*
+  unattributed entry still fails. With it, `main`'s residual is three lines: the two duplicate
+  pairs and the unresolvable number.
 - `.githooks/pre-push` loses its subject and is removed with the guard it serves.

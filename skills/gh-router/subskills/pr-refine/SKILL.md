@@ -13,7 +13,14 @@ metadata:
 
 Turns someone else's PR into a landable one without ever rewriting their history.
 Seam: **refine pushes, land merges** — this subskill owns up to push (branch prep, body
-trailers); `pr-land` owns watch + squash. The shared contract is the squash body.
+trailers); `pr-land` owns watch + landing. The shared contract is the squash body when the
+landing is squash, and the branch's own commits when it is merge.
+
+**Ledger.** A refined PR carries the artifacts a contributor's branch cannot: the ledger entry
+(Flow A pushes it onto their branch, Flow B ships it in the superseding PR) and, when the change
+is an architectural decision, an ADR on the same surface. Declare the landing with a
+`landing:merge` / `landing:squash` label. Per `rules/common/git-convention.md` §5; the design is
+ADR-0016. The checks live in `scripts/changelog-gate.py`: invoke them, never restate them.
 
 ## Script
 
