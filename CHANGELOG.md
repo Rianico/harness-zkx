@@ -122,6 +122,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** state per-field time-axis boundary contract
 * **scaffold:** document ensure ops in flavor subskills
 
+### Continuous Integration
+
+* **changelog:** enforce the floor at both boundaries and retire the push guard (#97)
+
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
 
 ### ⚠ BREAKING CHANGES
