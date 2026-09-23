@@ -6,8 +6,8 @@ Date: 2026-09-20
 
 Proposed — Applies [ADR-0015](0015-goal-gate-and-convergence-loop-architecture.md) to the
 changelog boundary. Amends the earlier draft of this record in place: that draft assumed every
-merge squashes, and the ledger's release source and landing rule have since changed. No
-implementation exists.
+merge squashes, and the ledger's release source and landing rule have since changed. The
+deterministic floor is implemented (`scripts/changelog-gate.py`); the ceiling is not.
 
 Relates to [13. Worktree Python Shims with wt Gate Delegation and Auto-Scaffold](0013-worktree-python-shims-with-wt-gate-delegation.md)
 
@@ -26,9 +26,10 @@ entry identities were duplicated.
 The failure is live on `main`. At `e3badd92` the same check fails — `changelog-check.yml` is red
 on `push: main` and green on the PR head for the same work — because the PR's branch commits
 minted entries that the squash destroyed, while `update` on `main` regenerates them from the
-squash subject. The floor below reports the same five scopes: `pr-land` 7 entries against 0
-commits, `pr-refine` 1 against 0, `pr-enhance` 1 against 0, `gh-router/ci` 1 against 0, and
-`gh-router/pr-land` 1 against 0.
+squash subject. Under attribution the same debt is one class, named per entry: of the 101
+`[Unreleased]` entries at `e3badd92`, 74 name no PR at all and 27 resolve to a landing commit.
+The entries whose commits the squash destroyed — `pr-land`, `pr-refine`, `pr-enhance`,
+`gh-router/ci`, `gh-router/pr-land` — are unattributed, not mis-counted.
 
 Two further decisions move the ledger's unit:
 
@@ -62,14 +63,22 @@ blocks the merge and leaves the worktree and the target unchanged.
 - *Well-formedness, section integrity, duplicate identities, placeholders.* Every entry matches
   the renderer's bullet grammar, sits under a known section, shares no identity with another
   entry (using the generator's `(#N)`-stripping rule), and carries no placeholder.
-- *Accounting.* For every scope the ledger carries, `entries(scope) ≤ commits(scope)`, where
-  `commits(scope)` counts the commits reachable from `HEAD` whose conventional subject projects
-  an entry in that scope. A global `entries ≤ commits` is kept only as a coarse pre-filter: it
-  holds on the measured ledger (73 ≤ 263) while the `herdr` scope alone is inflated (12 entries
-  against 3 commits). The bound counts and never deletes, so the rejection of reachability
-  pruning below still applies.
-- *Landing-scoped delta.* The PR's ledger delta is bound to its declaration:
-  `squash ⟹ delta == entries(project(<PR title> (#N)))`, exactly one; `merge ⟹ 1 ≤ delta ≤
+- *Accounting, per PR.* Every entry names the PR that landed it, and for every `#N`:
+  `entries(#N) ≤ commits(#N)`. `commits(#N)` is what that PR contributed to the log — one commit
+  for a squash landing, whose subject carries `(#N)`, or the merge commit's second-parent range
+  (`rev-list <merge>^1..<merge>^2`) for a merge landing. Merge subjects are read deliberately: the
+  generator's own `--no-merges` read would skip exactly the commits a merge landing rests on. One
+  basis, two scopes — the landing-scoped delta below is this rule for the PR that has not landed
+  yet — so the aggregate is implied, no global pre-filter exists, and no scope ratio is computed.
+  A violation names the PR that over-produced. The bound counts and never deletes, so the
+  rejection of reachability pruning below still applies.
+- *Attribution is mandatory.* An entry with no `(#N)`, or with one that resolves to no reachable
+  commit, is unvalidated and fails. This is the failure class the projection model produced: the
+  old scope ratio reported `herdr` as 12 entries against 3 commits, and attribution reports the
+  same twelve as twelve entries that name no PR. The check verifies that a number exists and
+  resolves, not that it is the *right* number for that entry — that stays the ceiling's job.
+- *Landing-scoped delta.* The PR's ledger delta is bound to its declaration, on the same
+  attribution: `squash ⟹ exactly one entry attributed to this PR`; `merge ⟹ 1 ≤ entries(#N) ≤
   commits(PR)`. Without this, a squashed PR raises its scopes' entry counts while contributing no
   commits, and `main` fails the accounting bound by construction.
 - *Provenance.* Every `(#N)` in the ledger must appear in a reachable commit subject — the squash
@@ -107,6 +116,13 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
   and commit no `[Unreleased]` at all. It is the field's default and would remove the two-tier
   machinery, but it gives up the in-tree ledger: the change set becomes visible only after the
   release, and curation has nowhere to happen before the tag.
+- **Rejected: a scope-ratio bound with a shrink-only baseline.** `entries(scope) ≤ commits(scope)`
+  counts a different basis — every commit reachable from `HEAD` — than the landing delta, so the
+  verdict depends on which branch you stand on: green on the `Target`, red on `main` for the same
+  digest, and every author pays for debt they did not create. Attribution derives the aggregate
+  from the same basis as the delta, so one basis covers both scopes and no baseline is needed.
+- **Rejected: optional attribution.** Verifying only the `(#N)`s that are present leaves
+  unattributed entries unvalidated, so a ghost is smuggled by omitting the number.
 - **Rejected: keep `([hash](url))` provenance.** Today's released sections link every entry to a
   commit. It cannot be authored before the merge: at curation time a squashed PR's commit does not
   exist, and a curated entry may represent several commits. `(#N)` is what survives.
@@ -115,7 +131,9 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
 
 - **`git-convention` §5 changes.** "Atomic inside, squash outside" becomes: atomic commits inside
   the topic, landing declared per PR — squash when the PR's commits are one change plus its docs
-  and follow-up fixes, merge when it carries several changes.
+  and follow-up fixes, merge when it carries several changes. §5 also owns the obligation table:
+  which artifacts each PR scenario carries and on which surface. The PR skills point at it and
+  restate nothing, and no skill describes the checks — they invoke the gate.
 - **`main` inherits the ticket commits of merged PRs.** A merged PR contributes its ticket commits
   to the log; a squashed PR contributes one subject. The ticket boundary already squashes
   intra-ticket churn, so this is smaller than the branch-commit era, but it is a real change in
@@ -157,8 +175,8 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
   mechanically verified; coverage rests on the Skeptic being independent and the accounting being
   visible in the PR. The landing declaration is a judgement nothing verifies before the irreversible
   act; the floor can only check the digest against what was declared.
-- **The existing ghosts are not retired by this decision.** At `e3badd92` the ledger carries 12
-  `herdr` entries against 3 commits, one `gitignore` entry against none, and two duplicate
-  identities. The floor reports them; nothing here removes them, and shrinking the ledger is a human
-  decision.
+- **The existing ghosts are not retired by this decision.** At `e3badd92` the ledger carries 74
+  unattributed entries and two duplicate identities. The floor reports them; nothing here removes
+  them, and shrinking the ledger is a human decision. Attribution is the honest fix — each entry
+  can name the PR that landed it — and it is the prerequisite for a green `main`-side run.
 - `.githooks/pre-push` loses its subject and is removed with the guard it serves.
