@@ -46,7 +46,7 @@ def _run_main(*argv: str) -> int:
 # --- 1: ensure_main runs self_check and exits non-zero on blocking ---
 def test_1_ensure_main_runs_self_check_on_written_path(tmp_path: Path, monkeypatch):
     (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
-    seen: list = []
+    seen: list[Path] = []
     orig = scaffold.self_check
 
     def spy(targets):
@@ -612,7 +612,7 @@ def test_r4_ensure_main_self_check_runs_for_unchanged_named_crate(
     tmp_path: Path, monkeypatch
 ):
     (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
-    seen: list = []
+    seen: list[Path] = []
     orig = scaffold.self_check
 
     def spy(targets):
