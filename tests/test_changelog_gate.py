@@ -386,7 +386,10 @@ def test_update_baseline_seeds_then_only_shrinks(tmp_path: Path) -> None:
         tmp_path,
         _ledger("* **thing:** add a thing", "* **thing:** add another thing"),
         ["feat(thing): a (#1)"],
+
     )
+
+    path = repo / ".config" / "changelog-unattributed-baseline.txt"
 
     seeded = _run(repo, "ledger", "--update-baseline")
     assert seeded.returncode == 0, seeded.stderr
@@ -398,12 +401,14 @@ def test_update_baseline_seeds_then_only_shrinks(tmp_path: Path) -> None:
     )
     grown = _run(repo, "ledger", "--update-baseline")
     assert grown.returncode == 2, grown.stderr
-    assert "refusing to grow the baseline" in grown.stderr
+    assert "not recorded" in grown.stderr
+    assert "third" not in path.read_text(encoding="utf-8")
+    assert "entry carries no (#N)" in _ledger_check(repo).stderr
 
     _ = (repo / "CHANGELOG.md").write_text(_ledger("* **thing:** add a thing"), encoding="utf-8")
     shrunk = _run(repo, "ledger", "--update-baseline")
     assert shrunk.returncode == 0, shrunk.stderr
-    recorded = (repo / ".config" / "changelog-unattributed-baseline.txt").read_text(encoding="utf-8")
+    recorded = path.read_text(encoding="utf-8")
     assert "add a thing" in recorded
     assert "another thing" not in recorded
 

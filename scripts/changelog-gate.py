@@ -219,22 +219,31 @@ def read_baseline(path: Path) -> set[str] | None:
 
 
 def write_baseline(path: Path, entries: list[str], existing: set[str] | None) -> list[Finding]:
-    """Seed the baseline, or shrink it. Growth needs a human, not a flag."""
+    """Seed the baseline, or shrink it. Growth is reported, never recorded.
+
+    Shrinking has to work in a tree that also carries new unattributed entries — the normal
+    state before a PR's curation — so the write happens and the additions come back as findings
+    instead of blocking it.
+    """
     present = unattributed(entries)
-    if existing is not None:
+    findings: list[Finding] = []
+    if existing is None:
+        recorded = present
+    else:
+        recorded = existing & present
         additions = sorted(present - existing)
         if additions:
-            return [
+            findings.append(
                 Finding(
                     "baseline",
-                    f"refusing to grow the baseline by {len(additions)} line(s): {additions[0]!r}",
+                    f"{len(additions)} unattributed entry(s) not recorded, e.g. {additions[0]!r}: "
+                    "they need (#N) attribution, not a baseline line",
                     fixable=False,
                 )
-            ]
-        present = existing & present
+            )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join([*BASELINE_NOTE, *sorted(present)]) + "\n", encoding="utf-8")
-    return []
+    path.write_text("\n".join([*BASELINE_NOTE, *sorted(recorded)]) + "\n", encoding="utf-8")
+    return findings
 
 
 def check_baseline(entries: list[str], baseline: set[str] | None) -> list[Finding]:
