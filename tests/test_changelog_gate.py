@@ -53,7 +53,7 @@ def _ledger_check(repo: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_ledger_passes_on_a_well_formed_ledger(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): add a thing"])
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#1)"), ["feat(thing): add a thing (#1)"])
 
     result = _ledger_check(repo)
 
@@ -193,33 +193,134 @@ def test_ledger_blocks_an_angle_bracket_placeholder(tmp_path: Path) -> None:
 # --- accounting ---------------------------------------------------------------------------
 
 
-def test_ledger_blocks_a_scope_with_more_entries_than_commits(tmp_path: Path) -> None:
-    """Two `thing` entries against one `thing` commit; unrelated commits keep the global bound green."""
+# --- provenance and attribution ------------------------------------------------------------
+
+
+def test_ledger_blocks_an_entry_with_no_pr_attribution(tmp_path: Path) -> None:
+    """Curation appends `(#N)`; an entry that names no PR can never be validated."""
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): add a thing (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "entry carries no (#N)" in result.stderr
+
+
+def test_ledger_blocks_an_attribution_that_resolves_to_no_commit(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#99)"), ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "(#99) resolves to no commit" in result.stderr
+
+
+def test_ledger_blocks_a_squash_landing_that_over_produced(tmp_path: Path) -> None:
+    """A squash landing is one commit; two entries attributed to it is the ghost shape."""
     repo = _repo(
         tmp_path,
-        _ledger("* **thing:** add a thing", "* **thing:** fix a thing"),
-        ["feat(thing): add a thing", "feat(other): a", "feat(other): b"],
+        _ledger("* **thing:** add a thing (#1)", "* **thing:** fix a thing (#1)"),
+        ["feat(thing): add a thing (#1)"],
     )
 
     result = _ledger_check(repo)
 
     assert result.returncode == 1, result.stderr
-    assert "scope 'thing': 2 entries > 1 commits" in result.stderr
-    assert "global pre-filter" not in result.stderr, "the global bound must not be the check here"
+    assert "#1: 2 entries > 1 commits" in result.stderr
 
 
-def test_ledger_blocks_a_global_pre_filter_violation(tmp_path: Path) -> None:
-    """Unscoped entries have no per-scope home, so the coarse global bound is what fires."""
+def _merge_landing(repo: Path, pr: str, commits: list[str]) -> None:
+    """Land `commits` onto `main` with a synthetic merge commit.
+
+    `git commit-tree` builds it from plumbing, so no `git merge` runs and no hook is involved.
+    """
+    _git(repo, "checkout", "-q", "-b", f"ticket-{pr}", "main")
+    for subject in commits:
+        _git(repo, "commit", "-q", "--allow-empty", "-m", subject)
+    tip = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    base = _git(repo, "rev-parse", "main").stdout.strip()
+    _git(repo, "checkout", "-q", "main")
+    tree = _git(repo, "rev-parse", f"{tip}^{{tree}}").stdout.strip()
+    merge = _git(
+        repo,
+        "commit-tree",
+        tree,
+        "-p",
+        base,
+        "-p",
+        tip,
+        "-m",
+        f"Merge pull request #{pr} from contributor/ticket-{pr}",
+    ).stdout.strip()
+    _git(repo, "update-ref", "refs/heads/main", merge)
+
+
+def test_ledger_blocks_a_merge_landing_that_exceeds_its_branch(tmp_path: Path) -> None:
+    """A merge landing carries the branch's own commits; more entries than those is a ghost."""
     repo = _repo(
         tmp_path,
-        _ledger("* add a thing", "* add another thing"),
-        ["feat(thing): add a thing"],
+        _ledger("* **thing:** a (#1)", "* **thing:** b (#1)", "* **thing:** c (#1)"),
+        [],
     )
+    _merge_landing(repo, "1", ["feat(thing): a", "feat(thing): b"])
 
     result = _ledger_check(repo)
 
     assert result.returncode == 1, result.stderr
-    assert "global pre-filter" in result.stderr
+    assert "#1: 3 entries > 2 commits" in result.stderr
+
+
+def test_ledger_accepts_a_merge_landing_within_its_branch(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)", "* **thing:** b (#1)"), [])
+    _merge_landing(repo, "1", ["feat(thing): a", "feat(thing): b"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_accepts_the_current_pr_at_its_declared_landing(tmp_path: Path) -> None:
+    """At the PR boundary the PR has not landed; its entries are covered by the declaration."""
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#96)"), ["feat(thing): a"])
+
+    result = _run(repo, "ledger", "--pr", "96", "--landing", "squash")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_blocks_an_under_curated_squash_landing(tmp_path: Path) -> None:
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** a (#96)", "* **thing:** b (#96)", "* **thing:** c (#96)"),
+        ["feat(thing): a", "feat(thing): b", "feat(thing): c"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--landing", "squash")
+
+    assert result.returncode == 1, result.stderr
+    assert "#96: 3 entries > 1 commits" in result.stderr
+
+
+def test_ledger_blocks_a_merge_landing_declared_over_its_branch(tmp_path: Path) -> None:
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** a (#96)", "* **thing:** b (#96)", "* **thing:** c (#96)"),
+        ["feat(thing): a", "feat(thing): b"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--landing", "merge", "--base", "main")
+
+    assert result.returncode == 1, result.stderr
+    assert "#96: 3 entries > 2 commits" in result.stderr
+
+
+def test_ledger_needs_a_human_when_pr_is_given_without_landing(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#96)"), ["feat(thing): a"])
+
+    result = _run(repo, "ledger", "--pr", "96")
+
+    assert result.returncode == 2, result.stderr
+    assert "--pr needs --landing" in result.stderr
 
 
 MEASURED_LEDGER = """\
@@ -248,25 +349,20 @@ MEASURED_LEDGER = """\
 """
 
 
-def test_ledger_blocks_the_measured_main_inflation(tmp_path: Path) -> None:
-    """The ledger ADR-0016 measures: 16 entries, 16 projected commits, two scopes inflated.
+def test_ledger_blocks_the_measured_main_shape_as_unattributed_entries(tmp_path: Path) -> None:
+    """The ledger ADR-0016 measures, under one predicate instead of a scope ratio.
 
-    The global bound passes (16 ≤ 16) while `herdr` carries 12 entries against 3 commits and
-    two identities are duplicated — the failure the per-scope bound exists to catch.
+    Fifteen entries predate the `(#N)` rule, so each is unattributed; the sixteenth names
+    `#35`, which resolves to no commit here. The old bound reported this as `herdr 12 > 3`.
     """
-    commits = (
-        ["feat(herdr): a", "fix(herdr): b", "feat(herdr): c"]
-        + ["feat(gh-router): d", "feat(gh-router): e"]
-        + [f"feat(bulk): {n}" for n in range(11)]
-    )
-    repo = _repo(tmp_path, MEASURED_LEDGER, commits)
+    repo = _repo(tmp_path, MEASURED_LEDGER, ["feat(herdr): a", "fix(herdr): b"])
 
     result = _ledger_check(repo)
 
     assert result.returncode == 1, result.stderr
-    assert "scope 'herdr': 12 entries > 3 commits" in result.stderr
+    assert result.stderr.count("entry carries no (#N)") == 15
+    assert "(#35) resolves to no commit" in result.stderr
     assert "duplicate-identity" in result.stderr
-    assert "global pre-filter" not in result.stderr, "the global bound passes on this ledger"
 
 
 # --- read-only guarantee ------------------------------------------------------------------
@@ -283,53 +379,52 @@ def test_a_failing_ledger_check_does_not_mutate_the_tree(tmp_path: Path) -> None
     assert _git(repo, "status", "--porcelain").stdout == ""
 
 
-# --- the merge boundary (squash) ----------------------------------------------------------
+# --- the ticket boundary ------------------------------------------------------------------
 
 
-def test_squash_passes_for_one_conventional_commit(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): add a thing"])
+def test_ticket_passes_for_one_conventional_commit(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#1)"), ["feat(thing): add a thing"])
 
-    result = _run(repo, "squash", "--base", "main")
+    result = _run(repo, "ticket", "--base", "main")
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "squash: pass"
+    assert result.stdout.strip() == "ticket: pass"
 
-
-def test_squash_blocks_a_non_conventional_subject(tmp_path: Path) -> None:
+def test_ticket_blocks_a_non_conventional_subject(tmp_path: Path) -> None:
     repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["added a thing"])
 
-    result = _run(repo, "squash", "--base", "main")
+    result = _run(repo, "ticket", "--base", "main")
 
     assert result.returncode == 1, result.stderr
     assert "conventional-subject" in result.stderr
 
 
-def test_squash_blocks_a_hidden_subject_that_projects_no_entry(tmp_path: Path) -> None:
+def test_ticket_blocks_a_hidden_subject_that_projects_no_entry(tmp_path: Path) -> None:
     repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["chore: tidy up"])
 
-    result = _run(repo, "squash", "--base", "main")
+    result = _run(repo, "ticket", "--base", "main")
 
     assert result.returncode == 1, result.stderr
     assert "single-entry" in result.stderr
 
 
-def test_squash_needs_a_human_when_head_is_not_one_commit(tmp_path: Path) -> None:
+def test_ticket_needs_a_human_when_head_is_not_one_commit(tmp_path: Path) -> None:
     repo = _repo(
         tmp_path,
         _ledger("* **thing:** add a thing"),
         ["feat(thing): add a thing", "feat(thing): add another"],
     )
 
-    result = _run(repo, "squash", "--base", "main")
+    result = _run(repo, "ticket", "--base", "main")
 
     assert result.returncode == 2, result.stderr
     assert "expects exactly one" in result.stderr
 
 
-def test_squash_needs_a_human_when_the_base_ref_is_unknown(tmp_path: Path) -> None:
+def test_ticket_needs_a_human_when_the_base_ref_is_unknown(tmp_path: Path) -> None:
     repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): add a thing"])
 
-    result = _run(repo, "squash", "--base", "no-such-branch")
+    result = _run(repo, "ticket", "--base", "no-such-branch")
 
     assert result.returncode == 2, result.stderr
     assert "does not resolve" in result.stderr

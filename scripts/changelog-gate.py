@@ -7,16 +7,21 @@
 
 Read-only: a failing run never writes the worktree, the target branch, or CHANGELOG.md.
 
-  squash  Merge boundary. `HEAD` must be the single squashed commit; its subject must be
+  ticket  Ticket boundary. `HEAD` must be the single squashed commit; its subject must be
           conventional and project exactly one well-formed entry.
-  ledger  PR boundary. The `## [Unreleased]` block must pass well-formedness, section
-          integrity, duplicate-identity, placeholder, and per-scope accounting checks.
+  ledger  Ledger checks. The `## [Unreleased]` block must pass well-formedness, section
+          integrity, duplicate-identity, placeholder, and provenance checks, and no PR may
+          have produced more entries than it had commits. On `main` every entry must resolve
+          to a landing commit; at the PR boundary pass `--pr`/`--landing`, and that PR is
+          covered by its declared landing instead.
 
 Exit codes: 0 pass · 1 blocked/fixable · 2 blocked/needs human.
 
 Usage:
-  uv run scripts/changelog-gate.py squash [--base main]
+  uv run scripts/changelog-gate.py ticket [--base main]
   uv run scripts/changelog-gate.py ledger [--changelog CHANGELOG.md]
+  uv run scripts/changelog-gate.py ledger --pr 96 --landing squash
+  uv run scripts/changelog-gate.py ledger --pr 96 --landing merge --base main
 """
 
 from __future__ import annotations
@@ -59,6 +64,9 @@ SCOPED_RE = re.compile(r"^\* \*\*[^*]+:\*\* \S")
 SCOPE_RE = re.compile(r"^\* \*\*(?P<scope>[^*]+):\*\*")
 EMPTY_BULLET_RE = re.compile(r"^[*+-]\s*$")
 PLACEHOLDER_RE = re.compile(r"\bTBD\b|\bTODO\b|<[^>]+>")
+# Curation appends the landing PR; the generator's identity rule strips it again.
+ATTRIBUTION_RE = re.compile(r"\(#(?P<pr>\d+)\)\s*$")
+PR_REF_RE = re.compile(r"#(\d+)")
 KNOWN_SECTIONS = frozenset(section for section, _ in GEN.TYPE_SECTIONS.values())
 
 
@@ -137,50 +145,110 @@ def check_duplicates(sections: dict[str, list[str]]) -> list[Finding]:
     return findings
 
 
-def scope_counts(entries: list[str]) -> Counter[str]:
-    counts: Counter[str] = Counter()
-    for entry in entries:
-        match = SCOPE_RE.match(entry.strip())
-        if match:
-            counts[match.group("scope").strip()] += 1
-    return counts
+def attributed_pr(entry: str) -> str | None:
+    """The `#N` an entry names as the PR that landed it, or None.
 
-
-def check_accounting(
-    sections: dict[str, list[str]], generated: dict[str, list[str]]
-) -> list[Finding]:
-    """`entries(scope) ≤ commits(scope)`, with the global bound kept as a coarse pre-filter.
-
-    The global count is diluted by unrelated commits: on the measured ledger `73 ≤ 263`
-    held while `herdr` carried 12 entries against 3 commits. It cannot be the check. This
-    counts; it never deletes, so the rejected reachability pruning is not implicated.
+    Curation appends it (ADR-0016) and `entry_identity` strips it, so identity and
+    attribution stay independent.
     """
-    ledger = [entry for entries in sections.values() for entry in entries]
-    minted = [entry for entries in generated.values() for entry in entries]
+    match = ATTRIBUTION_RE.search(entry.rstrip())
+    return match.group("pr") if match else None
+
+
+def _count(raw: str) -> int:
+    try:
+        return int(raw)
+    except ValueError:
+        return 0
+
+
+def landing_commits() -> dict[str, int]:
+    """`#N` -> how many commits that PR contributed to HEAD.
+
+    A squash landing is one commit carrying `(#N)`; a merge landing carries `#N` in the
+    merge subject, and its second-parent range is the PR's own commits. Both are permanent:
+    no network, no branch refs. Merge subjects are read deliberately — `--no-merges` would
+    hide exactly the commits a merge landing rests on.
+    """
+    raw = GEN.run(["git", "log", "HEAD", "--pretty=format:%s%x00%P%x1e"])
+    landings: dict[str, int] = {}
+    for record in raw.split("\x1e"):
+        record = record.strip()
+        if not record:
+            continue
+        subject, _, parents = record.partition("\x00")
+        refs = PR_REF_RE.findall(subject)
+        if not refs:
+            continue
+        parent_list = parents.split()
+        for ref in refs:
+            if ref in landings:
+                continue
+            if len(parent_list) > 1:
+                landings[ref] = _count(
+                    GEN.run(["git", "rev-list", "--count", f"{parent_list[0]}..{parent_list[1]}"])
+                )
+            else:
+                landings[ref] = 1
+    return landings
+
+
+def check_provenance(
+    entries: list[str], landings: dict[str, int], current_pr: str | None
+) -> list[Finding]:
+    """Every entry names a PR, and that PR's landing commit is reachable from HEAD."""
     findings: list[Finding] = []
-    if len(ledger) > len(minted):
-        findings.append(
-            Finding(
-                "accounting",
-                f"global pre-filter: {len(ledger)} entries > {len(minted)} projected entries",
-            )
-        )
-    ledger_scopes = scope_counts(ledger)
-    minted_scopes = scope_counts(minted)
-    for scope in sorted(ledger_scopes):
-        if ledger_scopes[scope] > minted_scopes.get(scope, 0):
+    for entry in entries:
+        ref = attributed_pr(entry)
+        identity = GEN.entry_identity(entry)
+        if ref is None:
+            findings.append(Finding("provenance", f"entry carries no (#N): {identity!r}"))
+        elif ref == current_pr:
+            continue
+        elif ref not in landings:
             findings.append(
                 Finding(
-                    "accounting",
-                    f"scope {scope!r}: {ledger_scopes[scope]} entries > "
-                    f"{minted_scopes.get(scope, 0)} commits",
+                    "provenance",
+                    f"(#{ref}) resolves to no commit reachable from HEAD: {identity!r}",
                 )
             )
     return findings
 
 
-def check_ledger(changelog: Path) -> list[Finding]:
-    """The whole-ledger floor. Reads; never writes."""
+def check_attribution(
+    entries: list[str],
+    landings: dict[str, int],
+    current_pr: str | None,
+    current_allowance: int | None,
+) -> list[Finding]:
+    """`entries(#N) <= commits(#N)`, per PR.
+
+    The aggregate of the landing delta, on one basis: attribution. A violation names the PR
+    that over-produced. This counts; it never deletes, so the rejected reachability pruning
+    is not implicated.
+    """
+    counts: Counter[str] = Counter(ref for ref in (attributed_pr(e) for e in entries) if ref)
+    findings: list[Finding] = []
+    for ref in sorted(counts):
+        allowance = current_allowance if ref == current_pr else landings.get(ref)
+        if allowance is None:
+            continue  # check_provenance already reported it
+        if counts[ref] > allowance:
+            findings.append(
+                Finding("accounting", f"#{ref}: {counts[ref]} entries > {allowance} commits")
+            )
+    return findings
+
+
+def check_ledger(
+    changelog: Path, base: str | None = None, landing: str | None = None, pr: str | None = None
+) -> list[Finding]:
+    """The ledger checks. Reads; never writes.
+
+    Without `--pr`/`--landing` this is the durable, main-side run: every entry must resolve
+    to a landing commit. With them it is the PR-boundary run — entries attributed to `--pr`
+    are covered by its declared landing instead, because that PR has not landed yet.
+    """
     if not changelog.exists():
         return [Finding("ledger", f"{changelog} is missing", fixable=False)]
     try:
@@ -195,15 +263,42 @@ def check_ledger(changelog: Path) -> list[Finding]:
     findings = check_sections(block) + check_entries(block)
     sections = GEN.parse_unreleased_sections(content)
     findings += check_duplicates(sections)
+    entries = [entry for group in sections.values() for entry in group]
 
-    commits = GEN.parse_commit_log(
-        GEN.run(["git", "log", "HEAD", "--pretty=format:%s%n%b%x00%x00", "--no-merges"])
-    )
-    if not commits:
+    if not GEN.run(["git", "rev-parse", "--verify", "--quiet", "HEAD"]):
         return findings + [
             Finding("accounting", "no commits reachable from HEAD; cannot evaluate", fixable=False)
         ]
-    findings += check_accounting(sections, GEN.commits_to_sections(commits))
+
+    allowance: int | None = None
+    if pr is not None and landing == "squash":
+        allowance = 1
+    elif pr is not None and landing == "merge":
+        if base is None:
+            return findings + [
+                Finding(
+                    "landing",
+                    "--landing merge needs --base to count the PR's commits",
+                    fixable=False,
+                )
+            ]
+        counted = GEN.run(["git", "rev-list", "--count", f"{base}..HEAD"])
+        if not counted.isdigit():
+            return findings + [
+                Finding("landing", f"cannot count commits in {base!r}..HEAD", fixable=False)
+            ]
+        allowance = _count(counted)
+
+    landings = landing_commits()
+    findings += check_provenance(entries, landings, pr)
+    findings += check_attribution(entries, landings, pr, allowance)
+
+    if pr is not None and landing == "squash" and not any(
+        attributed_pr(entry) == pr for entry in entries
+    ):
+        findings.append(
+            Finding("landing", f"a squash landing carries exactly one entry; #{pr} carries none")
+        )
     return findings
 
 
@@ -218,17 +313,17 @@ def default_base() -> str | None:
     return None
 
 
-def check_squash(base: str) -> list[Finding]:
-    """The merge-boundary check: one squashed commit, conventional, one well-formed entry."""
+def check_ticket(base: str) -> list[Finding]:
+    """The ticket-boundary check: one squashed commit, conventional, one well-formed entry."""
     if not GEN.run(["git", "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"]):
-        return [Finding("squash-state", f"base ref {base!r} does not resolve", fixable=False)]
+        return [Finding("ticket-state", f"base ref {base!r} does not resolve", fixable=False)]
     count = GEN.run(["git", "rev-list", "--count", f"{base}..HEAD"])
     if not count.isdigit():
-        return [Finding("squash-state", f"cannot count commits ahead of {base!r}", fixable=False)]
+        return [Finding("ticket-state", f"cannot count commits ahead of {base!r}", fixable=False)]
     if count != "1":
         return [
             Finding(
-                "squash-state",
+                "ticket-state",
                 f"{count} commits ahead of {base!r}; the merge boundary expects exactly one",
                 fixable=False,
             )
@@ -265,21 +360,25 @@ def exit_code(findings: list[Finding]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Deterministic changelog-ledger floor (ADR-0016)")
-    parser.add_argument("check", choices=["squash", "ledger"], help="which boundary to check")
+    parser.add_argument("check", choices=["ticket", "ledger"], help="which boundary to check")
     parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
-    parser.add_argument("--base", default=None, help="base ref for the squash check")
+    parser.add_argument("--base", default=None, help="base ref: the merge target, or the PR's target")
+    parser.add_argument("--pr", default=None, help="this PR's number, for the PR-boundary run")
+    parser.add_argument("--landing", choices=["squash", "merge"], default=None)
     args = parser.parse_args(argv)
 
-    if args.check == "squash":
+    if args.check == "ticket":
         base = args.base or default_base()
         if base is None:
             findings = [
-                Finding("squash-state", "cannot resolve a base branch; pass --base", fixable=False)
+                Finding("ticket-state", "cannot resolve a base branch; pass --base", fixable=False)
             ]
         else:
-            findings = check_squash(base)
+            findings = check_ticket(base)
+    elif args.pr is not None and args.landing is None:
+        findings = [Finding("landing", "--pr needs --landing (the declaration)", fixable=False)]
     else:
-        findings = check_ledger(Path(args.changelog))
+        findings = check_ledger(Path(args.changelog), args.base, args.landing, args.pr)
 
     for finding in findings:
         print(f"[{finding.check}] {finding.detail}", file=sys.stderr)
