@@ -9,7 +9,6 @@
 **gh-router:** --check runs merge gates, unconditional token gate
 **gh-router:** authorship token, pr-refine skill, and router wiring
 **gh-router:** document the lib split and the corrected watch/merge gates
-**gh-router:** give repo identity one authority and split shared code by concern
 **gh-router:** split libs and harden PR gates
 **gitignore:** scope the ADR pointer ignore to the repo root
 **herdr:** add herdr-label to name a pane and its agent together

@@ -52,9 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **dynamic-workflow-wrapper:** rename merge-conflict skill and harden determinism tests (#46)
 * converge the nine blocking issues from the run ledger (#45) (BREAKING CHANGE)
 * **gh-router:** split libs and harden PR gates
-* **gh-router:** split libs and harden PR gates
 * **gh-router:** give repo identity one authority and split shared code by concern (#35)
-* **gh-router:** give repo identity one authority and split shared code by concern
 * **gh-router:** resolve the repo from the push remote, not gh repo view (#34)
 * **scaffold:** correct the templates and detection the scaffold ships (#32)
 * **scaffold:** make the generated gates pass, and stop bypassing them
@@ -78,7 +76,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** repair pr-land reuse, conflict fast-fail, and ci.sh (#84)
 * **skills/harness-audit:** deterministic category, dump-context payload, regex robustness
 * **gh-router/pr-land:** prevent reuse body overwrite and conflict timeout
-* **gh-router/ci:** fix SyntaxError on Python <3.12 in ci.sh why (#72)
 * **herdr:** conform herdr_pane.py to PEP 723
 * **ci:** run the changelog check on main pushes
 * **gitignore:** scope the ADR pointer ignore to the repo root
