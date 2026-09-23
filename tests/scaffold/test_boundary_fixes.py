@@ -362,9 +362,10 @@ def test_10_cli_is_self_describing():
 # --- 11: changelog copies byte-equal (mirrors sync guard) ---
 def test_11_changelog_copies_byte_equal():
     repo_root = SKILL_DIR.parent.parent
-    assert (SKILL_DIR / "scripts" / "changelog-unreleased.py").read_bytes() == (
-        repo_root / "scripts" / "changelog-unreleased.py"
-    ).read_bytes()
+    for name in ("changelog-unreleased.py", "changelog-gate.py"):
+        assert (SKILL_DIR / "scripts" / name).read_bytes() == (
+            repo_root / "scripts" / name
+        ).read_bytes(), name
 
 
 # --- 12: NEXT hints runnable ---

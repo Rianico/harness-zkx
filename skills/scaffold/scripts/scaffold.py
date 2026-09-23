@@ -216,6 +216,15 @@ except FileNotFoundError:
         "#!/usr/bin/env python3\n# managed by scaffold — see scripts/changelog-unreleased.py\n"
     )
 
+try:
+    CHANGELOG_GATE_PY = (pathlib.Path(__file__).parent / "changelog-gate.py").read_text(
+        encoding="utf-8"
+    )
+except FileNotFoundError:
+    CHANGELOG_GATE_PY = (
+        "#!/usr/bin/env python3\n# managed by scaffold — see scripts/changelog-gate.py\n"
+    )
+
 GITIGNORE_GIT = [".lsz/", ".pi/", "coverage/"]
 
 GITIGNORE_PYTHON_EXTRA = ["__pycache__/", ".venv/"]
@@ -1026,6 +1035,7 @@ def do_git(
                 pass
     if "changelog-script" in sel:
         write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
+        write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
     if "commitlint" in sel:
         write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     if "changelog-md" in sel:
