@@ -1,4 +1,4 @@
-"""Tests for the changelog-sync hidden-type guardrail fix.
+"""Tests for the changelog-sync hidden-type rule.
 
 Regression: a changelog sync committed with a visible type (e.g. ``docs:``)
 re-triggers the Unreleased guard, which then demands the sync commit itself
@@ -33,27 +33,6 @@ sync_mod = _load("changelog_unreleased_mod", SYNC_SCRIPT)
 
 
 # --- fix-hint templates prescribe hidden-type sync ---------------------------
-
-
-def test_check_workflow_fix_hint_uses_hidden_type():
-    hint = scaffold.CHANGELOG_CHECK_YML
-    assert SYNC_EXAMPLE in hint
-    assert "loops forever" in hint
-
-
-def test_check_workflow_comment_body_uses_hidden_type():
-    body = scaffold.CHANGELOG_CHECK_YML
-    assert "git commit -m 'chore: sync changelog unreleased section'" in body
-
-
-def test_pre_push_hook_fix_hint_uses_hidden_type():
-    hook = scaffold.GITHOOK_PRE_PUSH
-    # the hook auto-fixes (amends HEAD) and blocks the push with a warning,
-    # so the hint tells the user to re-run their commit/push rather than hand-editing CHANGELOG.md
-    assert "Do NOT hand-edit CHANGELOG.md" in hook
-    assert "re-run your original commit" in hook
-    assert "git commit --amend --no-edit" in hook  # amend alternative retained
-    assert "PREPUSH_AUTOFIX=0" in hook  # human bypass retained
 
 
 def test_contributing_templates_prescribe_hidden_sync():

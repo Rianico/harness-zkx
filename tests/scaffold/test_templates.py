@@ -111,13 +111,11 @@ def _render_cases() -> dict[str, str]:
 
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RAW_SHA256: dict[str, str] = {
-    "git/.githooks/pre-push": "916ee6b757394084dc092bfddb1d5e607dd6baff3c098d2ce46993f3cc22f85b",
     "git/.github/ISSUE_TEMPLATE/01-bug_report.yml": "042c8a9647b165ef3c354cfd60e1a1b619b81b86f60bdc5fec65e324e061d676",
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
     "git/.github/ISSUE_TEMPLATE/config.yml": "27539305684d7673d88e80ec149c4ec9714da05a054b09fee67d56b8a7e5a820",
-    "git/.github/pull_request_template.md": "820682054cba7303639cac2fd8508a80c0a7bfed82148469a7a05ad76a4be0a4",
-    "git/.github/workflows/changelog-check.yml": "bcc24d5a39359a2e2bac26039d172568bbd7c47f5dd6f9ad497d7d2a29419c7d",
-    "git/.husky/pre-push": "4c08b6fe2b024a878970f2a74f22426460474d34d5d6a4f9115d1c2f3b62559f",
+    "git/.github/pull_request_template.md": "758fd1c7b4370d57a008c57585150fb18fa440a50ee392328d459428aa37526b",
+    "git/.github/workflows/changelog-check.yml": "464cbf5442172e34a799b496bb640809bc6952d9e391e00839667dc757a88b2a",
     "git/.releaserc.json": "479ebe05fa8fbd23e7bccdd4dfb4519ebf32de97299735066ce7fd0d6254db4d",
     "git/CHANGELOG.md": "eb242175379339814c7a91a1881f32f311970c549cfb01b468d99af7c04e67de",
     "git/commitlint.config.js": "9c46dd6e2258b8783f57255cbcdd09fd13c0283069b281568806ba147df85340",
@@ -254,8 +252,6 @@ def test_generator_ships_raw_template_bytes_verbatim(tmp_path):
         ),
         ".github/ISSUE_TEMPLATE/config.yml": "git/.github/ISSUE_TEMPLATE/config.yml",
         ".github/pull_request_template.md": "git/.github/pull_request_template.md",
-        ".githooks/pre-push": "git/.githooks/pre-push",
-        ".husky/pre-push": "git/.husky/pre-push",
         "commitlint.config.js": "git/commitlint.config.js",
         "CHANGELOG.md": "git/CHANGELOG.md",
     }

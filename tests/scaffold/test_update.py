@@ -36,7 +36,7 @@ def _seed_repo(cwd: Path) -> None:
     (cwd / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
     (cwd / "CONTRIBUTING.md").write_text(CONTRIBUTING, encoding="utf-8")
     (cwd / ".github" / "workflows" / "release.yml").write_text(RELEASE_YML, encoding="utf-8")
-    (cwd / ".githooks" / "pre-push").write_text("stale-hook\n", encoding="utf-8")
+    (cwd / "commitlint.config.js").write_text("stale\n", encoding="utf-8")
 
 
 # --- replacement vs preservation ----------------------------------------------
@@ -58,10 +58,9 @@ def test_update_refreshes_managed_files(tmp_path):
     _seed_repo(tmp_path)
     scaffold.do_git(tmp_path, "demo", dry_run=False, update=True)
 
-    assert (tmp_path / ".githooks" / "pre-push").read_text(encoding="utf-8") == (
-        scaffold.GITHOOK_PRE_PUSH
+    assert (tmp_path / "commitlint.config.js").read_text(encoding="utf-8") == (
+        scaffold.COMMITLINT_JS
     )
-    assert (tmp_path / ".husky" / "pre-push").is_file()
     assert (tmp_path / ".releaserc.json").is_file()
     assert (tmp_path / ".github" / "workflows" / "changelog-check.yml").is_file()
 
@@ -84,7 +83,7 @@ def test_update_dry_run_writes_nothing(tmp_path):
     _seed_repo(tmp_path)
     scaffold.do_git(tmp_path, "demo", dry_run=True, update=True)
 
-    assert (tmp_path / ".githooks" / "pre-push").read_text(encoding="utf-8") == "stale-hook\n"
+    assert (tmp_path / "commitlint.config.js").read_text(encoding="utf-8") == "stale\n"
     assert not (tmp_path / ".releaserc.json").exists()
 
 

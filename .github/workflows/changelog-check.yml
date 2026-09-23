@@ -40,9 +40,12 @@ jobs:
             python scripts/changelog-gate.py ledger
             exit $?
           fi
-          landing=$(printf '%s' "$PR_BODY" | sed -n \
-            's/^[[:space:]]*[Ll]anding:[[:space:]]*\(squash\|merge\)[[:space:]]*$/\1/p' \
-            | head -1)
+          landing=$(printf '%s\n' "$PR_BODY" \
+            | awk '/^[[:space:]]*[Ll]anding:/{print $2; exit}')
+          case "$landing" in
+            squash|merge) ;;
+            *) landing="" ;;
+          esac
           if [ -z "$landing" ]; then
             echo "::error::no landing declaration in the PR body"
             echo "add 'Landing: squash' or 'Landing: merge'"
