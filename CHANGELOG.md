@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
+* **changelog-gate:** account for entries by landing PR, not by scope
 * **changelog-gate:** enforce the deterministic floor for ledger entries
 * **herdr:** add herdr-overview and one name for panes and their agents (#69)
 * **scaffold:** add per-field ensure ops and the run-1/run-2 boundary (#56)
@@ -72,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **adr:** account for the ledger by landing PR
 * **adr:** gate the ledger on declared landing and pre-merge curation
 * **adr:** correct the ledger gate's floor, cap, and ceiling trigger
 * **adr:** gate the changelog with a floor and an adversarial ceiling
