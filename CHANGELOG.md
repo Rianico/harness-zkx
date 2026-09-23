@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **adr:** gate the ledger on declared landing and pre-merge curation
 * **adr:** correct the ledger gate's floor, cap, and ceiling trigger
 * **adr:** gate the changelog with a floor and an adversarial ceiling
 * **scaffold:** add adr-scaffolding subskill (#52)
