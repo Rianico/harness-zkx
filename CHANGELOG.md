@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **scaffold:** load the sibling scripts without redefining a constant
 * **changelog:** mint one entry per identity, not per commit
 * **changelog-gate:** let --update-baseline shrink in a tree with new entries
 * **skills/herdr:** hold unrecognized settled states, fall back to pane read (#94)
