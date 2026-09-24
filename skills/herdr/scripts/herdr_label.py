@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.14"
 # dependencies = []
 # ///
 """herdr-label — give a pane the one name a person sees and an agent can address.

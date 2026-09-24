@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.14"
 # dependencies = ["python-frontmatter>=1.0.0", "pyyaml>=6.0", "rich>=13.0.0"]
 # ///
 """

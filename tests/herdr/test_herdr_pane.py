@@ -240,7 +240,7 @@ def test_pep723_metadata_precedes_docstring() -> None:
     header = SCRIPT.read_text().split('"""', 1)[0]
     assert header.startswith("#!/usr/bin/env python3\n")
     assert "# /// script" in header
-    assert 'requires-python = ">=3.12"' in header
+    assert 'requires-python = ">=3.14"' in header
     assert "dependencies = []" in header
     assert header.rstrip().endswith("# ///")
 

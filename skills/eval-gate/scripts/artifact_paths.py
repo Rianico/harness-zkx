@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.14"
 # dependencies = ["pyyaml"]
 # ///
 """Resolve generated-artifact paths from the single source of truth (`.lsz/config.yaml`).

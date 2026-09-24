@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.14"
 # dependencies = ["pyyaml>=6.0"]
 # ///
 """Deterministic frontmatter injector for `meta.sources` per skillsh-compose spec.

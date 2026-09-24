@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # pyright: reportMissingImports=false
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.14"
 # dependencies = ["pydantic"]
 # ///
 

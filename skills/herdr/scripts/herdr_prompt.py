@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.14"
 # dependencies = []
 # ///
 """herdr-prompt — deliver one prompt payload to a Herdr agent without shell mangling.
