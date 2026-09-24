@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **scaffold:** ship the release plugin and stop clearing the ledger (#105)
 * **release:** promote the curated ledger instead of regenerating notes (#104)
 * **ci:** gate the typecheck with a shrink-only warning budget (#103)
 * **changelog-gate:** gate the ledger on attribution and ship it through scaffold (#96)

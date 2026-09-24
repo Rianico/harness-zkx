@@ -214,6 +214,7 @@ def _load_sibling_script(name: str) -> str:
 
 CHANGELOG_UNRELEASED_PY = _load_sibling_script("changelog-unreleased.py")
 CHANGELOG_GATE_PY = _load_sibling_script("changelog-gate.py")
+RELEASE_CHANGELOG_MJS = _load_sibling_script("release-changelog.mjs")
 
 GITIGNORE_GIT = [".lsz/", ".pi/", "coverage/"]
 
@@ -226,7 +227,7 @@ GIT_COMPONENTS: set[str] = {
     "releaserc",  # .releaserc.json
     "release-yml",  # .github/workflows/release.yml (git variant)
     "changelog-check",  # .github/workflows/changelog-check.yml
-    "changelog-script",  # scripts/changelog-unreleased.py
+    "changelog-script",  # scripts/changelog-*.py + scripts/release-changelog.mjs
     "commitlint",  # commitlint.config.js
     "changelog-md",  # CHANGELOG.md
     "issue-templates",  # .github/ISSUE_TEMPLATE/* + config.yml
@@ -980,6 +981,7 @@ def do_git(
     if "changelog-script" in sel:
         write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
         write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
+        _ = write_file(cwd / "scripts" / "release-changelog.mjs", RELEASE_CHANGELOG_MJS, dry_run)
     if "commitlint" in sel:
         write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     if "changelog-md" in sel:
