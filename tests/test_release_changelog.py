@@ -50,14 +50,14 @@ Intro line.
 
 
 @pytest.fixture
-def release(tmp_path):
+def release(tmp_path: Path) -> tuple[str, str]:
     """Run the real plugin over a fixture ledger and return (notes, promoted changelog)."""
     if shutil.which("node") is None:
         pytest.skip("node is required to run the release plugin")
 
-    (tmp_path / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
+    _ = (tmp_path / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
     driver = tmp_path / "driver.mjs"
-    driver.write_text(DRIVER, encoding="utf-8")
+    _ = driver.write_text(DRIVER, encoding="utf-8")
     proc = subprocess.run(
         ["node", str(driver), str(PLUGIN), str(tmp_path), json.dumps({}), "1.1.0"],
         capture_output=True,
@@ -67,7 +67,7 @@ def release(tmp_path):
     return proc.stdout, (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
 
 
-def test_promotion_keeps_the_curated_text(release):
+def test_promotion_keeps_the_curated_text(release: tuple[str, str]):
     """The entry a human wrote is what ends up under the released heading."""
     _, changelog = release
     assert re.search(r"^## \[1\.1\.0\] - \d{4}-\d{2}-\d{2}$", changelog, re.M)
@@ -75,7 +75,7 @@ def test_promotion_keeps_the_curated_text(release):
     assert "* **demo:** a curated entry (#42)" in promoted
 
 
-def test_unreleased_reopens_empty_above_the_release(release):
+def test_unreleased_reopens_empty_above_the_release(release: tuple[str, str]):
     """Keep-a-Changelog order: the working area sits above the newest release, not below it."""
     _, changelog = release
     assert changelog.index("## [Unreleased]") < changelog.index("## [1.1.0]")
@@ -83,34 +83,34 @@ def test_unreleased_reopens_empty_above_the_release(release):
     assert body.strip() == ""
 
 
-def test_earlier_releases_survive(release):
+def test_earlier_releases_survive(release: tuple[str, str]):
     _, changelog = release
     assert "* **demo:** an older entry (#7)" in changelog
     assert changelog.index("## [1.1.0]") < changelog.index("## [1.0.0]")
 
 
-def test_notes_are_the_curated_block_not_commit_subjects(release):
+def test_notes_are_the_curated_block_not_commit_subjects(release: tuple[str, str]):
     """The whole point: release notes come from the ledger, so curation is what readers see."""
     notes, _ = release
     assert "* **demo:** a curated entry (#42)" in notes
     assert "1.0.0" not in notes
 
 
-def test_the_intro_survives(release):
+def test_the_intro_survives(release: tuple[str, str]):
     _, changelog = release
     assert changelog.startswith("# Changelog\n\nIntro line.")
 
 
-def test_an_empty_ledger_releases_without_failing(tmp_path):
+def test_an_empty_ledger_releases_without_failing(tmp_path: Path):
     """A landing that carries no entry must not block a release on a bookkeeping gap."""
     if shutil.which("node") is None:
         pytest.skip("node is required to run the release plugin")
 
-    (tmp_path / "CHANGELOG.md").write_text(
+    _ = (tmp_path / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2025-01-01\n", encoding="utf-8"
     )
     driver = tmp_path / "driver.mjs"
-    driver.write_text(DRIVER, encoding="utf-8")
+    _ = driver.write_text(DRIVER, encoding="utf-8")
     proc = subprocess.run(
         ["node", str(driver), str(PLUGIN), str(tmp_path), json.dumps({}), "1.1.0"],
         capture_output=True,
@@ -121,13 +121,13 @@ def test_an_empty_ledger_releases_without_failing(tmp_path):
     assert "## [1.1.0]" in (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
 
 
-def test_a_ledger_without_the_heading_fails_loudly(tmp_path):
+def test_a_ledger_without_the_heading_fails_loudly(tmp_path: Path):
     if shutil.which("node") is None:
         pytest.skip("node is required to run the release plugin")
 
-    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
+    _ = (tmp_path / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
     driver = tmp_path / "driver.mjs"
-    driver.write_text(DRIVER, encoding="utf-8")
+    _ = driver.write_text(DRIVER, encoding="utf-8")
     proc = subprocess.run(
         ["node", str(driver), str(PLUGIN), str(tmp_path), json.dumps({}), "1.1.0"],
         capture_output=True,
