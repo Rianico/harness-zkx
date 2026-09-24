@@ -39,13 +39,13 @@ def test_contributing_templates_prescribe_hidden_sync():
     for name in ("default", "python", "typescript"):
         tmpl = scaffold.render_template(f"shared/CONTRIBUTING.{name}.md.j2", project_name="demo")
         assert SYNC_EXAMPLE in tmpl
-        assert "loops forever" in tmpl
+        assert "mints no ledger entry" in tmpl
 
 
 def test_git_subskill_docs_prescribe_hidden_sync():
     text = GIT_SKILL.read_text(encoding="utf-8")
     assert SYNC_EXAMPLE in text
-    assert "loops forever" in text
+    assert "mints no ledger entry" in text
 
 
 # --- loop warning is stderr-only ---------------------------------------------
