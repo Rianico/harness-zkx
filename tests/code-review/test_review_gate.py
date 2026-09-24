@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from pydantic import BaseModel
 
 # Module-level sys.path insert per LSZ convention
 SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "skills" / "code-review"
@@ -179,6 +180,13 @@ def test_format_remediation_markdown():
     assert "design.md missing /api/v2" in md
 
 
+class _Frontmatter(BaseModel):
+    """The SKILL.md frontmatter contract this test asserts on; extra keys stay the skill's business."""
+
+    name: str
+    description: str
+
+
 def test_skill_frontmatter_and_context_load():
     """Ensure SKILL.md adheres to LSZ context-load policy and frontmatter schemas."""
     skill_md = SKILL_DIR / "SKILL.md"
@@ -189,17 +197,16 @@ def test_skill_frontmatter_and_context_load():
     parts = content.split("---", 2)
     assert len(parts) >= 3
 
-    meta = yaml.safe_load(parts[1])
-    assert meta["name"] == "code-review"
-    assert "description" in meta
-    description = meta["description"].strip()
+    meta = _Frontmatter.model_validate(yaml.safe_load(parts[1]))
+    assert meta.name == "code-review"
+    description = meta.description.strip()
 
     # Description budget: <= 300 chars
     assert len(description) <= 300, f"Description too long ({len(description)} chars)"
     # Must contain trigger vocabulary
-    assert any(
-        kw in description.lower() for kw in ["use when", "trigger", "when"]
-    ), "Description lacks trigger vocabulary"
+    assert any(kw in description.lower() for kw in ["use when", "trigger", "when"]), (
+        "Description lacks trigger vocabulary"
+    )
 
 
 def test_evaluate_goal_gate_pass():
@@ -249,4 +256,3 @@ def test_evaluate_goal_gate_fail_semantic():
     assert res.goal_attained is False
     assert res.route == "remediate"
     assert any("Mock on SUT" in iss for iss in res.remediation_issues)
-
