@@ -203,6 +203,7 @@ OXLINT_COMMENT_GATE_JS = load_template("typescript/scripts/oxlint-plugin-comment
 INDEX_TEST_TS = load_template("typescript/tests/index.test.ts")
 CLI_TS = load_template("typescript/src/cli.ts")
 
+
 def _load_sibling_script(name: str) -> str:
     """A script shipped next to scaffold.py, or the marker-only stub when it is absent."""
     try:
@@ -1397,10 +1398,7 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         or "llvm-cov" in release_yml
         or "fail-under" in release_yml
         or "--coverage" in release_yml
-        or (
-            node_coverage_script is not None
-            and f"pnpm run {node_coverage_script}" in release_yml
-        )
+        or (node_coverage_script is not None and f"pnpm run {node_coverage_script}" in release_yml)
     )
     ts_variant: str | None
     if node_present:
@@ -1846,9 +1844,7 @@ def _is_coverage_script_name(name: str) -> bool:
 
 def _validate_coverage_script(name: str) -> None:
     if not _is_coverage_script_name(name):
-        raise EnsureError(
-            f"invalid coverage script name {name!r}: must match ^[A-Za-z0-9:_-]+$"
-        )
+        raise EnsureError(f"invalid coverage script name {name!r}: must match ^[A-Za-z0-9:_-]+$")
 
 
 def ensure_cargo_dep(
@@ -1865,9 +1861,7 @@ def ensure_cargo_dep(
     if error:
         raise EnsureError(f"{path}: {error} — fix by hand first")
     span = _cargo_dependencies_span(body)
-    if span is not None and re.search(
-        rf"(?m)^\s*{re.escape(name)}\s*=", body[span[0] : span[1]]
-    ):
+    if span is not None and re.search(rf"(?m)^\s*{re.escape(name)}\s*=", body[span[0] : span[1]]):
         return f"Cargo.toml: unchanged — dependency {name!r} already present"
     entry = f'{name} = "{version}"'
     section = re.search(r"(?m)^\s*\[\s*dependencies\s*\]\s*(?:[#;].*)?$", body)
@@ -1879,8 +1873,7 @@ def ensure_cargo_dep(
         tomllib.loads(new_body)
     except tomllib.TOMLDecodeError as exc:
         raise EnsureError(
-            f"{path}: refusing edit that would write invalid TOML ({exc})"
-            " — fix by hand first"
+            f"{path}: refusing edit that would write invalid TOML ({exc}) — fix by hand first"
         ) from None
     return _ensure_write(path, new_body, dry_run, f"added dependency {entry}")
 
@@ -2063,8 +2056,7 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
                 return f"pyproject.toml: unchanged — dependency {name!r} already present"
     mask = _toml_code_mask(body)
     code_text = "".join(
-        ch if ok else ("\n" if ch == "\n" else " ")
-        for ch, ok in zip(body, mask, strict=True)
+        ch if ok else ("\n" if ch == "\n" else " ") for ch, ok in zip(body, mask, strict=True)
     )
     lines_body = body.splitlines(keepends=True)
     lines_code = code_text.splitlines(keepends=True)
@@ -2078,9 +2070,7 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
         (
             i
             for i, raw in enumerate(lines_body)
-            if _py_dep_key_at(
-                raw, mask[offsets[i] : offsets[i] + len(raw)]
-            )
+            if _py_dep_key_at(raw, mask[offsets[i] : offsets[i] + len(raw)])
             and _toml_section_at(sections, offsets[i]) == "project"
         ),
         None,
@@ -2100,18 +2090,14 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
         tables = sorted({sec for _, sec in sections if sec})
         if "project" not in tables:
             found = ", ".join(f"[{t}]" for t in tables) if tables else "no tables"
-            raise EnsureError(
-                f"{path}: no [project] table (found {found}) — fix by hand first"
-            )
-        raise EnsureError(
-            f"{path}: no `dependencies` key in [project] — fix by hand first"
-        )
+            raise EnsureError(f"{path}: no [project] table (found {found}) — fix by hand first")
+        raise EnsureError(f"{path}: no `dependencies` key in [project] — fix by hand first")
     open_idx = lines_code[start].find("[")
     close_idx = lines_code[start].find("]", open_idx + 1) if open_idx != -1 else -1
     if open_idx != -1 and close_idx != -1:
         inner = lines_body[start][open_idx + 1 : close_idx]
         suffix = lines_body[start][close_idx + 1 :]
-        kept = [f'    {inner.strip().rstrip(",")},\n'] if inner.strip() else []
+        kept = [f"    {inner.strip().rstrip(',')},\n"] if inner.strip() else []
         lines_body[start : start + 1] = [
             "dependencies = [\n",
             *kept,
@@ -2161,8 +2147,7 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
         tomllib.loads(new_body)
     except tomllib.TOMLDecodeError as exc:
         raise EnsureError(
-            f"{path}: refusing edit that would write invalid TOML ({exc})"
-            " — fix by hand first"
+            f"{path}: refusing edit that would write invalid TOML ({exc}) — fix by hand first"
         ) from None
     return _ensure_write(path, new_body, dry_run, f'added dependency "{req}"')
 
@@ -2191,7 +2176,7 @@ def _ensure_json_field(
         data[section] = node
     if not isinstance(node, dict):
         raise EnsureError(
-            f"{path}: `{section}` is not an object — add a `\"{section}\": {{}}` object by hand, then re-run ensure"
+            f'{path}: `{section}` is not an object — add a `"{section}": {{}}` object by hand, then re-run ensure'
         )
     if name in node:
         return f"{filename}: unchanged — {kind} {name!r} already present"
@@ -2217,7 +2202,9 @@ def ensure_ts_dep(
     _reject_ts_control(name, "package name")
     _reject_ts_control(version, "version")
     section = "devDependencies" if dev else "dependencies"
-    return _ensure_json_field(cwd, "package.json", section, name, version, "dependency", dry_run=dry_run)
+    return _ensure_json_field(
+        cwd, "package.json", section, name, version, "dependency", dry_run=dry_run
+    )
 
 
 def ensure_ts_script(cwd: pathlib.Path, name: str, cmd: str, *, dry_run: bool = False) -> str:
@@ -2229,9 +2216,7 @@ def ensure_ts_script(cwd: pathlib.Path, name: str, cmd: str, *, dry_run: bool = 
     _reject_ts_control(name, "script name")
     _reject_ts_control(cmd, "script command")
     if not _is_coverage_script_name(name):
-        raise EnsureError(
-            f"invalid script name {name!r}: must match ^[A-Za-z0-9:_-]+$"
-        )
+        raise EnsureError(f"invalid script name {name!r}: must match ^[A-Za-z0-9:_-]+$")
     return _ensure_json_field(cwd, "package.json", "scripts", name, cmd, "script", dry_run=dry_run)
 
 
@@ -2255,9 +2240,7 @@ def ensure_coverage_threshold(
 
         def _coverage_section(pos: int) -> bool:
             name = _toml_section_at(sections, pos)
-            return name == "tool.coverage.report" or name.startswith(
-                "tool.coverage.report."
-            )
+            return name == "tool.coverage.report" or name.startswith("tool.coverage.report.")
 
         hits = [
             m
@@ -2265,7 +2248,9 @@ def ensure_coverage_threshold(
             if _coverage_section(m.start())
         ]
         if not hits:
-            raise EnsureError(f"{path}: no coverage gate — run --flavor python --with-coverage first")
+            raise EnsureError(
+                f"{path}: no coverage gate — run --flavor python --with-coverage first"
+            )
         parts: list[str] = []
         last = 0
         for m in hits:
@@ -2279,8 +2264,7 @@ def ensure_coverage_threshold(
             tomllib.loads(new_body)
         except tomllib.TOMLDecodeError as exc:
             raise EnsureError(
-                f"{path}: refusing edit that would write invalid TOML ({exc})"
-                " — fix by hand first"
+                f"{path}: refusing edit that would write invalid TOML ({exc}) — fix by hand first"
             ) from None
         return _ensure_write(path, new_body, dry_run, f"set coverage fail_under to {value}")
     if flavor == "typescript":
@@ -2291,7 +2275,9 @@ def ensure_coverage_threshold(
             raise EnsureError(f"{path}: invalid TypeScript ({error}) — fix by hand first")
         mask = _ts_code_mask(body)
         if _ts_code_match(r"lines:\s*\d+", body, mask) is None:
-            raise EnsureError(f"{path}: no coverage thresholds — run --flavor typescript --with-coverage first")
+            raise EnsureError(
+                f"{path}: no coverage thresholds — run --flavor typescript --with-coverage first"
+            )
         new_body = body
         for key in ("lines", "functions", "branches", "statements"):
             mask = _ts_code_mask(new_body)
@@ -2318,11 +2304,7 @@ def ensure_coverage_threshold(
                         f"{path}: threshold `{key}` untouched — no `thresholds: {{...}}` block to extend; add `{key}: {value}` by hand"
                     )
                 tail = next(
-                    (
-                        i
-                        for i in range(head.end(), len(new_body))
-                        if new_body[i] == "}" and mask[i]
-                    ),
+                    (i for i in range(head.end(), len(new_body)) if new_body[i] == "}" and mask[i]),
                     None,
                 )
                 if tail is None:
@@ -2333,7 +2315,10 @@ def ensure_coverage_threshold(
                 sep = "" if not inner.strip() else ("" if inner.rstrip().endswith(",") else ",")
                 insertion = f"{sep} {key}: {value}" if inner.strip() else f" {key}: {value} "
                 new_body = (
-                    new_body[: head.end()] + new_body[head.end() : tail].rstrip() + insertion + new_body[tail:]
+                    new_body[: head.end()]
+                    + new_body[head.end() : tail].rstrip()
+                    + insertion
+                    + new_body[tail:]
                 )
         return _ensure_write(path, new_body, dry_run, f"set coverage thresholds to {value}")
     raise EnsureError(
@@ -2391,8 +2376,7 @@ def ensure_main(argv: list[str]) -> int:
     # Write detection compares bytes, never prose: a value (e.g. a crate
     # named `unchanged`) must not be able to silence the writer gate.
     _watched = [
-        cwd / name
-        for name in ("Cargo.toml", "pyproject.toml", "package.json", "vitest.config.ts")
+        cwd / name for name in ("Cargo.toml", "pyproject.toml", "package.json", "vitest.config.ts")
     ]
     before = {p: p.read_bytes() if p.is_file() else None for p in _watched}
     try:
@@ -2405,9 +2389,7 @@ def ensure_main(argv: list[str]) -> int:
             print(note)
             target = cwd / "pyproject.toml"
         elif args.op == "ts-dep":
-            note = ensure_ts_dep(
-                cwd, args.name, args.version, dev=args.dev, dry_run=args.dry_run
-            )
+            note = ensure_ts_dep(cwd, args.name, args.version, dev=args.dev, dry_run=args.dry_run)
             print(note)
             target = cwd / "package.json"
         elif args.op == "ts-script":
@@ -2415,13 +2397,9 @@ def ensure_main(argv: list[str]) -> int:
             print(note)
             target = cwd / "package.json"
         elif args.op == "coverage-threshold":
-            note = ensure_coverage_threshold(
-                cwd, args.flavor, args.value, dry_run=args.dry_run
-            )
+            note = ensure_coverage_threshold(cwd, args.flavor, args.value, dry_run=args.dry_run)
             print(note)
-            target = (
-                cwd / "pyproject.toml" if args.flavor == "python" else cwd / "vitest.config.ts"
-            )
+            target = cwd / "pyproject.toml" if args.flavor == "python" else cwd / "vitest.config.ts"
         else:
             ap.error(f"unknown op {args.op}")
     except EnsureError as exc:
@@ -2435,6 +2413,7 @@ def ensure_main(argv: list[str]) -> int:
             if finding.blocking:
                 return 1
     return 0
+
 
 # ------------------------------------------------------------------ self-check
 # What a run wrote must parse, run, and resolve. Everything here is deterministic and cheap:
