@@ -4,10 +4,12 @@ Date: 2026-09-20
 
 ## Status
 
-Proposed — Applies [ADR-0015](0015-goal-gate-and-convergence-loop-architecture.md) to the
+Accepted — Applies [ADR-0015](0015-goal-gate-and-convergence-loop-architecture.md) to the
 changelog boundary. Amends the earlier draft of this record in place: that draft assumed every
 merge squashes, and the ledger's release source and landing rule have since changed. The
-deterministic floor is implemented (`scripts/changelog-gate.py`); the ceiling is not.
+deterministic floor is implemented (`scripts/changelog-gate.py`) and enforced at both boundaries —
+on a pull request against the landing declaration, and on `main` as the durable run. The ceiling is
+not implemented; it remains [#77](https://github.com/Rianico/harness-zkx/issues/77).
 
 Relates to [13. Worktree Python Shims with wt Gate Delegation and Auto-Scaffold](0013-worktree-python-shims-with-wt-gate-delegation.md)
 
