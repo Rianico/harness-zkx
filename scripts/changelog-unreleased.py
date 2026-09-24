@@ -79,7 +79,7 @@ def warn_if_visible_sync_head(commits: list[tuple[str, str]]) -> None:
             "WARNING: HEAD looks like a visible-type changelog sync commit: "
             f"{subject!r} — commit the sync as a hidden type "
             "(e.g. `chore: sync changelog unreleased section`); "
-            "a visible type re-triggers the guard and loops forever.",
+            "a visible type mints a ledger entry for the sync itself.",
             file=sys.stderr,
         )
 

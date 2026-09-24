@@ -130,9 +130,9 @@ RAW_SHA256: dict[str, str] = {
 
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RENDERED_SHA256: dict[str, str] = {
-    "CONTRIBUTING.default (project_name=demo)": "dcf7372501cad68db54342a8e8f2e0e2dc2911485f38dc2bf2e09e51a14c91ea",
-    "CONTRIBUTING.python (project_name=demo)": "587df36cc0f73f107fdbc34b9bbb634b0cdf121656517798a17685a30bea178a",
-    "CONTRIBUTING.typescript (project_name=demo)": "31dafc569c65f1dbca8137fce61b5ef168c83226cd271a6d74e2c73d0aa0417f",
+    "CONTRIBUTING.default (project_name=demo)": "b9f4a1b2f23500952d672df2992f5a821fd73dc64eae1432b279130fae26154d",
+    "CONTRIBUTING.python (project_name=demo)": "2c939aa9b22fcb935bb4a2f0ebeef6001634161c88adbb2a08fe12e1de79ca25",
+    "CONTRIBUTING.typescript (project_name=demo)": "0346f64eb3c2ec898d8a6aa09bbaed2394e6b5a6a746ab8273a78c808414f442",
     "ci/release.yml[node+coverage]": "ea1d43a462786d8459db34cc82871f7cc23a7f69d71996b6c2d927943bf819e6",
     "ci/release.yml[node]": "135ff24a1cb21a887418c53e391a18beed73a866b9f34b23441af9d37bd84d58",
     "ci/release.yml[python+coverage]": "122b942be6922bf559c992435a9a52f2ab3f1dea299d66175717967a6b49f8ab",

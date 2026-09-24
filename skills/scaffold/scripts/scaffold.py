@@ -977,15 +977,6 @@ def do_git(
         write_file(
             cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run
         )
-    if "pre-push" in sel:
-        write_file(cwd / ".githooks" / "pre-push", GITHOOK_PRE_PUSH, dry_run)
-        write_file(cwd / ".husky" / "pre-push", HUSKY_PRE_PUSH, dry_run)
-    if "pre-push" in sel and not dry_run:
-        for _hook in (cwd / ".githooks" / "pre-push", cwd / ".husky" / "pre-push"):
-            try:
-                _hook.chmod(0o755)
-            except OSError:  # best-effort chmod, ignore on read-only FS
-                pass
     if "changelog-script" in sel:
         write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
         write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
