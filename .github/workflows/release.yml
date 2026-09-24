@@ -15,7 +15,7 @@ jobs:
         with: { python-version: '3.14', enable-cache: true }
       - run: uv sync --frozen --group dev
       - run: uv run ruff check .
-      - run: uv run basedpyright
+      - run: uv run scripts/typecheck-budget.py
       - run: uv run pytest
   release:
     needs: verify
@@ -36,6 +36,7 @@ jobs:
         run: |
           python scripts/changelog-unreleased.py clear
           python scripts/changelog-gate.py ledger --update-baseline
+          python scripts/typecheck-budget.py --update-baseline
       - run: npm ci
       - run: npm audit signatures
       - run: npx semantic-release

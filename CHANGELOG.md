@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **ci:** gate the typecheck with a shrink-only warning budget (#103)
 * **changelog-gate:** gate the ledger on attribution and ship it through scaffold (#96)
 
 * **gh-router:** squash-merge attribution and contributor-PR refine flow (#95)
