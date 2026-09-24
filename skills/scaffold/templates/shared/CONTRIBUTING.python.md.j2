@@ -12,7 +12,7 @@ Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (bl
 - Features: state the problem and the proposal at minimum; alternatives optional.
 Prompt rule: when the model helps file an issue, infer `bug` vs `feat` from intent, ask for any missing `body` field of that form, and render via `gh issue create --template <file>`.
 ## Before PR
-`uv run ruff check . && uv run scripts/typecheck-budget.py && uv run pytest` must pass. See `AGENTS.md` for agent rules. Seed the budget once with `uv run scripts/typecheck-budget.py --seed` — until then every existing warning reads as growth.
+`uv run ruff check . && uv run ruff format --check . && uv run scripts/typecheck-budget.py && uv run pytest` must pass. See `AGENTS.md` for agent rules. Seed the budget once with `uv run scripts/typecheck-budget.py --seed` — until then every existing warning reads as growth.
 ## Pull Requests
 Prefer topic branch → PR → squash merge. Keep one concern per PR; link the issue with `Closes #NN`.
 ### Description

@@ -136,6 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Continuous Integration
 
+* **ci:** gate lint and formatting in the verify job (#113)
 * **changelog:** retire the pre-push guard from the scaffold and ship the ledger floor (#98)
 
 * **changelog:** enforce the floor at both boundaries and retire the push guard (#97)

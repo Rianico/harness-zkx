@@ -13,6 +13,6 @@
 
 ## Before PR
 
-`uv run ruff check . && uv run scripts/typecheck-budget.py && uv run pytest` must pass. See `AGENTS.md` for agent rules. The budget is inert until it is seeded once: `uv run scripts/typecheck-budget.py --seed`.
+`uv run ruff check . && uv run ruff format --check . && uv run scripts/typecheck-budget.py && uv run pytest` must pass. See `AGENTS.md` for agent rules. The budget is inert until it is seeded once: `uv run scripts/typecheck-budget.py --seed`.
 
-Do not run a repo-wide `ruff format` yet: `target-version` is `py314` and every PEP 723 floor now matches it, so the formatter no longer crosses a floor a script declares. What blocks the pass is the typecheck budget — the formatter's layout changes which warnings `basedpyright` reports, and a shrink-only budget refuses to absorb that growth, so the sites it surfaces have to be paid down before the bytes can move.
+`ruff format` is gated too: the verify job runs `uv run ruff format --check .`, so the tree stays formatted. `[tool.ruff] exclude` keeps `*.md` out of that pass — ruff also reformats Python fences inside Markdown, and this repo's 73 reference docs are the product, not code to reflow.

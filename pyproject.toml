@@ -35,6 +35,11 @@ addopts = "-q --tb=short"
 line-length = 100
 target-version = "py314"
 
+# `ruff format` also reformats Python fences inside Markdown, and this repo's `.md` files are the
+# product — 73 of them, mostly reference docs. The gate therefore covers code only: a formatter
+# must not be the instrument that rewrites documentation examples.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501", "B007", "B023", "E741"]

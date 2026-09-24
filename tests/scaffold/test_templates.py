@@ -131,7 +131,7 @@ RAW_SHA256: dict[str, str] = {
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RENDERED_SHA256: dict[str, str] = {
     "CONTRIBUTING.default (project_name=demo)": "b9f4a1b2f23500952d672df2992f5a821fd73dc64eae1432b279130fae26154d",
-    "CONTRIBUTING.python (project_name=demo)": "0b4348b10cd14c45bafbca17b586ed01e89b6f457c19d4fae500d8aae83ab71e",
+    "CONTRIBUTING.python (project_name=demo)": "8245f1e57d65b699bc9e102b395a6ecc437a2ab99934e09e2872431a5f5252b3",
     "CONTRIBUTING.typescript (project_name=demo)": "0346f64eb3c2ec898d8a6aa09bbaed2394e6b5a6a746ab8273a78c808414f442",
     "ci/release.yml[node+coverage]": "d7018000329223d8f4d03e05ff50393403c8f362bd8fbfd47ebfa6b0204152ab",
     "ci/release.yml[node]": "5fc8d4685e7bb4012f5fc5f2df1f7c48033ab4271cfbea6c85a0bfcdb6343946",
