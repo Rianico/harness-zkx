@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol, cast
 
 import pytest
 
@@ -33,7 +34,32 @@ def _load(name: str, path: Path):
     return mod
 
 
-scaffold = _load("scaffold_mod_oxfmt_contract", SCRIPT)
+class _Scaffold(Protocol):
+    """The surface these tests read, so the dynamically-loaded module stops typing as `Any`.
+
+    `_load` returns what `spec.loader.exec_module` produced, which the checker can only call
+    `Any`; every attribute read off it counts as a `reportAny` warning against the shrink-only
+    budget in `.config/basedpyright-baseline.txt`.
+    """
+
+    OXFMT_VERSION: str
+    FormatterUnavailable: type[Exception]
+    _formatter_root: Path | None
+
+    def build_package_json(
+        self,
+        project_name: str,
+        ts_variant: str,
+        with_coverage: bool,
+        coverage_script: str = "coverage",
+    ) -> str: ...
+
+    def canonicalize(self, path: Path, content: str) -> str: ...
+
+
+# `exec_module` yields a `ModuleType`, which overlaps with no protocol; the `object` hop is
+# where that identity is dropped and the script's surface starts being checked.
+scaffold = cast("_Scaffold", cast("object", _load("scaffold_mod_oxfmt_contract", SCRIPT)))
 
 
 # --- the pin ----------------------------------------------------------------
@@ -61,6 +87,28 @@ def test_unsupported_extensions_are_never_piped_to_the_formatter(monkeypatch, tm
     monkeypatch.setattr(scaffold, "_formatter_root", tmp_path)
     assert scaffold.canonicalize(tmp_path / "x.py", "x = 1\n") == "x = 1\n"
     assert scaffold.canonicalize(tmp_path / "x.sh", "echo 1\n") == "echo 1\n"
+
+
+def test_degenerate_formatter_output_never_reaches_the_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Exit 0 with nothing on stdout is a truncation, not a formatting result.
+
+    Reproduced: piping a script through `npx oxfmt` in a shell pipeline returned a bare
+    newline, and copying that stdout over the file left it 1 byte. `write_file` writes
+    whatever this seam returns, so the collapse has to be refused here — the next step is
+    the artifact. Empty input is the one case where nothing on stdout is correct.
+    """
+    monkeypatch.setattr(scaffold, "_formatter_root", tmp_path)
+
+    def _collapsed(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=["oxfmt"], returncode=0, stdout="\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _collapsed)
+
+    with pytest.raises(scaffold.FormatterUnavailable, match="emitted no output"):
+        _ = scaffold.canonicalize(tmp_path / "x.mjs", "export const x={a:1};\n")
+    assert scaffold.canonicalize(tmp_path / "x.mjs", "") == "\n"
 
 
 # --- the gate the generated CI runs -----------------------------------------

@@ -17,8 +17,8 @@
  * section is promoted empty and the note says so.
  */
 
-import {readFile, writeFile} from "node:fs/promises";
-import {join} from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const UNRELEASED = "## [Unreleased]";
 const NEXT_SECTION = /^## \[/m;
@@ -44,19 +44,17 @@ function changelogPath(pluginConfig, context) {
 }
 
 export async function generateNotes(pluginConfig, context) {
-  const {body} = split(await readFile(changelogPath(pluginConfig, context), "utf8"));
+  const { body } = split(await readFile(changelogPath(pluginConfig, context), "utf8"));
   return body || EMPTY_NOTES;
 }
 
 export async function prepare(pluginConfig, context) {
   const path = changelogPath(pluginConfig, context);
-  const {head, body, released} = split(await readFile(path, "utf8"));
+  const { head, body, released } = split(await readFile(path, "utf8"));
   const version = context.nextRelease.version;
   const date = new Date().toISOString().slice(0, 10);
   const heading = `## [${version}] - ${date}`;
-  const promoted = body
-    ? `${UNRELEASED}\n\n${heading}\n\n${body}`
-    : `${UNRELEASED}\n\n${heading}`;
+  const promoted = body ? `${UNRELEASED}\n\n${heading}\n\n${body}` : `${UNRELEASED}\n\n${heading}`;
   const content = `${head}${promoted}\n\n${released}`;
   await writeFile(path, `${content.trimEnd()}\n`, "utf8");
 }
