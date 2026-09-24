@@ -17,13 +17,13 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import html2text
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 # Default User-Agent pool for rotation
 DEFAULT_USER_AGENT_POOL: list[dict[str, str]] = [
@@ -72,6 +72,20 @@ _DEFAULT_HEADERS: dict[str, str] = {
     "Accept-Language": "en-US,en;q=0.5",
     "Accept-Encoding": "gzip, deflate, br",
 }
+
+
+class Section(TypedDict):
+    """A scraped documentation section.
+
+    The shape ptx and lsp share: heading text, numbering, depth, the anchor it is addressable by,
+    and the body elements between it and the next heading.
+    """
+
+    title: str
+    section_num: str
+    level: int
+    anchor: str
+    content: list[Tag]
 
 
 class DocumentationScraper(ABC):

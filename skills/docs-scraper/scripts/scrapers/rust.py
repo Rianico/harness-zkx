@@ -888,7 +888,7 @@ class RustScraper:
                 dir_set=dir_set,
             )
 
-            def rewrite_link(match: re.Match) -> str:
+            def rewrite_link(match: re.Match[str]) -> str:
                 link = match.group(1)
 
                 split = _split_link(link)

@@ -16,17 +16,36 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import yaml
 from rich.box import ROUNDED
 from rich.console import Console
 from rich.table import Table
 
+
+class _ValidationResult(TypedDict):
+    """Accumulator for a validator: verdict, findings, and per-check statistics."""
+
+    valid: bool
+    issues: list[str]
+    warnings: list[str]
+    stats: dict[str, object]
+
+
+class _CurationResult(TypedDict):
+    """Accumulator for a file-producing pass: counts, findings."""
+
+    success: bool
+    files_processed: int
+    files_created: int
+    issues: list[str]
+
+
 console = Console()
 
 
-def validate_yaml_file(file_path: Path) -> tuple[dict | None, list[str]]:
+def validate_yaml_file(file_path: Path) -> tuple[object, list[str]]:
     """Validate YAML file syntax and return content."""
     issues = []
 
@@ -43,9 +62,9 @@ def validate_yaml_file(file_path: Path) -> tuple[dict | None, list[str]]:
         return None, issues
 
 
-def validate_triggers(triggers_data: dict) -> dict[str, Any]:
+def validate_triggers(triggers_data: dict[str, object]) -> _ValidationResult:
     """Validate triggers.yaml content."""
-    result = {
+    result: _ValidationResult = {
         "valid": True,
         "issues": [],
         "warnings": [],
@@ -60,7 +79,18 @@ def validate_triggers(triggers_data: dict) -> dict[str, Any]:
     all_triggers: set[str] = set()
     module_trigger_counts: dict[str, int] = {}
 
-    for module, triggers in triggers_data.get("triggers", {}).items():
+    triggers_map = triggers_data.get("triggers", {})
+    if not isinstance(triggers_map, dict):
+        result["issues"].append("'triggers' must be a mapping of module to categories")
+        result["valid"] = False
+        return result
+
+    for module, triggers in triggers_map.items():
+        if not isinstance(triggers, dict):
+            result["issues"].append(f"Module '{module}' must map categories to trigger lists")
+            result["valid"] = False
+            continue
+
         module_triggers: list[str] = []
 
         for category in ["types", "functions", "queries", "problems"]:
@@ -104,7 +134,7 @@ def validate_triggers(triggers_data: dict) -> dict[str, Any]:
             )
 
     result["stats"] = {
-        "modules": len(triggers_data.get("triggers", {})),
+        "modules": len(triggers_map),
         "total_triggers": len(all_triggers),
         "per_module": module_trigger_counts,
     }
@@ -112,9 +142,9 @@ def validate_triggers(triggers_data: dict) -> dict[str, Any]:
     return result
 
 
-def validate_skill_md(skill_file: Path) -> dict[str, Any]:
+def validate_skill_md(skill_file: Path) -> _ValidationResult:
     """Validate a SKILL.md file."""
-    result = {
+    result: _ValidationResult = {
         "valid": True,
         "issues": [],
         "warnings": [],
@@ -199,9 +229,9 @@ def validate_skill_md(skill_file: Path) -> dict[str, Any]:
     return result
 
 
-def validate_skill_directory(skill_dir: Path) -> dict[str, Any]:
+def validate_skill_directory(skill_dir: Path) -> _ValidationResult:
     """Validate a generated skill directory."""
-    result = {
+    result: _ValidationResult = {
         "valid": True,
         "issues": [],
         "warnings": [],
@@ -307,9 +337,9 @@ def validate_skill_directory(skill_dir: Path) -> dict[str, Any]:
     return result
 
 
-def curate_references(doc_dir: Path, output_dir: Path) -> dict[str, Any]:
+def curate_references(doc_dir: Path, output_dir: Path) -> _CurationResult:
     """Curate reference files from documentation directory."""
-    result = {
+    result: _CurationResult = {
         "success": True,
         "files_processed": 0,
         "files_created": 0,
@@ -352,18 +382,15 @@ def curate_references(doc_dir: Path, output_dir: Path) -> dict[str, Any]:
     return result
 
 
-def print_validation_result(result: dict[str, Any], title: str):
+def print_validation_result(result: _ValidationResult | _CurationResult, title: str) -> None:
     """Print validation result as a table."""
     console.print(f"\n[bold]{title}[/bold]")
 
-    status = (
-        "[green]VALID[/green]"
-        if result.get("valid", result.get("success"))
-        else "[red]INVALID[/red]"
-    )
+    passed = result["valid"] if "valid" in result else result["success"]
+    status = "[green]VALID[/green]" if passed else "[red]INVALID[/red]"
     console.print(f"Status: {status}")
 
-    if result.get("stats"):
+    if "stats" in result and result["stats"]:
         table = Table(title="Statistics", box=ROUNDED)
         table.add_column("Metric", style="cyan")
         table.add_column("Value", style="green")
@@ -379,7 +406,7 @@ def print_validation_result(result: dict[str, Any], title: str):
         for issue in result["issues"]:
             console.print(f"  [red]✗[/red] {issue}")
 
-    if result.get("warnings"):
+    if "warnings" in result and result["warnings"]:
         console.print("\n[yellow]Warnings:[/yellow]")
         for warning in result["warnings"]:
             console.print(f"  [yellow]![/yellow] {warning}")
@@ -412,6 +439,10 @@ def main():
                 console.print(f"  {issue}")
             sys.exit(1)
 
+        if not isinstance(data, dict):
+            console.print("[red]triggers file must contain a YAML mapping[/red]")
+            sys.exit(1)
+
         result = validate_triggers(data)
         print_validation_result(result, "Triggers Validation")
 
@@ -419,7 +450,7 @@ def main():
         result = validate_skill_directory(args.skill_dir)
         print_validation_result(result, "Skill Validation")
 
-    elif args.command == "curate-refs":
+    else:  # curate-refs
         result = curate_references(args.doc_dir, args.output)
         console.print("\n[bold]Reference Curation[/bold]")
         console.print(f"Files processed: {result['files_processed']}")
@@ -430,7 +461,7 @@ def main():
             for issue in result["issues"]:
                 console.print(f"  [yellow]![/yellow] {issue}")
 
-    if result.get("valid") is False:
+    if "valid" in result and result["valid"] is False:
         sys.exit(1)
 
 
