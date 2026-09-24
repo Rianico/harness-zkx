@@ -1,119 +1,16 @@
 # Development Patterns
 
-Portable code and type conventions. Consult on every change that touches state, boundaries, surfaces, or verification.
+## 1. Architecture & State
+- **Immutable state:** New values from inputs; origins read-only.
+- **Pure core, impure shell:** Keep I/O and side-effects at the outer edges. Core logic remains pure.
+- **Typed boundaries:** Validate schemas at admission/emission. Trust typed models internally (no raw `dict.get` or `Any`).
+- **Deep interfaces:** Expose simple, narrow public APIs hiding internal complexity. No 5-line pass-through wrappers.
 
-## 1. Spine — State, Boundaries, Surfaces
+## 2. Guards & Errors
+- **Fail loud:** Explicitly handle, map to typed error, or re-raise. Zero empty catches.
+- **Suppressions:** Shrink-only; narrowest possible line/scope with documented reason.
 
-**Immutable state** — new values from inputs; origins read-only. `updated = evolve(original, patch)` over mutation. Mutation stays at owning boundary with recovery.
-_Check:_ no function mutates caller-owned object; tests assert `original` unchanged.
-
-**Pure core, impure shell** — push side effects (I/O, network, clock, subprocess) to outer edges. Core domain accepts pure values, returns pure values.
-_Check:_ core logic imports zero I/O or network clients.
-
-**Typed boundaries** — validate once at admission, trust inside.
-
-- **Admission:** API/message/file/config — schema (Pydantic/Zod/serde), reject invalid.
-- **Inside:** trust typed model; no `Any`/`object`/`dict.get` fallbacks.
-- **Emission:** serialize (`model_dump`/`toJSON`) only at transport/IPC/file/API. Logic stays typed.
-_Check:_ zero raw `dict.get` or `Any` past admission boundary.
-
-```python
-# trust typed model — preferred
-for name, conf in config.languages.items(): ...
-# loses type — move to boundary
-data = config.model_dump(); langs = data.get("languages")
-```
-
-When narrowing tangles, ask: why does this serialization exist here? Move it to the boundary. Prefer TypeScript over JS, Pydantic over `object`/`Any`.
-
-**Graded surfaces & Deep design** — narrowest promise that satisfies use; simple interface absorbing rich complexity.
-
-- **Clean Architecture + Deep Design (division of labor):**
-  - *Macro-Topology (Clean Architecture / Uncle Bob):* Where the seam is drawn and inward dependency direction. Core domain policy is pure and knows nothing of outer delivery mechanisms (DB, HTTP, CLI).
-  - *Micro-Geometry (Deep Design / John Ousterhout):* Boundary interface must be as narrow and simple as possible, while the module absorbs deep internal complexity (validation, caching, atomic transactions, error recovery).
-  - *Anti-pattern: Classitis & Layer Bloat:* Reject gratuitous 5-line micro-helpers and shallow pass-through layers (e.g. Controller → DTO → Service → Mapper → Repository → Entity where layers merely shuffle fields).
-  - *Systems engineering exemplars:*
-    - **Unix:** File descriptor (`open`, `read`, `write`, `close`) hiding filesystems, sockets, and pipes behind an integer handle.
-    - **SQLite:** 6-function C API and amalgamation (`sqlite3.c`) hiding 150k lines of ACID B-trees, WAL, and bytecode VM.
-    - **Linux Kernel (Linus Torvalds):** Rejects breaking cohesive functions into gratuitous micro-helpers when it harms readability; prefers deep function-pointer tables (`struct file_operations`) over deep OOP inheritance hierarchies.
-- Cross-module → public contract (needs cutover plan).
-- Internal → private; don't widen to silence warning — move caller or seam.
-- Deprecation → internal-only: remove + update callers atomically (no deprecated mark). Public/cross-boundary: deprecate with shim + migration window, cutover plan before removal.
-  SOLID at module seams, not per-line.
-_Check:_ public exports constrained to explicit interface or `__all__`; no shallow pass-through wrappers.
-
-**Design deepening vs. scope creep taxonomy** — distinguish internal structural refactoring from unmandated scope expansion.
-- *Harmful Scope Creep (`P2`):* Unmandated public APIs, mutating payload schemas, unrequested user-visible parameters, or altering repo tooling/configs (`.config/wt.toml`, CI workflows, linter configs).
-- *Permitted Design Deepening:* Submodule decomposition curing code smells (Divergent Change, God files, Shotgun Surgery), extracting cohesive internal helpers, and adding architectural regression tests (`test/arch/`). Reviewers must never flag internal deepening as scope creep.
-_Check:_ refactoring changes zero public APIs or repo tool configs; internal decomposition accompanied by regression tests.
-
-**Ubiquitous language & domain glossary** — domain boundaries define canonical nouns and forbidden synonyms (`_Avoid_: ...`). Check the domain glossary (`CONTEXT.md`) before naming types, functions, parameter names, error messages, and commit messages; treat avoided synonyms as invariant violations, not stylistic preference.
-_Check:_ diff contains zero terms from `_Avoid_:` lists.
-
-**Transactional atomicity** — multi-step state mutations spanning multiple records or tables must execute within a single atomic transaction (`BEGIN IMMEDIATE`), never fragmented into disjoint operations.
-_Check:_ state mutations across multiple tables/entities are bound inside one transaction block with rollback.
-
-## 2. Guards — Errors, Security, Suppressions
-
-**Errors fail loud** — every path has explicit branch: handle, map to typed error, or propagate. Log cause, no secrets. Fail-fast at invariant boundary.
-- **Boundary translation:** catch library/transport exceptions at admission; map to internal domain error types. Never leak raw external exceptions into caller layers.
-- **Storage error transparency:** never swallow secondary storage or desync failures with silent logging (`console.error`). Return explicit status, warnings, or typed errors in result structures so callers can compensate or alert.
-_Check:_ no empty `except`/`catch`; every catch re-raises, returns `Result`/`Err`, or logs with context; hybrid disk+DB operations report desyncs.
-
-**Security — negative path designed**
-
-- Secrets from env/secret manager, never in code/logs/errors.
-- Validate inputs at admission; auth/rate-limit/injection/XSS/CSRF at owning boundary.
-- On finding: stop → `security-reviewer` agent, fix CRITICAL first, rotate exposed secret. Classify reversible/compensable/irreversible.
-
-**Suppressions — shrink-only, smallest seam** — fix code first; when suppression is right, scope narrowly and document why.
-
-Ladder:
-1. Fix code
-2. Line `ignore` + reason
-3. File suppression + reason
-4. Targeted config (one category, 50+ hits)
-5. Project-level (drift signal, needs authority + review trigger)
-6. Global disable (boundary decision, authority + invariant + removal condition)
-
-```python
-# <tool>: ignore[<rule>]
-# Reason: <why legitimate, what invariant still holds>
-```
-
-_Guard rule:_ baselines shrink-only. Growth needs authority, narrow scope, owner, review trigger. Moving code outside guard scope is a boundary change.
-
-## 3. Runtime and Verification
-
-**Declared runtimes** — native tool that owns version+deps; commit version file.
-
-- Single: `uv`+`.python-version` (default 3.14), `cargo`+`rust-toolchain.toml`, `corepack`/`nvm`+`.nvmrc`.
-- Multi (2+ runtimes): `asdf`+`.tool-versions`; `asdf install` syncs all.
-
-**Verification closes the loop** — evidence, not stale green. Restart daemon after type/config changes; clean-build after refactors; clear test cache when stale; benchmark real path before performance claims.
-- **Deterministic vs. semantic split:** deterministic tools (compiler, linter, tests) are absolute blockers; never declare done on model claim alone. Semantic alignment requires adversarial verification (skeptic/reviewer subagent) or explicit BDD contract.
-- **Refutation by counterexample & oracle tests:** when claiming an invariant, state machine, or algorithmic defect, supply a concrete minimal failing input/scenario (`input -> expected vs observed`). Never accept or propose cosmetic heuristic patches without an executable counterexample proving the failure. Verify non-trivial state machines or combinatorial engines with minimal exhaustive small-input oracle tests or property tests.
-_Check:_ re-run failing signal from fresh state and confirm terminal invariant.
-
-## 4. Context — Keep Lean
-
-Dispatch when main only needs result: research → conclusions; sub-module → report+files; pipeline (`tdd→refactor→verify`) → one subagent per stage. Handoff via file pointer + dumped artifact, not bulk paste.
-
-**Anti-hero orchestrator** — in multi-step or multi-module tasks, orchestrator coordinates and passes pointers; never edits files, runs tests, or writes code directly.
-_Check:_ orchestrator context holds routing and summaries, zero file diffs or test logs.
-
-**Subagent response contract** — dispatched subagents return strictly:
-- `Summary`: concise bullets of work completed.
-- `Artifacts`: absolute file paths to deliverables.
-- `Status`: `COMPLETED` | `BLOCKED` | `REJECTED`.
-- `Issues`: discovered risks or necessary follow-ups.
-
-Subagents share same worktree — parallel writers race. Fan-out ≥2 touching `src`/`test`/tracked files → isolate with `worktree`. Pattern: main creates one worktree per task; dispatch `subagent` with that `cwd` + branch instruction; isolated writes; verify each worktree; integrate; clean up. Single writer or read-only → no worktree. See `git-convention.md` + `branch-worktree-pr` skill.
-
-**Sub-skills — match, don't wait** — router parents stay lean; model Reads the matching sub-skill as soon as the task matches its triggers. Explicit $domain is one trigger, task-match is the other — never wait for the user to name the domain. Creating/editing any agent-consumed doc always loads writing-for-agents.
-_Check:_ task matched a sub-skill trigger means its file was Read before acting.
-
-## 5. Ephemeral artifacts → `.lsz/tmp`
-
-Route scratch/repro through `.lsz/tmp` (gitignored). `mkdir -p .lsz/tmp`; `python -c "..." > .lsz/tmp/repro.json`. Keep root and `tests/` clean.
-_Check:_ `git status` shows no untracked temp outside `.lsz/tmp`.
+## 3. Verification & Context
+- **Proof before done:** Deterministic tests, types, and linters must pass cleanly.
+- **Counterexamples:** Claims of bugs or broken invariants require an executable minimal failing repro.
+- **Context:** Pass file paths and artifact links, not raw diffs or logs. Parallel writers use isolated worktrees (e.g. via `wt` or git).
