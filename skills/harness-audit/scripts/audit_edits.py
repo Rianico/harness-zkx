@@ -383,7 +383,9 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
             raise
     failure_count = len(typed_failures)
     for _code in sorted(unknown_codes):
-        eprint(f"warning: unrecognized edit error code {_code!r} (not in KNOWN_CODES); categorized as '?'")
+        eprint(
+            f"warning: unrecognized edit error code {_code!r} (not in KNOWN_CODES); categorized as '?'"
+        )
     audit_raw = {
         "session_path": str(path),
         "session_file": path.name,
@@ -442,7 +444,9 @@ def format_text(audit: dict[str, Any]) -> str:
             if len(f["anchors"]) > 4:
                 anchors += ",…"
             target = f["file"] or "(unknown file)"
-            lines.append(f"{i:>3}  {f['jsonl_line']:>5}  {f.get('category', '?'):<3}  {f['code']:<18}  {target} [{anchors}]")
+            lines.append(
+                f"{i:>3}  {f['jsonl_line']:>5}  {f.get('category', '?'):<3}  {f['code']:<18}  {target} [{anchors}]"
+            )
             if f.get("numeric_anchors"):
                 lines.append(
                     f"       numeric anchors (line numbers?): {','.join(f['numeric_anchors'])}"

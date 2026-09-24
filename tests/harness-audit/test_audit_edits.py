@@ -321,9 +321,7 @@ def test_scan_counts_parse_errors(tmp_path: Path) -> None:
         )
         f.write(
             json.dumps(
-                edit_result(
-                    "r1", "a1", "call_1", '[MODEL] [E_UNKNOWN_ANCHOR] anchor "zzz"', True
-                )
+                edit_result("r1", "a1", "call_1", '[MODEL] [E_UNKNOWN_ANCHOR] anchor "zzz"', True)
             )
             + "\n"
         )

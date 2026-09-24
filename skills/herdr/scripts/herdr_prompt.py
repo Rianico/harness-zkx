@@ -69,6 +69,7 @@ EXIT_WAIT_TIMEOUT = 4
 class WaitTimeout(Exception):
     """Prompt delivered but `--wait` timed out; the agent is still working (exit 4)."""
 
+
 @dataclass
 class Options:
     """CLI options; `argparse` writes into this typed namespace."""
@@ -225,6 +226,7 @@ def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> lis
         raise UsageError("duplicate TARGETs; list each agent once")
     return list(options.targets)
 
+
 @dataclass
 class Dispatch:
     """Per-target outcome of a broadcast prompt."""
@@ -301,6 +303,7 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
         )
     return EXIT_OK
 
+
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     env_map = dict(os.environ if env is None else env)
     options = build_parser().parse_args(argv, namespace=Options())
@@ -309,6 +312,7 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
     except WaitTimeout as exc:
         print(f"herdr-prompt: {exc}", file=sys.stderr)
         return EXIT_WAIT_TIMEOUT
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

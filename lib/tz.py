@@ -26,7 +26,7 @@ def _detect_tz_macos() -> str | None:
                 tz = line.split(":", 1)[1].strip()
                 if tz:
                     return tz
-    except (subprocess.SubprocessError, FileNotFoundError):
+    except subprocess.SubprocessError, FileNotFoundError:
         pass
 
     # Method 2: /etc/localtime symlink
@@ -137,7 +137,7 @@ def to_local_display(utc_ts: str) -> str:
         local_dt = dt.astimezone(local_tz())
         offset = local_dt.strftime("%z")
         return local_dt.strftime("%Y-%m-%d %H:%M") + " " + offset
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return utc_ts
 
 

@@ -378,12 +378,8 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
 # ── integration: broadcast, --no-wait, and wait-timeout ─────────────────────────
 
 
-def test_broadcast_delivers_same_payload_to_every_target(
-    stub: StubHarness, tmp_path: Path
-) -> None:
-    done = stub.run(
-        "worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"
-    )
+def test_broadcast_delivers_same_payload_to_every_target(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--no-wait")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (first, second) = stub.prompts()
     assert (first[3], second[3]) == ("worker1", "worker2")
@@ -393,9 +389,7 @@ def test_broadcast_delivers_same_payload_to_every_target(
 
 
 def test_wait_and_no_wait_together_are_rejected(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run(
-        "reviewer", "--file", str(payload_file(tmp_path, "hi")), "--wait", "--no-wait"
-    )
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), "--wait", "--no-wait")
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "not both" in done.stderr
     assert stub.prompts() == []
@@ -438,12 +432,8 @@ def test_broadcast_blocked_reports_exit_blocked(stub: StubHarness, tmp_path: Pat
     assert "need human input" in done.stderr
 
 
-def test_broadcast_dry_run_prints_one_argv_per_target(
-    stub: StubHarness, tmp_path: Path
-) -> None:
-    done = stub.run(
-        "worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run"
-    )
+def test_broadcast_dry_run_prints_one_argv_per_target(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     argv_lines = [json.loads(line) for line in done.stdout.splitlines()]

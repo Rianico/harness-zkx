@@ -57,7 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
     _ = p_copy.add_argument("child_branch", help="Child branch")
     _ = p_copy.add_argument("base_branch", help="Base branch")
 
-    p_check = sub.add_parser("self-check", help="Verify cwd is the expected worktree on the expected branch")
+    p_check = sub.add_parser(
+        "self-check", help="Verify cwd is the expected worktree on the expected branch"
+    )
     _ = p_check.add_argument("branch", help="Expected branch")
     _ = p_check.add_argument(
         "path",
@@ -83,7 +85,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_mpr = sub.add_parser("merge-pr", help="Merge PR and watch runs")
     _ = p_mpr.add_argument("pr", help="PR branch, number, or URL")
     _ = p_mpr.add_argument("--base", default="", help="Expected base branch")
-    _ = p_mpr.add_argument("--squash", dest="strategy", action="store_const", const="squash", default="squash")
+    _ = p_mpr.add_argument(
+        "--squash", dest="strategy", action="store_const", const="squash", default="squash"
+    )
     _ = p_mpr.add_argument("--merge", dest="strategy", action="store_const", const="merge")
     _ = p_mpr.add_argument("--rebase", dest="strategy", action="store_const", const="rebase")
     _ = p_mpr.add_argument("--no-delete-branch", action="store_true")

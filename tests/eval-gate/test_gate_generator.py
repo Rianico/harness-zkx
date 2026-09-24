@@ -37,7 +37,9 @@ def test_detect_stack_rust(tmp_path):
 
 def test_detect_stack_typescript(tmp_path):
     """Detects TypeScript project with package.json and tsconfig.json."""
-    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"test": "vitest"}}), encoding="utf-8")
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"test": "vitest"}}), encoding="utf-8"
+    )
     (tmp_path / "tsconfig.json").write_text("{}", encoding="utf-8")
     profile = detect_stack(tmp_path)
     assert profile.name == "typescript"
@@ -76,7 +78,12 @@ def test_synthesize_gate_script_execution(tmp_path):
     """Synthesizes an executable gate script and verifies its JSON output."""
     output_dir = tmp_path / "eval_run"
     custom_checks = [
-        {"id": "ECHO-01", "phase": "build", "command": ["echo", "hello"], "description": "Echo check"},
+        {
+            "id": "ECHO-01",
+            "phase": "build",
+            "command": ["echo", "hello"],
+            "description": "Echo check",
+        },
         {"id": "TRUE-01", "phase": "test", "command": ["true"], "description": "True test"},
     ]
     script_path = synthesize_gate_script(
@@ -101,7 +108,12 @@ def test_synthesize_gate_script_failure_reporting(tmp_path):
     output_dir = tmp_path / "eval_run_fail"
     custom_checks = [
         {"id": "PASS-01", "phase": "build", "command": ["true"], "description": "Passing check"},
-        {"id": "FAIL-01", "phase": "test", "command": [sys.executable, "-c", "import sys; sys.exit(1)"], "description": "Failing check"},
+        {
+            "id": "FAIL-01",
+            "phase": "test",
+            "command": [sys.executable, "-c", "import sys; sys.exit(1)"],
+            "description": "Failing check",
+        },
     ]
     script_path = synthesize_gate_script(
         repo_root=tmp_path,
@@ -185,7 +197,12 @@ def test_grade_semantic_assertions_all_pass():
     ]
     grader_results = [
         {"id": "SEM-01", "passed": True, "evidence": "file.py:10", "reasoning": "Proper raise"},
-        {"id": "SEM-02", "passed": True, "evidence": "test.py:20", "reasoning": "Refutable assertion"},
+        {
+            "id": "SEM-02",
+            "passed": True,
+            "evidence": "test.py:20",
+            "reasoning": "Refutable assertion",
+        },
     ]
     score, graded, issues = grade_semantic_assertions(assertions, grader_results)
     assert score == 10
@@ -276,7 +293,17 @@ def test_cli_subcommands(tmp_path):
 
     # 1. resolve-dir
     res = subprocess.run(
-        [sys.executable, str(script_file), "resolve-dir", "--repo-root", str(repo), "--topic", "t1", "--base-dir", str(tmp_path)],
+        [
+            sys.executable,
+            str(script_file),
+            "resolve-dir",
+            "--repo-root",
+            str(repo),
+            "--topic",
+            "t1",
+            "--base-dir",
+            str(tmp_path),
+        ],
         capture_output=True,
         text=True,
     )
@@ -285,16 +312,32 @@ def test_cli_subcommands(tmp_path):
 
     # 2. grade-assertions
     gate_file = tmp_path / "gate.json"
-    gate_file.write_text(json.dumps({
-        "semantic_ceiling": {
-            "assertions": [{"id": "SEM-01", "statement": "Test pass", "critical": True}]
-        }
-    }), encoding="utf-8")
+    gate_file.write_text(
+        json.dumps(
+            {
+                "semantic_ceiling": {
+                    "assertions": [{"id": "SEM-01", "statement": "Test pass", "critical": True}]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     graders_file = tmp_path / "graders.json"
-    graders_file.write_text(json.dumps([{"id": "SEM-01", "passed": True, "evidence": "x", "reasoning": "y"}]), encoding="utf-8")
+    graders_file.write_text(
+        json.dumps([{"id": "SEM-01", "passed": True, "evidence": "x", "reasoning": "y"}]),
+        encoding="utf-8",
+    )
 
     res = subprocess.run(
-        [sys.executable, str(script_file), "grade-assertions", "--assertions", str(gate_file), "--grader-results", str(graders_file)],
+        [
+            sys.executable,
+            str(script_file),
+            "grade-assertions",
+            "--assertions",
+            str(gate_file),
+            "--grader-results",
+            str(graders_file),
+        ],
         capture_output=True,
         text=True,
     )
@@ -333,4 +376,3 @@ def test_cli_subcommands(tmp_path):
     assert res.returncode == 0
     assert feedback_file.exists()
     assert "Autoresearch Checkpoint" in feedback_file.read_text(encoding="utf-8")
-

@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol, cast
 
 START_RE = re.compile(r"^<<<<<<<(?: (.*))?$")
 BASE_RE = re.compile(r"^\|\|\|\|\|\|\|(?: (.*))?$")
@@ -133,7 +134,9 @@ def normalize_requested_path(repo_root: Path, raw_path: str) -> str:
         raise RuntimeError(f"path is outside repository: {raw_path}") from error
 
 
-def parse_conflict_hunks(lines: list[str], context: int) -> tuple[list[dict[str, object]], str | None]:
+def parse_conflict_hunks(
+    lines: list[str], context: int
+) -> tuple[list[dict[str, object]], str | None]:
     hunks: list[dict[str, object]] = []
     index = 0
     while index < len(lines):
@@ -186,21 +189,23 @@ def parse_conflict_hunks(lines: list[str], context: int) -> tuple[list[dict[str,
             {
                 "start_line": start_index + 1,
                 "end_line": end_index + 1,
-                "before_context": lines[max(0, start_index - context):start_index],
+                "before_context": lines[max(0, start_index - context) : start_index],
                 "ours": ours,
                 "ours_label": ours_label,
                 "base": base or None,
                 "base_label": base_label,
                 "theirs": theirs,
                 "theirs_label": theirs_label,
-                "after_context": lines[index:index + context],
+                "after_context": lines[index : index + context],
             }
         )
 
     return hunks, None
 
 
-def build_summary_report(repo_root: Path, path: str, stage_entries: dict[int, dict[str, str]], context: int) -> dict[str, object]:
+def build_summary_report(
+    repo_root: Path, path: str, stage_entries: dict[int, dict[str, str]], context: int
+) -> dict[str, object]:
     worktree_lines = read_text_file(repo_root / path)
     hunks: list[dict[str, object]] = []
     parse_error = None
@@ -218,7 +223,9 @@ def build_summary_report(repo_root: Path, path: str, stage_entries: dict[int, di
     }
 
 
-def build_index_preview(repo_root: Path, report: dict[str, object], max_lines: int) -> dict[str, object]:
+def build_index_preview(
+    repo_root: Path, report: dict[str, object], max_lines: int
+) -> dict[str, object]:
     path = str(report["path"])
     ours = read_stage_text(repo_root, path, 2)
     theirs = read_stage_text(repo_root, path, 3)
@@ -285,7 +292,9 @@ def render_detail_text(
                 [
                     "",
                     f"[hunk {index}] current lines {hunk['start_line']}-{hunk['end_line']}",
-                    *section_lines("before", truncate_lines(list(hunk["before_context"]), max_lines)),
+                    *section_lines(
+                        "before", truncate_lines(list(hunk["before_context"]), max_lines)
+                    ),
                     *section_lines(
                         f"ours ({hunk['ours_label']})",
                         truncate_lines(ours, max_lines),
@@ -347,7 +356,9 @@ def render_json(
                         "ours_label": hunk["ours_label"],
                         "ours": truncate_lines(list(hunk["ours"]), max_lines),
                         "base_label": hunk["base_label"],
-                        "base": truncate_lines(list(hunk["base"]), max_lines) if hunk["base"] else None,
+                        "base": truncate_lines(list(hunk["base"]), max_lines)
+                        if hunk["base"]
+                        else None,
                         "theirs_label": hunk["theirs_label"],
                         "theirs": truncate_lines(list(hunk["theirs"]), max_lines),
                         "after_context": truncate_lines(list(hunk["after_context"]), max_lines),
@@ -372,6 +383,17 @@ def render_json(
         },
         indent=2,
     )
+
+
+class _Args(Protocol):
+    """The CLI surface, declared so `argparse`'s `Namespace` stops leaking `Any`."""
+
+    repo: str
+    file: list[str]
+    all: bool
+    json: bool
+    context: int
+    max_lines: int
 
 
 def main() -> int:
@@ -407,7 +429,7 @@ def main() -> int:
         default=40,
         help="Maximum lines to print for each section before truncating.",
     )
-    args = parser.parse_args()
+    args = cast(_Args, cast(object, parser.parse_args()))
 
     if args.all and args.file:
         parser.error("--all cannot be combined with --file")
@@ -429,7 +451,11 @@ def main() -> int:
     ]
 
     if not reports:
-        message = json.dumps({"repo_root": str(repo_root), "conflicted_files": []}, indent=2) if args.json else f"repo: {repo_root}\nconflicted files: 0"
+        message = (
+            json.dumps({"repo_root": str(repo_root), "conflicted_files": []}, indent=2)
+            if args.json
+            else f"repo: {repo_root}\nconflicted files: 0"
+        )
         print(message)
         return 0
 
@@ -452,14 +478,22 @@ def main() -> int:
         selected_reports = []
 
     if args.json:
-        print(render_json(repo_root, selected_reports or reports, bool(selected_reports), args.max_lines))
+        print(
+            render_json(
+                repo_root, selected_reports or reports, bool(selected_reports), args.max_lines
+            )
+        )
         return 0
 
     if not selected_reports:
         print(render_summary_text(repo_root, reports))
         return 0
 
-    print("\n\n".join(render_detail_text(repo_root, report, args.max_lines) for report in selected_reports))
+    print(
+        "\n\n".join(
+            render_detail_text(repo_root, report, args.max_lines) for report in selected_reports
+        )
+    )
     return 0
 
 

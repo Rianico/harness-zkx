@@ -20,7 +20,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, TypedDict, cast
 
 from pydantic import BaseModel, Field, ValidationError  # pyright: ignore[reportMissingImports]
 
@@ -71,7 +71,9 @@ class AuditResult(BaseModel):
     total_lines: int = Field(ge=0)
     total_chars: int = Field(ge=0)
     oversized: list[OversizedEntry] = Field(default_factory=list)
-    all: list[OversizedEntry] = Field(default_factory=list)  # all bash entries, alias to avoid shadowing
+    all: list[OversizedEntry] = Field(
+        default_factory=list
+    )  # all bash entries, alias to avoid shadowing
     estimated_savings: EstimatedSavings
 
     model_config = {"strict": True, "populate_by_name": True}
@@ -86,7 +88,6 @@ class TriagedEntry(BaseModel):
     reason: str
 
     model_config = {"strict": True}
-
 
 
 def eprint(msg: str) -> None:
@@ -163,6 +164,33 @@ def truncate_body(text: str, keep: int) -> tuple[str, int]:
         if text.endswith("\n"):
             truncated += "\n"
     return truncated, omitted
+
+
+class _Args(Protocol):
+    """The CLI surface, declared so `argparse`'s `Namespace` stops leaking `Any`."""
+
+    target: str
+    threshold: int
+    as_json: bool
+    emit_filtered: bool
+    keep_head_tail: int
+    with_context: int
+    dump_context: str | None
+
+
+class _TurnRow(TypedDict):
+    """One JSONL turn, as serialized into `next_turns` and `--dump-context` payloads."""
+
+    jsonl_line: int
+    role: str
+    type: str
+    preview: str
+
+
+class _PreviewRow(_TurnRow):
+    """A `_TurnRow` plus the full message body, kept only for `--dump-context`."""
+
+    full: dict[str, object]
 
 
 def _preview_for_msg(msg: dict[str, Any]) -> str:
@@ -269,7 +297,9 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                         "jsonl_line": idx,
                         "toolCallId": tc_id,
                         "command": cmd_preview,
-                        "command_preview": (cmd_preview[:120] + "…") if len(cmd_preview) > 120 else cmd_preview,
+                        "command_preview": (cmd_preview[:120] + "…")
+                        if len(cmd_preview) > 120
+                        else cmd_preview,
                         "lines": nlines,
                         "chars": nchars,
                         "oversized": oversized,
@@ -280,7 +310,7 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
     # attach following context if requested
     if with_context > 0 and oversized_entries:
         # second pass: collect previews for all message lines
-        line_to_preview: dict[int, dict[str, Any]] = {}
+        line_to_preview: dict[int, _PreviewRow] = {}
         ordered_lines: list[int] = []
         try:
             with path.open("r", encoding="utf-8", errors="replace") as fp2:
@@ -300,13 +330,19 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                     preview = _preview_for_msg(msg2)
                     role2 = str(msg2.get("role") or rec2.get("type") or "?")
                     t2 = str(msg2.get("toolName") or msg2.get("type") or role2)
-                    line_to_preview[idx2] = {"jsonl_line": idx2, "role": role2, "type": t2, "preview": preview, "full": msg2}
+                    line_to_preview[idx2] = {
+                        "jsonl_line": idx2,
+                        "role": role2,
+                        "type": t2,
+                        "preview": preview,
+                        "full": msg2,
+                    }
                     ordered_lines.append(idx2)
         except OSError:
             pass
         ordered_lines.sort()
         for e in oversized_entries:
-            ctx: list[dict[str, Any]] = []
+            ctx: list[_TurnRow] = []
             # find next N lines after e's line
             for ln in ordered_lines:
                 if ln <= e["jsonl_line"]:
@@ -316,10 +352,21 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                 info = line_to_preview.get(ln)
                 if info:
                     # store bounded preview, not full unbounded body (full kept for --dump-context)
-                    ctx.append({"jsonl_line": info["jsonl_line"], "role": info["role"], "type": info["type"], "preview": info["preview"]})
+                    ctx.append(
+                        {
+                            "jsonl_line": info["jsonl_line"],
+                            "role": info["role"],
+                            "type": info["type"],
+                            "preview": info["preview"],
+                        }
+                    )
             e["next_turns"] = ctx
             # also store full bodies separately for dump (lazy, only if needed later)
-            e["_next_full"] = [line_to_preview[ln]["full"] for ln in [c["jsonl_line"] for c in ctx] if ln in line_to_preview]
+            e["_next_full"] = [
+                line_to_preview[ln]["full"]
+                for ln in [c["jsonl_line"] for c in ctx]
+                if ln in line_to_preview
+            ]
 
     est_keep = DEFAULT_KEEP
     savings_lines = 0
@@ -332,7 +379,7 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
             avg = e["chars"] / n if n else 0
             try:
                 savings_chars += int(removed * avg)
-            except (ValueError, OverflowError, TypeError):
+            except ValueError, OverflowError, TypeError:
                 savings_chars += removed * 40
     # ── Validate via Pydantic (A: owned script type-safe, B: replaceable-handle ready) ──
     # Build typed entries; ValidationError surfaces bad shapes immediately (fail-loud)
@@ -364,7 +411,11 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
         "total_chars": total_chars,
         "oversized": [o.model_dump() for o in typed_oversized],
         "all": [a.model_dump() for a in typed_all],
-        "estimated_savings": {"lines": savings_lines, "chars": savings_chars, "keep_head_tail": est_keep},
+        "estimated_savings": {
+            "lines": savings_lines,
+            "chars": savings_chars,
+            "keep_head_tail": est_keep,
+        },
     }
     # final top-level validation (ensures AuditResult contract holds; cheap, fail-loud)
     try:
@@ -427,7 +478,9 @@ def emit_filtered(path: Path, threshold: int, keep: int) -> Path:
 def format_text(audit: dict[str, Any], keep: int) -> str:
     lines: list[str] = []
     lines.append(f"session: {audit['session_path']}")
-    lines.append(f"records: {audit['record_count']}  bash toolResults: {audit['bash_count']}  threshold: >{audit['threshold']} lines")
+    lines.append(
+        f"records: {audit['record_count']}  bash toolResults: {audit['bash_count']}  threshold: >{audit['threshold']} lines"
+    )
     if audit["parse_errors"]:
         lines.append(f"parse errors (skipped lines): {audit['parse_errors']}")
     lines.append("")
@@ -466,24 +519,51 @@ def format_text(audit: dict[str, Any], keep: int) -> str:
     est = audit["estimated_savings"]
     lines.append(f"Total bash output: {audit['total_lines']} lines / {audit['total_chars']} chars")
     if audit["oversized_count"]:
-        lines.append(f"Estimated savings if truncated (keep {est['keep_head_tail']} each side): −{est['lines']} lines / −{est['chars']} chars  (~{est['chars'] // 4} tokens @ 4 chars/token)")
+        lines.append(
+            f"Estimated savings if truncated (keep {est['keep_head_tail']} each side): −{est['lines']} lines / −{est['chars']} chars  (~{est['chars'] // 4} tokens @ 4 chars/token)"
+        )
         lines.append("")
-        lines.append("Refine: oversized outputs above are trimtable — use --emit-filtered to write a filtered copy,")
+        lines.append(
+            "Refine: oversized outputs above are trimtable — use --emit-filtered to write a filtered copy,"
+        )
         lines.append("or adjust --threshold / --keep-head-tail to taste.")
     lines.append("")
     return "\n".join(lines)
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(prog="audit.py", description="Scan pi session JSONL for oversized bash outputs.")
+    ap = argparse.ArgumentParser(
+        prog="audit.py", description="Scan pi session JSONL for oversized bash outputs."
+    )
     ap.add_argument("target", help="session id (uuid) or path to *.jsonl")
-    ap.add_argument("--threshold", type=int, default=DEFAULT_THRESHOLD, help="line threshold (default: 20)")
+    _ = ap.add_argument(
+        "--threshold", type=int, default=DEFAULT_THRESHOLD, help="line threshold (default: 20)"
+    )
     ap.add_argument("--json", action="store_true", dest="as_json", help="emit JSON instead of text")
-    ap.add_argument("--emit-filtered", action="store_true", help="write <session>.filtered.jsonl with truncated bodies")
-    ap.add_argument("--keep-head-tail", type=int, default=DEFAULT_KEEP, help="lines to keep each side when truncating (default: 10)")
-    ap.add_argument("--with-context", type=int, default=0, help="attach next N turns after each oversized result for triage (default: 0, recommend 3)")
-    ap.add_argument("--dump-context", type=str, default=None, help="write per-entry context JSON to dir (requires --with-context >0)")
-    args = ap.parse_args()
+    _ = ap.add_argument(
+        "--emit-filtered",
+        action="store_true",
+        help="write <session>.filtered.jsonl with truncated bodies",
+    )
+    _ = ap.add_argument(
+        "--keep-head-tail",
+        type=int,
+        default=DEFAULT_KEEP,
+        help="lines to keep each side when truncating (default: 10)",
+    )
+    _ = ap.add_argument(
+        "--with-context",
+        type=int,
+        default=0,
+        help="attach next N turns after each oversized result for triage (default: 0, recommend 3)",
+    )
+    _ = ap.add_argument(
+        "--dump-context",
+        type=str,
+        default=None,
+        help="write per-entry context JSON to dir (requires --with-context >0)",
+    )
+    args = cast(_Args, cast(object, ap.parse_args()))
     if args.threshold < 0:
         eprint("error: --threshold must be >= 0")
         sys.exit(1)
@@ -496,7 +576,9 @@ def main() -> None:
     resolved = resolve_session(args.target)
     if resolved is None:
         eprint(f"error: no session found for target {args.target!r}")
-        eprint("hint: pass an absolute path to a *.jsonl file, or a session id like 01a03e51-b378-786f-819d-f570bc26497c")
+        eprint(
+            "hint: pass an absolute path to a *.jsonl file, or a session id like 01a03e51-b378-786f-819d-f570bc26497c"
+        )
         eprint("searched: $PI_SESSIONS_DIR (if set) and ~/.pi/agent/sessions/")
         sys.exit(2)
     if not resolved.is_file():
@@ -509,11 +591,14 @@ def main() -> None:
         assert args.dump_context is not None
         dump_dir = Path(args.dump_context).expanduser()
         dump_dir.mkdir(parents=True, exist_ok=True)
-        for e in audit["oversized"]:
+        for e in cast("list[dict[str, object]]", audit["oversized"]):
             full_ctx = e.get("_next_full") or []
             # write one file per oversized entry
             out = dump_dir / f"oversized-{e['jsonl_line']}.json"
-            payload = {"oversized": {k: v for k, v in e.items() if not k.startswith("_")}, "next_turns_full": full_ctx}
+            payload = {
+                "oversized": {k: v for k, v in e.items() if not k.startswith("_")},
+                "next_turns_full": full_ctx,
+            }
             out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         audit["dump_context_dir"] = str(dump_dir.resolve())
     # remove internal key from json output
@@ -531,9 +616,13 @@ def main() -> None:
                 avg = e["chars"] / n if n else 0
                 try:
                     savings_chars += int(removed * avg)
-                except (ValueError, OverflowError, TypeError):
+                except ValueError, OverflowError, TypeError:
                     savings_chars += removed * 40
-        audit["estimated_savings"] = {"lines": savings_lines, "chars": savings_chars, "keep_head_tail": args.keep_head_tail}
+        audit["estimated_savings"] = {
+            "lines": savings_lines,
+            "chars": savings_chars,
+            "keep_head_tail": args.keep_head_tail,
+        }
     filtered_path = None
     if args.emit_filtered:
         filtered_path = emit_filtered(resolved, args.threshold, args.keep_head_tail)

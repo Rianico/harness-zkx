@@ -243,22 +243,36 @@ def main() -> int:
 
     # scan-diff command
     scan_parser = subparsers.add_parser("scan-diff", help="Scan diff for deterministic red flags")
-    scan_parser.add_argument("--diff-file", type=str, help="Path to git diff file (reads stdin if omitted)")
+    _ = scan_parser.add_argument(
+        "--diff-file", type=str, help="Path to git diff file (reads stdin if omitted)"
+    )
     scan_parser.add_argument("--json", action="store_true", help="Output findings in JSON")
 
     # check-verdict command
-    verdict_parser = subparsers.add_parser("check-verdict", help="Compute route from score and issues")
+    verdict_parser = subparsers.add_parser(
+        "check-verdict", help="Compute route from score and issues"
+    )
     verdict_parser.add_argument("--score", type=int, required=True, help="Review score (1-10)")
     verdict_parser.add_argument("--findings-json", type=str, help="Path to findings JSON file")
-    verdict_parser.add_argument("--sot-drift", action="store_true", help="Set if SOT drift was detected")
+    _ = verdict_parser.add_argument(
+        "--sot-drift", action="store_true", help="Set if SOT drift was detected"
+    )
 
     # evaluate-goal-gate command
-    goal_parser = subparsers.add_parser("evaluate-goal-gate", help="Evaluate composite Goal Gate (Floor + Ceiling)")
+    goal_parser = subparsers.add_parser(
+        "evaluate-goal-gate", help="Evaluate composite Goal Gate (Floor + Ceiling)"
+    )
     goal_parser.add_argument("--eval-report", type=str, help="Path to eval-gate JSON report")
-    goal_parser.add_argument("--score", type=int, required=True, help="Semantic review score (1-10)")
+    _ = goal_parser.add_argument(
+        "--score", type=int, required=True, help="Semantic review score (1-10)"
+    )
     goal_parser.add_argument("--findings-json", type=str, help="Path to semantic findings JSON")
-    goal_parser.add_argument("--sot-drift", action="store_true", help="Set if SOT drift was detected")
-    goal_parser.add_argument("--threshold", type=int, default=8, help="Passing score threshold (default: 8)")
+    _ = goal_parser.add_argument(
+        "--sot-drift", action="store_true", help="Set if SOT drift was detected"
+    )
+    _ = goal_parser.add_argument(
+        "--threshold", type=int, default=8, help="Passing score threshold (default: 8)"
+    )
 
     args = parser.parse_args()
 
@@ -328,4 +342,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
