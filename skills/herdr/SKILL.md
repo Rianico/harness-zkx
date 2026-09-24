@@ -96,6 +96,19 @@ uv run "$SKILL_DIR/scripts/herdr_prompt.py" --label "review pane" --file brief.m
 
 `--label` matches a pane label exactly. Labels are not unique — two panes may carry the same one — so an ambiguous label fails with the candidate pane ids listed instead of guessing.
 
+**Every handoff carries the caller's context, and requires a reply.** A worker cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and closes with the reply contract:
+
+```text
+Caller: pane=w1:p1 label=orchestrator agent=orchestrator
+
+<the payload>
+
+On completion, reply to the caller in one message:
+  herdr agent prompt orchestrator "<STATUS> <artifacts> <issues>"
+```
+
+`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked worker names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, reading the caller from `HERDR_PANE_ID`, `herdr pane current --current`, and the caller's agent record; `--no-caller-context` opts out for a broadcast where no single caller owns the result. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
+
 Underlying commands, if you drive them directly:
 
 - `herdr pane rename <PANE_ID> [LABEL]... [--clear]` — the visible label; multi-word; **not** addressable.
@@ -189,6 +202,8 @@ uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
 ```
 
 `herdr-prompt --wait` blocks on one agent, so fan-out always dispatches with `--no-wait` and converges on one `herdr-wait` barrier. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. The barrier exits 3 the moment any target needs input — unblock it, then re-enter the barrier for the rest.
+
+**The barrier is a fallback, not the primary signal.** The model is event-driven: a worker that finishes pushes a reply to the caller's agent name (see "Name a target, then hand off"), so completion arrives without the orchestrator holding a wait. Keep the barrier for workers that cannot reply — an ordinary command in a pane, a pane with no agent name, a worker already mid-flight when you arrive — and distrust its first tick: a worker that has not begun still reads `idle`, so a barrier can return in 0ms having observed the state *before* the work. Re-enter it rather than concluding the work is done.
 
 ### Sibling-reviewer pattern
 
@@ -286,6 +301,9 @@ uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dr
 ```
 
 Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Accepts several TARGETs for one broadcast (`herdr-prompt worker1 worker2 --file brief.md --no-wait`); `--no-wait` dispatches without waiting and is rejected alongside `--wait`. A `--wait` that times out after delivery exits 4 — prompt accepted, agent still working — so resume with `herdr-wait` instead of resubmitting; only a true dispatch failure exits 1. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as one JSON array per target and submits nothing.
+
+Unless `--no-caller-context` is passed, it prepends the caller block and the completion-reply contract (see "Name a target, then hand off"), so the convention does not depend on a caller remembering it. When the caller has no agent name, the block says so instead of naming a target that cannot be reached.
+
 ### `herdr-wait` — one barrier over many agents
 
 Polls `herdr agent get <target>` per target on a short tick — never concurrent `herdr agent wait` subprocesses (blind to the #83 event bug) and never `sleep` loops. Barrier mode waits for ALL targets; `--any` returns when ANY settles:
