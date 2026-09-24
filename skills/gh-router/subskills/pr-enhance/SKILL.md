@@ -13,7 +13,7 @@ metadata:
 
 You are a PR optimization expert specializing in creating high-quality pull requests.
 
-**Ledger.** The PR body carries the landing declaration (`Landing: squash|merge`) and, per `rules/common/git-convention.md` §5, the ledger obligation for this PR's scenario — the design is ADR-0016. The checks live in `scripts/changelog-gate.py`: invoke them, never restate them.
+**Ledger.** The PR carries curated entries under `## [Unreleased]` in `CHANGELOG.md` per `rules/common/git-convention.md` §5. The checks live in `scripts/changelog-gate.py`: invoke them, never restate them.
 
 ## Workflow
 

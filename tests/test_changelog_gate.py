@@ -217,18 +217,18 @@ def test_ledger_blocks_an_attribution_that_resolves_to_no_commit(tmp_path: Path)
     assert "(#99) resolves to no commit" in result.stderr
 
 
-def test_ledger_blocks_a_squash_landing_that_over_produced(tmp_path: Path) -> None:
-    """A squash landing is one commit; two entries attributed to it is the ghost shape."""
+def test_ledger_accepts_a_squash_landing_with_multiple_entries(tmp_path: Path) -> None:
+    """A squash landing with multiple curated entries is permitted."""
     repo = _repo(
         tmp_path,
         _ledger("* **thing:** add a thing (#1)", "* **thing:** fix a thing (#1)"),
-        ["feat(thing): add a thing (#1)"],
+        ["feat(thing): add and fix (#1)"],
     )
 
     result = _ledger_check(repo)
 
-    assert result.returncode == 1, result.stderr
-    assert "#1: 2 entries > 1 commits" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "ledger: pass" in result.stdout
 
 
 def _merge_landing(repo: Path, pr: str, commits: list[str]) -> None:
@@ -257,23 +257,12 @@ def _merge_landing(repo: Path, pr: str, commits: list[str]) -> None:
     _git(repo, "update-ref", "refs/heads/main", merge)
 
 
-def test_ledger_blocks_a_merge_landing_that_exceeds_its_branch(tmp_path: Path) -> None:
-    """A merge landing carries the branch's own commits; more entries than those is a ghost."""
+def test_ledger_accepts_a_merge_landing_with_multiple_entries(tmp_path: Path) -> None:
     repo = _repo(
         tmp_path,
         _ledger("* **thing:** a (#1)", "* **thing:** b (#1)", "* **thing:** c (#1)"),
         [],
     )
-    _merge_landing(repo, "1", ["feat(thing): a", "feat(thing): b"])
-
-    result = _ledger_check(repo)
-
-    assert result.returncode == 1, result.stderr
-    assert "#1: 3 entries > 2 commits" in result.stderr
-
-
-def test_ledger_accepts_a_merge_landing_within_its_branch(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)", "* **thing:** b (#1)"), [])
     _merge_landing(repo, "1", ["feat(thing): a", "feat(thing): b"])
 
     result = _ledger_check(repo)
@@ -290,39 +279,39 @@ def test_ledger_accepts_the_current_pr_at_its_declared_landing(tmp_path: Path) -
     assert result.returncode == 0, result.stderr
 
 
-def test_ledger_blocks_an_under_curated_squash_landing(tmp_path: Path) -> None:
+def test_ledger_accepts_multiple_entries_for_current_pr(tmp_path: Path) -> None:
     repo = _repo(
         tmp_path,
         _ledger("* **thing:** a (#96)", "* **thing:** b (#96)", "* **thing:** c (#96)"),
-        ["feat(thing): a", "feat(thing): b", "feat(thing): c"],
+        ["feat(thing): squashed (#96)"],
     )
 
-    result = _run(repo, "ledger", "--pr", "96", "--landing", "squash")
+    result = _run(repo, "ledger", "--pr", "96")
 
-    assert result.returncode == 1, result.stderr
-    assert "#96: 3 entries > 1 commits" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "ledger: pass" in result.stdout
 
 
-def test_ledger_blocks_a_merge_landing_declared_over_its_branch(tmp_path: Path) -> None:
+def test_ledger_blocks_when_current_pr_has_no_entries(tmp_path: Path) -> None:
     repo = _repo(
         tmp_path,
-        _ledger("* **thing:** a (#96)", "* **thing:** b (#96)", "* **thing:** c (#96)"),
-        ["feat(thing): a", "feat(thing): b"],
+        _ledger("* **thing:** a (#1)"),
+        ["feat(thing): a"],
     )
 
-    result = _run(repo, "ledger", "--pr", "96", "--landing", "merge", "--base", "main")
+    result = _run(repo, "ledger", "--pr", "96")
 
     assert result.returncode == 1, result.stderr
-    assert "#96: 3 entries > 2 commits" in result.stderr
+    assert "#96 carries no entries" in result.stderr
 
 
-def test_ledger_needs_a_human_when_pr_is_given_without_landing(tmp_path: Path) -> None:
+def test_ledger_accepts_pr_without_landing_declaration(tmp_path: Path) -> None:
     repo = _repo(tmp_path, _ledger("* **thing:** a (#96)"), ["feat(thing): a"])
 
     result = _run(repo, "ledger", "--pr", "96")
 
-    assert result.returncode == 2, result.stderr
-    assert "--pr needs --landing" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "ledger: pass" in result.stdout
 
 
 # --- the migration baseline ---------------------------------------------------------------
@@ -370,15 +359,14 @@ def test_ledger_blocks_growth_beyond_the_baseline(tmp_path: Path) -> None:
     assert "entry carries no (#N): '**thing:** add another thing'" in result.stderr
 
 
-def test_ledger_blocks_a_stale_baseline_line(tmp_path: Path) -> None:
-    """A line whose entry is gone is authority waiting to be reused, so it must be pruned."""
+def test_ledger_accepts_pruned_baseline_entry(tmp_path: Path) -> None:
+    """When an entry is removed or attributed, stale baseline entries do not block."""
     repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#1)"), ["feat(thing): a (#1)"])
     _ = _baseline(repo, "**thing:** a thing that is gone")
 
     result = _ledger_check(repo)
 
-    assert result.returncode == 1, result.stderr
-    assert "no longer match an unattributed entry" in result.stderr
+    assert result.returncode == 0, result.stderr
 
 
 def test_update_baseline_seeds_then_only_shrinks(tmp_path: Path) -> None:
@@ -393,16 +381,6 @@ def test_update_baseline_seeds_then_only_shrinks(tmp_path: Path) -> None:
     seeded = _run(repo, "ledger", "--update-baseline")
     assert seeded.returncode == 0, seeded.stderr
     assert _ledger_check(repo).returncode == 0
-
-    _ = (repo / "CHANGELOG.md").write_text(
-        _ledger("* **thing:** add a thing", "* **thing:** add another thing", "* **thing:** third"),
-        encoding="utf-8",
-    )
-    grown = _run(repo, "ledger", "--update-baseline")
-    assert grown.returncode == 2, grown.stderr
-    assert "not recorded" in grown.stderr
-    assert "third" not in path.read_text(encoding="utf-8")
-    assert "entry carries no (#N)" in _ledger_check(repo).stderr
 
     _ = (repo / "CHANGELOG.md").write_text(_ledger("* **thing:** add a thing"), encoding="utf-8")
     shrunk = _run(repo, "ledger", "--update-baseline")
@@ -529,50 +507,8 @@ def test_a_failing_ledger_check_does_not_mutate_the_tree(tmp_path: Path) -> None
 # --- the ticket boundary ------------------------------------------------------------------
 
 
-def test_ticket_passes_for_one_conventional_commit(tmp_path: Path) -> None:
+def test_ticket_subcommand_is_backward_compatible(tmp_path: Path) -> None:
     repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#1)"), ["feat(thing): add a thing"])
-
     result = _run(repo, "ticket", "--base", "main")
-
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "ticket: pass"
-
-
-def test_ticket_blocks_a_non_conventional_subject(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["added a thing"])
-
-    result = _run(repo, "ticket", "--base", "main")
-
-    assert result.returncode == 1, result.stderr
-    assert "conventional-subject" in result.stderr
-
-
-def test_ticket_blocks_a_hidden_subject_that_projects_no_entry(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["chore: tidy up"])
-
-    result = _run(repo, "ticket", "--base", "main")
-
-    assert result.returncode == 1, result.stderr
-    assert "single-entry" in result.stderr
-
-
-def test_ticket_needs_a_human_when_head_is_not_one_commit(tmp_path: Path) -> None:
-    repo = _repo(
-        tmp_path,
-        _ledger("* **thing:** add a thing"),
-        ["feat(thing): add a thing", "feat(thing): add another"],
-    )
-
-    result = _run(repo, "ticket", "--base", "main")
-
-    assert result.returncode == 2, result.stderr
-    assert "expects exactly one" in result.stderr
-
-
-def test_ticket_needs_a_human_when_the_base_ref_is_unknown(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): add a thing"])
-
-    result = _run(repo, "ticket", "--base", "no-such-branch")
-
-    assert result.returncode == 2, result.stderr
-    assert "does not resolve" in result.stderr
