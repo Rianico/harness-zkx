@@ -114,4 +114,6 @@ def test_release_keeps_the_title_at_the_top_and_the_notes_below_it(tmp_path: Pat
     assert second.index("* second fix (#2)") < second.index("* first feature (#1)"), (
         "the newest release must sit directly under the title"
     )
-    assert second.rstrip().endswith("documented in this file."), "release dropped the footer"
+    # the ledger block now follows the intro, so the footer is no longer the last line — the
+    # invariant is that the release preserves it, not that it stays terminal.
+    assert "documented in this file." in second, "release dropped the footer"

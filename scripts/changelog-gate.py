@@ -111,7 +111,13 @@ def check_sections(block: str) -> list[Finding]:
                 findings.append(Finding("section-integrity", f"duplicate heading '### {name}'"))
             seen.add(name)
             if name not in KNOWN_SECTIONS:
-                findings.append(Finding("section-integrity", f"unknown section '### {name}'"))
+                findings.append(
+                    Finding(
+                        "section-integrity",
+                        f"unknown section '### {name}' — this ledger's sections are the "
+                        f"conventional-commit types: {', '.join(sorted(KNOWN_SECTIONS))}",
+                    )
+                )
             current = name
             continue
         if GEN.BULLET_RE.match(line) and current is None:

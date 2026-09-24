@@ -117,7 +117,7 @@ RAW_SHA256: dict[str, str] = {
     "git/.github/pull_request_template.md": "758fd1c7b4370d57a008c57585150fb18fa440a50ee392328d459428aa37526b",
     "git/.github/workflows/changelog-check.yml": "464cbf5442172e34a799b496bb640809bc6952d9e391e00839667dc757a88b2a",
     "git/.releaserc.json": "479ebe05fa8fbd23e7bccdd4dfb4519ebf32de97299735066ce7fd0d6254db4d",
-    "git/CHANGELOG.md": "eb242175379339814c7a91a1881f32f311970c549cfb01b468d99af7c04e67de",
+    "git/CHANGELOG.md": "4f54bff5b026e07b59863211308e82335c0691389775863eb9611c5a884840f4",
     "git/commitlint.config.js": "9c46dd6e2258b8783f57255cbcdd09fd13c0283069b281568806ba147df85340",
     "rust/rust-toolchain.toml": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
     "rust/src/lib.rs": "7ee751810675dd67935f48c90a0ff696035fd0b47d7520a00bc0772d3eff1813",
