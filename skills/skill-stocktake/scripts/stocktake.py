@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.14"
 # dependencies = ["rich>=13.0.0"]
 # ///
 """skill-stocktake CLI — unified inventory and summary tool.

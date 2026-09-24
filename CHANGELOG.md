@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **python:** align the PEP 723 floors with the project's 3.14 (#111)
 * **scaffold:** name the gates that actually run, and record the formatter trap (#110)
 * **scaffold:** name the typecheck budget's seed step in the run plan (#109)
 * **scaffold:** resolve template drift, guard the formatter seam, gate the typecheck per PR (#108)

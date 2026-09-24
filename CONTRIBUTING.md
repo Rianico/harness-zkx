@@ -15,4 +15,4 @@
 
 `uv run ruff check . && uv run scripts/typecheck-budget.py && uv run pytest` must pass. See `AGENTS.md` for agent rules. The budget is inert until it is seeded once: `uv run scripts/typecheck-budget.py --seed`.
 
-Do not run a repo-wide `ruff format`: `target-version` is `py314` while the standalone scripts under `skills/**/scripts/` declare `requires-python` floors back to `3.11`, so the formatter rewrites `except (A, B):` into the PEP 758 form only 3.14 parses — silently breaking the floor those scripts advertise to `uv run`.
+Do not run a repo-wide `ruff format` yet: `target-version` is `py314` and every PEP 723 floor now matches it, so the formatter no longer crosses a floor a script declares. What blocks the pass is the typecheck budget — the formatter's layout changes which warnings `basedpyright` reports, and a shrink-only budget refuses to absorb that growth, so the sites it surfaces have to be paid down before the bytes can move.
