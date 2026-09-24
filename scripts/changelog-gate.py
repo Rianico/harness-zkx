@@ -26,6 +26,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 UNRELEASED_HEADING = "## [Unreleased]"
 VERSION_HEADING_RE = re.compile(r"^## \[[^\]]+\].*", re.MULTILINE)
@@ -104,7 +105,8 @@ def parse_unreleased_sections(content: str) -> dict[str, list[str]]:
         heading = SECTION_HEADING_RE.match(line)
         if heading:
             current = heading.group("name")
-            sections.setdefault(current, [])
+            if current:
+                _ = sections.setdefault(current, [])
             continue
         if current and BULLET_RE.match(line):
             sections[current].append(line.rstrip())
@@ -240,7 +242,7 @@ def check_ledger(
         recorded = baseline & unatt if baseline else unatt
         baseline_path.parent.mkdir(parents=True, exist_ok=True)
         lines = ["# Legacy unattributed baseline"] + sorted(recorded)
-        baseline_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _ = baseline_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return findings
 
     # Check provenance
@@ -280,51 +282,58 @@ def exit_code(findings: list[Finding]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Deterministic changelog-ledger floor")
-    parser.add_argument("check", choices=["ticket", "ledger"], default="ledger", nargs="?")
-    parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
-    parser.add_argument("--base", default=None, help="ignored for compatibility")
-    parser.add_argument("--pr", default=None, help="this PR's number, for PR-boundary check")
-    parser.add_argument("--landing", default=None, help="ignored for compatibility")
-    parser.add_argument(
+    _ = parser.add_argument("check", choices=["ticket", "ledger"], default="ledger", nargs="?")
+    _ = parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
+    _ = parser.add_argument("--base", default=None, help="ignored for compatibility")
+    _ = parser.add_argument("--pr", default=None, help="this PR's number, for PR-boundary check")
+    _ = parser.add_argument("--landing", default=None, help="ignored for compatibility")
+    _ = parser.add_argument(
         "--baseline", default=str(DEFAULT_BASELINE), help="recorded unattributed identities"
     )
-    parser.add_argument("--update-baseline", action="store_true", help="seed or shrink baseline")
-    parser.add_argument(
+    _ = parser.add_argument(
+        "--update-baseline", action="store_true", help="seed or shrink baseline"
+    )
+    _ = parser.add_argument(
         "--waiver",
         default=None,
         help="recorded reason to accept fixable findings; never rescues a needs-human one",
     )
-    args = parser.parse_args(argv)
+    ns = parser.parse_args(argv)
+    check_name = cast("str", getattr(ns, "check", "ledger"))
+    changelog_arg = cast("str", getattr(ns, "changelog", "CHANGELOG.md"))
+    pr_arg = cast("str | None", getattr(ns, "pr", None))
+    baseline_arg = cast("str", getattr(ns, "baseline", str(DEFAULT_BASELINE)))
+    update_baseline_arg = cast("bool", getattr(ns, "update_baseline", False))
+    waiver_arg = cast("str | None", getattr(ns, "waiver", None))
 
-    if args.check == "ticket":
+    if check_name == "ticket":
         print("ticket: pass")
         return 0
 
     findings = check_ledger(
-        Path(args.changelog),
-        args.pr,
-        Path(args.baseline),
-        args.update_baseline,
+        Path(changelog_arg),
+        pr_arg,
+        Path(baseline_arg),
+        update_baseline_arg,
     )
 
-    if args.waiver is not None and not args.waiver.strip():
+    waiver_clean = waiver_arg.strip() if waiver_arg is not None else None
+    if waiver_arg is not None and not waiver_clean:
         findings.append(Finding("waiver", "--waiver needs a written reason", fixable=False))
 
     waived: list[Finding] = []
     blocking: list[Finding] = []
     for finding in findings:
-        (waived if args.waiver and args.waiver.strip() and finding.fixable else blocking).append(
-            finding
-        )
+        (waived if waiver_clean and finding.fixable else blocking).append(finding)
 
     for finding in waived:
         print(f"[waived] [{finding.check}] {finding.detail}", file=sys.stderr)
     for finding in blocking:
         print(f"[{finding.check}] {finding.detail}", file=sys.stderr)
-    if args.waiver and args.waiver.strip():
-        print(f"waiver recorded: {args.waiver.strip()}", file=sys.stderr)
+    if waiver_clean:
+        print(f"waiver recorded: {waiver_clean}", file=sys.stderr)
     if not blocking:
-        print(f"{args.check}: pass" + (" (waived)" if waived else ""))
+        print(f"{check_name}: pass" + (" (waived)" if waived else ""))
     return exit_code(blocking)
 
 
