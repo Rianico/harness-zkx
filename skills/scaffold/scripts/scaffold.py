@@ -1272,6 +1272,11 @@ def do_ci(
             f"NOTE: Node/TS coverage runs `pnpm run {coverage_script}` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
             file=sys.stderr,
         )
+    if variant == "python":
+        print(
+            "NOTE: python verify gates on scripts/typecheck-budget.py — seed the baseline once with `uv run scripts/typecheck-budget.py --seed`",
+            file=sys.stderr,
+        )
     write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
     return []
 

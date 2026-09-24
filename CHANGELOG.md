@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
+* **scaffold:** name the typecheck budget's seed step in the run plan (#109)
 * **scaffold:** resolve template drift, guard the formatter seam, gate the typecheck per PR (#108)
 * **scaffold:** remove the retired pre-push guard's leftovers (#101)
 * **scaffold:** ship the ledger the gate reads, and name the accepted sections (#99)

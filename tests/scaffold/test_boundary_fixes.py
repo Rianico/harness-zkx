@@ -453,6 +453,28 @@ def test_r2_do_ci_update_returns_preserve_note(tmp_path: Path):
     assert "# CUSTOM MARKER" in rel.read_text(encoding="utf-8")
 
 
+def test_python_verify_note_states_the_budget_seed_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The python verify gates on the budget script, which stays inert until one `--seed` run.
+
+    Without the note the gate reads as a hard failure on a fresh tree: `--seed` is the only
+    way to record a starting point, and nothing else in the run mentions it.
+    """
+    code = _run_main(
+        "--flavor",
+        "ci",
+        "--ci-variant",
+        "python",
+        "--project-name",
+        "demo",
+        "--cwd",
+        str(tmp_path),
+    )
+    assert code == 0
+    assert "typecheck-budget.py --seed" in capsys.readouterr().err
+
+
 def test_r2_all_update_preserves_release_yml(tmp_path: Path):
     assert _run_main("--flavor", "all", "--project-name", "demo", "--cwd", str(tmp_path)) == 0
     rel = tmp_path / ".github" / "workflows" / "release.yml"
