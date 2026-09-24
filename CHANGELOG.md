@@ -136,6 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Continuous Integration
 
+* **cli:** guard the declared CLI surfaces against their parsers (#120)
 * **ci:** gate lint and formatting in the verify job (#113)
 * **changelog:** retire the pre-push guard from the scaffold and ship the ledger floor (#98)
 
