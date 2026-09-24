@@ -18,9 +18,8 @@ landing is squash, and the branch's own commits when it is merge.
 
 **Ledger.** A refined PR carries the artifacts a contributor's branch cannot: the ledger entry
 (Flow A pushes it onto their branch, Flow B ships it in the superseding PR) and, when the change
-is an architectural decision, an ADR on the same surface. Declare the landing by editing the PR body
-(`Landing: squash|merge`) — the maintainer owns that edit. Per `rules/common/git-convention.md` §5; the design is
-ADR-0016. The checks live in `scripts/changelog-gate.py`: invoke them, never restate them.
+is an architectural decision, an ADR on the same surface. Per `rules/common/git-convention.md` §5;
+the checks live in `scripts/changelog-gate.py`: invoke them, never restate them.
 
 ## Script
 

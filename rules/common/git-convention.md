@@ -1,10 +1,10 @@
 # Git Convention — daily default
 
-`topic → branch → worktree → gate → squash → PR` — never auto-merge.
+`dev worktree → task sub-worktree → squash to dev → curated [Unreleased] → PR → squash to main` — never auto-merge.
 
 ## 1. Branch
 
-- `feat|fix|doc/<slug>`; `map/<slug>` for integration. Never commit on `main`.
+- `dev` or `dev/<milestone>` for integration/staging; `feat|fix|doc/<slug>` for task branches. Never commit directly on `main`.
 
 ## 2. Repo identity
 
@@ -14,11 +14,16 @@
 - **Pre-flight:** before a repo-mutating call (dispatch, release, run lookup, PR/issue write), print the resolved slug and confirm it against `git remote -v`.
 - **Class fix:** when a slug/identity bug lands in one script, `rg -n 'gh repo view'` the toolchain before closing — same trap, different call site.
 
-## 3. Worktree
+## 3. Worktree & Hierarchy
 
-- **When:** daily work — optional, when it helps (parallel / protect base). Orchestrated via `branch-worktree-pr` — mandatory: one write ticket = one worktree.
-- **Target in place:** `git switch -c feat/<slug> <base>` — stays in same cwd.
-- **Children isolated:** `wt switch --create <child> --base <parent> --no-cd` — sibling dir.
+- **Architecture:** `dev` worktree is the integration anchor; task worktrees branch off `dev`.
+  - `dev` worktree: created from `main`. Staging ground for cohesive deliverable.
+  - Sub-worktree per task: `wt switch --create <task> --base dev --no-cd` in sibling dir.
+- **Commit hygiene:**
+  - Iterative review / exploratory commits live inside task sub-worktree.
+  - Squash-merge task worktree back into `dev` (`wt merge --squash`) with clean, atomic Conventional Commit(s).
+  - `dev` worktree may accumulate multiple features/fixes across task merges.
+  - When merging `dev` to `main` via PR: squash-merge into `main` with clean summary commit.
 - **Use `wt`:** `wt switch` / `wt merge` / `wt list --format=json`. Raw `git worktree` / `git merge` bypasses hooks, `copy-ignored`, and port allocation.
 - **Truth:** `.config/wt.toml` — don't restate hooks in prose.
 
@@ -26,13 +31,18 @@
 
 - `.config/wt.toml [pre-merge]` runs on every `wt merge`. Merge only when green.
 
-## 5. Commits
+## 5. Commits & Changelog Ledger
 
-- **Atomic inside, declared landing outside:** atomic bisectable commits inside the topic. Landing is declared per PR in the PR body (`Landing: squash|merge`) before the changelog digest is curated: **squash** when the PR's commits are one change plus its docs and follow-up fixes, **merge** when it carries several changes. `pr-land` reads the declaration and selects the merge method; a squash destroys the subjects a multi-entry digest rests on, so the digest must be written to match what was declared (ADR-0016). `code` and `docs` MUST be separate commits — never mix code + docs in one commit, even in same PR.
-- **Ledger obligation, by scenario.** Every PR that lands a change carries a ledger entry for it, attributed to that PR (`(#N)`). **Own PR:** the entry is born in the ticket squash (`update` in the `Copy`), the digest is curated at the PR boundary, and the landing is declared in the PR body. **Refined contributor PR** (`pr-refine`): the maintainer carries the entry — Flow A pushes it onto their branch, Flow B ships it in the superseding PR — and declares the landing by editing the PR body (`Landing: squash|merge`) — a maintainer-owned
-edit, one channel, no label vocabulary to keep in sync. **Unrefined contributor PR:** out of scope; no entry is minted and none is expected. An architectural decision adds an ADR on the same surface: the ledger and the ADR are the artifacts a contributor's branch cannot carry. Checks live in `scripts/changelog-gate.py` (ADR-0016) — never restate them.
-- **Escape and debt.** A `blocked` gate is waived only with a recorded reason: `scripts/changelog-gate.py ledger --waiver "<reason>"`, written in the PR body's accounting section. It accepts fixable findings and never a needs-human one, and `wt merge --no-hooks` is not it — that empties the hook plan and skips `ruff` + `pytest` too. The unattributed baseline `.config/changelog-unattributed-baseline.txt` is a bridge, not a record: it shrinks as entries gain `(#N)`, the release job runs `--update-baseline` right after `clear` in the same commit, and a baseline that has not shrunk across two releases is drift.
-- **Conventional (Conventional Commits 1.0.0 + semver):** `type[(scope)][!]: description`
+- **Curated `[Unreleased]` Ledger:**
+  - Both internal and external PRs carry curated entries under `## [Unreleased]` in `CHANGELOG.md`.
+  - Entries are attributed with `(#N)`. When a `dev` worktree PR contains multiple features, multiple entries are expected.
+  - CI gate (`scripts/changelog-gate.py` via `changelog-check.yml`) verifies:
+    - `CHANGELOG.md` starts with `# Changelog`.
+    - Every PR entry under `## [Unreleased]` references the PR (`(#N)`).
+    - Unattributed entries match baseline or PR waiver.
+  - On release: `scripts/release-changelog.mjs` moves all curated entries under `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`. Hand-edits to versioned sections forbidden.
+- **Escape and debt:** A blocked changelog gate can be waived via `Ledger-Waiver: <reason>` in PR body (or `--waiver "<reason>"`). Accepts fixable findings only, never unverified code. Unattributed baseline (`.config/changelog-unattributed-baseline.txt`) is a migration bridge.
+- **Conventional Commits (1.0.0 + semver):** `type[(scope)][!]: description`
   - Blank line → body (what/why) → blank line → footer(s).
   - `feat` = MINOR, `fix` = PATCH, `!` / `BREAKING CHANGE:` = MAJOR; other types (`docs|style|refactor|perf|test|build|ci|chore|revert`) no bump unless breaking.
   - Scope `(<noun>)`; description imperative, lowercase, no period, ≤72 (50 ideal).
@@ -45,12 +55,11 @@ edit, one channel, no label vocabulary to keep in sync. **Unrefined contributor 
     Closes #71
     Closes #72
     ```
-  - **Anti-pattern:** Never comma-separate or combine (`Closes #71, #72` or `Closes #71 and #72`) — GitHub's parser only recognizes the token immediately following the keyword; trailing numbers remain unlinked and open.
-  - In PR descriptions, place closing directives at the bottom (under Checklist or `## Related Issues`). Because `pr.sh` inherits the PR body as the squash message, this automatically carries into the base commit and auto-closes all linked issues upon merge.
+  - **Anti-pattern:** Never comma-separate or combine (`Closes #71, #72` or `Closes #71 and #72`) — GitHub parser only recognizes the token immediately following keyword.
+  - In PR descriptions, place closing directives at the bottom. Carries into squash message and auto-closes linked issues on merge.
 - **Provenance — squash loses ancestry, add `Co-authored-by: Name <email>`:**
-  - Applies to squash landing only; a merge commit preserves the authors' own commits, so no trailer is needed.
   - AI: one trailer per model — `Co-authored-by: <model> <noreply@ai>`
-  - Fork: `git fetch origin pull/<id>/head && git merge --no-ff FETCH_HEAD` → squash must include `Co-authored-by: Original Author <email>` + `Refs: GH#<id>` / `Closes #<id>`
+  - Fork/contributor: squash must include `Co-authored-by: Original Author <email>` + `Refs: GH#<id>` / `Closes #<id>`
 
 ## 6. Safeguards
 
@@ -59,6 +68,6 @@ edit, one channel, no label vocabulary to keep in sync. **Unrefined contributor 
 ## 7. Reference
 
 - **Fan-out / hooks:** parallel & Wayfinder → `branch-worktree-pr` skill; ports/hooks/templates → `worktrunk-guide` + `.config/wt.toml`.
-- **Changelog (Keep-a-Changelog):** `# Changelog` → `## [Unreleased]` (top) → `## [X.Y.Z] - YYYY-MM-DD` newest first. Subsections `### Added | Changed | Fixed | Removed`, one imperative bullet each. Link `(owner/repo#N)` or `#N` when exists; no issue → linkless. Dates from release commit. Native toolchain priority: if the repo ships a changelog management script (e.g. `scripts/changelog-unreleased.py`), run it rather than hand-crafting markdown. Respect hidden-type rules (`style|chore|refactor|test|build|ci` do not receive section headers unless `!` or `BREAKING CHANGE`).
+- **Changelog (Keep-a-Changelog):** `# Changelog` → `## [Unreleased]` (top) → `## [X.Y.Z] - YYYY-MM-DD` newest first. Subsections `### Added | Changed | Fixed | Removed`, one imperative bullet each. Curate in PR; on release, `release-changelog.mjs` shifts `[Unreleased]` into new version block.
 - **README (brooks-lint):** header (logo → h1 → tagline → lang switcher → `•` nav → shields → banner) → quote + narrative → Why (3 para) → Quick Start (read→act→result) → benchmark (table + command + `> **Scope & honesty.**`) → tools / tree / roadmap `<details>` / contributing / license. Bump version badge each release.
 - **Locale:** `README.md` is English source; translations mirror structure exactly, code/JSON/Mermaid identical, reciprocal links at top. Keep in sync — stale number is bug.

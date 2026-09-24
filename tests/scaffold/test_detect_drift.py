@@ -116,6 +116,12 @@ def test_the_shipped_gate_never_dirties_a_non_python_tree(tmp_path: Path) -> Non
     _init_repo(tmp_path)
     assert _git(tmp_path, "status", "--short").stdout == ""
 
+    # The gate is standalone; py_compile populates scripts/__pycache__ so git ignore is refuted
+    _ = subprocess.run(
+        [sys.executable, "-m", "py_compile", "scripts/changelog-gate.py"],
+        cwd=tmp_path,
+        check=True,
+    )
     result = subprocess.run(
         [sys.executable, "scripts/changelog-gate.py", "ledger"],
         cwd=tmp_path,

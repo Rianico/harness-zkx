@@ -75,26 +75,22 @@ def _run_floor(tmp_path: Path, *, pr_body: str, pr_number: str = "34") -> list[s
 def test_the_workflow_forwards_a_ledger_waiver_trailer(tmp_path: Path) -> None:
     argv = _run_floor(
         tmp_path,
-        pr_body="Landing: merge\n\nLedger-Waiver: backfilled attribution in #34\n",
+        pr_body="Ledger-Waiver: backfilled attribution in #34\n",
     )
 
     assert argv == [
         "ledger",
         "--pr",
         "34",
-        "--landing",
-        "merge",
-        "--base",
-        "main",
         "--waiver",
         "backfilled attribution in #34",
     ]
 
 
 def test_the_workflow_passes_no_waiver_when_the_pr_body_has_none(tmp_path: Path) -> None:
-    argv = _run_floor(tmp_path, pr_body="Landing: squash\n\nno waiver in this body\n")
+    argv = _run_floor(tmp_path, pr_body="no waiver in this body\n")
 
-    assert argv == ["ledger", "--pr", "34", "--landing", "squash", "--base", "main"]
+    assert argv == ["ledger", "--pr", "34"]
 
 
 def test_the_advertised_waiver_is_the_one_the_workflow_wires() -> None:

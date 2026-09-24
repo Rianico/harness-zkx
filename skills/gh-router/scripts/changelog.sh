@@ -60,10 +60,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "not a git repository" 2
-ROOT="$(git rev-parse --show-toplevel)"
-cd "$ROOT" || exit 2
-command -v python3 >/dev/null 2>&1 || fail "python3 not found" 3
-[[ -f scripts/changelog-unreleased.py ]] || fail "no scripts/changelog-unreleased.py in $ROOT" 3
+if [[ -f scripts/changelog-gate.py ]]; then
+  if python3 scripts/changelog-gate.py ledger; then
+    ok "$CHANGELOG ledger is valid and curated"
+    exit 0
+  else
+    fail "$CHANGELOG ledger has findings; run 'python scripts/changelog-gate.py ledger'" 1
+  fi
+fi
+
+[[ -f scripts/changelog-unreleased.py ]] || fail "no scripts/changelog-gate.py in $ROOT" 3
 
 if [[ -z "$BASE" ]]; then
   BASE="$(default_branch || true)"

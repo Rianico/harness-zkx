@@ -73,26 +73,23 @@ import json,sys
 d=json.load(sys.stdin)
 roll=d.get("statusCheckRollup") or []
 ok=sum(1 for c in roll if (c.get("conclusion") or "").upper() in ("SUCCESS","NEUTRAL","SKIPPED"))
-print(f"{d[\"number\"]}\t{d.get(\"mergeable\") or \"?\"}\t{d.get(\"mergeStateStatus\") or \"?\"}\t{ok}\t{len(roll)}")
+num=d.get("number","?")
+m=d.get("mergeable") or "?"
+s=d.get("mergeStateStatus") or "?"
+print(f"{num}\t{m}\t{s}\t{ok}\t{len(roll)}")
 '
   )"
   pr_line="#$pr_num $pr_merge/$pr_state checks $checks_ok/$checks_total"
 fi
 
-# --- changelog guard verdict (only where the repo ships the script)
+# --- changelog guard verdict
 guard_line="no changelog script"
-guard_script="$ROOT/scripts/changelog-unreleased.py"
-if [[ -f "$guard_script" ]] && [[ -f "$ROOT/CHANGELOG.md" ]]; then
-  probe="$(mktemp)"
-  cp "$ROOT/CHANGELOG.md" "$probe"
-  python3 "$guard_script" update --changelog "$probe" >/dev/null 2>&1 || true
-  if diff -q "$ROOT/CHANGELOG.md" "$probe" >/dev/null 2>&1; then
-    guard_line="in sync"
+if [[ -f "$ROOT/scripts/changelog-gate.py" ]] && [[ -f "$ROOT/CHANGELOG.md" ]]; then
+  if python3 "$ROOT/scripts/changelog-gate.py" ledger >/dev/null 2>&1; then
+    guard_line="ledger ok"
   else
-    changed="$(diff "$ROOT/CHANGELOG.md" "$probe" 2>/dev/null | grep -c '^[<>]' || true)"
-    guard_line="stale (${changed:-0} lines)"
+    guard_line="ledger has findings"
   fi
-  rm -f "$probe"
 fi
 
 # --- base tip
