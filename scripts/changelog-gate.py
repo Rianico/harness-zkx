@@ -34,11 +34,35 @@ import importlib.util
 import re
 import sys
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol, cast
 
 GENERATOR = Path(__file__).resolve().with_name("changelog-unreleased.py")
+
+
+class _Generator(Protocol):
+    """The generator surface this gate depends on.
+
+    The sibling is loaded by path — its filename carries a dash, so it is not importable as a
+    module — which leaves every `GEN.` access `Any`. Declaring the seam keeps the gate checked and
+    records the coupling: both scripts ship together, and a test pins the scaffolded copy
+    byte-for-byte against the canonical one.
+    """
+
+    UNRELEASED_HEADING: str
+    TYPE_SECTIONS: dict[str, tuple[str, bool]]
+    SECTION_HEADING_RE: re.Pattern[str]
+    VERSION_HEADING_RE: re.Pattern[str]
+    BULLET_RE: re.Pattern[str]
+    CONVENTIONAL_RE: re.Pattern[str]
+
+    run: Callable[[list[str]], str]
+    entry_identity: Callable[[str], str]
+    parse_unreleased_sections: Callable[[str], dict[str, list[str]]]
+    commits_to_sections: Callable[[list[tuple[str, str]]], dict[str, list[str]]]
 
 
 def _load_generator() -> ModuleType:
@@ -58,7 +82,7 @@ def _load_generator() -> ModuleType:
     return module
 
 
-GEN = _load_generator()
+GEN = cast(_Generator, cast(object, _load_generator()))
 
 # The renderer writes `* `, an optional `**scope:** `, then the subject. Anything else is
 # not something `changelog-unreleased.py update` could have produced.
@@ -115,7 +139,7 @@ def check_sections(block: str) -> list[Finding]:
                     Finding(
                         "section-integrity",
                         f"unknown section '### {name}' — this ledger's sections are the "
-                        f"conventional-commit types: {', '.join(sorted(KNOWN_SECTIONS))}",
+                        + f"conventional-commit types: {', '.join(sorted(KNOWN_SECTIONS))}",
                     )
                 )
             current = name
@@ -193,7 +217,7 @@ def landing_commits() -> dict[str, int]:
         if not record:
             continue
         subject, _, parents = record.partition("\x00")
-        refs = PR_REF_RE.findall(subject)
+        refs = [m.group(1) for m in PR_REF_RE.finditer(subject)]
         if not refs:
             continue
         parent_list = parents.split()
@@ -244,14 +268,14 @@ def write_baseline(path: Path, entries: list[str], existing: set[str] | None) ->
                 Finding(
                     "baseline",
                     f"{len(additions)} unattributed entry(s) not recorded, e.g. {additions[0]!r}: "
-                    "they need (#N) attribution, not a baseline line",
+                    + "they need (#N) attribution, not a baseline line",
                     fixable=False,
                 )
             )
     # A header-only file is the terminal state: it tolerates nothing, and unlike a deleted file it
     # stages cleanly in release tooling that globs assets rather than staging removals.
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join([*BASELINE_NOTE, *sorted(recorded)]) + "\n", encoding="utf-8")
+    _ = path.write_text("\n".join([*BASELINE_NOTE, *sorted(recorded)]) + "\n", encoding="utf-8")
     return findings
 
 
@@ -266,7 +290,7 @@ def check_baseline(entries: list[str], baseline: set[str] | None) -> list[Findin
         Finding(
             "baseline",
             f"{len(stale)} baseline line(s) no longer match an unattributed entry, "
-            f"e.g. {stale[0]!r}; --update-baseline shrinks it",
+            + f"e.g. {stale[0]!r}; --update-baseline shrinks it",
         )
     ]
 
@@ -456,25 +480,38 @@ def exit_code(findings: list[Finding]) -> int:
     return 2 if any(not finding.fixable for finding in findings) else 1
 
 
+class _Args(Protocol):
+    """The CLI surface, declared so `argparse`'s `Namespace` stops leaking `Any`."""
+
+    check: str
+    base: str | None
+    pr: str | None
+    landing: str | None
+    changelog: str
+    baseline: str
+    update_baseline: bool
+    waiver: str | None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Deterministic changelog-ledger floor (ADR-0016)")
-    parser.add_argument("check", choices=["ticket", "ledger"], help="which boundary to check")
-    parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
-    parser.add_argument(
+    _ = parser.add_argument("check", choices=["ticket", "ledger"], help="which boundary to check")
+    _ = parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
+    _ = parser.add_argument(
         "--base", default=None, help="base ref: the merge target, or the PR's target"
     )
-    parser.add_argument("--pr", default=None, help="this PR's number, for the PR-boundary run")
-    parser.add_argument("--landing", choices=["squash", "merge"], default=None)
-    parser.add_argument(
+    _ = parser.add_argument("--pr", default=None, help="this PR's number, for the PR-boundary run")
+    _ = parser.add_argument("--landing", choices=["squash", "merge"], default=None)
+    _ = parser.add_argument(
         "--baseline", default=str(DEFAULT_BASELINE), help="recorded unattributed identities"
     )
-    parser.add_argument("--update-baseline", action="store_true", help="seed or shrink it")
-    parser.add_argument(
+    _ = parser.add_argument("--update-baseline", action="store_true", help="seed or shrink it")
+    _ = parser.add_argument(
         "--waiver",
         default=None,
         help="recorded reason to accept fixable findings; never rescues a needs-human one",
     )
-    args = parser.parse_args(argv)
+    args = cast(_Args, cast(object, parser.parse_args(argv)))
 
     if args.check == "ticket":
         base = args.base or default_base()
