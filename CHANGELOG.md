@@ -44,7 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 
-* **python:** type the docs-scraper result and section shapes (#123)
+* **python:** type the docs-scraper result and section shapes (#124)
 * **scaffold:** repair the git contract's ignores, drift census, changelog title guard and ledger waiver (#123)
 * **python:** resolve the formatter-revealed `Any` and apply ruff format (#112)
 * **python:** align the PEP 723 floors with the project's 3.14 (#111)
