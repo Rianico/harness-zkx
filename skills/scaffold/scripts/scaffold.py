@@ -215,8 +215,9 @@ def _load_sibling_script(name: str) -> str:
 CHANGELOG_UNRELEASED_PY = _load_sibling_script("changelog-unreleased.py")
 CHANGELOG_GATE_PY = _load_sibling_script("changelog-gate.py")
 RELEASE_CHANGELOG_MJS = _load_sibling_script("release-changelog.mjs")
+TYPECHECK_BUDGET_PY = _load_sibling_script("typecheck-budget.py")
 
-GITIGNORE_GIT = [".lsz/", ".pi/", "coverage/"]
+GITIGNORE_GIT = [".lsz/*", "!.lsz/config.yaml", ".pi/", "coverage/"]
 
 GITIGNORE_PYTHON_EXTRA = ["__pycache__/", ".venv/"]
 GITIGNORE_RUST_EXTRA = ["target/"]
@@ -245,7 +246,7 @@ CI_COMPONENTS: set[str] = {
 # files the project owns are preserved and reported as NEXT actions. Keys are generated
 # basenames, values are the reason shown to the model.
 PROJECT_OWNED: dict[str, str] = {
-    "CHANGELOG.md": "release history — @semantic-release/changelog owns versioned sections",
+    "CHANGELOG.md": "release history — scripts/release-changelog.mjs owns versioned sections",
     "CONTRIBUTING.md": "mixed (project name + toolchain line) and language-variant",
     "pyproject.toml": "project manifest — deps and tool config",
     "Cargo.toml": "project manifest — deps and edition",
@@ -760,6 +761,13 @@ def canonicalize(path: pathlib.Path, content: str) -> str:
     if proc.returncode != 0:
         detail = proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}"
         raise FormatterUnavailable(f"oxfmt@{OXFMT_VERSION} failed on {rel}: {detail}")
+    if content.strip() and not proc.stdout.strip():
+        # Observed in the wild: a formatter can exit 0 with nothing on stdout (piping a script
+        # through a shell pipeline returned a bare newline). `write_file` writes this verbatim,
+        # so an unvalidated pass-through truncates the artifact instead of failing.
+        raise FormatterUnavailable(
+            f"oxfmt@{OXFMT_VERSION} emitted no output for {rel} ({len(content)} bytes in)"
+        )
     return proc.stdout
 
 
@@ -982,6 +990,7 @@ def do_git(
         write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
         write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
         _ = write_file(cwd / "scripts" / "release-changelog.mjs", RELEASE_CHANGELOG_MJS, dry_run)
+        _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
     if "commitlint" in sel:
         write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     if "changelog-md" in sel:
@@ -1625,7 +1634,7 @@ def print_next_actions(cwd: pathlib.Path, notes: list[str]) -> None:
     follow_up: dict[str, str] = {
         "release.yml": f"uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant {variant}",
         "CONTRIBUTING.md": "add the sections the note lists, or re-run with --merge-mixed to insert them (existing lines untouched) — templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2",
-        "CHANGELOG.md": "nothing to do — @semantic-release/changelog owns versioned sections",
+        "CHANGELOG.md": "nothing to do — scripts/release-changelog.mjs owns versioned sections",
         "pyproject.toml": "regenerate deliberately: --flavor python [--with-coverage --coverage-threshold N]",
         "Cargo.toml": "regenerate deliberately: --flavor rust [--with-coverage --coverage-threshold N]",
         "package.json": "regenerate deliberately: --flavor typescript [--ts-variant lib|cli|pi-extension]",

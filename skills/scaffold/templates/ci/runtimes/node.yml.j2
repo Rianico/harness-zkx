@@ -23,8 +23,9 @@
         with: { node-version: {{ node_version }}, cache: pnpm }
       - uses: actions/setup-python@{{ shas['setup-python'] }} # v7.0.0
         with: { python-version: "3.14" }
-      - name: Retire the migration baseline
+      - name: Retire the migration baselines
         run: |
+          python scripts/typecheck-budget.py --update-baseline
           python scripts/changelog-gate.py ledger --update-baseline
       - run: pnpm install
       - run: pnpm exec semantic-release

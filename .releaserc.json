@@ -2,10 +2,7 @@
   "branches": ["main"],
   "plugins": [
     "@semantic-release/commit-analyzer",
-    [
-      "./scripts/release-changelog.mjs",
-      { "changelogFile": "CHANGELOG.md" }
-    ],
+    ["./scripts/release-changelog.mjs", { "changelogFile": "CHANGELOG.md" }],
     ["@semantic-release/npm", { "npmPublish": false }],
     "@semantic-release/github",
     [

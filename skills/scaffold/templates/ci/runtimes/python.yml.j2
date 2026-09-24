@@ -7,7 +7,7 @@
       - run: uv sync --group dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run basedpyright
+      - run: uv run scripts/typecheck-budget.py
 {% if with_coverage %}
       - run: uv run pytest --cov --cov-report=term-missing --cov-report=lcov --cov-fail-under={{ threshold }}
 {% else %}

@@ -15,7 +15,8 @@
           "CHANGELOG.md",
           "package.json",
           "package-lock.json",
-          ".config/changelog-unattributed-baseline.txt"
+          ".config/changelog-unattributed-baseline.txt",
+          ".config/basedpyright-baseline.txt"
         ],
         "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
       }
