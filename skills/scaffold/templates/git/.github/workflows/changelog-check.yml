@@ -53,8 +53,21 @@ jobs:
             exit 2
           fi
           echo "landing: $landing"
-          python scripts/changelog-gate.py ledger \
-            --pr "$PR_NUMBER" --landing "$landing" --base main
+          # The reason the failure comment asks for: a `Ledger-Waiver:` trailer
+          # in the PR body, single line. The gate waives fixable findings only,
+          # so it can never rescue a needs-human one.
+          waiver=$(printf '%s\n' "$PR_BODY" \
+            | sed -n 's/^[[:space:]]*[Ll]edger-[Ww]aiver:[[:space:]]*//p' \
+            | head -n 1)
+          if [ -n "$waiver" ]; then
+            echo "waiver: $waiver"
+            python scripts/changelog-gate.py ledger \
+              --pr "$PR_NUMBER" --landing "$landing" --base main \
+              --waiver "$waiver"
+          else
+            python scripts/changelog-gate.py ledger \
+              --pr "$PR_NUMBER" --landing "$landing" --base main
+          fi
       - name: Comment on failure
         if: failure() && github.event_name == 'pull_request'
         # v9.0.0
@@ -81,8 +94,9 @@ jobs:
               '  --pr ' + pr + ' --landing squash --base main',
               '```',
               '',
-              'A blocked ledger is waived only with a recorded reason:',
-              '`--waiver "<reason>"`, written in this PR body.',
+              'A blocked ledger is waived only with a recorded reason: add a',
+              '`Ledger-Waiver: <reason>` trailer to this PR body and re-run.',
+              'The gate waives fixable findings only, never a needs-human one.',
             ].join('\n');
             const {data: comments} = await github.rest.issues.listComments({
               owner: context.repo.owner,

@@ -219,7 +219,11 @@ TYPECHECK_BUDGET_PY = _load_sibling_script("typecheck-budget.py")
 
 GITIGNORE_GIT = [".lsz/*", "!.lsz/config.yaml", ".pi/", "coverage/"]
 
-GITIGNORE_PYTHON_EXTRA = ["__pycache__/", ".venv/"]
+# The git flavor ships `scripts/*.py`, so the bytecode those scripts leave behind is the git
+# contract's litter, not the target language's: the entry travels with the component that writes
+# them. Without it, running the shipped gate dirties a non-Python repo's tree (#114).
+GITIGNORE_PY_SCRIPTS = ["__pycache__/"]
+GITIGNORE_PYTHON_EXTRA = [*GITIGNORE_PY_SCRIPTS, ".venv/"]
 GITIGNORE_RUST_EXTRA = ["target/"]
 GITIGNORE_TS_EXTRA = ["node_modules/", "dist/"]
 
@@ -833,24 +837,48 @@ def write_generated(
     return None
 
 
+# A directory-form rule excludes everything under it, and git cannot re-include a file inside an
+# excluded directory. `GITIGNORE_GIT` is content-scoped for exactly that reason — `.lsz/*` plus
+# `!.lsz/config.yaml` — so a superseded `.lsz/` from an earlier generation would silently win and
+# make the negation inert. Its value is the line the same run appends.
+SUPERSEDED_DIRECTORY_RULES: dict[str, str] = {".lsz/": ".lsz/*"}
+
+
 def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> None:
-    """Add missing ignore lines; never rewrites what is already there."""
+    """Add missing ignore lines; never rewrites what is already there.
+
+    The one exception is a superseded directory-form rule (see SUPERSEDED_DIRECTORY_RULES): it is
+    scaffold-owned litter from an earlier generation, and leaving it in place would make the
+    content-scoped pair this run appends inert.
+    """
     existed = path.exists()
-    existing: set[str] = set()
-    if existed:
-        existing = {
-            ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
-        }
+    lines = path.read_text(encoding="utf-8").splitlines() if existed else []
+    existing = {ln.strip() for ln in lines if ln.strip()}
     missing = [e for e in entries if e not in existing]
-    if not missing:
+    superseded = sorted(
+        {
+            ln.strip()
+            for ln in lines
+            if ln.strip() in SUPERSEDED_DIRECTORY_RULES
+            and SUPERSEDED_DIRECTORY_RULES[ln.strip()] in entries
+        }
+    )
+    if not missing and not superseded:
         REPORT.unchanged(path, "gitignore dedup")
         return
+    dropped = f" (dropped {superseded})" if superseded else ""
     if dry_run:
         REPORT.appended(
-            path, f"would add {missing}", f"would append to {path}: {missing}", stdout=True
+            path,
+            f"would add {missing}{dropped}",
+            f"would append to {path}: {missing}{dropped}",
+            stdout=True,
         )
         return
     path.parent.mkdir(parents=True, exist_ok=True)
+    if superseded:
+        kept = "\n".join(ln for ln in lines if ln.strip() not in superseded)
+        _ = path.write_text(f"{kept}\n" if kept else "", encoding="utf-8")
     with path.open("a", encoding="utf-8") as handle:
         if existed and path.stat().st_size > 0:
             content = path.read_text(encoding="utf-8")
@@ -859,7 +887,11 @@ def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> N
         for entry in missing:
             handle.write(entry + "\n")
     verb = "added" if existed else "created"
-    REPORT.appended(path, f"{verb} {missing}", f"appended ({len(missing)}) to {path}: {missing}")
+    REPORT.appended(
+        path,
+        f"{verb} {missing}{dropped}",
+        f"appended ({len(missing)}) to {path}: {missing}{dropped}",
+    )
 
 
 def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
@@ -1033,7 +1065,10 @@ def do_git(
         if note:
             notes.append(note)
     if "gitignore" in sel:
-        append_gitignore(cwd / ".gitignore", GITIGNORE_GIT, dry_run)
+        # The bytecode entry travels with the component that writes `scripts/*.py`, so a
+        # `--without changelog-script` run does not claim litter it cannot create.
+        entries = GITIGNORE_GIT + (GITIGNORE_PY_SCRIPTS if "changelog-script" in sel else [])
+        append_gitignore(cwd / ".gitignore", entries, dry_run)
     if "agents" in sel:
         patch_agents(
             cwd / "AGENTS.md",
@@ -1281,8 +1316,61 @@ def do_ci(
     return []
 
 
-def detect_project(cwd: pathlib.Path) -> dict[str, object]:
-    """Deterministic cheap detection: file existence + content sniff (no guessing)."""
+# `# Changelog` is the file's first line — the shape the shipped template states and
+# `changelog-gate.py` enforces in CI (#117).
+CHANGELOG_TITLE = "# Changelog"
+
+
+def changelog_title_line(content: str) -> int:
+    """1-based line of the `# Changelog` title, or 0 when the file carries none."""
+    return next(
+        (n for n, line in enumerate(content.splitlines(), 1) if line.strip() == CHANGELOG_TITLE),
+        0,
+    )
+
+
+def changelog_title_is_first(content: str) -> bool:
+    """True when the file's first non-blank line is the title.
+
+    `changelog-gate.py` enforces the same rule in CI. A detector that accepts a shape the gate
+    rejects (or the reverse) is the defect the pair exists to prevent, so the two are pinned
+    together by `tests/scaffold/test_changelog_title_gate.py`.
+    """
+    first = next((line for line in content.splitlines() if line.strip()), "")
+    return first.strip() == CHANGELOG_TITLE
+
+
+def git_contract_drift(cwd: pathlib.Path, project_name: str) -> dict[str, int]:
+    """The git contract's drift, counted in the plan's own kinds.
+
+    `--check` and `--detect` must not disagree about the same tree (#116), so this runs the same
+    `do_git` pass `--check` runs, under `--update`'s ownership and with prose suppressed —
+    `--detect` owns stdout. It stays formatter-free, so the census needs no Node and no formatter
+    pass; that is faithful because every byte `do_git` byte-compares is already canonical for the
+    pinned oxfmt, which makes `canonicalize` the identity on the template side and this the exact
+    comparison `--check` makes. `test_detect_drift.py` pins that invariant and names the offender
+    when a shipped template stops being canonical.
+    """
+    saved = (REPORT.mode, REPORT.cwd)
+    REPORT.start(SUMMARY, cwd)
+    try:
+        _ = do_git(cwd, project_name, dry_run=True, update=True)
+        counts: dict[str, int] = {}
+        for entry in REPORT.drift_entries:
+            counts[entry.kind] = counts.get(entry.kind, 0) + 1
+    finally:
+        REPORT.start(*saved)
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, object]:
+    """Deterministic cheap detection: file existence + content sniff (no guessing).
+
+    `drift=True` adds `git_contract.drift` — the counts `--check` would report — by running the
+    git flavor's dry-run plan. Only the CLI's `--detect` surface asks for it: the internal probes
+    (`print_next_actions`, the coverage-script default) want the cheap census alone.
+    """
 
     def exists(p: str) -> bool:
         return (cwd / p).exists()
@@ -1435,12 +1523,16 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
     git_complete = (
         files[".releaserc.json"] and files["CHANGELOG.md"] and files["commitlint.config.js"]
     )
-    git_stale = files[".releaserc.json"] and not files[".github/workflows/changelog-check.yml"]
-    changelog_lines = changelog.splitlines()
-    title_line = next(
-        (n for n, line in enumerate(changelog_lines, 1) if line.strip() == "# Changelog"), 0
+    # The name is the measurement: "the CI half of the guard is absent", not "the git contract
+    # differs from the template". `git_contract.drift` below is the latter, and it comes from the
+    # plan rather than from a file census (#116).
+    changelog_guard_absent = (
+        files[".releaserc.json"] and not files[".github/workflows/changelog-check.yml"]
     )
-    title_at_top = bool(changelog) and changelog.lstrip().startswith("# Changelog")
+    title_line = changelog_title_line(changelog)
+    title_at_top = bool(changelog) and changelog_title_is_first(changelog)
+    project_name = infer_project_name(cwd)
+    drift_counts = git_contract_drift(cwd, project_name) if drift else None
 
     if polyglot:
         inferred_shape = "polyglot"
@@ -1494,7 +1586,7 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
         findings.append({"area": area, "detail": detail, "remedy": remedy})
 
     scaffold_root = pathlib.Path(__file__).parent.parent
-    if git_stale:
+    if changelog_guard_absent:
         finding(
             ".github/workflows/changelog-check.yml",
             "absent — the CHANGELOG guard has no CI half",
@@ -1506,7 +1598,7 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
             "absent — PR bodies lose the checklist and impact/risk line",
             f"uv run {scaffold_root}/scripts/scaffold.py --update --only pr-template",
         )
-    if changelog and not git_stale:
+    if changelog and not changelog_guard_absent:
         # Both defects are real and independent: a release needs the heading *and* a title the
         # plugin can anchor on, so one must never mask the other.
         if "## [Unreleased]" not in changelog:
@@ -1548,12 +1640,13 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
 
     result: dict[str, object] = {
         "cwd": str(cwd),
-        "project_name": infer_project_name(cwd),
+        "project_name": project_name,
         "inferred_shape": inferred_shape,
         "files": files,
         "git_contract": {
             "complete": git_complete,
-            "stale": git_stale,
+            "changelog_guard_absent": changelog_guard_absent,
+            "drift": drift_counts,
             "has_releaserc": files[".releaserc.json"] or files[".releaserc.js"],
             "has_changelog": files["CHANGELOG.md"],
             "has_changelog_check": files[".github/workflows/changelog-check.yml"],
@@ -1600,7 +1693,7 @@ def detect_project(cwd: pathlib.Path) -> dict[str, object]:
 
 def print_detect(cwd: pathlib.Path, as_json: bool) -> int:
     """Census + findings. JSON always goes to stdout; `--json` drops the human summary."""
-    data = detect_project(cwd)
+    data = detect_project(cwd, drift=True)
     print(json.dumps(data, indent=2, sort_keys=True))
     if as_json:
         return 0
@@ -1614,6 +1707,15 @@ def print_detect(cwd: pathlib.Path, as_json: bool) -> int:
     missing = [k for k, v in files.items() if not v]
     print(f"present: {', '.join(present) if present else '(none)'}", file=sys.stderr)
     print(f"missing: {', '.join(missing) if missing else '(none)'}", file=sys.stderr)
+    # The same verdict `--check` exits 1 on: a census that says "complete" while the plan says
+    # "drift" is the mismatch this line exists to stop (#116).
+    contract = cast("dict[str, object]", data["git_contract"])
+    drift = cast("dict[str, int]", contract["drift"]) if contract["drift"] else {}
+    if drift.get("total"):
+        print(
+            f"git contract drift: {drift['total']} — --check names each file, --update repairs",
+            file=sys.stderr,
+        )
     findings = cast("list[dict[str, str]]", data["findings"])
     if findings:
         print(f"\nfindings ({len(findings)}):", file=sys.stderr)

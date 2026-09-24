@@ -76,14 +76,16 @@ Single source of truth — no new script. `--detect` never writes; it exits 0 af
   "inferred_shape": "python",
   "project_name": "my-app",
   "files": { ".python-version": true, "pyproject.toml": true, "Cargo.toml": false, ".releaserc.json": false },
-  "git_contract": { "complete": false, "stale": false },
+  "git_contract": { "complete": false, "changelog_guard_absent": false, "drift": null },
   "python": { "present": true, "coverage": false, "threshold": null },
   "ci": { "present": false, "variant": null, "coverage": false },
   "verify_gates": { "formatter": true, "linter": true, "typecheck": true, "tests": true }
 }
 ```
 
-Full keys: `cwd`, `inferred_shape` (`greenfield|python|rust|node|polyglot`), `files` (20 entries), `git_contract`, `runtimes`, `python`/`rust`/`ci`/`changelog`/`verify_gates`. Human summary on `stderr`: `shape=… present: … missing: …`.
+Full keys: `cwd`, `inferred_shape` (`greenfield|python|rust|node|polyglot`), `files` (20 entries), `git_contract`, `runtimes`, `python`/`rust`/`ci`/`changelog`/`verify_gates`. Human summary on `stderr`: `shape=… present: … missing: …`, plus `git contract drift: N` when the git plan has drifted.
+
+`git_contract` is three fields, and only the last reads the plan: `complete` (the `.releaserc.json` + `CHANGELOG.md` + `commitlint.config.js` existence census), `changelog_guard_absent` (the CI half is missing — this field used to be named `stale`, which never measured staleness), and `drift` (`{total, stale, missing, patched, appended}` — the counts `--check` exits 1 on, produced by the same git plan). `drift` is `null` only where the census is taken without the plan (the internal probes: `print_next_actions`, the coverage-script default).
 
 ### From detection → Recommended combos
 
@@ -101,7 +103,7 @@ After `--detect`, the model **must** render 2–4 curated combos before any gril
 > 3. Full — Python 90% strict + CI — for high-rigor teams; reason: opt-in, same files + threshold bump
 > ```
 
-Selection rule: **preset when confident, ask only when ambiguous.** If `inferred_shape` is confident and `git_contract.complete` clear, prefill Dialog 1/4 and skip. Grill only leaves where detection is inconclusive (e.g. greenfield, polyglot variant, coverage threshold choice).
+Selection rule: **preset when confident, ask only when ambiguous.** If `inferred_shape` is confident and `git_contract.complete` clear, prefill Dialog 1/4 and skip. Read `git_contract.drift` before recommending: a non-zero `total` means the contract exists but is not current, so the first combo is `--update`, never a new flavor. Grill only leaves where detection is inconclusive (e.g. greenfield, polyglot variant, coverage threshold choice).
 
 | Detected state                                                                               | Recommended combos (2–4, with generator)                                                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -349,7 +351,7 @@ Every run reports once, in the mode the flags select. `--summary`/`--check` coll
 | `--self-check`  | validate claimed files: `compile()` for `.py`, `bash -n` for shell/hooks, JSON/YAML parse, exec bit, and `scripts/…` references resolved; **runs automatically after a real write** |
 | `--merge-mixed` | insert the `##` sections a preserved `CONTRIBUTING.md` is missing (never rewrites an existing line)                                                                                 |
 
-`--detect` now also returns `findings[]` (`area`, `detail`, `remedy`) naming stale changelog, missing PR template, a pnpm/npm lockfile mismatch, and a vendored copy of a sibling skill — each with the command that fixes it. Blocking findings exit 1; a dangling reference only warns (it is a gap in what the skill ships, not in the target repo).
+`--detect` now also returns `findings[]` (`area`, `detail`, `remedy`) naming stale changelog, missing PR template, a pnpm/npm lockfile mismatch, and a vendored copy of a sibling skill — each with the command that fixes it. Blocking findings exit 1; a dangling reference only warns (it is a gap in what the skill ships, not in the target repo). `git_contract.drift` is the same verdict `--check` reports because it runs the same git plan, and `tests/scaffold/test_detect_drift.py` holds the two together — a detector that says "not stale" while `--check` says "drift 8" is the defect that test exists to prevent.
 
 - **Pure-deterministic** (no proofread): `.releaserc.json`, `.github/workflows/release.yml`, `commitlint.config.js`, `CHANGELOG.md`, `.gitignore` entries, `.python-version`, `rust-toolchain.toml`, `src/lib.rs`, `src/<module>/__init__.py`, `tests/test_smoke.py`.
 - **Mixed** (script writes skeleton + warns on stderr → proofread): `CONTRIBUTING.md` (`{{project_name}}` + Before PR line), `pyproject.toml`/`Cargo.toml` (name/description/edition; with `--with-coverage` also `fail_under`), `AGENTS.md` patch (keep 3 sections, verify pointer wording).

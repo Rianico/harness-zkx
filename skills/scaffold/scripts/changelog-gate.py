@@ -9,8 +9,9 @@ Read-only: a failing run never writes the worktree, the target branch, or CHANGE
 
   ticket  Ticket boundary. `HEAD` must be the single squashed commit; its subject must be
           conventional and project exactly one well-formed entry.
-  ledger  Ledger checks. The `## [Unreleased]` block must pass well-formedness, section
-          integrity, duplicate-identity, placeholder, and provenance checks, and no PR may
+  ledger  Ledger checks. The `# Changelog` title must be the file's first line, and the
+          `## [Unreleased]` block must pass well-formedness, section integrity,
+          duplicate-identity, placeholder, and provenance checks, and no PR may
           have produced more entries than it had commits. On `main` every entry must resolve
           to a landing commit; at the PR boundary pass `--pr`/`--landing`, and that PR is
           covered by its declared landing instead. Unattributed entries recorded in `--baseline`
@@ -168,6 +169,33 @@ def check_entries(block: str) -> list[Finding]:
         if PLACEHOLDER_RE.search(text):
             findings.append(Finding("placeholders", f"placeholder text: {text!r}"))
     return findings
+
+
+CHANGELOG_TITLE = "# Changelog"
+
+
+def title_line(content: str) -> int:
+    """1-based line of the `# Changelog` title, or 0 when the file carries none."""
+    return next(
+        (n for n, line in enumerate(content.splitlines(), 1) if line.strip() == CHANGELOG_TITLE),
+        0,
+    )
+
+
+def check_title(content: str) -> list[Finding]:
+    """`# Changelog` is the file's first line — the shape the shipped template states.
+
+    `scaffold.py --detect` reports the same rule (`changelog.title_at_top`) but non-blockingly and
+    outside CI, so the title regressed below the template's comment block in a real repo and no
+    gate failed (#117). The guard that owns `CHANGELOG.md`'s ledger owns its shape too; the two
+    halves of the rule are pinned together by `tests/scaffold/test_changelog_title_gate.py`.
+    """
+    first = next((line for line in content.splitlines() if line.strip()), "")
+    if first.strip() == CHANGELOG_TITLE:
+        return []
+    line = title_line(content)
+    where = f"it sits at line {line}" if line else "the title is absent"
+    return [Finding("title", f"`{CHANGELOG_TITLE}` must be the file's first line; {where}")]
 
 
 def check_duplicates(sections: dict[str, list[str]]) -> list[Finding]:
@@ -372,11 +400,14 @@ def check_ledger(
     except UnicodeDecodeError as error:
         return [Finding("ledger", f"{changelog} is not UTF-8: {error}", fixable=False)]
 
+    findings = check_title(content)
     block = unreleased_block(content)
     if block is None:
-        return [Finding("section-integrity", f"no '{GEN.UNRELEASED_HEADING}' block to check")]
+        return findings + [
+            Finding("section-integrity", f"no '{GEN.UNRELEASED_HEADING}' block to check")
+        ]
 
-    findings = check_sections(block) + check_entries(block)
+    findings += check_sections(block) + check_entries(block)
     sections = GEN.parse_unreleased_sections(content)
     findings += check_duplicates(sections)
     entries = [entry for group in sections.values() for entry in group]
