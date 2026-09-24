@@ -99,6 +99,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **contributing:** name the two type-check suppression layers (#122)
 * **herdr:** hand off with the caller's context and require a completion reply (#107)
 * **adr:** accept ADR-0016 now that its floor is enforced at both boundaries (#102)
 * **agent-rules:** clarify skill_dir resolves to the containing skill.md directory
