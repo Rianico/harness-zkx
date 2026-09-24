@@ -5,7 +5,7 @@ from pathlib import Path
 
 from bs4 import Tag
 
-from .base import DocumentationScraper
+from .base import DocumentationScraper, Section
 
 
 class PTXScraper(DocumentationScraper):
@@ -106,7 +106,7 @@ Examples:
         if not content:
             return []
 
-        sections = []
+        sections: list[Section] = []
         headings = content.find_all(["h1", "h2", "h3", "h4"])
 
         for heading in headings:
@@ -153,7 +153,7 @@ Examples:
 
         return sections
 
-    def _save_section(self, section: dict, parent_dir: Path) -> None:
+    def _save_section(self, section: Section, parent_dir: Path) -> None:
         """Save section as markdown file."""
         filename = self.sanitize_filename(section["title"], section["section_num"])
         markdown_parts = []

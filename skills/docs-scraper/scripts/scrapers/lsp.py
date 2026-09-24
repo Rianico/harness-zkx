@@ -5,7 +5,7 @@ from pathlib import Path
 
 from bs4 import Tag
 
-from .base import DocumentationScraper
+from .base import DocumentationScraper, Section
 
 
 class LSPScraper(DocumentationScraper):
@@ -55,7 +55,7 @@ Examples:
             output_dir=output_dir,
             force=force,
         )
-        self.sections: list[dict] = []  # Store for link resolution
+        self.sections: list[Section] = []  # Store for link resolution
 
     def _clean_anchor(self, anchor: str) -> str:
         """Remove emoji anchor suffix from anchor ID.
@@ -111,7 +111,7 @@ Examples:
 
         print(f"\n✓ Complete! Documentation saved to: {self.output_dir}")
 
-    def _extract_sections(self, soup) -> list[dict]:
+    def _extract_sections(self, soup) -> list[Section]:
         """Extract sections from LSP spec page, splitting at h4 level.
 
         h1 sections are TOC/index pages - skipped.
@@ -225,12 +225,12 @@ Examples:
                 anchor_map[section["anchor"].lower()] = filename
         return anchor_map
 
-    def _make_filename(self, section: dict, index: int) -> str:
+    def _make_filename(self, section: Section, index: int) -> str:
         """Generate filename with numeric prefix."""
         base_name = self.sanitize_filename(section["title"], section["section_num"])
         return f"{index:04d}-{base_name}.md"
 
-    def _save_section(self, section: dict, index: int) -> None:
+    def _save_section(self, section: Section, index: int) -> None:
         """Save section as markdown file with local link resolution."""
         filename = self._make_filename(section, index)
         markdown_parts = []
@@ -268,13 +268,15 @@ Examples:
 
             # Convert anchor links to local file references
             for link in element.find_all("a", href=True):
-                href = link.get("href", "")
-                if href.startswith("#"):
-                    # Clean emoji suffix and lowercase for matching
-                    anchor = self._clean_anchor(href[1:]).lower()
-                    if anchor in self.anchor_map:
-                        link["href"] = self.anchor_map[anchor]
-                    # else: keep the original anchor link
+                href = link.get("href")
+                if not isinstance(href, str) or not href.startswith("#"):
+                    # Not an in-page anchor: keep the original link as-is.
+                    continue
+                # Clean emoji suffix and lowercase for matching
+                anchor = self._clean_anchor(href[1:]).lower()
+                if anchor in self.anchor_map:
+                    link["href"] = self.anchor_map[anchor]
+                # else: keep the original anchor link
 
             # Remove empty anchor links (anchors with no text content)
             for link in element.find_all("a"):
