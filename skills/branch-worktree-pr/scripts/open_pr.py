@@ -28,9 +28,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _ = parser.add_argument("branch", help="Branch feat/<name> or map/<name>")
     _ = parser.add_argument("base", help="Base branch main or map/<name>")
     _ = parser.add_argument("issue_number", help="Issue number without #")
-    _ = parser.add_argument("--no-watch", action="store_true", help="Skip watching PR checks (default: watch)")
-    _ = parser.add_argument("--watch-interval", type=int, default=10, help="Interval in seconds for gh pr checks --watch (default: 10)")
-    _ = parser.add_argument("--fail-fast", action="store_true", help="Exit watch on first check failure")
+    _ = parser.add_argument(
+        "--no-watch", action="store_true", help="Skip watching PR checks (default: watch)"
+    )
+    _ = parser.add_argument(
+        "--watch-interval",
+        type=int,
+        default=10,
+        help="Interval in seconds for gh pr checks --watch (default: 10)",
+    )
+    _ = parser.add_argument(
+        "--fail-fast", action="store_true", help="Exit watch on first check failure"
+    )
     return parser.parse_args(argv)
 
 
@@ -227,9 +236,20 @@ def main(argv: list[str] | None = None) -> None:
     watch_interval: int = int(getattr(args, "watch_interval", 10))
     fail_fast: bool = bool(getattr(args, "fail_fast", False))
     if no_watch:
-        print("ok: PR for " + branch + " -> " + base + " (Closes #" + issue + ") is open and clean (watch skipped via --no-watch)")
+        print(
+            "ok: PR for "
+            + branch
+            + " -> "
+            + base
+            + " (Closes #"
+            + issue
+            + ") is open and clean (watch skipped via --no-watch)"
+        )
     else:
-        print(f"-> watch PR checks for {branch} (gh pr checks --watch, interval {watch_interval}s)", file=sys.stderr)
+        print(
+            f"-> watch PR checks for {branch} (gh pr checks --watch, interval {watch_interval}s)",
+            file=sys.stderr,
+        )
         # Resolve PR identifier — prefer branch name (gh supports branch|number|url), fallback to number if known
         pr_id: str = branch
         # try to get fresh number for nicer URL after watch
@@ -252,14 +272,27 @@ def main(argv: list[str] | None = None) -> None:
                         pr_id = pr_number
             except json.JSONDecodeError:
                 pass
-        watch_cmd: list[str] = ["gh", "pr", "checks", pr_id, "--watch", "--interval", str(watch_interval)]
+        watch_cmd: list[str] = [
+            "gh",
+            "pr",
+            "checks",
+            pr_id,
+            "--watch",
+            "--interval",
+            str(watch_interval),
+        ]
         if fail_fast:
             watch_cmd.append("--fail-fast")
         watch_res = run(watch_cmd)
         # gh pr checks --watch streams progress; exit codes: 0 pass, 1 fail, 8 pending (older gh) — treat non-zero as actionable
         if watch_res.returncode == 0:
-            print(f"ok: checks passed for PR {pr_id}" + (f" {pr_url}" if pr_url else ""), file=sys.stderr)
-            print(f"ok: PR for {branch} -> {base} (Closes #{issue}) is open and clean — checks passed")
+            print(
+                f"ok: checks passed for PR {pr_id}" + (f" {pr_url}" if pr_url else ""),
+                file=sys.stderr,
+            )
+            print(
+                f"ok: PR for {branch} -> {base} (Closes #{issue}) is open and clean — checks passed"
+            )
         else:
             # show summary of failing checks for diagnostics
             print_err(f"checks watch exited {watch_res.returncode} for PR {pr_id}")
@@ -273,24 +306,41 @@ def main(argv: list[str] | None = None) -> None:
                 try:
                     checks: object = json.loads(diag.stdout)
                     if isinstance(checks, list):
-                        fails = [c for c in checks if isinstance(c, dict) and c.get("bucket") == "fail"]
+                        fails = [
+                            c for c in checks if isinstance(c, dict) and c.get("bucket") == "fail"
+                        ]
                         if fails:
                             print_err(f"{len(fails)} check(s) failed — inspect above")
                 except json.JSONDecodeError:
                     pass
             # Fallback: also surface recent workflow runs for the PR head, like dispatch.sh polls gh run list + gh run watch
             # Find head sha and watch associated runs with gh run watch
-            sha_res = run(["gh", "pr", "view", pr_id, "--json", "headRefOid", "--jq", ".headRefOid"])
+            sha_res = run(
+                ["gh", "pr", "view", pr_id, "--json", "headRefOid", "--jq", ".headRefOid"]
+            )
             head_sha: str = sha_res.stdout.strip() if sha_res.returncode == 0 else ""
             if head_sha:
                 print_err(f"head sha: {head_sha} — recent runs:")
-                runs = run(["gh", "run", "list", "--limit", "5", "--json", "databaseId,name,conclusion,status,event,headSha,url"])
+                runs = run(
+                    [
+                        "gh",
+                        "run",
+                        "list",
+                        "--limit",
+                        "5",
+                        "--json",
+                        "databaseId,name,conclusion,status,event,headSha,url",
+                    ]
+                )
                 if runs.returncode == 0:
                     print(runs.stdout[:3000], file=sys.stderr)
-            print_err(f"view: gh pr view {pr_id} --json checks; web: {pr_url or 'https://github.com/.../pull/' + pr_number}")
+            print_err(
+                f"view: gh pr view {pr_id} --json checks; web: {pr_url or 'https://github.com/.../pull/' + pr_number}"
+            )
             if pr_url:
                 print_err(f"checks: gh pr checks {pr_id}")
             sys.exit(watch_res.returncode or 1)
+
 
 if __name__ == "__main__":
     main()

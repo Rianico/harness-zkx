@@ -445,7 +445,7 @@ class RustScraper:
                     if result.returncode == 0:
                         console.print(f"[green]Found repository at:[/] {url}")
                         return self._clone_repository(url)
-                except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+                except subprocess.TimeoutExpired, subprocess.SubprocessError:
                     continue
 
             raise ValueError(

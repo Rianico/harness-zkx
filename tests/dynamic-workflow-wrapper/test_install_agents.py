@@ -181,9 +181,7 @@ def test_canonical_agent_skills_resolve():
             # only stale when the local root exists to disprove it; without it (CI) it
             # is an unverifiable external harness skill, not a repo contract.
             if local_root.is_dir():
-                raise AssertionError(
-                    f"{agent_file.name} {what} unknown skill {name!r}"
-                )
+                raise AssertionError(f"{agent_file.name} {what} unknown skill {name!r}")
 
     # Both the user-scoped `~/.agents/skills/<name>/` form and the project-scoped
     # `.agents/skills/<name>/` form are valid load paths; match either.

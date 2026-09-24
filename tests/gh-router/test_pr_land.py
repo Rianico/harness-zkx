@@ -121,7 +121,9 @@ CONFLICT_CASES = [
 def test_pr_conflict_verdict(label: str, mergeable: str, state: str, expected: str) -> None:
     """pr_conflict_verdict pure function evaluates mergeable and mergeable_state/mergeStateStatus."""
     script = f'source "{PR_SH}"\npr_conflict_verdict "$1" "$2"'
-    res = subprocess.run(["bash", "-c", script, "bash", mergeable, state], capture_output=True, text=True)
+    res = subprocess.run(
+        ["bash", "-c", script, "bash", mergeable, state], capture_output=True, text=True
+    )
     assert res.returncode == 0, res.stderr
     assert res.stdout == expected, label
 
@@ -302,4 +304,3 @@ check_conflicts
     )
     assert res.returncode == 0
     assert "warning: head branch is behind main" in res.stderr
-

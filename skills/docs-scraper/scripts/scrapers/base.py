@@ -222,7 +222,7 @@ class DocumentationScraper(ABC):
                     try:
                         delay_str = line.split(":", 1)[1].strip()
                         self._crawl_delay = float(delay_str)
-                    except (ValueError, IndexError):
+                    except ValueError, IndexError:
                         pass
                     break
 
@@ -259,7 +259,7 @@ class DocumentationScraper(ABC):
                             delay = dt.timestamp() - time.time()
                             if delay > 0:
                                 return min(delay, MAX_RETRY_AFTER)
-                        except (ValueError, TypeError):
+                        except ValueError, TypeError:
                             pass
 
         # Exponential backoff: 1s, 2s, 4s, ...

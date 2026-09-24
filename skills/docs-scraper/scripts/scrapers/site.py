@@ -316,6 +316,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             "source": sources,
             "metrics": metrics,
         }
+
     def _discover_from_llms_txt(self) -> dict[str, Any]:
         """Fetch and parse llms.txt from the site."""
         llms_url = urljoin(self.base_url, "/llms.txt")
@@ -588,7 +589,9 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         try:
             metrics_path = self.output_dir / "metrics.json"
             metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
-            print(f"Metrics: {metrics_path} ({success}/{len(results)} success, {elapsed:.1f}s, {format_counts})")
+            print(
+                f"Metrics: {metrics_path} ({success}/{len(results)} success, {elapsed:.1f}s, {format_counts})"
+            )
         except Exception as e:
             print(f"Warning: could not write metrics.json: {e}")
 
