@@ -1,5 +1,6 @@
 """Tests for LLM-friendly fetching methods."""
 
+from collections.abc import Iterator
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -203,7 +204,7 @@ class TestFetchPageLlmFriendly:
     """Tests for fetch_page_llm_friendly method."""
 
     @pytest.fixture(autouse=True)
-    def _stub_defuddle_cli(self, scraper_with_mock_session) -> None:
+    def _stub_defuddle_cli(self, scraper_with_mock_session: object) -> Iterator[None]:
         """Every fallback test here assumes defuddle failed; unstubbed it was a real
         ~1s Node CLI spawn that reaches the network. `TestFetchViaDefuddle` owns the
         CLI behavior with `subprocess.run` mocked."""

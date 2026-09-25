@@ -719,9 +719,12 @@ def _cached_oxfmt() -> pathlib.Path | None:
         return None
     for pkg_json in candidates:
         try:
-            if json.loads(pkg_json.read_text(encoding="utf-8")).get("version") != OXFMT_VERSION:
-                continue
+            manifest = cast("object", json.loads(pkg_json.read_text(encoding="utf-8")))
         except OSError, json.JSONDecodeError:
+            continue
+        if not isinstance(manifest, dict):
+            continue
+        if cast("dict[str, object]", manifest).get("version") != OXFMT_VERSION:
             continue
         bin_path = pkg_json.parent / "bin" / "oxfmt"
         if os.access(bin_path, os.X_OK):
@@ -744,7 +747,7 @@ def formatter_command() -> list[str]:
     cached = _cached_oxfmt()
     if cached is None:
         try:
-            subprocess.run(
+            _ = subprocess.run(
                 ["npx", "--yes", f"oxfmt@{OXFMT_VERSION}", "--version"],
                 capture_output=True,
                 text=True,
