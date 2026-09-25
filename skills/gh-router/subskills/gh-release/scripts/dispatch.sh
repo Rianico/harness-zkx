@@ -25,7 +25,7 @@ NEXT_VER=""
 # that would otherwise flood the context window. Full log available on demand via
 # the hint printed by `preview`.
 preview() {
-  local tmp out _pm_exec
+  local tmp out _pm_exec sr_exit rc=0
   tmp=$(mktemp)
   # Detect package manager for semantic-release (npm vs pnpm)
   _pm_exec="npx --silent"
@@ -38,11 +38,18 @@ preview() {
   fi
   set +e
   GITHUB_TOKEN="$GITHUB_TOKEN" $_pm_exec semantic-release --dry-run >"$tmp" 2>&1
+  sr_exit=$?
   set -e
   out=$(cat "$tmp")
   rm -f "$tmp"
   NEXT_VER=$(echo "$out" | grep -oE "The next release version is [0-9][^ ]*" | tail -n1 | awk '{print $NF}' || true)
-  if [[ -n "$NEXT_VER" ]]; then
+  if [[ ${sr_exit} -ne 0 ]]; then
+    # semantic-release itself failed (e.g. network/SSL error during git fetch) —
+    # surface the real error instead of misreporting it as "no new version".
+    warn "semantic-release dry-run failed (exit ${sr_exit})"
+    echo "${out}" | tail -n 20 || true
+    rc=1
+  elif [[ -n "$NEXT_VER" ]]; then
     ok "next version: v$NEXT_VER"
     # condensed release-note body: version title, section headers, bullet lines
     echo "$out" | grep -E "^(##|###) |^    \* |^  \* |^\* " | head -n 50 || true
@@ -51,17 +58,23 @@ preview() {
     dim "commits since last tag do not trigger a release (need feat/fix/! or BREAKING CHANGE)"
   fi
   # Provide full-trace hint matching the detected package manager
-  if [[ "$_pm_exec" == "pnpm exec" ]]; then
+  if [[ "${_pm_exec}" == "pnpm exec" ]]; then
     dim "full trace: GITHUB_TOKEN=\$(gh auth token) pnpm exec semantic-release --dry-run"
   else
     dim "full trace: GITHUB_TOKEN=\$(gh auth token) npx semantic-release --dry-run"
   fi
+  return "${rc}"
 }
 
 if [[ "$DRY" == "true" ]]; then
   phase 3 3 "Preview — dry-run (no publish)"
   info "running semantic-release --dry-run…"
   preview
+  preview_rc=$?
+  if [[ ${preview_rc} -ne 0 ]]; then
+    phase_fail 3 "semantic-release dry-run failed"
+    exit 1
+  fi
   phase_ok 3 "dry-run complete"
   exit 0
 fi
@@ -71,6 +84,11 @@ phase 3 3 "Preview → Dispatch → Watch"
 
 info "running semantic-release --dry-run (preview)…"
 preview
+preview_rc=$?
+if [[ ${preview_rc} -ne 0 ]]; then
+  phase_fail 3 "semantic-release dry-run failed — holding (no dispatch on unknown version)"
+  exit 1
+fi
 
 if [[ -z "$NEXT_VER" ]]; then
   warn "no new version detected — dispatch will be a no-op (GitHub will receive event but semantic-release will skip)"

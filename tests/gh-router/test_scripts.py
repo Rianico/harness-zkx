@@ -6,6 +6,7 @@ so that is what is pinned here — no network, no gh auth required.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -147,3 +148,109 @@ def test_ci_why_python_syntax_and_formatting() -> None:
         check=True,
     )
     assert proc.stdout.strip() == "verify › lint"
+
+
+DISPATCH = GH_ROUTER / "subskills/gh-release/scripts/dispatch.sh"
+
+
+def _dispatch_env(tmp_path: Path, npx_script: str) -> tuple[dict[str, str], Path]:
+    """Build a hermetic PATH with fake `gh` (token) and fake `npx` (semantic-release).
+
+    dispatch.sh runs `$_pm_exec semantic-release --dry-run`; in a dir without
+    pnpm-lock.yaml that resolves to `npx --silent`. A fake `npx` on PATH lets the
+    test drive the semantic-release outcome (success / no-version / failure)
+    without any network or gh auth.
+    """
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+    gh_mock = mock_bin / "gh"
+    gh_script = (
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1" == "auth" && "$2" == "token" ]]; then\n'
+        "  echo fake-token\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n"
+    )
+    _ = gh_mock.write_text(gh_script)
+    _ = gh_mock.chmod(0o755)
+    npx_mock = mock_bin / "npx"
+    _ = npx_mock.write_text(npx_script)
+    _ = npx_mock.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}",
+    }
+    return env, mock_bin
+
+
+def test_dispatch_dry_run_reports_semantic_release_failure_not_no_version(
+    tmp_path: Path,
+) -> None:
+    """Regression for #140: a failing semantic-release must surface the error.
+
+    When semantic-release exits non-zero (e.g. SSL_ERROR_SYSCALL during git
+    fetch), the script must report the failure and exit non-zero — not print
+    the misleading "no new version" hint as if the release were a no-op.
+    """
+    npx_fails = (
+        "#!/usr/bin/env bash\n"
+        "echo 'SSL_ERROR_SYSCALL in function call to remote function \"git fetch\"'\n"
+        "echo 'The next release version is 0.0.0'\n"
+        "exit 1\n"
+    )
+    env, _ = _dispatch_env(tmp_path, npx_fails)
+    result = subprocess.run(
+        ["bash", str(DISPATCH), "--dry-run"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0, f"dry-run should fail on semantic-release error:\n{combined}"
+    assert "failed" in combined, f"failure not reported:\n{combined}"
+    assert "SSL_ERROR_SYSCALL" in combined, f"error tail not surfaced:\n{combined}"
+    assert "no new version" not in combined, f"misreported as no-op instead of failure:\n{combined}"
+
+
+def test_dispatch_dry_run_still_reports_no_new_version_on_clean_noop(
+    tmp_path: Path,
+) -> None:
+    """Exit 0 with no version line must still print the "no new version" hint."""
+    npx_noop = "#!/usr/bin/env bash\necho 'No commits since last release'\nexit 0\n"
+    env, _ = _dispatch_env(tmp_path, npx_noop)
+    result = subprocess.run(
+        ["bash", str(DISPATCH), "--dry-run"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, f"clean noop should succeed:\n{combined}"
+    assert "no new version" in combined, f"noop hint missing:\n{combined}"
+
+
+def test_dispatch_dry_run_reports_next_version_on_success(tmp_path: Path) -> None:
+    """Exit 0 with a version line must print the next version and succeed."""
+    npx_ok = (
+        "#!/usr/bin/env bash\n"
+        "echo 'The next release version is 1.2.3'\n"
+        "echo ''\n"
+        "echo '## 1.2.3'\n"
+        "echo '### Features'\n"
+        "echo '* add thing'\n"
+        "exit 0\n"
+    )
+    env, _ = _dispatch_env(tmp_path, npx_ok)
+    result = subprocess.run(
+        ["bash", str(DISPATCH), "--dry-run"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, f"successful preview should succeed:\n{combined}"
+    assert "next version: v1.2.3" in combined, f"next version not reported:\n{combined}"
