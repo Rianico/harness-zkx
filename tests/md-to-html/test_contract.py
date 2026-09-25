@@ -59,7 +59,7 @@ def extract_all_classes(html):
     doc = BeautifulSoup(html, "html.parser")
     classes = set()
     for tag in doc.find_all(True):
-        for cls in tag.get("class", []):
+        for cls in tag.get_attribute_list("class"):
             classes.add(cls)
     return classes
 

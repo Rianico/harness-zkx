@@ -2,8 +2,14 @@
 
 from pathlib import Path
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from render import AssetBundler, BodyRenderer, FrontmatterParser, ParsedDocument
+
+
+def _attr(tag: Tag, name: str) -> str:
+    """The attribute value as the plain string the assertions compare against."""
+    value = tag.get(name)
+    return value if isinstance(value, str) else ""
 
 
 class TestBasicStructure:
@@ -200,7 +206,7 @@ class TestOverviewTable:
         links = doc.find_all("a", class_="md-overview-link")
         assert len(links) >= 2
         # Links should reference section IDs
-        hrefs = [a.get("href", "") for a in links]
+        hrefs = [_attr(a, "href") for a in links]
         assert any("test-candidate-one" in h for h in hrefs)
 
     def test_strength_badge_in_table(self, renderer, sample_md):
@@ -257,8 +263,10 @@ class TestDynamicLegendCSS:
         style_tags = doc.find_all("style")
         inline = [s for s in style_tags if "legend-tag" in (s.string or "")]
         assert len(inline) >= 1
-        assert ".legend-tag-module::before" in inline[0].string
-        assert "#94a3b8" in inline[0].string
+        legend_css = inline[0].string
+        assert legend_css is not None
+        assert ".legend-tag-module::before" in legend_css
+        assert "#94a3b8" in legend_css
 
 
 class TestExternalAssets:
@@ -271,10 +279,10 @@ class TestExternalAssets:
         doc = BeautifulSoup(html, "html.parser")
 
         links = doc.find_all("link", rel="stylesheet")
-        assert any("style.css" in l.get("href", "") for l in links)
+        assert any("style.css" in _attr(l, "href") for l in links)
 
         scripts = doc.find_all("script")
-        srcs = [s.get("src", "") for s in scripts if s.get("src")]
+        srcs = [_attr(s, "src") for s in scripts if s.get("src")]
         assert any("mermaid.min.js" in s for s in srcs)
         assert any("zoom.js" in s for s in srcs)
 
@@ -297,7 +305,8 @@ class TestExternalAssets:
         doc = BeautifulSoup(html, "html.parser")
 
         link = doc.find("link", rel="stylesheet")
-        assert link and "flavors" in link.get("href", "") and "style.css" in link.get("href", "")
+        href = _attr(link, "href") if link is not None else ""
+        assert link and "flavors" in href and "style.css" in href
 
 
 class TestNonNumberedSections:

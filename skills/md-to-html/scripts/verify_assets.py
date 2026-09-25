@@ -15,27 +15,30 @@ SKILL_DIR = SCRIPT_DIR.parent
 ASSETS_DIR = SKILL_DIR / "assets"
 MANIFEST_PATH = ASSETS_DIR / "MANIFEST.json"
 
+#: File name -> the string metadata recorded for it in MANIFEST.json.
+type Manifest = dict[str, dict[str, str]]
+
 
 def compute_hash(path: Path) -> str:
     """Compute SHA-256 hex digest of *path*."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load_manifest() -> dict:
+def load_manifest() -> Manifest:
     """Load the manifest file. Returns empty dict if missing."""
     if MANIFEST_PATH.exists():
         return json.loads(MANIFEST_PATH.read_text())
     return {}
 
 
-def save_manifest(manifest: dict) -> None:
+def save_manifest(manifest: Manifest) -> None:
     """Write *manifest* to disk."""
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
-def build_manifest() -> dict:
+def build_manifest() -> Manifest:
     """Scan assets/ and build a fresh manifest with hashes and metadata."""
-    manifest: dict = {}
+    manifest: Manifest = {}
     for f in sorted(ASSETS_DIR.iterdir()):
         if f.name == "MANIFEST.json" or f.is_dir():
             continue

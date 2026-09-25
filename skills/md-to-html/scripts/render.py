@@ -13,7 +13,8 @@ from pathlib import Path
 
 import markdown
 import yaml
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+from bs4.element import AttributeValueList
 
 # ─── Module-Level Helpers ─────────────────────────────────────────────
 
@@ -21,6 +22,46 @@ from bs4 import BeautifulSoup
 def slugify(text: str) -> str:
     """Convert text to a URL-friendly slug."""
     return re.sub(r"[\W_]+", "-", text.lower()).strip("-")
+
+
+# ─── Frontmatter Shapes ───────────────────────────────────────────────
+#
+# YAML hands back dynamically typed mappings, so each consumer narrows the
+# fragment it reads instead of assuming a shape the document may not have.
+
+#: A tag-name keyed mapping of style keys (``css``, ``label``, ``description``).
+type StyleMap = dict[str, dict[str, str]]
+#: A term keyed mapping, used by the glossary and legend tooltips.
+type StringMap = dict[str, str]
+#: A mapping whose values stay as loose as YAML left them.
+type ValueMap = dict[str, object]
+
+
+def _text(value: object, default: str = "") -> str:
+    """Read *value* as the string the markup layer writes out."""
+    return value if isinstance(value, str) else default
+
+
+def _styles(value: object) -> StyleMap:
+    """Read *value* as an enum or legend style map."""
+    return value if isinstance(value, dict) else {}
+
+
+def _strings(value: object) -> StringMap:
+    """Read *value* as a term -> definition map."""
+    return value if isinstance(value, dict) else {}
+
+
+def _values(value: object) -> ValueMap:
+    """Read *value* as a mapping without committing to its value types."""
+    return value if isinstance(value, dict) else {}
+
+
+def _add_class(tag: Tag, cls: str) -> None:
+    """Append *cls* to *tag*'s classes unless it is already there."""
+    classes = tag.get_attribute_list("class")
+    if cls not in classes:
+        tag["class"] = AttributeValueList([*classes, cls])
 
 
 # ─── Stage 1: FrontmatterParser ───────────────────────────────────────
@@ -35,7 +76,7 @@ class ParsedDocument:
     fields (strength_map, category_map, glossary) from *frontmatter*.
     """
 
-    frontmatter: dict
+    frontmatter: ValueMap
     body: str
 
 
@@ -44,7 +85,7 @@ class FrontmatterParser:
 
     def parse(self, md_content: str) -> ParsedDocument:
         """Split frontmatter from body and apply input normalization."""
-        frontmatter: dict = {}
+        frontmatter: ValueMap = {}
         if md_content.startswith("---"):
             parts = re.split(r"^---$", md_content, maxsplit=2, flags=re.MULTILINE)
             if len(parts) >= 3:
@@ -104,10 +145,10 @@ class BodyRenderer:
         frontmatter = doc.frontmatter
         md_content = doc.body
 
-        strength_map: dict = frontmatter.get("strength_enum", {})
-        category_map: dict = frontmatter.get("category_enum", {})
-        glossary: dict = frontmatter.get("glossary", frontmatter.get("vocabulary", {}))
-        title: str = frontmatter.get("title", "").strip()
+        strength_map = _styles(frontmatter.get("strength_enum"))
+        category_map = _styles(frontmatter.get("category_enum"))
+        glossary = _strings(frontmatter.get("glossary", frontmatter.get("vocabulary", {})))
+        title = _text(frontmatter.get("title", "")).strip()
 
         # MD -> HTML
         html_output = markdown.markdown(md_content, extensions=["extra", "toc", "admonition"])
@@ -222,9 +263,9 @@ class BodyRenderer:
         el,
         current_section,
         current_card,
-        strength_map: dict,
-        category_map: dict,
-        glossary: dict,
+        strength_map: StyleMap,
+        category_map: StyleMap,
+        glossary: StringMap,
     ):
         """Handle [!badge], [!legend], [!files], [!problem], [!warning], [!note].
 
@@ -352,17 +393,16 @@ class BodyRenderer:
             for el in new_soup.find_all(tag):
                 if tag.startswith("h") and el.parent and el.parent.name in ["header", "div"]:
                     continue
-                if cls not in el.get("class", []):
-                    el["class"] = el.get("class", []) + [cls]
+                _add_class(el, cls)
         for td in new_soup.find_all("td"):
             if re.match(r"^[\d,\.%\s]+$", td.get_text().strip()):
-                td["class"] = td.get("class", []) + ["md-tabular"]
+                _add_class(td, "md-tabular")
         for c in new_soup.find_all("code"):
             if not c.parent or c.parent.name != "pre":
-                c["class"] = c.get("class", []) + ["md-code"]
+                _add_class(c, "md-code")
 
     def _color_enums_and_link_tables(
-        self, new_soup: BeautifulSoup, strength_map: dict, category_map: dict
+        self, new_soup: BeautifulSoup, strength_map: StyleMap, category_map: StyleMap
     ) -> None:
         """Color-code enum values in tables and link candidate names."""
         if not strength_map and not category_map:
@@ -435,7 +475,7 @@ class AssetBundler:
         self.flavors_dir = flavors_dir
         self.asset_dir = asset_dir
 
-    def get_dynamic_legend_css(self, legend_data: dict | None = None) -> str:
+    def get_dynamic_legend_css(self, legend_data: StyleMap | None = None) -> str:
         """Return only the data-driven legend color CSS that must be inline."""
         css = ""
         if legend_data:
@@ -456,10 +496,10 @@ class AssetBundler:
     def bundle(self, soup: BeautifulSoup, doc: ParsedDocument, output_path: str | None) -> str:
         """Wrap *soup* in a complete HTML document with head, assets, header, and glossary."""
         frontmatter = doc.frontmatter
-        legend_data: dict = frontmatter.get("legend", {})
-        glossary: dict = frontmatter.get("glossary", frontmatter.get("vocabulary", {}))
-        strength_map: dict = frontmatter.get("strength_enum", {})
-        category_map: dict = frontmatter.get("category_enum", {})
+        legend_data = _styles(frontmatter.get("legend"))
+        glossary = _strings(frontmatter.get("glossary", frontmatter.get("vocabulary", {})))
+        strength_map = _styles(frontmatter.get("strength_enum"))
+        category_map = _styles(frontmatter.get("category_enum"))
 
         result = BeautifulSoup(
             '<!doctype html><html lang="en"><head></head><body></body></html>',
@@ -476,7 +516,7 @@ class AssetBundler:
             )
         )
         title_tag = result.new_tag("title")
-        title_tag.string = frontmatter.get("title", "Report")
+        title_tag.string = _text(frontmatter.get("title"), "Report")
         head.append(title_tag)
 
         # ── Dynamic legend colors (data-driven, always inline) ──
@@ -618,11 +658,11 @@ class AssetBundler:
     def _build_header(
         self,
         doc,
-        frontmatter: dict,
-        strength_map: dict,
-        category_map: dict,
-        legend_data: dict,
-        glossary: dict,
+        frontmatter: ValueMap,
+        strength_map: StyleMap,
+        category_map: StyleMap,
+        legend_data: StyleMap,
+        glossary: StringMap,
     ):
         """Build the <header> with title, stats dashboard, meta, enum strip, and legend key."""
         if not frontmatter:
@@ -632,16 +672,16 @@ class AssetBundler:
 
         # Eyebrow
         eb = doc.new_tag("span", attrs={"class": "md-eyebrow"})
-        eb.string = frontmatter.get("title", "Architecture Review")
+        eb.string = _text(frontmatter.get("title"), "Architecture Review")
         h.append(eb)
 
         # H1
         h1 = doc.new_tag("h1", attrs={"class": "md-heading-level-1"})
-        h1.string = frontmatter.get("project", "Report")
+        h1.string = _text(frontmatter.get("project"), "Report")
         h.append(h1)
 
         # Subtitle
-        stats: dict = frontmatter.get("statistics", {})
+        stats = _values(frontmatter.get("statistics"))
         subtitle = doc.new_tag("p", attrs={"class": "md-subtitle"})
         subtitle.string = f"{stats.get('candidates', 0)} refactoring candidates ranked by leverage, locality, and risk"
         h.append(subtitle)
@@ -689,7 +729,7 @@ class AssetBundler:
                 item = doc.new_tag("div", attrs={"class": "md-meta-item"})
                 css_extra = ""
                 if isinstance(val, dict) and "value" in val:
-                    css_extra = val.get("css", "")
+                    css_extra = _text(val.get("css"))
                     val = val["value"]
                 lbl = doc.new_tag("span", attrs={"class": "md-meta-label"})
                 lbl.string = label
@@ -800,7 +840,7 @@ class KamiRenderer:
         self._body_renderer = BodyRenderer()
         self._asset_bundler = AssetBundler(flavor, self.flavors_dir, self.asset_dir)
 
-    def get_dynamic_legend_css(self, legend_data: dict | None = None) -> str:
+    def get_dynamic_legend_css(self, legend_data: StyleMap | None = None) -> str:
         """Delegate to AssetBundler."""
         return self._asset_bundler.get_dynamic_legend_css(legend_data)
 
