@@ -30,7 +30,7 @@ from pathlib import Path
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import print_err, run  # pyright: ignore[reportImplicitRelativeImport]
+from _lib import print_err, run
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -247,9 +247,9 @@ def main(argv: list[str] | None = None) -> None:
         )
         if br.returncode == 0 and br.stdout.strip():
             try:
-                data: object = json.loads(br.stdout)
-                if isinstance(data, list) and data:
-                    entry = data[0]
+                before_data: object = json.loads(br.stdout)
+                if isinstance(before_data, list) and before_data:
+                    entry = before_data[0]
                     if isinstance(entry, dict) and entry.get("databaseId") is not None:
                         before_run = str(entry.get("databaseId"))
             except json.JSONDecodeError:
@@ -317,10 +317,10 @@ def main(argv: list[str] | None = None) -> None:
             if lst.returncode != 0 or not lst.stdout.strip():
                 continue
             try:
-                data: object = json.loads(lst.stdout)
-                if isinstance(data, list) and data:
+                after_data: object = json.loads(lst.stdout)
+                if isinstance(after_data, list) and after_data:
                     # newest first; find first with different id than before_run
-                    for entry in data:
+                    for entry in after_data:
                         if not isinstance(entry, dict):
                             continue
                         did = str(entry.get("databaseId", ""))

@@ -120,16 +120,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Inject meta.sources into SKILL.md frontmatter (docs-scraper, deterministic)"
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--skill", type=Path, help="Path to SKILL.md (default: bash-expert for backward compat)"
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--manifest", type=Path, help="manifest.json from scrape.py skills staging (preferred)"
     )
-    ap.add_argument("--sources", nargs="*", help="Explicit URLs (overrides manifest)")
-    ap.add_argument("--sources-file", type=Path, help="File containing URLs one per line")
-    ap.add_argument("--check", action="store_true", help="check only, exit 1 on mismatch")
-    ap.add_argument("--dry-run", action="store_true", help="print, don't write")
+    _ = ap.add_argument("--sources", nargs="*", help="Explicit URLs (overrides manifest)")
+    _ = ap.add_argument("--sources-file", type=Path, help="File containing URLs one per line")
+    _ = ap.add_argument("--check", action="store_true", help="check only, exit 1 on mismatch")
+    _ = ap.add_argument("--dry-run", action="store_true", help="print, don't write")
     args = ap.parse_args()
 
     # Resolve skill path
@@ -191,7 +191,7 @@ def main() -> int:
 
     new_text, changed = ensure_sources_text(text, sources)
     if changed:
-        skill_md.write_text(new_text, encoding="utf-8")
+        _ = skill_md.write_text(new_text, encoding="utf-8")
         print(
             f"Updated {skill_md} with meta.sources ({len(sources)} URLs) — preserved block scalars"
         )

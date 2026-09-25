@@ -2,8 +2,9 @@
 
 import re
 from pathlib import Path
+from typing import override
 
-from bs4 import Tag
+from bs4 import BeautifulSoup, Tag
 
 from .base import DocumentationScraper, Section
 
@@ -23,10 +24,12 @@ class LSPScraper(DocumentationScraper):
     """
 
     # Pattern to match emoji anchor suffixes (e.g., "--arrow_right_hook" or "-leftwards_arrow_with_hook")
-    EMOJI_ANCHOR_PATTERN = re.compile(r"-{1,2}(arrow_|leftwards_|rightwards_)[\w_]+$")
+    EMOJI_ANCHOR_PATTERN: re.Pattern[str] = re.compile(
+        r"-{1,2}(arrow_|leftwards_|rightwards_)[\w_]+$"
+    )
 
-    name = "lsp"
-    description = """
+    name: str = "lsp"
+    description: str = """
 LSP 3.17 (Language Server Protocol) specification scraper.
 
 Scrapes Microsoft LSP 3.17 specification and converts to markdown.
@@ -68,6 +71,7 @@ Examples:
             return anchor
         return self.EMOJI_ANCHOR_PATTERN.sub("", anchor)
 
+    @override
     def run(self) -> None:
         """Execute LSP spec scraping workflow."""
         print("=" * 70)
@@ -86,7 +90,7 @@ Examples:
         print(f"Found {len(self.sections)} sections")
 
         # Build anchor-to-file mapping for link resolution
-        self.anchor_map = self._build_anchor_map()
+        self.anchor_map: dict[str, str] = self._build_anchor_map()
 
         print("\nSaving sections...")
         for i, section in enumerate(self.sections, 1):
@@ -111,7 +115,7 @@ Examples:
 
         print(f"\n✓ Complete! Documentation saved to: {self.output_dir}")
 
-    def _extract_sections(self, soup) -> list[Section]:
+    def _extract_sections(self, soup: BeautifulSoup) -> list[Section]:
         """Extract sections from LSP spec page, splitting at h4 level.
 
         h1 sections are TOC/index pages - skipped.
@@ -119,16 +123,16 @@ Examples:
 
         Exception: Change Log section is kept as a single file (no h4 splitting).
         """
-        content = None
-        for selector in [
-            {"class": "md-content"},
-            {"role": "main"},
-            {"class": "document"},
-            {"class": "body"},
-        ]:
-            content = soup.find("div", selector) or soup.find("main", selector)
-            if content:
-                break
+        content = (
+            soup.find("div", class_="md-content")
+            or soup.find("main", class_="md-content")
+            or soup.find("div", role="main")
+            or soup.find("main", role="main")
+            or soup.find("div", class_="document")
+            or soup.find("main", class_="document")
+            or soup.find("div", class_="body")
+            or soup.find("main", class_="body")
+        )
 
         if not content:
             content = soup.find("body")
@@ -175,11 +179,12 @@ Examples:
             if len(title) < 2 or title.lower() in ["next", "previous", "contents"]:
                 continue
 
-            anchor_id = heading.get("id", "") or (
-                heading.find("a").get("id", "") if heading.find("a") else ""
-            )
+            link = heading.find("a")
+            raw_anchor = heading.get("id", "") or (link.get("id", "") if link else "")
+            if isinstance(raw_anchor, list):
+                raw_anchor = raw_anchor[0] if raw_anchor else ""
             # Clean emoji suffix from anchor (e.g., "--arrow_right_hook")
-            anchor_id = self._clean_anchor(anchor_id)
+            anchor_id = self._clean_anchor(raw_anchor if isinstance(raw_anchor, str) else "")
             level = int(heading.name[1]) - 1  # h2 -> 1, h3 -> 2, h4 -> 3
 
             # Collect content until next heading
@@ -297,7 +302,7 @@ Examples:
 
         # Write file
         output_file = self.output_dir / filename
-        output_file.write_text(markdown.strip(), encoding="utf-8")
+        _ = output_file.write_text(markdown.strip(), encoding="utf-8")
         print(f"  Saved: {output_file.name}")
 
     def _create_index(self) -> None:
@@ -319,5 +324,5 @@ Examples:
             content += f"- [{title}]({md_file.name})\n"
 
         index_path = self.output_dir / "INDEX.md"
-        index_path.write_text(content, encoding="utf-8")
+        _ = index_path.write_text(content, encoding="utf-8")
         print(f"  ✓ Created: {index_path}")

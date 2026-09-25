@@ -1,11 +1,12 @@
 """Tests for skills scraper (skill.sh composition)."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest  # pyright: ignore[reportMissingImports]
+import pytest
 
 _scraper_path = (
     Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts" / "scrapers"
@@ -23,11 +24,11 @@ _tests_path = Path(__file__).parent.resolve()
 if str(_tests_path) not in sys.path:
     sys.path.insert(0, str(_tests_path))
 
-from scrapers.skillsh import (  # type: ignore[import-not-found]  # noqa: E402  # pyright: ignore[reportMissingImports]
-    _cache_key,  # pyright: ignore[reportMissingImports]
-    _repo_slug,  # pyright: ignore[reportMissingImports]
-    parse_skillsh_input,  # pyright: ignore[reportMissingImports]
-)  # pyright: ignore[reportMissingImports]
+from scrapers.skillsh import (  # type: ignore[import-not-found]  # noqa: E402
+    _cache_key,
+    _repo_slug,
+    parse_skillsh_input,
+)
 
 
 class TestParseSkillshInput:
@@ -96,15 +97,15 @@ class TestParseSkillshInput:
 
     def test_sk_09_invalid_empty(self):
         with pytest.raises(ValueError):
-            parse_skillsh_input("")
+            _ = parse_skillsh_input("")
 
     def test_sk_10_invalid_single_segment(self):
         with pytest.raises(ValueError):
-            parse_skillsh_input("onlyone")
+            _ = parse_skillsh_input("onlyone")
 
     def test_sk_11_invalid_host(self):
         with pytest.raises(ValueError):
-            parse_skillsh_input("https://example.com/foo/bar/baz")
+            _ = parse_skillsh_input("https://example.com/foo/bar/baz")
 
     def test_sk_12_github_direct_skill_heuristic(self):
         p = parse_skillsh_input("https://github.com/sickn33/agentic-awesome-skills/my-skill")
@@ -134,15 +135,15 @@ class TestHelpers:
 
 class TestSkillsScraperInit:
     def test_empty_inputs_error(self, temp_output_dir):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
-            SkillsScraper(inputs=[], staging=temp_output_dir)
+            _ = SkillsScraper(inputs=[], staging=temp_output_dir)
         with pytest.raises(ValueError):
-            SkillsScraper(inputs=None, staging=temp_output_dir)  # type: ignore[arg-type]
+            _ = SkillsScraper(inputs=None, staging=temp_output_dir)  # type: ignore[arg-type]
 
     def test_layout_with_run(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -160,7 +161,7 @@ class TestSkillsScraperInit:
         assert s.cache_dir.parts[-2:] == (".cache", "skills")
 
     def test_layout_without_run(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -175,10 +176,10 @@ class TestSkillsScraperInit:
         assert s.cache_dir == Path(".cache") / "skills"
 
     def test_method_validation(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
-            SkillsScraper(
+            _ = SkillsScraper(
                 inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
                 staging=tmp_path / "compose",
                 method="bad",
@@ -186,7 +187,7 @@ class TestSkillsScraperInit:
             )
 
     def test_run_slug_sanitization(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         s = SkillsScraper(
             inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
@@ -197,10 +198,10 @@ class TestSkillsScraperInit:
         assert s.run_dir.name == "hello-world"
 
     def test_run_slug_invalid(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
-            SkillsScraper(
+            _ = SkillsScraper(
                 inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
                 staging=tmp_path / "compose",
                 run="---",
@@ -212,7 +213,7 @@ class TestSkillsScraperNpx:
     """Npx-based fetch tests (mocked subprocess)."""
 
     def test_list_via_npx_parses(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -236,7 +237,7 @@ class TestSkillsScraperNpx:
         assert "vercel-react-best-practices" in names
 
     def test_fetch_via_npx_success(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -245,15 +246,17 @@ class TestSkillsScraperNpx:
             respect_robots_txt=False,
         )
 
-        def fake_run_npx(_args, cwd, timeout=300):
-            _ = timeout
+        def fake_run_npx(
+            args: list[str], cwd: Path, timeout: int = 300
+        ) -> subprocess.CompletedProcess[str]:
+            _ = args, timeout
             # Simulate npx installing skill into .agents/skills
             dest = cwd / ".agents" / "skills" / "vercel-react-best-practices"
             dest.mkdir(parents=True, exist_ok=True)
-            (dest / "SKILL.md").write_text("# skill")
-            return MagicMock(stdout="installed", stderr="", returncode=0)
+            _ = (dest / "SKILL.md").write_text("# skill")
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="installed", stderr="")
 
-        s._run_npx = fake_run_npx  # type: ignore[method-assign]
+        s._run_npx = fake_run_npx
         work = tmp_path / "work"
         staged = s._fetch_via_npx("vercel-labs/agent-skills", ["vercel-react-best-practices"], work)
         assert "vercel-react-best-practices" in staged
@@ -262,7 +265,7 @@ class TestSkillsScraperNpx:
         assert (dest / "SKILL.md").read_text().strip() == "# skill"
 
     def test_run_stages_via_mocked_npx(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(

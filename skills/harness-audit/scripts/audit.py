@@ -20,9 +20,9 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, ClassVar, Protocol, TypedDict, cast
 
-from pydantic import BaseModel, Field, ValidationError  # pyright: ignore[reportMissingImports]
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 DEFAULT_THRESHOLD = 20
 DEFAULT_KEEP = 10
@@ -35,7 +35,7 @@ class NextTurn(BaseModel):
     type: str
     preview: str = Field(max_length=240)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class OversizedEntry(BaseModel):
@@ -49,7 +49,7 @@ class OversizedEntry(BaseModel):
     isError: bool
     next_turns: list[NextTurn] = Field(default_factory=list)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class EstimatedSavings(BaseModel):
@@ -57,7 +57,7 @@ class EstimatedSavings(BaseModel):
     chars: int = Field(ge=0)
     keep_head_tail: int = Field(ge=0)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class AuditResult(BaseModel):
@@ -76,7 +76,7 @@ class AuditResult(BaseModel):
     )  # all bash entries, alias to avoid shadowing
     estimated_savings: EstimatedSavings
 
-    model_config = {"strict": True, "populate_by_name": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True, "populate_by_name": True}
 
 
 # Bucket triage — makes A/B/C/D explicit at type level (A=refine owned, B=replace one-off)
@@ -87,7 +87,7 @@ class TriagedEntry(BaseModel):
     replaceable_with: str | None = None
     reason: str
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 def eprint(msg: str) -> None:
@@ -419,7 +419,7 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
     }
     # final top-level validation (ensures AuditResult contract holds; cheap, fail-loud)
     try:
-        AuditResult.model_validate(audit_raw)
+        _ = AuditResult.model_validate(audit_raw)
     except ValidationError as ve:
         eprint(f"audit result validation failed: {ve}")
         raise
@@ -439,12 +439,12 @@ def emit_filtered(path: Path, threshold: int, keep: int) -> Path:
         for raw in fin:
             stripped = raw.strip()
             if not stripped:
-                fout.write(raw)
+                _ = fout.write(raw)
                 continue
             try:
                 rec = json.loads(stripped)
             except json.JSONDecodeError:
-                fout.write(raw)
+                _ = fout.write(raw)
                 continue
             if rec.get("type") == "message":
                 msg = rec.get("message")
@@ -469,9 +469,9 @@ def emit_filtered(path: Path, threshold: int, keep: int) -> Path:
                             new_content = [{"type": "text", "text": truncated}]
                             msg["content"] = new_content
                             rec["message"] = msg
-                            fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                            _ = fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
                             continue
-            fout.write(json.dumps(rec, ensure_ascii=False) + "\n" if stripped else raw)
+            _ = fout.write(json.dumps(rec, ensure_ascii=False) + "\n" if stripped else raw)
     return out_path
 
 
@@ -535,11 +535,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         prog="audit.py", description="Scan pi session JSONL for oversized bash outputs."
     )
-    ap.add_argument("target", help="session id (uuid) or path to *.jsonl")
+    _ = ap.add_argument("target", help="session id (uuid) or path to *.jsonl")
     _ = ap.add_argument(
         "--threshold", type=int, default=DEFAULT_THRESHOLD, help="line threshold (default: 20)"
     )
-    ap.add_argument("--json", action="store_true", dest="as_json", help="emit JSON instead of text")
+    _ = ap.add_argument(
+        "--json", action="store_true", dest="as_json", help="emit JSON instead of text"
+    )
     _ = ap.add_argument(
         "--emit-filtered",
         action="store_true",
@@ -599,7 +601,7 @@ def main() -> None:
                 "oversized": {k: v for k, v in e.items() if not k.startswith("_")},
                 "next_turns_full": full_ctx,
             }
-            out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            _ = out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         audit["dump_context_dir"] = str(dump_dir.resolve())
     # remove internal key from json output
     for e in audit["oversized"]:
@@ -630,13 +632,13 @@ def main() -> None:
     if args.as_json:
         out = dict(audit)
         json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
-        sys.stdout.write("\n")
+        _ = sys.stdout.write("\n")
     else:
-        sys.stdout.write(format_text(audit, args.keep_head_tail))
+        _ = sys.stdout.write(format_text(audit, args.keep_head_tail))
         if filtered_path is not None:
-            sys.stdout.write(f"Filtered copy: {filtered_path}\n")
+            _ = sys.stdout.write(f"Filtered copy: {filtered_path}\n")
         if will_dump:
-            sys.stdout.write(f"Context dump dir: {audit['dump_context_dir']}\n")
+            _ = sys.stdout.write(f"Context dump dir: {audit['dump_context_dir']}\n")
     sys.exit(0)
 
 

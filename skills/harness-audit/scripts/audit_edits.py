@@ -22,9 +22,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, ValidationError  # pyright: ignore[reportMissingImports]
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 CODE_RE = re.compile(r"\b(E_[A-Z_]+)\b")
 QUOTED_RE = re.compile(r'"([^"]+)"')
@@ -49,7 +49,7 @@ class NextTurn(BaseModel):
     type: str
     preview: str = Field(max_length=240)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class EditFailure(BaseModel):
@@ -64,7 +64,7 @@ class EditFailure(BaseModel):
     message_preview: str = ""
     next_turns: list[NextTurn] = Field(default_factory=list)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class EditAuditResult(BaseModel):
@@ -82,7 +82,7 @@ class EditAuditResult(BaseModel):
     foreign_leak_failures: int = Field(ge=0)
     failures: list[EditFailure] = Field(default_factory=list)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 def eprint(msg: str) -> None:
@@ -403,7 +403,7 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
         "full_context_by_line": full_by_line,
     }
     try:
-        EditAuditResult.model_validate(audit_raw)
+        _ = EditAuditResult.model_validate(audit_raw)
     except ValidationError as ve:
         eprint(f"audit result validation failed: {ve}")
         raise
@@ -471,15 +471,17 @@ def main() -> None:
         prog="audit_edits.py",
         description="Scan pi session JSONL for edit tool failures.",
     )
-    ap.add_argument("target", help="session id (uuid) or path to *.jsonl")
-    ap.add_argument("--json", action="store_true", dest="as_json", help="emit JSON instead of text")
-    ap.add_argument(
+    _ = ap.add_argument("target", help="session id (uuid) or path to *.jsonl")
+    _ = ap.add_argument(
+        "--json", action="store_true", dest="as_json", help="emit JSON instead of text"
+    )
+    _ = ap.add_argument(
         "--with-context",
         type=int,
         default=0,
         help="attach next N turns after each failure for triage (default: 0, recommend 3)",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--dump-context",
         type=str,
         default=None,
@@ -521,15 +523,15 @@ def main() -> None:
                 "failure": f,
                 "next_turns_full": full_ctx,
             }
-            out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            _ = out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         audit["dump_context_dir"] = str(dump_dir.resolve())
     if args.as_json:
         json.dump(dict(audit), sys.stdout, ensure_ascii=False, indent=2)
-        sys.stdout.write("\n")
+        _ = sys.stdout.write("\n")
     else:
-        sys.stdout.write(format_text(audit))
+        _ = sys.stdout.write(format_text(audit))
         if will_dump:
-            sys.stdout.write(f"Context dump dir: {audit['dump_context_dir']}\n")
+            _ = sys.stdout.write(f"Context dump dir: {audit['dump_context_dir']}\n")
     sys.exit(0)
 
 

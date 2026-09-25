@@ -3,6 +3,7 @@
 Test IDs: RT-01 through RT-07
 """
 
+from typing import override
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -31,6 +32,7 @@ class TestRobotsCompliance:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -86,6 +88,7 @@ class TestRobotsCompliance:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -113,7 +116,7 @@ class TestRobotsCompliance:
 
         # Should raise PermissionError for disallowed URL
         with pytest.raises(PermissionError):
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
     def test_rt_03_missing_robots_txt(self, temp_output_dir, temp_cache_dir):
         """RT-03: Missing robots.txt.
@@ -126,6 +129,7 @@ class TestRobotsCompliance:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -183,6 +187,7 @@ class TestRobotsCompliance:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -229,6 +234,7 @@ class TestRobotsCompliance:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -275,8 +281,8 @@ class TestRobotsCompliance:
             sleep_times.append(duration)
 
         with patch("time.sleep", side_effect=capture_sleep):
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="test1.html")
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="test2.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test1.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test2.html")
 
         # Crawl-delay of 2s should override default 1s delay
         assert len(sleep_times) == 1
@@ -293,6 +299,7 @@ class TestRobotsCompliance:
             name = "base"  # Match the user-agent in SPECIFIC_UA_ROBOTS
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -336,7 +343,7 @@ class TestRobotsCompliance:
         # URL blocked for 'base' user-agent
         blocked_url = f"{TEST_BASE_URL}/blocked-for-base/page.html"
         with pytest.raises(PermissionError):
-            scraper.fetch_page(blocked_url, cache_file="test.html")
+            _ = scraper.fetch_page(blocked_url, cache_file="test.html")
 
     def test_rt_07_wildcard_user_agent(self, temp_output_dir, temp_cache_dir):
         """RT-07: Wildcard user-agent.
@@ -349,6 +356,7 @@ class TestRobotsCompliance:
             name = "test"  # Does not match 'other' in SPECIFIC_UA_ROBOTS
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -376,4 +384,4 @@ class TestRobotsCompliance:
 
         # Should be blocked by wildcard rule
         with pytest.raises(PermissionError):
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")

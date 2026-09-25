@@ -28,7 +28,7 @@ from pathlib import Path
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import (  # pyright: ignore[reportImplicitRelativeImport]
+from _lib import (
     current_branch,
     ensure_git_repo,
     print_err,
@@ -40,8 +40,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Verify cwd is the expected worktree on the expected branch",
     )
-    parser.add_argument("branch", help="Expected branch (e.g. feat/<slug>--auth)")
-    parser.add_argument(
+    _ = parser.add_argument("branch", help="Expected branch (e.g. feat/<slug>--auth)")
+    _ = parser.add_argument(
         "path",
         nargs="?",
         default=None,

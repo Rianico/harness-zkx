@@ -113,7 +113,7 @@ def scaffold_wt_config(template_path: Path, dest: Path) -> str:
         else:
             patched = patched + f'\n[pre-merge]\ngate = "{gate}"\n'
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(patched, encoding="utf-8")
+    _ = dest.write_text(patched, encoding="utf-8")
     return gate
 
 
@@ -142,7 +142,7 @@ def read_gate(cwd: Path | None = None) -> str:
                 )
             # minimal scaffold when template truly absent
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(f'[pre-merge]\ngate = "{gate_sniff}"\n', encoding="utf-8")
+            _ = dest.write_text(f'[pre-merge]\ngate = "{gate_sniff}"\n', encoding="utf-8")
             return gate_sniff
         return scaffold_wt_config(template, dest)
 
@@ -154,13 +154,12 @@ def read_gate(cwd: Path | None = None) -> str:
         import tomllib  # type: ignore[import-not-found]
 
         with dest.open("rb") as f:
-            data: object = tomllib.load(f)
-        if isinstance(data, dict):
-            pre = data.get("pre-merge")
-            if isinstance(pre, dict):
-                raw = pre.get("gate")
-                if isinstance(raw, str) and raw.strip():
-                    gate = raw.strip()
+            data = tomllib.load(f)
+        pre = data.get("pre-merge")
+        if isinstance(pre, dict):
+            raw = pre.get("gate")
+            if isinstance(raw, str) and raw.strip():
+                gate = raw.strip()
     except Exception:
         gate = None
 

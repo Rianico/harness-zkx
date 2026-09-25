@@ -16,7 +16,7 @@ SKILL_DIR = SCRIPT_DIR.parent
 CONTRACT_PATH = SKILL_DIR / "references" / "flavors" / "RENDERING-CONTRACT.md"
 
 
-def parse_required_classes(contract_path):
+def parse_required_classes(contract_path: Path) -> list[str]:
     """Extract required items from the machine-readable section."""
     text = contract_path.read_text()
 
@@ -28,7 +28,7 @@ def parse_required_classes(contract_path):
         sys.exit(1)
 
     manifest = text[start + len("<!-- required-classes:start -->") : end]
-    items = []
+    items: list[str] = []
     for line in manifest.splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
@@ -36,7 +36,7 @@ def parse_required_classes(contract_path):
     return items
 
 
-def check_flavor(flavor_dir, required):
+def check_flavor(flavor_dir: str | Path, required: list[str]) -> tuple[list[str], int]:
     """Check a flavor's style.css for each required selector or property."""
     style_path = Path(flavor_dir) / "style.css"
     if not style_path.exists():
@@ -50,7 +50,7 @@ def check_flavor(flavor_dir, required):
     root_match = re.search(r":root\s*\{(.*?)\}", css, re.DOTALL)
     root_vars = root_match.group(1) if root_match else ""
 
-    missing = []
+    missing: list[str] = []
     found = 0
 
     for item in required:
@@ -82,10 +82,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Validate a flavor's style.css against the rendering contract"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "flavor", nargs="?", default=None, help="Flavor name or path to flavor directory"
     )
-    parser.add_argument("--list", action="store_true", help="List all required classes and exit")
+    _ = parser.add_argument(
+        "--list", action="store_true", help="List all required classes and exit"
+    )
     args = parser.parse_args()
 
     required = parse_required_classes(CONTRACT_PATH)

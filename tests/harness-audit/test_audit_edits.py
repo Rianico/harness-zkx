@@ -20,7 +20,7 @@ _SCRIPT = (
 def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as f:
         for r in records:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            _ = f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
 def session_header(sid: str = "test-uuid") -> dict[str, Any]:
@@ -308,10 +308,10 @@ def test_scan_ignores_non_edit(tmp_path: Path) -> None:
 def test_scan_counts_parse_errors(tmp_path: Path) -> None:
     p = tmp_path / "sess.jsonl"
     with p.open("w", encoding="utf-8") as f:
-        f.write(json.dumps(session_header()) + "\n")
-        f.write("{not valid json\n")
-        f.write("[1, 2, 3]\n")
-        f.write(
+        _ = f.write(json.dumps(session_header()) + "\n")
+        _ = f.write("{not valid json\n")
+        _ = f.write("[1, 2, 3]\n")
+        _ = f.write(
             json.dumps(
                 edit_call(
                     "a1", None, "call_1", "/tmp/a.ts", [{"anchor_from": "zzz", "anchor_to": "zzz"}]
@@ -319,7 +319,7 @@ def test_scan_counts_parse_errors(tmp_path: Path) -> None:
             )
             + "\n"
         )
-        f.write(
+        _ = f.write(
             json.dumps(
                 edit_result("r1", "a1", "call_1", '[MODEL] [E_UNKNOWN_ANCHOR] anchor "zzz"', True)
             )

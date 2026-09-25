@@ -18,7 +18,7 @@ from pathlib import Path
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import print_err, run  # pyright: ignore[reportImplicitRelativeImport]
+from _lib import print_err, run
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

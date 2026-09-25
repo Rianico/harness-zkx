@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
             start = diagnostic["range"]["start"]
             print(
                 f"{relative(diagnostic['file'])}:{start['line'] + 1} "
-                + f"{diagnostic['rule'] or 'error'}: {diagnostic['message']}",
+                f"{diagnostic['rule'] or 'error'}: {diagnostic['message']}",
                 file=sys.stderr,
             )
         print(f"typecheck: {len(errors)} error(s) — errors are never budgeted", file=sys.stderr)
@@ -164,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
             for (file, rule), count in sorted(growth.items()):
                 print(
                     f"::error file={file}::{count} warning(s) exceed the budget for {rule} "
-                    + f"(budget {budget.get((file, rule), 0)}); --update-baseline only shrinks",
+                    f"(budget {budget.get((file, rule), 0)}); --update-baseline only shrinks",
                     file=sys.stderr,
                 )
             print("typecheck-budget: refusing to absorb new warnings", file=sys.stderr)
@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
         write_baseline(path, dict(current))
         print(
             f"typecheck-budget: rewrote {path} — {len(current)} entries, "
-            + f"{len(retired)} retired, {sum(current.values())} warnings",
+            f"{len(retired)} retired, {sum(current.values())} warnings",
             file=sys.stderr,
         )
         return 0
@@ -181,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         for (file, rule), count in sorted(growth.items()):
             print(
                 f"::error file={file}::{count} warning(s) for {rule}, "
-                + f"budget {budget.get((file, rule), 0)} — fix them, or the budget grows",
+                f"budget {budget.get((file, rule), 0)} — fix them, or the budget grows",
                 file=sys.stderr,
             )
         print(
@@ -193,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     total = sum(current.values())
     print(
         f"typecheck-budget: pass — {total} warnings, {len(current)} entries, "
-        + f"{len(retired)} ready to retire with --update-baseline",
+        f"{len(retired)} ready to retire with --update-baseline",
         file=sys.stderr,
     )
     return 0

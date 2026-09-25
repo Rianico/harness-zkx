@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
-from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
+from herdr_cli import (
     EXIT_OK,
     UsageError,
     current_pane_id,

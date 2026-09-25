@@ -117,7 +117,7 @@ def test_degenerate_formatter_output_never_reaches_the_file(
 
 
 def _scaffold(cwd: Path, *args: str) -> None:
-    subprocess.run(
+    _ = subprocess.run(
         [sys.executable, str(SCRIPT), *args, "--project-name", "demo", "--cwd", str(cwd)],
         check=True,
         capture_output=True,
@@ -184,7 +184,7 @@ def test_an_invocation_split_never_changes_the_bytes(monkeypatch, tmp_path, sequ
 def test_generated_tree_passes_its_own_ci_format_gate(monkeypatch, tmp_path):
     """Generate with the formatter live, then run exactly what the generated `verify` job runs."""
     monkeypatch.delenv("SCAFFOLD_NO_FORMAT", raising=False)
-    subprocess.run(
+    _ = subprocess.run(
         [
             sys.executable,
             str(SCRIPT),

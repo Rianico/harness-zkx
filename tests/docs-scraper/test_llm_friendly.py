@@ -1,6 +1,7 @@
 """Tests for LLM-friendly fetching methods."""
 
 from collections.abc import Iterator
+from typing import override
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -221,6 +222,7 @@ class TestFetchPageLlmFriendly:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -591,7 +593,7 @@ class TestFetchPageLlmFriendlyFallbackChain:
                         "fetch_via_jina_reader",
                         return_value=("# Jina Content", "markdown"),
                     ):
-                        content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                        content, _fmt = scraper_with_mock_session.fetch_page_llm_friendly(
                             TEST_PAGE_URL, use_defuddle=False
                         )
 

@@ -57,8 +57,8 @@ def _scaffolded_repo(tmp_path):
     scaffold.do_git(tmp_path, "demo", dry_run=False)
     git = ["git", "-C", str(tmp_path), "-c", "user.email=t@example.com", "-c", "user.name=t"]
     for args in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "chore: init"]):
-        subprocess.run([*git, *args], check=True, capture_output=True)
-    subprocess.run([*git, "switch", "-qc", "feat/x"], check=True, capture_output=True)
+        _ = subprocess.run([*git, *args], check=True, capture_output=True)
+    _ = subprocess.run([*git, "switch", "-qc", "feat/x"], check=True, capture_output=True)
     return git
 
 
@@ -93,8 +93,10 @@ def test_scaffolded_ledger_passes_the_floor(tmp_path):
         changelog.read_text(encoding="utf-8") + "\n### Features\n\n* **demo:** a thing (#1)\n",
         encoding="utf-8",
     )
-    subprocess.run([*git, "add", "-A"], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "-q", "-m", "docs: ledger"], check=True, capture_output=True)
+    _ = subprocess.run([*git, "add", "-A"], check=True, capture_output=True)
+    _ = subprocess.run(
+        [*git, "commit", "-q", "-m", "docs: ledger"], check=True, capture_output=True
+    )
     result = _floor(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -108,8 +110,10 @@ def test_scaffolded_gate_names_the_accepted_sections(tmp_path):
         changelog.read_text(encoding="utf-8") + "\n### Added\n\n* **demo:** a thing (#1)\n",
         encoding="utf-8",
     )
-    subprocess.run([*git, "add", "-A"], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "-q", "-m", "docs: ledger"], check=True, capture_output=True)
+    _ = subprocess.run([*git, "add", "-A"], check=True, capture_output=True)
+    _ = subprocess.run(
+        [*git, "commit", "-q", "-m", "docs: ledger"], check=True, capture_output=True
+    )
     result = _floor(tmp_path)
     report = result.stdout + result.stderr
     assert result.returncode == 1, report

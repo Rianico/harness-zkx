@@ -115,21 +115,21 @@ class DocumentationScraper(ABC):
         respect_robots_txt: bool = True,
         timeout: float = 30.0,
     ):
-        self.base_url = base_url
-        self.output_dir = output_dir
-        self.force = force
-        self.timeout = timeout
-        self.delay = delay
-        self.max_retries = max_retries
-        self.respect_robots_txt = respect_robots_txt
+        self.base_url: str = base_url
+        self.output_dir: Path = output_dir
+        self.force: bool = force
+        self.timeout: float = timeout
+        self.delay: float = delay
+        self.max_retries: int = max_retries
+        self.respect_robots_txt: bool = respect_robots_txt
 
         # Unified cache directory: .cache/<scraper-name>/
-        self.cache_base = cache_base or (output_dir.parent / ".cache")
-        self.cache_dir = self.cache_base / self.name
+        self.cache_base: Path = cache_base or (output_dir.parent / ".cache")
+        self.cache_dir: Path = self.cache_base / self.name
 
         # User-Agent rotation
-        self.user_agent_pool = user_agent_pool if user_agent_pool else []
-        self._ua_index = 0
+        self.user_agent_pool: list[dict[str, str]] = user_agent_pool if user_agent_pool else []
+        self._ua_index: int = 0
 
         # Rate limiting state
         self._last_request_time: float = 0.0
@@ -140,18 +140,17 @@ class DocumentationScraper(ABC):
         self._crawl_delay: float | None = None
 
         # HTTP session with headers
-        self.session = requests.Session()
+        self.session: requests.Session = requests.Session()
         self._set_default_headers()
 
         # html2text configuration
-        self.h2t = html2text.HTML2Text()
+        self.h2t: html2text.HTML2Text = html2text.HTML2Text()
         self.h2t.body_width = 0
         self.h2t.ignore_links = False
         self.h2t.ignore_images = False
         self.h2t.ignore_emphasis = False
         self.h2t.skip_internal_links = False
         self.h2t.unicode_snob = True
-        self.h2t.decode_errors = "ignore"
 
     def _set_default_headers(self) -> None:
         """Set default headers for the session."""
@@ -203,7 +202,10 @@ class DocumentationScraper(ABC):
             return True
 
         # Check if URL is allowed
-        if not self._robots_parser.can_fetch(self.session.headers.get("User-Agent", "*"), url):
+        user_agent = self.session.headers.get("User-Agent", "*")
+        if isinstance(user_agent, bytes):
+            user_agent = user_agent.decode("latin-1", "replace")
+        if not self._robots_parser.can_fetch(user_agent, url):
             raise PermissionError(f"URL blocked by robots.txt: {url}")
 
         return True
@@ -290,7 +292,7 @@ class DocumentationScraper(ABC):
         self._wait_for_rate_limit()
 
         # Check robots.txt
-        self._check_robots_txt(url)
+        _ = self._check_robots_txt(url)
 
         # Rotate User-Agent
         self._rotate_user_agent()
@@ -407,7 +409,7 @@ class DocumentationScraper(ABC):
             if original_accept:
                 self.session.headers["Accept"] = original_accept
             else:
-                self.session.headers.pop("Accept", None)
+                _ = self.session.headers.pop("Accept", None)
 
     def fetch_markdown_extension(self, url: str) -> tuple[str | None, str]:
         """Try fetching markdown at .md extension.
@@ -538,7 +540,7 @@ class DocumentationScraper(ABC):
 
             # Save to cache
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(response.text, encoding="utf-8")
+            _ = cache_path.write_text(response.text, encoding="utf-8")
             print(f"   Cached to: {cache_path.relative_to(self.cache_base.parent)}")
 
             return BeautifulSoup(response.content, "html.parser")
@@ -600,14 +602,14 @@ class DocumentationScraper(ABC):
         content, fmt = self.fetch_markdown_via_negotiation(url)
         if content and fmt == "markdown":
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path_md.write_text(content, encoding="utf-8")
+            _ = cache_path_md.write_text(content, encoding="utf-8")
             return content, "markdown"
 
         # Try .md extension
         content, fmt = self.fetch_markdown_extension(url)
         if content and fmt == "markdown":
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path_md.write_text(content, encoding="utf-8")
+            _ = cache_path_md.write_text(content, encoding="utf-8")
             return content, "markdown"
 
         # Try defuddle CLI (local, cleaner than Jina)
@@ -615,7 +617,7 @@ class DocumentationScraper(ABC):
             content, fmt = self.fetch_via_defuddle(url)
             if content and fmt == "markdown":
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
-                cache_path_md.write_text(content, encoding="utf-8")
+                _ = cache_path_md.write_text(content, encoding="utf-8")
                 return content, "markdown"
 
         # Try Jina Reader proxy
@@ -623,7 +625,7 @@ class DocumentationScraper(ABC):
             content, fmt = self.fetch_via_jina_reader(url)
             if content and fmt == "markdown":
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
-                cache_path_md.write_text(content, encoding="utf-8")
+                _ = cache_path_md.write_text(content, encoding="utf-8")
                 return content, "markdown"
 
         # Fall back to HTML
@@ -650,7 +652,7 @@ class DocumentationScraper(ABC):
 
         return name if name else "index"
 
-    def extract_main_content(self, soup: BeautifulSoup) -> BeautifulSoup:
+    def extract_main_content(self, soup: BeautifulSoup) -> Tag:
         """Extract main documentation content from page."""
         content = soup.find("div", class_="contents")
         if not content:
@@ -675,7 +677,11 @@ class DocumentationScraper(ABC):
         for textblock in content.find_all("div", class_="textblock"):
             links = textblock.find_all("a", href=True)
             if len(links) > 10:
-                html_links = [link for link in links if link.get("href", "").endswith(".html")]
+                html_links = [
+                    link
+                    for link in links
+                    if isinstance(href := link.get("href"), str) and href.endswith(".html")
+                ]
                 if len(html_links) > 10:
                     textblock.decompose()
 
@@ -688,13 +694,17 @@ class DocumentationScraper(ABC):
         # Make image URLs absolute
         for img in content.find_all("img"):
             src = img.get("src")
-            if src and not src.startswith(("http://", "https://")):
+            if isinstance(src, str) and src and not src.startswith(("http://", "https://")):
                 img["src"] = urljoin(page_url, src)
 
         # Make link URLs absolute
         for link in content.find_all("a"):
             href = link.get("href")
-            if href and not href.startswith(("http://", "https://", "#", "mailto:")):
+            if (
+                isinstance(href, str)
+                and href
+                and not href.startswith(("http://", "https://", "#", "mailto:"))
+            ):
                 link["href"] = urljoin(page_url, href)
 
         markdown = self.h2t.handle(str(content))
@@ -813,5 +823,5 @@ class DocumentationScraper(ABC):
             ]
         )
 
-        readme_path.write_text("\n".join(lines), encoding="utf-8")
+        _ = readme_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"Generated: {readme_path}")

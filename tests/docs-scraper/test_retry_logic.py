@@ -3,6 +3,7 @@
 Test IDs: RB-01 through RB-07
 """
 
+from typing import override
 from unittest.mock import MagicMock, patch
 
 import requests.exceptions
@@ -48,6 +49,7 @@ class TestRetryLogic:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -106,6 +108,7 @@ class TestRetryLogic:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -164,6 +167,7 @@ class TestRetryLogic:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -215,6 +219,7 @@ class TestRetryLogic:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -272,6 +277,7 @@ class TestRetryLogic:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -321,6 +327,7 @@ class TestRetryLogic:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 

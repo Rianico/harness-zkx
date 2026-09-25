@@ -3,6 +3,7 @@
 import re
 import shutil
 from pathlib import Path
+from typing import override
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -19,8 +20,8 @@ class APIScraper(DocumentationScraper):
     - Cache location: .cache/cuda-driver/ or .cache/cuda-runtime/
     """
 
-    name = "cuda-api"
-    description = """
+    name: str = "cuda-api"
+    description: str = """
 CUDA Runtime or Driver API documentation scraper.
 
 Scrapes NVIDIA CUDA documentation and converts to searchable markdown format.
@@ -54,17 +55,17 @@ Examples:
             "runtime": "https://docs.nvidia.com/cuda/cuda-runtime-api/",
             "driver": "https://docs.nvidia.com/cuda/cuda-driver-api/",
         }
-        self.api_type = api_type
+        self.api_type: str = api_type
         # Override name for cache directory
-        self._scraper_name = f"cuda-{api_type}"
+        self._scraper_name: str = f"cuda-{api_type}"
         super().__init__(
             base_urls[api_type],
             output_dir,
             force=force,
         )
         # Override cache_dir to use api_type specific name
-        self.cache_dir = self.cache_base / self._scraper_name
-        self._cached_pages_dir = self.cache_dir / "pages"
+        self.cache_dir: Path = self.cache_base / self._scraper_name
+        self._cached_pages_dir: Path = self.cache_dir / "pages"
 
     def _fetch_with_cache(self, url: str, cache_filename: str) -> BeautifulSoup | None:
         """Fetch page with unified caching."""
@@ -86,7 +87,7 @@ Examples:
 
             # Save to cache
             self._cached_pages_dir.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(response.text, encoding="utf-8")
+            _ = cache_path.write_text(response.text, encoding="utf-8")
 
             return BeautifulSoup(response.content, "html.parser")
         except Exception as e:
@@ -108,7 +109,7 @@ Examples:
         for link in soup.find_all("a", href=re.compile(pattern)):
             href = link.get("href")
             title = link.get_text(strip=True)
-            if href and title and href not in seen:
+            if isinstance(href, str) and href and title and href not in seen:
                 seen.add(href)
                 modules.append(
                     {
@@ -134,7 +135,7 @@ Examples:
         for link in soup.find_all("a", href=re.compile(pattern)):
             href = link.get("href")
             title = link.get_text(strip=True)
-            if href and title and href not in seen:
+            if isinstance(href, str) and href and title and href not in seen:
                 seen.add(href)
                 structures.append(
                     {
@@ -161,7 +162,7 @@ Examples:
         header += "---\n\n"
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(header + markdown, encoding="utf-8")
+        _ = output_path.write_text(header + markdown, encoding="utf-8")
 
         print(f"  ✓ Saved: {output_path.name} ({len(header + markdown)} bytes)")
         return True
@@ -276,6 +277,7 @@ Examples:
 
         return "\n".join(cleaned_lines)
 
+    @override
     def run(self) -> None:
         """Execute the scraping workflow."""
         print("=" * 70)
@@ -319,14 +321,14 @@ Examples:
         for i, module in enumerate(modules, 1):
             print(f"\n[{i}/{len(modules)}] {module['title']}")
             filename = self.sanitize_filename(module["filename"]) + ".md"
-            self.scrape_page(module, cache_modules_dir / filename)
+            _ = self.scrape_page(module, cache_modules_dir / filename)
 
         # Scrape structures
         print("\n3. Scraping data structure pages...")
         for i, struct in enumerate(structures, 1):
             print(f"\n[{i}/{len(structures)}] {struct['title']}")
             filename = self.sanitize_filename(struct["filename"]) + ".md"
-            self.scrape_page(struct, cache_structures_dir / filename)
+            _ = self.scrape_page(struct, cache_structures_dir / filename)
 
         # Cleanup phase
         print("\n4. Cleaning and processing files...")
@@ -341,14 +343,14 @@ Examples:
 
         for md_file in sorted(cache_modules_dir.glob("*.md")):
             content, orig_size, new_size = self.clean_markdown_file(md_file)
-            (out_modules_dir / md_file.name).write_text(content, encoding="utf-8")
+            _ = (out_modules_dir / md_file.name).write_text(content, encoding="utf-8")
             total_original += orig_size
             total_new += new_size
             files_cleaned += 1
 
         for md_file in sorted(cache_structures_dir.glob("*.md")):
             content, orig_size, new_size = self.clean_markdown_file(md_file)
-            (out_structures_dir / md_file.name).write_text(content, encoding="utf-8")
+            _ = (out_structures_dir / md_file.name).write_text(content, encoding="utf-8")
             total_original += orig_size
             total_new += new_size
             files_cleaned += 1
@@ -414,5 +416,5 @@ Examples:
             content += f"- [{struct['title']}](data-structures/{filename})\n"
 
         index_path = self.output_dir / "INDEX.md"
-        index_path.write_text(content, encoding="utf-8")
+        _ = index_path.write_text(content, encoding="utf-8")
         print(f"  ✓ Created: {index_path}")

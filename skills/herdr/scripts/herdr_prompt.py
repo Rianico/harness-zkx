@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
-from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
+from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
     HerdrError,
@@ -373,7 +373,7 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
             hint = "still working when the wait timed out"
         raise WaitTimeout(
             f"prompt delivered to {names} but {hint}; "
-            + f"working asynchronously. Yield turn and await reply callback, or resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
+            f"working asynchronously. Yield turn and await reply callback, or resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
         )
     return EXIT_OK
 

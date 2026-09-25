@@ -192,7 +192,7 @@ def main():
         print(f"Unknown command: {command}")
         sys.exit(1)
 
-    manifest_path.write_text(json.dumps(manifest, indent=2))
+    _ = manifest_path.write_text(json.dumps(manifest, indent=2))
     print(f"Manifest updated: {manifest_path}")
 
 

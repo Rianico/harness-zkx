@@ -4,6 +4,7 @@ Test IDs: RA-01 through RA-05
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import override
 from unittest.mock import MagicMock, patch
 
 import requests.exceptions
@@ -24,6 +25,7 @@ class TestRetryAfter:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -88,6 +90,7 @@ class TestRetryAfter:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -156,6 +159,7 @@ class TestRetryAfter:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -220,6 +224,7 @@ class TestRetryAfter:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -284,6 +289,7 @@ class TestRetryAfter:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 

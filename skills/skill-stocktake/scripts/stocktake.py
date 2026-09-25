@@ -890,7 +890,7 @@ def cmd_save(args: argparse.Namespace) -> int:
     evaluated_at = datetime.now(local_tz()).strftime("%Y-%m-%dT%H:%M:%S%z")
 
     # Ensure parent directory exists
-    results_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = results_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not results_path.exists():
         # Bootstrap new results file
@@ -1064,48 +1064,58 @@ def main(argv: list[str] | None = None) -> int:
 
     # scan command
     scan_parser = subparsers.add_parser("scan", help="Phase 1: Inventory all skills")
-    scan_parser.add_argument("--global-dir", type=Path, help="Override global skills dir")
-    scan_parser.add_argument("--project-dir", type=Path, help="Override project skills dir")
-    scan_parser.add_argument(
+    _ = scan_parser.add_argument("--global-dir", type=Path, help="Override global skills dir")
+    _ = scan_parser.add_argument("--project-dir", type=Path, help="Override project skills dir")
+    _ = scan_parser.add_argument(
         "--observations-dir", type=Path, help="Override observations directory"
     )
-    scan_parser.add_argument("--output", choices=["json", "rich", "markdown"], default="rich")
-    scan_parser.add_argument("--width", type=int, help="Override terminal width for rich output")
+    _ = scan_parser.add_argument("--output", choices=["json", "rich", "markdown"], default="rich")
+    _ = scan_parser.add_argument(
+        "--width", type=int, help="Override terminal width for rich output"
+    )
 
     # diff command
     diff_parser = subparsers.add_parser("diff", help="Quick Scan: Find changed skills")
-    diff_parser.add_argument("--results", type=Path, help="Path to results.json")
-    diff_parser.add_argument("--global-dir", type=Path, help="Override global skills directory")
-    diff_parser.add_argument("--project-dir", type=Path, help="Override project skills directory")
-    diff_parser.add_argument("--output", choices=["json", "rich"], default="rich")
+    _ = diff_parser.add_argument("--results", type=Path, help="Path to results.json")
+    _ = diff_parser.add_argument("--global-dir", type=Path, help="Override global skills directory")
+    _ = diff_parser.add_argument(
+        "--project-dir", type=Path, help="Override project skills directory"
+    )
+    _ = diff_parser.add_argument("--output", choices=["json", "rich"], default="rich")
 
     # overview command
     overview_parser = subparsers.add_parser("overview", help="Quick overview with usage stats")
-    overview_parser.add_argument("--global-dir", type=Path, help="Override global skills dir")
-    overview_parser.add_argument("--project-dir", type=Path, help="Override project skills dir")
-    overview_parser.add_argument(
+    _ = overview_parser.add_argument("--global-dir", type=Path, help="Override global skills dir")
+    _ = overview_parser.add_argument("--project-dir", type=Path, help="Override project skills dir")
+    _ = overview_parser.add_argument(
         "--observations-dir", type=Path, help="Override observations directory"
     )
-    overview_parser.add_argument(
+    _ = overview_parser.add_argument(
         "--width", type=int, help="Override terminal width for rich output"
     )
 
     # summary command
     summary_parser = subparsers.add_parser("summary", help="Phase 3: Display results table")
-    summary_parser.add_argument("--results", type=Path, help="Path to results.json")
-    summary_parser.add_argument("--output", choices=["json", "rich", "markdown"], default="rich")
-    summary_parser.add_argument("--group-by", choices=["verdict", "skill"], default="verdict")
-    summary_parser.add_argument("--width", type=int, help="Override terminal width for rich output")
+    _ = summary_parser.add_argument("--results", type=Path, help="Path to results.json")
+    _ = summary_parser.add_argument(
+        "--output", choices=["json", "rich", "markdown"], default="rich"
+    )
+    _ = summary_parser.add_argument("--group-by", choices=["verdict", "skill"], default="verdict")
+    _ = summary_parser.add_argument(
+        "--width", type=int, help="Override terminal width for rich output"
+    )
 
     # save command
     save_parser = subparsers.add_parser("save", help="Merge evaluation results")
-    save_parser.add_argument("--results", type=Path, help="Path to results.json")
+    _ = save_parser.add_argument("--results", type=Path, help="Path to results.json")
 
     # merge-chunks command
     merge_parser = subparsers.add_parser("merge-chunks", help="Merge chunked evaluation results")
-    merge_parser.add_argument("--results", type=Path, help="Path to results.json")
-    merge_parser.add_argument("--inventory", type=Path, help="Path to inventory JSON from scan")
-    merge_parser.add_argument("--clean", action="store_true", help="Remove temp files after merge")
+    _ = merge_parser.add_argument("--results", type=Path, help="Path to results.json")
+    _ = merge_parser.add_argument("--inventory", type=Path, help="Path to inventory JSON from scan")
+    _ = merge_parser.add_argument(
+        "--clean", action="store_true", help="Remove temp files after merge"
+    )
 
     args = parser.parse_args(argv)
 

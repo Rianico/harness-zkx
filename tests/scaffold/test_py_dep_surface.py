@@ -27,7 +27,7 @@ scaffold = _load("scaffold_mod_py_dep_surface", SCRIPT)
 
 def test_n1_multiline_without_trailing_comma_appends(tmp_path: Path):
     body = '[project]\nname = "demo"\nversion = "0.1.0"\ndependencies = [\n    "httpx>=0.27"\n]\n'
-    (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+    _ = (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
     rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", "pydantic>=2"])
     assert rc == 0
     out = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
@@ -45,7 +45,7 @@ def test_n2_quoted_header_and_quoted_key_supported(tmp_path: Path, capsys):
         '[project]\nname = "demo"\n"dependencies" = []\n',
     ):
         p = tmp_path / "pyproject.toml"
-        p.write_text(body, encoding="utf-8")
+        _ = p.write_text(body, encoding="utf-8")
         capsys.readouterr()
         rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", "httpx>=0.27"])
         assert rc == 0
@@ -59,7 +59,7 @@ def test_n2_quoted_header_and_quoted_key_supported(tmp_path: Path, capsys):
 def test_declaration_out_of_contract_refuses_naming_found(tmp_path: Path, capsys):
     body = '[project]\nname = "demo"\nversion = "0.1.0"\n'
     p = tmp_path / "pyproject.toml"
-    p.write_text(body, encoding="utf-8")
+    _ = p.write_text(body, encoding="utf-8")
     before = p.read_bytes()
     rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", "httpx>=0.27"])
     assert rc != 0

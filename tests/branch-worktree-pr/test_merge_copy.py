@@ -24,11 +24,11 @@ def _repo_with_a_long_body(tmp_path: Path, body_line: str) -> Path:
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "t@example.invalid")
     _git(repo, "config", "user.name", "t")
-    (repo / "a.txt").write_text("a\n", encoding="utf-8")
+    _ = (repo / "a.txt").write_text("a\n", encoding="utf-8")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "chore: base")
     _git(repo, "tag", "base")
-    (repo / "b.txt").write_text("b\n", encoding="utf-8")
+    _ = (repo / "b.txt").write_text("b\n", encoding="utf-8")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", f"feat(thing): add a thing\n\n{body_line}")
     return repo
@@ -52,17 +52,19 @@ def test_commit_body_offenders_accepts_a_wrapped_body(tmp_path: Path) -> None:
 
 
 def test_commitlint_configured_detects_the_config_file(tmp_path: Path) -> None:
-    (tmp_path / "commitlint.config.js").write_text("export default {}\n", encoding="utf-8")
+    _ = (tmp_path / "commitlint.config.js").write_text("export default {}\n", encoding="utf-8")
     assert merge_copy.commitlint_configured(tmp_path)
 
 
 def test_commitlint_configured_detects_the_package_json_key(tmp_path: Path) -> None:
-    (tmp_path / "package.json").write_text('{"commitlint": {"extends": []}}\n', encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text(
+        '{"commitlint": {"extends": []}}\n', encoding="utf-8"
+    )
     assert merge_copy.commitlint_configured(tmp_path)
 
 
 def test_commitlint_configured_is_false_without_commitlint(tmp_path: Path) -> None:
-    (tmp_path / "package.json").write_text('{"name": "x"}\n', encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text('{"name": "x"}\n', encoding="utf-8")
     assert not merge_copy.commitlint_configured(tmp_path)
 
 

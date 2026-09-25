@@ -30,7 +30,7 @@ def load_module(name: str, filename: str) -> object:
         raise ImportError(f"could not load spec for {name} from {path}")
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
-    spec.loader.exec_module(mod)  # pyright: ignore[reportUnknownMemberType]
+    spec.loader.exec_module(mod)
     return mod
 
 
@@ -109,7 +109,7 @@ def main(argv: list[str] | None = None) -> None:
     # Dispatch via loading sibling modules and calling main with adjusted argv
     if cmd == "claim":
         mod = load_module("claim_gate", "claim_gate.py")
-        mod.main([args.issue])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main([args.issue])  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "create-target":
         mod = load_module("create_target", "create_target.py")
         base: str = args.base
@@ -118,25 +118,25 @@ def main(argv: list[str] | None = None) -> None:
         if base != "origin/main" or True:
             # Always pass base to preserve default handling; if caller omitted, it will be default
             argv2.append(base)
-        mod.main(argv2)  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main(argv2)  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "make-copy":
         mod = load_module("make_copy", "make_copy.py")
-        mod.main([args.child_branch, args.base_branch])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main([args.child_branch, args.base_branch])  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "self-check":
         mod = load_module("self_check", "self_check.py")
         check_args: list[str] = [args.branch]
         if args.path:
             check_args.append(args.path)
-        mod.main(check_args)  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main(check_args)  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "merge-copy":
         mod = load_module("merge_copy", "merge_copy.py")
-        mod.main([args.copy_path, args.target_branch])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main([args.copy_path, args.target_branch])  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "verify":
         mod = load_module("verify_parent", "verify_parent.py")
-        mod.main([])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main([])  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "check-history":
         mod = load_module("check_history", "check_history.py")
-        mod.main([])  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main([])  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "open-pr":
         mod = load_module("open_pr", "open_pr.py")
         extra: list[str] = [args.branch, args.base, args.issue_number]
@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> None:
             extra.extend(["--watch-interval", str(args.watch_interval)])
         if args.fail_fast:
             extra.append("--fail-fast")
-        mod.main(extra)  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main(extra)  # pyright: ignore[reportAttributeAccessIssue]
     elif cmd == "merge-pr":
         mod = load_module("merge_pr", "merge_pr.py")
         extra2: list[str] = [args.pr]
@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> None:
             extra2.append("--fail-fast")
         if not args.post_merge_watch:
             extra2.append("--no-post-merge-watch")
-        mod.main(extra2)  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        mod.main(extra2)  # pyright: ignore[reportAttributeAccessIssue]
     else:
         parser.print_help()
         sys.exit(1)

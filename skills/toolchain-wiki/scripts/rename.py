@@ -31,9 +31,11 @@ def repo_root_from_script(p: pathlib.Path) -> pathlib.Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Deprecated shim: rename toolchain <-> toolchain-wiki")
-    ap.add_argument("--to", dest="target", required=True, choices=["toolchain", "toolchain-wiki"])
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--cwd", type=pathlib.Path, default=None)
+    _ = ap.add_argument(
+        "--to", dest="target", required=True, choices=["toolchain", "toolchain-wiki"]
+    )
+    _ = ap.add_argument("--dry-run", action="store_true")
+    _ = ap.add_argument("--cwd", type=pathlib.Path, default=None)
     args = ap.parse_args()
 
     script_path = pathlib.Path(__file__)

@@ -2,8 +2,9 @@
 
 import re
 from pathlib import Path
+from typing import override
 
-from bs4 import Tag
+from bs4 import BeautifulSoup, Tag
 
 from .base import DocumentationScraper, Section
 
@@ -17,8 +18,8 @@ class PTXScraper(DocumentationScraper):
     - Cache location: .cache/ptx/index.html
     """
 
-    name = "ptx"
-    description = """
+    name: str = "ptx"
+    description: str = """
 PTX ISA (Parallel Thread Execution) documentation scraper.
 
 Scrapes NVIDIA PTX ISA documentation and converts to markdown.
@@ -47,6 +48,7 @@ Examples:
             force=force,
         )
 
+    @override
     def run(self) -> None:
         """Execute PTX scraping workflow."""
         print("=" * 70)
@@ -90,18 +92,18 @@ Examples:
 
         print(f"\n✓ Complete! Documentation saved to: {self.output_dir}")
 
-    def _extract_sections(self, soup):
+    def _extract_sections(self, soup: BeautifulSoup) -> list[Section]:
         """Extract sections from single-page documentation."""
-        content = None
-        for selector in [
-            {"role": "main"},
-            {"class": "document"},
-            {"class": "body"},
-            {"itemprop": "articleBody"},
-        ]:
-            content = soup.find("div", selector) or soup.find("section", selector)
-            if content:
-                break
+        content = (
+            soup.find("div", role="main")
+            or soup.find("section", role="main")
+            or soup.find("div", class_="document")
+            or soup.find("section", class_="document")
+            or soup.find("div", class_="body")
+            or soup.find("section", class_="body")
+            or soup.find("div", itemprop="articleBody")
+            or soup.find("section", itemprop="articleBody")
+        )
 
         if not content:
             return []
@@ -119,13 +121,15 @@ Examples:
             section_num = section_match.group(1) if section_match else ""
             title = section_match.group(2) if section_match else heading_text
 
-            anchor_id = heading.get("id", "") or (
-                heading.find("a").get("id", "") if heading.find("a") else ""
-            )
+            link = heading.find("a")
+            raw_anchor = heading.get("id", "") or (link.get("id", "") if link else "")
+            if isinstance(raw_anchor, list):
+                raw_anchor = raw_anchor[0] if raw_anchor else ""
+            anchor_id = raw_anchor if isinstance(raw_anchor, str) else ""
             level = int(heading.name[1]) - 1
 
             # Collect content
-            content_elements = []
+            content_elements: list[Tag] = []
             current = heading.next_sibling
             while current:
                 if isinstance(current, Tag) and current.name in [
@@ -188,5 +192,5 @@ Examples:
 
         # Write file
         output_file = parent_dir / f"{filename}.md"
-        output_file.write_text(markdown, encoding="utf-8")
+        _ = output_file.write_text(markdown, encoding="utf-8")
         print(f"  Saved: {output_file.name}")

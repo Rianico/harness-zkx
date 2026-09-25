@@ -41,7 +41,7 @@ def _install_agents_into(cwd: Path) -> Path:
 
 def test_install_agents_check_passes(tmp_path):
     """install-agents.mjs --check must exit 0 once the installed roles match the lockfile."""
-    _install_agents_into(tmp_path)
+    _ = _install_agents_into(tmp_path)
 
     result = subprocess.run(
         ["node", str(INSTALL_SCRIPT), "--check"],
@@ -135,7 +135,7 @@ def test_check_flags_drift_instead_of_overwriting(tmp_path):
     target_dir = _install_agents_into(tmp_path)
     target = target_dir / "developer.md"
     edited = target.read_text(encoding="utf-8") + "\nlocal edit\n"
-    target.write_text(edited, encoding="utf-8")
+    _ = target.write_text(edited, encoding="utf-8")
 
     result = subprocess.run(
         ["node", str(INSTALL_SCRIPT), "--check"],

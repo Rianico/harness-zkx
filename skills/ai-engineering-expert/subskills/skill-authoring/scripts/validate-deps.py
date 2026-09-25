@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    import frontmatter  # pyright: ignore[reportMissingImports]
+    import frontmatter
     # Reason: resolved by uv run via inline script metadata; not a project dependency
 except ImportError:
     print(
@@ -37,7 +37,7 @@ except ImportError:
 try:
     import yaml
 
-    HAS_YAML = True  # pyright: ignore[reportConstantRedefinition]
+    HAS_YAML = True
 except ImportError:
     HAS_YAML = False  # pyright: ignore[reportConstantRedefinition]
 
@@ -180,7 +180,7 @@ def show_related(
         return
 
     print(f"--- Skill: {target_skill} ---")
-    print(f"Location: {location.relative_to(root_dir) if isinstance(location, Path) else location}")
+    print(f"Location: {location.relative_to(root_dir)}")
 
     # 1. Outbound Dependencies
     print("\nOutbound Dependencies (depends-on):")
@@ -441,7 +441,7 @@ def fix_skills(root_dir: Path, skill_map: dict[str, Path], dry_run: bool = False
                 if dry_run:
                     print(f"Would fix: {location.relative_to(root_dir)}")
                 else:
-                    location.write_text(new_content, encoding="utf-8")
+                    _ = location.write_text(new_content, encoding="utf-8")
                     print(f"FIXED: {location.relative_to(root_dir)}")
                 fixed_count += 1
 
@@ -499,7 +499,7 @@ def rename_skill(old_name: str, new_name: str, root_dir: Path, dry_run: bool = F
                 f"Would rename: {old_dir.relative_to(root_dir)} -> {new_dir.relative_to(root_dir)}"
             )
         else:
-            old_dir.rename(new_dir)
+            _ = old_dir.rename(new_dir)
             print(f"RENAMED: {old_dir.relative_to(root_dir)} -> {new_dir.relative_to(root_dir)}")
 
     # 2. Update name field in the skill's own SKILL.md
@@ -516,7 +516,7 @@ def rename_skill(old_name: str, new_name: str, root_dir: Path, dry_run: bool = F
             count=1,
             flags=re.MULTILINE,
         )
-        skill_file.write_text(content, encoding="utf-8")
+        _ = skill_file.write_text(content, encoding="utf-8")
         print(f"UPDATED: {skill_file.relative_to(root_dir)} (name field)")
 
     # 3. Update references in other skills
@@ -565,7 +565,7 @@ def rename_skill(old_name: str, new_name: str, root_dir: Path, dry_run: bool = F
                 print(f"Would update: {location.relative_to(root_dir)}")
             else:
                 new_content = "---\n" + new_fm + "\n---" + content[match.end() :]
-                location.write_text(new_content, encoding="utf-8")
+                _ = location.write_text(new_content, encoding="utf-8")
                 print(f"UPDATED REFERENCES: {location.relative_to(root_dir)}")
             updated_count += 1
 
@@ -662,7 +662,7 @@ def sync_skill(skill_path: Path, dry_run: bool = False) -> bool:
 
     agents_dir.mkdir(parents=True, exist_ok=True)
     try:
-        openai_yaml.write_text(output, encoding="utf-8")
+        _ = openai_yaml.write_text(output, encoding="utf-8")
         target = skill_path.parent.parent.parent
         rel = openai_yaml.relative_to(target) if target.exists() else openai_yaml
         print(f"GENERATED: {rel}")
@@ -831,7 +831,7 @@ def context_check_all(
 
 def main():
     parser = argparse.ArgumentParser(description="LSZ Skill Management Tool")
-    parser.add_argument(
+    _ = parser.add_argument(
         "--project-root",
         type=Path,
         default=Path.cwd(),
@@ -839,56 +839,56 @@ def main():
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Subcommands")
-    subparsers.add_parser("check", help="Validate all skill dependencies")
+    _ = subparsers.add_parser("check", help="Validate all skill dependencies")
 
     rel_parser = subparsers.add_parser(
         "related",
         aliases=["callers"],
         help="Show inbound/outbound dependencies",
     )
-    rel_parser.add_argument("skill", help="Target skill name")
+    _ = rel_parser.add_argument("skill", help="Target skill name")
 
-    subparsers.add_parser("lint", help="Check skill frontmatter quality")
+    _ = subparsers.add_parser("lint", help="Check skill frontmatter quality")
     fix_parser = subparsers.add_parser("fix", help="Automatically fix frontmatter issues")
-    fix_parser.add_argument(
+    _ = fix_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be fixed without modifying files",
     )
 
     ren_parser = subparsers.add_parser("rename", help="Rename a skill and cascade updates")
-    ren_parser.add_argument("old_name", help="Current skill name")
-    ren_parser.add_argument("new_name", help="New skill name")
-    ren_parser.add_argument(
+    _ = ren_parser.add_argument("old_name", help="Current skill name")
+    _ = ren_parser.add_argument("new_name", help="New skill name")
+    _ = ren_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be renamed without modifying files",
     )
 
     sync_parser = subparsers.add_parser("sync", help="Generate agents/openai.yaml from SKILL.md")
-    sync_parser.add_argument(
+    _ = sync_parser.add_argument(
         "skill",
         nargs="?",
         help="Target skill name (omit for all)",
     )
-    sync_parser.add_argument(
+    _ = sync_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be generated",
     )
 
     cc_parser = subparsers.add_parser("context-check", help="Enforce context-load policy")
-    cc_parser.add_argument(
+    _ = cc_parser.add_argument(
         "skill",
         nargs="?",
         help="Target skill name (omit for all)",
     )
-    cc_parser.add_argument(
+    _ = cc_parser.add_argument(
         "--json",
         action="store_true",
         help="Machine-readable output",
     )
-    cc_parser.add_argument(
+    _ = cc_parser.add_argument(
         "--show-over",
         action="store_true",
         help="Print full description text for skills exceeding budget",

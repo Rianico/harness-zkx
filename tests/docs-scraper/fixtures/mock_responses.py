@@ -31,7 +31,9 @@ class MockResponse:
             raise self._raise_error
         if self.status_code >= 400:
             # Create a mock response for the HTTPError
-            raise requests.exceptions.HTTPError(f"{self.status_code} Error", response=self)
+            err_response = requests.Response()
+            err_response.status_code = self.status_code
+            raise requests.exceptions.HTTPError(f"{self.status_code} Error", response=err_response)
 
     def json(self) -> Any:
         import json

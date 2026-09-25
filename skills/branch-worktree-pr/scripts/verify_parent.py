@@ -17,7 +17,7 @@ from pathlib import Path
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import git_status_clean, print_err, read_gate, run, run_gate  # pyright: ignore[reportImplicitRelativeImport]
+from _lib import git_status_clean, print_err, read_gate, run, run_gate
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import artifact_paths
 
+assert artifact_paths.__file__ is not None  # plain module always carries __file__
 SCRIPT = Path(artifact_paths.__file__)
 WHEN = datetime(2026, 1, 2, 3, 4, 5)
 
@@ -28,7 +29,7 @@ def _repo_without_config(tmp_path: Path) -> Path:
 def _repo_with_config(tmp_path: Path, body: str) -> Path:
     repo = _repo_without_config(tmp_path)
     (repo / ".lsz").mkdir()
-    (repo / ".lsz" / "config.yaml").write_text(body, encoding="utf-8")
+    _ = (repo / ".lsz" / "config.yaml").write_text(body, encoding="utf-8")
     return repo
 
 

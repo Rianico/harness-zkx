@@ -88,7 +88,7 @@ def _safe_sandbox_dir(scenario_id: str) -> Path:
     safe_id = re.sub(r"[^a-zA-Z0-9\-_]", "_", scenario_id)
     path = SANDBOX_BASE / safe_id
     # Validate path stays within sandbox base (raises ValueError on traversal)
-    path.resolve().relative_to(SANDBOX_BASE.resolve())
+    _ = path.resolve().relative_to(SANDBOX_BASE.resolve())
     return path
 
 
@@ -98,10 +98,10 @@ def _setup_sandbox(sandbox_dir: Path, scenario: Scenario) -> None:
         shutil.rmtree(sandbox_dir)
     sandbox_dir.mkdir(parents=True)
 
-    subprocess.run(["git", "init"], cwd=sandbox_dir, capture_output=True)
+    _ = subprocess.run(["git", "init"], cwd=sandbox_dir, capture_output=True)
 
     for cmd in scenario.setup_commands:
-        subprocess.run(cmd, cwd=sandbox_dir, shell=True, capture_output=True)
+        _ = subprocess.run(cmd, cwd=sandbox_dir, shell=True, capture_output=True)
 
 
 def _parse_stream_json(stdout: str) -> list[ObservationEvent]:

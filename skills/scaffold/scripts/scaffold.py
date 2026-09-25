@@ -334,8 +334,8 @@ class Report:
     """Collects what a run did and renders it once, in the mode the CLI selected."""
 
     def __init__(self) -> None:
-        self.mode = VERBOSE
-        self.cwd = pathlib.Path()
+        self.mode: str = VERBOSE
+        self.cwd: pathlib.Path = pathlib.Path()
         self.entries: list[Entry] = []
         self.findings: list[Finding] = []
         self.notes: list[str] = []
@@ -353,7 +353,7 @@ class Report:
     def out(self, text: str) -> None:
         """Write an exact payload (diff, created content) to stdout — verbose only."""
         if self.mode == VERBOSE:
-            sys.stdout.write(text)
+            _ = sys.stdout.write(text)
 
     def err(self, text: str, *, always: bool = False) -> None:
         """Write a prose line to stderr; `always` for lines no mode may swallow."""
@@ -797,7 +797,7 @@ def canonicalize(path: pathlib.Path, content: str) -> str:
         # written yet — and its ignorePatterns keep CHANGELOG.md (MD004 `*` pin) untouched.
         _formatter_tmp = tempfile.TemporaryDirectory(prefix="scaffold-oxfmt-")
         _formatter_config = pathlib.Path(_formatter_tmp.name) / "oxfmtrc.json"
-        _formatter_config.write_text(OXFMT_JSON, encoding="utf-8")
+        _ = _formatter_config.write_text(OXFMT_JSON, encoding="utf-8")
     try:
         rel = path.resolve().relative_to(_formatter_root)
     except ValueError:
@@ -858,7 +858,7 @@ def write_file(
         return False
     changed = not path.exists() or path.read_text(encoding="utf-8") != content
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    _ = path.write_text(content, encoding="utf-8")
     REPORT.wrote(path, mixed=is_mixed, changed=changed)
     if is_mixed:
         REPORT.err(f"WARNING: {path}: {warn_mixed}")
@@ -886,7 +886,7 @@ def write_generated(
     reason = PROJECT_OWNED.get(path.name) if update else None
     if reason and path.exists():
         return preserve(path, reason)
-    write_file(path, content, dry_run, warn_mixed=warn_mixed)
+    _ = write_file(path, content, dry_run, warn_mixed=warn_mixed)
     return None
 
 
@@ -936,9 +936,9 @@ def append_gitignore(path: pathlib.Path, entries: list[str], dry_run: bool) -> N
         if existed and path.stat().st_size > 0:
             content = path.read_text(encoding="utf-8")
             if not content.endswith("\n"):
-                handle.write("\n")
+                _ = handle.write("\n")
         for entry in missing:
-            handle.write(entry + "\n")
+            _ = handle.write(entry + "\n")
     verb = "added" if existed else "created"
     REPORT.appended(
         path,
@@ -979,14 +979,14 @@ def patch_agents(path: pathlib.Path, snippet: str, dry_run: bool) -> None:
             return
         with path.open("a", encoding="utf-8") as handle:
             if not body.endswith("\n"):
-                handle.write("\n")
+                _ = handle.write("\n")
             if not body.endswith("\n\n"):
-                handle.write("\n")
-            handle.write(snippet.rstrip() + "\n")
+                _ = handle.write("\n")
+            _ = handle.write(snippet.rstrip() + "\n")
         REPORT.patched(path, "appended runtime pointer", f"patched {path} (mixed)")
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(snippet, encoding="utf-8")
+        _ = path.write_text(snippet, encoding="utf-8")
         REPORT.wrote(path, mixed=True, changed=True)
     REPORT.err(f"WARNING: {path}: {proofread}")
 
@@ -1018,7 +1018,7 @@ def patch_releaserc_lockfile(cwd: pathlib.Path, dry_run: bool) -> None:
             stdout=True,
         )
         return
-    path.write_text(text.replace('"package-lock.json"', '"pnpm-lock.yaml"'), encoding="utf-8")
+    _ = path.write_text(text.replace('"package-lock.json"', '"pnpm-lock.yaml"'), encoding="utf-8")
     REPORT.patched(
         path,
         "package-lock.json → pnpm-lock.yaml",
@@ -1054,13 +1054,13 @@ def do_git(
     sel = selected if selected is not None else GIT_COMPONENTS
     notes: list[str] = []
     if "releaserc" in sel:
-        write_file(cwd / ".releaserc.json", releaserc_content(cwd), dry_run)
+        _ = write_file(cwd / ".releaserc.json", releaserc_content(cwd), dry_run)
     if "release-yml" in sel:
         rel = cwd / ".github" / "workflows" / "release.yml"
         if update and rel.exists():
             notes.append(preserve(rel, FLAVOR_FOREIGN["release-yml"]))
         else:
-            write_file(
+            _ = write_file(
                 rel,
                 render_ci_release(
                     "node", with_coverage=False, threshold=DEFAULT_COVERAGE_THRESHOLD
@@ -1068,32 +1068,36 @@ def do_git(
                 dry_run,
             )
     if "changelog-check" in sel:
-        write_file(
+        _ = write_file(
             cwd / ".github" / "workflows" / "changelog-check.yml", CHANGELOG_CHECK_YML, dry_run
         )
     if "changelog-script" in sel:
-        write_file(cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run)
-        write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
+        _ = write_file(
+            cwd / "scripts" / "changelog-unreleased.py", CHANGELOG_UNRELEASED_PY, dry_run
+        )
+        _ = write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
         _ = write_file(cwd / "scripts" / "release-changelog.mjs", RELEASE_CHANGELOG_MJS, dry_run)
         _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
     if "commitlint" in sel:
-        write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
+        _ = write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     if "changelog-md" in sel:
         note = write_generated(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run, update=update)
         if note:
             notes.append(note)
     if "issue-templates" in sel:
-        write_file(
+        _ = write_file(
             cwd / ".github" / "ISSUE_TEMPLATE" / "01-bug_report.yml", ISSUE_BUG_REPORT_YML, dry_run
         )
-        write_file(
+        _ = write_file(
             cwd / ".github" / "ISSUE_TEMPLATE" / "02-feature_request.yml",
             ISSUE_FEATURE_REQUEST_YML,
             dry_run,
         )
-        write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
+        _ = write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
     if "pr-template" in sel:
-        write_file(cwd / ".github" / "pull_request_template.md", PULL_REQUEST_TEMPLATE_MD, dry_run)
+        _ = write_file(
+            cwd / ".github" / "pull_request_template.md", PULL_REQUEST_TEMPLATE_MD, dry_run
+        )
     # migrate legacy markdown template (pre-YAML) — keep spine small
     legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
     if legacy_md.exists():
@@ -1140,7 +1144,7 @@ def do_python(
     update: bool = False,
 ) -> list[str]:
     notes: list[str] = []
-    write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
+    _ = write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
     module = _py_module_name(project_name)
     for relative, content in (
         (
@@ -1209,7 +1213,7 @@ def do_rust(
             f"WARNING: Cargo package name normalized to '{cargo_name}' (from '{project_name}') — proofread Cargo.toml name.",
             file=sys.stderr,
         )
-    write_file(cwd / "rust-toolchain.toml", RUST_TOOLCHAIN_TOML, dry_run)
+    _ = write_file(cwd / "rust-toolchain.toml", RUST_TOOLCHAIN_TOML, dry_run)
     note = write_source(cwd, "src/lib.rs", RUST_LIB_RS, dry_run, update=update)
     if note:
         notes.append(note)
@@ -1261,7 +1265,7 @@ def do_typescript(
         REPORT.err(
             f"WARNING: npm package name normalized to '{npm_name}' (from '{project_name}') — proofread package.json name."
         )
-    write_file(cwd / ".nvmrc", NODE_VERSION, dry_run)
+    _ = write_file(cwd / ".nvmrc", NODE_VERSION, dry_run)
     pkg_json = build_package_json(project_name, ts_variant, with_coverage, coverage_script)
     warn = "mixed: {{project_name}} + description — proofread package name and description."
     if with_coverage:
@@ -1278,7 +1282,9 @@ def do_typescript(
     note = write_source(cwd, ".oxlintrc.json", OXLINT_JSON, dry_run, update=update)
     if note:
         notes.append(note)
-    write_file(cwd / "scripts" / "oxlint-plugin-comment-gate.js", OXLINT_COMMENT_GATE_JS, dry_run)
+    _ = write_file(
+        cwd / "scripts" / "oxlint-plugin-comment-gate.js", OXLINT_COMMENT_GATE_JS, dry_run
+    )
     note = write_source(cwd, ".oxfmtrc.json", OXFMT_JSON, dry_run, update=update)
     if note:
         notes.append(note)
@@ -1365,7 +1371,7 @@ def do_ci(
             "NOTE: python verify gates on scripts/typecheck-budget.py — seed the baseline once with `uv run scripts/typecheck-budget.py --seed`",
             file=sys.stderr,
         )
-    write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
+    _ = write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
     return []
 
 
@@ -1506,16 +1512,15 @@ def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, objec
         _pkg_scripts = {}
     if not isinstance(_pkg_scripts, dict):
         _pkg_scripts = {}
-    if isinstance(_pkg_scripts, dict):
-        for _name, _cmd in _pkg_scripts.items():
-            if (
-                isinstance(_name, str)
-                and isinstance(_cmd, str)
-                and _is_coverage_script_name(_name)
-                and re.search(r"vitest.*--coverage", _cmd)
-            ):
-                node_coverage_script = _name
-                break
+    for _name, _cmd in _pkg_scripts.items():
+        if (
+            isinstance(_name, str)
+            and isinstance(_cmd, str)
+            and _is_coverage_script_name(_name)
+            and re.search(r"vitest.*--coverage", _cmd)
+        ):
+            node_coverage_script = _name
+            break
     ts_coverage = (
         node_coverage_script is not None
         or "coverage" in vitest_config
@@ -1879,7 +1884,7 @@ def merge_missing_sections(path: pathlib.Path, template: str, dry_run: bool) -> 
         )
         REPORT.stale(path, "".join(diff))
         return False
-    path.write_text(merged, encoding="utf-8")
+    _ = path.write_text(merged, encoding="utf-8")
     REPORT.patched(
         path, f"merged {', '.join(absent)}", f"merged {len(absent)} section(s) into {path} (mixed)"
     )
@@ -1902,14 +1907,14 @@ def write_contributing(
     """
     path = cwd / "CONTRIBUTING.md"
     if not (update and path.exists()):
-        write_file(path, content, dry_run, warn_mixed=warn_mixed)
+        _ = write_file(path, content, dry_run, warn_mixed=warn_mixed)
         return None
     reason = PROJECT_OWNED["CONTRIBUTING.md"]
     absent = missing_sections(path.read_text(encoding="utf-8"), content)
     if not absent:
         return preserve(path, reason)
     if merge_mixed:
-        merge_missing_sections(path, content, dry_run)
+        _ = merge_missing_sections(path, content, dry_run)
         return None
     return f"{path.name}: preserved — {reason}; missing template sections: {', '.join(absent)}"
 
@@ -1953,7 +1958,7 @@ def write_source(
     if update and reason:
         suffix = "" if path.exists() else " (absent here; project-owned, not recreated)"
         return REPORT.preserved(path, f"{reason}{suffix}")
-    write_file(path, content, dry_run)
+    _ = write_file(path, content, dry_run)
     return None
 
 
@@ -1981,7 +1986,7 @@ def _ensure_read(path: pathlib.Path, create_hint: str) -> str:
 def _ensure_write(path: pathlib.Path, body: str, dry_run: bool, action: str) -> str:
     if dry_run:
         return f"{path.name}: would {action} (dry-run)"
-    path.write_text(body, encoding="utf-8")
+    _ = path.write_text(body, encoding="utf-8")
     return f"{path.name}: {action}"
 
 
@@ -2032,7 +2037,7 @@ def ensure_cargo_dep(
     else:
         new_body = body[: section.end()] + f"\n{entry}" + body[section.end() :]
     try:
-        tomllib.loads(new_body)
+        _ = tomllib.loads(new_body)
     except tomllib.TOMLDecodeError as exc:
         raise EnsureError(
             f"{path}: refusing edit that would write invalid TOML ({exc}) — fix by hand first"
@@ -2306,7 +2311,7 @@ def ensure_py_dep(cwd: pathlib.Path, req: str, *, dry_run: bool = False) -> str:
         lines_body[end:end] = [f'    "{req}",\n']
     new_body = "".join(lines_body)
     try:
-        tomllib.loads(new_body)
+        _ = tomllib.loads(new_body)
     except tomllib.TOMLDecodeError as exc:
         raise EnsureError(
             f"{path}: refusing edit that would write invalid TOML ({exc}) — fix by hand first"
@@ -2423,7 +2428,7 @@ def ensure_coverage_threshold(
         parts.append(body[last:])
         new_body = "".join(parts)
         try:
-            tomllib.loads(new_body)
+            _ = tomllib.loads(new_body)
         except tomllib.TOMLDecodeError as exc:
             raise EnsureError(
                 f"{path}: refusing edit that would write invalid TOML ({exc}) — fix by hand first"
@@ -2449,7 +2454,7 @@ def ensure_coverage_threshold(
                 if all(mask[m.start() : m.end()])
             ]
             if code_matches:
-                parts: list[str] = []
+                parts = []
                 last = 0
                 for m in code_matches:
                     parts.append(new_body[last : m.start(1)])
@@ -2504,12 +2509,12 @@ def ensure_main(argv: list[str]) -> int:
         "of tables, or an input the scanner cannot prove is [project].dependencies. Every "
         "refusal exits non-zero, leaves the file byte-identical, and names what was found.",
     )
-    ap.add_argument("--cwd", default=".", help="target directory (default: .)")
-    ap.add_argument("--dry-run", action="store_true", help="report the edit without writing")
+    _ = ap.add_argument("--cwd", default=".", help="target directory (default: .)")
+    _ = ap.add_argument("--dry-run", action="store_true", help="report the edit without writing")
     sub = ap.add_subparsers(dest="op", required=True)
     rust_dep = sub.add_parser("rust-dep", help="add a Cargo.toml [dependencies] entry")
-    rust_dep.add_argument("--name", required=True)
-    rust_dep.add_argument("--version", default="*")
+    _ = rust_dep.add_argument("--name", required=True)
+    _ = rust_dep.add_argument("--version", default="*")
     py_dep = sub.add_parser(
         "py-dep",
         help="add a pyproject.toml dependency (PEP 508) — [project].dependencies inline/multiline only",
@@ -2522,17 +2527,17 @@ def ensure_main(argv: list[str]) -> int:
         "of tables, or an input the scanner cannot prove is [project].dependencies. Every "
         "refusal exits non-zero, leaves the file byte-identical, and names what was found.",
     )
-    py_dep.add_argument("--req", required=True, help='e.g. "httpx>=0.27"')
+    _ = py_dep.add_argument("--req", required=True, help='e.g. "httpx>=0.27"')
     ts_dep = sub.add_parser("ts-dep", help="add a package.json dependency")
-    ts_dep.add_argument("--name", required=True)
-    ts_dep.add_argument("--version", default="*")
-    ts_dep.add_argument("--dev", action=argparse.BooleanOptionalAction, default=True)
+    _ = ts_dep.add_argument("--name", required=True)
+    _ = ts_dep.add_argument("--version", default="*")
+    _ = ts_dep.add_argument("--dev", action=argparse.BooleanOptionalAction, default=True)
     ts_script = sub.add_parser("ts-script", help="add a package.json script")
-    ts_script.add_argument("--name", required=True)
-    ts_script.add_argument("--cmd", required=True)
+    _ = ts_script.add_argument("--name", required=True)
+    _ = ts_script.add_argument("--cmd", required=True)
     cov = sub.add_parser("coverage-threshold", help="set the coverage fail-under field")
-    cov.add_argument("--flavor", choices=["python", "typescript"], required=True)
-    cov.add_argument("--value", type=int, required=True)
+    _ = cov.add_argument("--flavor", choices=["python", "typescript"], required=True)
+    _ = cov.add_argument("--value", type=int, required=True)
     args = ap.parse_args(argv)
     cwd = pathlib.Path(args.cwd).resolve()
     # Write detection compares bytes, never prose: a value (e.g. a crate
@@ -2584,11 +2589,9 @@ def ensure_main(argv: list[str]) -> int:
 # what the skill ships — the caller fails on the first and only reads the second.
 def _yaml_available() -> bool:
     """pyyaml is optional: the script's PEP-723 env ships jinja2, so probe, don't assume."""
-    try:
-        import yaml  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    from importlib.util import find_spec
+
+    return find_spec("yaml") is not None
 
 
 def _yaml_error(text: str) -> str | None:
@@ -2695,9 +2698,9 @@ def _ts_syntax_error(body: str) -> str | None:
     return None
 
 
-def _toml_syntax_error(path: pathlib.Path, body: str) -> str | None:
+def _toml_syntax_error(_path: pathlib.Path, body: str) -> str | None:
     try:
-        tomllib.loads(body)
+        _ = tomllib.loads(body)
     except tomllib.TOMLDecodeError as exc:
         return f"invalid TOML: {exc}"
     return None
@@ -2744,7 +2747,7 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
             continue
         if suffix == ".py":
             try:
-                compile(body, str(path), "exec")
+                _ = compile(body, str(path), "exec")
             except SyntaxError as exc:
                 findings.append(
                     Finding(str(path), f"python syntax error: {exc.msg} (line {exc.lineno})")
@@ -2796,98 +2799,98 @@ def main() -> int:
         "update one field / untouched; --update preserves, ensure <op> performs one "
         "confirmed field edit. See `scaffold.py ensure --help`.",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--flavor",
         choices=["git", "python", "rust", "typescript", "ci", "all"],
         required=False,
         default=None,
         help="flavor to scaffold",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--project-name",
         default=None,
         help="project name for {{project_name}} (default: inferred from cwd)",
     )
-    ap.add_argument("--dry-run", action="store_true", help="print diff without writing")
-    ap.add_argument(
+    _ = ap.add_argument("--dry-run", action="store_true", help="print diff without writing")
+    _ = ap.add_argument(
         "--ci-variant",
         choices=list(CI_RUNTIMES),
         default="node",
         help="CI verify variant (default: node)",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--ts-variant",
         choices=["lib", "cli", "pi-extension"],
         default="lib",
         help="TypeScript project variant (default: lib)",
     )
-    ap.add_argument("--cwd", default=".", help="target directory (default: .)")
-    ap.add_argument(
+    _ = ap.add_argument("--cwd", default=".", help="target directory (default: .)")
+    _ = ap.add_argument(
         "--with-coverage",
         action="store_true",
         help="wire coverage gate (pytest-cov / cargo llvm-cov / vitest coverage)",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--coverage-threshold",
         type=int,
         default=DEFAULT_COVERAGE_THRESHOLD,
         help="coverage fail-under threshold (default: 80)",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--coverage-script",
         default=None,
         help="package.json script name the coverage gate runs (default: detected script, else coverage)",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--detect", action="store_true", help="detect project state and exit (no writes)"
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--update",
         action="store_true",
         help="refresh generated infrastructure in place: project-owned files are preserved and reported as NEXT actions; implies --flavor git when --flavor is omitted",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--check",
         action="store_true",
         help="one-line-per-file drift report for the update plan; exit 1 when the repo has drifted (implies --update --dry-run --summary)",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--summary",
         action="store_true",
         help="collapse per-file reporting to one line each instead of diffs/prose",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--self-check",
         action="store_true",
         help="also validate the files this run claims (syntax, parse, exec bit, referenced paths); runs automatically after a real write",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--merge-mixed",
         action="store_true",
         help="with --update: insert CONTRIBUTING.md template sections that are missing; existing lines are never rewritten",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--only",
         default=None,
         help="only scaffold these components (comma-separated, e.g. 'changelog-check,releaserc'); default all",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--without",
         default=None,
         dest="without",
         help="exclude these components (comma-separated, e.g. 'release-yml,changelog-check')",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--components",
         default=None,
         help="alias for --only (comma-separated)",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--json",
         action="store_true",
         help="emit the run plan (or the detect census) as JSON instead of prose",
     )
-    ap.add_argument(
+    _ = ap.add_argument(
         "--no-format",
         action="store_true",
         help="skip the pinned oxfmt pass over generated bytes (needs no Node; bytes the formatter would rewrite ship as written, so a repo that wires `oxfmt --check` stays red until `pnpm run format:fix`)",

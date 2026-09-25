@@ -20,7 +20,7 @@ import time
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
@@ -154,7 +154,7 @@ def parse_llms_txt(content: str) -> dict[str, Any]:
         if match:
             url = match.group(1).strip()
             if url and url not in seen_urls:
-                entry: dict[str, Any] = {
+                entry = {
                     "url": url,
                     "section": current_section,
                 }
@@ -236,10 +236,10 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             **kwargs: Additional arguments passed to base class
         """
         # Determine mode
-        self.urls = urls or []
+        self.urls: list[str] = urls or []
 
         if self.urls:
-            self.mode = "fetch"
+            self.mode: str = "fetch"
             # Derive base_url from first URL if not provided
             if not base_url and self.urls:
                 parsed = urlparse(self.urls[0])
@@ -533,7 +533,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
                 output_file = self.output_dir / f"{filename}.md"
 
                 # Write content
-                output_file.write_text(content, encoding="utf-8")
+                _ = output_file.write_text(content, encoding="utf-8")
                 print(f"  Written: {output_file.name} ({len(content)} bytes, fmt={fmt})")
                 total_bytes += len(content)
 
@@ -588,7 +588,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         }
         try:
             metrics_path = self.output_dir / "metrics.json"
-            metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+            _ = metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
             print(
                 f"Metrics: {metrics_path} ({success}/{len(results)} success, {elapsed:.1f}s, {format_counts})"
             )
@@ -645,9 +645,10 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             ]
         )
 
-        readme_path.write_text("\n".join(lines), encoding="utf-8")
+        _ = readme_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"Generated: {readme_path}")
 
+    @override
     def run(self) -> None:
         """Execute the scraping workflow based on mode."""
         if self.mode == "discovery":
