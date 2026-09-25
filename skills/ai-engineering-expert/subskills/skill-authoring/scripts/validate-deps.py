@@ -180,7 +180,7 @@ def show_related(
         return
 
     print(f"--- Skill: {target_skill} ---")
-    print(f"Location: {location.relative_to(root_dir) if isinstance(location, Path) else location}")
+    print(f"Location: {location.relative_to(root_dir)}")
 
     # 1. Outbound Dependencies
     print("\nOutbound Dependencies (depends-on):")

@@ -593,7 +593,7 @@ class TestFetchPageLlmFriendlyFallbackChain:
                         "fetch_via_jina_reader",
                         return_value=("# Jina Content", "markdown"),
                     ):
-                        content, fmt = scraper_with_mock_session.fetch_page_llm_friendly(
+                        content, _fmt = scraper_with_mock_session.fetch_page_llm_friendly(
                             TEST_PAGE_URL, use_defuddle=False
                         )
 

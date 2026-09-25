@@ -24,7 +24,9 @@ class LSPScraper(DocumentationScraper):
     """
 
     # Pattern to match emoji anchor suffixes (e.g., "--arrow_right_hook" or "-leftwards_arrow_with_hook")
-    EMOJI_ANCHOR_PATTERN: re.Pattern[str] = re.compile(r"-{1,2}(arrow_|leftwards_|rightwards_)[\w_]+$")
+    EMOJI_ANCHOR_PATTERN: re.Pattern[str] = re.compile(
+        r"-{1,2}(arrow_|leftwards_|rightwards_)[\w_]+$"
+    )
 
     name: str = "lsp"
     description: str = """
@@ -121,16 +123,16 @@ Examples:
 
         Exception: Change Log section is kept as a single file (no h4 splitting).
         """
-        content = None
-        for selector in [
-            {"class": "md-content"},
-            {"role": "main"},
-            {"class": "document"},
-            {"class": "body"},
-        ]:
-            content = soup.find("div", **selector) or soup.find("main", **selector)
-            if content:
-                break
+        content = (
+            soup.find("div", class_="md-content")
+            or soup.find("main", class_="md-content")
+            or soup.find("div", role="main")
+            or soup.find("main", role="main")
+            or soup.find("div", class_="document")
+            or soup.find("main", class_="document")
+            or soup.find("div", class_="body")
+            or soup.find("main", class_="body")
+        )
 
         if not content:
             content = soup.find("body")

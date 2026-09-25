@@ -1,6 +1,7 @@
 """Tests for skills scraper (skill.sh composition)."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -245,15 +246,17 @@ class TestSkillsScraperNpx:
             respect_robots_txt=False,
         )
 
-        def fake_run_npx(_args, cwd, timeout=300):
-            _ = timeout
+        def fake_run_npx(
+            args: list[str], cwd: Path, timeout: int = 300
+        ) -> subprocess.CompletedProcess[str]:
+            _ = args, timeout
             # Simulate npx installing skill into .agents/skills
             dest = cwd / ".agents" / "skills" / "vercel-react-best-practices"
             dest.mkdir(parents=True, exist_ok=True)
-            (dest / "SKILL.md").write_text("# skill")
-            return MagicMock(stdout="installed", stderr="", returncode=0)
+            _ = (dest / "SKILL.md").write_text("# skill")
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="installed", stderr="")
 
-        s._run_npx = fake_run_npx  # type: ignore[method-assign]
+        s._run_npx = fake_run_npx
         work = tmp_path / "work"
         staged = s._fetch_via_npx("vercel-labs/agent-skills", ["vercel-react-best-practices"], work)
         assert "vercel-react-best-practices" in staged

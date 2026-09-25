@@ -16,7 +16,7 @@ from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
 
 SCRIPT = SCRIPTS_DIR / "herdr_transcript.py"
 
-PI_LINES = [
+PI_LINES: list[dict[str, object]] = [
     {"type": "message", "message": {"role": "user", "content": "review the diff"}},
     {
         "type": "message",
@@ -38,7 +38,7 @@ PI_LINES = [
     },
 ]
 
-CLAUDE_LINES = [
+CLAUDE_LINES: list[dict[str, object]] = [
     {"type": "human", "message": {"role": "user", "content": "summarize"}},
     {
         "type": "assistant",

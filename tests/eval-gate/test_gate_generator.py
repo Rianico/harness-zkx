@@ -225,7 +225,7 @@ def test_grade_semantic_assertions_critical_failure_caps_score():
         {"id": "SEM-03", "passed": True},
         {"id": "SEM-04", "passed": False, "evidence": "app.ts:42", "reasoning": "catch {} found"},
     ]
-    score, graded, issues = grade_semantic_assertions(assertions, grader_results)
+    score, _graded, issues = grade_semantic_assertions(assertions, grader_results)
     assert score == 7
     assert len(issues) == 1
     assert "SEM-04" in issues[0]

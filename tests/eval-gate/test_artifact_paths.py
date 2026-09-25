@@ -15,6 +15,7 @@ from pathlib import Path
 
 import artifact_paths
 
+assert artifact_paths.__file__ is not None  # plain module always carries __file__
 SCRIPT = Path(artifact_paths.__file__)
 WHEN = datetime(2026, 1, 2, 3, 4, 5)
 

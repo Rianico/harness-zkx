@@ -12,8 +12,6 @@ import pytest
 
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
-# Import from global skills directory
-import sys
 
 from tz import TZ_CST
 
@@ -239,7 +237,7 @@ class TestObservationCounting:
         # Import the function
         from stocktake import count_read_observations
 
-        counts_1d, counts_7d, counts_30d = count_read_observations([obs_file])
+        counts_1d, _counts_7d, _counts_30d = count_read_observations([obs_file])
 
         # Only Read tools counted, /a.md appears twice
         assert counts_1d.get("/a.md", 0) == 2

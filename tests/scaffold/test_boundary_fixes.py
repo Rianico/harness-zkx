@@ -386,8 +386,6 @@ def test_10_skill_states_boundary_contract():
 def test_10_cli_is_self_describing():
     assert "ensure" in (scaffold.__doc__ or "")
     # argparse epilog carries the boundary so --help is self-describing
-    import argparse as _ap  # noqa: F401
-
     src = SCRIPT.read_text(encoding="utf-8")
     assert "epilog" in src
     assert "ensure <op>" in src

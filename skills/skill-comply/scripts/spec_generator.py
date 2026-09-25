@@ -68,7 +68,6 @@ def generate_spec(
             if attempt == max_retries:
                 raise
         finally:
-            if tmp_path is not None:
-                tmp_path.unlink(missing_ok=True)
+            tmp_path.unlink(missing_ok=True)
 
     raise RuntimeError("unreachable")

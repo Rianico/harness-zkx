@@ -97,4 +97,4 @@ def test_guard_maps_herdr_errors_to_exit_herdr(capsys: pytest.CaptureFixture[str
 
 
 def test_guard_passes_through_a_successful_action() -> None:
-    assert herdr_cli.guard("herdr-x", lambda: herdr_cli.EXIT_OK) == herdr_cli.EXIT_OK
+    assert herdr_cli.guard("herdr-x", lambda: int(herdr_cli.EXIT_OK)) == herdr_cli.EXIT_OK

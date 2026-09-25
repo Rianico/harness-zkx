@@ -199,7 +199,8 @@ def parse_unreleased_sections(content: str) -> dict[str, list[str]]:
         heading = SECTION_HEADING_RE.match(line)
         if heading:
             current = heading.group("name")
-            _ = sections.setdefault(current, [])
+            if current is not None:
+                _ = sections.setdefault(current, [])
             continue
         if current is not None and BULLET_RE.match(line):
             sections[current].append(line.rstrip())

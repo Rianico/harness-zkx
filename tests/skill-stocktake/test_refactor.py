@@ -106,7 +106,7 @@ class TestSinglePassObservationCounting:
         result = count_read_observations([observations_file])
 
         if isinstance(result, tuple):
-            counts_1d, counts_7d, counts_30d = result
+            _counts_1d, counts_7d, _counts_30d = result
         else:
             pytest.skip("Function not yet refactored to return tuple")
 
@@ -126,7 +126,7 @@ class TestSinglePassObservationCounting:
         result = count_read_observations([observations_file])
 
         if isinstance(result, tuple):
-            counts_1d, counts_7d, counts_30d = result
+            _counts_1d, counts_7d, counts_30d = result
         else:
             pytest.skip("Function not yet refactored to return tuple")
 
@@ -208,7 +208,7 @@ class TestSinglePassObservationCounting:
         result = count_read_observations([obs_file])
 
         if isinstance(result, tuple):
-            counts_1d, counts_7d, counts_30d = result
+            _counts_1d, counts_7d, _counts_30d = result
             assert len(counts_7d) == 2
             assert "/valid/path.md" in counts_7d
             assert "/another/valid.md" in counts_7d

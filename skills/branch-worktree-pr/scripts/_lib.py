@@ -154,13 +154,12 @@ def read_gate(cwd: Path | None = None) -> str:
         import tomllib  # type: ignore[import-not-found]
 
         with dest.open("rb") as f:
-            data: object = tomllib.load(f)
-        if isinstance(data, dict):
-            pre = data.get("pre-merge")
-            if isinstance(pre, dict):
-                raw = pre.get("gate")
-                if isinstance(raw, str) and raw.strip():
-                    gate = raw.strip()
+            data = tomllib.load(f)
+        pre = data.get("pre-merge")
+        if isinstance(pre, dict):
+            raw = pre.get("gate")
+            if isinstance(raw, str) and raw.strip():
+                gate = raw.strip()
     except Exception:
         gate = None
 
