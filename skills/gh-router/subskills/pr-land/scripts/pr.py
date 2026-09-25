@@ -82,7 +82,6 @@ def run_command(
         raise PrError(f"command timed out after {timeout}s: {cmd_str}") from e
 
 
-
 @dataclass(frozen=True)
 class PrOptions:
     base: str | None = None
@@ -1017,9 +1016,7 @@ def merge_pr(
             cwd=cwd,
         )
         state = (
-            st_res.stdout.strip()
-            if st_res.returncode == 0 and st_res.stdout.strip()
-            else "unknown"
+            st_res.stdout.strip() if st_res.returncode == 0 and st_res.stdout.strip() else "unknown"
         )
         if state == "clean":
             break

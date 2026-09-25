@@ -38,7 +38,9 @@ from pr import (  # noqa: E402
 )
 
 
-def run_bash(script: str, env_extra: dict[str, str] | None = None, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+def run_bash(
+    script: str, env_extra: dict[str, str] | None = None, cwd: Path = REPO_ROOT
+) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, **(env_extra or {})}
     return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env, cwd=cwd)
 
@@ -263,7 +265,9 @@ except Exception:
     )
 
 
-def run_merge(env: dict[str, str], body: str, title: str = "feat: x") -> subprocess.CompletedProcess[str]:
+def run_merge(
+    env: dict[str, str], body: str, title: str = "feat: x"
+) -> subprocess.CompletedProcess[str]:
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
@@ -372,7 +376,9 @@ def test_merge_body_with_long_lines_passes(tmp_path: Path) -> None:
 # --- --check dry run ---
 
 
-def run_check(env: dict[str, str], *extra_args: str, use_sh: bool = False) -> subprocess.CompletedProcess[str]:
+def run_check(
+    env: dict[str, str], *extra_args: str, use_sh: bool = False
+) -> subprocess.CompletedProcess[str]:
     cmd = ["bash", str(PR_SH)] if use_sh else [sys.executable, str(PR_PY)]
     return subprocess.run(
         [*cmd, "--check", "--head", "feat-x", *extra_args],
@@ -498,7 +504,6 @@ def test_refine_lint_body_accepts_long_lines(tmp_path: Path) -> None:
     assert "body ok: no raw token" in r.stdout
 
 
-
 @pytest.mark.parametrize(
     ("tsv", "flow"),
     [
@@ -558,9 +563,7 @@ def matches_required(phrasing: str, description: str) -> bool:
 
 @pytest.mark.parametrize("phrasing", list(REQUIRED_TOKENS))
 def test_pr_refine_triggers_catch_contributor_pr_phrasings(phrasing: str) -> None:
-    desc = skill_description(
-        REPO_ROOT / "skills/gh-router/subskills/pr-refine/SKILL.md"
-    )
+    desc = skill_description(REPO_ROOT / "skills/gh-router/subskills/pr-refine/SKILL.md")
     assert matches_required(phrasing, desc), (
         f"{phrasing!r} needs {sorted(REQUIRED_TOKENS[phrasing])} in the pr-refine description"
     )
@@ -573,9 +576,7 @@ def test_generic_pr_token_alone_satisfies_no_phrasing() -> None:
 
 
 def test_pr_refine_frontmatter_declares_negative_space() -> None:
-    desc = skill_description(
-        REPO_ROOT / "skills/gh-router/subskills/pr-refine/SKILL.md"
-    )
+    desc = skill_description(REPO_ROOT / "skills/gh-router/subskills/pr-refine/SKILL.md")
     assert "pr-enhance" in desc
     assert "pr-land" in desc
     router = (REPO_ROOT / "skills/gh-router/SKILL.md").read_text(encoding="utf-8")

@@ -31,7 +31,14 @@ def test_missing_body_file_exits_2() -> None:
     """Missing or unreadable --body-file must fail loud with exit 2, never silently falling back."""
     # Test pr.py directly
     result_py = subprocess.run(
-        [sys.executable, str(PR_PY), "--head", "feature-test", "--body-file", "/nonexistent/path/pr.md"],
+        [
+            sys.executable,
+            str(PR_PY),
+            "--head",
+            "feature-test",
+            "--body-file",
+            "/nonexistent/path/pr.md",
+        ],
         capture_output=True,
         text=True,
     )
@@ -93,7 +100,9 @@ def test_parse_args_tracks_supplied_title_and_body() -> None:
 def test_squash_message_falls_back_when_body_is_template_or_empty() -> None:
     """When PR body matches the template or is empty, squash_message returns empty to let GitHub use commit subjects."""
     template_content = (
-        PR_TEMPLATE.read_text(encoding="utf-8") if PR_TEMPLATE.is_file() else "## Summary\n<!-- template -->\n"
+        PR_TEMPLATE.read_text(encoding="utf-8")
+        if PR_TEMPLATE.is_file()
+        else "## Summary\n<!-- template -->\n"
     )
 
     # Empty body -> empty squash message
@@ -365,7 +374,9 @@ except PrError as e:
         cwd=REPO_ROOT,
     )
     assert res.returncode == 42
-    assert "CAUGHT_PR_ERROR: failed to check PR #123 mergeable state: api rate limited" in res.stdout
+    assert (
+        "CAUGHT_PR_ERROR: failed to check PR #123 mergeable state: api rate limited" in res.stdout
+    )
 
 
 def test_check_trailers_fails_loud_on_body_fetch_error(tmp_path: Path) -> None:
@@ -412,7 +423,9 @@ except PrError as e:
         cwd=REPO_ROOT,
     )
     assert res.returncode == 42
-    assert "CAUGHT_PR_ERROR: failed to fetch body for PR #123: 500 internal server error" in res.stdout
+    assert (
+        "CAUGHT_PR_ERROR: failed to fetch body for PR #123: 500 internal server error" in res.stdout
+    )
 
 
 def test_dump_failure_logs_survives_view_timeout(tmp_path: Path) -> None:
@@ -462,4 +475,3 @@ pr.dump_failure_logs("test/repo", "123")
     assert res.returncode == 0
     assert "warning: could not fetch run logs: command timed out after 0.2s" in res.stderr
     assert "test-suite   fail   1m" in res.stderr
-
