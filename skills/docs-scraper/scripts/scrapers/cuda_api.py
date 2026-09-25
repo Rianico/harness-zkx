@@ -86,7 +86,7 @@ Examples:
 
             # Save to cache
             self._cached_pages_dir.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(response.text, encoding="utf-8")
+            _ = cache_path.write_text(response.text, encoding="utf-8")
 
             return BeautifulSoup(response.content, "html.parser")
         except Exception as e:
@@ -161,7 +161,7 @@ Examples:
         header += "---\n\n"
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(header + markdown, encoding="utf-8")
+        _ = output_path.write_text(header + markdown, encoding="utf-8")
 
         print(f"  ✓ Saved: {output_path.name} ({len(header + markdown)} bytes)")
         return True
@@ -319,14 +319,14 @@ Examples:
         for i, module in enumerate(modules, 1):
             print(f"\n[{i}/{len(modules)}] {module['title']}")
             filename = self.sanitize_filename(module["filename"]) + ".md"
-            self.scrape_page(module, cache_modules_dir / filename)
+            _ = self.scrape_page(module, cache_modules_dir / filename)
 
         # Scrape structures
         print("\n3. Scraping data structure pages...")
         for i, struct in enumerate(structures, 1):
             print(f"\n[{i}/{len(structures)}] {struct['title']}")
             filename = self.sanitize_filename(struct["filename"]) + ".md"
-            self.scrape_page(struct, cache_structures_dir / filename)
+            _ = self.scrape_page(struct, cache_structures_dir / filename)
 
         # Cleanup phase
         print("\n4. Cleaning and processing files...")
@@ -341,14 +341,14 @@ Examples:
 
         for md_file in sorted(cache_modules_dir.glob("*.md")):
             content, orig_size, new_size = self.clean_markdown_file(md_file)
-            (out_modules_dir / md_file.name).write_text(content, encoding="utf-8")
+            _ = (out_modules_dir / md_file.name).write_text(content, encoding="utf-8")
             total_original += orig_size
             total_new += new_size
             files_cleaned += 1
 
         for md_file in sorted(cache_structures_dir.glob("*.md")):
             content, orig_size, new_size = self.clean_markdown_file(md_file)
-            (out_structures_dir / md_file.name).write_text(content, encoding="utf-8")
+            _ = (out_structures_dir / md_file.name).write_text(content, encoding="utf-8")
             total_original += orig_size
             total_new += new_size
             files_cleaned += 1
@@ -414,5 +414,5 @@ Examples:
             content += f"- [{struct['title']}](data-structures/{filename})\n"
 
         index_path = self.output_dir / "INDEX.md"
-        index_path.write_text(content, encoding="utf-8")
+        _ = index_path.write_text(content, encoding="utf-8")
         print(f"  ✓ Created: {index_path}")

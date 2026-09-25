@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup  # pyright: ignore[reportMissingImports]
+from bs4 import BeautifulSoup
 
 from .base import DocumentationScraper
 

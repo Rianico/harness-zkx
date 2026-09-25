@@ -76,7 +76,7 @@ def observations_file(tmp_path: Path) -> Path:
 
     with open(obs_file, "w") as f:
         for entry in entries:
-            f.write(json.dumps(entry) + "\n")
+            _ = f.write(json.dumps(entry) + "\n")
 
     return obs_file
 
@@ -168,7 +168,7 @@ class TestSinglePassObservationCounting:
         from stocktake import count_read_observations
 
         empty_file = tmp_path / "empty.jsonl"
-        empty_file.write_text("")
+        _ = empty_file.write_text("")
 
         result = count_read_observations([empty_file])
 
@@ -203,7 +203,7 @@ class TestSinglePassObservationCounting:
                 }
             ),
         ]
-        obs_file.write_text("\n".join(lines))
+        _ = obs_file.write_text("\n".join(lines))
 
         result = count_read_observations([obs_file])
 
@@ -363,21 +363,21 @@ def skills_dir(tmp_path: Path) -> Path:
     # skill-a/SKILL.md
     skill_a = skills / "skill-a"
     skill_a.mkdir()
-    (skill_a / "SKILL.md").write_text("---\nname: skill-a\n---\nContent")
+    _ = (skill_a / "SKILL.md").write_text("---\nname: skill-a\n---\nContent")
 
     # skill-b/SKILL.md and sub.md
     skill_b = skills / "skill-b"
     skill_b.mkdir()
-    (skill_b / "SKILL.md").write_text("---\nname: skill-b\n---\nContent")
-    (skill_b / "sub.md").write_text("Sub content")
+    _ = (skill_b / "SKILL.md").write_text("---\nname: skill-b\n---\nContent")
+    _ = (skill_b / "sub.md").write_text("Sub content")
 
     # not-skill.txt (should be skipped)
-    (skills / "not-skill.txt").write_text("Not a skill")
+    _ = (skills / "not-skill.txt").write_text("Not a skill")
 
     # deep/nested/SKILL.md
     deep = skills / "deep" / "nested"
     deep.mkdir(parents=True)
-    (deep / "SKILL.md").write_text("---\nname: deep-skill\n---\nContent")
+    _ = (deep / "SKILL.md").write_text("---\nname: deep-skill\n---\nContent")
 
     return skills
 
@@ -438,7 +438,7 @@ class TestWalkSkillsDir:
         # Create a symlinked skill
         linked_skill = skills_dir.parent / "linked-skill"
         linked_skill.mkdir()
-        (linked_skill / "LINKED.md").write_text("Linked content")
+        _ = (linked_skill / "LINKED.md").write_text("Linked content")
 
         # Create symlink
         symlink_dir = skills_dir / "symlinked"

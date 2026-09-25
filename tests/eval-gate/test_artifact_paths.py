@@ -28,7 +28,7 @@ def _repo_without_config(tmp_path: Path) -> Path:
 def _repo_with_config(tmp_path: Path, body: str) -> Path:
     repo = _repo_without_config(tmp_path)
     (repo / ".lsz").mkdir()
-    (repo / ".lsz" / "config.yaml").write_text(body, encoding="utf-8")
+    _ = (repo / ".lsz" / "config.yaml").write_text(body, encoding="utf-8")
     return repo
 
 

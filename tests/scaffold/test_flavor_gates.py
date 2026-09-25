@@ -37,7 +37,7 @@ scaffold = _load("scaffold_mod_flavor_gates", SCRIPT)
 
 def _generate(target: Path, *invocations: list[str]) -> None:
     for args in invocations:
-        subprocess.run(
+        _ = subprocess.run(
             [sys.executable, str(SCRIPT), *args, "--project-name", "demo", "--cwd", str(target)],
             check=True,
             capture_output=True,

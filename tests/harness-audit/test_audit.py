@@ -13,7 +13,7 @@ import audit  # type: ignore[import-not-found]
 def write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
     with path.open("w", encoding="utf-8") as f:
         for r in records:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            _ = f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
 def session_header(sid: str = "test-uuid") -> dict[str, object]:
@@ -201,7 +201,7 @@ def test_emit_filtered_preserves_line_count_and_truncates(tmp_path: Path) -> Non
 # --- resolve + CLI ---
 def test_resolve_by_path(tmp_path: Path) -> None:
     p = tmp_path / "my.jsonl"
-    p.write_text("{}\n")
+    _ = p.write_text("{}\n")
     assert audit.resolve_session(str(p)) == p.resolve()
 
 

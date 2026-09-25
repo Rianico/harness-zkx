@@ -30,8 +30,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Create isolated worktree child and print absolute path",
     )
-    parser.add_argument("child_branch", help="Child branch feat/<name>--part")
-    parser.add_argument("base_branch", help="Base branch map/<name> or feat/<name>")
+    _ = parser.add_argument("child_branch", help="Child branch feat/<name>--part")
+    _ = parser.add_argument("base_branch", help="Base branch map/<name> or feat/<name>")
     _ = parser.add_argument(
         "--skip-deps",
         action="store_true",

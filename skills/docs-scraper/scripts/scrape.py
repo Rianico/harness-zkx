@@ -127,7 +127,7 @@ SCRAPERS: dict[str, ScraperConfig] = {
         "default_output": "site-output",
     },
     "skills": {
-        "class": SkillsScraper,  # pyright: ignore[reportUnknownMemberType]
+        "class": SkillsScraper,
         "kind": "skills",
         "default_output": ".lsz/tmp/skill-compose",
     },
@@ -213,7 +213,7 @@ For detailed help on a specific scraper:
                 name,
                 help="Scrape Rust crate documentation",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]
+                description=config["class"].description,
             )
             _ = sub.add_argument(
                 "target",
@@ -256,11 +256,11 @@ For detailed help on a specific scraper:
                 help="Exclude private items (default: True)",
             )
         elif config["kind"] == "skills":
-            sub = subparsers.add_parser(  # pyright: ignore[reportUnknownMemberType]
+            sub = subparsers.add_parser(
                 name,
                 help="Fetch skills from skill.sh via npx skills mature client for LLM composition",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             )
             _ = sub.add_argument(
                 "inputs",
@@ -298,7 +298,7 @@ For detailed help on a specific scraper:
                 name,
                 help="Scrape generic site via llms.txt/sitemap.xml",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]
+                description=config["class"].description,
             )
             _ = sub.add_argument(
                 "urls",
@@ -325,7 +325,7 @@ For detailed help on a specific scraper:
                 name,
                 help=f"Scrape {name.upper()} documentation",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]
+                description=config["class"].description,
             )
             _ = sub.add_argument(
                 "--output-dir",
@@ -366,7 +366,7 @@ def main() -> None:
     config = SCRAPERS[args.doc_type]
 
     # Set default output directory
-    output_dir = args.output_dir or Path(config["default_output"])  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+    output_dir = args.output_dir or Path(config["default_output"])
 
     # Create scraper instance
     if config["kind"] == "skills":
@@ -374,7 +374,7 @@ def main() -> None:
             getattr(args, "staging", None)
             or getattr(args, "output_dir", None)
             or Path(config["default_output"])
-        )  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+        )
         scraper = config["class"](
             inputs=getattr(args, "inputs", None),
             staging=staging,

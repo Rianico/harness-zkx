@@ -47,7 +47,7 @@ def _run_main(*argv: str) -> int:
 
 # --- 1: ensure_main runs self_check and exits non-zero on blocking ---
 def test_1_ensure_main_runs_self_check_on_written_path(tmp_path: Path, monkeypatch):
-    (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
     seen: list[Path] = []
     orig = scaffold.self_check
 
@@ -62,7 +62,7 @@ def test_1_ensure_main_runs_self_check_on_written_path(tmp_path: Path, monkeypat
 
 
 def test_1_ensure_main_exits_1_on_blocking_finding(tmp_path: Path, monkeypatch):
-    (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
 
     def fake(_targets):
         return [scaffold.Finding("x", "python syntax error: bad", "", True)]
@@ -83,7 +83,7 @@ def test_1_flavor_path_reports_blocking_findings(tmp_path: Path, monkeypatch, ca
 
 # --- 2: validate VALUE (quote/newline) + coverage-script shape ---
 def test_2_py_dep_newline_rejected_with_unchanged_file(tmp_path: Path, capsys):
-    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    _ = (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     before = (tmp_path / "pyproject.toml").read_bytes()
     rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", "foo\nbar"])
     assert rc == 1
@@ -92,7 +92,7 @@ def test_2_py_dep_newline_rejected_with_unchanged_file(tmp_path: Path, capsys):
 
 
 def test_2_py_dep_quote_rejected_with_unchanged_file(tmp_path: Path):
-    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    _ = (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     before = (tmp_path / "pyproject.toml").read_bytes()
     rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", 'foo"bar'])
     assert rc == 1
@@ -100,7 +100,7 @@ def test_2_py_dep_quote_rejected_with_unchanged_file(tmp_path: Path):
 
 
 def test_2_rust_version_quote_rejected_with_unchanged_file(tmp_path: Path, capsys):
-    (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
     before = (tmp_path / "Cargo.toml").read_bytes()
     rc = scaffold.ensure_main(
         ["--cwd", str(tmp_path), "rust-dep", "--name", "tokio", "--version", '1"2']
@@ -110,7 +110,7 @@ def test_2_rust_version_quote_rejected_with_unchanged_file(tmp_path: Path, capsy
 
 
 def test_2_rust_version_newline_rejected(tmp_path: Path):
-    (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
     before = (tmp_path / "Cargo.toml").read_bytes()
     rc = scaffold.ensure_main(
         ["--cwd", str(tmp_path), "rust-dep", "--name", "tokio", "--version", "1\n2"]
@@ -152,7 +152,7 @@ def test_2_bad_coverage_script_rejected(tmp_path: Path, capsys):
 def test_3_json_preserves_non_ascii_and_newline(tmp_path: Path):
     pkg = {"name": "demo", "description": "café 🎉", "scripts": {"test": "vitest run"}}
     raw = json.dumps(pkg, indent=2, ensure_ascii=False) + "\n"
-    (tmp_path / "package.json").write_text(raw, encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text(raw, encoding="utf-8")
     scaffold.ensure_ts_dep(tmp_path, "zod", "^3")
     out = (tmp_path / "package.json").read_text(encoding="utf-8")
     assert "café 🎉" in out
@@ -164,7 +164,7 @@ def test_3_json_keeps_missing_trailing_newline(tmp_path: Path):
     pkg = {"name": "demo", "scripts": {"test": "x"}}
     raw = json.dumps(pkg, indent=2, ensure_ascii=False)  # no trailing newline
     assert not raw.endswith("\n")
-    (tmp_path / "package.json").write_text(raw, encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text(raw, encoding="utf-8")
     scaffold.ensure_ts_dep(tmp_path, "zod", "^3")
     out = (tmp_path / "package.json").read_text(encoding="utf-8")
     assert not out.endswith("\n")
@@ -176,7 +176,7 @@ def test_4_typescript_sets_all_four_thresholds(tmp_path: Path):
         "export default { test: { coverage: { thresholds: "
         "{ lines: 80, functions: 80, branches: 80, statements: 80 } } } };\n"
     )
-    (tmp_path / "vitest.config.ts").write_text(cfg, encoding="utf-8")
+    _ = (tmp_path / "vitest.config.ts").write_text(cfg, encoding="utf-8")
     scaffold.ensure_coverage_threshold(tmp_path, "typescript", 90)
     out = (tmp_path / "vitest.config.ts").read_text(encoding="utf-8")
     for key in ("lines: 90", "functions: 90", "branches: 90", "statements: 90"):
@@ -185,7 +185,7 @@ def test_4_typescript_sets_all_four_thresholds(tmp_path: Path):
 
 def test_4_missing_threshold_key_is_added_not_silently_skipped(tmp_path: Path):
     cfg = "export default { test: { coverage: { thresholds: { lines: 80, functions: 80 } } } };\n"
-    (tmp_path / "vitest.config.ts").write_text(cfg, encoding="utf-8")
+    _ = (tmp_path / "vitest.config.ts").write_text(cfg, encoding="utf-8")
     scaffold.ensure_coverage_threshold(tmp_path, "typescript", 90)
     out = (tmp_path / "vitest.config.ts").read_text(encoding="utf-8")
     assert "branches: 90" in out
@@ -194,7 +194,7 @@ def test_4_missing_threshold_key_is_added_not_silently_skipped(tmp_path: Path):
 
 def test_4_python_bare_assert_replaced_with_raise(tmp_path: Path):
     # fail_under present as substring but regex cannot match -> explicit raise, not assert
-    (tmp_path / "pyproject.toml").write_text(
+    _ = (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "demo"\n# fail_under mentioned but no digits\n', encoding="utf-8"
     )
     try:
@@ -215,7 +215,7 @@ def test_5_crate_only_in_dev_dependencies_is_added(tmp_path: Path):
         '[dependencies]\nserde = "1"\n\n'
         '[dev-dependencies]\ntokio = "1"\n'
     )
-    (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
     note = scaffold.ensure_cargo_dep(tmp_path, "tokio", "1")
     assert "added dependency" in note
     out = (tmp_path / "Cargo.toml").read_text(encoding="utf-8")
@@ -225,19 +225,19 @@ def test_5_crate_only_in_dev_dependencies_is_added(tmp_path: Path):
 
 
 def test_5_present_in_dependencies_reports_unchanged(tmp_path: Path):
-    (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
     assert "unchanged" in scaffold.ensure_cargo_dep(tmp_path, "serde")
 
 
 # --- 6: missing section creates, never whole-flavor advice ---
 def test_6_missing_section_creates_without_flavor_advice(tmp_path: Path):
-    (tmp_path / "package.json").write_text('{"name": "demo"}', encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text('{"name": "demo"}', encoding="utf-8")
     note = scaffold.ensure_ts_dep(tmp_path, "zod")
     assert "added" in note
     data = json.loads((tmp_path / "package.json").read_text(encoding="utf-8"))
     assert data["devDependencies"]["zod"] == "*"
     # no EnsureError message in this path advises a whole-flavor rerun
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         json.dumps({"name": "demo", "scripts": "bad"}), encoding="utf-8"
     )
     try:
@@ -254,8 +254,10 @@ def test_7_run1_creates_run2_preserves_tsconfig_and_oxfmtrc(tmp_path: Path):
     assert (tmp_path / "tsconfig.json").is_file()
     assert (tmp_path / ".oxfmtrc.json").is_file()
     assert (tmp_path / ".oxlintrc.json").is_file()
-    (tmp_path / "tsconfig.json").write_text('{"include": ["index.ts"]}', encoding="utf-8")
-    (tmp_path / ".oxfmtrc.json").write_text('{"ignorePatterns": ["prompts/**"]}', encoding="utf-8")
+    _ = (tmp_path / "tsconfig.json").write_text('{"include": ["index.ts"]}', encoding="utf-8")
+    _ = (tmp_path / ".oxfmtrc.json").write_text(
+        '{"ignorePatterns": ["prompts/**"]}', encoding="utf-8"
+    )
     notes = scaffold.do_typescript(
         tmp_path,
         "demo",
@@ -276,7 +278,7 @@ def test_7_run1_creates_run2_preserves_tsconfig_and_oxfmtrc(tmp_path: Path):
 
 # --- 8: name-agnostic detection ---
 def test_8_detect_reports_cov_script(tmp_path: Path):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"cov": "vitest run --coverage"}}), encoding="utf-8"
     )
     data = scaffold.detect_project(tmp_path)
@@ -285,7 +287,7 @@ def test_8_detect_reports_cov_script(tmp_path: Path):
 
 
 def test_8_detect_reports_plain_test_script(tmp_path: Path):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"test": "vitest run --coverage"}}), encoding="utf-8"
     )
     data = scaffold.detect_project(tmp_path)
@@ -294,7 +296,7 @@ def test_8_detect_reports_plain_test_script(tmp_path: Path):
 
 
 def test_8_detect_reads_inline_threshold(tmp_path: Path):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"cov": "vitest run --coverage --coverage.thresholds.lines=85"}}),
         encoding="utf-8",
     )
@@ -303,19 +305,19 @@ def test_8_detect_reads_inline_threshold(tmp_path: Path):
 
 
 def test_8_ci_detection_is_name_agnostic(tmp_path: Path):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"cov": "vitest run --coverage"}}), encoding="utf-8"
     )
     wf = tmp_path / ".github" / "workflows"
     wf.mkdir(parents=True)
-    (wf / "release.yml").write_text("steps:\n  - run: pnpm run cov\n", encoding="utf-8")
+    _ = (wf / "release.yml").write_text("steps:\n  - run: pnpm run cov\n", encoding="utf-8")
     data = scaffold.detect_project(tmp_path)
     assert data["ci"]["coverage"] is True
 
 
 # --- 9: coverage-script defaults and threads ---
 def test_9_coverage_script_defaults_to_detected(tmp_path: Path, capsys):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"cov": "vitest run --coverage"}}), encoding="utf-8"
     )
     rc = _run_main(
@@ -425,7 +427,7 @@ def test_r2_ci_update_preserves_release_yml(tmp_path: Path):
         == 0
     )
     rel = tmp_path / ".github" / "workflows" / "release.yml"
-    rel.write_text(rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8")
+    _ = rel.write_text(rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8")
     assert (
         _run_main("--flavor", "ci", "--ci-variant", "node", "--update", "--cwd", str(tmp_path)) == 0
     )
@@ -447,7 +449,7 @@ def test_r2_do_ci_update_returns_preserve_note(tmp_path: Path):
         == 0
     )
     rel = tmp_path / ".github" / "workflows" / "release.yml"
-    rel.write_text(rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8")
+    _ = rel.write_text(rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8")
     notes = scaffold.do_ci(tmp_path, False, "node", False, 80, update=True)
     assert any("release.yml" in note for note in notes)
     assert "# CUSTOM MARKER" in rel.read_text(encoding="utf-8")
@@ -478,7 +480,7 @@ def test_python_verify_note_states_the_budget_seed_step(
 def test_r2_all_update_preserves_release_yml(tmp_path: Path):
     assert _run_main("--flavor", "all", "--project-name", "demo", "--cwd", str(tmp_path)) == 0
     rel = tmp_path / ".github" / "workflows" / "release.yml"
-    rel.write_text(rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8")
+    _ = rel.write_text(rel.read_text(encoding="utf-8") + "\n# CUSTOM MARKER\n", encoding="utf-8")
     assert (
         _run_main("--flavor", "all", "--project-name", "demo", "--update", "--cwd", str(tmp_path))
         == 0
@@ -489,31 +491,33 @@ def test_r2_all_update_preserves_release_yml(tmp_path: Path):
 # --- r2 P1-B: self_check parses .toml/.ts; ensure refuses corrupt files ---
 def test_r2_self_check_flags_invalid_toml(tmp_path: Path):
     bad = tmp_path / "Cargo.toml"
-    bad.write_text("INVALID [[[\n", encoding="utf-8")
+    _ = bad.write_text("INVALID [[[\n", encoding="utf-8")
     findings = scaffold.self_check([bad])
     assert any("invalid TOML" in f.detail and f.blocking for f in findings)
 
 
 def test_r2_self_check_flags_unbalanced_ts(tmp_path: Path):
     bad = tmp_path / "vitest.config.ts"
-    bad.write_text("INVALID(((\n", encoding="utf-8")
+    _ = bad.write_text("INVALID(((\n", encoding="utf-8")
     findings = scaffold.self_check([bad])
     assert any("unbalanced" in f.detail and f.blocking for f in findings)
 
 
 def test_r2_self_check_accepts_valid_toml_and_ts(tmp_path: Path):
     good_toml = tmp_path / "Cargo.toml"
-    good_toml.write_text(
+    _ = good_toml.write_text(
         '[package]\nname = "demo"\nversion = "0.1.0"\n\n[dependencies]\n', encoding="utf-8"
     )
     good_ts = tmp_path / "index.ts"
-    good_ts.write_text('export const greeting: string = `hello ${"world"}`;\n', encoding="utf-8")
+    _ = good_ts.write_text(
+        'export const greeting: string = `hello ${"world"}`;\n', encoding="utf-8"
+    )
     assert not [f for f in scaffold.self_check([good_toml, good_ts]) if f.blocking]
 
 
 def test_r2_ensure_rust_dep_refuses_invalid_toml_unchanged(tmp_path: Path):
     bad = '[package\nname = "demo"\n\n[dependencies]\nserde = "1"\n'
-    (tmp_path / "Cargo.toml").write_text(bad, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(bad, encoding="utf-8")
     rc = scaffold.ensure_main(["--cwd", str(tmp_path), "rust-dep", "--name", "tokio"])
     assert rc == 1
     assert (tmp_path / "Cargo.toml").read_text(encoding="utf-8") == bad
@@ -521,7 +525,7 @@ def test_r2_ensure_rust_dep_refuses_invalid_toml_unchanged(tmp_path: Path):
 
 def test_r2_ensure_py_dep_refuses_invalid_toml_unchanged(tmp_path: Path):
     bad = '[project\nname = "demo"\ndependencies = []\n'
-    (tmp_path / "pyproject.toml").write_text(bad, encoding="utf-8")
+    _ = (tmp_path / "pyproject.toml").write_text(bad, encoding="utf-8")
     rc = scaffold.ensure_main(["--cwd", str(tmp_path), "py-dep", "--req", "httpx>=0.27"])
     assert rc == 1
     assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == bad
@@ -529,7 +533,7 @@ def test_r2_ensure_py_dep_refuses_invalid_toml_unchanged(tmp_path: Path):
 
 def test_r2_ensure_threshold_refuses_invalid_ts_unchanged(tmp_path: Path):
     bad = "export default { test: { coverage: { thresholds: { lines: 80, functions: 80 } } } ;\n((("
-    (tmp_path / "vitest.config.ts").write_text(bad, encoding="utf-8")
+    _ = (tmp_path / "vitest.config.ts").write_text(bad, encoding="utf-8")
     rc = scaffold.ensure_main(
         ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "typescript", "--value", "90"]
     )
@@ -553,13 +557,13 @@ def test_r2_skill_discloses_json_normalization():
 # --- r3: prior-round P1/P2 (falsifiable: revert fix -> fail) ---
 def test_r3_cargo_trailing_comment_no_duplicate(tmp_path: Path):
     body = '[package]\nname = "demo"\nversion = "0.1.0"\n\n[dependencies] # comment\nserde = "1"\n'
-    (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
     rc = scaffold.ensure_main(["--cwd", str(tmp_path), "rust-dep", "--name", "tokio"])
     assert rc == 0
     out = (tmp_path / "Cargo.toml").read_text(encoding="utf-8")
     import tomllib as _toml
 
-    _toml.loads(out)
+    _ = _toml.loads(out)
     assert out.count("[dependencies]") == 1
     assert 'tokio = "*"' in out.split("[dependencies]")[1].split("[")[0]
 
@@ -570,7 +574,7 @@ def test_r3_cargo_dev_comment_bleed_adds_to_dependencies(tmp_path: Path):
         '[dependencies]\nserde = "1"\n\n'
         '[dev-dependencies] # comment\ntokio = "1"\n'
     )
-    (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(body, encoding="utf-8")
     note = scaffold.ensure_cargo_dep(tmp_path, "tokio", "1")
     assert "added dependency" in note
     out = (tmp_path / "Cargo.toml").read_text(encoding="utf-8")
@@ -580,7 +584,7 @@ def test_r3_cargo_dev_comment_bleed_adds_to_dependencies(tmp_path: Path):
 
 def test_r3_python_comment_only_fail_under_refuses(tmp_path: Path):
     bad = '[project]\nname = "demo"\n# fail_under = 80\n'
-    (tmp_path / "pyproject.toml").write_text(bad, encoding="utf-8")
+    _ = (tmp_path / "pyproject.toml").write_text(bad, encoding="utf-8")
     rc = scaffold.ensure_main(
         ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "python", "--value", "90"]
     )
@@ -590,7 +594,7 @@ def test_r3_python_comment_only_fail_under_refuses(tmp_path: Path):
 
 def test_r3_typescript_comment_only_thresholds_refuses(tmp_path: Path):
     bad = "// thresholds: { lines: 80 }\nexport default {};\n"
-    (tmp_path / "vitest.config.ts").write_text(bad, encoding="utf-8")
+    _ = (tmp_path / "vitest.config.ts").write_text(bad, encoding="utf-8")
     rc = scaffold.ensure_main(
         ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "typescript", "--value", "90"]
     )
@@ -599,7 +603,7 @@ def test_r3_typescript_comment_only_thresholds_refuses(tmp_path: Path):
 
 
 def test_r3_ts_newline_version_refused_unchanged(tmp_path: Path):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         '{"name": "demo", "devDependencies": {}, "scripts": {}}', encoding="utf-8"
     )
     before = (tmp_path / "package.json").read_bytes()
@@ -611,7 +615,7 @@ def test_r3_ts_newline_version_refused_unchanged(tmp_path: Path):
 
 
 def test_r3_ts_newline_script_name_refused_unchanged(tmp_path: Path):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         '{"name": "demo", "devDependencies": {}, "scripts": {}}', encoding="utf-8"
     )
     before = (tmp_path / "package.json").read_bytes()
@@ -635,7 +639,7 @@ def test_r4_python_string_fail_under_untouched(tmp_path: Path):
         '[project]\ndescription = "fail_under = 80 stays in docs"\n\n'
         "[tool.coverage.report]\nfail_under = 80\n"
     )
-    (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+    _ = (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
     rc = scaffold.ensure_main(
         ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "python", "--value", "90"]
     )
@@ -651,7 +655,7 @@ def test_r4_python_other_section_fail_under_untouched(tmp_path: Path):
         "[tool.coverage.report]\nfail_under = 80\n\n"
         "[tool.other]\nfail_under = 70\n"
     )
-    (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+    _ = (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
     rc = scaffold.ensure_main(
         ["--cwd", str(tmp_path), "coverage-threshold", "--flavor", "python", "--value", "90"]
     )
@@ -661,7 +665,7 @@ def test_r4_python_other_section_fail_under_untouched(tmp_path: Path):
 
 
 def test_r4_ensure_main_self_check_runs_for_unchanged_named_crate(tmp_path: Path, monkeypatch):
-    (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
+    _ = (tmp_path / "Cargo.toml").write_text(CARGO, encoding="utf-8")
     seen: list[Path] = []
     orig = scaffold.self_check
 
@@ -676,7 +680,7 @@ def test_r4_ensure_main_self_check_runs_for_unchanged_named_crate(tmp_path: Path
 
 
 def test_r4_ts_script_bad_name_refused_unchanged(tmp_path: Path):
-    (tmp_path / "package.json").write_text('{"name": "demo", "scripts": {}}', encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text('{"name": "demo", "scripts": {}}', encoding="utf-8")
     before = (tmp_path / "package.json").read_bytes()
     rc = scaffold.ensure_main(
         [
@@ -694,7 +698,7 @@ def test_r4_ts_script_bad_name_refused_unchanged(tmp_path: Path):
 
 
 def test_r4_detect_ignores_invalid_coverage_script_name(tmp_path: Path):
-    (tmp_path / "package.json").write_text(
+    _ = (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"bad name!": "vitest run --coverage"}}), encoding="utf-8"
     )
     data = scaffold.detect_project(tmp_path)

@@ -58,8 +58,10 @@ def _fresh_plan():
 def _seed_repo(cwd: pathlib.Path) -> None:
     (cwd / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
     (cwd / ".githooks").mkdir(parents=True, exist_ok=True)
-    (cwd / "CHANGELOG.md").write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
-    (cwd / "commitlint.config.js").write_text(STALE_FILE, encoding="utf-8")
+    _ = (cwd / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8"
+    )
+    _ = (cwd / "commitlint.config.js").write_text(STALE_FILE, encoding="utf-8")
 
 
 def _run_main(*argv: str) -> int:
@@ -96,7 +98,7 @@ def test_check_reports_drift_and_fails_the_run(tmp_path, capsys):
 
 def test_check_writes_nothing(tmp_path):
     _seed_repo(tmp_path)
-    _run_main("--check", "--cwd", str(tmp_path))
+    _ = _run_main("--check", "--cwd", str(tmp_path))
 
     assert (tmp_path / "commitlint.config.js").read_text(encoding="utf-8") == STALE_FILE
     assert not (tmp_path / ".releaserc.json").exists()
@@ -115,7 +117,7 @@ def test_check_without_flavor_is_not_a_usage_error(tmp_path, capsys):
 def test_summary_drops_the_diff_payload(tmp_path, capsys):
     _seed_repo(tmp_path)
 
-    _run_main("--update", "--dry-run", "--summary", "--cwd", str(tmp_path))
+    _ = _run_main("--update", "--dry-run", "--summary", "--cwd", str(tmp_path))
     out = capsys.readouterr().out
 
     assert "stale      commitlint.config.js" in out
@@ -126,7 +128,7 @@ def test_summary_drops_the_diff_payload(tmp_path, capsys):
 def test_json_plan_is_machine_readable(tmp_path, capsys):
     _seed_repo(tmp_path)
 
-    _run_main("--update", "--dry-run", "--json", "--cwd", str(tmp_path))
+    _ = _run_main("--update", "--dry-run", "--json", "--cwd", str(tmp_path))
     plan = json.loads(capsys.readouterr().out)
 
     assert plan["dry_run"] is True and plan["update"] is True

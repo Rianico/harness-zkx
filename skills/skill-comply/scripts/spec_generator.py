@@ -58,7 +58,7 @@ def generate_spec(
             suffix=".yaml",
             delete=False,
         ) as f:
-            f.write(raw_yaml)
+            _ = f.write(raw_yaml)
             tmp_path = Path(f.name)
 
         try:

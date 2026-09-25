@@ -533,7 +533,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
                 output_file = self.output_dir / f"{filename}.md"
 
                 # Write content
-                output_file.write_text(content, encoding="utf-8")
+                _ = output_file.write_text(content, encoding="utf-8")
                 print(f"  Written: {output_file.name} ({len(content)} bytes, fmt={fmt})")
                 total_bytes += len(content)
 
@@ -588,7 +588,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         }
         try:
             metrics_path = self.output_dir / "metrics.json"
-            metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+            _ = metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
             print(
                 f"Metrics: {metrics_path} ({success}/{len(results)} success, {elapsed:.1f}s, {format_counts})"
             )
@@ -645,7 +645,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             ]
         )
 
-        readme_path.write_text("\n".join(lines), encoding="utf-8")
+        _ = readme_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"Generated: {readme_path}")
 
     def run(self) -> None:

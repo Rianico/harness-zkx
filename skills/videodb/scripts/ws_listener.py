@@ -122,13 +122,13 @@ def append_event(event: dict[str, object]):
     event["ts"] = now.isoformat()
     event["unix_ts"] = now.timestamp()
     with EVENTS_FILE.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(event) + "\n")
+        _ = f.write(json.dumps(event) + "\n")
 
 
 def write_pid():
     """Write PID file for easy process management."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    PID_FILE.write_text(str(os.getpid()))
+    _ = PID_FILE.write_text(str(os.getpid()))
 
 
 def cleanup_pid():
@@ -191,7 +191,7 @@ async def listen_with_retry():
             log("Cleared events file")
         _first_connection = False
 
-        WS_ID_FILE.write_text(ws_id)
+        _ = WS_ID_FILE.write_text(ws_id)
 
         if retry_count == 0:
             print(f"WS_ID={ws_id}", flush=True)
@@ -263,7 +263,7 @@ async def main_async():
 
     # Cancel remaining tasks
     for task in pending:
-        task.cancel()
+        _ = task.cancel()
         try:
             await task
         except asyncio.CancelledError:
@@ -271,7 +271,7 @@ async def main_async():
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         with contextlib.suppress(NotImplementedError):
-            loop.remove_signal_handler(sig)
+            _ = loop.remove_signal_handler(sig)
 
     log("Shutdown complete")
 

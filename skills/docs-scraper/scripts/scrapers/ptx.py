@@ -188,5 +188,5 @@ Examples:
 
         # Write file
         output_file = parent_dir / f"{filename}.md"
-        output_file.write_text(markdown, encoding="utf-8")
+        _ = output_file.write_text(markdown, encoding="utf-8")
         print(f"  Saved: {output_file.name}")

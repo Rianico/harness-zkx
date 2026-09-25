@@ -399,7 +399,7 @@ def run(options: Options, env: Mapping[str, str]) -> int:
     rendered = (
         render_table(overview, env.get("HOME")) if chosen == FORMAT_TABLE else render_yaml(overview)
     )
-    sys.stdout.write(rendered)
+    _ = sys.stdout.write(rendered)
     return EXIT_OK
 
 

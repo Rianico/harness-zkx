@@ -33,10 +33,10 @@ RELEASE_YML = "name: Verify and Release\njobs:\n  verify:\n    steps:\n      - r
 def _seed_repo(cwd: Path) -> None:
     (cwd / ".github" / "workflows").mkdir(parents=True)
     (cwd / ".githooks").mkdir(parents=True)
-    (cwd / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
-    (cwd / "CONTRIBUTING.md").write_text(CONTRIBUTING, encoding="utf-8")
-    (cwd / ".github" / "workflows" / "release.yml").write_text(RELEASE_YML, encoding="utf-8")
-    (cwd / "commitlint.config.js").write_text("stale\n", encoding="utf-8")
+    _ = (cwd / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
+    _ = (cwd / "CONTRIBUTING.md").write_text(CONTRIBUTING, encoding="utf-8")
+    _ = (cwd / ".github" / "workflows" / "release.yml").write_text(RELEASE_YML, encoding="utf-8")
+    _ = (cwd / "commitlint.config.js").write_text("stale\n", encoding="utf-8")
 
 
 # --- replacement vs preservation ----------------------------------------------

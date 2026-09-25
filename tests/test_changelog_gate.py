@@ -23,14 +23,14 @@ def _repo(tmp_path: Path, changelog_text: str | None, subjects: list[str]) -> Pa
     repo.mkdir()
     if changelog_text is not None:
         _ = (repo / "CHANGELOG.md").write_text(changelog_text, encoding="utf-8")
-    _git(repo, "init", "-q", "-b", "main")
-    _git(repo, "config", "user.email", "t@example.invalid")
-    _git(repo, "config", "user.name", "t")
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-q", "--allow-empty", "-m", "chore: init")
-    _git(repo, "switch", "-q", "-c", "feature")
+    _ = _git(repo, "init", "-q", "-b", "main")
+    _ = _git(repo, "config", "user.email", "t@example.invalid")
+    _ = _git(repo, "config", "user.name", "t")
+    _ = _git(repo, "add", "-A")
+    _ = _git(repo, "commit", "-q", "--allow-empty", "-m", "chore: init")
+    _ = _git(repo, "switch", "-q", "-c", "feature")
     for subject in subjects:
-        _git(repo, "commit", "-q", "--allow-empty", "-m", subject)
+        _ = _git(repo, "commit", "-q", "--allow-empty", "-m", subject)
     return repo
 
 
@@ -236,12 +236,12 @@ def _merge_landing(repo: Path, pr: str, commits: list[str]) -> None:
 
     `git commit-tree` builds it from plumbing, so no `git merge` runs and no hook is involved.
     """
-    _git(repo, "checkout", "-q", "-b", f"ticket-{pr}", "main")
+    _ = _git(repo, "checkout", "-q", "-b", f"ticket-{pr}", "main")
     for subject in commits:
-        _git(repo, "commit", "-q", "--allow-empty", "-m", subject)
+        _ = _git(repo, "commit", "-q", "--allow-empty", "-m", subject)
     tip = _git(repo, "rev-parse", "HEAD").stdout.strip()
     base = _git(repo, "rev-parse", "main").stdout.strip()
-    _git(repo, "checkout", "-q", "main")
+    _ = _git(repo, "checkout", "-q", "main")
     tree = _git(repo, "rev-parse", f"{tip}^{{tree}}").stdout.strip()
     merge = _git(
         repo,
@@ -254,7 +254,7 @@ def _merge_landing(repo: Path, pr: str, commits: list[str]) -> None:
         "-m",
         f"Merge pull request #{pr} from contributor/ticket-{pr}",
     ).stdout.strip()
-    _git(repo, "update-ref", "refs/heads/main", merge)
+    _ = _git(repo, "update-ref", "refs/heads/main", merge)
 
 
 def test_ledger_accepts_a_merge_landing_with_multiple_entries(tmp_path: Path) -> None:

@@ -28,7 +28,7 @@ def write_skill(root: Path, name: str, depends_on: str | None = None) -> None:
     skill_dir = root / "skills" / name
     skill_dir.mkdir(parents=True)
     metadata = f"metadata:\n  depends-on: [{depends_on}]\n" if depends_on else ""
-    (skill_dir / "SKILL.md").write_text(
+    _ = (skill_dir / "SKILL.md").write_text(
         (
             f"---\nname: {name}\n"
             "description: Test skill for dependency validation.\n"
@@ -42,7 +42,7 @@ def write_raw_skill(root: Path, name: str, frontmatter: str) -> None:
     """Write a SKILL.md with arbitrary frontmatter for testing."""
     skill_dir = root / "skills" / name
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
+    _ = (skill_dir / "SKILL.md").write_text(
         f"---\n{frontmatter}---\n\n# {name}\n",
         encoding="utf-8",
     )
@@ -151,7 +151,7 @@ def test_commands_dir_is_not_scanned(tmp_path: Path) -> None:
     )
     commands_dir = tmp_path / "commands"
     commands_dir.mkdir()
-    (commands_dir / "legacy-cmd.md").write_text(
+    _ = (commands_dir / "legacy-cmd.md").write_text(
         "---\nname: legacy-cmd\n---\n\n# legacy-cmd\n", encoding="utf-8"
     )
 

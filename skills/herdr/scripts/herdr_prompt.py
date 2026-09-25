@@ -373,7 +373,7 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
             hint = "still working when the wait timed out"
         raise WaitTimeout(
             f"prompt delivered to {names} but {hint}; "
-            + f"working asynchronously. Yield turn and await reply callback, or resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
+            f"working asynchronously. Yield turn and await reply callback, or resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
         )
     return EXIT_OK
 

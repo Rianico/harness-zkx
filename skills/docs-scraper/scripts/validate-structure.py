@@ -120,9 +120,9 @@ def extract_api_surface(doc_dir: Path) -> dict[str, list[str]]:
 
 def main():
     parser = argparse.ArgumentParser(description="Validate documentation structure")
-    parser.add_argument("doc_dir", type=Path, help="Documentation directory to analyze")
-    parser.add_argument("--output", type=Path, help="Output JSON file path")
-    parser.add_argument("--api-surface", action="store_true", help="Extract API surface")
+    _ = parser.add_argument("doc_dir", type=Path, help="Documentation directory to analyze")
+    _ = parser.add_argument("--output", type=Path, help="Output JSON file path")
+    _ = parser.add_argument("--api-surface", action="store_true", help="Extract API surface")
 
     args = parser.parse_args()
 

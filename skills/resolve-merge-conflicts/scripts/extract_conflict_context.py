@@ -426,30 +426,30 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Summarize and extract compact merge-conflict context."
     )
-    parser.add_argument("--repo", default=".", help="Path inside the target repository.")
-    parser.add_argument(
+    _ = parser.add_argument("--repo", default=".", help="Path inside the target repository.")
+    _ = parser.add_argument(
         "--file",
         action="append",
         default=[],
         help="Conflicted file to inspect in detail. Repeat to inspect multiple files.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--all",
         action="store_true",
         help="Print detailed output for every conflicted file.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--json",
         action="store_true",
         help="Emit JSON instead of text.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--context",
         type=int,
         default=2,
         help="Lines of surrounding context to include around each conflict hunk.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--max-lines",
         type=int,
         default=40,

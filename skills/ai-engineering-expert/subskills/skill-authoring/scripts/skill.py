@@ -242,16 +242,16 @@ def _write_meta(
         ):
             # already handled; but if dump inlined, we fix later via lint fix? keep as is
             pass
-        path.write_text(out, encoding="utf-8")
+        _ = path.write_text(out, encoding="utf-8")
         return
     # fallback: yaml dump frontmatter block
     if yaml is not None:
         fm_text = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)  # type: ignore[union-attr]
         out = f"---\n{fm_text}---\n\n{body.lstrip()}\n"
-        path.write_text(out, encoding="utf-8")
+        _ = path.write_text(out, encoding="utf-8")
         return
     # last resort: minimal write
-    path.write_text(f"---\n{meta}\n---\n\n{body}", encoding="utf-8")
+    _ = path.write_text(f"---\n{meta}\n---\n\n{body}", encoding="utf-8")
 
 
 def _ensure_list(value) -> list[str]:
@@ -612,11 +612,11 @@ def cmd_manage(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
             # we can update the original file's managed-by then move, or move then update dest
             # Do: update original then move (so dest has correct)
             if not dry_run:
-                _update_list_in_meta(
+                _ = _update_list_in_meta(
                     child_file, "metadata.managed-by", set_value=parent, dry_run=False
                 )
                 # now move directory
-                child_top_dir.rename(child_sub_dir)
+                _ = child_top_dir.rename(child_sub_dir)
                 print(
                     f"  moved {child_top_dir.relative_to(repo_root)} -> {child_sub_dir.relative_to(repo_root)}"
                 )
@@ -678,7 +678,7 @@ def cmd_unmanage(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
                     f"  [dry-run] would move {child_sub_dir.relative_to(repo_root)} -> {child_top_dir.relative_to(repo_root)}"
                 )
             else:
-                child_sub_dir.rename(child_top_dir)
+                _ = child_sub_dir.rename(child_top_dir)
                 print(
                     f"  moved {child_sub_dir.relative_to(repo_root)} -> {child_top_dir.relative_to(repo_root)} (now top-level)"
                 )
@@ -739,7 +739,7 @@ def do_rename_skill(old: str, new: str, repo_root: pathlib.Path, dry_run: bool) 
     if dry_run:
         print("dry-run: no writes")
     if not dry_run:
-        old_dir.rename(new_dir)
+        _ = old_dir.rename(new_dir)
         print(f"moved {old_dir.relative_to(repo_root)} -> {new_dir.relative_to(repo_root)}")
     else:
         print(
@@ -805,7 +805,7 @@ def do_rename_skill(old: str, new: str, repo_root: pathlib.Path, dry_run: bool) 
             if dry_run:
                 print(f"  [dry-run] would patch {f.relative_to(repo_root)}")
             else:
-                f.write_text(text, encoding="utf-8")
+                _ = f.write_text(text, encoding="utf-8")
                 print(f"  patched {f.relative_to(repo_root)}")
     print(f"done: {old} -> {new}")
 
@@ -829,7 +829,7 @@ def do_rename_subskill(
     if dry_run:
         print("dry-run: no writes")
     if not dry_run:
-        old_dir.rename(new_dir)
+        _ = old_dir.rename(new_dir)
         print(f"moved {old_dir.relative_to(repo_root)} -> {new_dir.relative_to(repo_root)}")
     else:
         print(
@@ -885,7 +885,7 @@ def do_rename_subskill(
             if dry_run:
                 print(f"  [dry-run] would patch {f.relative_to(repo_root)}")
             else:
-                f.write_text(text, encoding="utf-8")
+                _ = f.write_text(text, encoding="utf-8")
                 print(f"  patched {f.relative_to(repo_root)}")
     print(f"done: {old_sub} -> {new_sub} (parent {parent})")
 
@@ -943,15 +943,15 @@ def main() -> None:
             ap = argparse.ArgumentParser(
                 description="Skill lifecycle manager — legacy rename compat"
             )
-            ap.add_argument(
+            _ = ap.add_argument(
                 "old_name", help="Current skill name (or old subskill name when --parent is used)"
             )
-            ap.add_argument("new_name", help="New skill/subskill name")
-            ap.add_argument(
+            _ = ap.add_argument("new_name", help="New skill/subskill name")
+            _ = ap.add_argument(
                 "--parent", dest="parent", default=None, help="Parent skill for subskill rename"
             )
-            ap.add_argument("--dry-run", action="store_true", help="preview without writing")
-            ap.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+            _ = ap.add_argument("--dry-run", action="store_true", help="preview without writing")
+            _ = ap.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
             args = ap.parse_args()
             script_path = pathlib.Path(__file__)
             repo_root = args.cwd.resolve() if args.cwd else repo_root_from_script(script_path)
@@ -974,81 +974,81 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Skill lifecycle manager — add/remove/rename + dependency & hierarchy wiring"
     )
-    ap.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
-    ap.add_argument("--dry-run", action="store_true", help="preview without writing (global)")
+    _ = ap.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = ap.add_argument("--dry-run", action="store_true", help="preview without writing (global)")
     sub = ap.add_subparsers(dest="command", required=True)
 
     p_rename = sub.add_parser("rename", help="Rename a skill or subskill and cascade references")
-    p_rename.add_argument("old_name", help="Current skill/subskill name")
-    p_rename.add_argument("new_name", help="New name")
-    p_rename.add_argument(
+    _ = p_rename.add_argument("old_name", help="Current skill/subskill name")
+    _ = p_rename.add_argument("new_name", help="New name")
+    _ = p_rename.add_argument(
         "--parent", dest="parent", default=None, help="Parent skill for subskill rename"
     )
-    p_rename.add_argument("--dry-run", action="store_true", help="preview without writing")
-    p_rename.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = p_rename.add_argument("--dry-run", action="store_true", help="preview without writing")
+    _ = p_rename.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
 
     p_add = sub.add_parser("add", help="Add a new skill or subskill")
-    p_add.add_argument("name", help="New skill/subskill name")
-    p_add.add_argument(
+    _ = p_add.add_argument("name", help="New skill/subskill name")
+    _ = p_add.add_argument(
         "--parent", dest="parent", default=None, help="Parent skill if creating a subskill"
     )
-    p_add.add_argument(
+    _ = p_add.add_argument(
         "--description",
         dest="description",
         default=None,
         help="Frontmatter description (uses block scalar)",
     )
-    p_add.add_argument(
+    _ = p_add.add_argument(
         "--depends-on",
         dest="depends_on",
         action="append",
         default=None,
         help="Initial dependency (repeatable)",
     )
-    p_add.add_argument("--dry-run", action="store_true", help="preview without writing")
-    p_add.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = p_add.add_argument("--dry-run", action="store_true", help="preview without writing")
+    _ = p_add.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
 
     p_remove = sub.add_parser("remove", help="Remove a skill or subskill")
-    p_remove.add_argument("name", help="Skill/subskill name to remove")
-    p_remove.add_argument(
+    _ = p_remove.add_argument("name", help="Skill/subskill name to remove")
+    _ = p_remove.add_argument(
         "--parent", dest="parent", default=None, help="Parent skill if removing a subskill"
     )
-    p_remove.add_argument("--dry-run", action="store_true", help="preview without writing")
-    p_remove.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = p_remove.add_argument("--dry-run", action="store_true", help="preview without writing")
+    _ = p_remove.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
 
     p_depend = sub.add_parser(
         "depend", help="Declare that <skill> relies on <dependency> (A relies on B)"
     )
-    p_depend.add_argument("skill", help="Skill that will depend on another (A)")
-    p_depend.add_argument("dependency", help="Dependency skill (B)")
-    p_depend.add_argument(
+    _ = p_depend.add_argument("skill", help="Skill that will depend on another (A)")
+    _ = p_depend.add_argument("dependency", help="Dependency skill (B)")
+    _ = p_depend.add_argument(
         "--parent", dest="parent", default=None, help="Parent if skill is a subskill"
     )
-    p_depend.add_argument("--dry-run", action="store_true", help="preview without writing")
-    p_depend.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = p_depend.add_argument("--dry-run", action="store_true", help="preview without writing")
+    _ = p_depend.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
 
     p_undepend = sub.add_parser("undepend", help="Remove a depends-on relationship")
-    p_undepend.add_argument("skill", help="Skill to modify")
-    p_undepend.add_argument("dependency", help="Dependency to remove")
-    p_undepend.add_argument(
+    _ = p_undepend.add_argument("skill", help="Skill to modify")
+    _ = p_undepend.add_argument("dependency", help="Dependency to remove")
+    _ = p_undepend.add_argument(
         "--parent", dest="parent", default=None, help="Parent if skill is a subskill"
     )
-    p_undepend.add_argument("--dry-run", action="store_true", help="preview without writing")
-    p_undepend.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = p_undepend.add_argument("--dry-run", action="store_true", help="preview without writing")
+    _ = p_undepend.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
 
     p_manage = sub.add_parser(
         "manage", help="Make <child> a subskill of <parent> (parent manages child)"
     )
-    p_manage.add_argument("parent", help="Parent skill (B)")
-    p_manage.add_argument("child", help="Child skill/subskill (A)")
-    p_manage.add_argument("--dry-run", action="store_true", help="preview without writing")
-    p_manage.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = p_manage.add_argument("parent", help="Parent skill (B)")
+    _ = p_manage.add_argument("child", help="Child skill/subskill (A)")
+    _ = p_manage.add_argument("--dry-run", action="store_true", help="preview without writing")
+    _ = p_manage.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
 
     p_unmanage = sub.add_parser("unmanage", help="Remove parent-child manage relationship")
-    p_unmanage.add_argument("parent", help="Parent skill")
-    p_unmanage.add_argument("child", help="Child skill/subskill")
-    p_unmanage.add_argument("--dry-run", action="store_true", help="preview without writing")
-    p_unmanage.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
+    _ = p_unmanage.add_argument("parent", help="Parent skill")
+    _ = p_unmanage.add_argument("child", help="Child skill/subskill")
+    _ = p_unmanage.add_argument("--dry-run", action="store_true", help="preview without writing")
+    _ = p_unmanage.add_argument("--cwd", type=pathlib.Path, default=None, help="repo root override")
     args = ap.parse_args()
     script_path = pathlib.Path(__file__)
     # effective cwd/dry_run: support --dry-run / --cwd either before or after subcommand

@@ -100,7 +100,7 @@ def test_dependency_tree_healthy_flags_dangling_symlinks(tmp_path: Path) -> None
     """`wt step copy-ignored` can leave every top-level store symlink dangling."""
     node_modules = tmp_path / "node_modules"
     node_modules.mkdir()
-    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text("{}", encoding="utf-8")
     for name in ("oxlint", "vitest"):
         (node_modules / name).symlink_to(tmp_path / "missing" / name)
 
@@ -110,7 +110,7 @@ def test_dependency_tree_healthy_flags_dangling_symlinks(tmp_path: Path) -> None
 
 
 def test_dependency_tree_healthy_flags_missing_node_modules(tmp_path: Path) -> None:
-    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text("{}", encoding="utf-8")
     healthy, detail = _lib.dependency_tree_healthy(tmp_path)
     assert not healthy
     assert "missing" in detail
@@ -121,7 +121,7 @@ def test_dependency_tree_healthy_accepts_resolving_symlinks(tmp_path: Path) -> N
     store = tmp_path / "store" / "vitest"
     store.mkdir(parents=True)
     node_modules.mkdir()
-    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text("{}", encoding="utf-8")
     (node_modules / "vitest").symlink_to(store)
 
     healthy, _ = _lib.dependency_tree_healthy(tmp_path)
@@ -129,8 +129,8 @@ def test_dependency_tree_healthy_accepts_resolving_symlinks(tmp_path: Path) -> N
 
 
 def test_detect_install_command_prefers_pnpm_lockfile(tmp_path: Path) -> None:
-    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
-    (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: 9\n", encoding="utf-8")
+    _ = (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    _ = (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: 9\n", encoding="utf-8")
     assert _lib.detect_install_command(tmp_path) == ["pnpm", "install", "--frozen-lockfile"]
 
 

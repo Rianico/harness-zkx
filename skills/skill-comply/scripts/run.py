@@ -25,39 +25,39 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="skill-comply: Measure skill compliance rates",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "skill",
         type=Path,
         help="Path to skill/rule file to test",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--model",
         default="sonnet",
         help="Model for scenario execution (default: sonnet)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--gen-model",
         default="haiku",
         help="Model for spec/scenario generation (default: haiku)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Generate spec and scenarios without executing",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--output",
         type=Path,
         default=None,
         help="Output report path (default: results/<skill-name>.md)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--timeout",
         type=int,
         default=600,
         help="Timeout in seconds for scenario execution (default: 600)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--classifier-timeout",
         type=int,
         default=120,
@@ -124,8 +124,8 @@ def main() -> None:
     logger.info("[4/4] Generating report...")
 
     report = generate_report(args.skill, spec, graded_results, scenarios=scenarios)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(report)
+    _ = output_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = output_path.write_text(report)
     logger.info("       Report saved to %s", output_path)
 
     # Summary

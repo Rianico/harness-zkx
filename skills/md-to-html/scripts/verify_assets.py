@@ -33,7 +33,7 @@ def load_manifest() -> Manifest:
 
 def save_manifest(manifest: Manifest) -> None:
     """Write *manifest* to disk."""
-    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
+    _ = MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def build_manifest() -> Manifest:
@@ -104,7 +104,7 @@ def update() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Verify md-to-html asset integrity")
-    parser.add_argument(
+    _ = parser.add_argument(
         "--update",
         action="store_true",
         help="Regenerate MANIFEST.json from current asset files",

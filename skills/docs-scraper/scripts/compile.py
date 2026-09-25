@@ -373,7 +373,7 @@ def curate_references(doc_dir: Path, output_dir: Path) -> _CurationResult:
             rel_path = md_file.relative_to(doc_dir)
             out_path = output_dir / rel_path
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(content, encoding="utf-8")
+            _ = out_path.write_text(content, encoding="utf-8")
             result["files_created"] += 1
 
         except Exception as e:
@@ -418,16 +418,16 @@ def main():
 
     # validate-triggers
     triggers_parser = subparsers.add_parser("validate-triggers", help="Validate triggers.yaml")
-    triggers_parser.add_argument("triggers_file", type=Path, help="triggers.yaml file path")
+    _ = triggers_parser.add_argument("triggers_file", type=Path, help="triggers.yaml file path")
 
     # validate-skill
     skill_parser = subparsers.add_parser("validate-skill", help="Validate skill directory")
-    skill_parser.add_argument("skill_dir", type=Path, help="Skill directory path")
+    _ = skill_parser.add_argument("skill_dir", type=Path, help="Skill directory path")
 
     # curate-refs
     curate_parser = subparsers.add_parser("curate-refs", help="Curate reference files")
-    curate_parser.add_argument("doc_dir", type=Path, help="Documentation directory")
-    curate_parser.add_argument("--output", type=Path, required=True, help="Output directory")
+    _ = curate_parser.add_argument("doc_dir", type=Path, help="Documentation directory")
+    _ = curate_parser.add_argument("--output", type=Path, required=True, help="Output directory")
 
     args = parser.parse_args()
 

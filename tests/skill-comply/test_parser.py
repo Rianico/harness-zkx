@@ -47,7 +47,7 @@ class TestParseTrace:
 
     def test_empty_file_returns_empty_list(self, tmp_path: Path) -> None:
         empty = tmp_path / "empty.jsonl"
-        empty.write_text("")
+        _ = empty.write_text("")
         events = parse_trace(empty)
         assert events == []
 

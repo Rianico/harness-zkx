@@ -33,8 +33,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if spec is None or spec.loader is None:
         raise ImportError(f"could not load spec for {_SKILL_WORKTREE}")
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # pyright: ignore[reportUnknownMemberType]
-    parser: argparse.ArgumentParser = mod.build_parser()  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
+    spec.loader.exec_module(mod)
+    parser: argparse.ArgumentParser = mod.build_parser()
     return parser.parse_args(argv)
 
 
@@ -48,9 +48,9 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
     mod = importlib.util.module_from_spec(spec)
     sys.modules["_skill_worktree_main"] = mod
-    spec.loader.exec_module(mod)  # pyright: ignore[reportUnknownMemberType]
+    spec.loader.exec_module(mod)
     # Delegate entire argv to skill dispatcher
-    mod.main(argv if argv is not None else sys.argv[1:])  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
+    mod.main(argv if argv is not None else sys.argv[1:])
 
 
 if __name__ == "__main__":

@@ -290,7 +290,7 @@ class DocumentationScraper(ABC):
         self._wait_for_rate_limit()
 
         # Check robots.txt
-        self._check_robots_txt(url)
+        _ = self._check_robots_txt(url)
 
         # Rotate User-Agent
         self._rotate_user_agent()
@@ -407,7 +407,7 @@ class DocumentationScraper(ABC):
             if original_accept:
                 self.session.headers["Accept"] = original_accept
             else:
-                self.session.headers.pop("Accept", None)
+                _ = self.session.headers.pop("Accept", None)
 
     def fetch_markdown_extension(self, url: str) -> tuple[str | None, str]:
         """Try fetching markdown at .md extension.
@@ -538,7 +538,7 @@ class DocumentationScraper(ABC):
 
             # Save to cache
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(response.text, encoding="utf-8")
+            _ = cache_path.write_text(response.text, encoding="utf-8")
             print(f"   Cached to: {cache_path.relative_to(self.cache_base.parent)}")
 
             return BeautifulSoup(response.content, "html.parser")
@@ -600,14 +600,14 @@ class DocumentationScraper(ABC):
         content, fmt = self.fetch_markdown_via_negotiation(url)
         if content and fmt == "markdown":
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path_md.write_text(content, encoding="utf-8")
+            _ = cache_path_md.write_text(content, encoding="utf-8")
             return content, "markdown"
 
         # Try .md extension
         content, fmt = self.fetch_markdown_extension(url)
         if content and fmt == "markdown":
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path_md.write_text(content, encoding="utf-8")
+            _ = cache_path_md.write_text(content, encoding="utf-8")
             return content, "markdown"
 
         # Try defuddle CLI (local, cleaner than Jina)
@@ -615,7 +615,7 @@ class DocumentationScraper(ABC):
             content, fmt = self.fetch_via_defuddle(url)
             if content and fmt == "markdown":
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
-                cache_path_md.write_text(content, encoding="utf-8")
+                _ = cache_path_md.write_text(content, encoding="utf-8")
                 return content, "markdown"
 
         # Try Jina Reader proxy
@@ -623,7 +623,7 @@ class DocumentationScraper(ABC):
             content, fmt = self.fetch_via_jina_reader(url)
             if content and fmt == "markdown":
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
-                cache_path_md.write_text(content, encoding="utf-8")
+                _ = cache_path_md.write_text(content, encoding="utf-8")
                 return content, "markdown"
 
         # Fall back to HTML
@@ -813,5 +813,5 @@ class DocumentationScraper(ABC):
             ]
         )
 
-        readme_path.write_text("\n".join(lines), encoding="utf-8")
+        _ = readme_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"Generated: {readme_path}")

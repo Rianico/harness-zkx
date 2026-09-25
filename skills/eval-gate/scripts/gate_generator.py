@@ -297,7 +297,7 @@ def synthesize_gate_script(
     content = content.replace("__STACK_NAME__", stack.name)
 
     script_path = output_dir / "run_evals.py"
-    script_path.write_text(content, encoding="utf-8")
+    _ = script_path.write_text(content, encoding="utf-8")
     script_path.chmod(0o755)
     return script_path
 
@@ -388,7 +388,7 @@ def synthesize_unified_gate(
     }
 
     gate_path = output_dir / "gate.json"
-    gate_path.write_text(json.dumps(gate_payload, indent=2), encoding="utf-8")
+    _ = gate_path.write_text(json.dumps(gate_payload, indent=2), encoding="utf-8")
 
     # 3. Initialize blank ledger.json
     ledger_path = output_dir / "ledger.json"
@@ -401,7 +401,7 @@ def synthesize_unified_gate(
             "immutable_invariants": [],
             "history": [],
         }
-        ledger_path.write_text(json.dumps(initial_ledger, indent=2), encoding="utf-8")
+        _ = ledger_path.write_text(json.dumps(initial_ledger, indent=2), encoding="utf-8")
 
     return gate_path, script_path
 
@@ -514,10 +514,10 @@ def update_regression_ledger(
     data["immutable_invariants"] = sorted(list(invariants))
     data["best_score"] = best_score
     data["best_commit"] = best_commit
-    data.setdefault("history", []).append(record)
+    _ = data.setdefault("history", []).append(record)
 
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    ledger_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    _ = ledger_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return data
 
 
@@ -575,33 +575,35 @@ def main() -> int:
 
     # detect
     detect_parser = subparsers.add_parser("detect", help="Detect repository toolchain stack")
-    detect_parser.add_argument(
+    _ = detect_parser.add_argument(
         "--repo-root", type=str, default=".", help="Root path of target repository"
     )
 
     # resolve-dir
     res_parser = subparsers.add_parser("resolve-dir", help="Resolve ~/.pi/workflows/projects path")
-    res_parser.add_argument(
+    _ = res_parser.add_argument(
         "--repo-root", type=str, default=".", help="Root path of target repository"
     )
-    res_parser.add_argument("--topic", type=str, required=True, help="Topic / feature name")
-    res_parser.add_argument("--base-dir", type=str, help="Optional base directory override")
+    _ = res_parser.add_argument("--topic", type=str, required=True, help="Topic / feature name")
+    _ = res_parser.add_argument("--base-dir", type=str, help="Optional base directory override")
 
     # generate-gate
     gen_gate_parser = subparsers.add_parser(
         "generate-gate", aliases=["generate"], help="Generate unified gate.json and run_evals.py"
     )
-    gen_gate_parser.add_argument(
+    _ = gen_gate_parser.add_argument(
         "--repo-root", type=str, default=".", help="Root path of target repository"
     )
-    gen_gate_parser.add_argument("--topic", type=str, required=True, help="Topic / feature name")
-    gen_gate_parser.add_argument(
+    _ = gen_gate_parser.add_argument(
+        "--topic", type=str, required=True, help="Topic / feature name"
+    )
+    _ = gen_gate_parser.add_argument(
         "--output-dir", type=str, help="Output directory override (defaults to ~/.pi path)"
     )
-    gen_gate_parser.add_argument(
+    _ = gen_gate_parser.add_argument(
         "--checks-json", type=str, help="Optional JSON file with custom checks"
     )
-    gen_gate_parser.add_argument(
+    _ = gen_gate_parser.add_argument(
         "--assertions-json", type=str, help="Optional JSON file with semantic assertions"
     )
 
@@ -609,13 +611,13 @@ def main() -> int:
     grade_parser = subparsers.add_parser(
         "grade-assertions", help="Grade atomic boolean + CoT semantic assertions"
     )
-    grade_parser.add_argument(
+    _ = grade_parser.add_argument(
         "--assertions", type=str, required=True, help="Path to gate.json or assertions.json"
     )
-    grade_parser.add_argument(
+    _ = grade_parser.add_argument(
         "--grader-results", type=str, required=True, help="Path to grader results JSON"
     )
-    grade_parser.add_argument(
+    _ = grade_parser.add_argument(
         "--output", type=str, help="Optional output path for graded results JSON"
     )
 
@@ -623,33 +625,37 @@ def main() -> int:
     ledger_parser = subparsers.add_parser(
         "update-ledger", help="Update regression ledger and emit worker feedback"
     )
-    ledger_parser.add_argument("--ledger-path", type=str, required=True, help="Path to ledger.json")
-    ledger_parser.add_argument("--loop", type=int, required=True, help="Current loop iteration")
-    ledger_parser.add_argument(
+    _ = ledger_parser.add_argument(
+        "--ledger-path", type=str, required=True, help="Path to ledger.json"
+    )
+    _ = ledger_parser.add_argument("--loop", type=int, required=True, help="Current loop iteration")
+    _ = ledger_parser.add_argument(
         "--floor-status", type=str, required=True, choices=["pass", "fail"], help="Floor status"
     )
-    ledger_parser.add_argument(
+    _ = ledger_parser.add_argument(
         "--semantic-score", type=int, required=True, help="Semantic score (1-10)"
     )
-    ledger_parser.add_argument(
+    _ = ledger_parser.add_argument(
         "--passed-items",
         type=str,
         default="[]",
         help="JSON array or comma-separated list of passed IDs",
     )
-    ledger_parser.add_argument(
+    _ = ledger_parser.add_argument(
         "--failed-items",
         type=str,
         default="[]",
         help="JSON array or comma-separated list of failed IDs",
     )
-    ledger_parser.add_argument("--git-commit", type=str, default="", help="Current git commit hash")
-    ledger_parser.add_argument(
+    _ = ledger_parser.add_argument(
+        "--git-commit", type=str, default="", help="Current git commit hash"
+    )
+    _ = ledger_parser.add_argument(
         "--issues-file",
         type=str,
         help="Optional path to report.json or issues.json for active issues",
     )
-    ledger_parser.add_argument(
+    _ = ledger_parser.add_argument(
         "--emit-feedback", type=str, help="Optional output path for issues.md feedback"
     )
 
@@ -726,7 +732,7 @@ def main() -> int:
         if args.output:
             out_p = Path(args.output)
             out_p.parent.mkdir(parents=True, exist_ok=True)
-            out_p.write_text(output_str, encoding="utf-8")
+            _ = out_p.write_text(output_str, encoding="utf-8")
         print(output_str)
         return 0
 
@@ -772,7 +778,7 @@ def main() -> int:
             feedback_md = format_worker_feedback(ledger, active_issues)
             feed_p = Path(args.emit_feedback)
             feed_p.parent.mkdir(parents=True, exist_ok=True)
-            feed_p.write_text(feedback_md, encoding="utf-8")
+            _ = feed_p.write_text(feedback_md, encoding="utf-8")
 
         print(json.dumps(ledger, indent=2))
         return 0

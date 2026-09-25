@@ -82,10 +82,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Validate a flavor's style.css against the rendering contract"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "flavor", nargs="?", default=None, help="Flavor name or path to flavor directory"
     )
-    parser.add_argument("--list", action="store_true", help="List all required classes and exit")
+    _ = parser.add_argument(
+        "--list", action="store_true", help="List all required classes and exit"
+    )
     args = parser.parse_args()
 
     required = parse_required_classes(CONTRACT_PATH)

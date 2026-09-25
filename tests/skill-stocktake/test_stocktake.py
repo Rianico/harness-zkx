@@ -80,7 +80,7 @@ class TestGetMtimeUtc:
     def test_returns_iso_format(self, tmp_path: Path) -> None:
         """Returns ISO 8601 UTC format string."""
         test_file = tmp_path / "test.md"
-        test_file.write_text("content")
+        _ = test_file.write_text("content")
 
         result = get_mtime_utc(test_file)
 
@@ -91,7 +91,7 @@ class TestGetMtimeUtc:
     def test_ends_with_z(self, tmp_path: Path) -> None:
         """Result ends with Z for UTC."""
         test_file = tmp_path / "test.md"
-        test_file.write_text("content")
+        _ = test_file.write_text("content")
 
         result = get_mtime_utc(test_file)
         assert result.endswith("Z")
@@ -234,7 +234,7 @@ class TestObservationCounting:
             json.dumps({"tool": "Write", "timestamp": ts, "input": {"file_path": "/b.md"}}),
             json.dumps({"tool": "Read", "timestamp": ts, "input": {"file_path": "/a.md"}}),
         ]
-        obs_file.write_text("\n".join(lines))
+        _ = obs_file.write_text("\n".join(lines))
 
         # Import the function
         from stocktake import count_read_observations
@@ -259,7 +259,7 @@ class TestObservationCounting:
         lines = [
             json.dumps({"tool": "Read", "timestamp": ts_1d, "input": {"file_path": "/recent.md"}}),
         ]
-        obs_file.write_text("\n".join(lines))
+        _ = obs_file.write_text("\n".join(lines))
 
         counts_1d, counts_7d, counts_30d = count_read_observations([obs_file])
 
@@ -279,14 +279,14 @@ def temp_skills_dir(tmp_path: Path) -> Path:
     # Create test skill
     skill_a = skills_dir / "skill-a"
     skill_a.mkdir()
-    (skill_a / "SKILL.md").write_text(
+    _ = (skill_a / "SKILL.md").write_text(
         "---\nname: skill-a\ndescription: Test skill A\n---\n# Content"
     )
 
     # Create another skill
     skill_b = skills_dir / "skill-b"
     skill_b.mkdir()
-    (skill_b / "SKILL.md").write_text(
+    _ = (skill_b / "SKILL.md").write_text(
         "---\nname: skill-b\ndescription: Test skill B\n---\n# Content"
     )
 

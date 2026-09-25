@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest  # pyright: ignore[reportMissingImports]
+import pytest
 
 _scraper_path = (
     Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts" / "scrapers"
@@ -23,11 +23,11 @@ _tests_path = Path(__file__).parent.resolve()
 if str(_tests_path) not in sys.path:
     sys.path.insert(0, str(_tests_path))
 
-from scrapers.skillsh import (  # type: ignore[import-not-found]  # noqa: E402  # pyright: ignore[reportMissingImports]
-    _cache_key,  # pyright: ignore[reportMissingImports]
-    _repo_slug,  # pyright: ignore[reportMissingImports]
-    parse_skillsh_input,  # pyright: ignore[reportMissingImports]
-)  # pyright: ignore[reportMissingImports]
+from scrapers.skillsh import (  # type: ignore[import-not-found]  # noqa: E402
+    _cache_key,
+    _repo_slug,
+    parse_skillsh_input,
+)
 
 
 class TestParseSkillshInput:
@@ -134,7 +134,7 @@ class TestHelpers:
 
 class TestSkillsScraperInit:
     def test_empty_inputs_error(self, temp_output_dir):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
             SkillsScraper(inputs=[], staging=temp_output_dir)
@@ -142,7 +142,7 @@ class TestSkillsScraperInit:
             SkillsScraper(inputs=None, staging=temp_output_dir)  # type: ignore[arg-type]
 
     def test_layout_with_run(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -160,7 +160,7 @@ class TestSkillsScraperInit:
         assert s.cache_dir.parts[-2:] == (".cache", "skills")
 
     def test_layout_without_run(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -175,7 +175,7 @@ class TestSkillsScraperInit:
         assert s.cache_dir == Path(".cache") / "skills"
 
     def test_method_validation(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
             SkillsScraper(
@@ -186,7 +186,7 @@ class TestSkillsScraperInit:
             )
 
     def test_run_slug_sanitization(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         s = SkillsScraper(
             inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
@@ -197,7 +197,7 @@ class TestSkillsScraperInit:
         assert s.run_dir.name == "hello-world"
 
     def test_run_slug_invalid(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
             SkillsScraper(
@@ -212,7 +212,7 @@ class TestSkillsScraperNpx:
     """Npx-based fetch tests (mocked subprocess)."""
 
     def test_list_via_npx_parses(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -236,7 +236,7 @@ class TestSkillsScraperNpx:
         assert "vercel-react-best-practices" in names
 
     def test_fetch_via_npx_success(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(
@@ -262,7 +262,7 @@ class TestSkillsScraperNpx:
         assert (dest / "SKILL.md").read_text().strip() == "# skill"
 
     def test_run_stages_via_mocked_npx(self, tmp_path):
-        from scrapers.skillsh import SkillsScraper  # pyright: ignore[reportMissingImports]
+        from scrapers.skillsh import SkillsScraper
 
         staging = tmp_path / "compose"
         s = SkillsScraper(

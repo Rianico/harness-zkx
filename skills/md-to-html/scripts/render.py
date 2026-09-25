@@ -164,7 +164,7 @@ class BodyRenderer:
             if isinstance(el, str) and not el.strip():
                 continue
             if isinstance(el, str):
-                (current_card or new_soup).append(el)
+                _ = (current_card or new_soup).append(el)
                 continue
 
             if el.name == "h1" and el.get_text().strip() == title:
@@ -184,30 +184,30 @@ class BodyRenderer:
                     hdr = new_soup.new_tag("div", attrs={"class": "md-section-header"})
                     span = new_soup.new_tag("span", attrs={"class": "md-section-num"})
                     span.string = num.zfill(2)
-                    hdr.append(span)
+                    _ = hdr.append(span)
                     h2 = new_soup.new_tag("h2", attrs={"class": "md-heading-level-2"})
                     h2.string = t_text
-                    hdr.append(h2)
+                    _ = hdr.append(h2)
                     badges_div = new_soup.new_tag("div", attrs={"class": "md-section-badges"})
-                    hdr.append(badges_div)
-                    current_section.append(hdr)
-                    new_soup.append(current_section)
+                    _ = hdr.append(badges_div)
+                    _ = current_section.append(hdr)
+                    _ = new_soup.append(current_section)
                     current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                    current_section.append(current_card)
+                    _ = current_section.append(current_card)
                     continue
 
                 # Non-numbered H2 — wrap in section + card for consistent styling
                 current_section = new_soup.new_tag("section", attrs={"class": "md-section"})
-                current_section.append(el)
-                new_soup.append(current_section)
+                _ = current_section.append(el)
+                _ = new_soup.append(current_section)
                 current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                current_section.append(current_card)
+                _ = current_section.append(current_card)
                 continue
 
             if el.name == "hr":
                 current_section = None
                 current_card = None
-                new_soup.append(el)
+                _ = new_soup.append(el)
                 continue
 
             if current_section:
@@ -228,12 +228,12 @@ class BodyRenderer:
                 if "Problem:" in text:
                     if not current_card:
                         current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                        current_section.append(current_card)
+                        _ = current_section.append(current_card)
                     bq = new_soup.new_tag("blockquote", attrs={"class": "md-blockquote"})
                     p = new_soup.new_tag("p", attrs={"class": "md-paragraph"})
                     p.string = text.strip()
-                    bq.append(p)
-                    current_card.append(bq)
+                    _ = bq.append(p)
+                    _ = current_card.append(bq)
                     continue
 
                 # Mermaid
@@ -245,9 +245,9 @@ class BodyRenderer:
                     self._process_mermaid(new_soup, el, current_section, current_card)
                     continue
 
-                (current_card or current_section).append(el)
+                _ = (current_card or current_section).append(el)
             else:
-                new_soup.append(el)
+                _ = new_soup.append(el)
 
         # 4. Standard Classes & Table Processing
         self._apply_standard_classes(new_soup)
@@ -306,7 +306,7 @@ class BodyRenderer:
                 lr = current_card.find("div", class_="md-card-legend-row")
                 if not lr:
                     lr = new_soup.new_tag("div", attrs={"class": "md-card-legend-row"})
-                    current_card.append(lr)
+                    _ = current_card.append(lr)
                 tags_inner = [t.strip() for t in content.split("·")]
                 for t in tags_inner:
                     if not t:
@@ -319,7 +319,7 @@ class BodyRenderer:
                     item.string = t.replace("_", " ")
                     if glossary.get(t_key):
                         item["data-tooltip"] = glossary[t_key]
-                    lr.append(item)
+                    _ = lr.append(item)
 
             elif kind == "files":
                 if not current_card:
@@ -333,7 +333,7 @@ class BodyRenderer:
                         files.append(clean)
                 if files:
                     files_div.string = " · ".join(files)
-                    current_card.append(files_div)
+                    _ = current_card.append(files_div)
 
             elif kind == "problem":
                 if not current_card:
@@ -342,8 +342,8 @@ class BodyRenderer:
                 bq = new_soup.new_tag("blockquote", attrs={"class": "md-blockquote"})
                 p = new_soup.new_tag("p", attrs={"class": "md-paragraph"})
                 p.string = f"Problem: {content}"
-                bq.append(p)
-                current_card.append(bq)
+                _ = bq.append(p)
+                _ = current_card.append(bq)
 
             elif kind == "warning":
                 if not current_card:
@@ -354,8 +354,8 @@ class BodyRenderer:
                 )
                 p = new_soup.new_tag("p", attrs={"class": "md-paragraph"})
                 p.string = content
-                bq.append(p)
-                current_card.append(bq)
+                _ = bq.append(p)
+                _ = current_card.append(bq)
 
             elif kind == "note":
                 if not current_card:
@@ -366,8 +366,8 @@ class BodyRenderer:
                 )
                 p = new_soup.new_tag("p", attrs={"class": "md-paragraph"})
                 p.string = content
-                bq.append(p)
-                current_card.append(bq)
+                _ = bq.append(p)
+                _ = current_card.append(bq)
 
         return current_card
 
@@ -377,14 +377,14 @@ class BodyRenderer:
         mp = new_soup.new_tag("pre", attrs={"class": "mermaid"})
         mp.string = el.find("code").string
         vp = new_soup.new_tag("div", attrs={"class": "md-mermaid-viewport"})
-        vp.append(mp)
-        dw.append(vp)
+        _ = vp.append(mp)
+        _ = dw.append(vp)
         zoom = new_soup.new_tag("div", attrs={"class": "md-mermaid-zoom"})
         for btn_text, btn_class in [("+", "zoom-in"), ("−", "zoom-out"), ("⛶", "zoom-fullscreen")]:
             btn = new_soup.new_tag("button", attrs={"class": btn_class})
             btn.string = btn_text
-            zoom.append(btn)
-        dw.append(zoom)
+            _ = zoom.append(btn)
+        _ = dw.append(zoom)
         (current_card or current_section).append(dw)
 
     def _apply_standard_classes(self, new_soup: BeautifulSoup) -> None:
@@ -430,7 +430,7 @@ class BodyRenderer:
                             "a", attrs={"href": f"#{slugify(name)}", "class": "md-overview-link"}
                         )
                         a.string = name
-                        td.append(a)
+                        _ = td.append(a)
                 if strength_idx is not None and strength_idx < len(tds):
                     td = tds[strength_idx]
                     text = td.get_text().strip()
@@ -440,7 +440,7 @@ class BodyRenderer:
                             "span", attrs={"class": f"md-tag {strength_map[text]['css']}"}
                         )
                         span.string = text
-                        td.append(span)
+                        _ = td.append(span)
                 if category_idx is not None and category_idx < len(tds):
                     td = tds[category_idx]
                     text = td.get_text().strip()
@@ -461,7 +461,7 @@ class BodyRenderer:
                         span.string = text
                         if desc:
                             span["data-tooltip"] = desc
-                        td.append(span)
+                        _ = td.append(span)
 
 
 # ─── Stage 3: AssetBundler ────────────────────────────────────────────
@@ -509,22 +509,22 @@ class AssetBundler:
         body_tag = result.body
 
         # ── Meta / Title ──
-        head.append(result.new_tag("meta", charset="utf-8"))
-        head.append(
+        _ = head.append(result.new_tag("meta", charset="utf-8"))
+        _ = head.append(
             result.new_tag(
                 "meta", attrs={"name": "viewport", "content": "width=device-width, initial-scale=1"}
             )
         )
         title_tag = result.new_tag("title")
         title_tag.string = _text(frontmatter.get("title"), "Report")
-        head.append(title_tag)
+        _ = head.append(title_tag)
 
         # ── Dynamic legend colors (data-driven, always inline) ──
         legend_css = self.get_dynamic_legend_css(legend_data)
         if legend_css:
             style = result.new_tag("style")
             style.string = legend_css
-            head.append(style)
+            _ = head.append(style)
 
         # ── External assets (skill's own files, referenced in-place) ──
         # When the output file sits inside the repo tree we write relative
@@ -544,16 +544,16 @@ class AssetBundler:
                 if flavor_css.exists():
                     style = result.new_tag("style")
                     style.string = flavor_css.read_text()
-                    head.append(style)
+                    _ = head.append(style)
                 for js_file in ["mermaid.min.js", "zoom.js"]:
                     js_path = self.asset_dir / js_file
                     if js_path.exists():
                         script = result.new_tag("script")
                         script.string = js_path.read_text()
-                        head.append(script)
+                        _ = head.append(script)
             else:
                 # Inside repo tree — relative references work
-                head.append(
+                _ = head.append(
                     result.new_tag(
                         "link",
                         attrs={
@@ -565,7 +565,7 @@ class AssetBundler:
                 for js_file in ["mermaid.min.js", "zoom.js"]:
                     js_path = self.asset_dir / js_file
                     if js_path.exists():
-                        head.append(
+                        _ = head.append(
                             result.new_tag(
                                 "script",
                                 attrs={
@@ -579,15 +579,15 @@ class AssetBundler:
             if base_css_path.exists():
                 style = result.new_tag("style")
                 style.string = base_css_path.read_text()
-                head.append(style)
+                _ = head.append(style)
             mermaid_js_path = self.asset_dir / "mermaid.min.js"
             if mermaid_js_path.exists():
                 script = result.new_tag("script")
                 script.string = mermaid_js_path.read_text()
-                head.append(script)
+                _ = head.append(script)
 
         # ── Mermaid init (tiny, always inline) ──
-        head.append(
+        _ = head.append(
             result.new_tag(
                 "script",
                 string="mermaid.initialize({startOnLoad:true, theme:'base', securityLevel:'loose', flowchart:{useMaxWidth:true, htmlLabels:true}});",
@@ -596,7 +596,7 @@ class AssetBundler:
 
         # ── Article wrapper ──
         art = result.new_tag("article", attrs={"class": f"md-document flavor-{self.flavor}"})
-        body_tag.append(art)
+        _ = body_tag.append(art)
 
         # ── Header ──
         header = self._build_header(
@@ -608,20 +608,20 @@ class AssetBundler:
             glossary,
         )
         if header is not None:
-            art.append(header)
+            _ = art.append(header)
 
         # ── Body content ──
         for e in list(soup.contents):
-            art.append(e)
+            _ = art.append(e)
 
         # ── Glossary ──
         if glossary:
             g_section = result.new_tag("section", attrs={"class": "md-section"})
             g_hr = result.new_tag("hr", attrs={"class": "md-hr"})
-            g_section.append(g_hr)
+            _ = g_section.append(g_hr)
             g_h2 = result.new_tag("h2", attrs={"class": "md-heading-level-2", "id": "glossary"})
             g_h2.string = "Glossary"
-            g_section.append(g_h2)
+            _ = g_section.append(g_h2)
             g_card = result.new_tag("div", attrs={"class": "md-card"})
             dl = result.new_tag("dl", attrs={"class": "md-glossary"})
             for term, defn in glossary.items():
@@ -629,11 +629,11 @@ class AssetBundler:
                 dt.string = term.replace("_", " ").capitalize()
                 dd = result.new_tag("dd", attrs={"class": "md-glossary-def"})
                 dd.string = defn
-                dl.append(dt)
-                dl.append(dd)
-            g_card.append(dl)
-            g_section.append(g_card)
-            art.append(g_section)
+                _ = dl.append(dt)
+                _ = dl.append(dd)
+            _ = g_card.append(dl)
+            _ = g_section.append(g_card)
+            _ = art.append(g_section)
 
         return result.prettify()
 
@@ -855,9 +855,9 @@ class KamiRenderer:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert Metadata-Driven Markdown to HTML")
-    parser.add_argument("source", help="Source Markdown file")
-    parser.add_argument("-o", "--output", help="Output HTML file")
-    parser.add_argument("-f", "--flavor", default="kami", help="Flavor (kami, minimal)")
+    _ = parser.add_argument("source", help="Source Markdown file")
+    _ = parser.add_argument("-o", "--output", help="Output HTML file")
+    _ = parser.add_argument("-f", "--flavor", default="kami", help="Flavor (kami, minimal)")
     args = parser.parse_args()
     renderer = KamiRenderer(flavor=args.flavor)
     output_path = args.output or args.source.replace(".md", ".html")
@@ -865,5 +865,5 @@ if __name__ == "__main__":
         md_content = f.read()
     html = renderer.render(md_content, output_path=output_path)
     with open(output_path, "w") as f:
-        f.write(html)
+        _ = f.write(html)
     print(f"Rendered: {output_path}")

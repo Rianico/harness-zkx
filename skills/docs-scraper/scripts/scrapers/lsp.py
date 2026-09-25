@@ -297,7 +297,7 @@ Examples:
 
         # Write file
         output_file = self.output_dir / filename
-        output_file.write_text(markdown.strip(), encoding="utf-8")
+        _ = output_file.write_text(markdown.strip(), encoding="utf-8")
         print(f"  Saved: {output_file.name}")
 
     def _create_index(self) -> None:
@@ -319,5 +319,5 @@ Examples:
             content += f"- [{title}]({md_file.name})\n"
 
         index_path = self.output_dir / "INDEX.md"
-        index_path.write_text(content, encoding="utf-8")
+        _ = index_path.write_text(content, encoding="utf-8")
         print(f"  ✓ Created: {index_path}")

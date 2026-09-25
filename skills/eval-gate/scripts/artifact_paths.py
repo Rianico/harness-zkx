@@ -172,17 +172,17 @@ def describe(repo_root: Path | None = None) -> dict[str, object]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Resolve generated-artifact paths")
-    parser.add_argument("--repo-root", default=None, help="Repo root (default: discovered)")
+    _ = parser.add_argument("--repo-root", default=None, help="Repo root (default: discovered)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     show = sub.add_parser("show", help="Print the effective config as JSON")
-    show.add_argument("--repo-root", default=None, help="Repo root (default: discovered)")
+    _ = show.add_argument("--repo-root", default=None, help="Repo root (default: discovered)")
 
     resolve = sub.add_parser("resolve", help="Print one artifact path")
-    resolve.add_argument("--kind", required=True, help="Logical kind (eval, tasks, pr)")
-    resolve.add_argument("--topic", default=None, help="Topic; required for a run layout")
-    resolve.add_argument("--run", type=int, default=None, help="Append run-N")
-    resolve.add_argument("--repo-root", default=None, help="Repo root (default: discovered)")
+    _ = resolve.add_argument("--kind", required=True, help="Logical kind (eval, tasks, pr)")
+    _ = resolve.add_argument("--topic", default=None, help="Topic; required for a run layout")
+    _ = resolve.add_argument("--run", type=int, default=None, help="Append run-N")
+    _ = resolve.add_argument("--repo-root", default=None, help="Repo root (default: discovered)")
 
     args = parser.parse_args(argv)
     root = Path(args.repo_root) if args.repo_root else None
