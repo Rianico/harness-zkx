@@ -475,6 +475,18 @@ def test_caller_block_omits_absent_fields_never_invents() -> None:
     assert herdr_prompt.render_caller_block(caller) == "Caller: pane=w9:p1 agent=reviewer"
 
 
+def test_caller_block_sanitizes_label_to_single_line() -> None:
+    caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="review\npane\tX", agent="reviewer")
+    assert (
+        herdr_prompt.render_caller_block(caller)
+        == "Caller: pane=w1:p1 label=review pane X agent=reviewer"
+    )
+
+
+def test_caller_block_omits_blank_label() -> None:
+    caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="   ", agent="reviewer")
+    assert herdr_prompt.render_caller_block(caller) == "Caller: pane=w1:p1 agent=reviewer"
+
 def test_reply_contract_without_agent_is_unaddressable() -> None:
     caller = herdr_prompt.CallerContext(pane_id="w9:p2", label="scratch pad")
     contract = herdr_prompt.render_reply_contract(caller)
