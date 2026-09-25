@@ -164,9 +164,7 @@ def normalize_requested_path(repo_root: Path, raw_path: str) -> str:
         raise RuntimeError(f"path is outside repository: {raw_path}") from error
 
 
-def parse_conflict_hunks(
-    lines: list[str], context: int
-) -> tuple[list[_Hunk], str | None]:
+def parse_conflict_hunks(lines: list[str], context: int) -> tuple[list[_Hunk], str | None]:
     hunks: list[_Hunk] = []
     index = 0
     while index < len(lines):
@@ -253,9 +251,7 @@ def build_summary_report(
     }
 
 
-def build_index_preview(
-    repo_root: Path, report: _Report, max_lines: int
-) -> _IndexPreview:
+def build_index_preview(repo_root: Path, report: _Report, max_lines: int) -> _IndexPreview:
     path = str(report["path"])
     ours = read_stage_text(repo_root, path, 2)
     theirs = read_stage_text(repo_root, path, 3)

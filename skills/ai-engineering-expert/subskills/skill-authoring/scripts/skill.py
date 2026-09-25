@@ -221,7 +221,9 @@ def _load_meta(path: pathlib.Path) -> tuple[dict[str, object], str, str]:
     return {}, body, text
 
 
-def _write_meta(path: pathlib.Path, meta: dict[str, object], body: str, dry_run: bool = False) -> None:
+def _write_meta(
+    path: pathlib.Path, meta: dict[str, object], body: str, dry_run: bool = False
+) -> None:
     """Write SKILL.md with updated meta. Preserves body. Uses frontmatter/yaml if available."""
     if dry_run:
         return

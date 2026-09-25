@@ -18,6 +18,7 @@ class _PendingTool(TypedDict):
     input: str
     order: int
 
+
 from scripts.parser import ObservationEvent
 from scripts.scenario_generator import Scenario
 
