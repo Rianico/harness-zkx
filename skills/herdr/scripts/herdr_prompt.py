@@ -201,11 +201,17 @@ def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
     return CallerContext(pane_id=pane_id, label=label, agent=agent)
 
 
+def _single_line(value: str, limit: int = 64) -> str:
+    """Collapse a free-form pane label onto one header line; labels are operator input."""
+    return " ".join(value.split())[:limit]
+
+
 def render_caller_block(caller: CallerContext) -> str:
     """Render the `Caller:` header; absent fields are omitted, never invented."""
     fields = f"pane={caller.pane_id}"
-    if caller.label:
-        fields += f" label={caller.label}"
+    label = _single_line(caller.label) if caller.label else ""
+    if label:
+        fields += f" label={label}"
     if caller.agent:
         fields += f" agent={caller.agent}"
     return f"Caller: {fields}"
