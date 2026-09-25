@@ -33,6 +33,7 @@ from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
+from typing import TypedDict
 
 # Add lib to path for tz import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "lib"))
@@ -90,6 +91,55 @@ VERDICT_COLORS: dict[Verdict, str] = {
 }
 
 
+# JSON record shapes
+#
+# Inventory and results documents come back from `json.load` untyped, so each
+# producer declares the record shape it writes and consumers read through it.
+
+
+class SkillRecord(TypedDict, total=False):
+    """One skill entry, as produced by scan or consumed from results.json."""
+
+    path: str
+    name: str
+    description: str
+    verdict: str
+    reason: str
+    mtime: str
+    use_1d: int
+    use_7d: int
+    use_30d: int
+
+
+class ChangedSkill(TypedDict):
+    """A skill that changed since the last evaluation."""
+
+    path: str
+    name: str
+    mtime: str
+    is_new: bool
+
+
+type SkillMap = dict[str, SkillRecord]
+type ScanSummaryFragment = dict[str, bool | str | int]
+
+
+class ScanDoc(TypedDict):
+    """The inventory document produced by the scan command."""
+
+    scan_summary: dict[str, ScanSummaryFragment]
+    skills: list[SkillRecord]
+
+
+class ResultsDoc(TypedDict, total=False):
+    """The persisted evaluation document read by the diff/summary commands."""
+
+    evaluated_at: str
+    mode: str
+    batch_progress: dict[str, str | int]
+    skills: list[SkillRecord] | SkillMap
+
+
 # Shared utilities
 
 
@@ -130,7 +180,7 @@ def get_mtime_utc(path: Path) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def normalize_skills(skills: dict | list) -> list[dict]:
+def normalize_skills(skills: SkillMap | list[SkillRecord]) -> list[SkillRecord]:
     """Normalize skills to list format.
 
     Handles both dict format (path -> skill_data) and list format.
@@ -138,10 +188,15 @@ def normalize_skills(skills: dict | list) -> list[dict]:
     """
     if isinstance(skills, list):
         return skills
-    return [{"path": k, **v} for k, v in skills.items()]
+    normalized: list[SkillRecord] = []
+    for path, record in skills.items():
+        entry: SkillRecord = {"path": path}
+        entry.update(record)
+        normalized.append(entry)
+    return normalized
 
 
-def get_skill_name(skill: dict) -> str:
+def get_skill_name(skill: SkillRecord) -> str:
     """Extract skill name from skill record, falling back to path parent or stem.
 
     For SKILL.md files, uses the parent directory name.
@@ -257,9 +312,9 @@ def scan_skills_dir(
     use_1d: dict[str, int],
     use_7d: dict[str, int],
     use_30d: dict[str, int],
-) -> list[dict]:
+) -> list[SkillRecord]:
     """Scan a skills directory and return list of skill metadata."""
-    skills = []
+    skills: list[SkillRecord] = []
 
     if not skills_dir.exists():
         return skills
@@ -293,7 +348,7 @@ def scan_skills_dir(
             }
         )
 
-    skills.sort(key=lambda s: s["path"])
+    skills.sort(key=lambda s: s.get("path", ""))
     return skills
 
 
@@ -321,7 +376,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     all_skills = global_skills + project_skills
 
-    data = {
+    data: ScanDoc = {
         "scan_summary": {
             "global": {
                 "found": global_dir.exists(),
@@ -348,7 +403,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
-def format_scan_markdown(data: dict) -> str:
+def format_scan_markdown(data: ScanDoc) -> str:
     """Format scan as markdown."""
     lines = []
     summary = data["scan_summary"]
@@ -372,14 +427,14 @@ def format_scan_markdown(data: dict) -> str:
 
     for skill in data["skills"]:
         name = get_skill_name(skill)
-        desc = truncate_text(skill["description"], 57, "...")
+        desc = truncate_text(skill.get("description", ""), 57, "...")
         desc = desc.replace("|", "\\|")
-        lines.append(f"| {name} | {skill['use_7d']} | {skill['use_30d']} | {desc} |")
+        lines.append(f"| {name} | {skill.get('use_7d', 0)} | {skill.get('use_30d', 0)} | {desc} |")
 
     return "\n".join(lines)
 
 
-def render_scan_rich(data: dict, render_console: Console | None = None) -> None:
+def render_scan_rich(data: ScanDoc, render_console: Console | None = None) -> None:
     """Render scan results with rich tables."""
     con = render_console or console
     # Calculate description column width: total - (Skill:15 + 7d:4 + 30d:5 + borders:8)
@@ -412,8 +467,8 @@ def render_scan_rich(data: dict, render_console: Console | None = None) -> None:
 
     for skill in data["skills"]:
         name = get_skill_name(skill)
-        desc = truncate_text(skill["description"], desc_width)
-        table.add_row(name, str(skill["use_7d"]), str(skill["use_30d"]), desc)
+        desc = truncate_text(skill.get("description", ""), desc_width)
+        table.add_row(name, str(skill.get("use_7d", 0)), str(skill.get("use_30d", 0)), desc)
 
     con.print(table)
 
@@ -464,9 +519,11 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
-def find_changed_skills(skills_dir: Path, evaluated_at: str, known_paths: set[str]) -> list[dict]:
+def find_changed_skills(
+    skills_dir: Path, evaluated_at: str, known_paths: set[str]
+) -> list[ChangedSkill]:
     """Find skills that changed since last evaluation."""
-    changed = []
+    changed: list[ChangedSkill] = []
 
     for md_file in _walk_skills_dir(skills_dir):
         mtime = get_mtime_utc(md_file)
@@ -490,7 +547,7 @@ def find_changed_skills(skills_dir: Path, evaluated_at: str, known_paths: set[st
     return changed
 
 
-def render_diff_rich(changed: list[dict], evaluated_at: str) -> None:
+def render_diff_rich(changed: list[ChangedSkill], evaluated_at: str) -> None:
     """Render diff results with rich."""
     if not changed:
         console.print(
@@ -541,7 +598,9 @@ def cmd_overview(args: argparse.Namespace) -> int:
     )
 
     # Filter to only main SKILL.md files (not references)
-    all_skills = [s for s in global_skills + project_skills if s["path"].endswith("/SKILL.md")]
+    all_skills = [
+        s for s in global_skills + project_skills if s.get("path", "").endswith("/SKILL.md")
+    ]
     # Sort by 7d usage descending, then by name for ties
     all_skills.sort(
         key=lambda s: (-s.get("use_7d", 0), s.get("name") or Path(s.get("path", "")).stem)
@@ -553,7 +612,7 @@ def cmd_overview(args: argparse.Namespace) -> int:
     return 0
 
 
-def render_overview_rich(skills: list[dict], render_console: Console | None = None) -> None:
+def render_overview_rich(skills: list[SkillRecord], render_console: Console | None = None) -> None:
     """Render overview table with usage stats."""
     con = render_console or console
     # Calculate description column width: total - (Skill:20 + 1d:4 + 7d:4 + 30d:5 + borders:8)
@@ -618,7 +677,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
     return 0
 
 
-def format_summary_markdown(data: dict, group_by: str) -> str:
+def format_summary_markdown(data: ResultsDoc, group_by: str) -> str:
     """Format results as markdown table."""
     lines = []
 
@@ -635,7 +694,7 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
     skills = normalize_skills(data.get("skills", []))
 
     if group_by == "verdict":
-        by_verdict: dict[str, list[dict]] = defaultdict(list)
+        by_verdict: dict[str, list[SkillRecord]] = defaultdict(list)
         for skill in skills:
             verdict = skill.get("verdict", "Unknown")
             by_verdict[verdict].append(skill)
@@ -686,21 +745,16 @@ def format_summary_markdown(data: dict, group_by: str) -> str:
     return "\n".join(lines)
 
 
-def format_summary_json(data: dict) -> str:
+def format_summary_json(data: ResultsDoc) -> str:
     """Format results as compact JSON."""
     skills = normalize_skills(data.get("skills", []))
 
-    summary = {
-        "evaluated_at": data.get("evaluated_at"),
-        "mode": data.get("mode"),
-        "total": len(skills),
-        "by_verdict": defaultdict(list),
-        "skills": [],
-    }
+    rows: list[dict[str, str | int | None]] = []
+    by_name: dict[str, list[str]] = defaultdict(list)
 
     for skill in sorted(skills, key=lambda x: get_skill_name(x)):
         name = get_skill_name(skill)
-        summary["skills"].append(
+        rows.append(
             {
                 "name": name,
                 "verdict": skill.get("verdict"),
@@ -708,13 +762,21 @@ def format_summary_json(data: dict) -> str:
                 "reason": skill.get("reason", "")[:100],
             }
         )
-        summary["by_verdict"][skill.get("verdict", "Unknown")].append(name)
+        by_name[skill.get("verdict", "Unknown")].append(name)
 
-    summary["by_verdict"] = dict(summary["by_verdict"])
+    summary = {
+        "evaluated_at": data.get("evaluated_at"),
+        "mode": data.get("mode"),
+        "total": len(skills),
+        "by_verdict": dict(by_name),
+        "skills": rows,
+    }
     return json.dumps(summary, indent=2)
 
 
-def render_summary_rich(data: dict, group_by: str, render_console: Console | None = None) -> None:
+def render_summary_rich(
+    data: ResultsDoc, group_by: str, render_console: Console | None = None
+) -> None:
     """Render results with rich tables."""
     con = render_console or console
     # Calculate reason column width: total - (Skill:15 + 7d:4 + 30d:5 + borders:8)
@@ -753,7 +815,7 @@ def render_summary_rich(data: dict, group_by: str, render_console: Console | Non
     con.print(summary_table)
 
     if group_by == "verdict":
-        by_verdict: dict[str, list[dict]] = defaultdict(list)
+        by_verdict: dict[str, list[SkillRecord]] = defaultdict(list)
         for skill in skills:
             verdict = skill.get("verdict", "Unknown")
             by_verdict[verdict].append(skill)
@@ -887,7 +949,7 @@ def cmd_merge_chunks(args: argparse.Namespace) -> int:
 
     # Load inventory if provided (for use_7d, use_30d, mtime, name)
     # Build lookup by path for merging
-    inventory_by_path: dict[str, dict] = {}
+    inventory_by_path: dict[str, SkillRecord] = {}
     if inventory_path:
         try:
             with open(inventory_path) as f:
@@ -912,7 +974,7 @@ def cmd_merge_chunks(args: argparse.Namespace) -> int:
         return 0
 
     # Load all chunks - expect array format
-    all_skills: list[dict] = []
+    all_skills: list[SkillRecord] = []
     total_evaluated = 0
     seen_paths: set[str] = set()
 
@@ -940,7 +1002,7 @@ def cmd_merge_chunks(args: argparse.Namespace) -> int:
             seen_paths.add(path)
 
             # Merge inventory data with evaluation data
-            merged = {
+            merged: SkillRecord = {
                 "path": path,
                 "verdict": eval_item.get("verdict", "Unknown"),
                 "reason": eval_item.get("reason", ""),
