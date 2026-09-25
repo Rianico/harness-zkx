@@ -8,6 +8,44 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
+
+
+class Artifact(TypedDict):
+    path: str
+    hash: str
+
+
+class Provenance(TypedDict):
+    agent_id: str
+
+
+class Unit(TypedDict):
+    unit_id: str
+    status: str
+    created_at: str
+    finished_at: str | None
+    artifacts: list[Artifact]
+    provenance: Provenance | None
+
+
+class Phase(TypedDict):
+    phase_id: str
+    run_id: str
+    status: str
+    created_at: str
+    finished_at: str | None
+    artifacts: list[Artifact]
+    provenance: Provenance | None
+    units: list[Unit]
+
+
+class Manifest(TypedDict):
+    mission_id: str
+    status: str
+    intent_hash: str
+    artifacts: list[Artifact]
+    phases: list[Phase]
 
 
 def get_file_hash(path: str) -> str:
@@ -21,7 +59,7 @@ def get_utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _build_artifacts(artifact_paths: list[str]) -> list[dict]:
+def _build_artifacts(artifact_paths: list[str]) -> list[Artifact]:
     return [{"path": p, "hash": get_file_hash(p)} for p in artifact_paths]
 
 
@@ -40,7 +78,7 @@ def main():
     command = sys.argv[2]
     args = sys.argv[3:]
 
-    manifest = {
+    manifest: Manifest = {
         "mission_id": "",
         "status": "in_progress",
         "intent_hash": "",
@@ -73,7 +111,7 @@ def main():
         artifact_paths = args[4:]
 
         artifacts = _build_artifacts(artifact_paths)
-        provenance = {"agent_id": agent_id}
+        provenance = Provenance(agent_id=agent_id)
 
         for p in manifest["phases"]:
             if p["phase_id"] == phase_id and p["run_id"] == run_id:
@@ -105,7 +143,7 @@ def main():
         artifact_paths = args[5:]
 
         artifacts = _build_artifacts(artifact_paths)
-        provenance = {"agent_id": agent_id}
+        provenance = Provenance(agent_id=agent_id)
 
         phase = next(
             (p for p in manifest["phases"] if p["phase_id"] == phase_id and p["run_id"] == run_id),
@@ -113,16 +151,16 @@ def main():
         )
         if not phase:
             now = get_utc_now()
-            phase = {
-                "phase_id": phase_id,
-                "run_id": run_id,
-                "status": "in_progress",
-                "created_at": now,
-                "finished_at": None,
-                "artifacts": [],
-                "units": [],
-                "provenance": None,
-            }
+            phase = Phase(
+                phase_id=phase_id,
+                run_id=run_id,
+                status="in_progress",
+                created_at=now,
+                finished_at=None,
+                artifacts=[],
+                units=[],
+                provenance=None,
+            )
             manifest["phases"].append(phase)
 
         for u in phase["units"]:
