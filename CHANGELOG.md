@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **gh-router:** migrate pr.sh to typed python and relax body length (#137)
+* **herdr:** confirm coding agent kind with user if unspecified (#138)
 * **herdr:** support event-driven dispatch-and-yield handoff (#136)
 * **herdr:** prepend caller context and reply contract in herdr-prompt ([#106](https://github.com/Rianico/harness-zkx/issues/106)) ([#119](https://github.com/Rianico/harness-zkx/issues/119)) (#132)
 * **rules:** streamline mental model and development patterns (#131)
