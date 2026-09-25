@@ -153,6 +153,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Code Refactoring
 
 * **ci:** type the changelog gate's two dynamic seams (#100)
+
+### Miscellaneous Chores
+
+* **commitlint:** stop enforcing the 100-col wrap on commit bodies (#135)
 ## [2.0.0](https://github.com/Rianico/harness-zkx/compare/v1.10.1...v2.0.0) (2026-09-12)
 
 ### ⚠ BREAKING CHANGES
