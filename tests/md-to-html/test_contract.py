@@ -1,16 +1,11 @@
 """Self-consistency: every class in the rendered HTML is documented in the contract."""
 
-import sys
 from pathlib import Path
 
 import pytest
 from bs4 import BeautifulSoup
-from conftest import SAMPLE_MD
 
-SCRIPTS_DIR = (Path(__file__).parent.parent.parent / "skills" / "md-to-html" / "scripts").resolve()
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
+# conftest adds skills/md-to-html/scripts to sys.path
 from render import KamiRenderer
 from validate_flavor import parse_required_classes
 
@@ -79,12 +74,12 @@ def is_documented(cls, manifest):
 class TestContractSelfConsistency:
     """Every CSS class in rendered HTML must be documented in the contract."""
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture
     @classmethod
-    def rendered_classes(cls):
+    def rendered_classes(cls, sample_md: str):
         """Generate HTML from the full sample and extract all classes."""
         renderer = KamiRenderer(flavor="kami")
-        html = renderer.render(SAMPLE_MD)
+        html = renderer.render(sample_md)
         return extract_all_classes(html)
 
     @pytest.fixture(scope="class")

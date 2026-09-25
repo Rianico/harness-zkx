@@ -1,6 +1,17 @@
 {
   "include": ["skills", "tests", "lib", "scripts"],
   "exclude": ["**/node_modules", "**/.venv", ".lsz"],
+  // Each root restates a directory the runtime already guarantees on sys.path (`uv run
+  // <path>/script.py` puts the script's own dir there; `-m scripts.run` makes the skill dir a
+  // root; a conftest puts its own dir there), so sibling imports resolve as absolute modules
+  // instead of tripping reportImplicitRelativeImport. A skill without an entry still fails
+  // loudly. Keep these per-root: a flat top-level `extraPaths` cross-binds same-named modules
+  // (two skills both exporting `conftest`) and grows the warning budget.
+  "executionEnvironments": [
+    { "root": "skills/skill-comply", "extraPaths": ["skills/skill-comply"] },
+    { "root": "skills/docs-scraper/scripts", "extraPaths": ["skills/docs-scraper/scripts"] },
+    { "root": "tests/docs-scraper", "extraPaths": ["tests/docs-scraper"] }
+  ],
   "allowedUntypedLibraries": ["markdown", "bs4", "pytest", "yaml", "pydantic", "requests", "html2text", "tz", "rich", "frontmatter"],
   "reportMissingImports": false,
   "reportMissingModuleSource": false,
