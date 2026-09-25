@@ -27,6 +27,10 @@ All tests MUST be placed in the project root `tests/` directory, never inside sk
 
 ## Agent skills
 
+### Multi-agent contract
+
+When invoked with a `Caller:` block and reply contract, always terminate your task by executing the caller's reply command with `<STATUS> <artifacts> <issues>`.
+
 ### Issue tracker
 
 Issues live as GitHub issues. Use `gh` CLI for all operations. See `docs/agents/issue-tracker.md`.

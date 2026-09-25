@@ -25,8 +25,8 @@ when combined with `--wait`.
 Exit status: 0 accepted (``--wait`` settled without needing input), 1 herdr failure,
 2 usage or missing precondition, 3 a target needs human input (``agent_blocked``, or
 ``--wait`` settled on ``blocked``), 4 the prompt was delivered but ``--wait``
-timed out first — the agent is still working, so resume with ``herdr-wait``
-instead of resubmitting.
+timed out first — the agent is working asynchronously: yield turn and await reply
+callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Caller context is prepended by default (see `resolve_caller`): the payload opens
 with a `Caller:` block and closes with the completion-reply contract, so a worker
@@ -373,7 +373,7 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
             hint = "still working when the wait timed out"
         raise WaitTimeout(
             f"prompt delivered to {names} but {hint}; "
-            f"resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
+            + f"working asynchronously. Yield turn and await reply callback, or resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
         )
     return EXIT_OK
 
