@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **herdr:** prepend caller context and reply contract in herdr-prompt ([#106](https://github.com/Rianico/harness-zkx/issues/106)) ([#119](https://github.com/Rianico/harness-zkx/issues/119))
+* **herdr:** prepend caller context and reply contract in herdr-prompt ([#106](https://github.com/Rianico/harness-zkx/issues/106)) ([#119](https://github.com/Rianico/harness-zkx/issues/119)) (#132)
 * **rules:** streamline mental model and development patterns (#131)
 * **scaffold:** ship the release plugin and stop clearing the ledger (#105)
 * **release:** promote the curated ledger instead of regenerating notes (#104)
