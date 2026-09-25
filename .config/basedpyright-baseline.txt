@@ -23,7 +23,7 @@
 1	skills/herdr/scripts/herdr_label.py	reportImplicitStringConcatenation
 1	skills/herdr/scripts/herdr_overview.py	reportImplicitStringConcatenation
 1	skills/herdr/scripts/herdr_overview.py	reportUnusedCallResult
-2	skills/herdr/scripts/herdr_prompt.py	reportImplicitStringConcatenation
+1	skills/herdr/scripts/herdr_prompt.py	reportImplicitStringConcatenation
 1	skills/herdr/scripts/herdr_transcript.py	reportAny
 1	skills/herdr/scripts/herdr_transcript.py	reportImplicitStringConcatenation
 3	skills/herdr/scripts/herdr_wait.py	reportImplicitStringConcatenation
@@ -49,9 +49,6 @@
 1	tests/eval-gate/test_artifact_paths.py	reportAny
 2	tests/eval-gate/test_artifact_paths.py	reportArgumentType
 1	tests/eval-gate/test_artifact_paths.py	reportUnusedCallResult
-39	tests/gh-router/test_pr_attribution.py	reportMissingParameterType
-36	tests/gh-router/test_pr_attribution.py	reportUnknownParameterType
-2	tests/gh-router/test_pr_attribution.py	reportUnusedParameter
 6	tests/harness-audit/test_audit_edits.py	reportAny
 8	tests/harness-audit/test_audit_edits.py	reportExplicitAny
 6	tests/harness-audit/test_audit_edits.py	reportUnusedCallResult
@@ -74,8 +71,6 @@
 5	tests/scaffold/test_changelog_script_sync.py	reportMissingParameterType
 5	tests/scaffold/test_changelog_script_sync.py	reportUnknownParameterType
 6	tests/scaffold/test_changelog_script_sync.py	reportUnusedCallResult
-11	tests/scaffold/test_changelog_title.py	reportAny
-2	tests/scaffold/test_changelog_title.py	reportUnusedCallResult
 59	tests/scaffold/test_ensure_fields.py	reportAny
 2	tests/scaffold/test_ensure_fields.py	reportMissingParameterType
 2	tests/scaffold/test_ensure_fields.py	reportUnknownParameterType
@@ -89,7 +84,7 @@
 4	tests/scaffold/test_git_flavor.py	reportAny
 4	tests/scaffold/test_git_flavor.py	reportMissingParameterType
 4	tests/scaffold/test_git_flavor.py	reportUnknownParameterType
-11	tests/scaffold/test_oxfmt_canonical.py	reportAny
+1	tests/scaffold/test_oxfmt_canonical.py	reportAny
 7	tests/scaffold/test_oxfmt_canonical.py	reportMissingParameterType
 7	tests/scaffold/test_oxfmt_canonical.py	reportUnknownParameterType
 2	tests/scaffold/test_oxfmt_canonical.py	reportUnusedCallResult
