@@ -472,7 +472,12 @@ def update_regression_ledger(
     git_commit: str = "",
 ) -> dict[str, Any]:
     """Update cumulative regression ledger and detect whac-a-mole regressions."""
-    data = {"immutable_invariants": [], "history": [], "best_score": 0, "best_commit": ""}
+    data: dict[str, Any] = {
+        "immutable_invariants": [],
+        "history": [],
+        "best_score": 0,
+        "best_commit": "",
+    }
     if ledger_path.exists():
         try:
             data = json.loads(ledger_path.read_text(encoding="utf-8"))

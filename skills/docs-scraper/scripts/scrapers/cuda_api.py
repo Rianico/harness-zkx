@@ -20,8 +20,8 @@ class APIScraper(DocumentationScraper):
     - Cache location: .cache/cuda-driver/ or .cache/cuda-runtime/
     """
 
-    name = "cuda-api"
-    description = """
+    name: str = "cuda-api"
+    description: str = """
 CUDA Runtime or Driver API documentation scraper.
 
 Scrapes NVIDIA CUDA documentation and converts to searchable markdown format.
@@ -55,17 +55,17 @@ Examples:
             "runtime": "https://docs.nvidia.com/cuda/cuda-runtime-api/",
             "driver": "https://docs.nvidia.com/cuda/cuda-driver-api/",
         }
-        self.api_type = api_type
+        self.api_type: str = api_type
         # Override name for cache directory
-        self._scraper_name = f"cuda-{api_type}"
+        self._scraper_name: str = f"cuda-{api_type}"
         super().__init__(
             base_urls[api_type],
             output_dir,
             force=force,
         )
         # Override cache_dir to use api_type specific name
-        self.cache_dir = self.cache_base / self._scraper_name
-        self._cached_pages_dir = self.cache_dir / "pages"
+        self.cache_dir: Path = self.cache_base / self._scraper_name
+        self._cached_pages_dir: Path = self.cache_dir / "pages"
 
     def _fetch_with_cache(self, url: str, cache_filename: str) -> BeautifulSoup | None:
         """Fetch page with unified caching."""
@@ -109,7 +109,7 @@ Examples:
         for link in soup.find_all("a", href=re.compile(pattern)):
             href = link.get("href")
             title = link.get_text(strip=True)
-            if href and title and href not in seen:
+            if isinstance(href, str) and href and title and href not in seen:
                 seen.add(href)
                 modules.append(
                     {
@@ -135,7 +135,7 @@ Examples:
         for link in soup.find_all("a", href=re.compile(pattern)):
             href = link.get("href")
             title = link.get_text(strip=True)
-            if href and title and href not in seen:
+            if isinstance(href, str) and href and title and href not in seen:
                 seen.add(href)
                 structures.append(
                     {

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import override
 
-from bs4 import Tag
+from bs4 import BeautifulSoup, Tag
 
 from .base import DocumentationScraper, Section
 
@@ -18,8 +18,8 @@ class PTXScraper(DocumentationScraper):
     - Cache location: .cache/ptx/index.html
     """
 
-    name = "ptx"
-    description = """
+    name: str = "ptx"
+    description: str = """
 PTX ISA (Parallel Thread Execution) documentation scraper.
 
 Scrapes NVIDIA PTX ISA documentation and converts to markdown.
@@ -92,7 +92,7 @@ Examples:
 
         print(f"\n✓ Complete! Documentation saved to: {self.output_dir}")
 
-    def _extract_sections(self, soup):
+    def _extract_sections(self, soup: BeautifulSoup) -> list[Section]:
         """Extract sections from single-page documentation."""
         content = None
         for selector in [
@@ -101,7 +101,7 @@ Examples:
             {"class": "body"},
             {"itemprop": "articleBody"},
         ]:
-            content = soup.find("div", selector) or soup.find("section", selector)
+            content = soup.find("div", **selector) or soup.find("section", **selector)
             if content:
                 break
 

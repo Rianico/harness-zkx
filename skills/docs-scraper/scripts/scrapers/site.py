@@ -154,7 +154,7 @@ def parse_llms_txt(content: str) -> dict[str, Any]:
         if match:
             url = match.group(1).strip()
             if url and url not in seen_urls:
-                entry: dict[str, Any] = {
+                entry = {
                     "url": url,
                     "section": current_section,
                 }
@@ -236,10 +236,10 @@ Output includes README.md (with page index) and pages/ directory with numbered m
             **kwargs: Additional arguments passed to base class
         """
         # Determine mode
-        self.urls = urls or []
+        self.urls: list[str] = urls or []
 
         if self.urls:
-            self.mode = "fetch"
+            self.mode: str = "fetch"
             # Derive base_url from first URL if not provided
             if not base_url and self.urls:
                 parsed = urlparse(self.urls[0])

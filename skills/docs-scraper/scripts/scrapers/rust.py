@@ -345,8 +345,8 @@ def check_prerequisites() -> tuple[bool, str]:
 class RustScraper:
     """Scrapes Rust crate documentation using cargo-docs-md."""
 
-    name = "rust"
-    description = """Generate markdown documentation from Rust crate source.
+    name: str = "rust"
+    description: str = """Generate markdown documentation from Rust crate source.
 
     Uses cargo-docs-md to convert rustdoc JSON to LLM-friendly markdown.
     Requires Rust nightly and cargo-docs-md to be installed.
@@ -385,14 +385,14 @@ class RustScraper:
             full_method_docs: Include full method documentation
             exclude_private: Exclude private items from output
         """
-        self.target = target
-        self.output_dir = output_dir
-        self.force = force
-        self.primary_crate = primary_crate
-        self.include_deps = include_deps
-        self.include_examples = include_examples
-        self.full_method_docs = full_method_docs
-        self.exclude_private = exclude_private
+        self.target: str = target
+        self.output_dir: Path = output_dir
+        self.force: bool = force
+        self.primary_crate: str | None = primary_crate
+        self.include_deps: bool = include_deps
+        self.include_examples: bool = include_examples
+        self.full_method_docs: bool = full_method_docs
+        self.exclude_private: bool = exclude_private
 
         self.temp_dir: Path | None = None
         self.source_dir: Path | None = None
@@ -573,7 +573,7 @@ class RustScraper:
 
         return json_dir
 
-    def _filter_json_files(self, json_dir: Path, primary_crate: str | None) -> Path | None:
+    def _filter_json_files(self, json_dir: Path, _primary_crate: str | None) -> Path | None:
         """Filter to only target crate JSON files.
 
         This reduces output from all dependencies to just the workspace crates.

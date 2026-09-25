@@ -334,8 +334,8 @@ class Report:
     """Collects what a run did and renders it once, in the mode the CLI selected."""
 
     def __init__(self) -> None:
-        self.mode = VERBOSE
-        self.cwd = pathlib.Path()
+        self.mode: str = VERBOSE
+        self.cwd: pathlib.Path = pathlib.Path()
         self.entries: list[Entry] = []
         self.findings: list[Finding] = []
         self.notes: list[str] = []
@@ -1512,16 +1512,15 @@ def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, objec
         _pkg_scripts = {}
     if not isinstance(_pkg_scripts, dict):
         _pkg_scripts = {}
-    if isinstance(_pkg_scripts, dict):
-        for _name, _cmd in _pkg_scripts.items():
-            if (
-                isinstance(_name, str)
-                and isinstance(_cmd, str)
-                and _is_coverage_script_name(_name)
-                and re.search(r"vitest.*--coverage", _cmd)
-            ):
-                node_coverage_script = _name
-                break
+    for _name, _cmd in _pkg_scripts.items():
+        if (
+            isinstance(_name, str)
+            and isinstance(_cmd, str)
+            and _is_coverage_script_name(_name)
+            and re.search(r"vitest.*--coverage", _cmd)
+        ):
+            node_coverage_script = _name
+            break
     ts_coverage = (
         node_coverage_script is not None
         or "coverage" in vitest_config
@@ -2455,7 +2454,7 @@ def ensure_coverage_threshold(
                 if all(mask[m.start() : m.end()])
             ]
             if code_matches:
-                parts: list[str] = []
+                parts = []
                 last = 0
                 for m in code_matches:
                     parts.append(new_body[last : m.start(1)])
@@ -2590,11 +2589,9 @@ def ensure_main(argv: list[str]) -> int:
 # what the skill ships — the caller fails on the first and only reads the second.
 def _yaml_available() -> bool:
     """pyyaml is optional: the script's PEP-723 env ships jinja2, so probe, don't assume."""
-    try:
-        import yaml  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    from importlib.util import find_spec
+
+    return find_spec("yaml") is not None
 
 
 def _yaml_error(text: str) -> str | None:

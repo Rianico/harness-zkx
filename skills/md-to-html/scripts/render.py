@@ -166,6 +166,8 @@ class BodyRenderer:
             if isinstance(el, str):
                 _ = (current_card or new_soup).append(el)
                 continue
+            if not isinstance(el, Tag):
+                continue
 
             if el.name == "h1" and el.get_text().strip() == title:
                 continue
@@ -239,8 +241,8 @@ class BodyRenderer:
                 # Mermaid
                 if (
                     el.name == "pre"
-                    and el.find("code")
-                    and "language-mermaid" in el.find("code").get("class", [])
+                    and (code := el.find("code")) is not None
+                    and "language-mermaid" in (code.get("class") or [])
                 ):
                     self._process_mermaid(new_soup, el, current_section, current_card)
                     continue
@@ -260,13 +262,13 @@ class BodyRenderer:
     def _process_callouts(
         self,
         new_soup: BeautifulSoup,
-        el,
-        current_section,
-        current_card,
+        el: Tag,
+        current_section: Tag,
+        current_card: Tag | None,
         strength_map: StyleMap,
         category_map: StyleMap,
         glossary: StringMap,
-    ):
+    ) -> Tag | None:
         """Handle [!badge], [!legend], [!files], [!problem], [!warning], [!note].
 
         Returns the (possibly updated) *current_card* so the caller can
@@ -297,12 +299,12 @@ class BodyRenderer:
                                     break
                         badge = new_soup.new_tag("span", attrs={"class": f"md-tag {cls}"})
                         badge.string = p_val
-                        b_container.append(badge)
+                        _ = b_container.append(badge)
 
             elif kind == "legend":
                 if not current_card:
                     current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                    current_section.append(current_card)
+                    _ = current_section.append(current_card)
                 lr = current_card.find("div", class_="md-card-legend-row")
                 if not lr:
                     lr = new_soup.new_tag("div", attrs={"class": "md-card-legend-row"})
@@ -324,7 +326,7 @@ class BodyRenderer:
             elif kind == "files":
                 if not current_card:
                     current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                    current_section.append(current_card)
+                    _ = current_section.append(current_card)
                 files_div = new_soup.new_tag("div", attrs={"class": "md-card-files"})
                 files = []
                 for line in content.split("\n"):
@@ -338,7 +340,7 @@ class BodyRenderer:
             elif kind == "problem":
                 if not current_card:
                     current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                    current_section.append(current_card)
+                    _ = current_section.append(current_card)
                 bq = new_soup.new_tag("blockquote", attrs={"class": "md-blockquote"})
                 p = new_soup.new_tag("p", attrs={"class": "md-paragraph"})
                 p.string = f"Problem: {content}"
@@ -348,7 +350,7 @@ class BodyRenderer:
             elif kind == "warning":
                 if not current_card:
                     current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                    current_section.append(current_card)
+                    _ = current_section.append(current_card)
                 bq = new_soup.new_tag(
                     "blockquote", attrs={"class": "md-blockquote md-blockquote-warn"}
                 )
@@ -360,7 +362,7 @@ class BodyRenderer:
             elif kind == "note":
                 if not current_card:
                     current_card = new_soup.new_tag("div", attrs={"class": "md-card"})
-                    current_section.append(current_card)
+                    _ = current_section.append(current_card)
                 bq = new_soup.new_tag(
                     "blockquote", attrs={"class": "md-blockquote md-blockquote-note"}
                 )
@@ -371,11 +373,14 @@ class BodyRenderer:
 
         return current_card
 
-    def _process_mermaid(self, new_soup: BeautifulSoup, el, current_section, current_card) -> None:
+    def _process_mermaid(
+        self, new_soup: BeautifulSoup, el: Tag, current_section: Tag, current_card: Tag | None
+    ) -> None:
         """Embed a mermaid diagram with zoom controls."""
         dw = new_soup.new_tag("div", attrs={"class": "md-mermaid-wrap"})
         mp = new_soup.new_tag("pre", attrs={"class": "mermaid"})
-        mp.string = el.find("code").string
+        code_el = el.find("code")
+        mp.string = str(code_el.string or "") if code_el is not None else ""
         vp = new_soup.new_tag("div", attrs={"class": "md-mermaid-viewport"})
         _ = vp.append(mp)
         _ = dw.append(vp)
@@ -385,7 +390,7 @@ class BodyRenderer:
             btn.string = btn_text
             _ = zoom.append(btn)
         _ = dw.append(zoom)
-        (current_card or current_section).append(dw)
+        _ = (current_card or current_section).append(dw)
 
     def _apply_standard_classes(self, new_soup: BeautifulSoup) -> None:
         """Apply standard CSS classes to all HTML elements."""
@@ -471,9 +476,9 @@ class AssetBundler:
     """Bundle a parsed soup tree into a complete HTML document with assets."""
 
     def __init__(self, flavor: str, flavors_dir: Path, asset_dir: Path) -> None:
-        self.flavor = flavor
-        self.flavors_dir = flavors_dir
-        self.asset_dir = asset_dir
+        self.flavor: str = flavor
+        self.flavors_dir: Path = flavors_dir
+        self.asset_dir: Path = asset_dir
 
     def get_dynamic_legend_css(self, legend_data: StyleMap | None = None) -> str:
         """Return only the data-driven legend color CSS that must be inline."""
@@ -507,6 +512,8 @@ class AssetBundler:
         )
         head = result.head
         body_tag = result.body
+        if head is None or body_tag is None:
+            raise ValueError("template document must contain <head> and <body>")
 
         # ── Meta / Title ──
         _ = head.append(result.new_tag("meta", charset="utf-8"))
@@ -639,12 +646,14 @@ class AssetBundler:
 
     # ── Header helpers ────────────────────────────────────────────────
 
-    def _make_stat_card(self, doc, label: str, value, extra_class: str = ""):
+    def _make_stat_card(
+        self, doc: BeautifulSoup, label: str, value: object, extra_class: str = ""
+    ) -> Tag:
         """Build a single stat card element."""
         card = doc.new_tag("div", attrs={"class": f"md-stat-card {extra_class}".strip()})
         lbl = doc.new_tag("span", attrs={"class": "md-stat-label"})
         lbl.string = label
-        card.append(lbl)
+        _ = card.append(lbl)
         if isinstance(value, (list, tuple)):
             value = len(value)
         val_tag = doc.new_tag(
@@ -652,18 +661,18 @@ class AssetBundler:
             attrs={"class": "md-stat-value" + (" md-tabular" if isinstance(value, int) else "")},
         )
         val_tag.string = f"{value:,}" if isinstance(value, int) else str(value)
-        card.append(val_tag)
+        _ = card.append(val_tag)
         return card
 
     def _build_header(
         self,
-        doc,
+        doc: BeautifulSoup,
         frontmatter: ValueMap,
         strength_map: StyleMap,
         category_map: StyleMap,
         legend_data: StyleMap,
         glossary: StringMap,
-    ):
+    ) -> Tag | None:
         """Build the <header> with title, stats dashboard, meta, enum strip, and legend key."""
         if not frontmatter:
             return None
@@ -673,18 +682,18 @@ class AssetBundler:
         # Eyebrow
         eb = doc.new_tag("span", attrs={"class": "md-eyebrow"})
         eb.string = _text(frontmatter.get("title"), "Architecture Review")
-        h.append(eb)
+        _ = h.append(eb)
 
         # H1
         h1 = doc.new_tag("h1", attrs={"class": "md-heading-level-1"})
         h1.string = _text(frontmatter.get("project"), "Report")
-        h.append(h1)
+        _ = h.append(h1)
 
         # Subtitle
         stats = _values(frontmatter.get("statistics"))
         subtitle = doc.new_tag("p", attrs={"class": "md-subtitle"})
         subtitle.string = f"{stats.get('candidates', 0)} refactoring candidates ranked by leverage, locality, and risk"
-        h.append(subtitle)
+        _ = h.append(subtitle)
 
         # --- Statistics Dashboard ---
         if stats:
@@ -692,8 +701,8 @@ class AssetBundler:
             # Total group
             if "candidates" in stats:
                 tg = doc.new_tag("div", attrs={"class": "md-dashboard-group"})
-                tg.append(self._make_stat_card(doc, "Candidates", stats["candidates"]))
-                dash.append(tg)
+                _ = tg.append(self._make_stat_card(doc, "Candidates", stats["candidates"]))
+                _ = dash.append(tg)
             # Strength group
             strength_keys = [
                 ("strong", "Strong"),
@@ -706,10 +715,10 @@ class AssetBundler:
                 if sk in stats:
                     has_sg = True
                     css_cls = strength_map.get(sl, {}).get("css", "")
-                    sg.append(self._make_stat_card(doc, sl, stats[sk], css_cls))
+                    _ = sg.append(self._make_stat_card(doc, sl, stats[sk], css_cls))
             if has_sg:
-                dash.append(sg)
-            h.append(dash)
+                _ = dash.append(sg)
+            _ = h.append(dash)
 
         # --- Meta Block ---
         mc = doc.new_tag("div", attrs={"class": "md-meta"})
@@ -733,7 +742,7 @@ class AssetBundler:
                     val = val["value"]
                 lbl = doc.new_tag("span", attrs={"class": "md-meta-label"})
                 lbl.string = label
-                item.append(lbl)
+                _ = item.append(lbl)
                 cls_val = "md-meta-value" + (" md-tabular" if isinstance(val, int) else "")
                 if css_extra:
                     cls_val += f" {css_extra}"
@@ -742,29 +751,29 @@ class AssetBundler:
                     val_tag.string = f"{val:,}"
                 else:
                     val_tag.string = str(val)
-                item.append(val_tag)
-                mc.append(item)
+                _ = item.append(val_tag)
+                _ = mc.append(item)
         # Stats-derived meta items
         if stats:
             if "total_lines_reviewed" in stats:
                 item = doc.new_tag("div", attrs={"class": "md-meta-item"})
                 lbl = doc.new_tag("span", attrs={"class": "md-meta-label"})
                 lbl.string = "Lines reviewed"
-                item.append(lbl)
+                _ = item.append(lbl)
                 val_tag = doc.new_tag("span", attrs={"class": "md-meta-value md-tabular"})
                 val_tag.string = f"{stats['total_lines_reviewed']:,}"
-                item.append(val_tag)
-                mc.append(item)
+                _ = item.append(val_tag)
+                _ = mc.append(item)
             if "files_involved" in stats:
                 item = doc.new_tag("div", attrs={"class": "md-meta-item"})
                 lbl = doc.new_tag("span", attrs={"class": "md-meta-label"})
                 lbl.string = "Files involved"
-                item.append(lbl)
+                _ = item.append(lbl)
                 val_tag = doc.new_tag("span", attrs={"class": "md-meta-value md-tabular"})
                 val_tag.string = f"{stats['files_involved']:,}"
-                item.append(val_tag)
-                mc.append(item)
-        h.append(mc)
+                _ = item.append(val_tag)
+                _ = mc.append(item)
+        _ = h.append(mc)
 
         # --- Enum Legend Strip ---
         if strength_map or category_map:
@@ -773,19 +782,19 @@ class AssetBundler:
                 row = doc.new_tag("div", attrs={"class": "md-enum-row"})
                 lbl = doc.new_tag("span", attrs={"class": "md-enum-label"})
                 lbl.string = "Strength:"
-                row.append(lbl)
+                _ = row.append(lbl)
                 for ek, ev in strength_map.items():
                     tag = doc.new_tag(
                         "span", attrs={"class": f"md-tag {ev.get('css', 'md-tag-info')}"}
                     )
                     tag.string = ek
-                    row.append(tag)
-                enum_bar.append(row)
+                    _ = row.append(tag)
+                _ = enum_bar.append(row)
             if category_map:
                 row = doc.new_tag("div", attrs={"class": "md-enum-row"})
                 lbl = doc.new_tag("span", attrs={"class": "md-enum-label"})
                 lbl.string = "Category:"
-                row.append(lbl)
+                _ = row.append(lbl)
                 for ek, ev in category_map.items():
                     tag = doc.new_tag(
                         "span", attrs={"class": f"md-tag {ev.get('css', 'md-tag-muted')}"}
@@ -793,16 +802,16 @@ class AssetBundler:
                     tag.string = ev.get("label", ek)
                     if ev.get("description"):
                         tag["title"] = ev["description"]
-                    row.append(tag)
-                enum_bar.append(row)
-            h.append(enum_bar)
+                    _ = row.append(tag)
+                _ = enum_bar.append(row)
+            _ = h.append(enum_bar)
 
         # --- Legend Key ---
         if legend_data:
             lk = doc.new_tag("div", attrs={"class": "md-legend-key"})
             lbl = doc.new_tag("span", attrs={"class": "md-legend-key-label"})
             lbl.string = "Legend"
-            lk.append(lbl)
+            _ = lk.append(lbl)
             for label, _ in legend_data.items():
                 item = doc.new_tag(
                     "span", attrs={"class": f"md-legend-key-item legend-tag-{label}"}
@@ -810,8 +819,8 @@ class AssetBundler:
                 item.string = label.replace("_", " ")
                 if glossary.get(label):
                     item["data-tooltip"] = glossary[label]
-                lk.append(item)
-            h.append(lk)
+                _ = lk.append(item)
+            _ = h.append(lk)
 
         return h
 
@@ -829,16 +838,16 @@ class KamiRenderer:
     def __init__(self, asset_dir: str | None = None, flavor: str = "kami") -> None:
         script_dir = Path(__file__).parent.parent.absolute()
         if asset_dir is None:
-            self.asset_dir = script_dir / "assets"
+            self.asset_dir: Path = script_dir / "assets"
         else:
             self.asset_dir = Path(asset_dir).absolute()
 
-        self.flavors_dir = script_dir / "references" / "flavors"
-        self.flavor = flavor
+        self.flavors_dir: Path = script_dir / "references" / "flavors"
+        self.flavor: str = flavor
 
-        self._parser = FrontmatterParser()
-        self._body_renderer = BodyRenderer()
-        self._asset_bundler = AssetBundler(flavor, self.flavors_dir, self.asset_dir)
+        self._parser: FrontmatterParser = FrontmatterParser()
+        self._body_renderer: BodyRenderer = BodyRenderer()
+        self._asset_bundler: AssetBundler = AssetBundler(flavor, self.flavors_dir, self.asset_dir)
 
     def get_dynamic_legend_css(self, legend_data: StyleMap | None = None) -> str:
         """Delegate to AssetBundler."""

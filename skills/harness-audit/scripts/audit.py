@@ -20,9 +20,9 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, ClassVar, Protocol, TypedDict, cast
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 DEFAULT_THRESHOLD = 20
 DEFAULT_KEEP = 10
@@ -35,7 +35,7 @@ class NextTurn(BaseModel):
     type: str
     preview: str = Field(max_length=240)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class OversizedEntry(BaseModel):
@@ -49,7 +49,7 @@ class OversizedEntry(BaseModel):
     isError: bool
     next_turns: list[NextTurn] = Field(default_factory=list)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class EstimatedSavings(BaseModel):
@@ -57,7 +57,7 @@ class EstimatedSavings(BaseModel):
     chars: int = Field(ge=0)
     keep_head_tail: int = Field(ge=0)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class AuditResult(BaseModel):
@@ -76,7 +76,7 @@ class AuditResult(BaseModel):
     )  # all bash entries, alias to avoid shadowing
     estimated_savings: EstimatedSavings
 
-    model_config = {"strict": True, "populate_by_name": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True, "populate_by_name": True}
 
 
 # Bucket triage — makes A/B/C/D explicit at type level (A=refine owned, B=replace one-off)
@@ -87,7 +87,7 @@ class TriagedEntry(BaseModel):
     replaceable_with: str | None = None
     reason: str
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 def eprint(msg: str) -> None:

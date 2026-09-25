@@ -198,7 +198,7 @@ def _skill_dir(repo_root: pathlib.Path, name: str, parent: str | None) -> pathli
 def _load_meta(path: pathlib.Path) -> tuple[dict[str, object], str, str]:
     """Load frontmatter via python-frontmatter if available, else regex parse. Returns (meta, body, raw_text)."""
     text = path.read_text(encoding="utf-8")
-    if has_fm:
+    if has_fm and frontmatter is not None:
         try:
             post = frontmatter.loads(text)  # type: ignore[union-attr]
             # post.metadata contains top-level keys (name, description, metadata, etc.)
@@ -227,7 +227,7 @@ def _write_meta(
     """Write SKILL.md with updated meta. Preserves body. Uses frontmatter/yaml if available."""
     if dry_run:
         return
-    if has_fm:
+    if has_fm and frontmatter is not None:
         # Use frontmatter to dump; ensure description block scalar handling via yaml
         post = frontmatter.Post(body)  # type: ignore[union-attr]
         post.metadata.update(meta)
@@ -254,7 +254,7 @@ def _write_meta(
     _ = path.write_text(f"---\n{meta}\n---\n\n{body}", encoding="utf-8")
 
 
-def _ensure_list(value) -> list[str]:
+def _ensure_list(value: object) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
@@ -273,7 +273,7 @@ def _update_list_in_meta(
     dry_run: bool = False,
 ) -> bool:
     """Update a frontmatter field. Returns True if changed."""
-    meta, body, raw = _load_meta(path)
+    meta, body, _raw = _load_meta(path)
     # field_path may be nested like metadata.depends-on
     parts = field_path.split(".")
     # navigate to parent dict
@@ -296,13 +296,9 @@ def _update_list_in_meta(
         else:
             new_val = set_value
         if orig_val != new_val:
-            if new_val is None or (isinstance(new_val, list) and len(new_val) == 0):
-                # remove key if empty list and caller wants removal? keep empty list for manage
-                # For managed-by, removing means delete key
-                if key == "managed-by" and (new_val is None or new_val == ""):
-                    _ = cur.pop(key, None)
-                else:
-                    cur[key] = new_val
+            # An empty list removes the key for managed-by; other fields keep the empty list.
+            if key == "managed-by" and isinstance(new_val, list) and not new_val:
+                _ = cur.pop(key, None)
             else:
                 cur[key] = new_val
             changed = True
@@ -604,7 +600,7 @@ def cmd_manage(args: argparse.Namespace, repo_root: pathlib.Path) -> None:
         print(f"  parent {parent} already manages {child}")
 
     # 2. update child managed-by
-    if child_file is not None and child_file.exists():
+    if child_file.exists():
         # if needs_move, we will update after move; else update in place
         # For dry-run, just show intent
         if needs_move:

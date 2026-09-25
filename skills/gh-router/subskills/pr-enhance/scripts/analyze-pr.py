@@ -4,10 +4,11 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
+from collections.abc import Mapping
 
 
 class PRAnalyzer:
-    def analyze_changes(self, base_branch="main"):
+    def analyze_changes(self, base_branch: str = "main") -> Mapping[str, object]:
         """
         Analyze changes between current branch and base
         """
@@ -19,12 +20,12 @@ class PRAnalyzer:
 
         return analysis
 
-    def _get_changed_files(self, base_branch):
+    def _get_changed_files(self, base_branch: str) -> list[dict[str, str]]:
         """Get list of changed files with statistics"""
         cmd = f"git diff --name-status {base_branch}...HEAD"
         result = subprocess.run(cmd.split(), capture_output=True, text=True)
 
-        files = []
+        files: list[dict[str, str]] = []
         for line in result.stdout.strip().split("\n"):
             if line:
                 parts = line.split("\t", 1)
@@ -34,18 +35,18 @@ class PRAnalyzer:
                         {
                             "filename": filename,
                             "status": self._parse_status(status),
-                            "category": self._categorize_file(filename),
+                            "category": self.categorize_file(filename),
                         }
                     )
 
         return files
 
-    def _parse_status(self, status):
+    def _parse_status(self, status: str) -> str:
         """Parse git status code"""
         status_map = {"A": "Added", "M": "Modified", "D": "Deleted", "R": "Renamed", "C": "Copied"}
         return status_map.get(status[0], "Unknown")
 
-    def _get_change_stats(self, base_branch):
+    def _get_change_stats(self, base_branch: str) -> dict[str, int]:
         """Get detailed change statistics"""
         cmd = f"git diff --shortstat {base_branch}...HEAD"
         result = subprocess.run(cmd.split(), capture_output=True, text=True)
@@ -67,7 +68,7 @@ class PRAnalyzer:
 
         return {"files_changed": 0, "insertions": 0, "deletions": 0, "net_change": 0}
 
-    def _categorize_file(self, filename):
+    def categorize_file(self, filename: str) -> str:
         """Categorize file by type"""
         categories = {
             "source": [".js", ".ts", ".py", ".java", ".go", ".rs", ".c", ".cpp"],
@@ -84,9 +85,9 @@ class PRAnalyzer:
 
         return "other"
 
-    def _categorize_changes(self, base_branch):
+    def _categorize_changes(self, base_branch: str) -> dict[str, list[dict[str, str]]]:
         files = self._get_changed_files(base_branch)
-        changes_by_category = defaultdict(list)
+        changes_by_category: dict[str, list[dict[str, str]]] = defaultdict(list)
         for f in files:
             changes_by_category[f["category"]].append(f)
         return dict(changes_by_category)
@@ -147,7 +148,7 @@ def _analyze_pr_via_gh(target: str) -> dict[str, object]:
                     {
                         "filename": filename,
                         "status": status,
-                        "category": analyzer._categorize_file(filename),
+                        "category": analyzer.categorize_file(filename),
                     }
                 )
             stats = {

@@ -22,9 +22,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 CODE_RE = re.compile(r"\b(E_[A-Z_]+)\b")
 QUOTED_RE = re.compile(r'"([^"]+)"')
@@ -49,7 +49,7 @@ class NextTurn(BaseModel):
     type: str
     preview: str = Field(max_length=240)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class EditFailure(BaseModel):
@@ -64,7 +64,7 @@ class EditFailure(BaseModel):
     message_preview: str = ""
     next_turns: list[NextTurn] = Field(default_factory=list)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 class EditAuditResult(BaseModel):
@@ -82,7 +82,7 @@ class EditAuditResult(BaseModel):
     foreign_leak_failures: int = Field(ge=0)
     failures: list[EditFailure] = Field(default_factory=list)
 
-    model_config = {"strict": True}
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 def eprint(msg: str) -> None:

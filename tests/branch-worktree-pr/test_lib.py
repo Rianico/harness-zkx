@@ -15,6 +15,19 @@ from pathlib import Path
 import _lib
 
 
+def _fake_run(payload: str):
+    """A `_lib.run` stand-in returning canned stdout."""
+
+    def run(
+        cmd: list[str],
+        cwd: Path | None = None,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        return _completed(payload)
+
+    return run
+
+
 def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(args=["wt"], returncode=returncode, stdout=stdout, stderr="")
 
@@ -43,7 +56,7 @@ SCHEMA_2 = json.dumps(
 
 
 def test_wt_list_reads_schema_1_bare_array(monkeypatch) -> None:
-    monkeypatch.setattr(_lib, "run", lambda cmd, cwd=None: _completed(SCHEMA_1))
+    monkeypatch.setattr(_lib, "run", _fake_run(SCHEMA_1))
     trees = _lib.wt_list()
     assert [(t.branch, t.path, t.is_current) for t in trees] == [
         ("main", "/repo", True),
@@ -57,7 +70,7 @@ def test_wt_list_reads_schema_2_envelope(monkeypatch) -> None:
     Unpinned `[list] json-schema` emits schema 1 with a stderr warning and a future wt flips the
     default to schema 2, so both shapes must parse to the same `Worktree` list.
     """
-    monkeypatch.setattr(_lib, "run", lambda cmd, cwd=None: _completed(SCHEMA_2))
+    monkeypatch.setattr(_lib, "run", _fake_run(SCHEMA_2))
     trees = _lib.wt_list()
     assert [(t.branch, t.path, t.is_current) for t in trees] == [
         ("main", "/repo", True),
@@ -73,13 +86,13 @@ PORCELAIN_REAL = "?? scripts/__pycache__/\n M src/app.py\n"
 
 def test_git_status_clean_ignores_ephemeral_caches(monkeypatch) -> None:
     """A stray interpreter run without PYTHONDONTWRITEBYTECODE=1 must not halt a run."""
-    monkeypatch.setattr(_lib, "run", lambda cmd, cwd=None: _completed(PORCELAIN_EPHEMERAL))
+    monkeypatch.setattr(_lib, "run", _fake_run(PORCELAIN_EPHEMERAL))
     clean, bad = _lib.git_status_clean()
     assert clean, bad
 
 
 def test_git_status_clean_still_flags_real_changes(monkeypatch) -> None:
-    monkeypatch.setattr(_lib, "run", lambda cmd, cwd=None: _completed(PORCELAIN_REAL))
+    monkeypatch.setattr(_lib, "run", _fake_run(PORCELAIN_REAL))
     clean, bad = _lib.git_status_clean()
     assert not clean
     assert bad == [" M src/app.py"]
