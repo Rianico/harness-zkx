@@ -90,11 +90,43 @@ uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer    # this pane's label and i
 When a person says "hand off to <name>", pass that name straight to the prompt helper:
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 120000
-uv run "$SKILL_DIR/scripts/herdr_prompt.py" --label "review pane" --file brief.md --wait --timeout 120000
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --timeout 15000
+uv run "$SKILL_DIR/scripts/herdr_prompt.py" --label "review pane" --file brief.md --wait --timeout 15000
 ```
 
 `--label` matches a pane label exactly. Labels are not unique — two panes may carry the same one — so an ambiguous label fails with the candidate pane ids listed instead of guessing.
+
+### Dispatch & Yield (Event-Driven workflow)
+
+Multi-agent coordination is event-driven via completion callbacks:
+
+1. **Caller self-names:**
+   ```bash
+   uv run "$SKILL_DIR/scripts/herdr_label.py" orchestrator
+   ```
+   Ensures the caller has a valid, addressable agent name so workers know whom to reply to.
+
+2. **Dispatch with short grace period or fire-and-forget:**
+   ```bash
+   # Short grace period (settles fast if prompt finishes quickly; exits 4 if long-running):
+   uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker --file task.md --wait --timeout 15000
+
+   # Or fire-and-forget:
+   uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker --file task.md --no-wait
+   ```
+
+3. **Yield turn on async execution:**
+   If `herdr-prompt` exits 4 (timeout) or was dispatched with `--no-wait`, the prompt was delivered and the worker is working asynchronously. The orchestrator yields turn (stops calling tools, enters idle).
+
+4. **Worker executes completion callback:**
+   Upon completion or blocking, the worker executes the contract callback:
+   ```bash
+   herdr agent prompt orchestrator "<STATUS> <artifacts> <issues>"
+   ```
+   This injects input into the orchestrator pane, waking its turn with the result.
+
+5. **`herdr-wait` is strictly a fallback:**
+   Do not poll workers with loops or barriers during normal execution. `herdr-wait` is strictly a fallback for non-agent panes, panes lacking an agent name, or watchdog recovery.
 
 **Every handoff carries the caller's context, and requires a reply.** A worker cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and closes with the reply contract:
 
@@ -193,17 +225,36 @@ If a wait fails or returns `blocked`, inspect `agent get` and the transcript bef
 
 ## Coordinate several agents
 
-Canonical fan-out lifecycle: dispatch → verbatim prompts → barrier wait → transcript extraction → iterative convergence.
+The primary workflow for multi-agent fan-out is **Dispatch & Yield (Event-Driven)**:
+
+1. **Caller self-names:**
+   ```bash
+   uv run "$SKILL_DIR/scripts/herdr_label.py" orchestrator
+   ```
+2. **Dispatch workers:**
+   ```bash
+   uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker1 worker2 --file brief.md --no-wait
+   ```
+3. **Yield turn:**
+   The orchestrator yields turn (stops calling tools, enters idle).
+4. **Completion callback wakes caller:**
+   Each worker finishes its assignment and executes the reply callback injected in the caller context:
+   ```bash
+   herdr agent prompt orchestrator "<STATUS> <artifacts> <issues>"
+   ```
+   This delivers prompt input directly to the orchestrator pane, waking its turn with the result.
+5. **Inspect session transcripts on wake:**
+   ```bash
+   uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
+   ```
+
+**`herdr-wait` is strictly a fallback, not the primary coordination signal.** The event-driven callback model ensures completion arrives without the orchestrator holding a wait, burning context, or looping. Keep `herdr-wait` strictly for non-agent panes, panes without an agent name, or watchdog recovery when a worker fails to report back. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. If using the barrier fallback:
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker1 worker2 --file brief.md --no-wait
 uv run "$SKILL_DIR/scripts/herdr_wait.py" worker1 worker2 --timeout 300000
-uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
 ```
 
-`herdr-prompt --wait` blocks on one agent, so fan-out always dispatches with `--no-wait` and converges on one `herdr-wait` barrier. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. The barrier exits 3 the moment any target needs input — unblock it, then re-enter the barrier for the rest.
-
-**The barrier is a fallback, not the primary signal.** The model is event-driven: a worker that finishes pushes a reply to the caller's agent name (see "Name a target, then hand off"), so completion arrives without the orchestrator holding a wait. Keep the barrier for workers that cannot reply — an ordinary command in a pane, a pane with no agent name, a worker already mid-flight when you arrive — and distrust its first tick: a worker that has not begun still reads `idle`, so a barrier can return in 0ms having observed the state *before* the work. Re-enter it rather than concluding the work is done.
+The barrier exits 3 the moment any target needs input — unblock it, then re-enter the barrier for the rest. Distrust its first tick: a worker that has not begun still reads `idle`, so a barrier can return in 0ms having observed the state *before* the work. Re-enter it rather than concluding the work is done.
 
 ### Sibling-reviewer pattern
 
@@ -246,7 +297,7 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 
 ## Local helpers (not upstream)
 
-Six scripts in `$SKILL_DIR/scripts/`, run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+All 6 scripts in `$SKILL_DIR/scripts/` are authoritative and fully documented below with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt` adds `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
@@ -300,7 +351,7 @@ git diff | uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --wait
 uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dry-run
 ```
 
-Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Accepts several TARGETs for one broadcast (`herdr-prompt worker1 worker2 --file brief.md --no-wait`); `--no-wait` dispatches without waiting and is rejected alongside `--wait`. A `--wait` that times out after delivery exits 4 — prompt accepted, agent still working — so resume with `herdr-wait` instead of resubmitting; only a true dispatch failure exits 1. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as one JSON array per target and submits nothing.
+Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Accepts several TARGETs for one broadcast (`herdr-prompt worker1 worker2 --file brief.md --no-wait`); `--no-wait` dispatches without waiting and is rejected alongside `--wait`. A `--wait` that times out after delivery exits 4 — prompt accepted, agent working asynchronously: yield turn and await reply callback, or resume with `herdr-wait` instead of resubmitting; only a true dispatch failure exits 1. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as one JSON array per target and submits nothing.
 
 Unless `--no-caller-context` is passed, it prepends the caller block and the completion-reply contract (see "Name a target, then hand off"), so the convention does not depend on a caller remembering it. When the caller has no agent name, the block says so instead of naming a target that cannot be reached.
 
