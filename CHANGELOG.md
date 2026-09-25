@@ -106,6 +106,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **scaffold:** preserve release.yml on update and gate corrupt manifests
 * **scaffold:** enforce per-field boundary across ensure and detect
 
+### Performance Improvements
+
+* **tests:** resolve the pinned oxfmt once, stub real CLI spawns and retry sleeps (#139)
+
 ### Documentation
 
 * **contributing:** name the two type-check suppression layers (#122)
