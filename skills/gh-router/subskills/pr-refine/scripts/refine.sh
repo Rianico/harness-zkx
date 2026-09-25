@@ -7,17 +7,41 @@
 #              in-repo branches (it only means anything for forks), and you already
 #              hold the push access pr-land demands.
 #   checkout : check out the contributor's head intact (never rewrite their history).
-#   lint-body: refuse a body still holding the raw CODE_AUTHORS token or a line over
-#              100 chars (commitlint body-max-line-length) — same gates pr-land enforces.
+#   lint-body: refuse a body still holding the raw CODE_AUTHORS token (line-length
+#              limit dropped per commit #135) — same gates pr-land enforces.
 # Seam: refine pushes, land merges — hand the branch and body to pr-land/scripts/pr.sh.
 # Exit: 0 ok | 1 gate refused or gh failed | 2 usage.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PR_SH="$(cd "$SCRIPT_DIR/../../pr-land/scripts" && pwd)/pr.sh"
-# Attribution gates live in pr-land; this script reuses them, never re-derives them.
-# shellcheck source=../../pr-land/scripts/pr.sh
-source "$PR_SH"
+LIB_DIR="$(cd "$SCRIPT_DIR/../../../lib" && pwd)"
+# shellcheck source=../../../lib/repo.sh
+source "$LIB_DIR/repo.sh"
+
+CODE_AUTHORS_TOKEN="CODE_AUTHORS"
+
+refuse_raw_token() {
+  local text
+  text=$(cat)
+  if printf '%s' "$text" | awk '
+    {
+      line = $0
+      while (match(line, /<!--|-->/)) {
+        before = substr(line, 1, RSTART - 1)
+        tok = substr(line, RSTART, RLENGTH)
+        if (incomment && index(before, "CODE_AUTHORS")) found = 1
+        if (tok == "<!--") incomment = 1
+        else incomment = 0
+        line = substr(line, RSTART + RLENGTH)
+      }
+      if (incomment && index(line, "CODE_AUTHORS")) found = 1
+    }
+    END { exit !found }'; then
+    echo "refusing squash message: raw $CODE_AUTHORS_TOKEN token still present" >&2
+    echo "remediation: replace the token with Co-authored-by lines for outside contributors (or delete the block), then re-run" >&2
+    return 1
+  fi
+}
 
 usage() { sed -n '2,9p' "$0"; }
 
@@ -95,9 +119,8 @@ lint_body() {
   BODY=$(cat -- "$file")
   local ok=0
   if ! printf '%s' "$BODY" | refuse_raw_token; then ok=1; fi
-  if ! printf '%s' "$BODY" | refuse_long_lines; then ok=1; fi
   if ((ok == 0)); then
-    echo "body ok: no raw token, all lines <= $SQUASH_LINE_MAX"
+    echo "body ok: no raw token"
   fi
   return "$ok"
 }

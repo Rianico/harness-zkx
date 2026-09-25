@@ -24,8 +24,8 @@ brief output — do not re-derive it with `gh pr view`, `gh run list`, or `gh ap
 | **Watch a workflow**                 | `scripts/ci.sh watch <run-id>`                  | quiet poll → `✔ run <id> completed: success`, or `✘` + exit 1                       |
 | See recent runs and what they cost   | `scripts/ci.sh runs [--branch B] [--limit N]`   | one line per run + slowest steps (`Run all tests=15s Install uv=2s`)                |
 | Why did a run fail                   | `scripts/ci.sh why <run-id>`                    | failing `job › step`, then the log tail                                             |
-| Create a PR, watch it, merge it      | `pr-land/scripts/pr.sh --watch --merge`         | `PR <url>` → `checks success` → `merged #N (squash) to main`                        |
-| Refresh an existing PR's description | `pr-land/scripts/pr.sh --title … --body-file …` | reuses the PR by head branch; pass title/body or they are not touched               |
+| Create a PR, watch it, merge it      | `pr-land/scripts/pr.py --watch --merge`         | `PR <url>` → `checks success` → `merged #N (squash) to main`                        |
+| Refresh an existing PR's description | `pr-land/scripts/pr.py --title … --body-file …` | reuses the PR by head branch; pass title/body or they are not touched               |
 | Draft PR body from the diff          | `pr-enhance/scripts/analyze-pr.py`              | changed files, stats, categories                                                    |
 | Preflight before releasing           | `gh-release/scripts/check.sh`                   | tree/branch/commit checks, one line each                                            |
 | Verify before releasing              | `gh-release/scripts/verify.sh`                  | one line per lint/typecheck/test                                                    |
