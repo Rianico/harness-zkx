@@ -107,7 +107,7 @@ On completion, reply to the caller in one message:
   herdr agent prompt orchestrator "<STATUS> <artifacts> <issues>"
 ```
 
-`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked worker names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, reading the caller from `HERDR_PANE_ID`, `herdr pane current --current`, and the caller's agent record; `--no-caller-context` opts out for a broadcast where no single caller owns the result. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
+`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked worker names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, reading the pane id from `HERDR_PANE_ID` (falling back to `herdr pane current --current`), the label from `herdr pane list`, and the agent name from `herdr agent list`; `--no-caller-context` opts out for a broadcast where no single caller owns the result. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
 
 Underlying commands, if you drive them directly:
 

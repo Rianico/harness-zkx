@@ -167,7 +167,7 @@ def test_non_positive_timeout_is_rejected(stub: StubHarness, tmp_path: Path) -> 
 
 
 def test_file_payload_is_delivered_byte_for_byte(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)))
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-caller-context")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[3] == "reviewer"
@@ -176,13 +176,13 @@ def test_file_payload_is_delivered_byte_for_byte(stub: StubHarness, tmp_path: Pa
 
 
 def test_stdin_dash_payload_is_delivered_verbatim(stub: StubHarness) -> None:
-    done = stub.run("reviewer", "--file", "-", stdin=METACHARS)
+    done = stub.run("reviewer", "--file", "-", "--no-caller-context", stdin=METACHARS)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts()[0][4] == METACHARS
 
 
 def test_bare_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
-    done = stub.run("reviewer", stdin=METACHARS)
+    done = stub.run("reviewer", "--no-caller-context", stdin=METACHARS)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts()[0][4] == METACHARS
 
@@ -199,6 +199,7 @@ def test_wait_until_and_timeout_follow_the_text(stub: StubHarness, tmp_path: Pat
         "done",
         "--timeout",
         "120000",
+        "--no-caller-context",
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
@@ -207,7 +208,9 @@ def test_wait_until_and_timeout_follow_the_text(stub: StubHarness, tmp_path: Pat
 
 
 def test_summary_reports_byte_count_and_state(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hello")), "--wait")
+    done = stub.run(
+        "reviewer", "--file", str(payload_file(tmp_path, "hello")), "--wait", "--no-caller-context"
+    )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert "prompted reviewer" in done.stdout
     assert "bytes=5" in done.stdout
@@ -221,10 +224,17 @@ def test_json_prints_raw_response(stub: StubHarness, tmp_path: Path) -> None:
 
 
 def test_dry_run_prints_exact_argv_without_prompting(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--dry-run", "--wait")
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--dry-run",
+        "--wait",
+        "--no-caller-context",
+    )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
-    argv = json.loads(done.stdout)
+    argv: list[str] = json.loads(done.stdout)
     assert argv[1:5] == ["agent", "prompt", "reviewer", METACHARS]
     assert argv[-1] == "--wait"
 
@@ -290,7 +300,9 @@ def ambiguous_state() -> dict[str, object]:
 
 
 def test_label_resolves_to_the_pane_id(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("--label", "scratch pad", "--file", str(payload_file(tmp_path, "hi")))
+    done = stub.run(
+        "--label", "scratch pad", "--file", str(payload_file(tmp_path, "hi")), "--no-caller-context"
+    )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert done.stdout.startswith("prompted w9:p2  bytes=2")
     (call,) = stub.prompts()
@@ -379,7 +391,14 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
 
 
 def test_broadcast_delivers_same_payload_to_every_target(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--no-wait")
+    done = stub.run(
+        "worker1",
+        "worker2",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--no-wait",
+        "--no-caller-context",
+    )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (first, second) = stub.prompts()
     assert (first[3], second[3]) == ("worker1", "worker2")
@@ -436,5 +455,90 @@ def test_broadcast_dry_run_prints_one_argv_per_target(stub: StubHarness, tmp_pat
     done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
-    argv_lines = [json.loads(line) for line in done.stdout.splitlines()]
+    argv_lines: list[list[str]] = [json.loads(line) for line in done.stdout.splitlines()]
     assert [argv[3] for argv in argv_lines] == ["worker1", "worker2"]
+
+
+# ── integration: caller context (#106, #119) ─────────────────────────────────────────
+
+
+def test_caller_block_renders_all_fields() -> None:
+    caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
+    assert (
+        herdr_prompt.render_caller_block(caller)
+        == "Caller: pane=w1:p1 label=orchestrator agent=orchestrator"
+    )
+
+
+def test_caller_block_omits_absent_fields_never_invents() -> None:
+    caller = herdr_prompt.CallerContext(pane_id="w9:p1", agent="reviewer")
+    assert herdr_prompt.render_caller_block(caller) == "Caller: pane=w9:p1 agent=reviewer"
+
+
+def test_reply_contract_without_agent_is_unaddressable() -> None:
+    caller = herdr_prompt.CallerContext(pane_id="w9:p2", label="scratch pad")
+    contract = herdr_prompt.render_reply_contract(caller)
+    assert "cannot be addressed" in contract
+    assert "herdr agent prompt w9:p2" not in contract
+
+
+def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")))
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (prompt_call,) = stub.prompts()
+    text = prompt_call[4]
+    assert text.startswith("Caller: pane=w9:p1 agent=reviewer")
+    assert "\n\nhi\n\n" in text
+    assert 'herdr agent prompt reviewer "<STATUS> <artifacts> <issues>"' in text
+
+
+def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "reviewer", "--file", str(payload_file(tmp_path, "hi")), env={"HERDR_PANE_ID": "w9:p2"}
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (prompt_call,) = stub.prompts()
+    assert prompt_call[4].startswith("Caller: pane=w9:p2 label=scratch pad")
+    assert "agent=" not in prompt_call[4].splitlines()[0]
+    assert "cannot be addressed" in prompt_call[4]
+
+
+def test_no_caller_context_sends_verbatim_without_lookups(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-caller-context")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (prompt_call,) = stub.prompts()
+    assert prompt_call[4] == "hi"
+    kinds = [call[1:3] for call in stub.calls()]
+    assert kinds == [["agent", "prompt"]]
+
+
+def test_broadcast_prepends_identically_per_target(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (first, second) = stub.prompts()
+    assert (first[3], second[3]) == ("worker1", "worker2")
+    assert first[4] == second[4]
+    assert first[4].startswith("Caller: pane=w9:p1 agent=reviewer")
+
+
+def test_dry_run_renders_caller_payload_without_prompting(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    argv: list[str] = json.loads(done.stdout)
+    assert argv[3] == "reviewer"
+    assert argv[4].startswith("Caller: pane=w9:p1 agent=reviewer")
+    assert "herdr agent prompt reviewer" in argv[4]
+
+
+def test_dry_run_opt_out_renders_verbatim(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run", "--no-caller-context"
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    assert json.loads(done.stdout)[4] == "hi"

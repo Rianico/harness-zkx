@@ -28,6 +28,11 @@ Exit status: 0 accepted (``--wait`` settled without needing input), 1 herdr fail
 timed out first — the agent is still working, so resume with ``herdr-wait``
 instead of resubmitting.
 
+Caller context is prepended by default (see `resolve_caller`): the payload opens
+with a `Caller:` block and closes with the completion-reply contract, so a worker
+can answer the orchestrator by name. `--no-caller-context` sends the payload
+verbatim; `--dry-run` shows the exact rendered payload that would be submitted.
+
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
 """
 
@@ -47,6 +52,7 @@ from herdr_cli import (  # pyright: ignore[reportImplicitRelativeImport]
     EXIT_OK,
     HerdrError,
     UsageError,
+    current_pane_id,
     decode_response,
     entries,
     entry_optional_text,
@@ -83,6 +89,7 @@ class Options:
     timeout: int | None = None
     json: bool = False
     dry_run: bool = False
+    no_caller_context: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -131,6 +138,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
     _ = parser.add_argument("--dry-run", action="store_true", help="print the argv, submit nothing")
+    _ = parser.add_argument(
+        "--no-caller-context",
+        action="store_true",
+        help="send the payload verbatim without the caller block and reply contract",
+    )
     return parser
 
 
@@ -160,6 +172,60 @@ def read_payload(source: str | None) -> str:
     if not payload.strip():
         raise UsageError("payload is empty; refusing to submit an empty prompt")
     return payload
+
+
+@dataclass(frozen=True)
+class CallerContext:
+    """Who is handing off: pane id, visible label, and addressable agent name."""
+
+    pane_id: str
+    label: str | None = None
+    agent: str | None = None
+
+
+def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
+    """Read the caller from HERDR_PANE_ID (or `pane current`), the pane list, and the agent list."""
+    pane_id = env.get("HERDR_PANE_ID") or current_pane_id(herdr, env)
+    label: str | None = None
+    listed = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    for entry in listed:
+        if entry_optional_text(entry, "pane_id") == pane_id:
+            label = entry_optional_text(entry, "label")
+            break
+    agent: str | None = None
+    agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    for entry in agents:
+        if entry_optional_text(entry, "pane_id") == pane_id:
+            agent = entry_optional_text(entry, "name")
+            break
+    return CallerContext(pane_id=pane_id, label=label, agent=agent)
+
+
+def render_caller_block(caller: CallerContext) -> str:
+    """Render the `Caller:` header; absent fields are omitted, never invented."""
+    fields = f"pane={caller.pane_id}"
+    if caller.label:
+        fields += f" label={caller.label}"
+    if caller.agent:
+        fields += f" agent={caller.agent}"
+    return f"Caller: {fields}"
+
+
+def render_reply_contract(caller: CallerContext) -> str:
+    """Render the completion-reply contract; without an agent name no target is addressable."""
+    if caller.agent:
+        contract = f'  herdr agent prompt {caller.agent} "<STATUS> <artifacts> <issues>"'
+        return f"On completion, reply to the caller in one message:\n{contract}"
+    note = (
+        "(the calling pane has no agent name; reply cannot be addressed — "
+        "report completion to the user instead)"
+    )
+    return f"On completion, reply to the caller in one message:\n  {note}"
+
+
+def wrap_with_caller(payload: str, caller: CallerContext) -> str:
+    """Prepend the caller block and append the reply contract around the payload."""
+    return f"{render_caller_block(caller)}\n\n{payload}\n\n{render_reply_contract(caller)}"
 
 
 def build_prompt_argv(
@@ -284,6 +350,8 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
     herdr = find_herdr(env)
     targets = resolve_targets(options, herdr, env)
     payload = read_payload(options.file)
+    if not options.no_caller_context:
+        payload = wrap_with_caller(payload, resolve_caller(herdr, env))
     dispatches = [prompt_one(herdr, target, payload, options, env) for target in targets]
     blocked = sorted(dispatch.target for dispatch in dispatches if dispatch.blocked)
     if blocked:
