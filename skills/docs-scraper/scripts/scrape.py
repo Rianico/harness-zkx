@@ -41,60 +41,95 @@ Examples:
 import argparse
 import sys
 from pathlib import Path
+from typing import Literal, TypedDict
 
 # Import scrapers
 from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper, SiteScraper, SkillsScraper
 
-# Registry of available scrapers
-SCRAPERS = {
+# Registry of available scrapers. Each entry is a TypedDict discriminated on "kind", so
+# consumers narrow the union by kind before calling the scraper with its own constructor
+# signature. Functional syntax because "class" is a keyword and cannot be a class-body key.
+_StandardConfig = TypedDict(
+    "_StandardConfig",
+    {
+        "class": type[LSPScraper] | type[PTXScraper],
+        "kind": Literal["standard"],
+        "default_output": str,
+    },
+)
+_ApiConfig = TypedDict(
+    "_ApiConfig",
+    {
+        "class": type[APIScraper],
+        "kind": Literal["api"],
+        "api_type": str,
+        "default_output": str,
+    },
+)
+_RustConfig = TypedDict(
+    "_RustConfig",
+    {
+        "class": type[RustScraper],
+        "kind": Literal["rust"],
+        "default_output": str,
+    },
+)
+_SiteConfig = TypedDict(
+    "_SiteConfig",
+    {
+        "class": type[SiteScraper],
+        "kind": Literal["site"],
+        "default_output": str,
+    },
+)
+_SkillsConfig = TypedDict(
+    "_SkillsConfig",
+    {
+        "class": type[SkillsScraper],
+        "kind": Literal["skills"],
+        "default_output": str,
+    },
+)
+
+ScraperConfig = _StandardConfig | _ApiConfig | _RustConfig | _SiteConfig | _SkillsConfig
+
+SCRAPERS: dict[str, ScraperConfig] = {
     "lsp": {
         "class": LSPScraper,
-        "requires_api_type": False,
+        "kind": "standard",
         "default_output": "references/lsp-3.17-docs",
-        "is_rust": False,
-        "is_site": False,
     },
     "ptx": {
         "class": PTXScraper,
-        "requires_api_type": False,
+        "kind": "standard",
         "default_output": "references/ptx-docs",
-        "is_rust": False,
-        "is_site": False,
     },
     "runtime": {
         "class": APIScraper,
-        "requires_api_type": True,
+        "kind": "api",
         "api_type": "runtime",
         "default_output": "references/cuda-runtime-docs",
-        "is_rust": False,
-        "is_site": False,
     },
     "driver": {
         "class": APIScraper,
-        "requires_api_type": True,
+        "kind": "api",
         "api_type": "driver",
         "default_output": "references/cuda-driver-docs",
-        "is_rust": False,
-        "is_site": False,
     },
     "rust": {
         "class": RustScraper,
+        "kind": "rust",
         "default_output": "references/rust-docs",
-        "is_rust": True,
-        "is_site": False,
     },
     "site": {
         "class": SiteScraper,
+        "kind": "site",
         "default_output": "site-output",
-        "is_rust": False,
-        "is_site": True,
     },
     "skills": {
         "class": SkillsScraper,  # pyright: ignore[reportUnknownMemberType]
+        "kind": "skills",
         "default_output": ".lsz/tmp/skill-compose",
-        "is_rust": False,
-        "is_site": False,
-        "is_skills": True,
     },
 }
 
@@ -172,13 +207,13 @@ For detailed help on a specific scraper:
 
     # Create subparser for each scraper
     for name, config in SCRAPERS.items():
-        if config["is_rust"]:
+        if config["kind"] == "rust":
             # Rust scraper has different arguments
             sub = subparsers.add_parser(
                 name,
                 help="Scrape Rust crate documentation",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]
             )
             _ = sub.add_argument(
                 "target",
@@ -220,12 +255,12 @@ For detailed help on a specific scraper:
                 default=True,
                 help="Exclude private items (default: True)",
             )
-        elif config.get("is_skills"):
+        elif config["kind"] == "skills":
             sub = subparsers.add_parser(  # pyright: ignore[reportUnknownMemberType]
                 name,
                 help="Fetch skills from skill.sh via npx skills mature client for LLM composition",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             )
             _ = sub.add_argument(
                 "inputs",
@@ -257,13 +292,13 @@ For detailed help on a specific scraper:
                 action="store_true",
                 help="Clear cache and re-fetch from network",
             )
-        elif config.get("is_site"):
+        elif config["kind"] == "site":
             # Site scraper has base_url and urls arguments
             sub = subparsers.add_parser(
                 name,
                 help="Scrape generic site via llms.txt/sitemap.xml",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]
             )
             _ = sub.add_argument(
                 "urls",
@@ -290,7 +325,7 @@ For detailed help on a specific scraper:
                 name,
                 help=f"Scrape {name.upper()} documentation",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType]
             )
             _ = sub.add_argument(
                 "--output-dir",
@@ -334,13 +369,13 @@ def main() -> None:
     output_dir = args.output_dir or Path(config["default_output"])  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
 
     # Create scraper instance
-    if config.get("is_skills"):
+    if config["kind"] == "skills":
         staging = (
             getattr(args, "staging", None)
             or getattr(args, "output_dir", None)
             or Path(config["default_output"])
         )  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
-        scraper = config["class"](  # pyright: ignore[reportUnknownMemberType, reportCallIssue]
+        scraper = config["class"](
             inputs=getattr(args, "inputs", None),
             staging=staging,
             run=getattr(args, "run", None),
@@ -348,7 +383,7 @@ def main() -> None:
             method=getattr(args, "method", "auto"),
             force=args.force,
         )
-    elif config["is_rust"]:
+    elif config["kind"] == "rust":
         scraper = config["class"](
             target=args.target,
             output_dir=output_dir,
@@ -359,14 +394,14 @@ def main() -> None:
             full_method_docs=getattr(args, "full_method_docs", True),
             exclude_private=getattr(args, "exclude_private", True),
         )
-    elif config.get("is_site"):
+    elif config["kind"] == "site":
         scraper = config["class"](
             base_url=getattr(args, "base_url", None) or "",
             urls=getattr(args, "urls", None),
             output_dir=output_dir,
             force=args.force,
         )
-    elif config.get("requires_api_type"):
+    elif config["kind"] == "api":
         scraper = config["class"](
             api_type=config["api_type"],
             output_dir=output_dir,
