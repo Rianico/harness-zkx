@@ -234,7 +234,7 @@ def test_dry_run_prints_exact_argv_without_prompting(stub: StubHarness, tmp_path
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
-    argv = json.loads(done.stdout)
+    argv: list[str] = json.loads(done.stdout)
     assert argv[1:5] == ["agent", "prompt", "reviewer", METACHARS]
     assert argv[-1] == "--wait"
 
@@ -455,7 +455,7 @@ def test_broadcast_dry_run_prints_one_argv_per_target(stub: StubHarness, tmp_pat
     done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
-    argv_lines = [json.loads(line) for line in done.stdout.splitlines()]
+    argv_lines: list[list[str]] = [json.loads(line) for line in done.stdout.splitlines()]
     assert [argv[3] for argv in argv_lines] == ["worker1", "worker2"]
 
 
@@ -529,7 +529,7 @@ def test_dry_run_renders_caller_payload_without_prompting(
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
-    argv = json.loads(done.stdout)
+    argv: list[str] = json.loads(done.stdout)
     assert argv[3] == "reviewer"
     assert argv[4].startswith("Caller: pane=w9:p1 agent=reviewer")
     assert "herdr agent prompt reviewer" in argv[4]
