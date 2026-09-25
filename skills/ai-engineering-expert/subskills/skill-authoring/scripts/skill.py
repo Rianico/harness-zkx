@@ -50,11 +50,11 @@ try:
     import frontmatter  # type: ignore[import-not-found]
     import yaml  # type: ignore[import-not-found]
 
-    HAS_FM = True
+    has_fm = True
 except Exception:  # noqa: BLE001
     frontmatter = None  # type: ignore[assignment]
     yaml = None  # type: ignore[assignment]
-    HAS_FM = False
+    has_fm = False
 
 
 def repo_root_from_script(script_path: pathlib.Path) -> pathlib.Path:
@@ -195,10 +195,10 @@ def _skill_dir(repo_root: pathlib.Path, name: str, parent: str | None) -> pathli
     return repo_root / "skills" / name
 
 
-def _load_meta(path: pathlib.Path) -> tuple[dict, str, str]:
+def _load_meta(path: pathlib.Path) -> tuple[dict[str, object], str, str]:
     """Load frontmatter via python-frontmatter if available, else regex parse. Returns (meta, body, raw_text)."""
     text = path.read_text(encoding="utf-8")
-    if HAS_FM:
+    if has_fm:
         try:
             post = frontmatter.loads(text)  # type: ignore[union-attr]
             # post.metadata contains top-level keys (name, description, metadata, etc.)
@@ -221,13 +221,14 @@ def _load_meta(path: pathlib.Path) -> tuple[dict, str, str]:
     return {}, body, text
 
 
-def _write_meta(path: pathlib.Path, meta: dict, body: str, dry_run: bool = False) -> None:
+def _write_meta(path: pathlib.Path, meta: dict[str, object], body: str, dry_run: bool = False) -> None:
     """Write SKILL.md with updated meta. Preserves body. Uses frontmatter/yaml if available."""
     if dry_run:
         return
-    if HAS_FM:
+    if has_fm:
         # Use frontmatter to dump; ensure description block scalar handling via yaml
-        post = frontmatter.Post(body, **meta)  # type: ignore[union-attr]
+        post = frontmatter.Post(body)  # type: ignore[union-attr]
+        post.metadata.update(meta)
         # frontmatter.dumps uses yaml.safe_dump; we post-process to ensure block scalars for description
         out = frontmatter.dumps(post)  # type: ignore[union-attr]
         # frontmatter.dumps may inline description; fix via regex if needed (ensure >-)
@@ -274,11 +275,13 @@ def _update_list_in_meta(
     # field_path may be nested like metadata.depends-on
     parts = field_path.split(".")
     # navigate to parent dict
-    cur = meta
+    cur: dict[str, object] = meta
     for p in parts[:-1]:
-        if p not in cur or not isinstance(cur[p], dict):
-            cur[p] = {}
-        cur = cur[p]
+        child = cur.get(p)
+        if not isinstance(child, dict):
+            child = {}
+            cur[p] = child
+        cur = child
     key = parts[-1]
     orig_val = cur.get(key)
 
@@ -295,7 +298,7 @@ def _update_list_in_meta(
                 # remove key if empty list and caller wants removal? keep empty list for manage
                 # For managed-by, removing means delete key
                 if key == "managed-by" and (new_val is None or new_val == ""):
-                    cur.pop(key, None)
+                    _ = cur.pop(key, None)
                 else:
                     cur[key] = new_val
             else:
@@ -345,7 +348,7 @@ def _create_skill_file(
         print(f"  [dry-run] would create {path}")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    meta: dict = {"name": name, "description": description}
+    meta: dict[str, object] = {"name": name, "description": description}
     if managed_by:
         meta["metadata"] = {"managed-by": managed_by}
     body = f"# {_skill_title(name)}\n\nSkill `{name}` — placeholder. Update SKILL.md body with usage guidance.\n"

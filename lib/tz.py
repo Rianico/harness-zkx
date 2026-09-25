@@ -87,15 +87,15 @@ def get_local_tz() -> ZoneInfo:
 
 
 # Module-level cache for local timezone
-_LOCAL_TZ: ZoneInfo | None = None
+_local_tz: ZoneInfo | None = None
 
 
 def local_tz() -> ZoneInfo:
     """Get cached local timezone."""
-    global _LOCAL_TZ
-    if _LOCAL_TZ is None:
-        _LOCAL_TZ = get_local_tz()
-    return _LOCAL_TZ
+    global _local_tz
+    if _local_tz is None:
+        _local_tz = get_local_tz()
+    return _local_tz
 
 
 def now_local() -> datetime:

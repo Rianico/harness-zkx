@@ -9,6 +9,11 @@ import re
 import shlex
 import subprocess
 from pathlib import Path
+from typing import TypedDict
+
+
+class _Tsconfig(TypedDict, total=False):
+    compilerOptions: dict[str, object]
 
 
 def run_cmd(cmd: str) -> str:
@@ -169,7 +174,7 @@ def strip_jsonc(text: str) -> str:
     return "".join(out2)
 
 
-def read_tsconfig(path: Path | str = "tsconfig.json") -> dict:
+def read_tsconfig(path: Path | str = "tsconfig.json") -> _Tsconfig:
     """Read and parse tsconfig.json stripping JSONC comments and trailing commas."""
     p = Path(path)
     if not p.exists():

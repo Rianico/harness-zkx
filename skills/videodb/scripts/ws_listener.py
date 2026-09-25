@@ -116,7 +116,7 @@ def log(msg: str):
     LOGGER.info("%s", msg)
 
 
-def append_event(event: dict):
+def append_event(event: dict[str, object]):
     """Append event to JSONL file with timestamps."""
     now = datetime.now(TZ_CST)
     event["ts"] = now.isoformat()
