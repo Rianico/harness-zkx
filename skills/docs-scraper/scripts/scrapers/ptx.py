@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from typing import override
 
 from bs4 import Tag
 
@@ -47,6 +48,7 @@ Examples:
             force=force,
         )
 
+    @override
     def run(self) -> None:
         """Execute PTX scraping workflow."""
         print("=" * 70)

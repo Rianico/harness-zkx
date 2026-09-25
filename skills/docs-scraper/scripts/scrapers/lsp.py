@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from typing import override
 
 from bs4 import Tag
 
@@ -68,6 +69,7 @@ Examples:
             return anchor
         return self.EMOJI_ANCHOR_PATTERN.sub("", anchor)
 
+    @override
     def run(self) -> None:
         """Execute LSP spec scraping workflow."""
         print("=" * 70)

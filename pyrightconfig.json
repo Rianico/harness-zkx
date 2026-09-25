@@ -22,7 +22,7 @@
     // test directory.
     {
       "root": "tests",
-      "extraPaths": ["tests/docs-scraper", "skills/docs-scraper/scripts"],
+      "extraPaths": ["tests/docs-scraper", "skills/docs-scraper/scripts", "skills/docs-scraper/scripts/scrapers"],
       "reportMissingParameterType": false,
       "reportUnknownParameterType": false,
       "reportUnannotatedClassAttribute": false,

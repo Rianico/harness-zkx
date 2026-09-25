@@ -20,7 +20,7 @@ import time
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
@@ -648,6 +648,7 @@ Output includes README.md (with page index) and pages/ directory with numbered m
         _ = readme_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"Generated: {readme_path}")
 
+    @override
     def run(self) -> None:
         """Execute the scraping workflow based on mode."""
         if self.mode == "discovery":

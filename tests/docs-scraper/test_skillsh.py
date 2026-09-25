@@ -96,15 +96,15 @@ class TestParseSkillshInput:
 
     def test_sk_09_invalid_empty(self):
         with pytest.raises(ValueError):
-            parse_skillsh_input("")
+            _ = parse_skillsh_input("")
 
     def test_sk_10_invalid_single_segment(self):
         with pytest.raises(ValueError):
-            parse_skillsh_input("onlyone")
+            _ = parse_skillsh_input("onlyone")
 
     def test_sk_11_invalid_host(self):
         with pytest.raises(ValueError):
-            parse_skillsh_input("https://example.com/foo/bar/baz")
+            _ = parse_skillsh_input("https://example.com/foo/bar/baz")
 
     def test_sk_12_github_direct_skill_heuristic(self):
         p = parse_skillsh_input("https://github.com/sickn33/agentic-awesome-skills/my-skill")
@@ -137,9 +137,9 @@ class TestSkillsScraperInit:
         from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
-            SkillsScraper(inputs=[], staging=temp_output_dir)
+            _ = SkillsScraper(inputs=[], staging=temp_output_dir)
         with pytest.raises(ValueError):
-            SkillsScraper(inputs=None, staging=temp_output_dir)  # type: ignore[arg-type]
+            _ = SkillsScraper(inputs=None, staging=temp_output_dir)  # type: ignore[arg-type]
 
     def test_layout_with_run(self, tmp_path):
         from scrapers.skillsh import SkillsScraper
@@ -178,7 +178,7 @@ class TestSkillsScraperInit:
         from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
-            SkillsScraper(
+            _ = SkillsScraper(
                 inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
                 staging=tmp_path / "compose",
                 method="bad",
@@ -200,7 +200,7 @@ class TestSkillsScraperInit:
         from scrapers.skillsh import SkillsScraper
 
         with pytest.raises(ValueError):
-            SkillsScraper(
+            _ = SkillsScraper(
                 inputs=["sickn33/agentic-awesome-skills/typescript-expert"],
                 staging=tmp_path / "compose",
                 run="---",

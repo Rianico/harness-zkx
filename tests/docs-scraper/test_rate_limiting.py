@@ -3,6 +3,7 @@
 Test IDs: RL-01 through RL-04
 """
 
+from typing import override
 from unittest.mock import MagicMock, patch
 
 from fixtures import TEST_PAGE_URL
@@ -51,6 +52,7 @@ class TestRateLimiting:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -72,8 +74,8 @@ class TestRateLimiting:
         scraper.session = mock_session
 
         with patch("time.sleep") as mock_sleep:
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="page1.html")
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="page2.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="page1.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="page2.html")
 
         assert mock_sleep.call_count == 1
         call_args = mock_sleep.call_args[0]
@@ -90,6 +92,7 @@ class TestRateLimiting:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -111,8 +114,8 @@ class TestRateLimiting:
         scraper.session = mock_session
 
         with patch("time.sleep") as mock_sleep:
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="page1.html")
-            scraper.fetch_page(TEST_PAGE_URL, cache_file="page2.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="page1.html")
+            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="page2.html")
 
         # With delay=0, sleep should not be called
         assert mock_sleep.call_count == 0

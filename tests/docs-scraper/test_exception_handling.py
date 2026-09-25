@@ -3,6 +3,7 @@
 Test IDs: EX-01 through EX-07
 """
 
+from typing import override
 from unittest.mock import MagicMock, patch
 
 import requests.exceptions
@@ -23,6 +24,7 @@ class TestExceptionHandling:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -72,6 +74,7 @@ class TestExceptionHandling:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -121,6 +124,7 @@ class TestExceptionHandling:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -179,6 +183,7 @@ class TestExceptionHandling:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -243,6 +248,7 @@ class TestExceptionHandling:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -290,6 +296,7 @@ class TestExceptionHandling:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -337,6 +344,7 @@ class TestExceptionHandling:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -367,7 +375,7 @@ class TestExceptionHandling:
         scraper.session = mock_session
 
         # Even if parsing fails, should not retry HTTP
-        scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         # Should have made only one HTTP call (no retry)
         assert call_count[0] == 1

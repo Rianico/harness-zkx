@@ -3,6 +3,7 @@
 import re
 import shutil
 from pathlib import Path
+from typing import override
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -276,6 +277,7 @@ Examples:
 
         return "\n".join(cleaned_lines)
 
+    @override
     def run(self) -> None:
         """Execute the scraping workflow."""
         print("=" * 70)

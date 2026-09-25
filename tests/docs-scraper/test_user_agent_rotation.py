@@ -3,6 +3,7 @@
 Test IDs: UA-01 through UA-05
 """
 
+from typing import override
 from unittest.mock import MagicMock, patch
 
 from fixtures import TEST_PAGE_URL, USER_AGENT_POOL
@@ -22,6 +23,7 @@ class TestUserAgentRotation:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -47,6 +49,7 @@ class TestUserAgentRotation:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -77,7 +80,7 @@ class TestUserAgentRotation:
 
         with patch("time.sleep"):
             for i in range(3):
-                scraper.fetch_page(TEST_PAGE_URL, cache_file=f"test{i}.html")
+                _ = scraper.fetch_page(TEST_PAGE_URL, cache_file=f"test{i}.html")
 
         # Should have rotated User-Agent
         user_agents = [h.get("User-Agent") for h in captured_headers if h.get("User-Agent")]
@@ -95,6 +98,7 @@ class TestUserAgentRotation:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -116,7 +120,7 @@ class TestUserAgentRotation:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         # Session headers should include Accept-related headers
         headers = dict(mock_session.headers)
@@ -135,6 +139,7 @@ class TestUserAgentRotation:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 
@@ -156,7 +161,7 @@ class TestUserAgentRotation:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         headers = dict(mock_session.headers)
         accept_header = headers.get("Accept", "")
@@ -175,6 +180,7 @@ class TestUserAgentRotation:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 

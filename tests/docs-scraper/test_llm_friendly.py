@@ -1,6 +1,7 @@
 """Tests for LLM-friendly fetching methods."""
 
 from collections.abc import Iterator
+from typing import override
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -221,6 +222,7 @@ class TestFetchPageLlmFriendly:
             name = "test"
             description = "Test scraper"
 
+            @override
             def run(self):
                 pass
 

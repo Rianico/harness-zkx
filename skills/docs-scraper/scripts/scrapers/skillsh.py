@@ -24,7 +24,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, override
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
@@ -555,6 +555,7 @@ class SkillsScraper(DocumentationScraper):
         except Exception as e:
             print(f"Warning: could not write manifest: {e}")
 
+    @override
     def run(self) -> None:
         """Fetch and stage skills via npx."""
         run_name = self.run_slug or "default"

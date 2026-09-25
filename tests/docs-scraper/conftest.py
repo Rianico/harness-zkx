@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from typing import override
 from unittest.mock import MagicMock
 
 import pytest
@@ -67,6 +68,7 @@ def scraper_with_mock_session(mock_session, temp_output_dir, temp_cache_dir):
         name = "test"
         description = "Test scraper"
 
+        @override
         def run(self):
             pass
 
