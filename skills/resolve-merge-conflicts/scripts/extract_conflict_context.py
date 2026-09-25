@@ -10,11 +10,41 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol, cast
+from typing import NotRequired, Protocol, TypedDict, cast
 
 START_RE = re.compile(r"^<<<<<<<(?: (.*))?$")
 BASE_RE = re.compile(r"^\|\|\|\|\|\|\|(?: (.*))?$")
 END_RE = re.compile(r"^>>>>>>>(?: (.*))?$")
+
+
+class _Hunk(TypedDict):
+    start_line: int
+    end_line: int
+    before_context: list[str]
+    ours: list[str]
+    ours_label: str
+    base: list[str] | None
+    base_label: str | None
+    theirs: list[str]
+    theirs_label: str
+    after_context: list[str]
+
+
+class _Report(TypedDict):
+    path: str
+    stages: list[int]
+    conflict_type: str
+    marker_hunks: int
+    parse_error: str | None
+    worktree_present: bool
+    hunks: list[_Hunk]
+
+
+class _IndexPreview(TypedDict):
+    ours: list[str] | None
+    theirs: list[str] | None
+    base: list[str] | None
+    ours_vs_theirs_diff: NotRequired[list[str]]
 
 
 def run_git(repo_root: Path, *args: str) -> str:
@@ -136,8 +166,8 @@ def normalize_requested_path(repo_root: Path, raw_path: str) -> str:
 
 def parse_conflict_hunks(
     lines: list[str], context: int
-) -> tuple[list[dict[str, object]], str | None]:
-    hunks: list[dict[str, object]] = []
+) -> tuple[list[_Hunk], str | None]:
+    hunks: list[_Hunk] = []
     index = 0
     while index < len(lines):
         start_match = START_RE.match(lines[index])
@@ -205,9 +235,9 @@ def parse_conflict_hunks(
 
 def build_summary_report(
     repo_root: Path, path: str, stage_entries: dict[int, dict[str, str]], context: int
-) -> dict[str, object]:
+) -> _Report:
     worktree_lines = read_text_file(repo_root / path)
-    hunks: list[dict[str, object]] = []
+    hunks: list[_Hunk] = []
     parse_error = None
     if worktree_lines is not None:
         hunks, parse_error = parse_conflict_hunks(worktree_lines, context)
@@ -224,13 +254,13 @@ def build_summary_report(
 
 
 def build_index_preview(
-    repo_root: Path, report: dict[str, object], max_lines: int
-) -> dict[str, object]:
+    repo_root: Path, report: _Report, max_lines: int
+) -> _IndexPreview:
     path = str(report["path"])
     ours = read_stage_text(repo_root, path, 2)
     theirs = read_stage_text(repo_root, path, 3)
     base = read_stage_text(repo_root, path, 1)
-    preview: dict[str, object] = {
+    preview: _IndexPreview = {
         "ours": truncate_lines(ours, max_lines) if ours else None,
         "theirs": truncate_lines(theirs, max_lines) if theirs else None,
         "base": truncate_lines(base, max_lines) if base else None,
@@ -248,7 +278,7 @@ def section_lines(title: str, lines: list[str] | None) -> list[str]:
     return [f"{title}:", *[f"  {line}" for line in lines]]
 
 
-def render_summary_text(repo_root: Path, reports: list[dict[str, object]]) -> str:
+def render_summary_text(repo_root: Path, reports: list[_Report]) -> str:
     lines = [f"repo: {repo_root}", f"conflicted files: {len(reports)}"]
     for report in reports:
         stages = ",".join(str(stage) for stage in report["stages"])
@@ -263,7 +293,7 @@ def render_summary_text(repo_root: Path, reports: list[dict[str, object]]) -> st
 
 def render_detail_text(
     repo_root: Path,
-    report: dict[str, object],
+    report: _Report,
     max_lines: int,
 ) -> str:
     lines = [
@@ -333,7 +363,7 @@ def render_detail_text(
 
 def render_json(
     repo_root: Path,
-    reports: list[dict[str, object]],
+    reports: list[_Report],
     include_details: bool,
     max_lines: int,
 ) -> str:

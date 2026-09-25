@@ -8,6 +8,15 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
+
+
+class _PendingTool(TypedDict):
+    """A tool_use call awaiting its tool_result."""
+
+    tool: str
+    input: str
+    order: int
 
 from scripts.parser import ObservationEvent
 from scripts.scenario_generator import Scenario
@@ -102,7 +111,7 @@ def _parse_stream_json(stdout: str) -> list[ObservationEvent]:
     - type=user with content[].type=tool_result → tool result (output)
     """
     events: list[ObservationEvent] = []
-    pending: dict[str, dict] = {}
+    pending: dict[str, _PendingTool] = {}
     event_counter = 0
 
     for line in stdout.strip().splitlines():

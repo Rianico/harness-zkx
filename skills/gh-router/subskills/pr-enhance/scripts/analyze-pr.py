@@ -112,7 +112,7 @@ def _is_pr_target(arg: str) -> bool:
     return arg.isdigit() or ("github.com" in arg and "/pull/" in arg)
 
 
-def _analyze_pr_via_gh(target: str) -> dict:
+def _analyze_pr_via_gh(target: str) -> dict[str, object]:
     """Fetch PR files/stats via gh, fallback to git diff."""
     try:
         r = subprocess.run(

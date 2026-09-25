@@ -495,7 +495,7 @@ def update_regression_ledger(
     best_commit = data.get("best_commit", "")
     composite_score = semantic_score if floor_status == "pass" else 0
 
-    if composite_score > best_score:
+    if isinstance(best_score, int) and composite_score > best_score:
         best_score = composite_score
         best_commit = git_commit
 

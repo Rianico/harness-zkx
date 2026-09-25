@@ -79,19 +79,19 @@ class TestStripLeadingDotdot:
 # --- LinkContext helpers ---
 
 
-def _make_ctx(tmp_path: Path, file_structure: dict, **overrides) -> LinkContext:
+def _make_ctx(tmp_path: Path, file_structure: dict[str, str], **overrides: object) -> LinkContext:
     """Build a LinkContext from a file structure dict.
 
     file_structure: {relative_path: content} — creates files and directories.
     The md_file defaults to the first .md file in the structure.
     """
-    file_set = set()
-    dir_set = set()
+    file_set: set[Path] = set()
+    dir_set: set[Path] = set()
 
     for rel, content in file_structure.items():
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content)
+        _ = p.write_text(content)
 
     # Build existence sets
     for p in tmp_path.rglob("*"):
@@ -102,13 +102,13 @@ def _make_ctx(tmp_path: Path, file_structure: dict, **overrides) -> LinkContext:
             dir_set.add(resolved)
 
     # Find first .md file as default md_file
-    md_file = None
+    md_file: Path | None = None
     for rel in file_structure:
         if rel.endswith(".md"):
             md_file = tmp_path / rel
             break
 
-    defaults = dict(
+    ctx = LinkContext(
         md_file=md_file or tmp_path / "dummy.md",
         was_flattened=False,
         is_crate_child=False,
@@ -116,8 +116,9 @@ def _make_ctx(tmp_path: Path, file_structure: dict, **overrides) -> LinkContext:
         file_set=file_set,
         dir_set=dir_set,
     )
-    defaults.update(overrides)
-    return LinkContext(**defaults)
+    for key, value in overrides.items():
+        setattr(ctx, key, value)
+    return ctx
 
 
 # --- Strategy function tests ---

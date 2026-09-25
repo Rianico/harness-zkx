@@ -10,13 +10,13 @@ import audit  # type: ignore[import-not-found]
 
 
 # helpers
-def write_jsonl(path: Path, records: list[dict]) -> None:
+def write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
     with path.open("w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
-def session_header(sid: str = "test-uuid") -> dict:
+def session_header(sid: str = "test-uuid") -> dict[str, object]:
     return {
         "type": "session",
         "version": 3,
@@ -26,7 +26,7 @@ def session_header(sid: str = "test-uuid") -> dict:
     }
 
 
-def toolcall_msg(mid: str, parent: str | None, call_id: str, command: str) -> dict:
+def toolcall_msg(mid: str, parent: str | None, call_id: str, command: str) -> dict[str, object]:
     return {
         "type": "message",
         "id": mid,
@@ -48,7 +48,7 @@ def toolcall_msg(mid: str, parent: str | None, call_id: str, command: str) -> di
 
 def toolresult_msg(
     mid: str, parent: str | None, call_id: str, text: str, is_error: bool = False
-) -> dict:
+) -> dict[str, object]:
     return {
         "type": "message",
         "id": mid,
