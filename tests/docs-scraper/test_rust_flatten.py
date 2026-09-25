@@ -5,10 +5,23 @@ flattening and link rewriting) without requiring cargo-docs-md or Rust.
 They build fixture filesystems and call the strategy functions directly.
 """
 
+import sys
 from pathlib import Path
 
+_scraper_path = (
+    Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts" / "scrapers"
+).resolve()
+if str(_scraper_path) not in sys.path:
+    sys.path.insert(0, str(_scraper_path))
+
+_scripts_path = (
+    Path(__file__).parent.parent.parent / "skills" / "docs-scraper" / "scripts"
+).resolve()
+if str(_scripts_path) not in sys.path:
+    sys.path.insert(0, str(_scripts_path))
+
 # Import from the rust scraper module
-from scrapers.rust import (
+from rust import (
     MD_LINK_PATTERN,
     LinkContext,
     _fix_flatten_index,

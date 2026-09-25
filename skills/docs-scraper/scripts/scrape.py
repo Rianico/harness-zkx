@@ -260,7 +260,7 @@ For detailed help on a specific scraper:
                 name,
                 help="Fetch skills from skill.sh via npx skills mature client for LLM composition",
                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                description=config["class"].description,  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                description=config["class"].description,
             )
             _ = sub.add_argument(
                 "inputs",

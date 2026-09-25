@@ -10,12 +10,40 @@
   "executionEnvironments": [
     { "root": "skills/skill-comply", "extraPaths": ["skills/skill-comply"] },
     { "root": "skills/docs-scraper/scripts", "extraPaths": ["skills/docs-scraper/scripts"] },
-    { "root": "tests/docs-scraper", "extraPaths": ["tests/docs-scraper"] }
+    { "root": "skills/branch-worktree-pr/scripts", "extraPaths": ["skills/branch-worktree-pr/scripts"] },
+    { "root": "skills/herdr/scripts", "extraPaths": ["skills/herdr/scripts"] },
+    { "root": "skills/eval-gate/scripts", "extraPaths": ["skills/eval-gate/scripts"] },
+    // Test code is executed by pytest, not shipped: fixture-bag classes, callback parameters
+    // that exist only for their arity, and deliberate pokes into module privates are the idiom
+    // here. Annotation strictness (missing/unknown parameter types) and privacy checks stay on
+    // for skills/, lib/ and scripts/ — the code users actually run. The extraPaths entries cover
+    // tests/docs-scraper's `fixtures` package and the scraper modules its conftest imports at
+    // runtime; the root itself is on the path for every environment, so one entry relaxes every
+    // test directory.
+    {
+      "root": "tests",
+      "extraPaths": ["tests/docs-scraper", "skills/docs-scraper/scripts"],
+      "reportMissingParameterType": false,
+      "reportUnknownParameterType": false,
+      "reportUnannotatedClassAttribute": false,
+      "reportUnusedParameter": false,
+      "reportPrivateUsage": false
+    }
   ],
   "allowedUntypedLibraries": ["markdown", "bs4", "pytest", "yaml", "pydantic", "requests", "html2text", "tz", "rich", "frontmatter"],
   "reportMissingImports": false,
   "reportMissingModuleSource": false,
   "reportMissingTypeStubs": false,
+  // The reportUnknown* family is off below; reportAny is its stricter sibling and floods the
+  // same untyped-library boundaries (json/yaml/subprocess), so it follows the family's posture.
+  // Explicit `Any` annotations (reportExplicitAny) mark deliberate escape points and stay as a
+  // review convention, not a gate.
+  "reportAny": false,
+  "reportExplicitAny": false,
+  // `ruff format` deliberately wraps over-long string literals into implicit concatenation, so
+  // the formatter and this rule are structurally opposed; ruff's ISC rules are off for the
+  // same reason.
+  "reportImplicitStringConcatenation": false,
   "reportOptionalMemberAccess": "warning",
   "reportArgumentType": "warning",
   "reportAttributeAccessIssue": "warning",

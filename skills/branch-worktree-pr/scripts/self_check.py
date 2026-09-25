@@ -28,7 +28,7 @@ from pathlib import Path
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import (  # pyright: ignore[reportImplicitRelativeImport]
+from _lib import (
     current_branch,
     ensure_git_repo,
     print_err,

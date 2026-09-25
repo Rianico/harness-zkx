@@ -27,7 +27,7 @@ from pathlib import Path
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import print_err, run  # pyright: ignore[reportImplicitRelativeImport]
+from _lib import print_err, run
 
 # commitlint's conventional default for `body-max-line-length`. Only enforced when the repo
 # actually wires commitlint; a project without it must never be blocked by this pre-check.

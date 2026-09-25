@@ -22,7 +22,7 @@ from typing import Any
 if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
-from artifact_paths import (  # noqa: E402  # pyright: ignore[reportImplicitRelativeImport]
+from artifact_paths import (  # noqa: E402
     load_config as load_storage_config,
 )
 
