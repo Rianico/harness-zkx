@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **herdr:** add herdr-prompt for byte-exact payload delivery
 
 ### Bug Fixes
+* **gh-router:** surface semantic-release dry-run failure instead of "no new version" (#142)
 * **herdr:** sanitize pane label to a single line in caller block ([#133](https://github.com/Rianico/harness-zkx/issues/133)) (#134)
 
 * **changelog-gate:** simplify gate and align with dev worktree curated workflow (#130)
