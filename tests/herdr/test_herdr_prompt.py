@@ -421,7 +421,9 @@ def test_duplicate_broadcast_targets_are_rejected(stub: StubHarness, tmp_path: P
     assert stub.prompts() == []
 
 
-def test_wait_timeout_is_exit_4_not_herdr_error(stub: StubHarness, tmp_path: Path) -> None:
+def test_prompt_wait_timeout_reports_exit_4_and_advises_herdr_wait(
+    stub: StubHarness, tmp_path: Path
+) -> None:
     error = {"code": "timeout", "message": "wait timed out after 120000ms"}
     done = stub.run(
         "reviewer",
@@ -435,6 +437,7 @@ def test_wait_timeout_is_exit_4_not_herdr_error(stub: StubHarness, tmp_path: Pat
     assert done.returncode == herdr_prompt.EXIT_WAIT_TIMEOUT
     assert done.returncode != herdr_cli.EXIT_HERDR
     assert "prompt delivered to reviewer" in done.stderr
+    assert "Yield turn and await reply callback" in done.stderr
     assert "herdr-wait reviewer" in done.stderr
     assert "instead of resubmitting" in done.stderr
 
