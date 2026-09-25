@@ -170,13 +170,13 @@ Replace `right` with `down` when appropriate. Read the new pane ID from `.result
 An available shell pane must be at its interactive prompt, with the shell itself in the foreground and no foreground command, editor, or agent running. Start a supported agent in that pane with a useful unique name:
 
 ```bash
-herdr agent start reviewer --kind codex --pane <returned-pane-id>
+herdr agent start reviewer --kind <kind> --pane <returned-pane-id>
 ```
 
-Use the kind requested by the user; run `herdr agent` to inspect the installed kind list and options. Pass native agent arguments only after `--`:
+Always use the kind requested by the user. If the user did not specify the type of coding agent, confirm with them first rather than picking a random or default kind. Run `herdr agent` to inspect installed kinds and list them when asking. Pass native agent arguments only after `--`:
 
 ```bash
-herdr agent start reviewer --kind codex --pane <returned-pane-id> -- <agent-args...>
+herdr agent start reviewer --kind <kind> --pane <returned-pane-id> -- <agent-args...>
 ```
 
 A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Wait until the agent settles (`idle` or `done`) before prompting it.
@@ -258,7 +258,7 @@ The barrier exits 3 the moment any target needs input — unblock it, then re-en
 
 ### Sibling-reviewer pattern
 
-Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and barrier-wait both. Agent arguments go after `--` (`agent start reviewer --kind codex --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
+Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and barrier-wait both. Confirm the reviewer kind with the user if unspecified. Agent arguments go after `--` (`agent start reviewer --kind <kind> --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
 
 ### Banned: sleep/timer polling loops
 
@@ -288,6 +288,7 @@ Prefer `--source recent-unwrapped` for logs and transcripts. The other read sour
 
 ## Safety and coordination rules
 
+- Confirm coding agent kind with user first if unspecified; never pick a random or default kind.
 - Use `--no-focus` for background work unless the user asked to switch context.
 - Use `--current`, an explicit pane ID, or a unique agent name. Do not rely on another client's focused pane.
 - Parse IDs from JSON responses. Do not derive them from sidebar order or examples.

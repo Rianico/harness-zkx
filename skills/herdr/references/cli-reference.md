@@ -46,7 +46,7 @@ No single response answers "which pane is this, by name": `PaneInfo` carries `la
 
 ## Agent start and prompt semantics
 
-A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Startup defaults to a 30-second timeout.
+A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Startup defaults to a 30-second timeout. Always confirm the agent kind (`--kind`) with the user first if unspecified; never pick a random or default agent kind.
 
 `agent prompt` reports successful submission only after the text and encoded Enter are both written; that alone does not prove the agent started a turn. The submit delay grows with prompt size for Codex on Windows. It rejects an agent already waiting at an approval or question dialog with `agent_blocked` before sending any input — inspect the blocked UI and ask the user before answering it. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`.
 
