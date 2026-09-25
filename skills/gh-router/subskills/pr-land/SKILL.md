@@ -17,11 +17,11 @@ Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head 
 
 ## Script
 
-`$SKILL_DIR/scripts/pr.sh` (755, `set -euo pipefail`, `GH_TOKEN` via `gh auth`). Repo identity and the check verdict come from the skill's shared modules — `$SKILL_DIR/../../lib/repo.sh` (push remote first; `gh repo view` only as last resort) and `$SKILL_DIR/../../lib/checks.sh` — so this script re-derives neither.
+`$SKILL_DIR/scripts/pr.py` (755, Python >=3.14 via `uv run`, `GH_TOKEN` via `gh auth`; accompanied by thin backward-compatible `$SKILL_DIR/scripts/pr.sh`). Repo identity and the check verdict come from the skill's shared modules — `$SKILL_DIR/../../lib/repo.sh` (push remote first; `gh repo view` only as last resort) and `$SKILL_DIR/../../lib/checks.sh` — re-implemented cleanly in Python.
 
 ```bash
-uv run $SKILL_DIR/scripts/pr.sh --watch --merge --title "feat: …" --body-file tmp/pr_body.md
-uv run $SKILL_DIR/scripts/pr.sh --watch --merge  # infers head/base/title/body
+uv run $SKILL_DIR/scripts/pr.py --watch --merge --title "feat: …" --body-file tmp/pr_body.md
+uv run $SKILL_DIR/scripts/pr.py --watch --merge  # infers head/base/title/body
 ```
 
 Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEAD` → `main`), `--head` (`git rev-parse --abbrev-ref HEAD`), `--title` (default `git log -1 --pretty=%s`), `--body` / `--body-file` (default `.github/pull_request_template.md`), `--watch` (poll **every** check on the PR via `gh pr checks --json name,bucket`, 60×10s), `--merge` (requires a green watch; waits `mergeable_state clean`, refuses otherwise, then `PUT merge squash`), `--draft`.
@@ -36,13 +36,14 @@ Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEA
    merge step rebuilds it first: one `Co-authored-by` trailer per distinct PR commit
    author except the merger (PR author included; dedupe by lowercase email, skipping
    emails already trailered case-insensitively), spliced ahead of the first
-   `Closes`/`Fixes`/`Resolves`/`Refs` directive line. The token and length gates run
+   `Closes`/`Fixes`/`Resolves`/`Refs` directive line. The token gate runs
    only on a body that actually becomes the squash message: a body still holding the
-   raw `CODE_AUTHORS` template token, or any line over 100 chars (`commitlint`
-   `body-max-line-length`), is refused pre-merge with line numbers and remediation.
+   raw `CODE_AUTHORS` template token is refused pre-merge with remediation.
+   Line length limits apply strictly to the commit title (`TITLE (#NUM) <= 100`),
+   while body line limits are dropped (aligning with commit #135).
    An empty body, or one identical to the repo template, omits `commit_message` as
    before and falls back to commit subjects — the token can never reach a commit that
-   way. `--check` runs the same gates the merge runs (token, trailers, length) and prints the
-   trailers that would be appended; it creates nothing.
+   way. `--check` runs the same gates the merge runs (token, trailers, title length) and prints the
+   trailers that would be appended; it evaluates local `--body` / `--body-file` and creates nothing.
 
 Fail-loud, no secrets in logs. Re-trigger is model-driven: script returns failure info, model edits, pushes, and re-runs `--watch --merge`. Exit: `0` ok · `1` checks failed or merge refused · `2` usage / unusable head ref. PR URL on stdout, progress on stderr.

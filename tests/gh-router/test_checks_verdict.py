@@ -13,13 +13,25 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CHECKS_LIB = REPO_ROOT / "skills/gh-router/lib/checks.sh"
+PR_PY = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.py"
 PR_SH = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.sh"
+
+SCRIPTS_DIR = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from pr import (
+    checks_verdict as py_checks_verdict,
+)
+from pr import (
+    squash_message,
+)
 
 CASES = [
     ("a single passing check is green", ["tests\tpass"], "success"),
@@ -51,22 +63,25 @@ def _verdict(payload: str) -> str:
 def test_checks_verdict(label: str, lines: list[str], expected: str) -> None:
     # _verdict feeds the payload with `printf '%s'`, so no case has a trailing newline.
     payload = "\n".join(lines)
-    assert _verdict(payload) == expected, label
+    assert _verdict(payload) == expected, f"bash lib mismatch on: {label}"
+    assert py_checks_verdict(payload) == expected, f"pr.py mismatch on: {label}"
 
 
 def test_verdict_ignores_check_names_entirely() -> None:
     """Two arbitrary names failing must fail — the verdict never keys on a name."""
     assert _verdict("some-future-check\tfail") == "failure"
     assert _verdict("some-future-check\tpass\nanother-one\tpass") == "success"
+    assert py_checks_verdict("some-future-check\tfail") == "failure"
+    assert py_checks_verdict("some-future-check\tpass\nanother-one\tpass") == "success"
 
 
-def test_pr_sh_no_longer_allowlists_check_names() -> None:
+def test_pr_no_longer_allowlists_check_names() -> None:
     """The fix must not be reintroduced as another name list."""
-    text = PR_SH.read_text()
+    text = PR_PY.read_text()
 
-    assert "checks_verdict" in text, "pr.sh does not use the shared verdict"
-    assert "select(.name==" not in text, "pr.sh filters checks by name again"
-    assert ".check_runs[]" not in text, "pr.sh hand-rolls check-run aggregation again"
+    assert "checks_verdict" in text, "pr.py does not use the shared verdict"
+    assert "select(.name==" not in text, "pr.py filters checks by name again"
+    assert ".check_runs[]" not in text, "pr.py hand-rolls check-run aggregation again"
 
 
 def test_squash_message_defaults_to_the_pr_body() -> None:
@@ -78,14 +93,8 @@ def test_squash_message_defaults_to_the_pr_body() -> None:
     body = (
         "Summary of the change.\n\nCloses #33\n\nCo-authored-by: deepseek-v4.1-flash <noreply@ai>\n"
     )
-    result = subprocess.run(
-        ["bash", "-c", f'source "{PR_SH}"\nBODY="$PAYLOAD"\nsquash_message'],
-        capture_output=True,
-        text=True,
-        env={**os.environ, "PAYLOAD": body},
-    )
+    result = squash_message(body)
 
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == body
-    assert "Co-authored-by: deepseek-v4.1-flash <noreply@ai>" in result.stdout
-    assert "Squash merge" not in result.stdout
+    assert result == body
+    assert "Co-authored-by: deepseek-v4.1-flash <noreply@ai>" in result
+    assert "Squash merge" not in result
