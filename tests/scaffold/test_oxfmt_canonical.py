@@ -56,6 +56,8 @@ class _Scaffold(Protocol):
 
     def canonicalize(self, path: Path, content: str) -> str: ...
 
+    def formatter_command(self) -> list[str]: ...
+
 
 # `exec_module` yields a `ModuleType`, which overlaps with no protocol; the `object` hop is
 # where that identity is dropped and the script's surface starts being checked.
@@ -170,7 +172,7 @@ def test_an_invocation_split_never_changes_the_bytes(monkeypatch, tmp_path, sequ
             # No formatter config in the tree means no `pnpm run format` gate to satisfy yet.
             continue
         gate = subprocess.run(
-            ["npx", "--yes", f"oxfmt@{scaffold.OXFMT_VERSION}", "--check", "."],
+            [*scaffold.formatter_command(), "--check", "."],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
@@ -200,7 +202,7 @@ def test_generated_tree_passes_its_own_ci_format_gate(monkeypatch, tmp_path):
         text=True,
     )
     gate = subprocess.run(
-        ["npx", "--yes", f"oxfmt@{scaffold.OXFMT_VERSION}", "--check", "."],
+        [*scaffold.formatter_command(), "--check", "."],
         cwd=str(tmp_path),
         capture_output=True,
         text=True,

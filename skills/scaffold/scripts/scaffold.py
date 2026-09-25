@@ -706,6 +706,58 @@ class FormatterUnavailable(RuntimeError):
 _formatter_root: pathlib.Path | None = None
 _formatter_config: pathlib.Path | None = None
 _formatter_tmp: tempfile.TemporaryDirectory[str] | None = None
+_formatter_argv: list[str] | None = None
+
+
+def _cached_oxfmt() -> pathlib.Path | None:
+    """The pinned oxfmt inside npx's install cache, if a previous run left one there."""
+    try:
+        candidates = sorted(
+            (pathlib.Path.home() / ".npm" / "_npx").glob("*/node_modules/oxfmt/package.json")
+        )
+    except OSError:
+        return None
+    for pkg_json in candidates:
+        try:
+            if json.loads(pkg_json.read_text(encoding="utf-8")).get("version") != OXFMT_VERSION:
+                continue
+        except OSError, json.JSONDecodeError:
+            continue
+        bin_path = pkg_json.parent / "bin" / "oxfmt"
+        if os.access(bin_path, os.X_OK):
+            return bin_path
+    return None
+
+
+def formatter_command() -> list[str]:
+    """Base argv for the pinned formatter, resolved once per process.
+
+    Each `npx` launch costs ~0.5s warm and `canonicalize` runs once per reachable file, so
+    the resolver paid for itself the first generation it ran. npx installs exact pins into
+    the cache `_cached_oxfmt` scans, so invoking that binary directly keeps the pin
+    contract at ~0.07s per file. Any cache miss falls back to the `npx` argv — this is a
+    speed optimization, never a correctness dependency.
+    """
+    global _formatter_argv
+    if _formatter_argv is not None:
+        return list(_formatter_argv)
+    cached = _cached_oxfmt()
+    if cached is None:
+        try:
+            subprocess.run(
+                ["npx", "--yes", f"oxfmt@{OXFMT_VERSION}", "--version"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError:
+            cached = None
+        else:
+            cached = _cached_oxfmt()
+    _formatter_argv = (
+        [str(cached)] if cached is not None else ["npx", "--yes", f"oxfmt@{OXFMT_VERSION}"]
+    )
+    return list(_formatter_argv)
 
 
 def enable_formatter(root: pathlib.Path) -> None:
@@ -748,9 +800,7 @@ def canonicalize(path: pathlib.Path, content: str) -> str:
     except ValueError:
         rel = pathlib.Path(path.name)
     cmd = [
-        "npx",
-        "--yes",
-        f"oxfmt@{OXFMT_VERSION}",
+        *formatter_command(),
         "-c",
         str(_formatter_config),
         "--stdin-filepath",

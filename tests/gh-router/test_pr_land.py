@@ -356,6 +356,8 @@ exit 1
 
     test_script = f"""
 import sys
+import time
+time.sleep = lambda _s: None  # retry-now semantics are the contract; wall-clock waits are not
 sys.path.insert(0, "{PR_SCRIPTS}")
 from pr import check_conflicts, PrError
 try:

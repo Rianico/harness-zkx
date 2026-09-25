@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, call, patch
 
+import pytest
 from fixtures import TEST_BASE_URL, TEST_PAGE_URL
 
 
@@ -200,6 +201,16 @@ class TestFetchMarkdownExtension:
 
 class TestFetchPageLlmFriendly:
     """Tests for fetch_page_llm_friendly method."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_defuddle_cli(self, scraper_with_mock_session) -> None:
+        """Every fallback test here assumes defuddle failed; unstubbed it was a real
+        ~1s Node CLI spawn that reaches the network. `TestFetchViaDefuddle` owns the
+        CLI behavior with `subprocess.run` mocked."""
+        with patch.object(
+            scraper_with_mock_session, "fetch_via_defuddle", return_value=(None, "html")
+        ):
+            yield
 
     def test_prefers_markdown_from_cache(self, temp_cache_dir, temp_output_dir) -> None:
         """Should return cached markdown if available."""
