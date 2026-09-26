@@ -362,11 +362,14 @@ class Report:
         if always or self.mode == VERBOSE:
             print(text, file=sys.stderr)
 
-    def _rel(self, path: pathlib.Path) -> str:
+    def rel(self, path: pathlib.Path) -> str:
         try:
             return path.resolve().relative_to(self.cwd).as_posix()
         except ValueError:  # outside the target repo — report the path as given
             return path.as_posix()
+
+    def _rel(self, path: pathlib.Path) -> str:
+        return self.rel(path)
 
     def record(self, path: pathlib.Path, kind: str, detail: str = "") -> None:
         self.entries.append(Entry(self._rel(path), kind, detail))
@@ -408,6 +411,7 @@ class Report:
         self.err(f"recorded  {path} ({reason})")
         self.record(path, RECORDED, reason)
         return f"{self._rel(path)}: recorded — {reason}"
+
     def patched(
         self, path: pathlib.Path, detail: str, message: str, *, stdout: bool = False
     ) -> None:
@@ -509,7 +513,6 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
     # allow comma-separated, plus alias normalization for pre-push vs pre_push, changelog vs changelog-script, etc.
     alias = {
         "changelog": "changelog-md",
-        "script": "changelog-script",
         "script": "changelog-script",
         "typecheck": "typecheck-budget",
         "issues": "issue-templates",
@@ -927,7 +930,7 @@ def write_file(
             REPORT.err(f"WARNING (dry-run): {path}: {warn_mixed}")
         return False
     if path.exists() and path.read_text(encoding="utf-8") != content:
-        reason = divergence_reason(REPORT.cwd, REPORT._rel(path))
+        reason = divergence_reason(REPORT.cwd, REPORT.rel(path))
         if reason is not None:
             # Recorded divergence: a real --update never overwrites deliberate drift.
             _ = REPORT.recorded(path, reason + " (not overwritten)")
@@ -1130,7 +1133,11 @@ def do_git(
     sel = selected if selected is not None else GIT_COMPONENTS
     notes: list[str] = []
     if "releaserc" in sel:
-        _ = write_file(cwd / ".releaserc.json", releaserc_content(cwd, with_typecheck="typecheck-budget" in sel), dry_run)
+        _ = write_file(
+            cwd / ".releaserc.json",
+            releaserc_content(cwd, with_typecheck="typecheck-budget" in sel),
+            dry_run,
+        )
     if "release-yml" in sel:
         rel = cwd / ".github" / "workflows" / "release.yml"
         if update and rel.exists():
@@ -1203,7 +1210,9 @@ def do_git(
     if "gitignore" in sel:
         # The bytecode entry travels with the component that writes `scripts/*.py`, so a
         # `--without changelog-script` run does not claim litter it cannot create.
-        entries = GITIGNORE_GIT + (GITIGNORE_PY_SCRIPTS if "changelog-script" in sel or "typecheck-budget" in sel else [])
+        entries = GITIGNORE_GIT + (
+            GITIGNORE_PY_SCRIPTS if "changelog-script" in sel or "typecheck-budget" in sel else []
+        )
         append_gitignore(cwd / ".gitignore", entries, dry_run)
     if "agents" in sel:
         patch_agents(
@@ -2062,6 +2071,7 @@ def releaserc_content(cwd: pathlib.Path, *, with_typecheck: bool = True) -> str:
     if _declares_pnpm(cwd):
         return content.replace('"package-lock.json"', '"pnpm-lock.yaml"')
     return content
+
 
 def write_source(
     cwd: pathlib.Path, relative: str, content: str, dry_run: bool, *, update: bool = False
