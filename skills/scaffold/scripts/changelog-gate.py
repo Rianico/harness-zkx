@@ -298,7 +298,11 @@ def main(argv: list[str] | None = None) -> int:
     _ = parser.add_argument("--changelog", default="CHANGELOG.md", help="path to CHANGELOG.md")
     _ = parser.add_argument("--base", default=None, help="ignored for compatibility")
     _ = parser.add_argument("--pr", default=None, help="this PR's number, for PR-boundary check")
-    _ = parser.add_argument("--landing", default=None, help="declared landing strategy (squash|merge); validated, and selects the ledger rule when --pr is absent")
+    _ = parser.add_argument(
+        "--landing",
+        default=None,
+        help="declared landing strategy (squash|merge); validated, and selects the ledger rule when --pr is absent",
+    )
     _ = parser.add_argument(
         "--baseline", default=str(DEFAULT_BASELINE), help="recorded unattributed identities"
     )
