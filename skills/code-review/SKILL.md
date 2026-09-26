@@ -95,7 +95,7 @@ Score the submission on a 1–10 scale:
 
 ## Mandatory Response Contract
 
-Format output per `skills/dynamic-workflow-wrapper/references/resp-format.md`:
+Format output per `skills/ai-engineering-expert/references/resp-format.md`:
 
 ```markdown
 ## Summary
