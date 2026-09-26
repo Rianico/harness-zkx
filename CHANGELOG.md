@@ -123,6 +123,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **herdr:** document implementer context isolation via internal subagents (#156)
 * **herdr:** document hierarchical lane coordination and TM contracts (#153)
 * **contributing:** name the two type-check suppression layers (#122)
 * **herdr:** hand off with the caller's context and require a completion reply (#107)
