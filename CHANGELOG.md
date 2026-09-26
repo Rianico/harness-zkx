@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **gh-router:** filter procedural checklist, landing directives, and comments from squash commit body
 * **gh-router:** auto-stamp PR attribution, use --log-failed for failure logs, and enable local pre-flight checks (#145)
 * **herdr:** add dispatch and reply helpers to prevent dropped contracts (#144)
 * **gh-router:** migrate pr.sh to typed python and relax body length (#137)

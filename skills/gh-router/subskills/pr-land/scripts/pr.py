@@ -32,6 +32,10 @@ CLOSING_RE = re.compile(
     r"^[ \t]*(closes?|closed|fixes?|fixed|resolves?|resolved|refs?)[ \t]*:?[ \t]+(#[0-9]|GH-[0-9]|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9])",
     re.IGNORECASE,
 )
+PROCEDURAL_SECTION_RE = re.compile(r"^#{1,6}\s+(Checklist|Landing)\b", re.IGNORECASE)
+HEADING_RE = re.compile(r"^#{1,6}\s+\S")
+DIRECTIVE_RE = re.compile(r"^[ \t]*(Landing|Ledger-Waiver):", re.IGNORECASE)
+EMPTY_BULLET_RE = re.compile(r"^[ \t]*[*+-][ \t]*$")
 
 SQUASH_TITLE_MAX = 100
 CODE_AUTHORS_TOKEN = "CODE_AUTHORS"
@@ -566,6 +570,58 @@ def check_title_length(title: str, num: str | int) -> None:
         raise RefusalError(f"commit title exceeds {SQUASH_TITLE_MAX} chars: {header}")
 
 
+def clean_squash_body(body: str) -> str:
+    refuse_raw_token(body)
+    text = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
+
+    lines: list[str] = []
+    in_procedural_section = False
+
+    for line in text.splitlines():
+        if HEADING_RE.match(line):
+            if PROCEDURAL_SECTION_RE.match(line):
+                in_procedural_section = True
+                continue
+            in_procedural_section = False
+
+        if in_procedural_section:
+            if is_closing_line(line) or is_trailer_line(line):
+                in_procedural_section = False
+            else:
+                continue
+
+        if DIRECTIVE_RE.match(line):
+            continue
+
+        lines.append(line)
+
+    pruned: list[str] = []
+    for i, line in enumerate(lines):
+        if HEADING_RE.match(line):
+            has_content = False
+            for next_line in lines[i + 1 :]:
+                if HEADING_RE.match(next_line):
+                    break
+                s = next_line.strip()
+                if (
+                    s
+                    and not EMPTY_BULLET_RE.match(s)
+                    and not is_closing_line(next_line)
+                    and not is_trailer_line(next_line)
+                ):
+                    has_content = True
+                    break
+            if not has_content:
+                continue
+        pruned.append(line)
+
+    result = "\n".join(pruned)
+    result = re.sub(r"\n{3,}", "\n\n", result).strip()
+    if body.endswith("\n") and result:
+        result += "\n"
+    return result
+
+
 def squash_message(body: str, template_path: Path | None = None) -> str:
     template = ""
     if template_path and template_path.is_file():
@@ -578,7 +634,7 @@ def squash_message(body: str, template_path: Path | None = None) -> str:
     trimmed_template = template.strip()
     if not trimmed_body or (trimmed_template and trimmed_body == trimmed_template):
         return ""
-    return body
+    return clean_squash_body(body)
 
 
 def is_fallback_body(body: str, template_path: Path | None = None) -> bool:
@@ -586,9 +642,9 @@ def is_fallback_body(body: str, template_path: Path | None = None) -> bool:
 
 
 def build_squash_message(msg: str, merger: str, tsv: str) -> str:
-    refuse_raw_token(msg)
-    new_trailers = pr_co_author_trailers(tsv, merger=merger, body=msg)
-    final = insert_trailers(msg, new_trailers)
+    cleaned = clean_squash_body(msg)
+    new_trailers = pr_co_author_trailers(tsv, merger=merger, body=cleaned)
+    final = insert_trailers(cleaned, new_trailers)
     # 100-character line limit on body is dropped per commit #135
     if new_trailers.strip():
         print("appended trailers:", file=sys.stderr)
