@@ -59,3 +59,89 @@ def test_update_leaves_a_vendored_copy_to_the_project(tmp_path):
     scaffold.do_git(tmp_path, "demo", dry_run=False, update=True)
 
     assert (vendored / "SKILL.md").read_text(encoding="utf-8") == "hand-kept copy\n"
+
+
+def _run_main(*argv: str) -> int:
+    old = sys.argv
+    sys.argv = ["scaffold.py", *argv]
+    try:
+        return scaffold.main()
+    finally:
+        sys.argv = old
+
+
+def test_node_repo_receives_no_typecheck_budget_and_no_baseline(tmp_path: pathlib.Path):
+    _ = (tmp_path / "package.json").write_text('{"name": "demo-node"}\n', encoding="utf-8")
+    assert _run_main("--cwd", str(tmp_path), "--flavor", "git") == 0
+    assert not (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
+    assert ".config/basedpyright-baseline.txt" not in releaserc
+    assert _run_main("--cwd", str(tmp_path), "--check") == 0
+
+
+def test_python_repo_receives_typecheck_budget_and_baseline(tmp_path: pathlib.Path):
+    _ = (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo-py"\n', encoding="utf-8")
+    assert _run_main("--cwd", str(tmp_path), "--flavor", "all") == 0
+    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
+    assert ".config/basedpyright-baseline.txt" in releaserc
+    assert _run_main("--cwd", str(tmp_path), "--check") == 0
+
+
+def test_python_repo_git_flavor_receives_typecheck_budget_and_baseline(tmp_path: pathlib.Path):
+    _ = (tmp_path / ".python-version").write_text("3.14\n", encoding="utf-8")
+    assert _run_main("--cwd", str(tmp_path), "--flavor", "git") == 0
+    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
+    assert ".config/basedpyright-baseline.txt" in releaserc
+    assert _run_main("--cwd", str(tmp_path), "--check") == 0
+
+
+def test_node_repo_can_opt_in_to_typecheck_budget(tmp_path: pathlib.Path):
+    _ = (tmp_path / "package.json").write_text('{"name": "demo-node"}\n', encoding="utf-8")
+    assert (
+        _run_main(
+            "--cwd",
+            str(tmp_path),
+            "--flavor",
+            "git",
+            "--only",
+            "releaserc,typecheck-budget",
+        )
+        == 0
+    )
+    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
+    assert ".config/basedpyright-baseline.txt" in releaserc
+
+
+def test_python_repo_can_opt_out_of_typecheck_budget(tmp_path: pathlib.Path):
+    _ = (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo-py"\n', encoding="utf-8")
+    assert (
+        _run_main(
+            "--cwd",
+            str(tmp_path),
+            "--flavor",
+            "git",
+            "--without",
+            "typecheck-budget",
+        )
+        == 0
+    )
+    assert not (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
+    assert ".config/basedpyright-baseline.txt" not in releaserc
+
+
+def test_python_flavor_updates_existing_releaserc(tmp_path: pathlib.Path):
+    _ = (tmp_path / "package.json").write_text('{"name": "demo"}\n', encoding="utf-8")
+    assert _run_main("--cwd", str(tmp_path), "--flavor", "git") == 0
+    releaserc_before = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
+    assert ".config/basedpyright-baseline.txt" not in releaserc_before
+
+    _ = (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\n', encoding="utf-8")
+    assert _run_main("--cwd", str(tmp_path), "--flavor", "python") == 0
+    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    releaserc_after = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
+    assert ".config/basedpyright-baseline.txt" in releaserc_after
+    assert _run_main("--cwd", str(tmp_path), "--check") == 0
