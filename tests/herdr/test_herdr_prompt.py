@@ -504,8 +504,12 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
     assert text.startswith("Caller: pane=w9:p1 agent=reviewer")
+    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
     assert "\n\nhi\n\n" in text
-    assert 'herdr agent prompt reviewer "<STATUS> <artifacts> <issues>"' in text
+    assert (
+        'uv run ~/.agents/skills/herdr/scripts/herdr_reply.py reviewer "<STATUS> <artifacts> <issues>"'
+        in text
+    )
 
 
 def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> None:
@@ -528,6 +532,7 @@ def test_no_caller_context_sends_verbatim_without_lookups(
     assert prompt_call[4] == "hi"
     kinds = [call[1:3] for call in stub.calls()]
     assert kinds == [["agent", "prompt"]]
+    assert "--no-caller-context drops caller block" in done.stderr
 
 
 def test_broadcast_prepends_identically_per_target(stub: StubHarness, tmp_path: Path) -> None:
@@ -548,7 +553,8 @@ def test_dry_run_renders_caller_payload_without_prompting(
     argv: list[str] = json.loads(done.stdout)
     assert argv[3] == "reviewer"
     assert argv[4].startswith("Caller: pane=w9:p1 agent=reviewer")
-    assert "herdr agent prompt reviewer" in argv[4]
+    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in argv[4]
+    assert "~/.agents/skills/herdr/scripts/herdr_reply.py reviewer" in argv[4]
 
 
 def test_dry_run_opt_out_renders_verbatim(stub: StubHarness, tmp_path: Path) -> None:
@@ -558,3 +564,38 @@ def test_dry_run_opt_out_renders_verbatim(stub: StubHarness, tmp_path: Path) -> 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     assert json.loads(done.stdout)[4] == "hi"
+
+
+def test_refuses_target_that_is_an_agent_kind(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [{"pane_id": "w9:p2", "name": "t7-impl", "agent": "qodercli"}],
+        "panes": [
+            *DEFAULT_STATE["panes"],
+            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "worker"},
+        ],
+    }
+    done = stub.run("qodercli", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "is an agent kind" in done.stderr
+    assert "live agent names: t7-impl" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_workspace_workers_listed_in_caller_context(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi"},
+            {"pane_id": "w9:p2", "name": "t7-impl", "agent": "qodercli"},
+        ],
+        "panes": [
+            *DEFAULT_STATE["panes"],
+            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "worker"},
+        ],
+    }
+    done = stub.run("worker", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (prompt_call,) = stub.prompts()
+    text = prompt_call[4]
+    assert "Workers: t7-impl@w9:p2" in text

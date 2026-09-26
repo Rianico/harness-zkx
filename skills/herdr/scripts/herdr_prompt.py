@@ -29,9 +29,11 @@ timed out first — the agent is working asynchronously: yield turn and await re
 callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Caller context is prepended by default (see `resolve_caller`): the payload opens
-with a `Caller:` block and closes with the completion-reply contract, so a worker
-can answer the orchestrator by name. `--no-caller-context` sends the payload
-verbatim; `--dry-run` shows the exact rendered payload that would be submitted.
+with a `Caller:` block (including Herdr skill notice and sibling workers if present)
+and closes with the completion-reply contract via `herdr-reply`, so a worker
+can answer the caller by name using the helper script without shell mangling.
+`--no-caller-context` sends the payload verbatim (with a loud warning for named targets);
+`--dry-run` shows the exact rendered payload that would be submitted.
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
 """
@@ -217,11 +219,17 @@ def render_caller_block(caller: CallerContext) -> str:
     return f"Caller: {fields}"
 
 
+SKILL_NOTICE = "Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI"
+
+
 def render_reply_contract(caller: CallerContext) -> str:
     """Render the completion-reply contract; without an agent name no target is addressable."""
     if caller.agent:
-        contract = f'  herdr agent prompt {caller.agent} "<STATUS> <artifacts> <issues>"'
-        return f"On completion, reply to the caller in one message:\n{contract}"
+        contract = f'  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py {caller.agent} "<STATUS> <artifacts> <issues>"'
+        return (
+            "On completion, reply to the caller in one message using the herdr helper script:\n"
+            f"{contract}"
+        )
     note = (
         "(the calling pane has no agent name; reply cannot be addressed — "
         "report completion to the user instead)"
@@ -229,9 +237,70 @@ def render_reply_contract(caller: CallerContext) -> str:
     return f"On completion, reply to the caller in one message:\n  {note}"
 
 
-def wrap_with_caller(payload: str, caller: CallerContext) -> str:
-    """Prepend the caller block and append the reply contract around the payload."""
-    return f"{render_caller_block(caller)}\n\n{payload}\n\n{render_reply_contract(caller)}"
+def resolve_workspace_workers(
+    herdr: str,
+    caller_pane_id: str,
+    target_panes: Sequence[str],
+    env: Mapping[str, str],
+) -> list[str]:
+    """Find other live agents in the caller's workspace (or target's workspace)."""
+    try:
+        listed_panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except HerdrError:
+        return []
+
+    pane_ws: dict[str, str] = {}
+    for p in listed_panes:
+        pid = entry_optional_text(p, "pane_id")
+        ws = entry_optional_text(p, "workspace_id")
+        if pid and ws:
+            pane_ws[pid] = ws
+
+    agent_panes: dict[str, str] = {}
+    for a in agents:
+        name = entry_optional_text(a, "name")
+        pid = entry_optional_text(a, "pane_id")
+        if name and pid:
+            agent_panes[name] = pid
+
+    resolved_targets: set[str] = set()
+    for t in target_panes:
+        if t in pane_ws:
+            resolved_targets.add(t)
+        elif t in agent_panes:
+            resolved_targets.add(agent_panes[t])
+
+    caller_ws = pane_ws.get(caller_pane_id)
+    target_workspaces = {pane_ws.get(p) for p in resolved_targets if pane_ws.get(p)}
+
+    workspaces_to_check: list[str] = []
+    if caller_ws:
+        workspaces_to_check.append(caller_ws)
+    for tw in target_workspaces:
+        if tw and tw not in workspaces_to_check:
+            workspaces_to_check.append(tw)
+
+    excluded_panes = {caller_pane_id} | resolved_targets
+    workers: list[str] = []
+    for a in agents:
+        name = entry_optional_text(a, "name")
+        pid = entry_optional_text(a, "pane_id")
+        if not name or not pid or pid in excluded_panes:
+            continue
+        if pane_ws.get(pid) in workspaces_to_check:
+            workers.append(f"{name}@{pid}")
+
+    return sorted(dict.fromkeys(workers))
+
+
+def wrap_with_caller(payload: str, caller: CallerContext, *, workers: Sequence[str] = ()) -> str:
+    """Prepend the caller block, skill notice, and append the reply contract around the payload."""
+    header_lines = [render_caller_block(caller), SKILL_NOTICE]
+    if workers:
+        header_lines.append(f"Workers: {', '.join(workers)}")
+    header = "\n".join(header_lines)
+    return f"{header}\n\n{payload}\n\n{render_reply_contract(caller)}"
 
 
 def build_prompt_argv(
@@ -286,6 +355,76 @@ def resolve_label(herdr: str, label: str, env: Mapping[str, str]) -> str:
     return pane_id
 
 
+KNOWN_AGENT_KINDS: frozenset[str] = frozenset(
+    {
+        "pi",
+        "qodercli",
+        "agy",
+        "claude",
+        "cursor",
+        "codestral",
+        "cline",
+        "gemini",
+        "openai",
+        "copilot",
+        "aider",
+    }
+)
+
+
+def validate_targets_not_kinds(targets: Sequence[str], herdr: str, env: Mapping[str, str]) -> None:
+    """Refuse targets that are agent kinds (e.g. 'qodercli') instead of addressable agent names."""
+    try:
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except HerdrError:
+        return
+    live_names = {entry_optional_text(a, "name") for a in agents if entry_optional_text(a, "name")}
+    live_panes = {
+        entry_optional_text(a, "pane_id") for a in agents if entry_optional_text(a, "pane_id")
+    }
+    live_kinds = {
+        entry_optional_text(a, "agent") for a in agents if entry_optional_text(a, "agent")
+    }
+    all_kinds = KNOWN_AGENT_KINDS | live_kinds
+
+    for target in targets:
+        if target in all_kinds and target not in live_names and target not in live_panes:
+            matching = sorted(
+                entry_optional_text(a, "name") or ""
+                for a in agents
+                if entry_optional_text(a, "agent") == target and entry_optional_text(a, "name")
+            )
+            matching = [name for name in matching if name]
+            hint = f" (live agent names: {', '.join(matching)})" if matching else ""
+            raise UsageError(
+                f"target {target!r} is an agent kind, not an addressable agent name{hint}. "
+                + "Pass the agent name (or pane id) instead"
+            )
+
+
+def fetch_agent_revision(
+    herdr: str, target: str, env: Mapping[str, str]
+) -> tuple[str | None, str | None]:
+    """Fetch (revision, pane_id) from `herdr agent get <target>`, if available."""
+    done = run_herdr([herdr, "agent", "get", target], env)
+    if done.returncode != 0:
+        return None, None
+    try:
+        data = decode_response(done.stdout).get("result")
+        if isinstance(data, dict):
+            agent = data.get("agent")
+            if isinstance(agent, dict):
+                rev = agent.get("revision")
+                pane = agent.get("pane_id")
+                return (
+                    str(rev) if rev is not None else None,
+                    str(pane) if pane is not None else None,
+                )
+    except Exception:
+        pass
+    return None, None
+
+
 def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> list[str]:
     """Pick the prompt targets: explicit TARGETs, or the pane carrying --label."""
     if options.label:
@@ -296,6 +435,8 @@ def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> lis
         raise UsageError("pass TARGET (agent name or pane id) or --label")
     if len(set(options.targets)) != len(options.targets):
         raise UsageError("duplicate TARGETs; list each agent once")
+    if not options.no_caller_context:
+        validate_targets_not_kinds(options.targets, herdr, env)
     return list(options.targets)
 
 
@@ -345,7 +486,14 @@ def prompt_one(
     else:
         size = len(payload.encode("utf-8"))
         suffix = f"  state={state}" if state else ""
-        print(f"prompted {target}  bytes={size}{suffix}")
+        rev, pane = (
+            fetch_agent_revision(herdr, target, env)
+            if not options.no_caller_context
+            else (None, None)
+        )
+        pane_str = f" ({pane})" if pane and pane != target else ""
+        rev_str = f"  revision={rev}" if rev else ""
+        print(f"prompted {target}{pane_str}  bytes={size}{rev_str}{suffix}")
     return Dispatch(target, state=state, blocked=state == BLOCKED)
 
 
@@ -356,8 +504,16 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
     herdr = find_herdr(env)
     targets = resolve_targets(options, herdr, env)
     payload = read_payload(options.file)
-    if not options.no_caller_context:
-        payload = wrap_with_caller(payload, resolve_caller(herdr, env))
+    if options.no_caller_context:
+        for target in targets:
+            print(
+                f"herdr-prompt: warning: --no-caller-context drops caller block and reply contract for target {target!r}; target cannot call back",
+                file=sys.stderr,
+            )
+    else:
+        caller = resolve_caller(herdr, env)
+        workers = resolve_workspace_workers(herdr, caller.pane_id, targets, env)
+        payload = wrap_with_caller(payload, caller, workers=workers)
     dispatches = [prompt_one(herdr, target, payload, options, env) for target in targets]
     blocked = sorted(dispatch.target for dispatch in dispatches if dispatch.blocked)
     if blocked:
