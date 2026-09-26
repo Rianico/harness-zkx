@@ -70,12 +70,36 @@ def test_dispatch_refuses_agent_kind(stub: StubHarness, tmp_path: Path) -> None:
 def test_dispatch_reports_delivery_revision(stub: StubHarness, tmp_path: Path) -> None:
     state = {
         **DEFAULT_STATE,
-        "agent_get": {"reviewer": {"revision": "r99", "pane_id": "w9:p1"}},
+        "agent_get_rev_seq": {"reviewer": ["r98", "r99"]},
+        "agent_get": {"reviewer": {"pane_id": "w9:p1"}},
     }
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), state=state)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert "prompted reviewer" in done.stdout
     assert "revision=r99" in done.stdout
+
+
+def test_dispatch_fails_on_stale_revision(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r1"]},
+    }
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), state=state)
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "prompt dropped (revision remained r1)" in done.stderr
+    assert len(stub.prompts()) == 2
+
+
+def test_dispatch_retries_and_succeeds_on_startup_race(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r2"]},
+    }
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "prompted reviewer" in done.stdout
+    assert "revision=r2" in done.stdout
+    assert len(stub.prompts()) == 2
 
 
 def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None:

@@ -599,3 +599,26 @@ def test_workspace_workers_listed_in_caller_context(stub: StubHarness, tmp_path:
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
     assert "Workers: t7-impl@w9:p2" in text
+
+
+def test_prompt_fails_on_stale_revision(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r1"]},
+    }
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "prompt dropped (revision remained r1)" in done.stderr
+    assert len(stub.prompts()) == 2
+
+
+def test_prompt_retries_and_succeeds_on_startup_race(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r2"]},
+    }
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "prompted reviewer" in done.stdout
+    assert "revision=r2" in done.stdout
+    assert len(stub.prompts()) == 2
