@@ -1506,7 +1506,12 @@ def git_contract_drift(cwd: pathlib.Path, project_name: str) -> dict[str, int]:
     saved = (REPORT.mode, REPORT.cwd)
     REPORT.start(SUMMARY, cwd)
     try:
-        _ = do_git(cwd, project_name, dry_run=True, update=True)
+        selected = (
+            GIT_COMPONENTS
+            if (cwd / "scripts" / "typecheck-budget.py").exists()
+            else (GIT_COMPONENTS - {"typecheck-budget"})
+        )
+        _ = do_git(cwd, project_name, dry_run=True, update=True, selected=selected)
         counts: dict[str, int] = {}
         for entry in REPORT.drift_entries:
             counts[entry.kind] = counts.get(entry.kind, 0) + 1
