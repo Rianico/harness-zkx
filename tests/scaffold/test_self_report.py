@@ -426,3 +426,95 @@ def test_detect_json_drops_the_human_summary(tmp_path, capsys):
 
     assert json.loads(captured.out)["inferred_shape"] == "greenfield"
     assert captured.err == ""
+
+
+def test_self_check_inspects_markdown_files_for_dead_scripts(tmp_path):
+    doc = tmp_path / "CONTRIBUTING.md"
+    doc.write_text("Run `scripts/ghost.sh` before PR.\n", encoding="utf-8")
+    scaffold.REPORT.start(scaffold.VERBOSE, tmp_path)
+
+    findings = scaffold.self_check([doc])
+
+    assert [f.detail for f in findings] == ["references absent path 'scripts/ghost.sh'"]
+    assert not any(f.blocking for f in findings)
+
+
+def test_self_check_inspects_markdown_files_for_obsolete_changelog_headings(tmp_path):
+    doc = tmp_path / "CONTRIBUTING.md"
+    doc.write_text("## Changelog\n### Added\n- new thing\n", encoding="utf-8")
+    scaffold.REPORT.start(scaffold.VERBOSE, tmp_path)
+
+    findings = scaffold.self_check([doc])
+
+    assert any("references Keep-a-Changelog subheadings" in f.detail for f in findings)
+    assert not any(f.blocking for f in findings)
+
+
+def test_detect_reports_contributing_dead_script_references(tmp_path):
+    (tmp_path / "package.json").write_text('{"name": "demo"}', encoding="utf-8")
+    (tmp_path / "CONTRIBUTING.md").write_text("See `scripts/missing-tool.mjs`\n", encoding="utf-8")
+
+    findings = scaffold.detect_project(tmp_path)["findings"]
+    finding = next(
+        f
+        for f in findings
+        if f["area"] == "CONTRIBUTING.md" and "scripts/missing-tool.mjs" in f["detail"]
+    )
+
+    assert "references absent script" in finding["detail"]
+    assert "drop the reference" in finding["remedy"]
+
+
+def test_detect_reports_contributing_obsolete_changelog_headings(tmp_path):
+    (tmp_path / "package.json").write_text('{"name": "demo"}', encoding="utf-8")
+    (tmp_path / "CONTRIBUTING.md").write_text(
+        "Subsections ### Added | Changed | Fixed\n", encoding="utf-8"
+    )
+
+    findings = scaffold.detect_project(tmp_path)["findings"]
+    finding = next(
+        f for f in findings if f["area"] == "CONTRIBUTING.md" and "Keep-a-Changelog" in f["detail"]
+    )
+
+    assert "rejected by changelog-gate.py" in finding["detail"]
+    assert "ADR-0016" in finding["remedy"]
+
+
+def test_detect_reports_contributing_missing_sections(tmp_path):
+    (tmp_path / "package.json").write_text('{"name": "demo"}', encoding="utf-8")
+    (tmp_path / "CONTRIBUTING.md").write_text(
+        "# Contributing\n\n## Conventional commits\n\nkeep\n", encoding="utf-8"
+    )
+
+    findings = scaffold.detect_project(tmp_path)["findings"]
+    finding = next(
+        f
+        for f in findings
+        if f["area"] == "CONTRIBUTING.md" and "missing template section" in f["detail"]
+    )
+
+    assert "missing template section(s)" in finding["detail"]
+    assert "--merge-mixed" in finding["remedy"]
+
+
+def test_do_python_update_merges_mixed_sections(tmp_path):
+    contrib = tmp_path / "CONTRIBUTING.md"
+    contrib.write_text(
+        "# Contributing to demo\n\n## Conventional commits\n\nkeep\n", encoding="utf-8"
+    )
+
+    _ = scaffold.do_python(
+        tmp_path,
+        "demo",
+        dry_run=False,
+        with_coverage=False,
+        threshold=80,
+        update=True,
+        merge_mixed=True,
+    )
+
+    text = contrib.read_text(encoding="utf-8")
+    assert "## Conventional commits" in text
+    assert "## Reporting Issues" in text
+    assert "## Before PR" in text
+    assert "## Pull Requests" in text

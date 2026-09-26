@@ -1221,6 +1221,7 @@ def do_python(
     with_coverage: bool,
     threshold: int,
     update: bool = False,
+    merge_mixed: bool = False,
 ) -> list[str]:
     notes: list[str] = []
     _ = write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
@@ -1260,12 +1261,13 @@ def do_python(
         dry_run,
     )
     contrib_py = render_template("shared/CONTRIBUTING.python.md.j2", project_name=project_name)
-    note = write_generated(
-        cwd / "CONTRIBUTING.md",
+    note = write_contributing(
+        cwd,
         contrib_py,
         dry_run,
-        update=update,
         warn_mixed="mixed: contains {{project_name}} + toolchain 'Before PR' line — proofread project name and lint/test commands.",
+        update=update,
+        merge_mixed=merge_mixed,
     )
     if note:
         notes.append(note)
@@ -1777,6 +1779,47 @@ def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, objec
             "git rm -r skills/gh-router (pi discovers gh-router from ~/.agents/skills), "
             "or keep it as project content",
         )
+    if files["CONTRIBUTING.md"]:
+        contrib_text = read_text("CONTRIBUTING.md")
+        for ref in sorted(set(REFERENCE_RE.findall(contrib_text))):
+            if not (cwd / ref).is_file():
+                finding(
+                    "CONTRIBUTING.md",
+                    f"references absent script {ref!r}",
+                    f"ship {ref} or drop the reference from CONTRIBUTING.md",
+                )
+        if re.search(r"###\s*(?:Added|Changed|Fixed|Removed)\b", contrib_text):
+            finding(
+                "CONTRIBUTING.md",
+                "references Keep-a-Changelog subheadings (Added/Changed/Fixed/Removed) rejected by changelog-gate.py",
+                "update CONTRIBUTING.md to use Conventional Commit headings (Features, Bug Fixes, etc.) per ADR-0016",
+            )
+        if python_present:
+            template_name = "shared/CONTRIBUTING.python.md.j2"
+        elif node_present:
+            template_name = "shared/CONTRIBUTING.typescript.md.j2"
+        else:
+            template_name = "shared/CONTRIBUTING.default.md.j2"
+        try:
+            expected_contrib = render_template(template_name, project_name=project_name)
+            absent_sections = missing_sections(contrib_text, expected_contrib)
+            if absent_sections:
+                finding(
+                    "CONTRIBUTING.md",
+                    f"missing template section(s): {', '.join(absent_sections)}",
+                    f"uv run {scaffold_root}/scripts/scaffold.py --update --merge-mixed",
+                )
+        except Exception:
+            pass
+    if files["AGENTS.md"]:
+        agents_text = read_text("AGENTS.md")
+        for ref in sorted(set(REFERENCE_RE.findall(agents_text))):
+            if not (cwd / ref).is_file():
+                finding(
+                    "AGENTS.md",
+                    f"references absent script {ref!r}",
+                    f"ship {ref} or drop the reference from AGENTS.md",
+                )
 
     result: dict[str, object] = {
         "cwd": str(cwd),
@@ -1903,7 +1946,7 @@ SECTION_RE = re.compile(r"^## (?!#)(.+)$", re.MULTILINE)
 
 # `scripts/…` references a generated file must resolve: a hook or workflow that names a script
 # nobody ships fails at the worst moment, and the gap survives review because it spans files.
-REFERENCE_RE = re.compile(r"(?:[\w.-]+/)*scripts/[\w.-]+\.(?:sh|py)")
+REFERENCE_RE = re.compile(r"(?:[\w.-]+/)*scripts/[\w.-]+\.(?:sh|py|mjs|js|ts)")
 
 SCRIPT_NAMES = {"pre-commit", "pre-merge-commit", "commit-msg", "post-commit"}
 
@@ -2797,12 +2840,16 @@ def _toml_syntax_error(_path: pathlib.Path, body: str) -> str | None:
 def referenced_path_findings(path: pathlib.Path) -> list[Finding]:
     """Report `scripts/x.sh` style references that resolve to nothing (non-blocking).
 
-    Resolved against the repo root: the only files that can raise this are generated hooks,
-    workflows and scripts, since scaffold writes no `SKILL.md` of its own.
+    Resolved against the repo root or relative to the containing file/subskills.
     """
     findings: list[Finding] = []
     for reference in sorted(set(REFERENCE_RE.findall(path.read_text(encoding="utf-8")))):
-        if not (REPORT.cwd / reference).is_file():
+        resolved = (
+            (REPORT.cwd / reference).is_file()
+            or (path.parent / reference).is_file()
+            or (path.parent / "subskills" / reference).is_file()
+        )
+        if not resolved:
             findings.append(
                 Finding(
                     str(path),
@@ -2825,7 +2872,7 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
             continue
         suffix = path.suffix
         is_script = suffix == ".sh" or path.name in SCRIPT_NAMES
-        checkable = is_script or suffix in {".py", ".json", ".yml", ".yaml", ".toml", ".ts"}
+        checkable = is_script or suffix in {".py", ".json", ".yml", ".yaml", ".toml", ".ts", ".md"}
         if not checkable:
             continue
         try:
@@ -2857,6 +2904,16 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
             error = _ts_syntax_error(body)
             if error:
                 findings.append(Finding(str(path), f"invalid TypeScript: {error}"))
+        elif suffix == ".md":
+            if re.search(r"###\s*(?:Added|Changed|Fixed|Removed)\b", body):
+                findings.append(
+                    Finding(
+                        str(path),
+                        "references Keep-a-Changelog subheadings (Added/Changed/Fixed/Removed) rejected by changelog-gate.py",
+                        "use Conventional Commit headings (Features, Bug Fixes, etc.) per ADR-0016",
+                        blocking=False,
+                    )
+                )
         if is_script:
             bash = shutil.which("bash")
             if bash is None:
@@ -2871,7 +2928,7 @@ def self_check(targets: list[pathlib.Path]) -> list[Finding]:
                     )
             if not path.stat().st_mode & 0o111:
                 findings.append(Finding(str(path), "not executable", f"chmod +x {path}"))
-        if is_script or suffix in {".yml", ".yaml"}:
+        if is_script or suffix in {".yml", ".yaml", ".md"}:
             findings.extend(referenced_path_findings(path))
     return findings
 
@@ -3065,7 +3122,15 @@ def main() -> int:
                 merge_mixed=args.merge_mixed,
             )
         if flavor in ("python", "all"):
-            notes += do_python(cwd, project_name, dry_run, with_coverage, threshold, update=update)
+            notes += do_python(
+                cwd,
+                project_name,
+                dry_run,
+                with_coverage,
+                threshold,
+                update=update,
+                merge_mixed=args.merge_mixed,
+            )
         if flavor in ("rust", "all"):
             notes += do_rust(cwd, project_name, dry_run, with_coverage, threshold, update=update)
         if flavor in ("typescript", "all"):
