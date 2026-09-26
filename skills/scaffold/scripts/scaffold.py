@@ -1223,6 +1223,15 @@ def do_git(
     return notes
 
 
+def _is_python_present(cwd: pathlib.Path) -> bool:
+    """Whether the target project uses Python: pyproject.toml, .python-version, or script exists."""
+    return (
+        (cwd / "pyproject.toml").exists()
+        or (cwd / ".python-version").exists()
+        or (cwd / "scripts" / "typecheck-budget.py").exists()
+    )
+
+
 def do_python(
     cwd: pathlib.Path,
     project_name: str,
@@ -1231,6 +1240,7 @@ def do_python(
     threshold: int,
     update: bool = False,
     merge_mixed: bool = False,
+    with_typecheck: bool = True,
 ) -> list[str]:
     notes: list[str] = []
     _ = write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
@@ -1282,7 +1292,14 @@ def do_python(
         notes.append(note)
     # The python verify gates on this budget script (see the release.yml NOTE) — the
     # python flavor owns it, so it is written here, not by the git contract.
-    _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
+    if with_typecheck:
+        _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
+        if (cwd / ".releaserc.json").exists():
+            _ = write_file(
+                cwd / ".releaserc.json",
+                releaserc_content(cwd, with_typecheck=True),
+                dry_run,
+            )
     if with_coverage:
         print(
             f"NOTE: Python coverage wired — run `uv run pytest --cov --cov-fail-under={threshold}`",
@@ -1507,9 +1524,7 @@ def git_contract_drift(cwd: pathlib.Path, project_name: str) -> dict[str, int]:
     REPORT.start(SUMMARY, cwd)
     try:
         selected = (
-            GIT_COMPONENTS
-            if (cwd / "scripts" / "typecheck-budget.py").exists()
-            else (GIT_COMPONENTS - {"typecheck-budget"})
+            GIT_COMPONENTS if _is_python_present(cwd) else (GIT_COMPONENTS - {"typecheck-budget"})
         )
         _ = do_git(cwd, project_name, dry_run=True, update=True, selected=selected)
         counts: dict[str, int] = {}
@@ -3106,9 +3121,9 @@ def main() -> int:
     # finer granularity: resolve selected components (git/ci)
     git_selected: set[str] | None = None
     ci_selected: set[str] | None = None
-    if flavor in ("git", "all") or flavor == "ci":
+    if flavor in ("git", "all", "python") or flavor == "ci":
         try:
-            if flavor in ("git", "all"):
+            if flavor in ("git", "all", "python"):
                 git_selected = _resolve_selected(
                     args.only, args.without, args.components, GIT_COMPONENTS
                 )
@@ -3120,9 +3135,10 @@ def main() -> int:
             print(f"error: {e}", file=sys.stderr)
             return 2
     if git_selected is not None and args.only is None and args.components is None:
-        # `typecheck-budget` is opt-in: a repo that did not ask for it must not
-        # inherit a basedpyright gate (explicit --only/--components still opts in).
-        git_selected.discard("typecheck-budget")
+        # `typecheck-budget` is opt-in for git: a repo that did not ask for it
+        # (and does not have python present / flavor all / flavor python) must not inherit a basedpyright gate.
+        if flavor not in ("all", "python") and not _is_python_present(cwd):
+            git_selected.discard("typecheck-budget")
     if not args.no_format and not os.environ.get("SCAFFOLD_NO_FORMAT"):
         enable_formatter(cwd)
     notes: list[str] = []
@@ -3145,6 +3161,7 @@ def main() -> int:
                 threshold,
                 update=update,
                 merge_mixed=args.merge_mixed,
+                with_typecheck=git_selected is None or "typecheck-budget" in git_selected,
             )
         if flavor in ("rust", "all"):
             notes += do_rust(cwd, project_name, dry_run, with_coverage, threshold, update=update)
