@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Bug Fixes
+* **adr:** fail-loudly shim refuses silent `doc/adr` fallback in fresh worktrees
+
 ### Features
 * **scaffold:** audit markdown references and detect drift in mixed project-owned files (#147)
 * **git-convention:** align changelog headings with ADR-0016 and codify squash body filtering (#147)
