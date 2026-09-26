@@ -40,7 +40,10 @@
     - `CHANGELOG.md` starts with `# Changelog`.
     - Every PR entry under `## [Unreleased]` references the PR (`(#N)`).
     - Unattributed entries match baseline or PR waiver.
-  - On release: `scripts/release-changelog.mjs` moves all curated entries under `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`. Hand-edits to versioned sections forbidden.
+  - On release: `scripts/release-changelog.mjs` promotes curated entries under `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and opens a fresh unreleased block. Hand-edits to versioned sections forbidden.
+- **PR tooling & squash-merge hygiene:**
+  - `pr.py` auto-attributes `(#N)` upon PR creation so the changelog ledger gate stays green without manual intervention.
+  - Squash commit body cleans ephemeral review and CI procedural noise (`## Checklist`, `Landing: squash`, `Ledger-Waiver:`, HTML comments, and empty headings) while preserving authored sections (`## Summary`, `## What Changed`), `Closes #NN` issue closing directives, and `Co-authored-by:` trailers.
 - **Escape and debt:** A blocked changelog gate can be waived via `Ledger-Waiver: <reason>` in PR body (or `--waiver "<reason>"`). Accepts fixable findings only, never unverified code. Unattributed baseline (`.config/changelog-unattributed-baseline.txt`) is a migration bridge.
 - **Conventional Commits (1.0.0 + semver):** `type[(scope)][!]: description`
   - Blank line → body (what/why) → blank line → footer(s).
@@ -68,6 +71,6 @@
 ## 7. Reference
 
 - **Fan-out / hooks:** parallel & Wayfinder → `branch-worktree-pr` skill; ports/hooks/templates → `worktrunk-guide` + `.config/wt.toml`.
-- **Changelog (Keep-a-Changelog):** `# Changelog` → `## [Unreleased]` (top) → `## [X.Y.Z] - YYYY-MM-DD` newest first. Subsections `### Added | Changed | Fixed | Removed`, one imperative bullet each. Curate in PR; on release, `release-changelog.mjs` shifts `[Unreleased]` into new version block.
+- **Changelog (ADR-0016 / Keep-a-Changelog):** `# Changelog` → `## [Unreleased]` (top) → `## [X.Y.Z] - YYYY-MM-DD` newest first. Subsections follow Conventional Commit categories (`### Features`, `### Bug Fixes`, `### Documentation`, `### Code Refactoring`, etc. — never `Added`/`Changed`/`Fixed`), one imperative bullet each. Curate in PR; on release, `release-changelog.mjs` shifts `[Unreleased]` into new version block.
 - **README (brooks-lint):** header (logo → h1 → tagline → lang switcher → `•` nav → shields → banner) → quote + narrative → Why (3 para) → Quick Start (read→act→result) → benchmark (table + command + `> **Scope & honesty.**`) → tools / tree / roadmap `<details>` / contributing / license. Bump version badge each release.
 - **Locale:** `README.md` is English source; translations mirror structure exactly, code/JSON/Mermaid identical, reciprocal links at top. Keep in sync — stale number is bug.

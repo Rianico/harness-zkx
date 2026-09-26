@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **scaffold:** audit markdown references and detect drift in mixed project-owned files
+* **git-convention:** align changelog headings with ADR-0016 and codify squash body filtering
 * **gh-router:** filter procedural checklist, landing directives, and comments from squash commit body (#146)
 * **gh-router:** auto-stamp PR attribution, use --log-failed for failure logs, and enable local pre-flight checks (#145)
 * **herdr:** add dispatch and reply helpers to prevent dropped contracts (#144)
