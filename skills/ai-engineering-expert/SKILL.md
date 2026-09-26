@@ -23,7 +23,9 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs 
 
 1. **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task.
 2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model _says_ it did; we only trust what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
-3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Deterministic work is measured by non-LLM tools (compilers, linters, property tests). Semantic work is verified by Adversarial Orchestration (a "Skeptic" agent).
+3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules:
+   - **Mechanical violations** (syntax, banned APIs, import shapes, file locations) → deterministic tools (compilers, linters, property tests). Full stop.
+   - **Prompts & steering files** → reserved strictly for genuine **judgment calls** (consistency, idiom, architecture fit) verified via Adversarial Orchestration ("Skeptic" agent).
 
 ## Information Boundary Design
 
@@ -37,16 +39,17 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs 
 
 ## Core Mental Model
 
-AI system quality is constrained by eight factors:
+AI system quality is constrained by nine factors:
 
 1. **Action space quality** -- Can the agent express the right operations?
-2. **Observation quality** -- Does the agent see what it needs to decide?
+2. **Observation access** -- Does the agent see what it needs? Deliver runtime truth passively (tee server logs/pipes) rather than forcing blind query loops.
 3. **Recovery quality** -- Can the agent handle errors gracefully?
 4. **Tool feedback quality** -- Are automated signals (LSP, linters, compilers) treated as authoritative blockers?
-5. **Context budget quality** -- Is guidance loaded when needed, not before? Are descriptions within budget and invocation classes declared correctly?
-6. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
-7. **Subagent-first execution** -- Is all implementation work delegated to subagents?
-8. **Handoff quality** -- Is state captured such that a fresh agent can resume with full fidelity?
+5. **Tool economy** -- Are tool/MCP outputs streamlined to prevent token-bloated payloads?
+6. **Context budget quality** -- Is guidance loaded when needed, not before? Are descriptions within budget and invocation classes declared correctly?
+7. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
+8. **Subagent-first execution** -- Is all implementation work delegated to subagents?
+9. **Handoff quality** -- Is state captured such that a fresh agent can resume with full fidelity?
 
 ---
 
@@ -60,6 +63,12 @@ When assigning a specialist role (architect, TDD expert, refactoring expert, etc
 | **Skills**                    | Deep reusable methodology             | Checklists, heuristics, trade-off frameworks, discipline-specific guidance |
 | **Orchestration / Workflows** | Workflow-specific overlay             | Phase-local emphasis, suppressions, artifact-specific instructions         |
 | **Rules**                     | Lightweight cross-cutting constraints | Conventions, tool preferences, artifact locations, global guardrails       |
+
+### Context Pressure Asymmetry
+
+All work splits into implementation and review:
+- **Implementer**: Max context pressure (exploration, drafting, debug loops). Keep free of style/standards overhead.
+- **Reviewer**: Min context pressure (receives diff only, zero exploration). Place coding standards and qualitative checks here, not in implementation prompts.
 
 **Default decision rule:**
 
@@ -81,6 +90,9 @@ When assigning a specialist role (architect, TDD expert, refactoring expert, etc
 The 20% of knowledge that solves 80% of problems lives in SKILL.md files. The deep 80% lives in reference files behind context pointers. This applies recursively at every level -- parent spine, subskills, and subskill references.
 
 Every line in a SKILL.md earns its place by passing the test: does this solve 80% of problems? If it's deep methodology, edge-case patterns, or platform-specific detail, disclose it behind a pointer. If the pointer fires unreliably on must-have material, sharpen its wording first; pull it inline only if that fails.
+
+- **Root steering files (`AGENTS.md`, `CLAUDE.md`):** Keep minimal. Use strictly for **navigation pointers**, never inline specs.
+- **Prune No-Ops:** Aggressively delete steering instructions that don't measurably alter agent decisions.
 
 ---
 

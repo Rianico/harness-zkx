@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **agents:** align root instructions with ai-engineering-expert and streamline harness audit (#155)
 * **scaffold:** audit markdown references and detect drift in mixed project-owned files (#147)
 * **git-convention:** align changelog headings with ADR-0016 and codify squash body filtering (#147)
 * **gh-router:** filter procedural checklist, landing directives, and comments from squash commit body (#146)

@@ -42,9 +42,16 @@ Exit `0` ok / `1` bad args / `2` not found.
 
 For each oversized entry, state in one line:
 
-- **Root cause:** `dump` (`cat`/`nl`/`ls -R`/`env`), `broad-search` (`rg` without scope), `loop/poll`, `verbose-log` (test/build), or `legitimate-large` (known artifact).
-- **Manageable?** Yes if you can intervene the producing call/site and keep intent `< threshold` — tighten flags (`pytest -q`, `rg --max-count` / `-A`, `ls | head`, `validate-deps | tail`), or edit owned `skills/*/scripts/*` to use a bounded handle. No if inherently verbose (full test/build log where bounding loses required signal) — then post-hoc truncation/filtering (`--emit-filtered` / `keep_head_tail`) is the fix.
-- **Replaceable?** Orthogonal: which advanced handle replaces the bash with same intent at lower cost — `rg`→`ast_grep_search`/`symbol_search`, `cat|grep`→`read_symbol`/`module_report`/`read --offset/limit`, repeated `bash` polling→`tool feedback`/`lsp`.
+- **Root cause:**
+  - `dump` (`cat`/`nl`/`ls -R`/`env`)
+  - `broad-search` (`rg` without scope) — audit if caused by missing navigation pointer in `AGENTS.md`/`CLAUDE.md`.
+  - `loop/poll` — audit if caused by missing environmental plumbing (e.g. untracked dev-server logs, missing status tool).
+  - `verbose-log` (test/build runners)
+  - `tool-payload` (oversized return from non-bash tool, MCP, or whole-file read).
+  - `legitimate-large` (known artifact).
+- **Manageable?** Yes if you can intervene the producing call/site and keep intent `< threshold` — tighten flags (`pytest -q`, `rg --max-count` / `-A`), add navigation pointer, improve environment plumbing (tee server logs to file), or edit owned `skills/*/scripts/*` to use a bounded handle. No if inherently verbose — then post-hoc truncation/filtering (`--emit-filtered` / `keep_head_tail`) is the fix.
+- **Replaceable?** Orthogonal: which advanced handle replaces the bash with same intent at lower cost — `rg`→`ast_grep_search`/`symbol_search`, `cat|grep`→`read_symbol`/`module_report`/`read --offset/limit`, repeated `bash` polling→`tool feedback`/`lsp`/`tee`.
+- **Existing Rule Check (No-Op Detection):** Did this violate an already-declared rule in `rules/` or `gotcha.md`? If rule was present but ignored by the model, flag it as a **No-Op**.
 
 Keep prose tight: `why / manageable / replaceable + tool` — no re-diagnosing scan.
 
@@ -53,9 +60,10 @@ Keep prose tight: `why / manageable / replaceable + tool` — no re-diagnosing s
 | Bucket                                     | Signal                                                                                                                        | Default action                                                                                                                                                                                                                       |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **A — Refine script**                      | Dump/search/poll in owned `skills/*/scripts/*` (or tight flag in managed invocation); repeat offender; manageable=Yes & owned | Edit the owning script: add bound flag (`-q`/`--max-count`/`\| head`) or replace with scoped tool; add test in `tests/harness-audit/` if reusable; re-run `uv run ruff check` + `audit.py --with-context 3` to confirm `< threshold` |
-| **B — Replace bash with advanced command** | One-off exploratory bash that wasted context; manageable=Yes but unowned                                                      | Document mapping and switch next time: `ast_grep`/`lsp`/`read` handle; no script edit; optional one-line note in skill or `gotcha` if recurrent                                                                                      |
+| **B — Replace bash with advanced command** | One-off exploratory bash that wasted context; manageable=Yes but unowned                                                      | Document mapping and switch next time: `ast_grep`/`lsp`/`read` handle; no script edit; optional one-line note in skill if recurrent                                                                                                  |
 | **C — Filter output**                      | Legitimately large but context-costly log                                                                                     | Keep bash, use `--emit-filtered` (or lower `keep_head_tail`)                                                                                                                                                                         |
-| **D — Keep**                               | Rare/expected large, cost acceptable                                                                                          | No action |
+| **D — Keep**                               | Rare/expected large, cost acceptable                                                                                          | No action                                                                                                                                                                                                                            |
+| **E — Environment / Pointer fix**          | Broad search due to navigation blindness, or blind polling due to untracked daemon                                           | Add navigation pointer to root `AGENTS.md`/`CLAUDE.md`, or tee runtime daemon logs to disk                                                                                                                                           |
 
 Per entry: `bucket / confidence / cheapest fix / context saved`. Include simpler/no-change when credible; do not invent fixes when one path suffices (keel: bounded options).
 
@@ -65,16 +73,20 @@ Present triaged list as dialog (not auto-fix):
 
 ```
 1. line 16 — `nl -ba _lib.py` (101 lines) → A — refine to `read --offset 120 --limit 20`  [saves ~80 lines]
-2. line 39 — `rg except` (51 lines) → B — replace with `ast_grep_search`                     [saves ~30 lines]
+2. line 39 — `rg except` (51 lines) → E — add navigation pointer to AGENTS.md             [eliminates scan]
 ```
 
-Ask: *Which entries to (a) refine script, (b) replace bash in future, (c) keep with filtered output, or (d) keep as-is?* Default `C` for `verbose-log`; require explicit approval for `A/B` touching `skills/*/scripts/` or `rules/`.
+Ask: *Which entries to (a) refine script, (b) replace bash in future, (c) keep with filtered output, (d) keep as-is, or (e) fix environment/navigation?* Default `C` for `verbose-log`; require explicit approval for `A/B/E` touching `skills/*/scripts/` or `rules/`.
 
 On approval:
 
 - **Refine script:** edit producing script (not session), replace `bash cat|rg` with scoped tool, add test in `tests/harness-audit/` when reusable, re-run `uv run ruff check` + `audit.py`.
 - **Replace bash:** note advanced-tool mapping for next turn; no code change.
-- **Add to `rules/common/gotcha.md`:** only when violation creates meaningful context-window risk and check can change action (keel §6). New gotcha needs evidence rule detects planted violation, narrow scope, owner, removal condition. Otherwise prefer one-off fix. Default gotchas remain shrink-only; growth is boundary decision.
+- **Environment & Navigation:** add concise navigation pointer to root `AGENTS.md`/`CLAUDE.md`, or pipe daemon logs to file.
+- **Harden vs Gotchas (Deterministic Check > Steering Rule):**
+  - **Mechanical violations** (syntax, flags, unbounded dumps, missing leases, numeric anchors) → **build a deterministic check** (pre-commit hook, CI step, tool wrapper script). Never write a prose gotcha for mechanical failures.
+  - **Add to `rules/common/gotcha.md`:** reserve strictly for qualitative **judgment calls** uncatchable by tools (keel §6). Requires evidence rule detects planted violation, narrow scope, owner, removal condition. Default gotchas remain shrink-only.
+  - **Prune No-Ops:** If an existing rule failed to alter agent behavior during the session, prune the dead prose or convert to a hard tool blocker.
 
 ## Edit audit workload
 
@@ -122,4 +134,4 @@ uv run $SKILL_DIR/scripts/audit_edits.py <session-id-or-path> --json
 
 ## Completion
 
-Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed, **and** user has chosen `A/B/C/D` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count. For edit audit: done when every edit failure has deterministic `category` N/H/F/B/T/M (or `?` with a stated reason), and the model proposes a corrected retry (read before edit, separate spans, re-read after mutation) or an explicit keep.
+Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed, **and** user has chosen `A/B/C/D/E` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count. For edit audit: done when every edit failure has deterministic `category` N/H/F/B/T/M (or `?` with a stated reason), and the model proposes a corrected retry (read before edit, separate spans, re-read after mutation) or an explicit keep.
