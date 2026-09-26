@@ -129,7 +129,7 @@ Agent tool (code-reviewer):
     [
       { "id": "SEM-01", "passed": true/false, "evidence": "file:line", "reasoning": "..." }
     ]
-    Return standard response per skills/dynamic-workflow-wrapper/references/resp-format.md.
+    Return standard response per skills/ai-engineering-expert/references/resp-format.md.
 ```
 
 Grade atomic assertions deterministically:
