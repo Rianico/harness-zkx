@@ -12,6 +12,12 @@ Manage ADRs through the installed `adr` command, with AI helping classify relati
 
 This skill is reusable by other skills and agents. It does not own a parallel ADR system. The `adr` CLI is the system of record for numbering, filenames, template application, status updates, and link mechanics.
 
+## Fail-loudly shim (`$SKILL_DIR/bin/adr`)
+
+adr-tools resolves its directory by walking up for `.adr-dir` and, finding none, **silently** falls back to `doc/adr` — `adr new` then mints a parallel ADR tree with fresh numbering and exit 0. `.adr-dir` is gitignored by design (see `adr-scaffolding`), so a freshly created worktree lacks it until wt's asynchronous `[post-start] copy-ignored` lands (~seconds): any `adr` call in that window misfires.
+
+`$SKILL_DIR/bin/adr` wraps the real CLI: it refuses `new`/`link`/`list`/`generate`/`upgrade-repository` (exit 2, remedy `adr init docs/adr`) when no `.adr-dir` or `doc/adr` resolves from cwd up to the repository root, and passes everything else through. Exit 64 means the real `adr` could not be resolved or shim recursion was detected (`ADR_SHIM_ACTIVE` already set). Install by putting it ahead of the real `adr` in `PATH`, or set `ADR_REAL` to the absolute path of the real binary; `ADR_ALLOW_DEFAULT=1` (exactly `1`) skips the guard for deliberate `doc/adr` projects. Tests: `tests/adr/`.
+
 ## When to Use
 
 Use this skill when:

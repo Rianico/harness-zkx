@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# adr — fail-loudly shim for adr-tools (issue #79).
+#
+# adr-tools' `_adr_dir` walks up from cwd looking for `.adr-dir` and, finding
+# none, silently falls back to `doc/adr`: `adr new` then creates a parallel
+# ADR tree with fresh numbering and exit 0. This repo keeps `.adr-dir`
+# gitignored (adr-scaffolding), so a worktree whose async `[post-start]
+# copy-ignored` has not landed yet is exactly that case.
+#
+# The shim resolves the real adr (ADR_REAL > first PATH hit that is not itself)
+# and refuses directory-touching subcommands when neither `.adr-dir` nor a
+# `doc/adr` tree is found walking up from cwd, stopping at the repository root.
+#
+# Exit codes: 0 pass-through | 2 refused (needs .adr-dir) | 64 no real adr /
+# shim recursion (EX_USAGE).
+# Escape hatch: ADR_ALLOW_DEFAULT=1 skips the guard for a deliberate
+# doc/adr project. Install: place this file earlier in PATH than the real
+# `adr` (the skill dir's bin/), or set ADR_REAL to the absolute path.
+# Requires: bash >= 3.2 (macOS system bash).
+
+set -Eeuo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
+IFS=$'\n\t'
+
+if [[ -n "${ADR_SHIM_ACTIVE:-}" ]]; then
+    printf '%s\n' "adr-shim: shim recursion detected (ADR_SHIM_ACTIVE already set; another copy of the shim precedes the real adr on PATH)" >&2
+    exit 64
+fi
+
+self=$(cd -- "$(dirname -- "$0")" && pwd -P)/adr
+
+# Prints the resolved path, or nothing after printing the reason on stderr;
+# empty output is fatal for the caller (exit 64 outside the subshell).
+find_real_adr() {
+    if [[ -n "${ADR_REAL:-}" ]]; then
+        if [[ -x "${ADR_REAL}" ]]; then
+            printf '%s\n' "${ADR_REAL}"
+        else
+            printf 'adr-shim: ADR_REAL not executable: %s\n' "${ADR_REAL}" >&2
+        fi
+        return 0
+    fi
+    local -a path_dirs
+    local dir candidate
+    IFS=':' read -ra path_dirs <<< "${PATH}"
+    for dir in "${path_dirs[@]}"; do
+        candidate="${dir}/adr"
+        if [[ -x "${candidate}" && ! -d "${candidate}" ]]; then
+            # Skip any PATH entry that resolves to this shim itself.
+            local resolved
+            resolved=$(cd -- "${dir}" && pwd -P)/adr
+            if [[ "${resolved}" != "${self}" ]]; then
+                printf '%s\n' "${candidate}"
+                return 0
+            fi
+        fi
+    done
+    printf '%s\n' "adr-shim: no real adr found on PATH (set ADR_REAL)" >&2
+}
+
+# Mirrors _adr_dir's walk, but stops at the repository root: in a fresh
+# worktree docs/adr is tracked while .adr-dir is not, so walking past the
+# root could bless the wrong tree. Returns 0 configured / 1 not; errexit-
+# independent (every command's status is consumed by an explicit branch).
+adr_dir_configured() {
+    local reldir=. abs
+    while true; do
+        if [[ -f "${reldir}/.adr-dir" || -d "${reldir}/doc/adr" ]]; then
+            return 0
+        fi
+        if [[ -e "${reldir}/.git" ]]; then
+            return 1
+        fi
+        abs=$(cd -- "${reldir}" && pwd -P)
+        if [[ "${abs}" == "/" ]]; then
+            return 1
+        fi
+        reldir="${reldir}/.."
+    done
+}
+
+# First non-flag argument is the subcommand (adr-tools dispatches on $1).
+subcommand=""
+for arg in "$@"; do
+    case "${arg}" in
+        -*) ;;
+        *)
+            subcommand="${arg}"
+            break
+            ;;
+    esac
+done
+
+if [[ "${ADR_ALLOW_DEFAULT:-}" != "1" ]]; then
+    case "${subcommand}" in
+        new | link | list | generate | upgrade-repository)
+            # shellcheck disable=SC2310  # Reason: the function is errexit-independent
+            # (returns 0/1 explicitly, no command's failure can escape it silently).
+            if ! adr_dir_configured; then
+                cat >&2 <<'EOF'
+adr-shim: no `.adr-dir` found walking up to the repository root.
+adr-tools would silently fall back to `doc/adr` and mint a parallel ADR tree.
+This is the fresh-worktree race: wt's `[post-start] copy-ignored` is
+asynchronous and may not have landed yet.
+Remedy:
+  adr init docs/adr        # writes .adr-dir (gitignored by design)
+Or wait for the worktree post-start copy, then retry.
+Deliberate doc/adr project? re-run with ADR_ALLOW_DEFAULT=1.
+EOF
+                exit 2
+            fi
+            ;;
+        *) ;; # every other subcommand touches no resolved ADR dir
+    esac
+fi
+
+real_adr=$(find_real_adr)
+[[ -n "${real_adr}" ]] || exit 64
+export ADR_SHIM_ACTIVE=1
+# Forward "$@" verbatim: the real adr dispatches on $1 and rejects a `--`
+# separator, so the option-terminator rule cannot apply at this seam.
+exec "${real_adr}" "$@"
