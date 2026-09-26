@@ -151,6 +151,8 @@ Underlying commands, if you drive them directly:
 
 The full split, including which response returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
+For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for anti-hero-mode rules, canonical TM brief contracts, and the subagent-vs-worker boundary.
+
 ## Start and coordinate an agent
 
 Default to a sibling pane in the current tab and the current working directory. Do not create a workspace, tab, worktree, or different cwd unless the user explicitly requests that topology or location.
