@@ -24,6 +24,7 @@ from pr import (  # noqa: E402
     pr_conflict_verdict,
     run_command,
     squash_message,
+    stamp_changelog,
 )
 
 
@@ -443,7 +444,7 @@ for arg in "$@"; do
     elif [[ "$arg" =~ \\.workflow_runs ]]; then
         echo "99999"
         exit 0
-    elif [[ "$arg" == "--log" ]]; then
+    elif [[ "$arg" == "--log" || "$arg" == "--log-failed" ]]; then
         sleep 5
         exit 0
     elif [[ "$arg" == "checks" ]]; then
@@ -477,3 +478,244 @@ pr.dump_failure_logs("test/repo", "123")
     assert res.returncode == 0
     assert "warning: could not fetch run logs: command timed out after 0.2s" in res.stderr
     assert "test-suite   fail   1m" in res.stderr
+
+
+def test_parse_args_tracks_no_stamp() -> None:
+    """parse_args must support --no-stamp (True) and --stamp (False), defaulting to False."""
+    assert not parse_args([]).no_stamp
+    assert parse_args(["--no-stamp"]).no_stamp
+    assert not parse_args(["--no-stamp", "--stamp"]).no_stamp
+
+
+def test_stamp_changelog_attributes_entries_and_commits(tmp_path: Path) -> None:
+    """stamp_changelog must attribute unreleased entries with PR number, preserve BREAKING CHANGE, and push commit."""
+    remote_path = tmp_path / "remote.git"
+    _ = subprocess.run(["git", "init", "--bare", str(remote_path)], check=True, capture_output=True)
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    _ = subprocess.run(
+        ["git", "init", "-b", "main", str(repo_path)], check=True, capture_output=True
+    )
+    _ = subprocess.run(
+        ["git", "-C", str(repo_path), "remote", "add", "origin", str(remote_path)],
+        check=True,
+        capture_output=True,
+    )
+    _ = subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Tester"], check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.email", "tester@example.com"], check=True
+    )
+
+    readme = repo_path / "README.md"
+    _ = readme.write_text("# Repo\n", encoding="utf-8")
+    _ = subprocess.run(["git", "-C", str(repo_path), "add", "README.md"], check=True)
+    _ = subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "chore: initial"], check=True)
+    _ = subprocess.run(["git", "-C", str(repo_path), "push", "-u", "origin", "main"], check=True)
+
+    _ = subprocess.run(
+        ["git", "-C", str(repo_path), "checkout", "-b", "feat/my-feature"], check=True
+    )
+
+    config_dir = repo_path / ".config"
+    config_dir.mkdir(parents=True)
+    baseline_file = config_dir / "changelog-unattributed-baseline.txt"
+    _ = baseline_file.write_text("# baseline\nlegacy baseline entry\n", encoding="utf-8")
+
+    changelog_content = """# Changelog
+
+## [Unreleased]
+
+### Features
+* **pr-land:** test auto-stamp
+* **scope:** breaking change (BREAKING CHANGE)
+* legacy baseline entry
+* already attributed (#99)
+
+## [1.0.0] - 2026-01-01
+* initial entry (#1)
+"""
+    changelog_file = repo_path / "CHANGELOG.md"
+    _ = changelog_file.write_text(changelog_content, encoding="utf-8")
+    _ = subprocess.run(["git", "-C", str(repo_path), "add", "CHANGELOG.md", ".config"], check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(repo_path), "commit", "-m", "feat: add feature"], check=True
+    )
+    _ = subprocess.run(
+        ["git", "-C", str(repo_path), "push", "-u", "origin", "feat/my-feature"], check=True
+    )
+
+    stamped = stamp_changelog("feat/my-feature", "145", cwd=repo_path)
+    assert stamped is True
+
+    updated_text = changelog_file.read_text(encoding="utf-8")
+    assert "* **pr-land:** test auto-stamp (#145)" in updated_text
+    assert "* **scope:** breaking change (#145) (BREAKING CHANGE)" in updated_text
+    assert "* legacy baseline entry" in updated_text
+    assert "legacy baseline entry (#145)" not in updated_text
+    assert "* already attributed (#99)" in updated_text
+    assert "already attributed (#99) (#145)" not in updated_text
+
+    log_res = subprocess.run(
+        ["git", "-C", str(repo_path), "log", "-1", "--pretty=%s"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert log_res.stdout.strip() == "chore(changelog): attribute #145 in unreleased ledger"
+
+    # Idempotent
+    stamped_again = stamp_changelog("feat/my-feature", "145", cwd=repo_path)
+    assert stamped_again is False
+
+
+def test_dump_failure_logs_targets_check_link_and_log_failed(tmp_path: Path) -> None:
+    """dump_failure_logs must resolve failed run ID from check links and invoke gh run view --log-failed."""
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir(exist_ok=True)
+    gh_mock = mock_bin / "gh"
+    log_file = tmp_path / "calls.log"
+
+    gh_script = f"""#!/usr/bin/env bash
+echo "$@" >> "{log_file}"
+if [[ "$*" =~ name,bucket,link,state ]]; then
+    cat <<'EOF'
+[
+  {{"name": "build", "bucket": "pass", "link": "https://github.com/test/repo/actions/runs/1111/job/1", "state": "SUCCESS"}},
+  {{"name": "test", "bucket": "fail", "link": "https://github.com/test/repo/actions/runs/77777/job/2", "state": "FAILURE"}}
+]
+EOF
+    exit 0
+elif [[ "$*" =~ view\\ 77777.*--log-failed ]]; then
+    echo "FAIL: test_something() failed assert 1 == 2"
+    exit 0
+elif [[ "$*" =~ pr\\ checks\\ 123 ]]; then
+    echo "test   fail   1m"
+    exit 0
+fi
+exit 0
+"""
+    _ = gh_mock.write_text(gh_script, encoding="utf-8")
+    gh_mock.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}",
+    }
+
+    test_script = f"""
+import sys
+sys.path.insert(0, "{PR_SCRIPTS}")
+from pr import dump_failure_logs
+dump_failure_logs("test/repo", "123")
+"""
+    res = subprocess.run(
+        [sys.executable, "-c", test_script],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    assert res.returncode == 0
+    assert "FAIL: test_something() failed assert 1 == 2" in res.stderr
+    assert "test   fail   1m" in res.stderr
+
+    calls = log_file.read_text(encoding="utf-8")
+    assert "run view 77777 --repo test/repo --log-failed" in calls
+
+
+def test_check_trailers_local_preflight_no_remote_pr(tmp_path: Path) -> None:
+    """check_trailers without open PR: exit 2 when no body supplied; exit 0 on valid body; exit 1 on bad title or raw token."""
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir(exist_ok=True)
+    gh_mock = mock_bin / "gh"
+
+    gh_script = """#!/usr/bin/env bash
+if [[ "$*" =~ pulls\\?head= ]]; then
+    echo "null"
+    exit 0
+elif [[ "$*" =~ api\\ user ]]; then
+    echo "merger-user"
+    exit 0
+fi
+exit 0
+"""
+    _ = gh_mock.write_text(gh_script, encoding="utf-8")
+    gh_mock.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}",
+    }
+
+    # Case 1: no open PR and no body_supplied -> returns 2
+    test_no_body = f"""
+import sys
+sys.path.insert(0, "{PR_SCRIPTS}")
+from pr import check_trailers
+rc = check_trailers("test/repo", "feat-branch", "", body_supplied=False)
+sys.exit(rc)
+"""
+    res1 = subprocess.run(
+        [sys.executable, "-c", test_no_body],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    assert res1.returncode == 2
+    assert "no open PR for head feat-branch" in res1.stderr
+
+    # Case 2: body_supplied=True, valid body & title -> returns 0
+    test_valid = f"""
+import sys
+sys.path.insert(0, "{PR_SCRIPTS}")
+from pr import check_trailers
+rc = check_trailers("test/repo", "feat-branch", "feat: short description", body_supplied=True, title="feat: short title")
+sys.exit(rc)
+"""
+    res2 = subprocess.run(
+        [sys.executable, "-c", test_valid],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    assert res2.returncode == 0
+
+    # Case 3: body_supplied=True, body has raw CODE_AUTHORS token -> returns 1
+    test_raw_token = f"""
+import sys
+sys.path.insert(0, "{PR_SCRIPTS}")
+from pr import check_trailers
+rc = check_trailers("test/repo", "feat-branch", "feat: body <!-- CODE_AUTHORS -->", body_supplied=True)
+sys.exit(rc)
+"""
+    res3 = subprocess.run(
+        [sys.executable, "-c", test_raw_token],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    assert res3.returncode == 1
+    assert "raw CODE_AUTHORS token still present" in res3.stderr
+
+    # Case 4: body_supplied=True, title exceeds 100 chars -> returns 1
+    long_title = "feat: " + "a" * 95
+    test_long_title = f"""
+import sys
+sys.path.insert(0, "{PR_SCRIPTS}")
+from pr import check_trailers
+rc = check_trailers("test/repo", "feat-branch", "feat: body", body_supplied=True, title="{long_title}")
+sys.exit(rc)
+"""
+    res4 = subprocess.run(
+        [sys.executable, "-c", test_long_title],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    assert res4.returncode == 1
+    assert "commit title exceeds 100 chars" in res4.stderr

@@ -9,11 +9,11 @@
 
 ## Changelog
 
-`CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required, `diff -q` vs generated); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Hidden types `style|chore|refactor|test|build|ci` only appear when `!`/`BREAKING CHANGE`.
+`CHANGELOG.md` `## [Unreleased]` gated by `scripts/changelog-gate.py` in `changelog-check.yml` (a PR run reads the `Landing:` declaration from the PR body; the `main` run is the durable one); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit a sync as a hidden type (e.g. `chore: sync changelog unreleased section`) so it mints no ledger entry. Hidden types only appear when `!`/`BREAKING CHANGE`.
 
 ## Before PR
 
-`uv run ruff check . && uv run ruff format --check . && uv run scripts/typecheck-budget.py && uv run pytest` must pass. See `AGENTS.md` for agent rules. The budget is inert until it is seeded once: `uv run scripts/typecheck-budget.py --seed`.
+`uv run ruff check . && uv run ruff format --check . && uv run scripts/typecheck-budget.py && uv run pytest && uv run python3 scripts/changelog-gate.py ledger` must pass. See `AGENTS.md` for agent rules. The budget is inert until it is seeded once: `uv run scripts/typecheck-budget.py --seed`.
 
 `ruff format` is gated too: the verify job runs `uv run ruff format --check .`, so the tree stays formatted. `[tool.ruff] exclude` keeps `*.md` out of that pass — ruff also reformats Python fences inside Markdown, and this repo's 73 reference docs are the product, not code to reflow.
 
