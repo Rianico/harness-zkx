@@ -96,9 +96,30 @@ if args[:2] == ["agent", "get"]:
         print(json.dumps({"error": state["agent_get_error"], "id": "cli:agent:get"}), file=sys.stderr)
         raise SystemExit(1)
     seq = state.get("agent_get_seq", {}).get(target)
+    rev_seq = state.get("agent_get_rev_seq", {}).get(target)
     static = state.get("agent_get", {}).get(target, {})
+    prior = -1
+    try:
+        with Path(os.environ["STUB_HERDR_LOG"]).open() as log:
+            for line in log:
+                try:
+                    logged = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if logged[1:4] == ["agent", "get", target]:
+                    prior += 1
+    except FileNotFoundError:
+        prior = 0
     if seq is not None:
-        prior = -1
+        status = seq[min(max(prior, 0), len(seq) - 1)]
+    else:
+        status = static.get("agent_status", "working")
+    if rev_seq is not None:
+        revision = rev_seq[min(max(prior, 0), len(rev_seq) - 1)]
+    elif "revision" in static:
+        revision = static["revision"]
+    else:
+        prompts = 0
         try:
             with Path(os.environ["STUB_HERDR_LOG"]).open() as log:
                 for line in log:
@@ -106,18 +127,16 @@ if args[:2] == ["agent", "get"]:
                         logged = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    if logged[1:4] == ["agent", "get", target]:
-                        prior += 1
+                    if len(logged) > 3 and logged[1:3] == ["agent", "prompt"] and logged[3] == target:
+                        prompts += 1
         except FileNotFoundError:
-            prior = 0
-        status = seq[min(max(prior, 0), len(seq) - 1)]
-    else:
-        status = static.get("agent_status", "working")
+            pass
+        revision = "r1" if prompts == 0 else f"r{1 + prompts}"
     agent = {
         "name": target,
         "agent": "pi",
         "agent_status": status,
-        "revision": static.get("revision", "r1"),
+        "revision": revision,
     }
     if static.get("session"):
         agent["agent_session"] = {"kind": "path", "value": static["session"]}

@@ -44,6 +44,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -466,6 +467,10 @@ def prompt_one(
         print(json.dumps(argv))
         return Dispatch(target)
 
+    pre_rev, pane = (
+        fetch_agent_revision(herdr, target, env) if not options.no_caller_context else (None, None)
+    )
+
     done = run_herdr(argv, env)
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
@@ -479,6 +484,39 @@ def prompt_one(
             return Dispatch(target, wait_timed_out=True)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
+    post_rev, post_pane = (
+        fetch_agent_revision(herdr, target, env) if not options.no_caller_context else (None, None)
+    )
+    if post_pane:
+        pane = post_pane
+
+    if pre_rev is not None and (post_rev is None or post_rev == pre_rev):
+        time.sleep(0.1)
+        retry_done = run_herdr(argv, env)
+        if retry_done.returncode != 0:
+            detail = (
+                retry_done.stderr or retry_done.stdout
+            ).strip() or f"exit status {retry_done.returncode}"
+            code = error_code(retry_done.stderr)
+            if code == BLOCKED_CODE:
+                print(f"herdr-prompt: {target}: {detail}", file=sys.stderr)
+                return Dispatch(target, blocked=True)
+            if code == TIMEOUT_CODE:
+                return Dispatch(target, wait_timed_out=True)
+            raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
+        done = retry_done
+        post_rev, post_pane = (
+            fetch_agent_revision(herdr, target, env)
+            if not options.no_caller_context
+            else (None, None)
+        )
+        if post_pane:
+            pane = post_pane
+        if post_rev is None or post_rev == pre_rev:
+            raise HerdrError(
+                f"herdr agent prompt {target} failed: prompt dropped (revision remained {pre_rev})"
+            )
+
     _ = decode_response(done.stdout)
     state = settled_state(done.stdout)
     if options.json:
@@ -486,13 +524,8 @@ def prompt_one(
     else:
         size = len(payload.encode("utf-8"))
         suffix = f"  state={state}" if state else ""
-        rev, pane = (
-            fetch_agent_revision(herdr, target, env)
-            if not options.no_caller_context
-            else (None, None)
-        )
         pane_str = f" ({pane})" if pane and pane != target else ""
-        rev_str = f"  revision={rev}" if rev else ""
+        rev_str = f"  revision={post_rev}" if post_rev else ""
         print(f"prompted {target}{pane_str}  bytes={size}{rev_str}{suffix}")
     return Dispatch(target, state=state, blocked=state == BLOCKED)
 
