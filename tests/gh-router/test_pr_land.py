@@ -20,6 +20,7 @@ if str(PR_SCRIPTS) not in sys.path:
 
 from pr import (  # noqa: E402
     PrError,
+    clean_squash_body,
     parse_args,
     pr_conflict_verdict,
     run_command,
@@ -719,3 +720,61 @@ sys.exit(rc)
     )
     assert res4.returncode == 1
     assert "commit title exceeds 100 chars" in res4.stderr
+
+
+def test_clean_squash_body_strips_checklist_landing_and_comments() -> None:
+    """clean_squash_body must strip HTML comments, ## Landing, ## Checklist, and empty sections while keeping closes."""
+    raw_body = """<!-- markdownlint-disable MD041 -->
+
+## Summary
+Add important feature.
+
+<!-- 2-3 sentences -->
+**Impact**: 2 files · **Risk**: Low
+
+## What Changed
+- item 1
+- item 2
+
+## Architecture
+<!-- Mermaid diagram here -->
+
+## Landing
+Landing: squash
+Ledger-Waiver: test-waiver
+
+## Checklist
+- [x] Formatter green
+- [ ] Tests passed
+
+Closes #123
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "<!--" not in cleaned
+    assert "## Checklist" not in cleaned
+    assert "Formatter green" not in cleaned
+    assert "## Landing" not in cleaned
+    assert "Landing: squash" not in cleaned
+    assert "Ledger-Waiver" not in cleaned
+    assert "## Architecture" not in cleaned
+    assert "## Summary\nAdd important feature.\n\n**Impact**: 2 files · **Risk**: Low" in cleaned
+    assert "## What Changed\n- item 1\n- item 2" in cleaned
+    assert "Closes #123" in cleaned
+
+
+def test_clean_squash_body_refuses_raw_token() -> None:
+    """clean_squash_body must refuse when raw CODE_AUTHORS token is present."""
+    with pytest.raises(PrError):
+        clean_squash_body("## Summary\nText\n<!-- CODE_AUTHORS -->\n")
+
+
+def test_squash_message_returns_empty_when_body_has_only_procedural_sections() -> None:
+    """When a PR body contains only procedural checklists, comments, or directives, squash_message returns empty."""
+    procedural_only = """<!-- markdownlint-disable MD041 -->
+## Landing
+Landing: squash
+
+## Checklist
+- [x] Tests green
+"""
+    assert squash_message(procedural_only) == ""
