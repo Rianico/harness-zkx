@@ -309,8 +309,8 @@ def main(argv: list[str] | None = None) -> None:
         for k in ("CHANGELOG", "[Unreleased]", "changelog-unreleased", "pre-push", "pre_push")
     )
     if changelog_hit:
-        print_err("hint: CHANGELOG guard blocked — run inside copy:")
-        print_err("  uv run python scripts/changelog-unreleased.py update")
+        print_err("hint: CHANGELOG guard blocked — check ledger inside copy:")
+        print_err("  uv run python scripts/changelog-gate.py ledger")
         print_err("  git add CHANGELOG.md && git commit --amend --no-edit  # or new commit")
         print_err("  then retry: uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>")
     status_text: str = git_status_text(copy_path)

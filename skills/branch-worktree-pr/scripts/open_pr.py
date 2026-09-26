@@ -125,8 +125,8 @@ def main(argv: list[str] | None = None) -> None:
         if any(
             k in push_out for k in ("CHANGELOG", "[Unreleased]", "changelog-unreleased", "pre-push")
         ):
-            print_err("hint: pre-push CHANGELOG guard blocked — run:")
-            print_err("  uv run python scripts/changelog-unreleased.py update")
+            print_err("hint: CHANGELOG guard blocked — check ledger:")
+            print_err("  uv run python scripts/changelog-gate.py ledger")
             print_err("  git add CHANGELOG.md && git commit --amend --no-edit")
             print_err("  git push -u origin " + branch + "  # retry")
         else:

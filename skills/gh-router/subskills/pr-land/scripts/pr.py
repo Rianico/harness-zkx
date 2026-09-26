@@ -4,10 +4,11 @@
 # ///
 """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
 
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp]
   --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
+  --no-stamp : do not auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
 except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
 script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
@@ -16,6 +17,7 @@ Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no 
 Exit: 0 ok | 1 checks failed or merge refused | 2 usage or unusable head ref
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -93,16 +95,18 @@ class PrOptions:
     merge: bool = False
     check: bool = False
     draft: bool = False
+    no_stamp: bool = False
     title_supplied: bool = False
     body_supplied: bool = False
 
 
 def print_usage() -> None:
     usage = """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp]
   --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
+  --no-stamp : do not auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
 except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
 script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
@@ -124,6 +128,7 @@ def parse_args(args: list[str]) -> PrOptions:
     merge = False
     check = False
     draft = False
+    no_stamp = False
 
     i = 0
     while i < len(args):
@@ -180,6 +185,12 @@ def parse_args(args: list[str]) -> PrOptions:
         elif arg == "--no-draft":
             draft = False
             i += 1
+        elif arg == "--no-stamp":
+            no_stamp = True
+            i += 1
+        elif arg == "--stamp":
+            no_stamp = False
+            i += 1
         elif arg in ("-h", "--help"):
             print_usage()
             sys.exit(0)
@@ -196,6 +207,7 @@ def parse_args(args: list[str]) -> PrOptions:
         merge=merge,
         check=check,
         draft=draft,
+        no_stamp=no_stamp,
         title_supplied=title_supplied,
         body_supplied=body_supplied,
     )
@@ -424,7 +436,7 @@ def pr_co_author_trailers(tsv: str, merger: str = "", body: str = "") -> str:
 
         if not name or not email:
             continue
-        if merger_key and login == merger_key:
+        if merger_key and (login == merger_key or email.lower() == merger_key):
             continue
         key = email.lower()
         if key in seen or key in existing_emails:
@@ -693,37 +705,99 @@ def check_conflicts(repo: str, num: str, base: str, cwd: Path | None = None) -> 
 
 
 def dump_failure_logs(repo: str, num: str, cwd: Path | None = None) -> None:
-    sha_res = run_command(
-        ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".head.sha"],
+    run_ids: list[str] = []
+    checks_json_res = run_command(
+        [
+            "gh",
+            "pr",
+            "checks",
+            num,
+            "--repo",
+            repo,
+            "--json",
+            "name,bucket,link,state",
+        ],
         cwd=cwd,
     )
-    sha = sha_res.stdout.strip() if sha_res.returncode == 0 else ""
-    run_id = ""
-    if sha:
-        run_res = run_command(
-            [
-                "gh",
-                "api",
-                f"repos/{repo}/actions/runs?head_sha={sha}&per_page=1",
-                "--jq",
-                ".workflow_runs[0].id // empty",
-            ],
+    if checks_json_res.returncode == 0 and checks_json_res.stdout.strip():
+        try:
+            checks_data = json.loads(checks_json_res.stdout)
+            if isinstance(checks_data, list):
+                for check in checks_data:
+                    if isinstance(check, dict):
+                        bucket = str(check.get("bucket", "")).lower()
+                        state = str(check.get("state", "")).upper()
+                        if bucket in ("fail", "cancel") or state in (
+                            "FAILURE",
+                            "CANCELLED",
+                            "TIMED_OUT",
+                        ):
+                            link = str(check.get("link", ""))
+                            m = re.search(r"/actions/runs/(\d+)", link)
+                            if m:
+                                rid = m.group(1)
+                                if rid not in run_ids:
+                                    run_ids.append(rid)
+        except ValueError, TypeError, KeyError:
+            pass
+
+    if not run_ids:
+        sha_res = run_command(
+            ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".head.sha"],
             cwd=cwd,
         )
-        run_id = run_res.stdout.strip() if run_res.returncode == 0 else ""
-    if run_id:
+        sha = sha_res.stdout.strip() if sha_res.returncode == 0 else ""
+        if sha:
+            runs_res = run_command(
+                [
+                    "gh",
+                    "api",
+                    f"repos/{repo}/actions/runs?head_sha={sha}&status=completed&per_page=10",
+                    "--jq",
+                    '[.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .id] | .[0] // empty',
+                ],
+                cwd=cwd,
+            )
+            rid = runs_res.stdout.strip() if runs_res.returncode == 0 else ""
+            if rid:
+                run_ids.append(rid)
+            else:
+                any_run_res = run_command(
+                    [
+                        "gh",
+                        "api",
+                        f"repos/{repo}/actions/runs?head_sha={sha}&per_page=1",
+                        "--jq",
+                        ".workflow_runs[0].id // empty",
+                    ],
+                    cwd=cwd,
+                )
+                rid = any_run_res.stdout.strip() if any_run_res.returncode == 0 else ""
+                if rid:
+                    run_ids.append(rid)
+
+    for run_id in run_ids[:2]:
         try:
             view_res = run_command(
-                ["gh", "run", "view", run_id, "--repo", repo, "--log"],
+                ["gh", "run", "view", run_id, "--repo", repo, "--log-failed"],
                 timeout=LOG_TIMEOUT,
                 cwd=cwd,
             )
-            combined = (view_res.stdout + view_res.stderr).splitlines()
-            tail_lines = combined[-200:]
+            combined = (view_res.stdout + view_res.stderr).strip()
+            if not combined or view_res.returncode != 0:
+                view_res = run_command(
+                    ["gh", "run", "view", run_id, "--repo", repo, "--log"],
+                    timeout=LOG_TIMEOUT,
+                    cwd=cwd,
+                )
+                combined = (view_res.stdout + view_res.stderr).strip()
+
+            tail_lines = combined.splitlines()[-200:]
             if tail_lines:
                 print("\n".join(tail_lines), file=sys.stderr)
         except PrError as e:
             print(f"warning: could not fetch run logs: {e}", file=sys.stderr)
+
     checks_res = run_command(
         ["gh", "pr", "checks", num, "--repo", repo],
         cwd=cwd,
@@ -792,6 +866,7 @@ def check_trailers(
     head_ref: str,
     body: str,
     body_supplied: bool,
+    title: str = "",
     template_path: Path | None = None,
     cwd: Path | None = None,
 ) -> int:
@@ -812,8 +887,59 @@ def check_trailers(
         )
     found = res.stdout.strip()
     if not found or found == "null":
-        print(f"no open PR for head {head_ref}", file=sys.stderr)
-        return 2
+        if not body_supplied:
+            print(f"no open PR for head {head_ref}", file=sys.stderr)
+            return 2
+
+        if title:
+            try:
+                check_title_length(title, 9999)
+            except RefusalError:
+                return 1
+
+        if is_fallback_body(body, template_path=template_path):
+            print(
+                "commit_message will be omitted (body empty or repo template); GitHub builds the squash message"
+            )
+            return 0
+
+        try:
+            refuse_raw_token(body)
+        except RefusalError:
+            return 1
+
+        log_res = run_command(
+            ["git", "log", f"origin/main..{head_ref}", "--pretty=format:\t%an\t%ae"],
+            cwd=cwd,
+        )
+        if log_res.returncode != 0:
+            log_res = run_command(
+                ["git", "log", f"main..{head_ref}", "--pretty=format:\t%an\t%ae"],
+                cwd=cwd,
+            )
+        if log_res.returncode != 0:
+            log_res = run_command(
+                ["git", "log", "-1", "--pretty=format:\t%an\t%ae", head_ref],
+                cwd=cwd,
+            )
+        tsv = log_res.stdout if log_res.returncode == 0 else ""
+
+        merger = ""
+        user_res = run_command(["gh", "api", "user", "--jq", ".login"], cwd=cwd)
+        if user_res.returncode == 0 and user_res.stdout.strip():
+            merger = user_res.stdout.strip()
+        if not merger:
+            cfg_res = run_command(["git", "config", "user.email"], cwd=cwd)
+            if cfg_res.returncode == 0:
+                merger = cfg_res.stdout.strip()
+
+        new_trailers = pr_co_author_trailers(tsv, merger=merger, body=body)
+        if new_trailers.strip():
+            print(new_trailers, end="")
+        else:
+            print(f"no co-author trailers would be appended for {head_ref}", file=sys.stderr)
+        return 0
+
     num = found
 
     if not body_supplied:
@@ -1053,6 +1179,141 @@ def merge_pr(
     return True
 
 
+def stamp_changelog(
+    head_ref: str,
+    pr_num: str,
+    cwd: Path | None = None,
+) -> bool:
+    root = cwd or Path.cwd()
+    changelog_path = root / "CHANGELOG.md"
+    if not changelog_path.is_file():
+        return False
+
+    try:
+        content = changelog_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    if "## [Unreleased]" not in content:
+        return False
+
+    before_unreleased, rest = content.split("## [Unreleased]", 1)
+    version_match = re.search(r"^## \[[^\]]+\].*", rest, re.MULTILINE)
+    if version_match:
+        unreleased_block = rest[: version_match.start()]
+        after_unreleased = rest[version_match.start() :]
+    else:
+        unreleased_block = rest
+        after_unreleased = ""
+
+    if f"(#{pr_num})" in unreleased_block:
+        return False
+
+    baseline_path = root / ".config" / "changelog-unattributed-baseline.txt"
+    baseline: set[str] = set()
+    if baseline_path.is_file():
+        try:
+            baseline = {
+                line.strip()
+                for line in baseline_path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")
+            }
+        except OSError:
+            baseline = set()
+
+    attribution_re = re.compile(r"\(#\d+\)(?:\s*\(BREAKING CHANGE\))?\s*$")
+    breaking_re = re.compile(r"\s*\(BREAKING CHANGE\)\s*$")
+    bullet_re = re.compile(r"^([*+-]\s+)(.+)$")
+
+    def entry_identity(text: str) -> str:
+        s = text.strip()
+        if s[:1] in "*+-":
+            s = s[1:].strip()
+        while True:
+            trimmed = re.sub(r"\s*\(#\d+\)\s*$|\s*\(BREAKING CHANGE\)\s*$", "", s).rstrip()
+            if trimmed == s:
+                return s
+            s = trimmed
+
+    new_lines: list[str] = []
+    modified = False
+
+    for line in unreleased_block.splitlines(keepends=True):
+        raw_line = line.rstrip("\r\n")
+        m = bullet_re.match(raw_line)
+        if not m:
+            new_lines.append(line)
+            continue
+
+        prefix, body = m.group(1), m.group(2)
+        if attribution_re.search(body):
+            new_lines.append(line)
+            continue
+
+        identity = entry_identity(raw_line)
+        if identity in baseline:
+            new_lines.append(line)
+            continue
+
+        ending = ""
+        if line.endswith("\r\n"):
+            ending = "\r\n"
+        elif line.endswith("\n"):
+            ending = "\n"
+
+        if breaking_re.search(body):
+            body_without_breaking = breaking_re.sub("", body).rstrip()
+            stamped_body = f"{body_without_breaking} (#{pr_num}) (BREAKING CHANGE)"
+        else:
+            stamped_body = f"{body.rstrip()} (#{pr_num})"
+
+        new_lines.append(f"{prefix}{stamped_body}{ending}")
+        modified = True
+
+    if not modified:
+        return False
+
+    new_unreleased = "".join(new_lines)
+    new_content = before_unreleased + "## [Unreleased]" + new_unreleased + after_unreleased
+
+    try:
+        _ = changelog_path.write_text(new_content, encoding="utf-8")
+    except OSError as e:
+        print(f"warning: could not write stamped CHANGELOG.md: {e}", file=sys.stderr)
+        return False
+
+    try:
+        _ = run_command(["git", "add", "CHANGELOG.md"], cwd=cwd, check=True)
+        commit_res = run_command(
+            ["git", "commit", "-m", f"chore(changelog): attribute #{pr_num} in unreleased ledger"],
+            cwd=cwd,
+        )
+        if commit_res.returncode != 0:
+            print(
+                f"warning: git commit failed during changelog stamp: {commit_res.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return False
+
+        remote = repo_remote_for_ref(head_ref, cwd=cwd)
+        push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
+        if push_res.returncode != 0:
+            print(
+                f"warning: git push to {remote} {head_ref} failed: {push_res.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return False
+
+        print(
+            f"attributed #{pr_num} in CHANGELOG.md and pushed to {remote}/{head_ref}",
+            file=sys.stderr,
+        )
+        return True
+    except PrError as e:
+        print(f"warning: changelog auto-stamp failed: {e}", file=sys.stderr)
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
@@ -1068,6 +1329,7 @@ def main(argv: list[str] | None = None) -> int:
                 head_ref=head,
                 body=body,
                 body_supplied=body_supplied,
+                title=title,
             )
 
         base = resolve_base(options.base, repo)
@@ -1083,6 +1345,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         url = pr_url(repo, num)
         print(f"PR {url}")
+
+        if not options.no_stamp:
+            _ = stamp_changelog(head, num)
 
         if options.watch:
             if not watch_checks(repo, num, base):

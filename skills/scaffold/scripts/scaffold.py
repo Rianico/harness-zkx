@@ -1663,7 +1663,7 @@ def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, objec
             finding(
                 "CHANGELOG.md",
                 "no `## [Unreleased]` section — the ledger floor has nothing to check",
-                "uv run python scripts/changelog-unreleased.py update",
+                "add a `## [Unreleased]` section to CHANGELOG.md",
             )
         if not title_at_top:
             finding(
