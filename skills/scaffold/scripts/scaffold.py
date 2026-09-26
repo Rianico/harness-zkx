@@ -227,12 +227,13 @@ GITIGNORE_PYTHON_EXTRA = [*GITIGNORE_PY_SCRIPTS, ".venv/"]
 GITIGNORE_RUST_EXTRA = ["target/"]
 GITIGNORE_TS_EXTRA = ["node_modules/", "dist/"]
 
-# Component granularity — git flavor default is all; --only/--without/--components select subset
+# Component granularity — git flavor default is all except opt-in extras; --only/--without/--components select subset
 GIT_COMPONENTS: set[str] = {
     "releaserc",  # .releaserc.json
     "release-yml",  # .github/workflows/release.yml (git variant)
     "changelog-check",  # .github/workflows/changelog-check.yml
     "changelog-script",  # scripts/changelog-*.py + scripts/release-changelog.mjs
+    "typecheck-budget",  # scripts/typecheck-budget.py (basedpyright budget gate; opt-in, python flavor owns it)
     "commitlint",  # commitlint.config.js
     "changelog-md",  # CHANGELOG.md
     "issue-templates",  # .github/ISSUE_TEMPLATE/* + config.yml
@@ -301,6 +302,7 @@ MISSING = "missing"  # absent, would be created
 PRESERVED = "preserved"  # project-owned, deliberately untouched
 PATCHED = "patched"  # append-only or section merge — existing lines never rewritten
 APPENDED = "appended"  # lines added to an existing file (.gitignore dedup)
+RECORDED = "recorded"  # deliberate divergence, covered by .config/scaffold-divergence.txt
 
 # Drift = the repo and the template disagree. Preservation is a decision, not drift.
 DRIFT_KINDS = frozenset({STALE, MISSING, PATCHED, APPENDED})
@@ -377,10 +379,17 @@ class Report:
         self.record(path, UNCHANGED, label)
 
     def stale(self, path: pathlib.Path, diff: str) -> None:
+        reason = divergence_reason(self.cwd, self._rel(path))
+        if reason is not None:
+            _ = self.recorded(path, reason)
+            return
         self.out(diff)
         self.record(path, STALE)
 
     def missing(self, path: pathlib.Path, preview: str) -> None:
+        # A record cannot cover an absent file: report the missing drift, but mark the
+        # stanza consumed, so the run fails once (missing) instead of twice (missing + unused).
+        _ = divergence_reason(self.cwd, self._rel(path))
         self.out(f"would create {path}:\n{preview}")
         self.record(path, MISSING)
 
@@ -394,6 +403,11 @@ class Report:
         self.record(path, PRESERVED, reason)
         return f"{self._rel(path)}: preserved — {reason}"
 
+    def recorded(self, path: pathlib.Path, reason: str) -> str:
+        """Report a deliberate divergence covered by the record; returns the NEXT note."""
+        self.err(f"recorded  {path} ({reason})")
+        self.record(path, RECORDED, reason)
+        return f"{self._rel(path)}: recorded — {reason}"
     def patched(
         self, path: pathlib.Path, detail: str, message: str, *, stdout: bool = False
     ) -> None:
@@ -496,7 +510,8 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
     alias = {
         "changelog": "changelog-md",
         "script": "changelog-script",
-        "templates": "issue-templates",
+        "script": "changelog-script",
+        "typecheck": "typecheck-budget",
         "issues": "issue-templates",
         "pr-template": "pr-template",
         "pr_template": "pr-template",
@@ -828,6 +843,61 @@ def canonicalize(path: pathlib.Path, content: str) -> str:
     return proc.stdout
 
 
+# Recorded divergence — a repo-side "intentional" marker, not a tool-side merge class.
+# `.config/scaffold-divergence.txt` lists generated paths the project deliberately keeps
+# different from the template (path:/reason: stanzas, `#` comments, header carries
+# authority + scope + owner + review trigger). A covered path reports `recorded` instead
+# of `stale` and a real `--update` never overwrites it. Shrink-only: a stanza whose path
+# no longer differs is itself a finding (see report_unused_divergence), and a record
+# cannot cover an absent file (missing still drifts).
+DIVERGENCE_RECORD = ".config/scaffold-divergence.txt"
+
+
+def _divergence_cover(cwd: pathlib.Path) -> dict[str, str]:
+    """Recorded divergences: repo-relative path -> reason. No record file means none."""
+    try:
+        text = (cwd / DIVERGENCE_RECORD).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    cover: dict[str, str] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("path:"):
+            current = stripped.split(":", 1)[1].strip()
+            cover[current] = ""
+        elif stripped.startswith("reason:") and current is not None:
+            cover[current] = stripped.split(":", 1)[1].strip()
+    return cover
+
+
+_DIVERGENCE_HITS: set[tuple[str, str]] = set()
+
+
+def divergence_reason(cwd: pathlib.Path, rel: str) -> str | None:
+    """Reason when `rel` is a recorded divergence; marks the stanza consumed (shrink-only)."""
+    cover = _divergence_cover(cwd)
+    if rel not in cover:
+        return None
+    _DIVERGENCE_HITS.add((str(cwd), rel))
+    return cover[rel] or f"recorded divergence — see {DIVERGENCE_RECORD}"
+
+
+def report_unused_divergence(cwd: pathlib.Path) -> None:
+    """Record stanzas that covered nothing this run are dead weight — shrink the record."""
+    cover = _divergence_cover(cwd)
+    key = str(cwd)
+    for rel in sorted(cover):
+        if (key, rel) not in _DIVERGENCE_HITS:
+            REPORT.finding(
+                "scaffold-divergence",
+                f"{rel}: recorded but covered nothing this run (byte-identical, absent, or preserved elsewhere) — shrink {DIVERGENCE_RECORD}",
+                f"remove the '{rel}' stanza from {DIVERGENCE_RECORD}",
+            )
+
+
 def write_file(
     path: pathlib.Path, content: str, dry_run: bool, *, warn_mixed: str | None = None
 ) -> bool:
@@ -856,6 +926,12 @@ def write_file(
         if is_mixed:
             REPORT.err(f"WARNING (dry-run): {path}: {warn_mixed}")
         return False
+    if path.exists() and path.read_text(encoding="utf-8") != content:
+        reason = divergence_reason(REPORT.cwd, REPORT._rel(path))
+        if reason is not None:
+            # Recorded divergence: a real --update never overwrites deliberate drift.
+            _ = REPORT.recorded(path, reason + " (not overwritten)")
+            return False
     changed = not path.exists() or path.read_text(encoding="utf-8") != content
     path.parent.mkdir(parents=True, exist_ok=True)
     _ = path.write_text(content, encoding="utf-8")
@@ -1054,7 +1130,7 @@ def do_git(
     sel = selected if selected is not None else GIT_COMPONENTS
     notes: list[str] = []
     if "releaserc" in sel:
-        _ = write_file(cwd / ".releaserc.json", releaserc_content(cwd), dry_run)
+        _ = write_file(cwd / ".releaserc.json", releaserc_content(cwd, with_typecheck="typecheck-budget" in sel), dry_run)
     if "release-yml" in sel:
         rel = cwd / ".github" / "workflows" / "release.yml"
         if update and rel.exists():
@@ -1077,6 +1153,9 @@ def do_git(
         )
         _ = write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
         _ = write_file(cwd / "scripts" / "release-changelog.mjs", RELEASE_CHANGELOG_MJS, dry_run)
+    if "typecheck-budget" in sel:
+        # Split from `changelog-script`: a basedpyright budget gate is python tooling,
+        # not git contract — opt in explicitly, or take it with the python flavor.
         _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
     if "commitlint" in sel:
         _ = write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
@@ -1124,7 +1203,7 @@ def do_git(
     if "gitignore" in sel:
         # The bytecode entry travels with the component that writes `scripts/*.py`, so a
         # `--without changelog-script` run does not claim litter it cannot create.
-        entries = GITIGNORE_GIT + (GITIGNORE_PY_SCRIPTS if "changelog-script" in sel else [])
+        entries = GITIGNORE_GIT + (GITIGNORE_PY_SCRIPTS if "changelog-script" in sel or "typecheck-budget" in sel else [])
         append_gitignore(cwd / ".gitignore", entries, dry_run)
     if "agents" in sel:
         patch_agents(
@@ -1190,6 +1269,9 @@ def do_python(
     )
     if note:
         notes.append(note)
+    # The python verify gates on this budget script (see the release.yml NOTE) — the
+    # python flavor owns it, so it is written here, not by the git contract.
+    _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
     if with_coverage:
         print(
             f"NOTE: Python coverage wired — run `uv run pytest --cov --cov-fail-under={threshold}`",
@@ -1919,18 +2001,24 @@ def write_contributing(
     return f"{path.name}: preserved — {reason}; missing template sections: {', '.join(absent)}"
 
 
-def releaserc_content(cwd: pathlib.Path) -> str:
+def releaserc_content(cwd: pathlib.Path, *, with_typecheck: bool = True) -> str:
     """The release config this repo's package manager calls for.
 
     `.releaserc.json` ships a `package-lock.json` asset (the npm default); a pnpm repo needs
     `pnpm-lock.yaml` there. Resolving it *before* the write keeps `--check` honest — the plan
     compares the repo against the bytes the run would really produce, not against the raw
     template, so a pnpm repo stops reporting permanent drift.
-    """
-    if _declares_pnpm(cwd):
-        return RELEASERC_JSON.replace('"package-lock.json"', '"pnpm-lock.yaml"')
-    return RELEASERC_JSON
 
+    `with_typecheck=False` drops the `.config/basedpyright-baseline.txt` asset: that file
+    only exists when the `typecheck-budget` component is selected (python repos), so a repo
+    without the component would otherwise release an asset that is never produced.
+    """
+    content = RELEASERC_JSON
+    if not with_typecheck:
+        content = content.replace(',\n          ".config/basedpyright-baseline.txt"', "")
+    if _declares_pnpm(cwd):
+        return content.replace('"package-lock.json"', '"pnpm-lock.yaml"')
+    return content
 
 def write_source(
     cwd: pathlib.Path, relative: str, content: str, dry_run: bool, *, update: bool = False
@@ -2959,6 +3047,10 @@ def main() -> int:
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
+    if git_selected is not None and args.only is None and args.components is None:
+        # `typecheck-budget` is opt-in: a repo that did not ask for it must not
+        # inherit a basedpyright gate (explicit --only/--components still opts in).
+        git_selected.discard("typecheck-budget")
     if not args.no_format and not os.environ.get("SCAFFOLD_NO_FORMAT"):
         enable_formatter(cwd)
     notes: list[str] = []
@@ -3000,6 +3092,9 @@ def main() -> int:
                 update=update,
             )
 
+        if update:
+            # Record stanzas that covered nothing are dead weight — shrink the record.
+            report_unused_divergence(cwd)
         # A real write validates itself; a preview validates what it touched when asked.
         check_targets = REPORT.paths_of({STALE, MISSING, PATCHED, APPENDED})
         if check_targets and (args.self_check or not dry_run):

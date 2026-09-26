@@ -64,6 +64,7 @@ Ownership is declared in `scaffold.py` (`PROJECT_OWNED`, `SOURCE_OWNED`, `FLAVOR
 | `CHANGELOG.md`, `CONTRIBUTING.md`, `pyproject.toml`, `Cargo.toml`, `package.json`                                                                                                                    | **preserved** (data / mixed / project manifest)                              |
 | `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts`, `tsconfig.json`, `.oxlintrc.json`, `.oxfmtrc.json` (TS flavor) | **preserved** — hand-grown source and adapted configs; only a greenfield run writes the skeleton |
 | `.github/workflows/release.yml`                                                                                                                                                                      | **preserved** in the git flavor — it is the `ci` flavor's projection; `do_ci` also preserves it on `--update` for `--flavor ci` and `--flavor all` |
+| `.config/scaffold-divergence.txt`                                                                                                                                                                          | **recorded** — repo-side list of deliberate divergences; covered paths report `recorded`, never `stale` |
 
 The printed `NEXT` block _is_ the remaining task. Work it in this order:
 
@@ -103,7 +104,7 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 - `wt` worktrees: if `.config/wt.toml` exists, `scaffold` ensures `[post-start] setup-hooks = "git config core.hooksPath .githooks"` so `wt switch --create` clones get live pre-push without manual `git config`.
 - `@semantic-release/git` bumps `package.json` + `CHANGELOG.md` + commits + tags atomically; no manual `git tag` or manifest bump.
 - `.releaserc.json` release assets follow the repo, not the flavor: `pnpm-lock.yaml` when the repo declares pnpm (`pnpm-lock.yaml`, `pnpm-workspace.yaml` or `packageManager: pnpm`), else the template's `package-lock.json`. The swap is resolved before the write, so `--check` stays clean on a pnpm repo.
-- `--check` is the CI-shaped projection of `--update` (`--update --dry-run --summary`, exit 1 on drift) and `--self-check` validates what a run wrote (syntax, parse, exec bit, `scripts/…` references) — it runs automatically after a real write, because a generated workflow or hook that does not parse is a defect worth failing on.
+- `--check` is the CI-shaped projection of `--update` (`--update --dry-run --summary`, exit 1 on drift) and `--self-check` validates what a run wrote (syntax, parse, exec bit, `scripts/…` references) — it runs automatically after a real write, because a generated workflow or hook that does not parse is a defect worth failing on. A deliberate divergence is a first-class record, not permanent drift: list it in `.config/scaffold-divergence.txt` (`path:`/`reason:` stanzas; header carries authority + scope + owner + review trigger) and `--check` reports it as `recorded` instead of `stale`. Shrink-only — a stanza that covers nothing is itself a finding, and a real `--update` never overwrites a recorded path.
 - For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`.
 
 ## References
@@ -131,6 +132,6 @@ Git flavor is spine — always present. Grilling `Project Shape` selects sibling
 - `--cwd <path>` — target repo root (default `.`)
 - `--dry-run` — print diff without writing + emit mixed warnings on stderr
 - `--retrofit` behavior is implicit: `.gitignore` dedup + `AGENTS.md` append-only (preserves manual sections)
-- `--only <a,b>` / `--components <a,b>` — write just those components keyed by `GIT_COMPONENTS` (`releaserc`, `release-yml`, `changelog-check`, `pre-push`, `changelog-script`, `commitlint`, `changelog-md`, `issue-templates`, `pr-template`, `contributing`, `agents`, `gitignore`; aliases `hooks`, `changelog`, `issues`, `pull-request`)
+- `--only <a,b>` / `--components <a,b>` — write just those components keyed by `GIT_COMPONENTS` (`releaserc`, `release-yml`, `changelog-check`, `pre-push`, `changelog-script`, `typecheck-budget`, `commitlint`, `changelog-md`, `issue-templates`, `pr-template`, `contributing`, `agents`, `gitignore`; aliases `hooks`, `changelog`, `issues`, `pull-request`, `typecheck`). `typecheck-budget` (`scripts/typecheck-budget.py`, the basedpyright budget gate) is opt-in for git — default runs skip it; the python flavor always writes it.
 - `--without <a,b>` — inverse of `--only`; the recorded way to retrofit without clobbering project-owned files (e.g. `--without changelog-md,release-yml,contributing`)
 - `--detect` — read-only state detection (JSON to stdout, summary to stderr); never writes
