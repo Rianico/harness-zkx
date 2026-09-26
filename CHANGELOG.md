@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **herdr:** add dispatch and reply helpers to prevent dropped contracts (#144)
 * **gh-router:** migrate pr.sh to typed python and relax body length (#137)
 * **herdr:** confirm coding agent kind with user if unspecified (#138)
 * **herdr:** support event-driven dispatch-and-yield handoff (#136)

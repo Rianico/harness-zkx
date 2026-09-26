@@ -27,9 +27,16 @@ All tests MUST be placed in the project root `tests/` directory, never inside sk
 
 ## Agent skills
 
+### Harness exposure model
+
+This repo is the harness project. Skills are authored under `skills/<name>/` and exposed externally via symlinks under `~/.agents/skills/<name>`.
+Downstream projects consuming skills never have `skills/` or `skills/herdr/SKILL.md` at their repo root. They discover and invoke skills from `~/.agents/skills/<name>/`.
+
 ### Multi-agent contract
 
-When invoked with a `Caller:` block and reply contract, always terminate your task by executing the caller's reply command with `<STATUS> <artifacts> <issues>`.
+When running under Herdr (`HERDR_ENV=1`), caller and callee MUST notice the `herdr` skill (`~/.agents/skills/herdr/SKILL.md`, or `skills/herdr/SKILL.md` in this harness) and use communication scripts in `~/.agents/skills/herdr/scripts/` (or `skills/herdr/scripts/` in this harness), NEVER raw `herdr` CLI directly (`herdr agent prompt`), or caller context and reply contracts drop:
+- **Caller dispatch:** Dispatch tasks with `uv run ~/.agents/skills/herdr/scripts/herdr_dispatch.py <worker> --file <ticket>` (or `herdr_prompt.py`; in harness: `skills/herdr/scripts/...`). Injects `Caller:`, Herdr skill notice, sibling worker addresses, and reply contract.
+- **Callee reply:** Terminate task by running caller's reply command (`uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller> "<STATUS> <artifacts> <issues>"`).
 
 ### Issue tracker
 
