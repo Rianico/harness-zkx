@@ -151,7 +151,7 @@ Underlying commands, if you drive them directly:
 
 The full split, including which response returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
-For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for anti-hero-mode rules, canonical TM brief contracts, and the subagent-vs-worker boundary.
+For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for anti-hero-mode rules, canonical TM brief contracts, implementer context isolation via internal subagents, and the lane-vs-subagent boundary.
 
 ## Start and coordinate an agent
 
@@ -263,6 +263,10 @@ The barrier exits 3 the moment any target needs input — unblock it, then re-en
 ### Sibling-reviewer pattern
 
 Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and barrier-wait both. Confirm the reviewer kind with the user if unspecified. Agent arguments go after `--` (`agent start reviewer --kind <kind> --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
+
+### Implementer context isolation
+
+When an implementer faces a large task or operates under a constrained context window, it should spawn internal subagents for deep research, bulk edits, or test triage. The subagents run in isolated contexts, returning pointer-based summaries to avoid context bloating and compaction degradation. The implementer remains the single point of contact for the lane and replies to the orchestrator via `herdr_reply.py`. Details: [Hierarchical Lane Coordination](references/lane-coordination.md).
 
 ### Banned: sleep/timer polling loops
 
