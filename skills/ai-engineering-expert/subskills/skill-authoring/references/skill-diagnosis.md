@@ -114,6 +114,16 @@ uv run skills/harness-audit/scripts/audit_skills.py capture <session-id-or-path>
 
 For false-positive collisions, capture with `--expect no-trigger --intent hard_negative`.
 
+#### Dual-Layer Skill Snapshot & Regression Blame
+
+Each case records a dual snapshot to preserve provenance:
+- `git_commit` + `dirty` for the skill directory (`Macro`).
+- `captured_description` for the active routing text (`Micro`).
+
+**Regression Blame Rule:**
+- If a test regresses and `captured_description == current_description` → **Model weight drift**.
+- If `captured_description != current_description` → **Description regression**.
+
 ### Step 3: 4-Tier Failure Triage
 
 Map the failure to the appropriate architectural tier. Never apply a prose patch to a mechanical defect.
