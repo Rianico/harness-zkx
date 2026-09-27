@@ -216,3 +216,28 @@ _Avoid_: Tier 2, PR gate.
 How a PR's commits enter the base branch — a squash commit, or a merge commit that preserves them — declared per PR before the Changelog Digest is curated, because a squash destroys the subjects a multi-entry digest rests on.
 _Avoid_: merge method, integration.
 
+## Skill Trigger Evaluation
+
+**Trigger Evaluation**:
+The empirical verification of whether an agent skill is correctly selected or rejected by a model.
+_Avoid_: Skill testing, trigger test.
+
+**Intent Class**:
+The semantic classification of a trigger test case: `in_domain` (target task requiring the skill), `hard_negative` (boundary near-miss sharing vocabulary or domain that must not trigger), or `distractor` (ambient coding task).
+_Avoid_: Prompt type, test category.
+
+**Agent Run Trigger**:
+The atomic unit of trigger evaluation: an `agent_run` observation (`user_prompt` or `tool_result`) mapped to an expected action (`should_trigger: true | false`).
+_Avoid_: Prompt turn, trigger prompt.
+
+**Trigger Recall**:
+The fraction of applicable `in_domain` test cases where the skill was triggered.
+_Avoid_: Skill coverage, trigger rate.
+
+**Collision Resistance**:
+The fraction of `hard_negative` test cases where the skill was correctly suppressed.
+_Avoid_: Negative accuracy, suppression score.
+
+**Trigger Ledger**:
+The persistent per-skill dataset stored at `~/.pi/agent/evals/<skill_name>.yaml` recording synthetic and captured session trigger cases.
+_Avoid_: Eval file, test cases.
