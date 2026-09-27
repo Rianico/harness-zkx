@@ -104,6 +104,18 @@ def test_refuses_target_that_is_an_agent_kind(stub: StubHarness) -> None:
     assert stub.prompts() == []
 
 
+def test_refuses_qoderclicn_target_that_is_an_agent_kind(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [{"pane_id": "w9:p2", "name": "orch-2", "agent": "qoderclicn"}],
+    }
+    done = stub.run("qoderclicn", "done", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "is an agent kind" in done.stderr
+    assert "live agents of this kind: orch-2" in done.stderr
+    assert stub.prompts() == []
+
+
 def test_delivery_reports_revision_increment(stub: StubHarness) -> None:
     state = {
         **DEFAULT_STATE,

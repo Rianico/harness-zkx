@@ -55,7 +55,7 @@ To solve both TM Hero-Mode and Worker Context Bloating, enforce a clean two-tier
 
 | Role | Authority | Allowed Actions | Strictly Forbidden |
 |---|---|---|---|
-| **Root Orchestrator** | Global Intent & Topology | • Allocate panes/worktrees<br>• Boot TM and Implementers<br>• Issue brief to TM<br>• Run final release gate | • Direct file editing in worker branches<br>• Bypassing TM to micromanage lane workers |
+| **Root Orchestrator** | Global Intent & Topology | • Confirm role-to-agent mapping (role, agent kind, provider, model) with user before lane provisioning<br>• Allocate panes/worktrees<br>• Boot TM and Implementers (with verified bootstrap/approval flags)<br>• Issue brief to TM<br>• Run final release gate | • Direct file editing in worker branches<br>• Bypassing TM to micromanage lane workers |
 | **Task Manager (TM)** | In-Lane Coordination & Judgment | • Decompose brief into atomic tickets<br>• Dispatch to workers via `herdr_dispatch.py`<br>• Await worker `herdr_reply.py`<br>• Run verification/audit gates<br>• Dispatch rework tickets on gate failure<br>• Synthesize lane status to caller | • Editing source or test files directly<br>• Running iterative fix loops directly<br>• Ignoring assigned workers in `Workers:`<br>• Spawning uncoordinated background panes |
 | **Implementer (Worker)** | Execution & Mutation | • Read assigned ticket<br>• Spawn internal subagents for context isolation (research, bulk edits, test triage)<br>• Edit code and tests to fulfill ticket<br>• Run targeted local checks<br>• Atomic commits<br>• Aggregate results and reply to TM via `herdr_reply.py` | • Expanding scope beyond ticket<br>• Attempting lane-level orchestration (dispatching to other Herdr panes)<br>• Modifying architectural boundaries unasked<br>• Allowing internal subagents to call Herdr CLI or `herdr_reply.py` |
 | **Worker Subagent (Internal)** | Isolated Subtask Execution | • Read-only codebase exploration<br>• Scoped file editing/refactoring<br>• Isolated test execution and log filtering<br>• Return structured result/pointers to parent worker | • Invoking Herdr CLI / scripts (`herdr_dispatch.py`, `herdr_reply.py`)<br>• Bypassing parent worker to message TM or Orchestrator<br>• Spawning nested subagents (no agent-ception) |
@@ -66,12 +66,13 @@ To solve both TM Hero-Mode and Worker Context Bloating, enforce a clean two-tier
 
 ### A. Root Orchestrator → TM Brief Contract
 
-The orchestrator brief MUST explicitly define the TM role, prohibit direct editing, and instruct worker dispatch:
+The orchestrator brief MUST explicitly define the TM role, prohibit direct editing, and instruct worker dispatch, noting the confirmed role assignments and agent bootstrap flags (see [Agent Bootstrap](agent-bootstrap.md)):
 
 ```markdown
 # TASK: <Feature / Bug Name>
 
 Lane: `<lane-label>` | TM: `<tm-name>` | Workers: `<worker-names>`
+Role Assignment: TM=`<kind>` (`<provider>/<model>`), Workers=`<kind>` (`<provider>/<model>`) [Bootstrap: `<flags>`]
 
 ## Role & Delegation Mandate
 You are the **Task Manager** for this lane. You hold **coordination and judgment authority ONLY**.

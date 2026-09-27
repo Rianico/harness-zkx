@@ -155,6 +155,8 @@ For multi-tier lanes where an in-lane Task Manager coordinates one or more Imple
 
 ## Start and coordinate an agent
 
+Before starting any agent or orchestrating tasks, confirm with the user which role should use which coding agent kind, provider, and model (e.g. `pi` with Anthropic `claude-3-7-sonnet`, `qoderclicn` with specific model). Never assume or pick defaults. See `$SKILL_DIR/references/agent-bootstrap.md` for the confirmation template, bootstrap command matrix, and provider/model flags.
+
 Default to a sibling pane in the current tab and the current working directory. Do not create a workspace, tab, worktree, or different cwd unless the user explicitly requests that topology or location.
 
 Honor a direction requested by the user. Otherwise inspect the caller pane:
@@ -177,13 +179,18 @@ An available shell pane must be at its interactive prompt, with the shell itself
 herdr agent start reviewer --kind <kind> --pane <returned-pane-id>
 ```
 
-Always use the kind requested by the user. If the user did not specify the type of coding agent, confirm with them first rather than picking a random or default kind. Run `herdr agent` to inspect installed kinds and list them when asking. Pass native agent arguments only after `--`:
+Always use the kind requested by the user. Run `herdr agent` to inspect installed kinds and list them when asking. Pass native agent arguments only after `--`:
 
 ```bash
 herdr agent start reviewer --kind <kind> --pane <returned-pane-id> -- <agent-args...>
 ```
 
-A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Wait until the agent settles (`idle` or `done`) before prompting it.
+Different coding agents have different bootstrap commands and folder trust requirements:
+- `pi`: supports `--approve` (`-a`) after `--` to trust project-local files without interactive blocking.
+- `qoderclicn` / `qodercli`: requires trusting the folder in the terminal UI on first launch; cannot be bypassed with `--approve`. Operator must ensure the folder is trusted in terminal before automated prompts can proceed.
+- Full agent matrix, model flags, and quirks: `$SKILL_DIR/references/agent-bootstrap.md`.
+
+A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Verify folder trust and wait until the agent settles (`idle` or `done`) before prompting it.
 
 Submit work through the agent surface:
 
@@ -296,7 +303,8 @@ Prefer `--source recent-unwrapped` for logs and transcripts. The other read sour
 
 ## Safety and coordination rules
 
-- Confirm coding agent kind with user first if unspecified; never pick a random or default kind.
+- Confirm role-to-agent mapping (kind, provider, model) with user before starting agents or orchestrating; never assume or pick defaults.
+- Verify folder trust and startup readiness before automated prompting (`qoderclicn` requires terminal trust; `pi` accepts `--approve`). See `$SKILL_DIR/references/agent-bootstrap.md`.
 - Use `--no-focus` for background work unless the user asked to switch context.
 - Use `--current`, an explicit pane ID, or a unique agent name. Do not rely on another client's focused pane.
 - Parse IDs from JSON responses. Do not derive them from sidebar order or examples.
