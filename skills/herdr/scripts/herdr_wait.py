@@ -12,7 +12,9 @@ event-driven ``agent wait --until idle`` never wakes: background agents settle t
 ``done`` (not ``idle``), and a later ``seen`` flip to ``idle`` emits no event.
 Polling still trusts the state feed, so a false-positive ``idle``/``done`` with
 revision 0 and no session (weak recognition, seen on agy panes whose status bar
-still reads WORKING) is held, not settled: the barrier keeps waiting and warns.
+still reads WORKING, or when agents report idle while background subagents run)
+is held, not settled: the barrier emits an advisory, periodic hold heartbeats,
+and timeout guidance to dispatch and yield turn.
 
     herdr-wait action1 action2 --timeout 300000   # barrier: ALL settle (default)
     herdr-wait review1 review2 --any              # reactive: ANY settles
@@ -59,6 +61,7 @@ KNOWN_STATES = ("idle", "working", "blocked", "done", "unknown")
 DEFAULT_SETTLED = ("idle", "done", "blocked")
 DEFAULT_TIMEOUT_MS = 300000
 DEFAULT_INTERVAL_S = 1.0
+DEFAULT_HOLD_WARN_INTERVAL_S = 15.0
 
 
 @dataclass
@@ -70,6 +73,7 @@ class Options:
     until: list[str] = field(default_factory=list)
     timeout: int = DEFAULT_TIMEOUT_MS
     interval: float = DEFAULT_INTERVAL_S
+    hold_interval: float = DEFAULT_HOLD_WARN_INTERVAL_S
     json: bool = False
 
 
@@ -119,6 +123,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_INTERVAL_S,
         metavar="SEC",
         help=f"poll period in seconds (default {DEFAULT_INTERVAL_S})",
+    )
+    _ = parser.add_argument(
+        "--hold-interval",
+        type=float,
+        default=DEFAULT_HOLD_WARN_INTERVAL_S,
+        metavar="SEC",
+        help=f"heartbeat period in seconds for held revision 0 targets (default {DEFAULT_HOLD_WARN_INTERVAL_S})",
     )
     _ = parser.add_argument("--json", action="store_true", help="print a machine-readable summary")
     return parser
@@ -248,6 +259,8 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
         raise UsageError(f"--timeout {options.timeout} is not positive")
     if options.interval <= 0:
         raise UsageError(f"--interval {options.interval} is not positive")
+    if options.hold_interval <= 0:
+        raise UsageError(f"--hold-interval {options.hold_interval} is not positive")
     if len(set(options.targets)) != len(options.targets):
         raise UsageError("duplicate TARGETs; list each agent once")
     wanted = resolve_until(options.until)
@@ -257,6 +270,9 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
     deadline = start + options.timeout / 1000.0
     snaps: list[Snapshot] = []
     warned: set[str] = set()
+    held_targets: set[str] = set()
+    hold_start: dict[str, float] = {}
+    hold_last_warn: dict[str, float] = {}
     while True:
         now = time.monotonic()
         snaps = [snapshot_agent(herdr, target, env) for target in options.targets]
@@ -270,16 +286,41 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
             names = ", ".join(blocked)
             print(f"herdr-wait: {names} need human input (blocked)", file=sys.stderr)
             return EXIT_BLOCKED
-        held = sorted(
-            snap.target for snap in snaps if snap.status in wanted and not is_recognized(snap)
-        )
-        for target in held:
-            if target not in warned:
-                warned.add(target)
-                print(
-                    f"herdr-wait: {target} reports settled with revision 0 (unrecognized); still waiting",
-                    file=sys.stderr,
-                )
+        held_now = {
+            snap.target: snap for snap in snaps if snap.status in wanted and not is_recognized(snap)
+        }
+        for target in sorted(held_now.keys()):
+            snap = held_now[target]
+            held_targets.add(target)
+            if target not in hold_start:
+                hold_start[target] = now
+                hold_last_warn[target] = now
+                if target not in warned:
+                    warned.add(target)
+                    print(
+                        f"herdr-wait: advisory: {target} reports {snap.status} with revision 0 (unrecognized; typical of agy).\n"
+                        "herdr-wait: agents with background subagents (e.g. agy) report idle while subagents work; weakly-recognized agents do not advance revision and cannot be observed to completion via herdr-wait.\n"
+                        "herdr-wait: holding wait loop; dispatch and yield turn for herdr-reply callback instead.",
+                        file=sys.stderr,
+                    )
+            else:
+                elapsed_hold = now - hold_start[target]
+                since_last_warn = now - hold_last_warn[target]
+                if since_last_warn >= options.hold_interval:
+                    hold_last_warn[target] = now
+                    elapsed_desc = (
+                        f"{int(elapsed_hold)}s" if elapsed_hold >= 1.0 else f"{elapsed_hold:.2f}s"
+                    )
+                    print(
+                        f"herdr-wait: holding {target} ({snap.status}, revision 0) for {elapsed_desc} (still waiting)",
+                        file=sys.stderr,
+                    )
+
+        for target in list(hold_start.keys()):
+            if target not in held_now:
+                del hold_start[target]
+                _ = hold_last_warn.pop(target, None)
+
         matched = [snap.target for snap in snaps if snap.status in wanted and is_recognized(snap)]
         if options.any and matched:
             emit(snaps, as_json=options.json)
@@ -289,7 +330,16 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
             return EXIT_OK
         remaining = deadline - now
         if remaining <= 0:
-            unsettled = sorted(f"{snap.target} ({snap.status})" for snap in snaps)
+            unsettled: list[str] = []
+            for snap in snaps:
+                desc = f"{snap.target} ({snap.status})"
+                if snap.target in held_targets and not is_recognized(snap):
+                    desc += (
+                        " [revision 0 held; weakly-recognized agent does not settle barrier;"
+                        " use dispatch & yield]"
+                    )
+                unsettled.append(desc)
+            unsettled.sort()
             emit(snaps, as_json=options.json)
             print(
                 f"herdr-wait: timed out after {options.timeout}ms "

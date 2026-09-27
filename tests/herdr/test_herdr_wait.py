@@ -87,6 +87,12 @@ def test_duplicate_targets_are_rejected(stub: StubHarness) -> None:
     assert "duplicate" in done.stderr
 
 
+def test_hold_interval_must_be_positive(stub: StubHarness) -> None:
+    done = stub.run("a", "--hold-interval", "0")
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "--hold-interval 0.0 is not positive" in done.stderr
+
+
 def test_agent_get_failure_is_herdr_error(stub: StubHarness) -> None:
     error = {"code": "agent_not_found", "message": "agent target nope not found"}
     done = stub.run("nope", "--interval", "0.01", state={**DEFAULT_STATE, "agent_get_error": error})
@@ -121,8 +127,12 @@ def test_revision_zero_settled_state_is_held(stub: StubHarness) -> None:
     state = settled_state(a={"agent_status": "done", "revision": "0"})
     done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
     assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
-    assert "revision 0" in done.stderr
-    assert "timed out" in done.stderr
+    assert "advisory: a reports done with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert "timed out after 200ms" in done.stderr
+    assert (
+        "[revision 0 held; weakly-recognized agent does not settle barrier; use dispatch & yield]"
+        in done.stderr
+    )
 
 
 def test_int_revision_zero_is_held(stub: StubHarness) -> None:
@@ -130,7 +140,59 @@ def test_int_revision_zero_is_held(stub: StubHarness) -> None:
     state = settled_state(a={"agent_status": "idle", "revision": 0})
     done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
     assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
-    assert "revision 0" in done.stderr
+    assert "advisory: a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert (
+        "[revision 0 held; weakly-recognized agent does not settle barrier; use dispatch & yield]"
+        in done.stderr
+    )
+
+
+def test_revision_zero_loud_advisory_contains_recovery_guidance(stub: StubHarness) -> None:
+    """Loud tick-1 advisory directs callers to dispatch and yield turn for herdr-reply."""
+    state = settled_state(a={"agent_status": "idle", "revision": "0"})
+    done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "advisory: a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert (
+        "agents with background subagents (e.g. agy) report idle while subagents work"
+        in done.stderr
+    )
+    assert "weakly-recognized agents do not advance revision" in done.stderr
+    assert "dispatch and yield turn for herdr-reply callback instead" in done.stderr
+
+
+def test_periodic_hold_heartbeat_emitted(stub: StubHarness) -> None:
+    """Held revision-0 targets periodically pulse stderr with elapsed hold time."""
+    state = settled_state(a={"agent_status": "done", "revision": "0"})
+    done = stub.run(
+        "a",
+        "--interval",
+        "0.01",
+        "--hold-interval",
+        "0.03",
+        "--timeout",
+        "200",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "holding a (done, revision 0)" in done.stderr
+    assert "(still waiting)" in done.stderr
+
+
+def test_timeout_annotates_targets_held_on_revision_zero(stub: StubHarness) -> None:
+    """Timeout annotates targets held on revision 0 but leaves ordinary targets unannotated."""
+    state = settled_state(
+        a={"agent_status": "idle", "revision": "0"}, b={"agent_status": "working"}
+    )
+    done = stub.run("a", "b", "--interval", "0.01", "--timeout", "200", state=state)
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "timed out after 200ms" in done.stderr
+    assert (
+        "a (idle) [revision 0 held; weakly-recognized agent does not settle barrier; use dispatch & yield]"
+        in done.stderr
+    )
+    assert "b (working)" in done.stderr
+    assert "b (working) [" not in done.stderr
 
 
 def test_is_recognized_gate() -> None:

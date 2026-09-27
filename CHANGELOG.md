@@ -58,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **herdr:** add herdr-prompt for byte-exact payload delivery
 
 ### Bug Fixes
+* **herdr:** warn loudly and pulse hold on weakly-recognized agents in herdr-wait ([#157](https://github.com/Rianico/harness-zkx/issues/157))
 * **adr:** fail-loudly shim refuses silent `doc/adr` fallback in fresh worktrees (#154)
 * **scaffold:** scope typecheck budget to python flavor and prevent false drift on python repos ([#150](https://github.com/Rianico/harness-zkx/issues/150)) (#152)
 * **herdr:** verify delivery revision increment and fail on stale prompt ([#148](https://github.com/Rianico/harness-zkx/issues/148)) (#151)

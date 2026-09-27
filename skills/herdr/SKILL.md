@@ -259,7 +259,7 @@ The primary workflow for multi-agent fan-out is **Dispatch & Yield (Event-Driven
    uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
    ```
 
-**`herdr-wait` is strictly a fallback, not the primary coordination signal.** The event-driven callback model ensures completion arrives without the orchestrator holding a wait, burning context, or looping. Keep `herdr-wait` strictly for non-agent panes, panes without an agent name, or watchdog recovery when a worker fails to report back. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. If using the barrier fallback:
+**`herdr-wait` is strictly a fallback, not the primary coordination signal.** The event-driven callback model ensures completion arrives without the orchestrator holding a wait, burning context, or looping. External `agent_status` detection is untrustworthy for coding agents with background subagents (such as `agy`): the primary agent reports `idle` while waiting on subagents even though the task is still actively running, causing false early settlements or indefinite revision-0 holds. Event-driven `herdr_reply.py` callbacks are the only reliable completion signal. Keep `herdr-wait` strictly for non-agent panes, panes without an agent name, or watchdog recovery when a worker fails to report back. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. If using the barrier fallback:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_wait.py" worker1 worker2 --timeout 300000
@@ -269,7 +269,7 @@ The barrier exits 3 the moment any target needs input — unblock it, then re-en
 
 ### Sibling-reviewer pattern
 
-Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and barrier-wait both. Confirm the reviewer kind with the user if unspecified. Agent arguments go after `--` (`agent start reviewer --kind <kind> --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
+Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and yield turn for their `herdr-reply` completion callbacks. Agents with background subagents report `idle` while subagents run, so external `agent_status` cannot distinguish waiting on subagents from task completion; never barrier-wait them. Keep `herdr-wait` strictly as a fallback for non-agent panes or strongly-recognized agents that advance revision past 0. Confirm the reviewer kind with the user if unspecified. Agent arguments go after `--` (`agent start reviewer --kind <kind> --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
 
 ### Implementer context isolation
 
@@ -407,7 +407,7 @@ uv run "$SKILL_DIR/scripts/herdr_wait.py" review1 review2 --any
 uv run "$SKILL_DIR/scripts/herdr_wait.py" action1 action2 --json
 ```
 
-Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING) is held, never settled: the barrier warns and keeps waiting. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
+Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING or while awaiting background subagents) is held, never settled: the barrier emits an advisory, periodic hold heartbeats, and keeps waiting. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
 
 ### `herdr-transcript` — clean text from the session file
 
