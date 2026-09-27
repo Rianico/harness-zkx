@@ -30,6 +30,20 @@ class _Hunk(TypedDict):
     after_context: list[str]
 
 
+class _CommitIntent(TypedDict):
+    ref: str
+    sha: str
+    author: str
+    date: str
+    subject: str
+    body: str
+
+
+class _AuthorIntent(TypedDict):
+    ours: _CommitIntent | None
+    theirs: _CommitIntent | None
+
+
 class _Report(TypedDict):
     path: str
     stages: list[int]
@@ -37,6 +51,8 @@ class _Report(TypedDict):
     marker_hunks: int
     parse_error: str | None
     worktree_present: bool
+    operation: str | None
+    author_intent: _AuthorIntent | None
     hunks: list[_Hunk]
 
 
@@ -71,6 +87,104 @@ def find_repo_root(start: Path) -> Path:
         message = result.stderr.strip() or result.stdout.strip() or "not a git repository"
         raise RuntimeError(message)
     return Path(result.stdout.strip()).resolve()
+
+
+def detect_git_operation(repo_root: Path) -> tuple[str, str | None, str | None]:
+    """Detect git operation in progress and return (operation, ours_ref, theirs_ref)."""
+    for op, theirs in [
+        ("rebase", "REBASE_HEAD"),
+        ("merge", "MERGE_HEAD"),
+        ("cherry-pick", "CHERRY_PICK_HEAD"),
+        ("revert", "REVERT_HEAD"),
+    ]:
+        res = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--verify", "-q", theirs],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode == 0:
+            return (op, "HEAD", theirs)
+
+    # Check git directories for rebase in progress if REBASE_HEAD was not verified as a ref
+    for dir_name in ("rebase-merge", "rebase-apply"):
+        git_path_res = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--git-path", dir_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if git_path_res.returncode == 0:
+            raw_path = git_path_res.stdout.strip()
+            if raw_path:
+                p = Path(raw_path)
+                target = p if p.is_absolute() else (repo_root / p)
+                if target.is_dir():
+                    return ("rebase", "HEAD", "REBASE_HEAD")
+
+    return ("unknown", None, None)
+
+
+def get_commit_summary(repo_root: Path, ref: str, path: str | None = None) -> dict[str, str] | None:
+    """Extract commit details (sha, author, relative_time/date, subject, body)."""
+    fmt = "%h%x00%an%x00%ar%x00%s%x00%b"
+    cmd = ["git", "-C", str(repo_root), "log", "-1", f"--format={fmt}", ref]
+    if path is not None:
+        cmd_with_path = [*cmd, "--", path]
+        res = subprocess.run(cmd_with_path, capture_output=True, text=True, check=False)
+        if res.returncode == 0 and res.stdout.strip():
+            parts = res.stdout.rstrip("\n").split("\x00", 4)
+            if len(parts) == 5:
+                return {
+                    "sha": parts[0],
+                    "author": parts[1],
+                    "date": parts[2],
+                    "relative_time": parts[2],
+                    "subject": parts[3],
+                    "body": parts[4].strip(),
+                }
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if res.returncode != 0 or not res.stdout.strip():
+        return None
+    parts = res.stdout.rstrip("\n").split("\x00", 4)
+    if len(parts) != 5:
+        return None
+    return {
+        "sha": parts[0],
+        "author": parts[1],
+        "date": parts[2],
+        "relative_time": parts[2],
+        "subject": parts[3],
+        "body": parts[4].strip(),
+    }
+
+
+def format_operation_description(
+    op: str,
+    _ours_ref: str | None,
+    _theirs_ref: str | None,
+    ours_sha: str | None,
+    theirs_sha: str | None,
+) -> str | None:
+    if op == "unknown" or not op:
+        return None
+    if op == "rebase":
+        if theirs_sha and ours_sha:
+            return f"rebase (replaying {theirs_sha} onto {ours_sha})"
+        return "rebase"
+    if op == "merge":
+        if theirs_sha and ours_sha:
+            return f"merge (merging {theirs_sha} into {ours_sha})"
+        return "merge"
+    if op == "cherry-pick":
+        if theirs_sha and ours_sha:
+            return f"cherry-pick (applying {theirs_sha} onto {ours_sha})"
+        return "cherry-pick"
+    if op == "revert":
+        if theirs_sha and ours_sha:
+            return f"revert (reverting {theirs_sha} onto {ours_sha})"
+        return "revert"
+    return op
 
 
 def get_unmerged_entries(repo_root: Path) -> dict[str, dict[int, dict[str, str]]]:
@@ -232,7 +346,11 @@ def parse_conflict_hunks(lines: list[str], context: int) -> tuple[list[_Hunk], s
 
 
 def build_summary_report(
-    repo_root: Path, path: str, stage_entries: dict[int, dict[str, str]], context: int
+    repo_root: Path,
+    path: str,
+    stage_entries: dict[int, dict[str, str]],
+    context: int,
+    operation_info: tuple[str, str | None, str | None] | None = None,
 ) -> _Report:
     worktree_lines = read_text_file(repo_root / path)
     hunks: list[_Hunk] = []
@@ -240,6 +358,41 @@ def build_summary_report(
     if worktree_lines is not None:
         hunks, parse_error = parse_conflict_hunks(worktree_lines, context)
     stages = sorted(stage_entries)
+
+    op, ours_ref, theirs_ref = operation_info or detect_git_operation(repo_root)
+    ours_commit = get_commit_summary(repo_root, ours_ref, path) if ours_ref else None
+    theirs_commit = get_commit_summary(repo_root, theirs_ref, path) if theirs_ref else None
+
+    ours_intent: _CommitIntent | None = None
+    if ours_commit and ours_ref:
+        ours_intent = {
+            "ref": ours_ref,
+            "sha": ours_commit["sha"],
+            "author": ours_commit["author"],
+            "date": ours_commit["date"],
+            "subject": ours_commit["subject"],
+            "body": ours_commit["body"],
+        }
+
+    theirs_intent: _CommitIntent | None = None
+    if theirs_commit and theirs_ref:
+        theirs_intent = {
+            "ref": theirs_ref,
+            "sha": theirs_commit["sha"],
+            "author": theirs_commit["author"],
+            "date": theirs_commit["date"],
+            "subject": theirs_commit["subject"],
+            "body": theirs_commit["body"],
+        }
+
+    author_intent: _AuthorIntent | None = None
+    if ours_intent is not None or theirs_intent is not None:
+        author_intent = {"ours": ours_intent, "theirs": theirs_intent}
+
+    ours_sha = ours_intent["sha"] if ours_intent else None
+    theirs_sha = theirs_intent["sha"] if theirs_intent else None
+    operation_desc = format_operation_description(op, ours_ref, theirs_ref, ours_sha, theirs_sha)
+
     return {
         "path": path,
         "stages": stages,
@@ -247,6 +400,8 @@ def build_summary_report(
         "marker_hunks": len(hunks),
         "parse_error": parse_error,
         "worktree_present": worktree_lines is not None,
+        "operation": operation_desc,
+        "author_intent": author_intent,
         "hunks": hunks,
     }
 
@@ -295,8 +450,24 @@ def render_detail_text(
     lines = [
         f"== {report['path']} ==",
         f"type: {report['conflict_type']}",
-        f"stages: {', '.join(str(stage) for stage in report['stages'])}",
     ]
+    if report["operation"]:
+        lines.append(f"operation: {report['operation']}")
+    if report["author_intent"]:
+        intent = report["author_intent"]
+        if intent["ours"] or intent["theirs"]:
+            lines.append("author intent:")
+            for side in ("ours", "theirs"):
+                commit = intent[side]
+                if commit:
+                    ref_label = commit["ref"]
+                    lines.append(
+                        f"  {side} ({ref_label}): [{commit['sha']}] by {commit['author']}, {commit['date']}"
+                    )
+                    lines.append(f"    subject: {commit['subject']}")
+                    if commit["body"]:
+                        lines.append(f"    body: {commit['body']}")
+    lines.append(f"stages: {', '.join(str(stage) for stage in report['stages'])}")
     parse_error = report["parse_error"]
     if parse_error:
         lines.append(f"parse-error: {parse_error}")
@@ -372,6 +543,10 @@ def render_json(
             "marker_hunks": report["marker_hunks"],
             "parse_error": report["parse_error"],
         }
+        if report["operation"] is not None:
+            file_entry["operation"] = report["operation"]
+        if report["author_intent"] is not None:
+            file_entry["author_intent"] = cast(object, report["author_intent"])
         if include_details:
             if report["hunks"]:
                 file_entry["hunks"] = [
@@ -467,12 +642,13 @@ def main() -> int:
     try:
         repo_root = find_repo_root(Path(args.repo).resolve())
         entries = get_unmerged_entries(repo_root)
+        operation_info = detect_git_operation(repo_root)
     except RuntimeError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
 
     reports = [
-        build_summary_report(repo_root, path, entries[path], args.context)
+        build_summary_report(repo_root, path, entries[path], args.context, operation_info)
         for path in sorted(entries)
     ]
 

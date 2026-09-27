@@ -751,7 +751,7 @@ def check_conflicts(repo: str, num: str, base: str, cwd: Path | None = None) -> 
         if files:
             print(f"files: {files}", file=sys.stderr)
         print(
-            f"resolve: merge or rebase origin/{base} into the head branch, then re-run",
+            "conflict detected: run 'uv run skills/gh-router/subskills/pr-conflict/scripts/extract_conflict_context.py' to inspect hunks and commit intent, then delegate resolution to a worker subagent.",
             file=sys.stderr,
         )
         return False
