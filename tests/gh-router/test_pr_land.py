@@ -293,7 +293,10 @@ sys.exit(0 if ok else 1)
     assert "PR https://github.com/test/repo/pull/999" in res.stderr
     assert "conflicting: mergeable=false merge_state_status=dirty" in res.stderr
     assert "files: file1.txt file2.py" in res.stderr
-    assert "resolve: merge or rebase origin/main into the head branch, then re-run" in res.stderr
+    assert (
+        "conflict detected: run 'uv run skills/gh-router/subskills/pr-conflict/scripts/extract_conflict_context.py' to inspect hunks and commit intent, then delegate resolution to a worker subagent."
+        in res.stderr
+    )
 
     # Case 2: Clean PR 888
     test_clean = f"""
