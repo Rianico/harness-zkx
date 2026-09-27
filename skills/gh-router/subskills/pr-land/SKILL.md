@@ -21,10 +21,19 @@ Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head 
 
 ```bash
 uv run $SKILL_DIR/scripts/pr.py --watch --merge --title "feat: …" --body-file tmp/pr_body.md
+uv run $SKILL_DIR/scripts/pr.py --title "feat: …" --body-file tmp/pr_body.md --check  # dry run
 uv run $SKILL_DIR/scripts/pr.py --watch --merge  # infers head/base/title/body
 ```
 
 Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEAD` → `main`), `--head` (`git rev-parse --abbrev-ref HEAD`), `--title` (default `git log -1 --pretty=%s`), `--body` / `--body-file` (default `.github/pull_request_template.md`), `--watch` (poll **every** check on the PR via `gh pr checks --json name,bucket`, 60×10s), `--merge` (requires a green watch; waits `mergeable_state clean`, refuses otherwise, then `PUT merge squash`), `--draft`, `--no-stamp` (skips auto-stamping `(#NUM)` into `CHANGELOG.md`).
+
+## Invariants & Gates
+
+- **Title Length Gate**: Strict limit `TITLE (#NUM) <= 100` chars. Keep raw `--title` ≤ 90 chars to allow room for ` (#NNN)`.
+- **Changelog Auto-Stamping**: When `CHANGELOG.md` carries unattributed entries in `## [Unreleased]`, `pr.py` automatically commits and pushes `(#PR)` attribution to the branch (disable via `--no-stamp`).
+- **Pre-flight Push**: The current working branch must be pushed to remote before running `pr.py`.
+- **Squash Body Hygiene**: Cleans HTML comments, `## Checklist`, and `Landing:` directives, appending `Co-authored-by` trailers automatically. Refuses bodies with raw `CODE_AUTHORS` token.
+- **Dry-run Gate (`--check`)**: Runs all validation gates (title budget, token checks, trailer generation) without opening a PR.
 
 ## Flow
 
