@@ -18,22 +18,22 @@ brief output — do not re-derive it with `gh pr view`, `gh run list`, or `gh ap
 
 ## Common operations
 
-| I want to…                           | Run                                             | Output                                                                              |
-| ------------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| See where I stand                    | `scripts/state.sh`                              | 4 lines: branch→base divergence · PR state + checks · changelog guard · base tip    |
-| **Watch a workflow**                 | `scripts/ci.sh watch <run-id>`                  | quiet poll → `✔ run <id> completed: success`, or `✘` + exit 1                       |
-| See recent runs and what they cost   | `scripts/ci.sh runs [--branch B] [--limit N]`   | one line per run + slowest steps (`Run all tests=15s Install uv=2s`)                |
-| Why did a run fail                   | `scripts/ci.sh why <run-id>`                    | failing `job › step`, then the log tail                                             |
-| Create a PR, watch it, merge it      | `pr-land/scripts/pr.py --watch --merge`         | `PR <url>` → `checks success` → `merged #N (squash) to main`                        |
-| Refresh an existing PR's description | `pr-land/scripts/pr.py --title … --body-file …` | reuses the PR by head branch; pass title/body or they are not touched               |
-| Draft PR body from the diff          | `pr-enhance/scripts/analyze-pr.py`              | changed files, stats, categories                                                    |
-| Preflight before releasing           | `gh-release/scripts/check.sh`                   | tree/branch/commit checks, one line each                                            |
-| Verify before releasing              | `gh-release/scripts/verify.sh`                  | one line per lint/typecheck/test                                                    |
-| Cut a release                        | `gh-release/scripts/dispatch.sh [--dry-run]`    | `✔ next version: vX` → `a: dispatch / b: hold` → quiet watch                        |
-| Confirm a release landed             | `gh-release/scripts/confirm.sh`                 | release + URL · tag→commit + reachability from base · base tip · changelog sections |
-| Sync the changelog after a merge     | `scripts/changelog.sh sync [--apply]`           | `rebuild would change N lines` · refuses >40 lines of formatter churn               |
+| I want to…                           | Run                                                                                                            | Output                                                                              |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| See where I stand                    | `$SKILL_DIR/scripts/state.sh`                                                                                  | 4 lines: branch→base divergence · PR state + checks · changelog guard · base tip    |
+| **Watch a workflow**                 | `$SKILL_DIR/scripts/ci.sh watch <run-id>`                                                                     | quiet poll → `✔ run <id> completed: success`, or `✘` + exit 1                       |
+| See recent runs and what they cost   | `$SKILL_DIR/scripts/ci.sh runs [--branch B] [--limit N]`                                                      | one line per run + slowest steps (`Run all tests=15s Install uv=2s`)                |
+| Why did a run fail                   | `$SKILL_DIR/scripts/ci.sh why <run-id>`                                                                       | failing `job › step`, then the log tail                                             |
+| Create a PR, watch it, merge it      | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --watch --merge`                                            | `PR <url>` → `checks success` → `merged #N (squash) to main`                        |
+| Refresh an existing PR's description | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --body-file …`                                   | reuses the PR by head branch; pass title/body or they are not touched               |
+| Draft PR body from the diff          | `uv run $SKILL_DIR/subskills/pr-enhance/scripts/analyze-pr.py`                                                 | changed files, stats, categories                                                    |
+| Preflight before releasing           | `$SKILL_DIR/subskills/gh-release/scripts/check.sh`                                                             | tree/branch/commit checks, one line each                                            |
+| Verify before releasing              | `$SKILL_DIR/subskills/gh-release/scripts/verify.sh`                                                            | one line per lint/typecheck/test                                                    |
+| Cut a release                        | `$SKILL_DIR/subskills/gh-release/scripts/dispatch.sh [--dry-run]`                                               | `✔ next version: vX` → `a: dispatch / b: hold` → quiet watch                        |
+| Confirm a release landed             | `$SKILL_DIR/subskills/gh-release/scripts/confirm.sh`                                                            | release + URL · tag→commit + reachability from base · base tip · changelog sections |
+| Sync the changelog after a merge     | `$SKILL_DIR/scripts/changelog.sh sync [--apply]`                                                              | `rebuild would change N lines` · refuses >40 lines of formatter churn               |
 
-Run ids come from `scripts/ci.sh runs`, a PR's checks, or `gh run list`. All paths are relative to
+Run ids come from `$SKILL_DIR/scripts/ci.sh runs`, a PR's checks, or `gh run list`. All paths are relative to
 `$SKILL_DIR`; `--help` answers from the file header without `gh` or network.
 
 ## Subskills (load for the deep flow)
@@ -45,7 +45,7 @@ Run ids come from `scripts/ci.sh runs`, a PR's checks, or `gh run list`. All pat
 | `pr-enhance` | own-PR description and diagram generation     | `submit PR`, own-PR prose                            |
 | `pr-refine`  | refine / take over someone's PR up to push    | `refine`, `take over`, `supersede`, land someone's PR |
 
-Read `$SKILL_DIR/subskills/<name>/SKILL.md` for flags, exit codes and failure contracts.
+Read `$SKILL_DIR/subskills/<name>/SKILL.md` for full flag options (`--title`, `--body-file`, `--check`, `--no-stamp`), title length limits, exit codes, and failure contracts.
 
 ## Conventions
 
