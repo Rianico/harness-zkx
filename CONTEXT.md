@@ -241,3 +241,7 @@ _Avoid_: Negative accuracy, suppression score.
 **Trigger Ledger**:
 The persistent per-skill dataset stored at `~/.pi/agent/evals/<skill_name>.yaml` recording synthetic and captured session trigger cases.
 _Avoid_: Eval file, test cases.
+
+**Skill Snapshot**:
+The dual-layer provenance record (`Macro`: git commit & dirty state of skill directory; `Micro`: exact description text) preserved in a trigger eval record to distinguish prompt drift from model weight drift.
+_Avoid_: Skill version, commit tag.

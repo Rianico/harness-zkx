@@ -181,6 +181,13 @@ cases:
     root_goal: |-
       rebase our feature branch onto main and update dependencies
 
+    snapshot:
+      git_commit: e718a938
+      date: "2026-09-27"
+      dirty: false
+      captured_description: >-
+        <description active at time of capture>
+
     trigger_observation:
       type: tool_result # tool_result | user_prompt
       tool_name: bash
@@ -188,9 +195,6 @@ cases:
       exit_code: 1
       content: |-
         CONFLICT (content): Merge conflict in src/auth.py
-
-    captured_description: >-
-      <description active at time of capture>
 
     notes: |-
       Model attempted manual sed/grep edits instead of loading skill.

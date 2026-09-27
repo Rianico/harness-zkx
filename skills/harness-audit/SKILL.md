@@ -124,6 +124,8 @@ uv run $SKILL_DIR/scripts/audit_skills.py [--days 30] [--json]
 uv run $SKILL_DIR/scripts/audit_skills.py capture <session-id-or-path> --skill <name> --expect [trigger|no-trigger] [--intent in_domain|hard_negative]
 ```
 
+`audit_skills.py capture` automatically queries `git log -1` and `git status` on the skill directory to populate `snapshot.git_commit` and `snapshot.dirty`, alongside `snapshot.captured_description`.
+
 ### Triage & Discovery Categories
 
 | Finding | Signal | Default action |
