@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **gh-router:** absorb pr-conflict with rich commit intent and reorganize delivery pipeline
+* **gh-router:** absorb pr-conflict with rich commit intent and reorganize delivery pipeline (#163)
 * **gh-router:** realign router and pr-land to router-projection pattern (#160)
 * **herdr:** record agent bootstrap quirks and require role confirmation (#159)
 * **ai-engineering:** add skill trigger evals, 4-tier triage, and audit-skills capture (#158)
