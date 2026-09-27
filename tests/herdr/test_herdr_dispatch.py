@@ -67,6 +67,18 @@ def test_dispatch_refuses_agent_kind(stub: StubHarness, tmp_path: Path) -> None:
     assert stub.prompts() == []
 
 
+def test_dispatch_refuses_qoderclicn_agent_kind(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [{"pane_id": "w9:p2", "name": "t7-impl", "agent": "qoderclicn"}],
+    }
+    done = stub.run("qoderclicn", "--file", str(payload_file(tmp_path)), state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "is an agent kind" in done.stderr
+    assert "live agent names: t7-impl" in done.stderr
+    assert stub.prompts() == []
+
+
 def test_dispatch_reports_delivery_revision(stub: StubHarness, tmp_path: Path) -> None:
     state = {
         **DEFAULT_STATE,

@@ -582,6 +582,22 @@ def test_refuses_target_that_is_an_agent_kind(stub: StubHarness, tmp_path: Path)
     assert stub.prompts() == []
 
 
+def test_refuses_qoderclicn_target_that_is_an_agent_kind(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [{"pane_id": "w9:p2", "name": "t7-impl", "agent": "qoderclicn"}],
+        "panes": [
+            *DEFAULT_STATE["panes"],
+            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "worker"},
+        ],
+    }
+    done = stub.run("qoderclicn", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "is an agent kind" in done.stderr
+    assert "live agent names: t7-impl" in done.stderr
+    assert stub.prompts() == []
+
+
 def test_workspace_workers_listed_in_caller_context(stub: StubHarness, tmp_path: Path) -> None:
     state = {
         **DEFAULT_STATE,

@@ -4,7 +4,8 @@ Depth for `$SKILL_DIR/SKILL.md`. Read before any consent-gated or irreversible a
 
 ## Coordination
 
-- Confirm coding agent kind with user first if unspecified; never pick a random or default kind when starting an agent.
+- Confirm role-to-agent mapping (role, agent kind, provider, and model) with the user before starting agents or orchestrating; never assume or pick defaults.
+- Verify folder trust and agent bootstrap state before dispatching tasks (`qoderclicn` requires terminal UI trust confirmation; `pi` requires `--approve` after `--`). Ensure agent settles into `idle` or `done` before prompting (see [Agent Bootstrap](agent-bootstrap.md)).
 - Use `--no-focus` for background work unless the user asked to switch context.
 - Use `--current`, an explicit pane ID, or a unique agent name. Do not rely on another client's focused pane.
 - Parse IDs from JSON responses. Do not derive them from sidebar order or examples.
