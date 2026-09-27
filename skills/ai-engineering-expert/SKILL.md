@@ -1,10 +1,10 @@
 ---
 name: ai-engineering-expert
 description: >-
-  AI engineering methodology spine for LSZ harness — context-load, skill/agent design, writing for agents, testing, subagent-first execution. Use when designing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md), or diagnosing context bloat.
+  AI engineering methodology spine for LSZ harness — context-load, skill/agent design, writing for agents, testing, subagent-first execution. Use when designing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md), or diagnosing context bloat or skill discovery failures.
 arguments: domain
 argument-hint: |-
-  skill-authoring -- loads skill design methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, progressive disclosure, rules-vs-skills boundary, platform sync, parent/sub-skill layout, and authoring checklists
+  skill-authoring -- loads skill design and diagnosis methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, trigger diagnosis, progressive disclosure, rules-vs-skills boundary, platform sync, and authoring checklists
   subagent-engineering -- loads subagent methodology: action space design, observation formats, error recovery, parallel execution, orchestration constraints, and agent frontmatter
   verification -- loads verification methodology: EDD, deterministic vs semantic verification, AI regression patterns, runtime trace fixtures, and eval-first loops
   writing-for-agents -- loads agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or any agent-consumed doc
@@ -23,9 +23,11 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs 
 
 1. **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task.
 2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model _says_ it did; we only trust what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
-3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules:
-   - **Mechanical violations** (syntax, banned APIs, import shapes, file locations) → deterministic tools (compilers, linters, property tests). Full stop.
-   - **Prompts & steering files** → reserved strictly for genuine **judgment calls** (consistency, idiom, architecture fit) verified via Adversarial Orchestration ("Skeptic" agent).
+3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules. When an agent fails, classify root cause into four distinct archetypes:
+   - **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → deterministic tools (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
+   - **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → refine prompt contracts (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
+   - **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → enforce via Context Pressure Asymmetry (move to Skeptic reviewer) or build a hard tool gate. Prune ignored prose.
+   - **Route Friction** (model bypassed rule because compliance was too manual or multi-step) → pack steps into a script (`scripts/<cmd>`). Make the governed path the cheapest path.
 
 ## Information Boundary Design
 
@@ -239,6 +241,10 @@ Use the handoff document as the index for durable artifacts (`design.md`, `linea
 | Monitor for completion/failure       | Run tests directly                       |
 | Receive and synthesize summaries     | Read full artifact contents into context |
 | Pass pointers between phases         | Re-process subagent outputs              |
+
+### Execution Profile Boundary
+- **Heavy Mutation & Implementation**: Subagent-first is mandatory. Keeps orchestrator context clean and isolates trial-and-error churn.
+- **Diagnostic & Audit Pipelines**: Standalone retrospective audits (`harness-audit`) may run as in-process linear pipelines when strictly isolated to scratch/report directories. However, **mid-session diagnostics** (e.g. diagnosing why a skill failed to trigger during an active task) **must be dispatched to a subagent with forked context** to prevent diagnostic meta-chatter from bloating the parent session's working memory.
 
 ### Dispatch Pattern
 

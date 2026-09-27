@@ -154,6 +154,52 @@ Manage architecture decision records with the `adr` CLI. Use for initializing an
 
 Reference: [glossary.md](references/glossary.md) for the full domain vocabulary (invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms).
 
+### Trigger Calibration & Evidential Ledgers
+
+Never judge skill description quality by crude invocation counts or unconstrained `skill_coverage`. A skill firing on unrelated tasks is context pollution; an installed skill failing to fire on matching domain problems is a discovery failure.
+
+Measure trigger performance via:
+- **Trigger Recall**: $\frac{\text{Triggered in\_domain}}{\text{Total in\_domain}}$ (must be high).
+- **Collision Resistance**: $\frac{\text{Suppressed hard\_negative}}{\text{Total hard\_negative}}$ (must be high).
+
+**Evidential Trigger Ledger (`~/.pi/agent/evals/<skill_name>.yaml`)**:
+Maintain per-skill trigger evals modeled at the granularity of an `agent_run` observation:
+
+```yaml
+skill: <skill-name>
+version: 1
+
+cases:
+  - id: eval_20260927_01
+    created_at: "2026-09-27T00:25:00Z"
+    source: captured_session # captured_session | synthetic
+    session_id: "01a07730-d9be-73cc-b7b1-a8caa2187f49"
+    turn_index: 8
+    intent_class: in_domain # in_domain | hard_negative | distractor
+    should_trigger: true
+
+    root_goal: |-
+      rebase our feature branch onto main and update dependencies
+
+    trigger_observation:
+      type: tool_result # tool_result | user_prompt
+      tool_name: bash
+      command: git rebase main
+      exit_code: 1
+      content: |-
+        CONFLICT (content): Merge conflict in src/auth.py
+
+    captured_description: >-
+      <description active at time of capture>
+
+    notes: |-
+      Model attempted manual sed/grep edits instead of loading skill.
+```
+
+Harvest real-world failure sessions into this ledger (via `harness-audit capture`). When Trigger Recall is low, extract exact user symptom keywords from captured observations and inject them into the `Use when...` clause.
+
+For complete step-by-step troubleshooting when a skill fails to fire, over-triggers, or loops during execution, see the [Skill Diagnosis Guide](references/skill-diagnosis.md).
+
 **Key Optional Fields**
 
 - `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line using the `|` or `>-` block scalar: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
@@ -194,6 +240,7 @@ Reference: [glossary.md](references/glossary.md) for the full domain vocabulary 
 **References:**
 
 - [skill-authoring.md](references/skill-authoring.md) -- Complete skill authoring reference (frontmatter, descriptions, triggers, string substitutions, calibration)
+- [skill-diagnosis.md](references/skill-diagnosis.md) -- Step-by-step troubleshooting for trigger misses, collisions, execution loops, and dead skills
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts
 - [dialog-contract.md](references/dialog-contract.md) -- Standard pattern for user interactions
 - [glossary.md](references/glossary.md) -- Domain vocabulary: invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms

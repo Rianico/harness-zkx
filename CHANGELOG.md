@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **ai-engineering:** add skill trigger evals, 4-tier triage, and audit-skills capture
 * **agents:** align root instructions with ai-engineering-expert and streamline harness audit (#155)
 * **scaffold:** audit markdown references and detect drift in mixed project-owned files (#147)
 * **git-convention:** align changelog headings with ADR-0016 and codify squash body filtering (#147)

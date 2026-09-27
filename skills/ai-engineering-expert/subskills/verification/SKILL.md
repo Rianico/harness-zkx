@@ -62,6 +62,19 @@ Write tests for bugs that were found, not just for code that works. AI tends to 
 
 > **Doc/writing verification:** Agent-document output (SKILL.md, AGENTS.md, CLAUDE.md) verifies deterministically via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` + `context-check` and semantically via a Skeptic comparing prose to intent (see [writing sub-skill](../writing-for-agents/SKILL.md)). Prose for a human reader also runs that sub-skill's blind evals ([evals.json](../writing-for-agents/evals/evals.json)) — one fresh subagent per eval, assertions withheld.
 
+### Skill Trigger Verification (CI Tests vs. Offline Evals)
+
+Do not make LLM API calls in CI unit tests. Reconcile trigger verification via a strict two-tier architecture:
+
+1. **Deterministic Regression Tests (CI Floor)**:
+   - Zero model calls.
+   - Run in `pytest` against historical transcript records stored in the trigger ledger.
+   - Verifies that recorded session facts match expectations (`assert actual_invoked == should_trigger`).
+2. **Offline Routing Probes (Skill Authoring Eval)**:
+   - Run on-demand when authoring or revising a skill `description`.
+   - Sends a mini-trajectory (System prompt with `<available_skills>` + `root_goal` + `trigger_observation`) to a fast probe model.
+   - Asserts that the model's next tool call correctly selects or rejects the target skill across all ledger cases.
+
 ## Runtime Trace Fixtures
 
 For testing invocation class behavior against live Codex surfaces. See the context-load policy runtime trace fixture spec for fixture design and test procedure.

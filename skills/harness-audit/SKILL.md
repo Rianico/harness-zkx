@@ -1,12 +1,13 @@
 ---
 name: harness-audit
 description: >-
-  Audits pi session JSONL for oversized bash outputs and edit tool failures, analyses cause and triages refinable vs replaceable-by-tool vs filter vs keep for fix-or-gotcha decision. Use when trimming verbose results, hardening context-window bloat, or diagnosing hash-anchor edit rejections.
+  Audits pi session JSONL for oversized bash outputs, edit failures, and dead skills; captures trigger evals and triages fixes. Use when trimming verbose results, hardening context bloat, diagnosing edit rejections, or evaluating skill discovery.
 arguments: target
 argument-hint: |-
   <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file
   audit.py: [--threshold N] [--json] [--emit-filtered] [--keep-head-tail N]
   audit_edits.py: [--json] [--with-context N] [--dump-context <dir>]
+  audit_skills.py: [--days N] [--json] | capture <session-id> --skill <name> --expect [trigger|no-trigger]
 disable-model-invocation: true
 ---
 
@@ -14,7 +15,7 @@ disable-model-invocation: true
 
 Deterministic scan for oversized `bash` tool results **plus** constructive triage, **and** a second workload for `edit` tool failures (hash-anchor rejections). Scan identifies candidates; the model analyses, triages, and discusses fixes with you — including whether to refine scripts or add a `rules/` guard. Read-only by default; filtered output is opt-in.
 
-Two workloads: `audit.py` (bash oversized output) and `audit_edits.py` (edit failures). Both resolve the target the same way (§1) and support `--json` plus `--with-context N`.
+Three workloads: `audit.py` (bash oversized output), `audit_edits.py` (edit failures), and `audit_skills.py` (skill discovery & trigger capture). All resolve targets via §1 and support `--json`.
 ## Workflow
 
 ### 1. Resolve target
@@ -111,6 +112,26 @@ Report: total `edit` calls, successes, failures, failure rate, breakdown by code
 
 Per failure: `category / confidence / cheapest fix`. Done when every failure has a category and the model shows a corrected retry (fresh `read` → valid anchors) or an explicit keep.
 
+## Skill audit & trigger capture workload
+
+`audit_skills.py` parses session JSONL to measure skill discovery, identify dead skills, and harvest real session friction into the trigger ledger (`~/.pi/agent/evals/<skill_name>.yaml`).
+
+```bash
+# Scan sessions for invocation counts, dead skills, and zero-skill friction sessions
+uv run $SKILL_DIR/scripts/audit_skills.py [--days 30] [--json]
+
+# Capture an agent_run step from a session into a skill's trigger eval ledger
+uv run $SKILL_DIR/scripts/audit_skills.py capture <session-id-or-path> --skill <name> --expect [trigger|no-trigger] [--intent in_domain|hard_negative]
+```
+
+### Triage & Discovery Categories
+
+| Finding | Signal | Default action |
+| ------- | ------ | -------------- |
+| **Dead Skill** | Installed in `.agents/skills/` or `~/.pi/agent/skills/` with 0 invocations in lookback | Triage to `skill-authoring`: audit description triggers, check for missing symptom keywords, or prune |
+| **Zero-Skill Friction** | High bash retries / edit loops with 0 skills loaded | Model inspects User Prompt + Error Turn to triage whether an installed skill should have triggered |
+| **Eval Harvest** | Daily session encountered target task or near-miss | Capture `agent_run` observation (`user_prompt` or `tool_result`) into `~/.pi/agent/evals/<skill_name>.yaml` |
+
 ## Examples
 
 ```bash
@@ -130,6 +151,14 @@ uv run $SKILL_DIR/scripts/audit_edits.py 01a07730-d9be-73cc-b7b1-a8caa2187f49 --
 
 # Machine-readable
 uv run $SKILL_DIR/scripts/audit_edits.py <session-id-or-path> --json
+```
+
+```bash
+# Skill discovery audit
+uv run $SKILL_DIR/scripts/audit_skills.py --days 14
+
+# Capture rebase conflict session as positive eval case
+uv run $SKILL_DIR/scripts/audit_skills.py capture 01a07730-d9be-73cc-b7b1-a8caa2187f49 --skill resolve-merge-conflicts --expect trigger --intent in_domain
 ```
 
 ## Completion
