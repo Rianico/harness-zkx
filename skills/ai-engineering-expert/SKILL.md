@@ -8,9 +8,10 @@ argument-hint: |-
   subagent-engineering -- loads subagent methodology: action space design, observation formats, error recovery, parallel execution, orchestration constraints, and agent frontmatter
   verification -- loads verification methodology: EDD, deterministic vs semantic verification, AI regression patterns, runtime trace fixtures, and eval-first loops
   writing-for-agents -- loads agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or any agent-consumed doc
+  writing-for-humans -- loads human-facing proposal writing: problem-first framing, evidence grounding, scannability, explicit asks; use when drafting/reviewing GitHub issues, RFCs, or proposals
   omitted -- loads only the core AI engineering philosophy and the sub-skill dispatch registry
 metadata:
-  manage: [skill-authoring, subagent-engineering, verification, writing-for-agents]
+  manage: [skill-authoring, subagent-engineering, verification, writing-for-agents, writing-for-humans]
 ---
 
 # AI Engineering Expert
@@ -325,7 +326,7 @@ When workflow steps are plain shell that the model rewrites each time, they add 
 
 ## Sub-Skill Dispatch
 
-This skill manages four domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument. When the task writes or edits any agent-consumed document (SKILL.md, AGENTS.md, CLAUDE.md, pointer docs), also load `writing-for-agents` — even when primary domain is `skill-authoring`.
+This skill manages five domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument. When the task writes or edits any agent-consumed document (SKILL.md, AGENTS.md, CLAUDE.md, pointer docs), also load `writing-for-agents` — even when primary domain is `skill-authoring`.
 
 | Domain                 | Sub-Skill                                            | Covers                                                                                                                                                                                                    |
 | ---------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -333,5 +334,6 @@ This skill manages four domain-specific sub-skills. Read the appropriate sub-ski
 | `subagent-engineering` | `$SKILL_DIR/subskills/subagent-engineering/SKILL.md` | Action space design, observation design, error recovery, parallel execution, orchestration constraints, agent frontmatter                                                                                 |
 | `verification`         | `$SKILL_DIR/subskills/verification/SKILL.md`         | EDD, deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loop, runtime trace fixtures                                                                             |
 | `writing-for-agents`   | `$SKILL_DIR/subskills/writing-for-agents/SKILL.md`   | Agent-document writing — context pointers, hierarchy, progressive disclosure, completion criteria, leading words, pruning; use for any SKILL.md/AGENTS.md/CLAUDE.md or narrative rigor in skill-authoring |
+| `writing-for-humans`   | `$SKILL_DIR/subskills/writing-for-humans/SKILL.md`   | Human-facing proposal writing — problem-first framing, evidence grounding, scannability, explicit asks, non-goals; use for GitHub issues, RFCs, and proposals a maintainer triages |
 
 **Dispatch:** When `$domain` is provided, read the matching sub-skill file and follow its instructions. When no domain is specified, only the philosophy above is loaded.

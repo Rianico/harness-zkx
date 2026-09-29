@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **herdr:** add managed agy bridge installer for terminal title lifecycle hooks (#169)
+* **ai-engineering:** add writing-for-humans subskill for human-facing proposals, RFCs, and issues (#170)
 * **gh-router:** absorb pr-conflict with rich commit intent and reorganize delivery pipeline (#163)
 * **gh-router:** realign router and pr-land to router-projection pattern (#160)
 * **herdr:** record agent bootstrap quirks and require role confirmation (#159)
