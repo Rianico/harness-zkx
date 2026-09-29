@@ -638,3 +638,16 @@ def test_prompt_retries_and_succeeds_on_startup_race(stub: StubHarness, tmp_path
     assert "prompted reviewer" in done.stdout
     assert "revision=r2" in done.stdout
     assert len(stub.prompts()) == 2
+
+
+def test_revision_zero_agent_accepted_without_retry(stub: StubHarness, tmp_path: Path) -> None:
+    """agy pins revision at 0: exit 0 is success, and retrying would duplicate the injection."""
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_rev_seq": {"reviewer": ["0", "0"]},
+    }
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "prompt dropped" not in done.stderr
+    assert "prompted reviewer" in done.stdout
+    assert len(stub.prompts()) == 1

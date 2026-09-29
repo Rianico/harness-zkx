@@ -122,36 +122,30 @@ def test_barrier_accepts_background_done_without_until(stub: StubHarness) -> Non
     assert "done" in done.stdout
 
 
-def test_revision_zero_settled_state_is_held(stub: StubHarness) -> None:
-    """False-positive done with revision 0 (agy, unrecognized) must not settle."""
+def test_revision_zero_settled_state_fails_fast(stub: StubHarness) -> None:
+    """False-positive done with revision 0 (agy, unrecognized) fails fast, never hangs."""
     state = settled_state(a={"agent_status": "done", "revision": "0"})
-    done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
-    assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
+    done = stub.run("a", "--interval", "0.01", "--timeout", "200000", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
     assert "advisory: a reports done with revision 0 (unrecognized; typical of agy)" in done.stderr
-    assert "timed out after 200ms" in done.stderr
-    assert (
-        "[revision 0 held; weakly-recognized agent does not settle barrier; use dispatch & yield]"
-        in done.stderr
-    )
+    assert "unsatisfiable wait" in done.stderr
+    assert "timed out" not in done.stderr
 
 
-def test_int_revision_zero_is_held(stub: StubHarness) -> None:
-    """Numeric revision 0 normalizes to "0" and is held as well."""
+def test_int_revision_zero_fails_fast(stub: StubHarness) -> None:
+    """Numeric revision 0 normalizes to "0" and fails fast as well."""
     state = settled_state(a={"agent_status": "idle", "revision": 0})
-    done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
-    assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
+    done = stub.run("a", "--interval", "0.01", "--timeout", "200000", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
     assert "advisory: a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
-    assert (
-        "[revision 0 held; weakly-recognized agent does not settle barrier; use dispatch & yield]"
-        in done.stderr
-    )
+    assert "unsatisfiable wait" in done.stderr
 
 
-def test_revision_zero_loud_advisory_contains_recovery_guidance(stub: StubHarness) -> None:
-    """Loud tick-1 advisory directs callers to dispatch and yield turn for herdr-reply."""
+def test_revision_zero_fast_failure_steers_to_dispatch_and_yield(stub: StubHarness) -> None:
+    """Fail-fast stderr names the event-driven herdr-reply pattern, not just the hold."""
     state = settled_state(a={"agent_status": "idle", "revision": "0"})
-    done = stub.run("a", "--interval", "0.01", "--timeout", "200", state=state)
-    assert done.returncode == herdr_cli.EXIT_HERDR
+    done = stub.run("a", "--interval", "0.01", "--timeout", "200000", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE
     assert "advisory: a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
     assert (
         "agents with background subagents (e.g. agy) report idle while subagents work"
@@ -159,13 +153,49 @@ def test_revision_zero_loud_advisory_contains_recovery_guidance(stub: StubHarnes
     )
     assert "weakly-recognized agents do not advance revision" in done.stderr
     assert "dispatch and yield turn for herdr-reply callback instead" in done.stderr
+    assert "Dispatch & Yield" in done.stderr
+    assert "herdr-reply" in done.stderr
+
+
+def test_barrier_fails_fast_when_any_target_is_revision_zero(stub: StubHarness) -> None:
+    """A held target can never settle the ALL barrier, so the barrier exits 2 at once."""
+    state = settled_state(a={"agent_status": "idle", "revision": "0"}, b={"agent_status": "done"})
+    done = stub.run("a", "b", "--interval", "0.01", "--timeout", "200000", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "unsatisfiable wait: a " in done.stderr
+    assert "timed out" not in done.stderr
+
+
+def test_any_mode_settles_despite_held_revision_zero_target(stub: StubHarness) -> None:
+    """--any still succeeds on a recognized match while another target is revision 0."""
+    state = settled_state(
+        a={"agent_status": "done", "revision": "0"}, b={"agent_status": "done", "revision": "r3"}
+    )
+    done = stub.run("a", "b", "--any", "--interval", "0.01", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+
+def test_any_mode_fails_fast_when_all_targets_revision_zero(stub: StubHarness) -> None:
+    """--any with every target revision 0 is equally unsatisfiable: exit 2, never hang."""
+    state = settled_state(
+        a={"agent_status": "idle", "revision": "0"}, b={"agent_status": "done", "revision": "0"}
+    )
+    done = stub.run("a", "b", "--any", "--interval", "0.01", "--timeout", "200000", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "unsatisfiable wait" in done.stderr
+    assert "herdr-reply" in done.stderr
+    assert "timed out" not in done.stderr
 
 
 def test_periodic_hold_heartbeat_emitted(stub: StubHarness) -> None:
-    """Held revision-0 targets periodically pulse stderr with elapsed hold time."""
-    state = settled_state(a={"agent_status": "done", "revision": "0"})
+    """--any mode with one live target keeps pulsing heartbeats for the held target."""
+    state = settled_state(
+        a={"agent_status": "done", "revision": "0"}, b={"agent_status": "working"}
+    )
     done = stub.run(
         "a",
+        "b",
+        "--any",
         "--interval",
         "0.01",
         "--hold-interval",
@@ -174,17 +204,17 @@ def test_periodic_hold_heartbeat_emitted(stub: StubHarness) -> None:
         "200",
         state=state,
     )
-    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
     assert "holding a (done, revision 0)" in done.stderr
     assert "(still waiting)" in done.stderr
 
 
 def test_timeout_annotates_targets_held_on_revision_zero(stub: StubHarness) -> None:
-    """Timeout annotates targets held on revision 0 but leaves ordinary targets unannotated."""
+    """Timeout in --any mode annotates targets held on revision 0; ordinary targets stay bare."""
     state = settled_state(
         a={"agent_status": "idle", "revision": "0"}, b={"agent_status": "working"}
     )
-    done = stub.run("a", "b", "--interval", "0.01", "--timeout", "200", state=state)
+    done = stub.run("a", "b", "--any", "--interval", "0.01", "--timeout", "200", state=state)
     assert done.returncode == herdr_cli.EXIT_HERDR
     assert "timed out after 200ms" in done.stderr
     assert (
