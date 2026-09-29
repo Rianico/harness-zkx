@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **herdr:** add managed agy bridge installer for terminal title lifecycle hooks
+* **herdr:** add managed agy bridge installer for terminal title lifecycle hooks (#169)
 * **gh-router:** absorb pr-conflict with rich commit intent and reorganize delivery pipeline (#163)
 * **gh-router:** realign router and pr-land to router-projection pattern (#160)
 * **herdr:** record agent bootstrap quirks and require role confirmation (#159)
@@ -60,8 +60,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **herdr:** add herdr-prompt for byte-exact payload delivery
 
 ### Bug Fixes
-* **herdr:** bypass revision increment check on pre_rev 0 to avoid duplicate prompts ([#168](https://github.com/Rianico/harness-zkx/issues/168))
-* **herdr:** fail fast on revision 0 unsatisfiable wait and steer to dispatch-and-yield ([#157](https://github.com/Rianico/harness-zkx/issues/157))
+* **herdr:** bypass revision increment check on pre_rev 0 to avoid duplicate prompts ([#168](https://github.com/Rianico/harness-zkx/issues/168)) (#169)
+* **herdr:** fail fast on revision 0 unsatisfiable wait and steer to dispatch-and-yield ([#157](https://github.com/Rianico/harness-zkx/issues/157)) (#169)
 * **herdr:** warn loudly and pulse hold on weakly-recognized agents in herdr-wait ([#157](https://github.com/Rianico/harness-zkx/issues/157)) (#164)
 * **adr:** fail-loudly shim refuses silent `doc/adr` fallback in fresh worktrees (#154)
 * **scaffold:** scope typecheck budget to python flavor and prevent false drift on python repos ([#150](https://github.com/Rianico/harness-zkx/issues/150)) (#152)
