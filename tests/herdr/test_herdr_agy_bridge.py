@@ -97,17 +97,23 @@ def test_prune_managed_drops_empty_matcher_group() -> None:
 # ── integration: install ────────────────────────────────────────────────────────
 
 
+def herdr_entries(group: dict[str, object], event: str) -> list[object]:
+    entries = group.get(event)
+    assert isinstance(entries, list)
+    return entries
+
+
 def test_install_writes_stop_and_permission_hooks(tmp_path: Path) -> None:
     done = install(tmp_path)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     group = herdr_group(tmp_path)
-    (stop,) = group["Stop"]
+    (stop,) = herdr_entries(group, "Stop")
     assert isinstance(stop, dict)
     assert stop["type"] == "command"
     assert stop["timeout"] == 10
     assert str(stop["command"]).startswith("bash '")
     assert str(stop["command"]).endswith("herdr-agy-bridge.sh' stop")
-    (permission_group,) = group["PreToolUse"]
+    (permission_group,) = herdr_entries(group, "PreToolUse")
     assert isinstance(permission_group, dict)
     assert permission_group["matcher"] == "ask_permission"
     hooks = permission_group["hooks"]
@@ -169,7 +175,7 @@ def test_install_preserves_unrelated_hooks(tmp_path: Path) -> None:
     data = read_hooks(tmp_path)
     assert isinstance(data["safety-gate"], dict)
     group = cast(dict[str, object], data["herdr"])
-    assert len(group["PreInvocation"]) == 1
+    assert len(herdr_entries(group, "PreInvocation")) == 1
     assert managed_count(group, "Stop") == 1
 
 
