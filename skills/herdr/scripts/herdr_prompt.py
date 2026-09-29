@@ -505,7 +505,10 @@ def prompt_one(
     if post_pane:
         pane = post_pane
 
-    if pre_rev is not None and (post_rev is None or post_rev == pre_rev):
+    # Weakly-recognized agents (e.g. agy) never advance revision past "0", so a
+    # same-revision read there is not a dropped prompt; retrying would duplicate
+    # the injection. Accept a successful exit verbatim when pre is "0".
+    if pre_rev is not None and pre_rev != "0" and (post_rev is None or post_rev == pre_rev):
         time.sleep(0.1)
         retry_done = run_herdr(argv, env)
         if retry_done.returncode != 0:

@@ -114,6 +114,18 @@ def test_dispatch_retries_and_succeeds_on_startup_race(stub: StubHarness, tmp_pa
     assert len(stub.prompts()) == 2
 
 
+def test_dispatch_accepts_revision_zero_without_retry(stub: StubHarness, tmp_path: Path) -> None:
+    """Inherits the herdr-prompt fix: revision-0 (agy) exit 0 is accepted, never re-sent."""
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_rev_seq": {"reviewer": ["0", "0"]},
+    }
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "prompt dropped" not in done.stderr
+    assert len(stub.prompts()) == 1
+
+
 def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "dry")), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr

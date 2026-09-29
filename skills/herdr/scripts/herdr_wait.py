@@ -13,21 +13,25 @@ event-driven ``agent wait --until idle`` never wakes: background agents settle t
 Polling still trusts the state feed, so a false-positive ``idle``/``done`` with
 revision 0 and no session (weak recognition, seen on agy panes whose status bar
 still reads WORKING, or when agents report idle while background subagents run)
-is held, not settled: the barrier emits an advisory, periodic hold heartbeats,
-and timeout guidance to dispatch and yield turn.
+is held, never settled; a wait that can no longer succeed fails fast (exit 2)
+instead of hanging to the watchdog.
 
     herdr-wait action1 action2 --timeout 300000   # barrier: ALL settle (default)
     herdr-wait review1 review2 --any              # reactive: ANY settles
     herdr-wait action1 action2 --json             # machine-readable summary
 
 Settled means ``idle``, ``done``, or ``blocked`` unless ``--until`` narrows it.
-A wanted state with revision 0 is not settled (agent unrecognized); it is held.
+A wanted state with revision 0 is not settled (agent unrecognized); it makes the
+wait unsatisfiable, so herdr-wait fails fast with exit 2 and steering toward the
+event-driven Dispatch & Yield (``herdr-reply``) pattern instead of holding until
+the watchdog: ANY held target in barrier mode, ALL held in ``--any`` mode.
 ``blocked`` always exits 3 (the agent needs human input, matching herdr-prompt).
 A watchdog ``--timeout`` (default 300s) always applies; expiry exits 1 naming the
 unsettled targets.
 
-Exit status: 0 settled, 1 herdr failure or timeout, 2 usage or missing
-precondition, 3 a target needs human input (blocked).
+Exit status: 0 settled, 1 herdr failure or timeout, 2 usage, missing precondition,
+or an unsatisfiable wait (revision-0 weakly-recognized targets), 3 a target needs
+human input (blocked).
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
 """
@@ -47,6 +51,7 @@ from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_HERDR,
     EXIT_OK,
+    EXIT_USAGE,
     HerdrError,
     UsageError,
     decode_response,
@@ -94,7 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Wait until Herdr agents settle (barrier over ALL targets by default).",
         epilog=(
             "exit status: 0 settled, 1 herdr failure or timeout, "
-            "2 usage or precondition, 3 a target needs human input"
+            "2 usage, precondition, or unsatisfiable wait (revision 0 targets), "
+            "3 a target needs human input"
         ),
     )
     _ = parser.add_argument("targets", nargs="*", metavar="TARGET", help="agent names or pane ids")
@@ -199,8 +205,8 @@ def is_recognized(snap: Snapshot) -> bool:
     """Revision 0 means Herdr has not recognized an agent turn yet.
 
     Seen on agy panes: `agent get` reports idle/done with revision 0 and no
-    session while the pane status bar still reads WORKING. Such a record is
-    held, never settled.
+    session while the pane status bar still reads WORKING. Such a record never
+    settles the barrier; the wait is failed fast (exit 2) instead of hanging.
     """
     return snap.revision != "0"
 
@@ -289,6 +295,10 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
         held_now = {
             snap.target: snap for snap in snaps if snap.status in wanted and not is_recognized(snap)
         }
+        # A revision-0 target never advances to recognized, so ANY held target
+        # dooms the ALL barrier and ALL held doom --any too: fail fast, never
+        # hang silently to the watchdog on weak recognition.
+        unsatisfiable = bool(held_now) and (not options.any or len(held_now) == len(snaps))
         for target in sorted(held_now.keys()):
             snap = held_now[target]
             held_targets.add(target)
@@ -297,10 +307,15 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
                 hold_last_warn[target] = now
                 if target not in warned:
                     warned.add(target)
+                    action = (
+                        "exiting now instead of holding to the watchdog"
+                        if unsatisfiable
+                        else "holding wait loop"
+                    )
                     print(
                         f"herdr-wait: advisory: {target} reports {snap.status} with revision 0 (unrecognized; typical of agy).\n"
                         "herdr-wait: agents with background subagents (e.g. agy) report idle while subagents work; weakly-recognized agents do not advance revision and cannot be observed to completion via herdr-wait.\n"
-                        "herdr-wait: holding wait loop; dispatch and yield turn for herdr-reply callback instead.",
+                        f"herdr-wait: {action}; dispatch and yield turn for herdr-reply callback instead.",
                         file=sys.stderr,
                     )
             else:
@@ -320,6 +335,18 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
             if target not in held_now:
                 del hold_start[target]
                 _ = hold_last_warn.pop(target, None)
+
+        if unsatisfiable:
+            emit(snaps, as_json=options.json)
+            names = ", ".join(sorted(held_now))
+            print(
+                f"herdr-wait: unsatisfiable wait: {names} report a wanted state stuck at revision 0; "
+                "weakly-recognized agents cannot be observed to completion by polling.\n"
+                "herdr-wait: use the event-driven Dispatch & Yield pattern instead of barrier-waiting: "
+                "dispatch with herdr-prompt/herdr-dispatch, yield the turn, and await the herdr-reply callback.",
+                file=sys.stderr,
+            )
+            return EXIT_USAGE
 
         matched = [snap.target for snap in snaps if snap.status in wanted and is_recognized(snap)]
         if options.any and matched:

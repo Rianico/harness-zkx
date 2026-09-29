@@ -314,7 +314,7 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 
 ## Local helpers (not upstream)
 
-All 8 scripts in `$SKILL_DIR/scripts/` are authoritative and fully documented below with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+All 9 scripts in `$SKILL_DIR/scripts/` are authoritative and fully documented below with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
@@ -407,7 +407,22 @@ uv run "$SKILL_DIR/scripts/herdr_wait.py" review1 review2 --any
 uv run "$SKILL_DIR/scripts/herdr_wait.py" action1 action2 --json
 ```
 
-Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING or while awaiting background subagents) is held, never settled: the barrier emits an advisory, periodic hold heartbeats, and keeps waiting. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
+Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING or while awaiting background subagents) is held, never settled: the wait is unsatisfiable, so it fails fast with exit 2 and an advisory steering callers to the event-driven Dispatch & Yield pattern (`herdr-reply`) instead of barrier-waiting. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
+
+### Managed Antigravity (agy) bridge
+
+`agy` reports revision 0 forever, so its pane state is only trustworthy when the agent itself publishes lifecycle titles. `herdr_agy_bridge.py` manages that bridge as an installation in Antigravity's own hooks (`~/.gemini/config/hooks.json` globally, `.agents/hooks.json` with `--project`), installing two hooks under the `herdr` group and deploying `hooks/herdr-agy-bridge.sh` beside the hooks file:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_agy_bridge.py" --install             # global (default)
+uv run "$SKILL_DIR/scripts/herdr_agy_bridge.py" --install --project   # repo .agents/hooks.json
+uv run "$SKILL_DIR/scripts/herdr_agy_bridge.py" --status --json
+uv run "$SKILL_DIR/scripts/herdr_agy_bridge.py" --uninstall
+```
+
+`Stop` evaluates the payload's `fullyIdle` and emits an OSC 0 title — `agy: idle` when fully idle, `agy: working (subagents)` while background subagents still run (absent `fullyIdle` counts as idle). `PreToolUse` with matcher `ask_permission` emits `agy: blocked (permission)` when a permission gate fires. Installs are idempotent — re-running updates the managed entries and preserves unrelated hooks; `--uninstall` removes only the managed entries and the deployed script. `--status` exits 0 when installed and active, 1 when missing or misconfigured (it checks the hook entries, the script, and that the hooks file parses). Restart the `agy` pane after installing so it reloads the hooks.
+
+**Agent bridge convention:** per-agent lifecycle knowledge lives in exactly one adapter — `scripts/herdr_<agent>_bridge.py` — implementing the agy bridge's contract: marker-identified idempotent `--install/--uninstall/--status` into the agent's native config, publishing state as OSC 0 titles (`<agent>: idle | working (...) | blocked (...)`). Generic helpers (`herdr-prompt`, `herdr-wait`, `herdr-dispatch`) never branch on agent kind: they react only to observables (the revision-0 weak-recognition sentinel, herdr exit codes). When a second bridge lands, lift the shared constants (agent kinds, weak-revision predicate, OSC rendering) into `herdr_cli.py`; until then this section is the registry.
 
 ### `herdr-transcript` — clean text from the session file
 
@@ -419,4 +434,4 @@ uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role user
 uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role all --json
 ```
 
-Tests for all eight: `tests/herdr/`.
+Tests for all nine: `tests/herdr/`.
