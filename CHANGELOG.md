@@ -135,6 +135,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **herdr:** make herdr-overview the first orientation step and drop raw pane-layout probes
 * **herdr:** bind lane role boundaries and architectural skills (#173)
 * **herdr:** document implementer context isolation via internal subagents (#156)
 * **herdr:** document hierarchical lane coordination and TM contracts (#153)
