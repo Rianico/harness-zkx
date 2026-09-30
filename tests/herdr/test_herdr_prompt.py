@@ -300,8 +300,20 @@ def ambiguous_state() -> dict[str, object]:
 
 
 def test_label_resolves_to_the_pane_id(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            DEFAULT_STATE["panes"][0],
+            {**DEFAULT_STATE["panes"][1], "agent": "pi", "agent_status": "idle"},
+        ],
+    }
     done = stub.run(
-        "--label", "scratch pad", "--file", str(payload_file(tmp_path, "hi")), "--no-caller-context"
+        "--label",
+        "scratch pad",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--no-caller-context",
+        state=state,
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert done.stdout.startswith("prompted w9:p2  bytes=2")

@@ -35,6 +35,7 @@ from dataclasses import dataclass, replace
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_OK,
+    METHOD_CONSTRAINT_EPILOG,
     UsageError,
     entries,
     entry_optional_text,
@@ -53,6 +54,7 @@ SCOPE_CURRENT = "current"
 FORMAT_AUTO = "auto"
 FORMAT_TABLE = "table"
 FORMAT_YAML = "yaml"
+FORMAT_JSON = "json"
 
 SCOPE_ANCHORS = {
     SCOPE_WORKSPACE: "HERDR_WORKSPACE_ID",
@@ -112,12 +114,14 @@ class Options:
     tab: bool = False
     workspace: bool = False
     format: str = FORMAT_AUTO
+    json: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="herdr-overview",
         description="Show Herdr panes grouped by workspace, marking the calling pane.",
+        epilog=METHOD_CONSTRAINT_EPILOG,
     )
     scope = parser.add_mutually_exclusive_group()
     _ = scope.add_argument("--current", action="store_true", help="only the calling pane")
@@ -125,9 +129,14 @@ def build_parser() -> argparse.ArgumentParser:
     _ = scope.add_argument("--workspace", action="store_true", help="only the calling workspace")
     _ = parser.add_argument(
         "--format",
-        choices=(FORMAT_AUTO, FORMAT_TABLE, FORMAT_YAML),
+        choices=(FORMAT_AUTO, FORMAT_TABLE, FORMAT_YAML, FORMAT_JSON),
         default=FORMAT_AUTO,
         help="auto: table on a terminal, YAML otherwise (default: auto)",
+    )
+    _ = parser.add_argument(
+        "--json",
+        action="store_true",
+        help="output clean, valid JSON (equivalent to --format json)",
     )
     return parser
 
@@ -293,6 +302,7 @@ def _scalar(value: object) -> str:
 
 def render_yaml(overview: Overview) -> str:
     lines = [
+        "# herdr-overview (format: YAML; pass --json for JSON, --format table for table)",
         f"scope: {_scalar(overview.scope)}",
         "current:",
         f"  pane_id: {_scalar(overview.current_pane_id)}",
@@ -322,6 +332,42 @@ def render_yaml(overview: Overview) -> str:
             lines.append(f"        current: {_scalar(pane.current)}")
             lines.append(f"        cwd: {_scalar(pane.cwd)}")
     return "\n".join(lines) + "\n"
+
+
+def render_json(overview: Overview) -> str:
+    data = {
+        "scope": overview.scope,
+        "current": {
+            "pane_id": overview.current_pane_id,
+            "workspace_id": overview.current_workspace_id,
+            "tab_id": overview.current_tab_id,
+        },
+        "pane_total": overview.pane_total,
+        "workspaces": [
+            {
+                "workspace_id": group.workspace_id,
+                "label": group.label,
+                "number": group.number,
+                "current": group.current,
+                "pane_count": len(group.panes),
+                "panes": [
+                    {
+                        "pane_id": pane.pane_id,
+                        "tab_id": pane.tab_id,
+                        "agent": pane.agent,
+                        "agent_status": pane.agent_status,
+                        "name": pane.name,
+                        "label": pane.label,
+                        "current": pane.current,
+                        "cwd": pane.cwd,
+                    }
+                    for pane in group.panes
+                ],
+            }
+            for group in overview.groups
+        ],
+    }
+    return json.dumps(data, indent=2) + "\n"
 
 
 def _display_cwd(cwd: str | None, home: str | None) -> str:
@@ -394,11 +440,16 @@ def run(options: Options, env: Mapping[str, str]) -> int:
     )
 
     chosen = options.format
-    if chosen == FORMAT_AUTO:
-        chosen = FORMAT_TABLE if sys.stdout.isatty() else FORMAT_YAML
-    rendered = (
-        render_table(overview, env.get("HOME")) if chosen == FORMAT_TABLE else render_yaml(overview)
-    )
+    if options.json or chosen == FORMAT_JSON:
+        rendered = render_json(overview)
+    else:
+        if chosen == FORMAT_AUTO:
+            chosen = FORMAT_TABLE if sys.stdout.isatty() else FORMAT_YAML
+        rendered = (
+            render_table(overview, env.get("HOME"))
+            if chosen == FORMAT_TABLE
+            else render_yaml(overview)
+        )
     _ = sys.stdout.write(rendered)
     return EXIT_OK
 

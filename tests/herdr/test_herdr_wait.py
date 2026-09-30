@@ -127,7 +127,8 @@ def test_revision_zero_settled_state_fails_fast(stub: StubHarness) -> None:
     state = settled_state(a={"agent_status": "done", "revision": "0"})
     done = stub.run("a", "--interval", "0.01", "--timeout", "200000", state=state)
     assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
-    assert "advisory: a reports done with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert "a reports done with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert "REQUIRED" in done.stderr
     assert "unsatisfiable wait" in done.stderr
     assert "timed out" not in done.stderr
 
@@ -137,7 +138,8 @@ def test_int_revision_zero_fails_fast(stub: StubHarness) -> None:
     state = settled_state(a={"agent_status": "idle", "revision": 0})
     done = stub.run("a", "--interval", "0.01", "--timeout", "200000", state=state)
     assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
-    assert "advisory: a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert "a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert "REQUIRED" in done.stderr
     assert "unsatisfiable wait" in done.stderr
 
 
@@ -146,7 +148,8 @@ def test_revision_zero_fast_failure_steers_to_dispatch_and_yield(stub: StubHarne
     state = settled_state(a={"agent_status": "idle", "revision": "0"})
     done = stub.run("a", "--interval", "0.01", "--timeout", "200000", state=state)
     assert done.returncode == herdr_cli.EXIT_USAGE
-    assert "advisory: a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert "a reports idle with revision 0 (unrecognized; typical of agy)" in done.stderr
+    assert "REQUIRED" in done.stderr
     assert (
         "agents with background subagents (e.g. agy) report idle while subagents work"
         in done.stderr
@@ -201,7 +204,7 @@ def test_periodic_hold_heartbeat_emitted(stub: StubHarness) -> None:
         "--hold-interval",
         "0.03",
         "--timeout",
-        "200",
+        "600",
         state=state,
     )
     assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr

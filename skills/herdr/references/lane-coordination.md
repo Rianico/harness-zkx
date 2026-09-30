@@ -2,6 +2,9 @@
 
 Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract protocols for multi-tier Herdr lanes where an in-lane Task Manager coordinates one or more Implementers (#153, #156, #166, #167, #172).
 
+> [!IMPORTANT] Method Constraint
+> Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_dispatch.py`, `herdr_reply.py`, `herdr_prompt.py`, `herdr_overview.py`), NOT bare `herdr` CLI commands, for lane coordination, task dispatch, and completion replies.
+
 ---
 
 ## 1. Context & Motivation
@@ -349,7 +352,7 @@ sequenceDiagram
 
 1. **Brief Dispatch & Sizing**:
    - Orchestrator briefs TM via `herdr_dispatch.py`, supplying intent, constraints, acceptance, verification contract, and sizing budget.
-   - Orchestrator yields turn and awaits callback.
+   - Orchestrator yields turn and awaits callback. **Dispatch-&-Yield is REQUIRED (not advisory) for `agy` and revision-0 agents**; external polling via `herdr-wait` cannot reliably observe them to completion.
 2. **TM Triage & Decomposition**:
    - TM applies `keel` and `programming-expert` design judgment to evaluate the solution space.
    - Decomposes brief into atomic tickets with concrete evidence criteria.
