@@ -15,6 +15,8 @@ Relates to [13. Worktree Python Shims with wt Gate Delegation and Auto-Scaffold]
 
 The measurements below were read on 2026-09-22 at `e3badd92` (`main`) and at `a6b1d206`.
 
+Amended by [17. Retire the clear subcommand from the release handoff](0017-retire-the-clear-subcommand-from-the-release-handoff.md)
+
 ## Context
 
 `CHANGELOG.md` `## [Unreleased]` is the ledger: the record of what has landed but not been
@@ -35,10 +37,11 @@ The entries whose commits the squash destroyed — `pr-land`, `pr-refine`, `pr-e
 
 Two further decisions move the ledger's unit:
 
-- **The ledger is the published changelog's source.** `release.yml` runs
-  `changelog-unreleased.py clear` before `semantic-release`, whose notes generator rebuilds
-  versioned sections from commit subjects. A curated ledger is therefore deleted at release and
-  never published.
+- **The ledger is the published changelog's source.** At the time of this record `release.yml` ran
+  `changelog-unreleased.py clear` before `semantic-release`, whose notes generator rebuilt versioned
+  sections from commit subjects. A curated ledger was therefore deleted at release and never
+  published. [ADR-0017](0017-retire-the-clear-subcommand-from-the-release-handoff.md) retires that
+  step — the promotion plugin owns the emptying.
 - **Landing is declared per PR, not fixed.** A PR whose commits are one change plus its docs and
   follow-up fixes lands as a squash; a PR carrying several changes lands as a merge commit that
   preserves its commits. A squash destroys the subjects a multi-entry digest rests on; a merge
@@ -171,11 +174,11 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
   `scaffold --update` and hash-pinned in `tests/scaffold/test_templates.py`; `changelog-check.yml`
   is a required PR check. Retiring the guards, moving the notes source, and shipping the gate are
   therefore scaffold template changes plus a branch-protection change, not repo edits.
-- **The release path changes.** Notes come from the ledger: a `generateNotes` plugin placed after
-  `@semantic-release/release-notes-generator` can replace `nextRelease.notes` (the step is a chain,
-  each plugin receiving the previous output), and `@semantic-release/changelog` prepends that string
-  under the title. `changelog-unreleased.py clear` must move to *after* capture — as a `release.yml`
-  step it currently deletes the source.
+- **The release path changes.** Notes come from the ledger: `scripts/release-changelog.mjs` exports
+  `generateNotes` (returns the curated block) and `prepare` (promotes it to `## [X.Y.Z] - <date>`
+  and re-opens an empty `## [Unreleased]`). The plugin owns the emptying, so
+  `changelog-unreleased.py clear` is retired rather than moved
+  ([ADR-0017](0017-retire-the-clear-subcommand-from-the-release-handoff.md)).
 - **ADR-0015's Goal Gate predicate carries a `score ≥ 8/10` term.** This ceiling is binary and never
   emits a score: it either reports `unrepresented: []` or it does not. That is a deliberate narrowing
   of the ADR-0015 predicate at this boundary, as `max_loops = 2` already is.
@@ -187,9 +190,10 @@ Outcomes map to ADR-0015 routes: a pass returns `continue`; a fixable failure re
   74 unattributed entries (72 distinct identities), two duplicate identities, and one `(#N)` that
   resolves to nothing. A shrink-only baseline (`.config/changelog-unattributed-baseline.txt`,
   `--update-baseline`) records 71 identities as tolerated debt so the gate can be enabled now, while
-  any *new* unattributed entry still fails. It cannot be permanent: a release empties `[Unreleased]`
-  and every baselined identity with it, so the release job runs `--update-baseline` immediately
-  after `clear` in the same commit, and the file is header-only once the migration is paid down. A
+  any *new* unattributed entry still fails. It cannot be permanent: a release promotes `[Unreleased]`
+  and re-opens it empty, taking every baselined identity with it, so the release job runs
+  `--update-baseline` in the same commit, and the file is header-only once the migration is paid
+  down. A
   baseline that has not shrunk across two releases is drift. Nothing here removes the debt —
   shrinking the ledger stays a human decision.
 - `.githooks/pre-push` loses its subject and is removed with the guard it serves.
