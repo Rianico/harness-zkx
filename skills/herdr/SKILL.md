@@ -1,7 +1,7 @@
 ---
 name: herdr
 description: >-
-  Herdr terminal-multiplexer reference for coding agents. Inspects and drives panes, tabs, workspaces, and sibling agents, waits on test or server output. Use when the user mentions Herdr or asks to drive panes or agents. Requires HERDR_ENV=1; not for general background terminals or delegation.
+  Herdr terminal-multiplexer reference for coding agents. Inspects and drives panes, tabs, workspaces, and sibling agents; waits on test or server output. Use when the user mentions Herdr or asks to inspect pane layout or drive agents. Requires HERDR_ENV=1; not for background terminals or delegation.
 metadata:
   author: herdrdev
   version: '0.9.0'
@@ -23,8 +23,25 @@ If the check fails, say that you are not running inside Herdr and stop. Do not i
 
 When the check passes, the `herdr` binary in `PATH` talks to the current session. Use it to inspect neighboring work, create terminal layout, start agents and commands, read output, and wait for state changes.
 
-> [!IMPORTANT] Use Harness Scripts, Not Bare CLI
-> Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`), NOT bare `herdr` CLI commands, for agent communication, prompting, waiting, and overview.
+> [!IMPORTANT] Orient First, Then Use Harness Scripts
+> Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_overview.py`, `herdr_pane.py`, `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`), NOT bare `herdr` CLI commands, for orientation, layout, agent communication, prompting, and waiting.
+
+## Orient with `herdr-overview` first
+
+One call answers "what is here, and which pane or agent do I act on?" — pane ids, agent kinds, agent names, labels, and cwd, grouped by workspace, with the calling pane marked `*`. It joins pane labels with agent names, which no single `herdr` list command returns. Reach for it before any `workspace list`, `tab list`, `pane list`, `pane layout`, or `agent list` probe: those return overlapping subsets, cost several round trips, and bloat the context.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace: YAML when piped, table on a TTY
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --json          # JSON for programmatic parsing
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --workspace     # only the calling workspace
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling tab
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
+```
+
+Piped output is YAML with a `# Format: YAML (pass --json for JSON)` header; pass `--json` when a script parses it. Orientation is done when you can name the target pane id or agent name.
+
+Panes and agents that do not exist yet come from creation responses, not from re-listing: `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`; `tab create` returns `.result.tab` and `.result.root_pane`; `pane split` returns `.result.pane`.
 
 ## Learn the current CLI
 
@@ -46,8 +63,9 @@ A pane exists whether or not it contains an agent. `agent start` requires an exi
 
 Agent commands accept either a unique live agent name or the pane ID currently hosting that agent — not terminal IDs or bare agent-kind labels. `idle` and `done` both mean ready for input, `blocked` means an approval or question UI, and `unknown` does not prove completion. Full lifecycle and naming rules live in `$SKILL_DIR/references/cli-reference.md`.
 
-> [!WARNING] Method Constraint & Shell Injection Prevention
-> Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`) for agent communication, not bare `herdr` CLI commands.
+For the live instance of this topology, orient with `herdr-overview` above instead of enumerating with `pane list` / `agent list`.
+
+> [!WARNING] Shell Input Constraint
 > NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. In a raw shell pane, this executes prompt text directly as shell commands.
 
 ## Use IDs and caller context
@@ -62,28 +80,7 @@ printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_TAB_ID" "$HERDR_PANE_ID"
 
 Prefer `--current` when a pane command should target the calling pane. Omitting a target may use the UI-focused pane, which can belong to the user or another client.
 
-Orient with one compact view: pane ids, agent kinds, agent names, labels, and cwd, grouped by workspace.
-
-```bash
-uv run "$SKILL_DIR/scripts/herdr_overview.py"            # YAML when piped, table on a terminal
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --json     # JSON output (also --format json) for programmatic parsing
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab      # only the calling tab
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --current  # only the calling pane
-```
-
-Piped overview emits YAML with a `# Format: YAML (pass --json for JSON)` header, or structured JSON with `--json` / `--format json`. Always pass `--json` when parsing programmatically in scripts.
-
-Drop to the raw lists when you need a field the view omits:
-
-```bash
-herdr workspace list
-herdr tab list --workspace "$HERDR_WORKSPACE_ID"
-herdr pane current --current
-herdr pane list --workspace "$HERDR_WORKSPACE_ID"
-herdr agent list
-```
-
-Creation responses expose the IDs to use next. `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`; `tab create` returns `.result.tab` and `.result.root_pane`; `pane split` returns the new pane as `.result.pane`.
+Use `herdr-overview` to find an existing pane, tab, or agent by name or label; use the creation responses above for one that does not exist yet. Do not reconstruct layout from `pane list`, `tab list`, or `agent list` probes.
 
 ## Name a target, then hand off
 
@@ -183,19 +180,15 @@ Before starting any agent or orchestrating tasks, confirm with the user which ro
 
 Default to a sibling pane in the current tab and the current working directory. Do not create a workspace, tab, worktree, or different cwd unless the user explicitly requests that topology or location.
 
-Honor a direction requested by the user. Otherwise inspect the caller pane:
+Split with `herdr-pane`, which runs the env check, resolves the caller, picks the direction from the caller's aspect ratio (`wide -> right`, `tall -> down`), and preserves the caller's `$PWD` and focus — one command, no `pane layout` round trip:
 
 ```bash
-herdr pane layout --pane "$HERDR_PANE_ID"
+uv run "$SKILL_DIR/scripts/herdr_pane.py"              # auto direction from the caller's aspect ratio
+uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical     # stack below the caller (--direction down)
+uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal   # place right of the caller (--direction right)
 ```
 
-Split a wide pane to the right and a narrow or tall pane down. Avoid repeated same-direction splits that create unusably narrow columns or short rows. Keep the user's focus in the calling pane and preserve the caller's working directory:
-
-```bash
-herdr pane split --current --direction right --cwd "$PWD" --no-focus
-```
-
-Replace `right` with `down` when appropriate. Read the new pane ID from `.result.pane.pane_id`.
+Honor a direction the user requested by passing the word that means it. Avoid repeated same-direction splits that create unusably narrow columns or short rows. The helper prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`; use that id for `agent start`.
 
 An available shell pane must be at its interactive prompt, with the shell itself in the foreground and no foreground command, editor, or agent running. Start a supported agent in that pane with a useful unique name:
 
@@ -262,26 +255,17 @@ If a wait fails or returns `blocked`, inspect `agent get` and the transcript bef
 
 The primary workflow for multi-agent fan-out is **Dispatch & Yield (Event-Driven)**:
 
-1. **Caller self-names:**
-   ```bash
-   uv run "$SKILL_DIR/scripts/herdr_label.py" orchestrator
-   ```
-2. **Dispatch workers:**
-   ```bash
-   uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker1 worker2 --file brief.md --no-wait
-   ```
-3. **Yield turn:**
-   The orchestrator yields turn (stops calling tools, enters idle).
-4. **Completion callback wakes caller:**
-   Each worker finishes its assignment and executes the reply callback injected in the caller context:
-   ```bash
-   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "<STATUS> <artifacts> <issues>"
-   ```
-   This delivers prompt input directly to the orchestrator pane without shell mangling, waking its turn with the result.
-5. **Inspect session transcripts on wake:**
-   ```bash
-   uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
-   ```
+1. **Dispatch, then yield.** The canonical sequence — caller self-names, workers receive the caller context and reply contract, the orchestrator yields turn, the `herdr-reply` callback wakes it — is the Dispatch & Yield block above. Broadcast to several workers in one call:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker1 worker2 --file task.md --no-wait
+```
+
+2. **Inspect session transcripts on wake**, never a poll loop:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
+```
 
 **`herdr-wait` is strictly a fallback, not the primary coordination signal.** The event-driven callback model ensures completion arrives without the orchestrator holding a wait, burning context, or looping. External `agent_status` detection is untrustworthy for coding agents with background subagents (such as `agy`): the primary agent reports `idle` while waiting on subagents even though the task is still actively running, causing false early settlements or indefinite revision-0 holds. Event-driven `herdr_reply.py` callbacks are the only reliable completion signal. Keep `herdr-wait` strictly for non-agent panes, panes without an agent name, or watchdog recovery when a worker fails to report back. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. If using the barrier fallback:
 
@@ -307,13 +291,13 @@ Deep CLI semantics (wait activity gate, rejection vs settled outcomes, read sour
 
 ## Run an ordinary command in another pane
 
-Create a sibling pane with the same geometry rule, preserve the caller's working directory, and keep user focus unchanged:
+Create a sibling pane with the same rule as above — `herdr-pane` preserves the caller's `$PWD` and focus and prints the new pane id:
 
 ```bash
-herdr pane split --current --direction right --cwd "$PWD" --no-focus
+uv run "$SKILL_DIR/scripts/herdr_pane.py"
 ```
 
-Read the new pane ID from `.result.pane.pane_id`, then run and inspect the command:
+Then run and inspect the command in that pane:
 
 ```bash
 herdr pane run <returned-pane-id> "just test"
@@ -327,7 +311,8 @@ Prefer `--source recent-unwrapped` for logs and transcripts. The other read sour
 
 ## Safety and coordination rules
 
-- Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`), NOT bare `herdr` CLI commands, for agent communication, prompting, waiting, and overview.
+- Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_overview.py`, `herdr_pane.py`, `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`), NOT bare `herdr` CLI commands, for orientation, layout, agent communication, prompting, and waiting.
+- Orient with `herdr-overview` before enumerating panes, tabs, or agents. Do not run `herdr pane layout`, `pane list`, `tab list`, `workspace list`, or `agent list` to reconstruct layout.
 - NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. If target resolution fails or target has no agent, use the alternatives above (queue/watch, start agent, graceful abort). Raw text sent to a shell executes as shell commands.
 - Confirm role-to-agent mapping (kind, provider, model) with user before starting agents or orchestrating; never assume or pick defaults.
 - Verify folder trust and startup readiness before automated prompting (`qoderclicn` requires terminal trust; `pi` accepts `--approve`). See `$SKILL_DIR/references/agent-bootstrap.md`.
@@ -343,20 +328,11 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 > [!IMPORTANT] Method Constraint
 > Always execute these 9 harness scripts in `$SKILL_DIR/scripts/` instead of bare `herdr` CLI commands. Bare CLI commands bypass argument quoting, caller context injection, target safety checks, and delivery verification.
 
-All 9 scripts in `$SKILL_DIR/scripts/` are authoritative and fully documented below with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+All 9 scripts in `$SKILL_DIR/scripts/` are authoritative and documented here or in the orientation section above, with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
-Panes grouped by workspace with the id, agent kind, agent name, label, and cwd: YAML when stdout is not a terminal, an aligned table when it is. Pass `--json` (or `--format json`) for structured JSON output. Piped YAML includes a `# Format: YAML (pass --json for JSON)` top comment header. The calling pane is marked `*` and the calling workspace header `, current`.
-
-```bash
-uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace (YAML if piped, table if TTY)
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --json          # JSON output for programmatic parsing
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --workspace     # only the calling workspace
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling tab
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
-```
+Panes grouped by workspace with id, agent kind, agent name, label, and cwd; the calling pane marked `*`. Same script and flags as "Orient with `herdr-overview` first" above — that section is canonical.
 
 ### `herdr-label` — the one name that is both visible and addressable
 
