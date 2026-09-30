@@ -52,6 +52,27 @@ def test_git_flavor_ships_the_check_capable_bytes(tmp_path):
     assert shipped == CANONICAL.read_text(encoding="utf-8")
 
 
+def test_shipped_script_has_no_clear_subcommand():
+    """`clear` emptied the ledger before the promotion plugin could read it; it is retired.
+
+    A subcommand with no legitimate caller is a release-path footgun, so the fix is removal.
+    """
+    canonical = _load("canonical_changelog_clear", CANONICAL)
+    assert not hasattr(canonical, "clear_changelog")
+    result = subprocess.run(
+        [sys.executable, str(CANONICAL), "clear"], capture_output=True, text=True
+    )
+    assert result.returncode != 0, "the retired `clear` subcommand still runs"
+
+
+def test_scaffolded_release_workflow_never_clears_the_ledger(tmp_path):
+    """A scaffolded `release.yml` must let the promotion plugin read the ledger first."""
+    scaffold.do_git(tmp_path, "demo", dry_run=False)
+    workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "changelog-unreleased" not in workflow
+    assert "semantic-release" in workflow
+
+
 def _scaffolded_repo(tmp_path):
     """A `git`-flavor scaffold with one commit, on a topic branch."""
     scaffold.do_git(tmp_path, "demo", dry_run=False)

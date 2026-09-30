@@ -130,9 +130,9 @@ RAW_SHA256: dict[str, str] = {
 
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RENDERED_SHA256: dict[str, str] = {
-    "CONTRIBUTING.default (project_name=demo)": "b9f4a1b2f23500952d672df2992f5a821fd73dc64eae1432b279130fae26154d",
-    "CONTRIBUTING.python (project_name=demo)": "8245f1e57d65b699bc9e102b395a6ecc437a2ab99934e09e2872431a5f5252b3",
-    "CONTRIBUTING.typescript (project_name=demo)": "0346f64eb3c2ec898d8a6aa09bbaed2394e6b5a6a746ab8273a78c808414f442",
+    "CONTRIBUTING.default (project_name=demo)": "dec6d0f6235cbd378ce0888e425bf88747d9405edbab18f94be766e9ea705bba",
+    "CONTRIBUTING.python (project_name=demo)": "eef62add1cac7d2c111c8cc845489126f81756b6c6134dc23d7d5dd530ab1d11",
+    "CONTRIBUTING.typescript (project_name=demo)": "7a25dc4e715952d49284575cbd4c8de95894ee30666d4c669bbd27acff66eb34",
     "ci/release.yml[node+coverage]": "d7018000329223d8f4d03e05ff50393403c8f362bd8fbfd47ebfa6b0204152ab",
     "ci/release.yml[node]": "5fc8d4685e7bb4012f5fc5f2df1f7c48033ab4271cfbea6c85a0bfcdb6343946",
     "ci/release.yml[python+coverage]": "08460696bcc7cb359fb5d0db1f75998ee3a5690b1301dd5875fc8bcef2471487",
@@ -228,6 +228,20 @@ def test_rendered_bytes_are_pinned():
     assert not drifted, "rendered bytes changed — re-pin only if intended:\n" + _as_source(
         {k: _digest(cases[k]) for k in drifted}
     )
+
+
+def test_no_rendered_release_workflow_clears_the_ledger():
+    """The promotion plugin reads the ledger, so no shipped release.yml may empty it first.
+
+    `changelog-unreleased.py clear` ran as a pre-release step in a downstream scaffold and
+    deleted the curated `## [Unreleased]` block before `scripts/release-changelog.mjs` could
+    promote it. The template ships no such step; this guard keeps it that way.
+    """
+    for label, out in _render_cases().items():
+        if not label.startswith("ci/release.yml"):
+            continue
+        assert "changelog-unreleased" not in out, f"{label} references the ledger script"
+        assert "clear" not in out, f"{label} carries a ledger-clearing step"
 
 
 def test_rendered_output_has_no_template_leftovers():
