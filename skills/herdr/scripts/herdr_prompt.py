@@ -53,10 +53,13 @@ from pathlib import Path
 from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
+    METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
     current_pane_id,
     decode_response,
+    diagnose_agent_not_found,
+    diagnose_target_pane,
     entries,
     entry_optional_text,
     error_code,
@@ -65,6 +68,7 @@ from herdr_cli import (
     require_herdr_env,
     run_herdr,
     run_herdr_checked,
+    verify_target_not_bare_shell,
 )
 
 STDIN = "-"
@@ -101,7 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Submit a byte-exact prompt payload to a Herdr agent (no shell involved).",
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
-            "3 a target needs human input, 4 prompt delivered but the wait timed out"
+            "3 a target needs human input, 4 prompt delivered but the wait timed out\n\n"
+            + METHOD_CONSTRAINT_EPILOG
         ),
     )
     _ = parser.add_argument(
@@ -446,13 +451,23 @@ def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> lis
     if options.label:
         if options.targets:
             raise UsageError("pass either TARGETs or --label, not both")
-        return [resolve_label(herdr, options.label, env)]
+        pane_id = resolve_label(herdr, options.label, env)
+        if not options.dry_run:
+            diag = diagnose_target_pane(herdr, pane_id, env)
+            if diag is None:
+                diag = diagnose_target_pane(herdr, options.label, env)
+            if diag is not None:
+                raise UsageError(diag)
+        return [pane_id]
     if not options.targets:
         raise UsageError("pass TARGET (agent name or pane id) or --label")
     if len(set(options.targets)) != len(options.targets):
         raise UsageError("duplicate TARGETs; list each agent once")
     if not options.no_caller_context:
         validate_targets_not_kinds(options.targets, herdr, env)
+        if not options.dry_run:
+            for target in options.targets:
+                verify_target_not_bare_shell(herdr, target, env)
     return list(options.targets)
 
 
@@ -497,6 +512,10 @@ def prompt_one(
             # Not a dispatch failure: the prompt was accepted and the agent is
             # working; only the wait ran out. Reported as exit 4, never exit 1.
             return Dispatch(target, wait_timed_out=True)
+        if code == "agent_not_found":
+            diag = diagnose_agent_not_found(herdr, target, env)
+            if diag:
+                raise UsageError(diag)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
     post_rev, post_pane = (
@@ -565,6 +584,28 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
         caller = resolve_caller(herdr, env)
         workers = resolve_workspace_workers(herdr, caller.pane_id, targets, env)
         payload = wrap_with_caller(payload, caller, workers=workers)
+    if options.wait:
+        try:
+            agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+            for a in agents:
+                name = entry_optional_text(a, "name")
+                pid = entry_optional_text(a, "pane_id")
+                kind = entry_optional_text(a, "agent")
+                for target in targets:
+                    if (target == name or target == pid) and kind == "agy":
+                        prog = (
+                            "herdr-dispatch"
+                            if "herdr_dispatch" in sys.argv[0] or "herdr-dispatch" in sys.argv[0]
+                            else "herdr-prompt"
+                        )
+                        print(
+                            f"{prog}: warning: target {target!r} is an 'agy' agent; "
+                            "waiting on agy agents is unreliable because they report idle while background subagents work. "
+                            "Dispatch-&-Yield (--no-wait + await herdr-reply) is required.",
+                            file=sys.stderr,
+                        )
+        except Exception:
+            pass
     dispatches = [prompt_one(herdr, target, payload, options, env) for target in targets]
     blocked = sorted(dispatch.target for dispatch in dispatches if dispatch.blocked)
     if blocked:

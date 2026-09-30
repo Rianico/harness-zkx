@@ -62,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 * **scaffold:** drop the changelog clear subcommand so the release handoff never erases the curated ledger (#175)
+* **herdr:** remediate target resolution, agent observability, and shell prompt safety (#174)
 * **herdr:** bypass revision increment check on pre_rev 0 to avoid duplicate prompts ([#168](https://github.com/Rianico/harness-zkx/issues/168)) (#169)
 * **herdr:** fail fast on revision 0 unsatisfiable wait and steer to dispatch-and-yield ([#157](https://github.com/Rianico/harness-zkx/issues/157)) (#169)
 * **herdr:** warn loudly and pulse hold on weakly-recognized agents in herdr-wait ([#157](https://github.com/Rianico/harness-zkx/issues/157)) (#164)
@@ -134,6 +135,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
+* **herdr:** bind lane role boundaries and architectural skills (#173)
 * **herdr:** document implementer context isolation via internal subagents (#156)
 * **herdr:** document hierarchical lane coordination and TM contracts (#153)
 * **contributing:** name the two type-check suppression layers (#122)

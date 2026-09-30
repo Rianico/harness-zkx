@@ -27,7 +27,7 @@ import sys
 from collections.abc import Mapping, Sequence
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
-from herdr_cli import UsageError, guard
+from herdr_cli import METHOD_CONSTRAINT_EPILOG, UsageError, guard
 from herdr_prompt import (
     EXIT_WAIT_TIMEOUT,
     PROMPT_STATES,
@@ -43,7 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Dispatch a ticket file to a Herdr worker with caller context and reply contract.",
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
-            "3 a target needs human input, 4 prompt delivered but wait timed out"
+            "3 a target needs human input, 4 prompt delivered but wait timed out\n\n"
+            + METHOD_CONSTRAINT_EPILOG
         ),
     )
     _ = parser.add_argument(

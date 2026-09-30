@@ -23,6 +23,9 @@ If the check fails, say that you are not running inside Herdr and stop. Do not i
 
 When the check passes, the `herdr` binary in `PATH` talks to the current session. Use it to inspect neighboring work, create terminal layout, start agents and commands, read output, and wait for state changes.
 
+> [!IMPORTANT] Use Harness Scripts, Not Bare CLI
+> Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`), NOT bare `herdr` CLI commands, for agent communication, prompting, waiting, and overview.
+
 ## Learn the current CLI
 
 The installed binary is the authority for command syntax. Start with `herdr --help`, then print a command group by running the group without a subcommand (`herdr agent`, `herdr pane`, and the rest). Do not run bare `herdr` for discovery; it launches the TUI. Do not probe a mutating nested command by omitting arguments — commands such as `herdr workspace create` are valid with defaults and will execute.
@@ -43,6 +46,10 @@ A pane exists whether or not it contains an agent. `agent start` requires an exi
 
 Agent commands accept either a unique live agent name or the pane ID currently hosting that agent — not terminal IDs or bare agent-kind labels. `idle` and `done` both mean ready for input, `blocked` means an approval or question UI, and `unknown` does not prove completion. Full lifecycle and naming rules live in `$SKILL_DIR/references/cli-reference.md`.
 
+> [!WARNING] Method Constraint & Shell Injection Prevention
+> Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`) for agent communication, not bare `herdr` CLI commands.
+> NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. In a raw shell pane, this executes prompt text directly as shell commands.
+
 ## Use IDs and caller context
 
 Public IDs are opaque stable handles: workspace `w1`, tab `w1:t1`, pane `w1:p1`.
@@ -59,9 +66,12 @@ Orient with one compact view: pane ids, agent kinds, agent names, labels, and cw
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_overview.py"            # YAML when piped, table on a terminal
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --json     # JSON output (also --format json) for programmatic parsing
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab      # only the calling tab
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --current  # only the calling pane
 ```
+
+Piped overview emits YAML with a `# Format: YAML (pass --json for JSON)` header, or structured JSON with `--json` / `--format json`. Always pass `--json` when parsing programmatically in scripts.
 
 Drop to the raw lists when you need a field the view omits:
 
@@ -96,6 +106,17 @@ uv run "$SKILL_DIR/scripts/herdr_prompt.py" --label "review pane" --file brief.m
 
 `--label` matches a pane label exactly. Labels are not unique — two panes may carry the same one — so an ambiguous label fails with the candidate pane ids listed instead of guessing.
 
+### Target resolution failures & bare shell prevention
+
+If target resolution fails or matches a pane without an active agent (e.g. an idle shell pane):
+- **Refusal**: `herdr-prompt` and `herdr-reply` refuse delivery to raw shell panes to prevent prompt text executing as shell commands.
+- **Suggested recovery hook**: Diagnostics detect previous agent clues in the pane (agent attribute, title, label) and output an exact copy-paste recovery command: `Suggested recovery: herdr agent start <name> --kind <kind> --pane <id>`.
+- **Auto-start**: `herdr-reply` supports `--auto-start <KIND>` to automatically start the agent on an open shell pane before delivering the reply.
+- **Queue/watch**: Wait for the agent to start or monitor the pane with `herdr pane wait-output`.
+- **Start agent**: Explicitly start the agent via `herdr agent start <name> --kind <kind> --pane <id>`.
+- **Graceful abort**: If the caller or target agent exited, abort gracefully rather than forcing unprompted execution.
+- **Safety invariant**: NEVER fall back to bare `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies into a shell pane. In an idle shell pane, this executes markdown prose as shell commands (potentially catastrophic!).
+
 ### Dispatch & Yield (Event-Driven workflow)
 
 Multi-agent coordination is event-driven via completion callbacks:
@@ -123,11 +144,14 @@ Multi-agent coordination is event-driven via completion callbacks:
    Upon completion or blocking, the worker executes the contract callback via `herdr_reply.py`:
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "<STATUS> <artifacts> <issues>"
+   # Or auto-start the caller agent if its turn exited back to an open shell pane:
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "<STATUS> <artifacts> <issues>" --auto-start pi
    ```
    This delivers prompt input directly to the orchestrator pane without shell mangling, waking its turn with the result. Never use bare `herdr agent prompt` directly for replies.
 
-5. **`herdr-wait` is strictly a fallback:**
+5. **`herdr-wait` is strictly a fallback; Dispatch-&-Yield is REQUIRED for `agy` / revision-0:**
    Do not poll workers with loops or barriers during normal execution. `herdr-wait` is strictly a fallback for non-agent panes, panes lacking an agent name, or watchdog recovery.
+   **Dispatch-&-Yield is REQUIRED (not advisory) for `agy` and revision-0 agents**: Agents with background subagents (such as `agy`) report `idle` while their subagents work, and weakly-recognized agents never advance revision past 0. `herdr-wait` and `herdr-prompt --wait` CANNOT reliably observe `agy` agents to completion (they fail fast with exit 2 or hang to timeout). You must dispatch with `herdr-dispatch` or `herdr-prompt --no-wait`, yield turn, and await the `herdr-reply` callback.
 
 **Every handoff carries the caller's context, and requires a reply.** A worker cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and Herdr skill notice, and closes with the reply contract:
 
@@ -151,7 +175,7 @@ Underlying commands, if you drive them directly:
 
 The full split, including which response returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
-For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for anti-hero-mode rules, canonical TM brief contracts, implementer context isolation via internal subagents, and the lane-vs-subagent boundary.
+For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for non-overlapping role boundaries (Orchestrator, TM, Implementer), bound architectural skills (`keel`, `coding-protocol`, `programming-expert`), reconnaissance budgets, TM code review subagents, and implementer context isolation.
 
 ## Start and coordinate an agent
 
@@ -271,9 +295,9 @@ The barrier exits 3 the moment any target needs input — unblock it, then re-en
 
 Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and yield turn for their `herdr-reply` completion callbacks. Agents with background subagents report `idle` while subagents run, so external `agent_status` cannot distinguish waiting on subagents from task completion; never barrier-wait them. Keep `herdr-wait` strictly as a fallback for non-agent panes or strongly-recognized agents that advance revision past 0. Confirm the reviewer kind with the user if unspecified. Agent arguments go after `--` (`agent start reviewer --kind <kind> --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
 
-### Implementer context isolation
+### Role-internal context isolation & review subagents
 
-When an implementer faces a large task or operates under a constrained context window, it should spawn internal subagents for deep research, bulk edits, or test triage. The subagents run in isolated contexts, returning pointer-based summaries to avoid context bloating and compaction degradation. The implementer remains the single point of contact for the lane and replies to the orchestrator via `herdr_reply.py`. Details: [Hierarchical Lane Coordination](references/lane-coordination.md).
+When an implementer faces a large task or operates under a constrained context window, it should spawn internal subagents for deep research, bulk edits, or test triage. Similarly, the Task Manager spawns internal subagents for adversarial crux code review under `keel`, `coding-protocol`, and `programming-expert` to keep its own context window clean and un-compacted. Internal subagents run in isolated contexts, returning pointer-based summaries. They never invoke Herdr CLI commands or reply scripts directly. Details: [Hierarchical Lane Coordination](references/lane-coordination.md).
 
 ### Banned: sleep/timer polling loops
 
@@ -303,6 +327,8 @@ Prefer `--source recent-unwrapped` for logs and transcripts. The other read sour
 
 ## Safety and coordination rules
 
+- Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`), NOT bare `herdr` CLI commands, for agent communication, prompting, waiting, and overview.
+- NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. If target resolution fails or target has no agent, use the alternatives above (queue/watch, start agent, graceful abort). Raw text sent to a shell executes as shell commands.
 - Confirm role-to-agent mapping (kind, provider, model) with user before starting agents or orchestrating; never assume or pick defaults.
 - Verify folder trust and startup readiness before automated prompting (`qoderclicn` requires terminal trust; `pi` accepts `--approve`). See `$SKILL_DIR/references/agent-bootstrap.md`.
 - Use `--no-focus` for background work unless the user asked to switch context.
@@ -314,14 +340,18 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 
 ## Local helpers (not upstream)
 
+> [!IMPORTANT] Method Constraint
+> Always execute these 9 harness scripts in `$SKILL_DIR/scripts/` instead of bare `herdr` CLI commands. Bare CLI commands bypass argument quoting, caller context injection, target safety checks, and delivery verification.
+
 All 9 scripts in `$SKILL_DIR/scripts/` are authoritative and fully documented below with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
-Panes grouped by workspace with the id, agent kind, agent name, label, and cwd: YAML when stdout is not a terminal, an aligned table when it is. The calling pane is marked `*` and the calling workspace header `, current`.
+Panes grouped by workspace with the id, agent kind, agent name, label, and cwd: YAML when stdout is not a terminal, an aligned table when it is. Pass `--json` (or `--format json`) for structured JSON output. Piped YAML includes a `# Format: YAML (pass --json for JSON)` top comment header. The calling pane is marked `*` and the calling workspace header `, current`.
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace
+uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace (YAML if piped, table if TTY)
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --json          # JSON output for programmatic parsing
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --workspace     # only the calling workspace
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling tab
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
@@ -407,7 +437,7 @@ uv run "$SKILL_DIR/scripts/herdr_wait.py" review1 review2 --any
 uv run "$SKILL_DIR/scripts/herdr_wait.py" action1 action2 --json
 ```
 
-Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING or while awaiting background subagents) is held, never settled: the wait is unsatisfiable, so it fails fast with exit 2 and an advisory steering callers to the event-driven Dispatch & Yield pattern (`herdr-reply`) instead of barrier-waiting. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
+Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING or while awaiting background subagents) is held, never settled: the wait is unsatisfiable, so it fails fast with exit 2 and an error steering callers to the event-driven Dispatch & Yield pattern (`herdr-reply`) instead of barrier-waiting. Dispatch-&-Yield is REQUIRED, not advisory, for `agy` and revision-0 agents: `herdr-wait` and `herdr-prompt --wait` cannot observe them to completion. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
 
 ### Managed Antigravity (agy) bridge
 

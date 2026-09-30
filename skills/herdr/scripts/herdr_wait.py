@@ -52,14 +52,17 @@ from herdr_cli import (
     EXIT_HERDR,
     EXIT_OK,
     EXIT_USAGE,
+    METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
     decode_response,
+    entries,
     entry_optional_text,
     find_herdr,
     guard,
     require_herdr_env,
     run_herdr,
+    run_herdr_checked,
 )
 
 KNOWN_STATES = ("idle", "working", "blocked", "done", "unknown")
@@ -100,7 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "exit status: 0 settled, 1 herdr failure or timeout, "
             "2 usage, precondition, or unsatisfiable wait (revision 0 targets), "
-            "3 a target needs human input"
+            "3 a target needs human input\n\n" + METHOD_CONSTRAINT_EPILOG
         ),
     )
     _ = parser.add_argument("targets", nargs="*", metavar="TARGET", help="agent names or pane ids")
@@ -279,6 +282,26 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
     held_targets: set[str] = set()
     hold_start: dict[str, float] = {}
     hold_last_warn: dict[str, float] = {}
+    try:
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+        for a in agents:
+            name = entry_optional_text(a, "name")
+            pid = entry_optional_text(a, "pane_id")
+            kind = entry_optional_text(a, "agent")
+            for target in options.targets:
+                if (target == name or target == pid) and kind == "agy":
+                    if target not in warned:
+                        warned.add(target)
+                        print(
+                            f"herdr-wait: target {target!r} is an 'agy' agent.\n"
+                            "herdr-wait: agents with background subagents (e.g. agy) report idle while subagents work; "
+                            "weakly-recognized agents do not advance revision and cannot be observed to completion via herdr-wait.\n"
+                            "herdr-wait: Dispatch & Yield (herdr-dispatch + herdr-reply) is REQUIRED; herdr-wait cannot observe them to completion.",
+                            file=sys.stderr,
+                        )
+    except Exception:
+        pass
+
     while True:
         now = time.monotonic()
         snaps = [snapshot_agent(herdr, target, env) for target in options.targets]
@@ -313,8 +336,9 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
                         else "holding wait loop"
                     )
                     print(
-                        f"herdr-wait: advisory: {target} reports {snap.status} with revision 0 (unrecognized; typical of agy).\n"
+                        f"herdr-wait: {target} reports {snap.status} with revision 0 (unrecognized; typical of agy).\n"
                         "herdr-wait: agents with background subagents (e.g. agy) report idle while subagents work; weakly-recognized agents do not advance revision and cannot be observed to completion via herdr-wait.\n"
+                        "herdr-wait: Dispatch & Yield (herdr-dispatch + herdr-reply) is REQUIRED, not advisory; herdr-wait cannot observe them to completion.\n"
                         f"herdr-wait: {action}; dispatch and yield turn for herdr-reply callback instead.",
                         file=sys.stderr,
                     )
@@ -342,7 +366,7 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
             print(
                 f"herdr-wait: unsatisfiable wait: {names} report a wanted state stuck at revision 0; "
                 "weakly-recognized agents cannot be observed to completion by polling.\n"
-                "herdr-wait: use the event-driven Dispatch & Yield pattern instead of barrier-waiting: "
+                "herdr-wait: Dispatch & Yield (herdr-dispatch + herdr-reply) is REQUIRED: "
                 "dispatch with herdr-prompt/herdr-dispatch, yield the turn, and await the herdr-reply callback.",
                 file=sys.stderr,
             )

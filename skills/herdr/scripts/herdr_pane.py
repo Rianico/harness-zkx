@@ -28,6 +28,7 @@ from pathlib import Path
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_OK,
+    METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
     current_pane_id,
@@ -78,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="herdr-pane",
         description="Split the caller's Herdr pane in the requested direction.",
+        epilog=METHOD_CONSTRAINT_EPILOG,
     )
     _ = parser.add_argument(
         "direction",
