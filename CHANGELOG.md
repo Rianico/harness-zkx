@@ -133,7 +133,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Documentation
 
-* **herdr:** bind lane role boundaries and architectural skills (#172)
+* **herdr:** bind lane role boundaries and architectural skills (#173)
 * **herdr:** document implementer context isolation via internal subagents (#156)
 * **herdr:** document hierarchical lane coordination and TM contracts (#153)
 * **contributing:** name the two type-check suppression layers (#122)
