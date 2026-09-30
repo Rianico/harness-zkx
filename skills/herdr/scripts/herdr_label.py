@@ -40,6 +40,7 @@ from dataclasses import dataclass
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_OK,
+    METHOD_CONSTRAINT_EPILOG,
     UsageError,
     current_pane_id,
     entries,
@@ -72,7 +73,10 @@ def build_parser() -> argparse.ArgumentParser:
             "Give a pane one name: its visible label and, when it hosts an agent, "
             "that agent's name."
         ),
-        epilog="exit status: 0 ok, 1 herdr failure, 2 usage or precondition",
+        epilog=(
+            "exit status: 0 ok, 1 herdr failure, 2 usage or precondition\n\n"
+            + METHOD_CONSTRAINT_EPILOG
+        ),
     )
     _ = parser.add_argument("name", nargs="?", metavar="NAME", help="the name to set")
     _ = parser.add_argument(

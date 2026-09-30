@@ -34,17 +34,23 @@ from pathlib import Path
 from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
+    KNOWN_AGENT_KINDS,
+    METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
     decode_response,
+    diagnose_agent_not_found,
     entries,
     entry_optional_text,
     error_code,
     find_herdr,
+    format_shell_pane_diagnostic,
     guard,
+    inspect_target_shell_pane,
     require_herdr_env,
     run_herdr,
     run_herdr_checked,
+    verify_target_not_bare_shell,
 )
 
 STDIN = "-"
@@ -52,37 +58,6 @@ BLOCKED = "blocked"
 BLOCKED_CODE = "agent_blocked"
 TIMEOUT_CODE = "timeout"
 EXIT_WAIT_TIMEOUT = 4
-
-KNOWN_AGENT_KINDS: frozenset[str] = frozenset(
-    {
-        "aider",
-        "agy",
-        "amp",
-        "claude",
-        "cline",
-        "codestral",
-        "codex",
-        "copilot",
-        "cursor",
-        "devin",
-        "droid",
-        "gemini",
-        "grok",
-        "hermes",
-        "kilo",
-        "kimi",
-        "kiro",
-        "maki",
-        "mastracode",
-        "omp",
-        "openai",
-        "opencode",
-        "pi",
-        "qodercli",
-        "qoderclicn",
-        "qwen",
-    }
-)
 
 
 class WaitTimeout(Exception):
@@ -100,6 +75,7 @@ class Options:
     timeout: int | None = None
     json: bool = False
     dry_run: bool = False
+    auto_start: str | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -108,7 +84,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Deliver a completion reply to a caller agent without shell mangling.",
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
-            "3 target needs human input, 4 reply delivered but wait timed out"
+            "3 target needs human input, 4 reply delivered but wait timed out\n\n"
+            + METHOD_CONSTRAINT_EPILOG
         ),
     )
     _ = parser.add_argument("target", metavar="TARGET", help="caller agent name or pane id")
@@ -136,6 +113,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
     _ = parser.add_argument("--dry-run", action="store_true", help="print the argv, submit nothing")
+    _ = parser.add_argument(
+        "--auto-start",
+        metavar="KIND",
+        help="automatically start the agent on an open shell pane before delivering the reply",
+    )
     return parser
 
 
@@ -244,6 +226,50 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     if not target:
         raise UsageError("pass TARGET (caller agent name or pane id)")
     validate_target_not_kind(target, herdr, env)
+
+    if options.auto_start:
+        auto_kind = options.auto_start.strip().lower()
+        if not auto_kind or auto_kind not in KNOWN_AGENT_KINDS:
+            raise UsageError(
+                f"--auto-start kind {options.auto_start!r} is not a recognized agent kind (known: {', '.join(sorted(KNOWN_AGENT_KINDS))})"
+            )
+
+    shell_info = inspect_target_shell_pane(herdr, target, env)
+    if shell_info is not None:
+        if options.auto_start:
+            kind = options.auto_start.strip().lower()
+            start_name = (
+                shell_info.suggested_name
+                if shell_info.suggested_name != "<name>"
+                else f"agent-{shell_info.pane_id.replace(':', '-')}"
+            )
+            start_argv = [
+                herdr,
+                "agent",
+                "start",
+                start_name,
+                "--kind",
+                kind,
+                "--pane",
+                shell_info.pane_id,
+            ]
+            if not options.dry_run:
+                _ = run_herdr_checked(start_argv, env)
+            target = start_name
+        else:
+            diag = format_shell_pane_diagnostic(
+                target=target,
+                pane_id=shell_info.pane_id,
+                label=shell_info.label,
+                foreground_proc=shell_info.foreground_proc,
+                is_label_match=shell_info.is_label_match,
+                suggested_name=shell_info.suggested_name,
+                suggested_kind=shell_info.suggested_kind,
+            )
+            raise UsageError(diag)
+    else:
+        verify_target_not_bare_shell(herdr, target, env)
+
     payload = read_payload(options.file, options.message)
 
     argv = [herdr, "agent", "prompt", target, payload]
@@ -269,6 +295,10 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             raise WaitTimeout(
                 f"reply delivered to {target} but wait timed out; caller is processing asynchronously"
             )
+        if code == "agent_not_found":
+            diag = diagnose_agent_not_found(herdr, target, env)
+            if diag:
+                raise UsageError(diag)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
     _ = decode_response(done.stdout)
@@ -279,7 +309,8 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         size = len(payload.encode("utf-8"))
         suffix = f"  state={state}" if state else ""
         rev, pane = fetch_agent_revision(herdr, target, env)
-        pane_str = f" ({pane})" if pane and pane != target else ""
+        resolved_pane = pane or (shell_info.pane_id if shell_info else None)
+        pane_str = f" ({resolved_pane})" if resolved_pane and resolved_pane != target else ""
         rev_str = f"  revision={rev}" if rev else ""
         print(f"replied to {target}{pane_str}  bytes={size}{rev_str}{suffix}")
     return EXIT_OK

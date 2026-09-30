@@ -45,8 +45,14 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-# Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
-from herdr_cli import EXIT_HERDR, EXIT_OK, HerdrError, UsageError, guard
+from herdr_cli import (
+    EXIT_HERDR,
+    EXIT_OK,
+    METHOD_CONSTRAINT_EPILOG,
+    HerdrError,
+    UsageError,
+    guard,
+)
 
 BRIDGE_SCRIPT_NAME = "herdr-agy-bridge.sh"
 BRIDGE_MARKER = "herdr-agy-bridge.sh"
@@ -115,7 +121,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="herdr-agy-bridge",
         description="Install, inspect, or remove the managed agy lifecycle bridge hooks.",
-        epilog="exit status: 0 done or installed, 1 not-installed or misconfigured, 2 usage",
+        epilog=(
+            "exit status: 0 done or installed, 1 not-installed or misconfigured, 2 usage\n\n"
+            + METHOD_CONSTRAINT_EPILOG
+        ),
     )
     action = parser.add_mutually_exclusive_group(required=True)
     _ = action.add_argument("--install", action="store_true", help="install or update the bridge")

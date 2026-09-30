@@ -37,6 +37,7 @@ from dataclasses import dataclass
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_OK,
+    METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
     decode_response,
@@ -73,7 +74,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="herdr-transcript",
         description="Extract clean assistant text from a Herdr agent's session JSONL.",
-        epilog="exit status: 0 extracted, 1 herdr failure or nothing to extract, 2 usage",
+        epilog=(
+            "exit status: 0 extracted, 1 herdr failure or nothing to extract, 2 usage\n\n"
+            + METHOD_CONSTRAINT_EPILOG
+        ),
     )
     _ = parser.add_argument("target", nargs="?", metavar="TARGET", help="agent name or pane id")
     _ = parser.add_argument(

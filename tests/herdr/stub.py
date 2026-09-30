@@ -47,6 +47,20 @@ if args[:2] == ["pane", "split"]:
     print(json.dumps({"result": {"pane": pane}}))
     raise SystemExit(0)
 
+if args[:2] == ["pane", "process-info"]:
+    if state.get("process_info_error"):
+        print(json.dumps({"error": state["process_info_error"], "id": "cli:pane:process-info"}), file=sys.stderr)
+        raise SystemExit(1)
+    pane_id = args[args.index("--pane") + 1] if "--pane" in args else state.get("current", "w9:p1")
+    proc_info = state.get("process_info", {}).get(pane_id, {
+        "shell_pid": 1234,
+        "foreground_process_group_id": 1234,
+        "foreground_processes": [{"pid": 1234, "name": "zsh", "argv0": "zsh", "argv": ["zsh"], "cmdline": "zsh"}],
+    })
+    payload = {"id": "cli:pane:process-info", "result": {"process_info": proc_info, "type": "pane_process_info"}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
 if args[:2] == ["pane", "list"]:
     payload = {"id": "cli:pane:list", "result": {"panes": state["panes"], "type": "pane_list"}}
     print(json.dumps(payload))
@@ -81,6 +95,17 @@ if args[:2] == ["agent", "rename"]:
     name = None if "--clear" in args else args[3]
     payload = {"id": "cli:agent:rename", "result": {"agent": {"pane_id": target, "name": name}}}
     print(json.dumps(payload))
+    raise SystemExit(0)
+
+if args[:2] == ["agent", "start"]:
+    if state.get("agent_start_error"):
+        print(json.dumps({"error": state["agent_start_error"], "id": "cli:agent:start"}), file=sys.stderr)
+        raise SystemExit(1)
+    name = args[2]
+    kind = args[args.index("--kind") + 1] if "--kind" in args else "pi"
+    pane_id = args[args.index("--pane") + 1] if "--pane" in args else state.get("current", "w9:p1")
+    agent = {"name": name, "agent": kind, "pane_id": pane_id, "agent_status": "idle", "revision": "r0"}
+    print(json.dumps({"id": "cli:agent:start", "result": {"agent": agent, "type": "agent_started"}}))
     raise SystemExit(0)
 
 if args[:2] == ["agent", "prompt"]:
@@ -205,6 +230,9 @@ class StubHarness:
 
     def prompts(self) -> list[list[str]]:
         return [call for call in self.calls() if call[1:3] == ["agent", "prompt"]]
+
+    def starts(self) -> list[list[str]]:
+        return [call for call in self.calls() if call[1:3] == ["agent", "start"]]
 
     def run(
         self,

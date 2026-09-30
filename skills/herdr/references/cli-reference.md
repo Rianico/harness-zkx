@@ -2,6 +2,9 @@
 
 Depth for `$SKILL_DIR/SKILL.md`. The installed binary is always the authority; run `herdr --help`, then a command group without a subcommand.
 
+> [!IMPORTANT] Method Constraint
+> Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`), NOT bare `herdr` CLI commands, for agent communication, prompting, waiting, and overview.
+
 ## Command groups
 
 ```bash
@@ -23,7 +26,7 @@ Most control commands return JSON. Read identifiers and state from those respons
 
 ## Agent lifecycle states
 
-`idle` and `done` both mean the agent is ready for input — unless the record is weakly recognized. A record reporting `idle`/`done` with revision 0 and no `agent_session` path (seen on agy panes whose status bar still reads WORKING) proves nothing; hold the barrier and confirm via the pane. The CLI/API uses the server's seen state to distinguish them; explicit focus commands mark the target seen, while reads do not. Each TUI client tracks viewed completions independently, so its Done badge can differ from the CLI or another client's badge. `blocked` means Herdr recognized an approval or question UI. `unknown` means an agent is present but Herdr cannot classify it confidently; it does not prove completion.
+`idle` and `done` both mean the agent is ready for input — unless the record is weakly recognized. A record reporting `idle`/`done` with revision 0 and no `agent_session` path (seen on agy panes whose status bar still reads WORKING, or while awaiting background subagents) proves nothing; hold the barrier and confirm via the pane. Weakly-recognized agents never advance revision past 0 and cannot be observed to completion via `herdr-wait` or `herdr-prompt --wait`. For `agy` and revision-0 agents, **Dispatch-&-Yield is REQUIRED, not advisory** (`herdr_dispatch.py` or `herdr_prompt.py --no-wait` + yield turn + `herdr_reply.py` completion callback). The CLI/API uses the server's seen state to distinguish them; explicit focus commands mark the target seen, while reads do not. Each TUI client tracks viewed completions independently, so its Done badge can differ from the CLI or another client's badge. `blocked` means Herdr recognized an approval or question UI. `unknown` means an agent is present but Herdr cannot classify it confidently; it does not prove completion.
 
 Agent commands accept either a unique live agent name or the pane ID currently hosting that agent. They do not accept terminal IDs or bare agent-kind labels. Names must match `[a-z][a-z0-9_-]{0,31}` and be unique among live agents. A name follows the current pane occupant and is cleared when that agent exits, is released, or is replaced.
 
@@ -42,7 +45,18 @@ Labels are **not unique**: `pane rename` accepts the same label on any number of
 
 Because a person names what they can see, `herdr-label` sets both to the same string, and `herdr-prompt --label` resolves an exact label to its pane id, failing with the candidate pane ids when several panes carry it.
 
-No single response answers "which pane is this, by name": `PaneInfo` carries `label` and never the agent `name`; `AgentInfo` carries `name` and never `label`. Joining the two by `pane_id` is what `herdr-overview` does.
+No single response answers "which pane is this, by name": `PaneInfo` carries `label` and never the agent `name`; `AgentInfo` carries `name` and never `label`. Joining the two by `pane_id` is what `herdr-overview` does. Pass `--json` (or `--format json`) to `herdr-overview` for machine parsing; piped output defaults to YAML with a `# Format: YAML (pass --json for JSON)` top comment header.
+
+### Safe target resolution and raw shell prevention
+
+When target resolution fails or resolves to an idle shell pane:
+- `herdr-prompt` and `herdr-reply` inspect process info and refuse injection into bare shell panes.
+- **NEVER use bare `herdr pane send-text` or `herdr pane send-keys` for prompt injection into shell panes**; doing so executes markdown/prose as shell commands.
+- Guidance & alternatives:
+  1. **Queue/watch**: wait for agent to start or monitor pane with `herdr pane wait-output`.
+  2. **Start agent**: `herdr agent start <name> --kind <kind> --pane <id>` (diagnostics output exact copy-paste `Suggested recovery: herdr agent start ...`).
+  3. **Auto-start**: pass `--auto-start <KIND>` to `herdr-reply` to start the agent automatically on an open shell pane.
+  4. **Graceful abort**: abort gracefully if caller or worker has exited.
 
 ## Agent start and prompt semantics
 

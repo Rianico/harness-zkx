@@ -12,17 +12,50 @@ from __future__ import annotations
 
 import errno
 import json
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import cast
 
 EXIT_OK = 0
 EXIT_HERDR = 1
 EXIT_USAGE = 2
 EXIT_BLOCKED = 3
+
+KNOWN_AGENT_KINDS: frozenset[str] = frozenset(
+    {
+        "aider",
+        "agy",
+        "amp",
+        "claude",
+        "cline",
+        "codestral",
+        "codex",
+        "copilot",
+        "cursor",
+        "devin",
+        "droid",
+        "gemini",
+        "grok",
+        "hermes",
+        "kilo",
+        "kimi",
+        "kiro",
+        "maki",
+        "mastracode",
+        "omp",
+        "openai",
+        "opencode",
+        "pi",
+        "qodercli",
+        "qoderclicn",
+        "qwen",
+    }
+)
 
 
 class UsageError(Exception):
@@ -151,6 +184,243 @@ def error_code(stderr: str) -> str | None:
         code = error.get("code")
         return code if isinstance(code, str) and code else None
     return None
+
+
+METHOD_CONSTRAINT_EPILOG = (
+    "Always use harness helper scripts in skills/herdr/scripts/, "
+    "never bare herdr CLI for agent communication or pane control."
+)
+SHELL_PROCESS_NAMES = frozenset({"zsh", "bash", "fish", "sh", "csh", "tcsh", "ksh", "dash", "nu"})
+
+
+def pane_foreground_process(herdr: str, pane_id: str, env: Mapping[str, str]) -> str | None:
+    """Query `herdr pane process-info --pane <pane_id>` for the foreground process name."""
+    done = run_herdr([herdr, "pane", "process-info", "--pane", pane_id], env)
+    if done.returncode != 0:
+        return None
+    try:
+        decoded = decode_response(done.stdout)
+        result = decoded.get("result")
+        if isinstance(result, dict):
+            proc_info = result.get("process_info")
+            if isinstance(proc_info, dict):
+                procs = proc_info.get("foreground_processes")
+                if isinstance(procs, list) and procs:
+                    for p in procs:
+                        if isinstance(p, dict) and p.get("name"):
+                            return str(p["name"])
+    except Exception:
+        pass
+    return None
+
+
+def detect_agent_clues(
+    pane: Mapping[str, object],
+    target: str | None = None,
+    foreground_proc: str | None = None,
+) -> tuple[str, str]:
+    """Detect previous agent clues (name, kind) from a pane's fields, title, or label."""
+    pane_id = entry_optional_text(pane, "pane_id") or ""
+    label = entry_optional_text(pane, "label")
+    title = entry_optional_text(pane, "title")
+    agent_attr = entry_optional_text(pane, "agent")
+
+    suggested_name = "<name>"
+    if label:
+        suggested_name = label
+    elif target and target != pane_id:
+        suggested_name = target
+
+    suggested_kind = "<kind>"
+    if agent_attr:
+        if agent_attr.lower() in KNOWN_AGENT_KINDS:
+            suggested_kind = agent_attr.lower()
+        else:
+            suggested_kind = agent_attr
+    elif title:
+        tokens = re.findall(r"[a-zA-Z0-9_-]+", title.lower())
+        for k in KNOWN_AGENT_KINDS:
+            if k in tokens or k in title.lower():
+                suggested_kind = k
+                break
+
+    if suggested_kind == "<kind>" and label:
+        tokens = re.findall(r"[a-zA-Z0-9]+", label.lower())
+        for k in KNOWN_AGENT_KINDS:
+            if k in tokens:
+                suggested_kind = k
+                break
+
+    if suggested_kind == "<kind>" and target:
+        tokens = re.findall(r"[a-zA-Z0-9]+", target.lower())
+        for k in KNOWN_AGENT_KINDS:
+            if k in tokens:
+                suggested_kind = k
+                break
+
+    if suggested_kind == "<kind>" and foreground_proc and foreground_proc in KNOWN_AGENT_KINDS:
+        suggested_kind = foreground_proc
+
+    return suggested_name, suggested_kind
+
+
+@dataclass(frozen=True)
+class ShellPaneInfo:
+    pane_id: str
+    label: str | None
+    foreground_proc: str | None
+    suggested_name: str
+    suggested_kind: str
+    is_label_match: bool
+
+
+def format_shell_pane_diagnostic(
+    *,
+    target: str,
+    pane_id: str,
+    label: str | None,
+    foreground_proc: str | None,
+    is_label_match: bool = False,
+    suggested_name: str | None = None,
+    suggested_kind: str | None = None,
+) -> str:
+    proc_desc = foreground_proc or "shell / unknown"
+    label_desc = f" (label: {label!r})" if label else ""
+    if is_label_match:
+        headline = (
+            f"target {target!r} matches pane {pane_id}{label_desc}, "
+            f"but no live agent is running in this pane (foreground process: {proc_desc})."
+        )
+    else:
+        headline = (
+            f"target pane {pane_id}{label_desc} has no live agent "
+            f"(foreground process: {proc_desc})."
+        )
+    name = suggested_name or (label if label else (target if target != pane_id else "<name>"))
+    kind = suggested_kind or "<kind>"
+    recovery_cmd = f"herdr agent start {name} --kind {kind} --pane {pane_id}"
+    return (
+        f"{headline}\n"
+        "Refusing injection: injecting prompts into a raw shell pane executes prose as commands.\n"
+        "Guidance and alternatives:\n"
+        f"  1. Start an agent: {recovery_cmd}\n"
+        "  2. Queue/watch: wait for agent to start or monitor pane with herdr pane wait-output\n"
+        "  3. Graceful abort: if caller/worker exited, abort gracefully\n"
+        "  4. Safety warning: never fall back to bare pane send-text or pane send-keys into a shell pane.\n"
+        f"Suggested recovery: {recovery_cmd}"
+    )
+
+
+def _pane_has_live_agent(p: Mapping[str, object], agents: Sequence[Mapping[str, object]]) -> bool:
+    pid = entry_optional_text(p, "pane_id")
+    if pid and any(entry_optional_text(a, "pane_id") == pid for a in agents):
+        return True
+    status = entry_optional_text(p, "agent_status")
+    return bool(entry_optional_text(p, "agent")) and status in (
+        "idle",
+        "working",
+        "done",
+        "blocked",
+    )
+
+
+def inspect_target_shell_pane(
+    herdr: str, target: str, env: Mapping[str, str]
+) -> ShellPaneInfo | None:
+    """Inspect pane list, agent list, and process-info to detect an open shell pane without a live agent."""
+    try:
+        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except HerdrError:
+        return None
+
+    agent_names = {entry_optional_text(a, "name") for a in agents if entry_optional_text(a, "name")}
+    agent_panes = {
+        entry_optional_text(a, "pane_id") for a in agents if entry_optional_text(a, "pane_id")
+    }
+    if target in agent_names or target in agent_panes:
+        return None
+
+    # Check if target is a pane_id in panes
+    for p in panes:
+        pid = entry_optional_text(p, "pane_id")
+        if pid is not None and pid == target:
+            if not _pane_has_live_agent(p, agents):
+                label = entry_optional_text(p, "label")
+                proc = pane_foreground_process(herdr, pid, env)
+                s_name, s_kind = detect_agent_clues(p, target, proc)
+                return ShellPaneInfo(
+                    pane_id=pid,
+                    label=label,
+                    foreground_proc=proc,
+                    suggested_name=s_name,
+                    suggested_kind=s_kind,
+                    is_label_match=False,
+                )
+
+    # Check if target is a pane label in panes
+    for p in panes:
+        label = entry_optional_text(p, "label")
+        if label == target:
+            pid = entry_optional_text(p, "pane_id")
+            if pid is not None:
+                if not _pane_has_live_agent(p, agents):
+                    proc = pane_foreground_process(herdr, pid, env)
+                    s_name, s_kind = detect_agent_clues(p, target, proc)
+                    return ShellPaneInfo(
+                        pane_id=pid,
+                        label=label,
+                        foreground_proc=proc,
+                        suggested_name=s_name,
+                        suggested_kind=s_kind,
+                        is_label_match=True,
+                    )
+
+    # Check if target matches pane title
+    for p in panes:
+        title = entry_optional_text(p, "title")
+        if title and target in title:
+            pid = entry_optional_text(p, "pane_id")
+            if pid is not None:
+                if not _pane_has_live_agent(p, agents):
+                    proc = pane_foreground_process(herdr, pid, env)
+                    s_name, s_kind = detect_agent_clues(p, target, proc)
+                    return ShellPaneInfo(
+                        pane_id=pid,
+                        label=entry_optional_text(p, "label"),
+                        foreground_proc=proc,
+                        suggested_name=s_name,
+                        suggested_kind=s_kind,
+                        is_label_match=False,
+                    )
+
+    return None
+
+
+def diagnose_target_pane(herdr: str, target: str, env: Mapping[str, str]) -> str | None:
+    """Inspect pane list, agent list, and process-info to diagnose a non-agent target."""
+    info = inspect_target_shell_pane(herdr, target, env)
+    if info is None:
+        return None
+    return format_shell_pane_diagnostic(
+        target=target,
+        pane_id=info.pane_id,
+        label=info.label,
+        foreground_proc=info.foreground_proc,
+        is_label_match=info.is_label_match,
+        suggested_name=info.suggested_name,
+        suggested_kind=info.suggested_kind,
+    )
+
+
+def diagnose_agent_not_found(herdr: str, target: str, env: Mapping[str, str]) -> str | None:
+    return diagnose_target_pane(herdr, target, env)
+
+
+def verify_target_not_bare_shell(herdr: str, target: str, env: Mapping[str, str]) -> None:
+    diag = diagnose_target_pane(herdr, target, env)
+    if diag is not None:
+        raise UsageError(diag)
 
 
 def guard(prog: str, action: Callable[[], int]) -> int:

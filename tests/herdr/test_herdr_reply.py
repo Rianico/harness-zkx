@@ -143,6 +143,132 @@ def test_wait_and_timeout_forwarded(stub: StubHarness) -> None:
     assert call[5:] == ["--wait", "--timeout", "15000"]
 
 
+def test_auto_start_starts_agent_on_shell_pane_and_delivers_reply(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "lens-orchestrator",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    done = stub.run("lens-orchestrator", "COMPLETED", "--auto-start", "pi", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == [
+        [
+            str(stub.herdr),
+            "agent",
+            "start",
+            "lens-orchestrator",
+            "--kind",
+            "pi",
+            "--pane",
+            "wM:p1N",
+        ]
+    ]
+    (call,) = stub.prompts()
+    assert call[1:5] == ["agent", "prompt", "lens-orchestrator", "COMPLETED"]
+    assert "replied to lens-orchestrator (wM:p1N)" in done.stdout
+
+
+def test_auto_start_on_pane_id_with_label(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "lens-orchestrator",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    done = stub.run("wM:p1N", "COMPLETED", "--auto-start", "claude", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == [
+        [
+            str(stub.herdr),
+            "agent",
+            "start",
+            "lens-orchestrator",
+            "--kind",
+            "claude",
+            "--pane",
+            "wM:p1N",
+        ]
+    ]
+    (call,) = stub.prompts()
+    assert call[1:5] == ["agent", "prompt", "lens-orchestrator", "COMPLETED"]
+
+
+def test_auto_start_when_target_already_has_live_agent_skips_start(stub: StubHarness) -> None:
+    done = stub.run("reviewer", "COMPLETED", "--auto-start", "pi")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == []
+    (call,) = stub.prompts()
+    assert call[1:5] == ["agent", "prompt", "reviewer", "COMPLETED"]
+
+
+def test_auto_start_with_unrecognized_kind_fails(stub: StubHarness) -> None:
+    done = stub.run("reviewer", "COMPLETED", "--auto-start", "notakind")
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not a recognized agent kind" in done.stderr
+    assert stub.starts() == []
+
+
+def test_auto_start_dry_run_skips_submitting(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "lens-orchestrator",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    done = stub.run(
+        "lens-orchestrator", "COMPLETED", "--auto-start", "pi", "--dry-run", state=state
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == []
+    assert stub.prompts() == []
+
+
 def test_pep723_metadata_precedes_docstring() -> None:
     header = SCRIPT.read_text().split('"""', 1)[0]
     assert header.startswith("#!/usr/bin/env python3\n")
