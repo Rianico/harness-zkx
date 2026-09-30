@@ -193,7 +193,7 @@ The rendered ledger body presented to the Semantic Ceiling, and the load-bearing
 _Avoid_: notes, changelog text.
 
 **Changelog Generator**:
-The tool that writes the ledger from commit subjects (`changelog-unreleased.py update` / `clear`).
+The tool that writes the ledger from commit subjects (`changelog-unreleased.py update`).
 _Avoid_: floor, gate, check.
 
 **Changelog Floor**:

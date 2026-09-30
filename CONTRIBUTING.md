@@ -9,7 +9,7 @@
 
 ## Changelog
 
-`CHANGELOG.md` `## [Unreleased]` gated by `scripts/changelog-gate.py` in `changelog-check.yml` (a PR run reads the `Landing:` declaration from the PR body; the `main` run is the durable one); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit a sync as a hidden type (e.g. `chore: sync changelog unreleased section`) so it mints no ledger entry. Hidden types only appear when `!`/`BREAKING CHANGE`.
+`CHANGELOG.md` `## [Unreleased]` gated by `scripts/changelog-gate.py` in `changelog-check.yml` (a PR run reads the `Landing:` declaration from the PR body; the `main` run is the durable one); `release.yml` runs `semantic-release`, whose `scripts/release-changelog.mjs` plugin promotes the curated ledger into the versioned section and re-opens an empty `## [Unreleased]`. Do not hand-edit versioned sections. Commit a sync as a hidden type (e.g. `chore: sync changelog unreleased section`) so it mints no ledger entry. Hidden types only appear when `!`/`BREAKING CHANGE`.
 
 ## Before PR
 
