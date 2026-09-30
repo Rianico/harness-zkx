@@ -151,7 +151,7 @@ Underlying commands, if you drive them directly:
 
 The full split, including which response returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
-For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for anti-hero-mode rules, canonical TM brief contracts, implementer context isolation via internal subagents, and the lane-vs-subagent boundary.
+For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for non-overlapping role boundaries (Orchestrator, TM, Implementer), bound architectural skills (`keel`, `coding-protocol`, `programming-expert`), reconnaissance budgets, TM code review subagents, and implementer context isolation.
 
 ## Start and coordinate an agent
 
@@ -271,9 +271,9 @@ The barrier exits 3 the moment any target needs input — unblock it, then re-en
 
 Place the reviewer next to the implementer in the same working directory so findings cite the same tree: split a sibling pane from the implementer's pane, start the reviewer with the implementer's worktree as `--cwd`, prompt both with `--no-wait`, and yield turn for their `herdr-reply` completion callbacks. Agents with background subagents report `idle` while subagents run, so external `agent_status` cannot distinguish waiting on subagents from task completion; never barrier-wait them. Keep `herdr-wait` strictly as a fallback for non-agent panes or strongly-recognized agents that advance revision past 0. Confirm the reviewer kind with the user if unspecified. Agent arguments go after `--` (`agent start reviewer --kind <kind> --pane <id> -- --model <m>`); flags before `--` belong to Herdr and misplacing them breaks startup.
 
-### Implementer context isolation
+### Role-internal context isolation & review subagents
 
-When an implementer faces a large task or operates under a constrained context window, it should spawn internal subagents for deep research, bulk edits, or test triage. The subagents run in isolated contexts, returning pointer-based summaries to avoid context bloating and compaction degradation. The implementer remains the single point of contact for the lane and replies to the orchestrator via `herdr_reply.py`. Details: [Hierarchical Lane Coordination](references/lane-coordination.md).
+When an implementer faces a large task or operates under a constrained context window, it should spawn internal subagents for deep research, bulk edits, or test triage. Similarly, the Task Manager spawns internal subagents for adversarial crux code review under `keel`, `coding-protocol`, and `programming-expert` to keep its own context window clean and un-compacted. Internal subagents run in isolated contexts, returning pointer-based summaries. They never invoke Herdr CLI commands or reply scripts directly. Details: [Hierarchical Lane Coordination](references/lane-coordination.md).
 
 ### Banned: sleep/timer polling loops
 
