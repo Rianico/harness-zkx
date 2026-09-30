@@ -491,20 +491,20 @@ def parse_session_for_capture(
                     if t_id and cmd:
                         call_commands[t_id] = str(cmd)
 
-            turns.append({
-                "line": idx,
-                "turn_index": len(turns) + 1,
-                "role": role,
-                "msg": msg,
-                "rec": rec,
-            })
+            turns.append(
+                {
+                    "line": idx,
+                    "turn_index": len(turns) + 1,
+                    "role": role,
+                    "msg": msg,
+                    "rec": rec,
+                }
+            )
 
     return root_goal, turns, call_commands
 
 
-def turn_to_case_payload(
-    turn: dict[str, Any], call_commands: dict[str, str]
-) -> tuple[str, Any]:
+def turn_to_case_payload(turn: dict[str, Any], call_commands: dict[str, str]) -> tuple[str, Any]:
     role = turn["role"]
     msg = turn["msg"]
     rec = turn["rec"]
@@ -560,9 +560,7 @@ def capture(
     if intent is None:
         intent = "in_domain" if expect == "trigger" else "hard_negative"
     elif intent not in ("in_domain", "hard_negative"):
-        raise ValueError(
-            f"Invalid intent '{intent}', must be 'in_domain' or 'hard_negative'"
-        )
+        raise ValueError(f"Invalid intent '{intent}', must be 'in_domain' or 'hard_negative'")
 
     session_path = resolve_session(str(session_target), custom_session_roots)
     if session_path is None:
@@ -634,9 +632,7 @@ def capture(
     if evals_dir is None:
         env_evals = os.environ.get("PI_EVALS_DIR")
         target_evals_dir = (
-            Path(env_evals).expanduser()
-            if env_evals
-            else Path.home() / ".pi" / "agent" / "evals"
+            Path(env_evals).expanduser() if env_evals else Path.home() / ".pi" / "agent" / "evals"
         )
     else:
         target_evals_dir = evals_dir.resolve()
@@ -656,9 +652,7 @@ def capture(
         except Exception:
             existing_cases = []
 
-    existing_ids = {
-        str(c["id"]) for c in existing_cases if "id" in c
-    }
+    existing_ids = {str(c["id"]) for c in existing_cases if "id" in c}
     case_num = len(existing_cases) + 1
     case_id = f"case_{case_num:03d}"
     while case_id in existing_ids:
@@ -797,9 +791,7 @@ def main() -> None:
             else:
                 print("  (none)")
 
-            print(
-                f"\nZero-Skill Friction Sessions ({len(result.zero_skill_friction_sessions)}):"
-            )
+            print(f"\nZero-Skill Friction Sessions ({len(result.zero_skill_friction_sessions)}):")
             if result.zero_skill_friction_sessions:
                 for z in result.zero_skill_friction_sessions:
                     goal_prev = f' - "{z.root_goal[:50]}..."' if z.root_goal else ""
