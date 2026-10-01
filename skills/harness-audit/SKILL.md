@@ -5,7 +5,7 @@ description: >-
 arguments: target
 argument-hint: |-
   <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file
-  audit.py: [--threshold N] [--json] [--emit-filtered] [--keep-head-tail N]
+  audit.py: [--threshold N] [--json] [--emit-filtered] [--keep-head-tail N] [--census]
   audit_edits.py: [--json] [--with-context N] [--dump-context <dir>]
   audit_skills.py: [--days N] [--json] | capture <session-id> --skill <name> --expect [trigger|no-trigger]
 disable-model-invocation: true
@@ -29,11 +29,13 @@ Accepts either form:
 uv run $SKILL_DIR/scripts/audit.py <session-id-or-path> [--threshold 20] [--json] [--emit-filtered] [--keep-head-tail 10]
 ```
 
-Exit `0` ok / `1` bad args / `2` not found.
+Exit `0` ok / `1` bad args / `2` not found / `3` scanned records but paired no bash (schema warning — *not* a clean result).
 
 ### 2. Scan (deterministic)
 
-`audit.py` parses JSONL line-by-line (see [session-format](references/session-format.md)), pairs `bash` `toolCall`→`toolResult`, counts `toolResult.content[].text` via `splitlines()`. Only `toolName == "bash"` is measured. With `--with-context 3` (recommended for triage) it also attaches the next 3 turns (assistant `text` + subsequent `toolCall`/`toolResult` roles) after each oversized `toolResult` so you can see how the model reacted (summarized, re-dumped, looped, or recovered) — see `audit.py --help`.
+`audit.py` parses JSONL line-by-line (see [session-format](references/session-format.md)), pairs `bash` `toolCall`→`toolResult`, counts `toolResult.content[].text` via `splitlines()`. It accepts both record shapes — native `type == "message"` and the pi event-stream `message_end` (benchmark harness `stdout.jsonl`) — so a stream log is never read as empty. Only `toolName == "bash"` feeds the oversized table; `--census` adds a delivered-line census for every tool. A delivery-cap footer (`[Showing lines A-B of Z (50.0KB limit)…]`) yields `produced_lines` / `omitted_lines` per entry plus a session total, so produced-but-never-delivered lines are not invisible. The default text report therefore gains exactly one line — `Produced but not delivered (delivery cap): N lines omitted across M tool results, all tools` — **only when at least one result was capped**; on a truncation-free session the text report is byte-identical to the pre-census version. With `--with-context 3` (recommended for triage) it also attaches the next 3 turns (assistant `text` + subsequent `toolCall`/`toolResult` roles) after each oversized `toolResult` so you can see how the model reacted (summarized, re-dumped, looped, or recovered) — see `audit.py --help`.
+
+> **Bash-only is not the whole budget.** In benchmark corpora `read` was 67 % of delivered tool lines vs `bash` 28 %; bash share ranged 30–67 % across observations of the same arm and tasks, and the arm's *worst* performer used the *least* bash (it leaned on `read`/`edit`). A bash-only metric ranks bash appetite, not context discipline — take `--census` before drawing cross-session conclusions.
 
 > **Tmp dump?** Not by default. `--with-context` inlines a bounded preview (first 120 chars × 3 turns, plus `role/type`) in the `--json` payload; enough for step 4 without extra I/O. Use `--dump-context <dir>` only when you need full bodies for deep dive — it writes one `oversized-<line>.json` per entry to the given tmp dir (not overwritten into the session) and prints the dir path.
 
@@ -97,7 +99,9 @@ On approval:
 uv run $SKILL_DIR/scripts/audit_edits.py <session-id-or-path> [--json] [--with-context 3] [--dump-context <dir>]
 ```
 
-Report: total `edit` calls, successes, failures, failure rate, breakdown by code (`E_UNKNOWN_ANCHOR`, `E_FOREIGN_ANCHOR`, `E_MALFORMED_ANCHOR`, `E_BATCH_ABORT`, `E_TARGET_LOST`), per-file counts, plus two pattern flags — `numeric_anchor_failures` (anchors matching `/^\d+$/`, i.e. line numbers passed as hashes) and `foreign_leak_failures` (anchor served for a different file than the target). With `--with-context 3` (recommended for triage) each failure carries the next 3 turns so you can see how the model reacted (re-read and retried, looped, or abandoned).
+Report: total `edit` calls, successes, failures, failure rate, breakdown by code against the full registry in pi-better-edit `src/domain-errors.ts` (19 `E_*` codes; the JSON key stays `by_code`), per-file counts, plus two pattern flags — `numeric_anchor_failures` (anchors matching `/^\d+$/`, i.e. line numbers passed as hashes) and `foreign_leak_failures` (anchor served for a different file than the target). Applied-tier `W_*` notes are reported separately under `warnings` / `by_warning_code` and are never counted as failures (`W_*` means the mutation was written; `E_*` means it was rejected). With `--with-context 3` (recommended for triage) each failure carries the next 3 turns so you can see how the model reacted (re-read and retried, looped, or abandoned).
+
+> **Marker greps overcount.** A raw `grep -o '\[E_[A-Z_]*\]'` over a session also matches codes embedded in `bash`/`read` output (e.g. bundled extension JS), so scope any marker metric to `toolName in (edit, write, undo_last_edit)`. `audit_edits.py` counts markers only inside `edit` results — the narrowest safe scope (it does not read `write`/`undo_last_edit` results).
 
 ### Triage categories for edit failures
 
@@ -109,6 +113,11 @@ Report: total `edit` calls, successes, failures, failure rate, breakdown by code
 | **B — batch abort** | `E_BATCH_ABORT` (overlapping spans in one `edits[]`) | Split into disjoint spans or sequential calls |
 | **M — malformed anchor** | `E_MALFORMED_ANCHOR` (empty / wrong-shape anchor value) | Fix the anchor value at the call site; never synthesize hash strings |
 | **T — target lost** | `E_TARGET_LOST` (anchor deleted in an earlier turn) | Re-`read` and re-target; don't reuse anchors across mutations |
+| **P — payload / contract** | `E_BAD_PAYLOAD` (the call's `edits[]` failed the tool's shape contract) | Fix the payload shape at the call site; do not retry the same body |
+| **R — path / limits** | `E_NOT_FOUND`, `E_ACCESS`, `E_UNSUPPORTED_FILE`, `E_LARGE_FILE` | Resolve the path or drop the unsupported file — not an anchor-lease problem |
+| **G — guard / policy** | `E_SUSPICIOUS_TEXT`, `E_EMPTY_RANGE`, `E_NOOP_LOOP` | A guard refused the edit; inspect intent before retrying |
+| **U — undo lifecycle** | `E_UNDO_STALE`, `E_UNDO_UNAVAILABLE` | The undo target expired or none is available; re-`read` and re-target |
+| **W — applied-tier warning** | `W_*` under `warnings[]` — mutation was applied | Not a failure; verify the byte-exact result before trusting the edit |
 
 Per failure: `category / confidence / cheapest fix`. Done when every failure has a category and the model shows a corrected retry (fresh `read` → valid anchors) or an explicit keep.
 
@@ -165,4 +174,4 @@ uv run $SKILL_DIR/scripts/audit_skills.py capture 01a07730-d9be-73cc-b7b1-a8caa2
 
 ## Completion
 
-Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed, **and** user has chosen `A/B/C/D/E` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count. For edit audit: done when every edit failure has deterministic `category` N/H/F/B/T/M (or `?` with a stated reason), and the model proposes a corrected retry (read before edit, separate spans, re-read after mutation) or an explicit keep.
+Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed (the `keep_head_tail`-window model — the stricter `Σ(n − threshold)` headline differs by one line per entry by definition, not a bug), truncation totals reviewed, **and** user has chosen `A/B/C/D/E` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count. For edit audit: done when every edit failure has deterministic `category` N/H/F/B/T/M/P/R/G/U (or `?` for `E_UNKNOWN` / unrecognized codes with a stated reason), `W_*` rows are reported separately as applied-tier (never as failures), and the model proposes a corrected retry (read before edit, separate spans, re-read after mutation) or an explicit keep.
