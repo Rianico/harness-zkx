@@ -423,3 +423,117 @@ def test_cli_json_output(tmp_path: Path) -> None:
     assert data["edit_count"] == 1
     assert data["failure_count"] == 0
     assert "full_context_by_line" not in data
+
+
+# --- full code registry + applied-tier warnings ---
+def test_code_registry_is_complete() -> None:
+    assert len(audit_edits.ERROR_CODES) == 19
+    assert len(audit_edits.WARNING_CODES) == 6
+    assert "E_BAD_PAYLOAD" in audit_edits.KNOWN_CODES
+    assert "E_NOT_FOUND" in audit_edits.KNOWN_CODES
+    assert "E_UNSERVED_RANGE" in audit_edits.KNOWN_CODES  # legacy, still recognized
+
+
+def test_categorize_extended_letters() -> None:
+    assert audit_edits.categorize("E_BAD_PAYLOAD", [], False) == "P"
+    assert audit_edits.categorize("E_NOT_FOUND", [], False) == "R"
+    assert audit_edits.categorize("E_ACCESS", [], False) == "R"
+    assert audit_edits.categorize("E_UNSUPPORTED_FILE", [], False) == "R"
+    assert audit_edits.categorize("E_LARGE_FILE", [], False) == "R"
+    assert audit_edits.categorize("E_SUSPICIOUS_TEXT", [], False) == "G"
+    assert audit_edits.categorize("E_EMPTY_RANGE", [], False) == "G"
+    assert audit_edits.categorize("E_NOOP_LOOP", [], False) == "G"
+    assert audit_edits.categorize("E_UNDO_STALE", [], False) == "U"
+    assert audit_edits.categorize("E_UNDO_UNAVAILABLE", [], False) == "U"
+    assert audit_edits.categorize("E_STALE_RANGE", [], False) == "H"
+    assert audit_edits.categorize("E_UNVERIFIED_RANGE", [], False) == "H"
+    assert audit_edits.categorize("E_UNKNOWN", [], False) == "?"
+
+
+def test_scan_bad_payload_and_warning(tmp_path: Path, capsys: Any) -> None:
+    p = tmp_path / "sess.jsonl"
+    write_jsonl(
+        p,
+        [
+            session_header(),
+            edit_call(
+                "a1", None, "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            edit_result(
+                "r1",
+                "a1",
+                "call_1",
+                "[MODEL] [E_BAD_PAYLOAD] payload failed contract validation",
+                True,
+            ),
+            edit_call(
+                "a2", "r1", "call_2", "/tmp/b.ts", [{"anchor_from": "DdE", "anchor_to": "FfG"}]
+            ),
+            edit_result(
+                "r2",
+                "a2",
+                "call_2",
+                "[MODEL] [W_REVERSED_ANCHORS] applied with reversed anchors",
+                False,
+            ),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["by_code"] == {"E_BAD_PAYLOAD": 1}
+    assert res["failures"][0]["category"] == "P"
+    assert "?" not in {f["category"] for f in res["failures"]}
+    assert res["warning_count"] == 1
+    assert res["by_warning_code"] == {"W_REVERSED_ANCHORS": 1}
+    assert res["warnings"][0]["code"] == "W_REVERSED_ANCHORS"
+    assert res["warnings"][0]["is_error"] is False
+    out = audit_edits.format_text(res)
+    assert "Applied-tier warnings" in out
+    assert "W_REVERSED_ANCHORS" in out
+    # a recognized code must not trigger the unknown-code stderr warning
+    assert "E_BAD_PAYLOAD" not in capsys.readouterr().err
+
+
+def test_scan_accepts_event_stream(tmp_path: Path) -> None:
+    p = tmp_path / "stream.jsonl"
+    write_jsonl(
+        p,
+        [
+            {"type": "session", "id": "s"},
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "toolCall",
+                            "id": "call_1",
+                            "name": "edit",
+                            "arguments": {
+                                "file": "/tmp/a.ts",
+                                "edits": [{"anchor_from": "aBc", "anchor_to": "aBc"}],
+                            },
+                        }
+                    ],
+                },
+            },
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "toolResult",
+                    "toolCallId": "call_1",
+                    "toolName": "edit",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '[MODEL] [E_UNKNOWN_ANCHOR] anchor "aBc" not served',
+                        }
+                    ],
+                    "isError": True,
+                },
+            },
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["edit_count"] == 1
+    assert res["failure_count"] == 1
+    assert res["failures"][0]["code"] == "E_UNKNOWN_ANCHOR"

@@ -8,10 +8,13 @@
 """harness-audit edit workload: scan pi session JSONL for edit tool failures.
 
 Parse JSONL line-by-line, pair ``edit`` toolCall -> toolResult, compute
-success/failure stats, classify rejections by domain error code
-(E_UNKNOWN_ANCHOR, E_FOREIGN_ANCHOR, E_MALFORMED_ANCHOR, E_BATCH_ABORT,
-E_TARGET_LOST, ...), and flag diagnostic patterns (numeric line-number
-anchors, cross-file leaked anchors). Read-only.
+success/failure stats, classify rejections by domain error code against the full
+registry in pi-better-edit ``src/domain-errors.ts`` (19 ``E_*`` codes), track the
+applied-tier ``W_*`` warnings separately, and flag diagnostic patterns (numeric
+line-number anchors, cross-file leaked anchors). Read-only.
+
+Accepts both record shapes: native ``type == "message"`` and the pi event-stream
+``message_end``.
 """
 
 from __future__ import annotations
@@ -27,19 +30,48 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 CODE_RE = re.compile(r"\b(E_[A-Z_]+)\b")
+WARNING_RE = re.compile(r"\b(W_[A-Z_]+)\b")
 QUOTED_RE = re.compile(r'"([^"]+)"')
 SERVED_FOR_RE = re.compile(r"served for ([^;\s]+)")
 NUMERIC_RE = re.compile(r"^\d+$")
 
-KNOWN_CODES = (
+# Source of truth: pi-better-edit src/domain-errors.ts:32-51 (``DomainErrorCode``, 19 codes).
+# A ``[E_*]`` line reports a rejection.
+ERROR_CODES = (
+    "E_BAD_PAYLOAD",
+    "E_EMPTY_RANGE",
+    "E_STALE_ANCHOR",
     "E_UNKNOWN_ANCHOR",
     "E_FOREIGN_ANCHOR",
-    "E_MALFORMED_ANCHOR",
-    "E_BATCH_ABORT",
+    "E_STALE_RANGE",
     "E_TARGET_LOST",
+    "E_UNVERIFIED_RANGE",
+    "E_MALFORMED_ANCHOR",
+    "E_SUSPICIOUS_TEXT",
+    "E_BATCH_ABORT",
+    "E_NOOP_LOOP",
+    "E_UNSUPPORTED_FILE",
+    "E_ACCESS",
+    "E_NOT_FOUND",
+    "E_UNDO_STALE",
+    "E_UNDO_UNAVAILABLE",
+    "E_UNKNOWN",
+    "E_LARGE_FILE",
 )
-# Domain codes observed in the wild but outside the core set above.
-EXTRA_CODES = ("E_STALE_ANCHOR", "E_UNSERVED_RANGE")
+# src/domain-errors.ts:61-67 (``DomainWarningCode``, 6 codes). Applied tier: the mutation was
+# written, so a ``W_*`` row is a warning, never a failure.
+WARNING_CODES = (
+    "W_NEVER_SERVED_SHAPE",
+    "W_SERVED_PREFIX_MISMATCH",
+    "W_REVERSED_ANCHORS",
+    "W_UNICODE_LITERAL",
+    "W_LITERAL_BYPASS",
+    "W_NOOP",
+)
+# Seen in older sessions, absent from the current registry — kept recognized so historical
+# corpora still classify instead of falling through to '?'.
+LEGACY_CODES = ("E_UNSERVED_RANGE",)
+KNOWN_CODES = (*ERROR_CODES, *LEGACY_CODES)
 
 
 # ── Pydantic domain models ──
@@ -67,6 +99,19 @@ class EditFailure(BaseModel):
     model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
+class EditWarning(BaseModel):
+    """An applied-tier ``W_*`` note: the mutation was applied, so it is not a failure."""
+
+    jsonl_line: int = Field(ge=1)
+    toolCallId: str
+    file: str
+    code: str
+    is_error: bool
+    message_preview: str = ""
+
+    model_config: ClassVar[ConfigDict] = {"strict": True}
+
+
 class EditAuditResult(BaseModel):
     session_path: str
     session_file: str
@@ -81,6 +126,9 @@ class EditAuditResult(BaseModel):
     numeric_anchor_failures: int = Field(ge=0)
     foreign_leak_failures: int = Field(ge=0)
     failures: list[EditFailure] = Field(default_factory=list)
+    warnings: list[EditWarning] = Field(default_factory=list)
+    warning_count: int = Field(default=0, ge=0)
+    by_warning_code: dict[str, int] = Field(default_factory=dict)
 
     model_config: ClassVar[ConfigDict] = {"strict": True}
 
@@ -191,6 +239,27 @@ def _result_text(msg: dict[str, Any]) -> str:
     return ""
 
 
+def message_of(rec: dict[str, Any]) -> dict[str, Any] | None:
+    """The canonical ``message`` payload, or ``None``.
+
+    Native pi sessions log ``type == "message"``; pi event-stream logs log
+    ``message_end`` with an identical ``message`` payload. Both are accepted.
+    """
+    if rec.get("type") not in ("message", "message_end"):
+        return None
+    msg = rec.get("message")
+    return msg if isinstance(msg, dict) else None
+
+
+def _warning_codes(text: str) -> list[str]:
+    """Distinct ``W_*`` codes in ``text``, in first-seen order."""
+    seen: list[str] = []
+    for m in WARNING_RE.finditer(text):
+        if m.group(1) not in seen:
+            seen.append(m.group(1))
+    return seen
+
+
 def classify(text: str) -> str:
     m = CODE_RE.search(text)
     if m:
@@ -199,15 +268,35 @@ def classify(text: str) -> str:
 
 
 def categorize(code: str, numeric_anchors: list[str], is_leak: bool) -> str:
-    """Deterministic triage bucket: N/F/B/T/M/H, '?' when unrecognized."""
+    """Deterministic triage bucket: N/F/B/T/M/P/R/G/U, '?' when unrecognized."""
     if numeric_anchors:
         return "N"
     if is_leak or code == "E_FOREIGN_ANCHOR":
         return "F"
-    direct = {"E_BATCH_ABORT": "B", "E_TARGET_LOST": "T", "E_MALFORMED_ANCHOR": "M"}
+    direct = {
+        "E_BATCH_ABORT": "B",
+        "E_TARGET_LOST": "T",
+        "E_MALFORMED_ANCHOR": "M",
+        "E_BAD_PAYLOAD": "P",  # payload / contract shape
+        "E_NOT_FOUND": "R",  # path / limits
+        "E_ACCESS": "R",
+        "E_UNSUPPORTED_FILE": "R",
+        "E_LARGE_FILE": "R",
+        "E_SUSPICIOUS_TEXT": "G",  # guard / policy, not a hash problem
+        "E_EMPTY_RANGE": "G",
+        "E_NOOP_LOOP": "G",
+        "E_UNDO_STALE": "U",  # undo lifecycle
+        "E_UNDO_UNAVAILABLE": "U",
+    }
     if code in direct:
         return direct[code]
-    if code in ("E_UNKNOWN_ANCHOR", *EXTRA_CODES):
+    if code in (
+        "E_UNKNOWN_ANCHOR",
+        "E_STALE_ANCHOR",
+        "E_UNSERVED_RANGE",
+        "E_STALE_RANGE",
+        "E_UNVERIFIED_RANGE",
+    ):
         return "H"
     return "?"
 
@@ -224,6 +313,8 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
     numeric_anchor_failures = 0
     foreign_leak_failures = 0
     unknown_codes: set[str] = set()
+    warnings: list[dict[str, Any]] = []
+    by_warning_code: dict[str, int] = {}
     full_by_line: dict[int, list[dict[str, Any]]] = {}
     fp = path.open("r", encoding="utf-8", errors="replace")
     with fp:
@@ -237,10 +328,10 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
             except json.JSONDecodeError:
                 parse_errors += 1
                 continue
-            if not isinstance(rec, dict) or rec.get("type") != "message":
+            if not isinstance(rec, dict):
                 continue
-            msg = rec.get("message")
-            if not isinstance(msg, dict):
+            msg = message_of(rec)
+            if msg is None:
                 continue
             role = msg.get("role")
             if role == "assistant":
@@ -266,13 +357,6 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                 text = _result_text(msg)
                 is_error = bool(msg.get("isError"))
                 edit_count += 1
-                if not is_error:
-                    success_count += 1
-                    continue
-                code = classify(text)
-                if code not in (*KNOWN_CODES, *EXTRA_CODES, "E_NO_CODE", "E_EMPTY_RESULT"):
-                    unknown_codes.add(code)
-                by_code[code] = by_code.get(code, 0) + 1
                 call = calls.get(tc_id)
                 if call is None and "|" in tc_id:
                     prefix, suffix = tc_id.split("|", 1)
@@ -284,6 +368,25 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                     pm = re.search(r"\(([^)]+)\)", text)
                     if pm:
                         file = pm.group(1)
+                for wcode in _warning_codes(text):
+                    by_warning_code[wcode] = by_warning_code.get(wcode, 0) + 1
+                    warnings.append(
+                        {
+                            "jsonl_line": idx,
+                            "toolCallId": tc_id,
+                            "file": file,
+                            "code": wcode,
+                            "is_error": is_error,
+                            "message_preview": text[:240].replace("\n", " ⏎ "),
+                        }
+                    )
+                if not is_error:
+                    success_count += 1
+                    continue
+                code = classify(text)
+                if code not in (*KNOWN_CODES, "E_NO_CODE", "E_EMPTY_RESULT"):
+                    unknown_codes.add(code)
+                by_code[code] = by_code.get(code, 0) + 1
                 if file:
                     by_file[file] = by_file.get(file, 0) + 1
                 quoted = QUOTED_RE.findall(text)
@@ -330,10 +433,10 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                         rec2 = json.loads(raw2)
                     except json.JSONDecodeError:
                         continue
-                    if not isinstance(rec2, dict) or rec2.get("type") != "message":
+                    if not isinstance(rec2, dict):
                         continue
-                    msg2 = rec2.get("message")
-                    if not isinstance(msg2, dict):
+                    msg2 = message_of(rec2)
+                    if msg2 is None:
                         continue
                     preview = _preview_for_msg(msg2)
                     role2 = str(msg2.get("role") or rec2.get("type") or "?")
@@ -382,6 +485,13 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
             eprint(f"validation error at line {f.get('jsonl_line')}: {ve}")
             raise
     failure_count = len(typed_failures)
+    typed_warnings: list[EditWarning] = []
+    for w in warnings:
+        try:
+            typed_warnings.append(EditWarning.model_validate(w))
+        except ValidationError as ve:
+            eprint(f"validation error at line {w.get('jsonl_line')}: {ve}")
+            raise
     for _code in sorted(unknown_codes):
         eprint(
             f"warning: unrecognized edit error code {_code!r} (not in KNOWN_CODES); categorized as '?'"
@@ -400,6 +510,9 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
         "numeric_anchor_failures": numeric_anchor_failures,
         "foreign_leak_failures": foreign_leak_failures,
         "failures": [o.model_dump() for o in typed_failures],
+        "warnings": [w.model_dump() for w in typed_warnings],
+        "warning_count": len(typed_warnings),
+        "by_warning_code": by_warning_code,
         "full_context_by_line": full_by_line,
     }
     try:
@@ -462,6 +575,16 @@ def format_text(audit: dict[str, Any]) -> str:
                     previews = " | ".join(f"{c['role']}:{c['preview'][:60]}" for c in ctx)
                     lines.append(f"  line {f['jsonl_line']} → {previews}")
             lines.append("")
+    if audit.get("warnings"):
+        lines.append("Applied-tier warnings ([W_*] — the mutation was applied; not a failure):")
+        for code, n in sorted(audit["by_warning_code"].items(), key=lambda kv: (-kv[1], kv[0])):
+            lines.append(f"  {code}: {n}")
+        for w in audit["warnings"]:
+            target = w["file"] or "(unknown file)"
+            state = "after failure" if w["is_error"] else "applied"
+            lines.append(f"  line {w['jsonl_line']}  {w['code']}  {target}  ({state})")
+        lines.append("")
+
     lines.append("")
     return "\n".join(lines)
 

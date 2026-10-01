@@ -11,6 +11,13 @@ Resolve target (path or session id), scan JSONL line-by-line, pair
 bash toolCall -> toolResult for command preview, classify by line
 count, and report trimtable savings. Read-only; --emit-filtered
 writes a sibling copy. --with-context attaches following turns for triage.
+
+Accepts both record shapes: native ``type == "message"`` and the pi event-stream
+``message_end`` (benchmark harness ``stdout.jsonl``), which carries the identical
+``message`` payload. A scan that reads records but pairs no bash results exits ``3``
+(schema warning) instead of reporting a false all-clear. ``--census`` adds
+per-tool delivered-line counts; delivery-cap footers surface ``produced_lines`` /
+``omitted_lines`` next to ``lines``.
 """
 
 from __future__ import annotations
@@ -18,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, ClassVar, Protocol, TypedDict, cast
@@ -26,6 +34,30 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 DEFAULT_THRESHOLD = 20
 DEFAULT_KEEP = 10
+# Exit 3 = "scanned records, found nothing to scan" — deliberately distinct from 0 (clean).
+EXIT_SCHEMA = 3
+# Pi logs one turn in two shapes: native sessions use {"type": "message", "message": {...}};
+# pi event-stream logs (benchmark harness stdout.jsonl) use "message_end" with the identical
+# "message" payload. Accepting both stops a stream log from being read as empty (and "clean").
+MESSAGE_RECORD_TYPES = frozenset({"message", "message_end"})
+# Delivery-cap footer: "[Showing lines A-B of Z (50.0KB limit). Use offset=… to continue]".
+# The trailing "(N.NKB limit)" is load-bearing — a stricter "of Z]" pattern never matches.
+TRUNCATION_FOOTER_RE = re.compile(r"\[Showing lines (\d+)-(\d+) of (\d+) \(([\d.]+)KB limit\)")
+# Census rows are always emitted for these five, zero-filled when unused, so "all five tools"
+# is a stable shape rather than a set that silently drops tools with no calls.
+CENSUS_TOOLS = ("bash", "read", "edit", "write", "undo_last_edit")
+
+
+class ToolCensus(BaseModel):
+    """Delivered-vs-produced line accounting for one tool across the session."""
+
+    calls: int = Field(ge=0)
+    lines: int = Field(ge=0)
+    chars: int = Field(ge=0)
+    truncated_calls: int = Field(ge=0)
+    omitted_lines: int = Field(ge=0)
+
+    model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
 # ── Pydantic domain models (A: type-safe owned script + B: replaceable-handle catalog) ──
@@ -45,6 +77,8 @@ class OversizedEntry(BaseModel):
     command_preview: str
     lines: int = Field(ge=0)
     chars: int = Field(ge=0)
+    produced_lines: int = Field(default=0, ge=0)
+    omitted_lines: int = Field(default=0, ge=0)
     oversized: bool
     isError: bool
     next_turns: list[NextTurn] = Field(default_factory=list)
@@ -52,6 +86,10 @@ class OversizedEntry(BaseModel):
     model_config: ClassVar[ConfigDict] = {"strict": True}
 
 
+# Two loss models coexist and both are correct. ``lines`` is the trim-table estimate: it keeps
+# a ``2*keep_head_tail + 1``-line window and sums Σ(n − (2k+1)) over entries above the
+# threshold. The stricter headline Σ(n − threshold) differs by exactly one line per entry —
+# a definition difference, not an off-by-one bug.
 class EstimatedSavings(BaseModel):
     lines: int = Field(ge=0)
     chars: int = Field(ge=0)
@@ -70,6 +108,10 @@ class AuditResult(BaseModel):
     oversized_count: int = Field(ge=0)
     total_lines: int = Field(ge=0)
     total_chars: int = Field(ge=0)
+    total_produced_lines: int = Field(default=0, ge=0)
+    total_omitted_lines: int = Field(default=0, ge=0)
+    truncated_count: int = Field(default=0, ge=0)
+    tool_census: dict[str, ToolCensus] = Field(default_factory=dict)
     oversized: list[OversizedEntry] = Field(default_factory=list)
     all: list[OversizedEntry] = Field(
         default_factory=list
@@ -148,6 +190,48 @@ def count_lines(text: str) -> int:
     return len(text.splitlines())
 
 
+def message_of(rec: dict[str, Any]) -> dict[str, Any] | None:
+    """The canonical ``message`` payload of a record, or ``None`` for anything else.
+
+    Native pi sessions log ``type == "message"``; pi event-stream logs (the benchmark
+    harness ``stdout.jsonl``) log ``message_end`` with an identical ``message`` payload.
+    Both are accepted so an event stream is never read as an empty — and falsely
+    "clean" — session.
+    """
+    if rec.get("type") not in MESSAGE_RECORD_TYPES:
+        return None
+    msg = rec.get("message")
+    return msg if isinstance(msg, dict) else None
+
+
+def result_text(msg: dict[str, Any]) -> str:
+    """Join every ``text`` block of a ``toolResult`` message."""
+    content = msg.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for c in content:
+            if isinstance(c, dict) and c.get("type") == "text":
+                t = c.get("text")
+                if isinstance(t, str):
+                    parts.append(t)
+        return "".join(parts)
+    return ""
+
+
+def truncation_of(text: str) -> tuple[int, int] | None:
+    """``(produced_lines, omitted_lines)`` from a delivery-cap footer, else ``None``.
+
+    The footer is ``[Showing lines A-B of Z (50.0KB limit). Use offset=… to continue]``.
+    """
+    m = TRUNCATION_FOOTER_RE.search(text)
+    if m is None:
+        return None
+    produced = int(m.group(3))
+    return produced, max(0, produced - count_lines(text))
+
+
 def truncate_body(text: str, keep: int) -> tuple[str, int]:
     lines = text.splitlines()
     n = len(lines)
@@ -176,6 +260,7 @@ class _Args(Protocol):
     keep_head_tail: int
     with_context: int
     dump_context: str | None
+    census: bool
 
 
 class _TurnRow(TypedDict):
@@ -224,6 +309,10 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
     total_chars = 0
     parse_errors = 0
     record_count = 0
+    census: dict[str, dict[str, int]] = {
+        t: {"calls": 0, "lines": 0, "chars": 0, "truncated_calls": 0, "omitted_lines": 0}
+        for t in CENSUS_TOOLS
+    }
     try:
         fp = path.open("r", encoding="utf-8", errors="replace")
     except OSError as exc:
@@ -242,10 +331,8 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                 continue
             if not isinstance(rec, dict):
                 continue
-            if rec.get("type") != "message":
-                continue
-            msg = rec.get("message")
-            if not isinstance(msg, dict):
+            msg = message_of(rec)
+            if msg is None:
                 continue
             role = msg.get("role")
             if role == "assistant":
@@ -263,25 +350,37 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                             cmd = args.get("command") or args.get("cmd") or ""
                         if tc_id and isinstance(cmd, str):
                             call_commands[tc_id] = cmd
-            elif role == "toolResult" and msg.get("toolName") == "bash":
-                tc_id = msg.get("toolCallId") or ""
-                content_list = msg.get("content")
-                text = ""
-                if isinstance(content_list, list):
-                    parts: list[str] = []
-                    for c in content_list:
-                        if isinstance(c, dict) and c.get("type") == "text":
-                            t = c.get("text")
-                            if isinstance(t, str):
-                                parts.append(t)
-                    text = "".join(parts)
-                elif isinstance(content_list, str):
-                    text = content_list
+            elif role == "toolResult":
+                tool_name = msg.get("toolName")
+                tool_key = tool_name if isinstance(tool_name, str) and tool_name else "unknown"
+                text = result_text(msg)
                 nlines = count_lines(text)
                 nchars = len(text)
+                trunc = truncation_of(text)
+                produced = nlines if trunc is None else trunc[0]
+                omitted = 0 if trunc is None else trunc[1]
+                row = census.setdefault(
+                    tool_key,
+                    {
+                        "calls": 0,
+                        "lines": 0,
+                        "chars": 0,
+                        "truncated_calls": 0,
+                        "omitted_lines": 0,
+                    },
+                )
+                row["calls"] += 1
+                row["lines"] += nlines
+                row["chars"] += nchars
+                if trunc is not None:
+                    row["truncated_calls"] += 1
+                    row["omitted_lines"] += omitted
+                if tool_name != "bash":
+                    continue
                 total_lines += nlines
                 total_chars += nchars
                 oversized = nlines > threshold
+                tc_id = msg.get("toolCallId") or ""
                 cmd_preview = ""
                 if tc_id in call_commands:
                     cmd_preview = call_commands[tc_id]
@@ -302,6 +401,8 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                         else cmd_preview,
                         "lines": nlines,
                         "chars": nchars,
+                        "produced_lines": produced,
+                        "omitted_lines": omitted,
                         "oversized": oversized,
                         "isError": is_error,
                     }
@@ -322,10 +423,10 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                         rec2 = json.loads(raw2)
                     except json.JSONDecodeError:
                         continue
-                    if not isinstance(rec2, dict) or rec2.get("type") != "message":
+                    if not isinstance(rec2, dict):
                         continue
-                    msg2 = rec2.get("message")
-                    if not isinstance(msg2, dict):
+                    msg2 = message_of(rec2)
+                    if msg2 is None:
                         continue
                     preview = _preview_for_msg(msg2)
                     role2 = str(msg2.get("role") or rec2.get("type") or "?")
@@ -399,6 +500,9 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
         if typed.oversized:
             typed_oversized.append(typed)
     # also validate savings/overall via AuditResult (strict)
+    total_omitted_lines = sum(r["omitted_lines"] for r in census.values())
+    total_produced_lines = sum(r["lines"] + r["omitted_lines"] for r in census.values())
+    truncated_count = sum(r["truncated_calls"] for r in census.values())
     audit_raw = {
         "session_path": str(path),
         "session_file": path.name,
@@ -409,8 +513,12 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
         "oversized_count": len(typed_oversized),
         "total_lines": total_lines,
         "total_chars": total_chars,
+        "total_produced_lines": total_produced_lines,
+        "total_omitted_lines": total_omitted_lines,
+        "truncated_count": truncated_count,
         "oversized": [o.model_dump() for o in typed_oversized],
         "all": [a.model_dump() for a in typed_all],
+        "tool_census": {k: dict(v) for k, v in sorted(census.items())},
         "estimated_savings": {
             "lines": savings_lines,
             "chars": savings_chars,
@@ -446,36 +554,35 @@ def emit_filtered(path: Path, threshold: int, keep: int) -> Path:
             except json.JSONDecodeError:
                 _ = fout.write(raw)
                 continue
-            if rec.get("type") == "message":
-                msg = rec.get("message")
-                if (
-                    isinstance(msg, dict)
-                    and msg.get("role") == "toolResult"
-                    and msg.get("toolName") == "bash"
-                ):
-                    content_list = msg.get("content")
-                    if isinstance(content_list, list) and content_list:
-                        text_parts: list[str] = []
-                        for c in content_list:
-                            if (
-                                isinstance(c, dict)
-                                and c.get("type") == "text"
-                                and isinstance(c.get("text"), str)
-                            ):
-                                text_parts.append(c["text"])
-                        combined = "".join(text_parts)
-                        if count_lines(combined) > threshold:
-                            truncated, _ = truncate_body(combined, keep)
-                            new_content = [{"type": "text", "text": truncated}]
-                            msg["content"] = new_content
-                            rec["message"] = msg
-                            _ = fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                            continue
+            msg = message_of(rec) if isinstance(rec, dict) else None
+            if (
+                msg is not None
+                and msg.get("role") == "toolResult"
+                and msg.get("toolName") == "bash"
+            ):
+                content_list = msg.get("content")
+                if isinstance(content_list, list) and content_list:
+                    text_parts: list[str] = []
+                    for c in content_list:
+                        if (
+                            isinstance(c, dict)
+                            and c.get("type") == "text"
+                            and isinstance(c.get("text"), str)
+                        ):
+                            text_parts.append(c["text"])
+                    combined = "".join(text_parts)
+                    if count_lines(combined) > threshold:
+                        truncated, _ = truncate_body(combined, keep)
+                        new_content = [{"type": "text", "text": truncated}]
+                        msg["content"] = new_content
+                        rec["message"] = msg
+                        _ = fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                        continue
             _ = fout.write(json.dumps(rec, ensure_ascii=False) + "\n" if stripped else raw)
     return out_path
 
 
-def format_text(audit: dict[str, Any], keep: int) -> str:
+def format_text(audit: dict[str, Any], keep: int, census: bool = False) -> str:
     lines: list[str] = []
     lines.append(f"session: {audit['session_path']}")
     lines.append(
@@ -499,6 +606,10 @@ def format_text(audit: dict[str, Any], keep: int) -> str:
             cmd = e["command_preview"] or "(no paired toolCall — id " + e["toolCallId"][:24] + "…)"
             cmd = cmd.replace("\n", " ⏎ ")
             lines.append(f"{i:>3}  {e['jsonl_line']:>5}  {e['lines']:>5}  {e['chars']:>7}  {cmd}")
+            if e.get("omitted_lines"):
+                lines.append(
+                    f"       (delivery cap: {e['produced_lines']} lines produced, {e['omitted_lines']} omitted)"
+                )
         lines.append("")
         lines.append(f"Truncation preview (keep {keep} head + {keep} tail + marker):")
         for e in audit["oversized"]:
@@ -518,6 +629,21 @@ def format_text(audit: dict[str, Any], keep: int) -> str:
             lines.append("")
     est = audit["estimated_savings"]
     lines.append(f"Total bash output: {audit['total_lines']} lines / {audit['total_chars']} chars")
+    if audit.get("total_omitted_lines"):
+        lines.append(
+            f"Produced but not delivered (delivery cap): {audit['total_omitted_lines']} lines omitted "
+            f"across {audit['truncated_count']} tool results, all tools"
+        )
+    if census and audit.get("tool_census"):
+        lines.append("")
+        lines.append("Tool census (delivered lines; truncated = hit the delivery cap):")
+        lines.append(
+            f"  {'tool':<18}{'calls':>7}{'lines':>10}{'chars':>12}{'truncated':>11}{'omitted':>10}"
+        )
+        for tool, row in audit["tool_census"].items():
+            lines.append(
+                f"  {tool:<18}{row['calls']:>7}{row['lines']:>10}{row['chars']:>12}{row['truncated_calls']:>11}{row['omitted_lines']:>10}"
+            )
     if audit["oversized_count"]:
         lines.append(
             f"Estimated savings if truncated (keep {est['keep_head_tail']} each side): −{est['lines']} lines / −{est['chars']} chars  (~{est['chars'] // 4} tokens @ 4 chars/token)"
@@ -564,6 +690,11 @@ def main() -> None:
         type=str,
         default=None,
         help="write per-entry context JSON to dir (requires --with-context >0)",
+    )
+    _ = ap.add_argument(
+        "--census",
+        action="store_true",
+        help="also print the delivered-line census for every tool (read, bash, edit, …)",
     )
     args = cast(_Args, cast(object, ap.parse_args()))
     if args.threshold < 0:
@@ -634,11 +765,19 @@ def main() -> None:
         json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
         _ = sys.stdout.write("\n")
     else:
-        _ = sys.stdout.write(format_text(audit, args.keep_head_tail))
+        _ = sys.stdout.write(format_text(audit, args.keep_head_tail, census=args.census))
         if filtered_path is not None:
             _ = sys.stdout.write(f"Filtered copy: {filtered_path}\n")
         if will_dump:
             _ = sys.stdout.write(f"Context dump dir: {audit['dump_context_dir']}\n")
+    if audit["record_count"] > 0 and audit["bash_count"] == 0:
+        eprint(
+            f"WARNING: scanned {audit['record_count']} records but found 0 bash toolResults — "
+            "the session schema may be unrecognized (pi event-stream logs must expose "
+            "'message_end' records carrying a 'message' payload), or this session used no bash. "
+            "Exit 3 means 'scanned, nothing to scan'; it is NOT a clean result."
+        )
+        sys.exit(EXIT_SCHEMA)
     sys.exit(0)
 
 
