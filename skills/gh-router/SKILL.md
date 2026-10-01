@@ -30,7 +30,7 @@ brief output — do not re-derive it with `gh pr view`, `gh run list`, or `gh ap
 | Triage unmerged conflicts | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py` | repo-level unmerged paths, types, hunk counts |
 | Inspect conflict & commit intent | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py --file <path>` | operation + ours/theirs author intent + compact hunks |
 | **3: Landing & CI** | | |
-| Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --watch --merge` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
+| Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --watch --merge --body-file tmp/pr_body.md` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
 | Watch a workflow | `$SKILL_DIR/scripts/ci.sh watch <run-id>` | quiet poll → `✔ run <id> completed: success`, or `✘` + exit 1 |
 | Recent runs and step costs | `$SKILL_DIR/scripts/ci.sh runs [--branch B] [--limit N]` | one line per run + slowest steps (`Run all tests=15s`) |
 | Why did a run fail | `$SKILL_DIR/scripts/ci.sh why <run-id>` | failing `job › step`, then the log tail |

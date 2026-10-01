@@ -52,4 +52,4 @@ When invoked via `/pr-enhance [base|pr_url]` (default: inferred from context —
 
    Extract related issue numbers from the branch name, commit messages, or user request. Always emit them on standalone lines at the bottom (`Closes #NN` / `Fixes #NN`) so GitHub links and auto-closes them upon merge.
 
-3. **Review** — present draft, await approval, then create PR and clean tmp artifacts.
+3. **Review** — present the draft, await approval, then hand off to `pr-land`: `uv run $SKILL_DIR/../pr-land/scripts/pr.py --body-file tmp/pr_body.md` (add `--watch --merge` when authorized). Clean `tmp/` after the PR is open.

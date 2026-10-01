@@ -62,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 * **harness-audit:** read event-stream session logs, name all edit error codes, and report delivery-cap truncation (#179)
+* **gh-router:** require a drafted PR body in pr-land and compose the preflight with pr-enhance ([#177](https://github.com/Rianico/harness-zkx/issues/177)) (#180)
 * **scaffold:** drop the changelog clear subcommand so the release handoff never erases the curated ledger (#175)
 * **herdr:** remediate target resolution, agent observability, and shell prompt safety (#174)
 * **herdr:** bypass revision increment check on pre_rev 0 to avoid duplicate prompts ([#168](https://github.com/Rianico/harness-zkx/issues/168)) (#169)

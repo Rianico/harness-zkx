@@ -11,7 +11,7 @@ metadata:
 
 # PR — Create → Watch → Squash-Merge
 
-Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head sha blank`). Complements `pr-enhance` (description) — this subskill owns the `POST pulls` → `poll every check` → `PUT merge squash` loop.
+Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head sha blank`). Owns the `POST pulls` → `poll every check` → `PUT merge squash` loop. Description authoring composes with `pr-enhance` — see [Body Preflight](#body-preflight).
 
 **Ledger.** The PR carries curated entries under `## [Unreleased]` in `CHANGELOG.md` per `rules/common/git-convention.md` §5. The checks live in `scripts/changelog-gate.py`: invoke them, never restate them.
 
@@ -22,10 +22,18 @@ Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head 
 ```bash
 uv run $SKILL_DIR/scripts/pr.py --watch --merge --title "feat: …" --body-file tmp/pr_body.md
 uv run $SKILL_DIR/scripts/pr.py --title "feat: …" --body-file tmp/pr_body.md --check  # dry run
-uv run $SKILL_DIR/scripts/pr.py --watch --merge  # infers head/base/title/body
+uv run $SKILL_DIR/scripts/pr.py --watch --merge --body-file tmp/pr_body.md  # infers head/base/title only
 ```
 
-Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEAD` → `main`), `--head` (`git rev-parse --abbrev-ref HEAD`), `--title` (default `git log -1 --pretty=%s`), `--body` / `--body-file` (default `.github/pull_request_template.md`), `--watch` (poll **every** check on the PR via `gh pr checks --json name,bucket`, 60×10s), `--merge` (requires a green watch; waits `mergeable_state clean`, refuses otherwise, then `PUT merge squash`), `--draft`, `--no-stamp` (skips auto-stamping `(#NUM)` into `CHANGELOG.md`).
+Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEAD` → `main`), `--head` (`git rev-parse --abbrev-ref HEAD`), `--title` (default `git log -1 --pretty=%s`), `--body` / `--body-file` (required to open a PR — takes no template default), `--watch` (poll **every** check on the PR via `gh pr checks --json name,bucket`, 60×10s), `--merge` (requires a green watch; waits `mergeable_state clean`, refuses otherwise, then `PUT merge squash`), `--draft`, `--no-stamp` (skips auto-stamping `(#NUM)` into `CHANGELOG.md`).
+
+## Body Preflight
+
+The caller authors the description. Draft it with `pr-enhance` before landing:
+
+1. `uv run $SKILL_DIR/../pr-enhance/scripts/analyze-pr.py [base|pr_url] > tmp/pr.json`
+2. Draft `tmp/pr_body.md` from `tmp/pr.json` — see [pr-enhance](../pr-enhance/SKILL.md) §Workflow step 2.
+3. Pass `--body-file tmp/pr_body.md` to `pr.py`.
 
 ## Invariants & Gates
 
@@ -33,6 +41,7 @@ Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEA
 - **Changelog Auto-Stamping**: When `CHANGELOG.md` carries unattributed entries in `## [Unreleased]`, `pr.py` automatically commits and pushes `(#PR)` attribution to the branch (disable via `--no-stamp`).
 - **Pre-flight Push**: The current working branch must be pushed to remote before running `pr.py`.
 - **Squash Body Hygiene**: Cleans HTML comments, `## Checklist`, and `Landing:` directives, appending `Co-authored-by` trailers automatically. Refuses bodies with raw `CODE_AUTHORS` token.
+- **Body Gate**: `pr.py` refuses create or update with no `--body`/`--body-file`, or with a body that is empty or the unfilled `.github/pull_request_template.md` — exit `1` with remediation.
 - **Dry-run Gate (`--check`)**: Runs all validation gates (title budget, token checks, trailer generation) without opening a PR.
 
 ## Flow
@@ -55,4 +64,4 @@ Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEA
    way. `--check` runs the same gates the merge runs (token, trailers, title length) and prints the
    trailers that would be appended; it evaluates local `--body` / `--body-file` and creates nothing.
 
-Fail-loud, no secrets in logs. Re-trigger is model-driven: script returns failure info, model edits, pushes, and re-runs `--watch --merge`. Exit: `0` ok · `1` checks failed or merge refused · `2` usage / unusable head ref. PR URL on stdout, progress on stderr.
+Fail-loud, no secrets in logs. Re-trigger is model-driven: script returns failure info, model edits, pushes, and re-runs `--watch --merge`. Exit: `0` ok · `1` checks failed, body refused, or merge refused · `2` usage / unusable head ref. PR URL on stdout, progress on stderr.

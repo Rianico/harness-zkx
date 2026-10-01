@@ -21,6 +21,7 @@ if str(PR_SCRIPTS) not in sys.path:
 from pr import (  # noqa: E402
     PrError,
     clean_squash_body,
+    is_unfilled_body,
     parse_args,
     pr_conflict_verdict,
     run_command,
@@ -781,3 +782,63 @@ Landing: squash
 - [x] Tests green
 """
     assert squash_message(procedural_only) == ""
+
+
+def test_is_unfilled_body_detects_empty_and_template() -> None:
+    """is_unfilled_body is true only for an empty body or the repo template verbatim."""
+    template = (
+        PR_TEMPLATE.read_text(encoding="utf-8")
+        if PR_TEMPLATE.is_file()
+        else "## Summary\n<!-- note -->\n"
+    )
+    assert is_unfilled_body("")
+    assert is_unfilled_body(template, template_path=PR_TEMPLATE)
+    assert not is_unfilled_body("## Summary\nAuthored description.", template_path=PR_TEMPLATE)
+
+
+def test_create_or_reuse_refuses_missing_or_template_body(tmp_path: Path) -> None:
+    """create_or_reuse_pr refuses to open a PR with no body or with the unfilled repo template."""
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+    gh_mock = mock_bin / "gh"
+    _ = gh_mock.write_text(
+        '#!/usr/bin/env bash\nif [[ "$*" =~ pulls\\\\?head= ]]; then echo "null"; exit 0; fi\nexit 0\n',
+        encoding="utf-8",
+    )
+    gh_mock.chmod(0o755)
+    env = {**os.environ, "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}"}
+
+    def refuse(body_expr: str, body_supplied: bool) -> subprocess.CompletedProcess[str]:
+        script = f"""
+import sys
+from pathlib import Path
+sys.path.insert(0, "{PR_SCRIPTS}")
+from pr import PrError, create_or_reuse_pr
+body = {body_expr}
+try:
+    create_or_reuse_pr(
+        repo="test/repo",
+        head_ref="feat-branch",
+        base="main",
+        title="feat: x",
+        body=body,
+        title_supplied=True,
+        body_supplied={body_supplied!r},
+    )
+except PrError as e:
+    print(f"REFUSED: {{e}}", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+"""
+        return subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, env=env, cwd=REPO_ROOT
+        )
+
+    missing = refuse('""', False)
+    assert missing.returncode == 1, missing.stderr
+    assert "no PR body supplied" in missing.stderr
+
+    template_literal = f'Path({str(PR_TEMPLATE)!r}).read_text(encoding="utf-8")'
+    unfilled = refuse(template_literal, True)
+    assert unfilled.returncode == 1, unfilled.stderr
+    assert "unfilled repo template" in unfilled.stderr
