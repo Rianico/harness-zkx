@@ -12,9 +12,10 @@ Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
 except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
 script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
+Opening a PR requires a description: an empty body or the unfilled repo template is refused pre-create.
 Commit title length is strictly limited to 100 characters (TITLE (#NUM) <= 100).
 Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
-Exit: 0 ok | 1 checks failed or merge refused | 2 usage or unusable head ref
+Exit: 0 ok | 1 checks failed, body refused, or merge refused | 2 usage or unusable head ref
 """
 
 import json
@@ -39,6 +40,7 @@ EMPTY_BULLET_RE = re.compile(r"^[ \t]*[*+-][ \t]*$")
 
 SQUASH_TITLE_MAX = 100
 CODE_AUTHORS_TOKEN = "CODE_AUTHORS"
+DEFAULT_TEMPLATE_PATH = Path(".github/pull_request_template.md")
 POLL_TRIES = 60
 POLL_INTERVAL = 10.0
 MERGE_STATE_TRIES = 5
@@ -111,12 +113,13 @@ Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
   --no-stamp : do not auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger
+  --body/--body-file : required to open a PR; the caller drafts the description (pr-enhance workflow). An empty body or the unfilled repo template is refused.
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
 except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
 script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
 Commit title length is strictly limited to 100 characters (TITLE (#NUM) <= 100).
 Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
-Exit: 0 ok | 1 checks failed or merge refused | 2 usage or unusable head ref"""
+Exit: 0 ok | 1 checks failed, body refused, or merge refused | 2 usage or unusable head ref"""
     print(usage)
 
 
@@ -627,7 +630,7 @@ def squash_message(body: str, template_path: Path | None = None) -> str:
     if template_path and template_path.is_file():
         template = template_path.read_text(encoding="utf-8")
     elif not template_path:
-        default_tmpl = Path(".github/pull_request_template.md")
+        default_tmpl = DEFAULT_TEMPLATE_PATH
         if default_tmpl.is_file():
             template = default_tmpl.read_text(encoding="utf-8")
     trimmed_body = body.strip()
@@ -639,6 +642,25 @@ def squash_message(body: str, template_path: Path | None = None) -> str:
 
 def is_fallback_body(body: str, template_path: Path | None = None) -> bool:
     return squash_message(body, template_path=template_path) == ""
+
+
+def is_unfilled_body(body: str, template_path: Path | None = None) -> bool:
+    """True when *body* carries no authored description: empty, or the repo template verbatim."""
+    return is_fallback_body(body, template_path=template_path)
+
+
+def refuse_unfilled_body(body: str) -> None:
+    """Refuse a PR whose description is empty or the unfilled repo template (exit 1)."""
+    if body.strip():
+        print("refusing PR: the description is the unfilled repo template", file=sys.stderr)
+    else:
+        print("refusing PR: no description supplied", file=sys.stderr)
+    print(
+        "remediation: draft the description via the pr-enhance workflow "
+        "(analyze-pr.py → draft → tmp/pr_body.md), then pass it with --body-file",
+        file=sys.stderr,
+    )
+    raise RefusalError("PR body is empty or an unfilled template")
 
 
 def build_squash_message(msg: str, merger: str, tsv: str) -> str:
@@ -1068,6 +1090,10 @@ def create_or_reuse_pr(
     cwd: Path | None = None,
 ) -> tuple[str, str, str]:
     """Create or reuse open PR for head_ref. Returns (num, final_title, final_body)."""
+    template_path = (cwd / DEFAULT_TEMPLATE_PATH) if cwd else DEFAULT_TEMPLATE_PATH
+    if body_supplied and is_unfilled_body(body, template_path=template_path):
+        refuse_unfilled_body(body)
+
     owner = repo.split("/")[0]
     res = run_command(
         [
@@ -1136,11 +1162,14 @@ def create_or_reuse_pr(
 
     draft_flag = "true" if draft else "false"
     final_body = body
-    if not body_supplied and not body:
-        tmpl = Path(".github/pull_request_template.md")
-        tmpl_path = (cwd / tmpl) if cwd else tmpl
-        if tmpl_path.is_file():
-            final_body = tmpl_path.read_text(encoding="utf-8")
+    if not body_supplied:
+        print("refusing to open PR: no --body/--body-file supplied", file=sys.stderr)
+        print(
+            "remediation: draft the description via the pr-enhance workflow "
+            "(analyze-pr.py → draft → tmp/pr_body.md), then re-run with --body-file",
+            file=sys.stderr,
+        )
+        raise RefusalError("no PR body supplied")
 
     create_res = run_command(
         [
