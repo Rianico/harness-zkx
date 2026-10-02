@@ -246,6 +246,26 @@ def allocate_with_wt(wt: str, branch: str, base: str | None, env: Mapping[str, s
     return Allocation(branch=branch, path=path, engine=ENGINE_WORKTRUNK)
 
 
+def git_worktree_for(branch: str, env: Mapping[str, str]) -> str | None:
+    """Return the worktree path git reports for branch, or None."""
+    raw = run_checked(["git", "worktree", "list", "--porcelain"], env)
+    for worktree in parse_git_worktree_list(raw):
+        if worktree.branch == branch:
+            return worktree.path
+    return None
+
+
+def recover_git_worktree(branch: str, env: Mapping[str, str]) -> Allocation | None:
+    """Best-effort reuse of a worktree git already tracks for branch."""
+    try:
+        existing = git_worktree_for(branch, env)
+    except WorktreeError:
+        return None
+    if existing is not None and Path(existing).is_dir():
+        return Allocation(branch=branch, path=existing, engine=ENGINE_GIT)
+    return None
+
+
 def allocate_with_git(branch: str, base: str | None, env: Mapping[str, str]) -> Allocation:
     """Fallback allocation with `git worktree add` under a predictable sibling path."""
     path = fallback_path(branch, env)
@@ -258,6 +278,9 @@ def allocate_with_git(branch: str, base: str | None, env: Mapping[str, str]) -> 
         retry = ["git", "worktree", "add", str(path), branch]
         done = run(retry, env)
         if done.returncode != 0:
+            recovered = recover_git_worktree(branch, env)
+            if recovered is not None:
+                return recovered
             raise WorktreeError(f"{shlex.join(retry)} failed: {failure_detail(done)}")
     if not path.is_dir():
         raise WorktreeError(f"git reported success but {path} is not a directory")

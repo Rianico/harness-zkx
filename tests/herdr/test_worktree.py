@@ -238,6 +238,33 @@ def test_allocate_git_fallback_retries_existing_branch(
     assert capsys.readouterr().out.strip() == str(worktree)
 
 
+def test_allocate_git_fallback_recovers_existing_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = env_without_wt(tmp_path)
+    root = tmp_path / "work" / "repo"
+    resolved_root = Path(os.path.realpath(root))
+    existing = resolved_root.parent / f"{resolved_root.name}.feat-184"
+    existing.mkdir(parents=True, exist_ok=True)
+    porcelain = (
+        "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n"
+        f"worktree {existing}\nHEAD def\nbranch refs/heads/feat/184\n"
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "rev-parse", "--git-common-dir"]:
+            return completed(argv, stdout=f"{root / '.git'}\n")
+        if argv[:3] == ["git", "worktree", "add"]:
+            return completed(argv, returncode=128, stderr="already exists")
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=porcelain)
+        raise AssertionError(f"unexpected command: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    assert hw.main(["allocate", "feat/184"], env) == herdr_cli.EXIT_OK
+    assert capsys.readouterr().out.strip() == str(existing)
+
+
 def test_allocate_git_fallback_failure_exits_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
