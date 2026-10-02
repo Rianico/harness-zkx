@@ -3,7 +3,7 @@ name: docs-scraper
 description: >-
   Documentation scraper for LSP, PTX, CUDA, and Rust sites. Converts docs to markdown skills. Use when scraping docs, converting docs to skills, or composing layered skills.
 argument-hint: |-
-  [auto|lsp|ptx|runtime|driver|rust|site|skills <target>] [--output-dir <path>] [--force] [--base-url <url>] [--staging <path>] [--run <slug>]
+  [auto|lsp|ptx|runtime|driver|rust|site|skills|book|sanitize] [--output-dir <path>] [--force] [--base-url <url>] [--staging <path>] [--run <slug>]
   to-skill: <doc-dir|url> [--name <skill>] [--supplementary <paths-or-urls>] [--output-dir <path>]
 metadata:
   depends-on: [ai-engineering-expert]
@@ -27,6 +27,7 @@ Core = script + converter. Per-source cleanup lives in `references/*` loaded on 
 | `docs.nvidia.com/cuda/cuda-driver`                                        | `driver`  | CUDA Driver                                  |
 | `docs.rs` `crate name` `*.rs` (or explicit `rust https://github.com/...`) | `rust`    | cargo-docs-md (GitHub needs explicit `rust`) |
 | `skill.sh` URL / `owner/collection/skill`                                 | `skills`  | npx skills                                   |
+| `.pdf` `.epub` `.docx` `.md` `.txt` file paths                                | `book`    | Monolithic document ingestion              |
 | otherwise                                                                 | `site`    | llms.txt/sitemap fallback                    |
 
 Explicit source skips detection: `uv run $SKILL_DIR/scripts/scrape.py site --base-url https://example.com`.
@@ -58,6 +59,7 @@ uv run $SKILL_DIR/scripts/scrape.py auto https://example.com --output-dir .lsz/t
 | `driver`  | CUDA Driver  | multi-page API                |
 | `rust`    | Rust crates  | cargo-docs-md                 |
 | `site`    | Generic web  | llms.txt/sitemap, CLI globals |
+| `book`    | Monolithic docs | PDF/EPUB/DOCX→MD, deterministic cleanup |
 | `skills`  | skill.sh     | npx fetch + stage             |
 
 Details per scraper → `references/*.md`.
@@ -102,6 +104,8 @@ All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser
 - `lsp`/`ptx`/`cuda` — single/multi-page HTML via `_rate_limited_get()` + cached `.cache/<name>/` (e.g. `.cache/lsp/spec.html`).
 - `rust` — `cargo-docs-md` pipeline: clone → `cargo +nightly doc` (JSON) → `cargo docs-md --dir` → flatten `module/index.md→module.md` → rewrite links → verify.
 - `skills` — `npx -y skills add <repo> --list` + `npx add <repo> --skill` via `skills` CLI, staged to `.lsz/tmp/skill-compose/<run>/stage`.
+- `book` — monolithic file ingestion: extraction cascade `docling → pdftotext → pypdf` (PDF), zipfile+BS4 (EPUB), zipfile+XML (DOCX). Deterministic `clean_pdftotext()` strips running headers/footers (page-repetition >50%), edge page numbers (Arabic+Roman), joins hyphen-wraps. Sliced into heading-anchored chunks (`--max-tokens`). Output routed through `sanitize.py` (zero-width/bidi/Trojan Source + prompt injection scan).
+- `sanitize` — CLI `sanitize.py <file> [--check]` strips invisible/zero-width/bidi codepoints (34 total) and scans 4 injection patterns; emits `{clean, removed, injections}` report.
 
 ## Metrics
 
@@ -110,7 +114,7 @@ All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser
 - **CUDA metrics**: `_create_index` + cleanup reports `files: total_original→total_new bytes (reduction%)`, output dir size.
 - **Rust metrics**: post-run `Generated N markdown files`, `verify_links` broken-link count, `flattened N files`.
 - **Skill quality metrics**: `references/quality-metrics.md` — 6 criteria (Trigger Coverage 20%, Pattern Usefulness 20%, Beginner Friendliness 15%, Documentation Completeness 15%, Navigation Clarity 15%, Graceful Degradation 15%) scored 0-1, compiled by `scripts/compile.py validate-skill/validate-triggers`.
-
+- **Sanitization & STE-100** (deterministic, no AI): `compile.py` runs `lint_injections()` + STE-100 checks — `lint_banned_words()` (fluff: comprehensive/robust/properly/various/should work), `lint_sentence_lengths()` (max 20 words, code blocks stripped), on SKILL.md body and every reference file. `sanitize.py` strips threat codepoints before compilation.
 ## References
 
 - `references/lsp-patterns.md` — emoji anchor cleanup
@@ -120,7 +124,7 @@ All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser
 - `references/cleanup-patterns.md` + `section-extraction.md` — generic cleanup/splitting
 - `references/cli-scrape-standards.md` — CLI globals extraction
 - `references/skillsh-compose.md` — skill.sh compose wiring
-- `references/module-detection.md` `trigger-extraction.md` `pattern-extraction.md` `extraction-rules.md` `skill-template.md` `quality-metrics.md` `compilation-contract.md` — to-skill pipeline (load only during `to-skill`)
+- `references/module-detection.md` `trigger-extraction.md` `pattern-extraction.md` `extraction-rules.md` `skill-template.md` `quality-metrics.md` `compilation-contract.md` — to-skill pipeline (load only during `to-skill`; extraction-rules and compilation-contract now include ASD-STE100 guidelines)
 
 ## Docs-to-Skill Pipeline
 

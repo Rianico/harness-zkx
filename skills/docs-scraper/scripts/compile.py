@@ -42,6 +42,72 @@ class _CurationResult(TypedDict):
     issues: list[str]
 
 
+# ── ASD-STE100 deterministic checks ────────────────────────────────────────────
+
+# STE-100 Rule 1.3: use only approved words. These fluff terms have no
+# deterministic meaning and are banned in procedural/instructional prose.
+STE100_BANNED_WORDS: dict[str, str] = {
+    "comprehensive": "use a specific scope instead",
+    "robust": "use a concrete guarantee instead",
+    "properly": "use the exact condition instead",
+    "various": "list items explicitly instead",
+    "should work": "state the deterministic behavior instead",
+}
+
+# STE-100 Rule 6.5: keep procedural sentences to 20 words or fewer.
+STE100_MAX_SENTENCE_WORDS = 20
+
+
+_STRIP_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
+
+
+def _strip_code_blocks(text: str) -> str:
+    """Blank out fenced code blocks so code lines are not linted as prose."""
+    return _STRIP_CODE_RE.sub(" ", text)
+
+
+def split_sentences(text: str) -> list[str]:
+    """Split prose into sentences on `.`, `!`, `?` terminators.
+
+    Code blocks are blanked first so they are never treated as sentences.
+    """
+    clean = _strip_code_blocks(text)
+    parts = re.split(r"(?<=[.!?])\s+", clean)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def lint_sentence_lengths(text: str, max_words: int = STE100_MAX_SENTENCE_WORDS) -> list[str]:
+    """Return issues for sentences exceeding ``max_words`` words."""
+    issues: list[str] = []
+    for sentence in split_sentences(text):
+        words = len(sentence.split())
+        if words > max_words:
+            preview = sentence[:80] + ("..." if len(sentence) > 80 else "")
+            issues.append(f"Sentence has {words} words (max {max_words}): {preview}")
+    return issues
+
+
+def lint_banned_words(text: str) -> list[str]:
+    """Return issues for STE-100 banned fluff terms."""
+    issues: list[str] = []
+    for term, reason in STE100_BANNED_WORDS.items():
+        escaped = re.escape(term).replace(r"\ ", r"\s+")
+        pattern = re.compile(rf"\b{escaped}\b", re.IGNORECASE)
+        for match in pattern.finditer(text):
+            issues.append(f"Banned STE-100 term '{match.group(0)}': {reason}")
+    return issues
+
+
+def lint_injections(text: str) -> list[str]:
+    """Scan for prompt-injection patterns using the shared sanitize module."""
+    try:
+        from sanitize import scan_text_for_injections
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from sanitize import scan_text_for_injections
+    return [f"Prompt injection pattern: '{f}'" for f in scan_text_for_injections(text)]
+
+
 console = Console()
 
 
@@ -224,6 +290,24 @@ def validate_skill_md(skill_file: Path) -> _ValidationResult:
         if not link_path.exists():
             result["warnings"].append(f"Broken link: {link}")
 
+    # STE-100 and injection checks on the body (frontmatter excluded).
+    body = content[frontmatter_end + 3 :]
+    banned = lint_banned_words(body)
+    injections = lint_injections(body)
+    long_sentences = lint_sentence_lengths(body)
+
+    for issue in banned:
+        result["issues"].append(issue)
+    for issue in injections:
+        result["issues"].append(issue)
+    for warning in long_sentences:
+        result["warnings"].append(warning)
+
+    result["stats"]["ste100_banned"] = len(banned)
+    result["stats"]["injections"] = len(injections)
+    result["stats"]["long_sentences"] = len(long_sentences)
+    if banned or injections:
+        result["valid"] = False
     result["stats"]["frontmatter"] = frontmatter
 
     return result
@@ -324,6 +408,13 @@ def validate_skill_directory(skill_dir: Path) -> _ValidationResult:
                 result["warnings"].append(f"Reference file missing Source: {ref_file.name}")
             if not has_brief:
                 result["warnings"].append(f"Reference file missing Brief: {ref_file.name}")
+
+            # Scan reference files for prompt injection (untrusted docs).
+            ref_injections = lint_injections(content)
+            for finding in ref_injections:
+                result["issues"].append(f"{ref_file.name}: {finding}")
+            if ref_injections:
+                result["valid"] = False
     else:
         result["warnings"].append("No references/ directory found")
 

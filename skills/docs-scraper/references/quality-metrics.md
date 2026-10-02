@@ -8,8 +8,18 @@ Criteria for evaluating generated skill quality.
 overall_score = weighted_average(criterion_scores)
 ```
 
-## Criteria
+## Deterministic Gates (Non-Scored)
 
+These are binary pass/fail checks in `scripts/compile.py validate-skill` — NOT part of the 0-1 weighted average. Any failure blocks compilation regardless of score.
+
+| Gate | Rule | Enforcement |
+|------|------|-------------|
+| Sanitization | No zero-width/bidi/invisible control codepoints | `sanitize.py` strips before compile; presence = Error |
+| Prompt injection | No known injection patterns (4 compiled regexes) | `lint_injections()` on SKILL.md body + reference files |
+| STE-100 sentence length | Max 20 words per sentence (code blocks excluded) | `lint_sentence_lengths()` |
+| STE-100 banned words | No fluff: comprehensive, robust, properly, various, should work | `lint_banned_words()` (case-insensitive) |
+
+## Criteria
 ### 1. Trigger Coverage (20%)
 
 **Check:** Do triggers cover all major API surfaces?

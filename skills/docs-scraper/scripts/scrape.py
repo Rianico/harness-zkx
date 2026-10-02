@@ -44,7 +44,15 @@ from pathlib import Path
 from typing import Literal, TypedDict
 
 # Import scrapers
-from scrapers import APIScraper, LSPScraper, PTXScraper, RustScraper, SiteScraper, SkillsScraper
+from scrapers import (
+    APIScraper,
+    BookScraper,
+    LSPScraper,
+    PTXScraper,
+    RustScraper,
+    SiteScraper,
+    SkillsScraper,
+)
 
 # Registry of available scrapers. Each entry is a TypedDict discriminated on "kind", so
 # consumers narrow the union by kind before calling the scraper with its own constructor
@@ -90,8 +98,18 @@ _SkillsConfig = TypedDict(
         "default_output": str,
     },
 )
+_BookConfig = TypedDict(
+    "_BookConfig",
+    {
+        "class": type[BookScraper],
+        "kind": Literal["book"],
+        "default_output": str,
+    },
+)
 
-ScraperConfig = _StandardConfig | _ApiConfig | _RustConfig | _SiteConfig | _SkillsConfig
+ScraperConfig = (
+    _StandardConfig | _ApiConfig | _RustConfig | _SiteConfig | _SkillsConfig | _BookConfig
+)
 
 SCRAPERS: dict[str, ScraperConfig] = {
     "lsp": {
@@ -131,6 +149,11 @@ SCRAPERS: dict[str, ScraperConfig] = {
         "kind": "skills",
         "default_output": ".lsz/tmp/skill-compose",
     },
+    "book": {
+        "class": BookScraper,
+        "kind": "book",
+        "default_output": "book-output",
+    },
 }
 
 
@@ -153,6 +176,8 @@ def _detect_auto_type(targets: list[str]) -> str:
         return "runtime"
     if "cuda-driver" in joined:
         return "driver"
+    if any(tok.lower().endswith((".pdf", ".epub", ".docx", ".md", ".txt")) for tok in targets):
+        return "book"
     for tok in targets:
         if tok.startswith("--"):
             continue
@@ -319,6 +344,33 @@ For detailed help on a specific scraper:
                 action="store_true",
                 help="Clear cache and re-fetch from network",
             )
+        elif config["kind"] == "book":
+            sub = subparsers.add_parser(
+                name,
+                help="Ingest monolithic documents (PDF, EPUB, DOCX, MD, TXT)",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                description=config["class"].description,
+            )
+            _ = sub.add_argument(
+                "path",
+                help="Path to the document file",
+            )
+            _ = sub.add_argument(
+                "--output-dir",
+                type=Path,
+                help=f"Output directory (default: {config['default_output']})",
+            )
+            _ = sub.add_argument(
+                "--force",
+                action="store_true",
+                help="Re-extract and overwrite existing output",
+            )
+            _ = sub.add_argument(
+                "--max-tokens",
+                type=int,
+                default=50_000,
+                help="Max tokens per sliced chunk (default: 50000)",
+            )
         else:
             # Standard web scrapers
             sub = subparsers.add_parser(
@@ -406,6 +458,13 @@ def main() -> None:
             api_type=config["api_type"],
             output_dir=output_dir,
             force=args.force,
+        )
+    elif config["kind"] == "book":
+        scraper = config["class"](
+            path=args.path,
+            output_dir=output_dir,
+            force=args.force,
+            max_tokens=getattr(args, "max_tokens", 50_000),
         )
     else:
         scraper = config["class"](output_dir=output_dir, force=args.force)
