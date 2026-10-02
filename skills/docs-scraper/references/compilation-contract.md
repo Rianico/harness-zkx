@@ -75,7 +75,12 @@ uv run scripts/compile.py validate-skill .lsz/{topic}/draft/skills/{name}/
   "warnings": []
 }
 ```
-
+  "stats": {
+    "long_sentences": 0,
+    "banned_words": 0,
+    "injections": 0,
+    "sanitized": 0
+  },
 **Deterministic Checks:**
 
 | Check | Error Level | Description |
@@ -93,7 +98,10 @@ uv run scripts/compile.py validate-skill .lsz/{topic}/draft/skills/{name}/
 | Link existence | Warning | Internal links exist |
 | Trigger duplicates | Warning | No duplicates across modules |
 | Trigger format | Error | No regex/special chars |
-
+| Sentence length (STE-100) | Error | Max 20 words per sentence (code blocks excluded) |
+| Banned words (STE-100) | Error | No fluff: comprehensive, robust, properly, various, should work |
+| Prompt injection | Error | No known injection patterns in body or reference files |
+| Sanitized codepoints | Error | No zero-width/bidi/invisible control codepoints |
 ## Stage 3: LLM Evaluator
 
 **Input:**

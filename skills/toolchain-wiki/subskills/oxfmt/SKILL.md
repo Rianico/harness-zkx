@@ -61,8 +61,7 @@ For freshness, re-scrape via `uv run $SKILL_DIR/../../../docs-scraper/scripts/sc
 
 ## When to Use Raw
 
-Read `references/oxc-raw/` when curated lacks flag/option, you need full API surface, or curated conflicts with observation — raw is authoritative.
-
+Read `references/oxc-raw/` when curated lacks a flag or conflicts with observation — raw is authoritative.
 ## Path Convention
 
 - **Prose:** `$SKILL_DIR/references/...` — cwd unknown

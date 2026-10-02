@@ -1,6 +1,13 @@
 """Documentation scraper plugins for various technical documentation sources."""
 
 from .base import DocumentationScraper
+from .book import (
+    BookScraper,
+    clean_pdftotext,
+    detect_format,
+    extract_text,
+    slice_document_by_headings,
+)
 from .cuda_api import APIScraper
 from .lsp import LSPScraper
 from .ptx import PTXScraper
@@ -13,6 +20,7 @@ __all__ = [
     "APIScraper",
     "PTXScraper",
     "LSPScraper",
+    "BookScraper",
     "RustScraper",
     "SiteScraper",
     "SkillsScraper",
@@ -20,4 +28,8 @@ __all__ = [
     "parse_llms_txt",
     "parse_sitemap_xml",
     "parse_skillsh_input",
+    "clean_pdftotext",
+    "detect_format",
+    "extract_text",
+    "slice_document_by_headings",
 ]

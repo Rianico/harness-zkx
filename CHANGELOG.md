@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **docs-scraper:** enhance with PDF/book ingestion, sanitization, and ASD-STE100 rules (#181)
 * **harness-audit:** implement audit-skills workload for discovery audit and trigger eval capture (#171)
 * **ai-engineering:** add writing-for-humans subskill for human-facing proposals, RFCs, and issues (#170)
 * **gh-router:** absorb pr-conflict with rich commit intent and reorganize delivery pipeline (#163)
@@ -190,6 +191,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 * **protocol:** extract subagent response format to common rule and ai-engineering spine (#153)
 * **ci:** type the changelog gate's two dynamic seams (#100)
+* **worktrunk:** adopt ASD-STE100 style and add cheatsheet (#181)
+* **oxfmt:** add metadata headers and align with ASD-STE100 (#181)
+* **oxlint:** add metadata headers and align with ASD-STE100 (#181)
+* **jinja:** tighten prose to ASD-STE100 guidelines (#181)
 
 ### Miscellaneous Chores
 

@@ -77,7 +77,7 @@ Group extracted atomic notes into themes first, then write summaries based on th
 
 ### One-Idea-Per-Paragraph
 
-Each paragraph covers exactly one point. Keep sentences under 25 words.
+Each paragraph covers exactly one point. Keep sentences under 20 words (STE-100 Rule 6.5).
 
 **Bad:**
 
@@ -135,6 +135,41 @@ See [switch command](worktrunk-guide-raw/switch.md) for full flag reference.
 For high-stakes content (security parameters, destructive operations, breaking changes), cross-reference against the raw docs before including in curated references.
 
 ---
+## Rule Set 4: ASD-STE100 Style Guidelines
+
+Generated reference files MUST follow ASD-STE100 Simplified Technical English. These are deterministic checks in `scripts/compile.py validate-skill` (no AI judgment — mechanical pass/fail).
+
+### Approved Vocabulary
+
+Avoid fluff words that add no technical meaning. Replace with the approved form:
+
+| Banned         | Replace with            |
+| -------------- | ----------------------- |
+| comprehensive  | complete                |
+| robust         | stable / reliable       |
+| properly       | correctly               |
+| various        | specify the exact count |
+| should work    | works (or "must work") |
+
+### Sentence Length (Rule 6.5)
+
+Max 20 words per sentence. Code blocks, inline code spans, and frontmatter are excluded before splitting. Long sentences must be split or rewritten.
+
+### One Instruction Per Sentence
+
+Write exactly one instruction per sentence. Use imperative mood and active voice. If a sentence mixes two actions, split it.
+
+**Bad:**
+
+> Configure the tool and then run the tests.
+
+**Good:**
+
+> Configure the tool. Run the tests.
+
+### Judgment-Aid Schemas
+
+Deterministic checks in `compile.py` report per-file counts (`long_sentences`, `banned_words`, `injections`). Any non-zero count fails validation. No qualitative scoring — a file is either compliant or it is not.
 
 ## Template Schemas
 

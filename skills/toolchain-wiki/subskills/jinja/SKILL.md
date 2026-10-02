@@ -12,7 +12,7 @@ argument-hint: |-
 
 > **3.1.6** (docs 3.1.x) — <https://jinja.palletsprojects.com/en/stable/> — package `jinja2`, Python only
 
-Fast, expressive, extensible Python templating engine. A template is text plus `{{ expressions }}`, `{% statements %}` and `{# comments #}`; the application owns all configuration through one `Environment`.
+Fast, expressive, extensible Python templating engine. A template mixes text with `{{ }}`, `{% %}`, and `{# #}` markers. One `Environment` owns all configuration.
 
 Templates compile to Python and are cached by the loader (400 entries, `auto_reload` on). Undefined names render as empty string by default and raise on any other operation.
 
@@ -41,7 +41,7 @@ print(env.get_template("page.html").render(users=users))
 {% endblock %}
 ```
 
-**Done when:** `render()` returns the expected `str` and `env.get_template()` resolved the file from the loader directory — if either fails, the fault is in `Environment` configuration, not the template.
+**Done when:** `render()` returns the expected `str`. If the template fails to resolve, check `Environment` configuration.
 
 ## Authoring Rules
 
@@ -155,12 +155,12 @@ Writing your own extension (Extension, Parser, AST APIs): [extensions](reference
 
 ### Sandboxing
 
-`SandboxedEnvironment` swaps the compiler for a safe runtime and raises `SecurityError` on insecure attribute access; `SandboxedEnvironment(SecurityPolicy, …)` and `intercepted_binops` / `call_binop()` tune the surface.
+`SandboxedEnvironment` swaps the compiler for a safe runtime. It raises `SecurityError` on insecure attribute access. Tune the surface with `SecurityPolicy`, `intercepted_binops`, and `call_binop()`.
 
 > [!WARNING]
-> The sandbox is not a security sandbox for untrusted _template authors_ by default: `is_safe_callable`, `is_safe_attribute` and the operator tables must be audited for your threat model. Details: [sandbox](references/sandbox.md).
+> The sandbox is not a security sandbox for untrusted template authors by default. Audit `is_safe_callable`, `is_safe_attribute`, and operator tables for your threat model. Details: [sandbox](references/sandbox.md).
 
-`NativeEnvironment` renders to native Python types (`int`, `list`, arbitrary objects) instead of strings — for templates that define values, not text.
+`NativeEnvironment` renders native Python types (`int`, `list`) instead of strings. Use it for templates that define values, not text.
 
 ## Reference Map
 
@@ -179,9 +179,9 @@ Writing your own extension (Extension, Parser, AST APIs): [extensions](reference
 
 Raw upstream docs (authoritative for flag-level and edge-case detail): `$SKILL_DIR/references/jinja-raw/` — `001-stable`, `002-intro`, `003-api`, `004-sandbox`, `005-nativetypes`, `006-templates`, `007-extensions`, `008-integration`, `009-switching`, `010-tricks`, `011-faq`, `013-changes`.
 
-- Prose pointer: `$SKILL_DIR/references/jinja-raw/006-templates.md` (cwd unknown)
-- Markdown link: from this file `[for](references/jinja-raw/006-templates.md)`; from `references/<module>.md` the same target is the bare path `jinja-raw/006-templates.md`
-- If a curated file conflicts with observation, raw wins
+- Prose pointer: `$SKILL_DIR/references/jinja-raw/006-templates.md` (cwd unknown).
+- Markdown link: from this file `[for](references/jinja-raw/006-templates.md)`; from `references/<module>.md` the same target is the bare path `jinja-raw/006-templates.md`.
+- If a curated file conflicts with observation, raw wins.
 
 ## When Answering Questions
 
@@ -190,13 +190,14 @@ Raw upstream docs (authoritative for flag-level and edge-case detail): `$SKILL_D
 3. For exact signatures, defaults and version behaviour, read `$SKILL_DIR/references/jinja-raw/<file>.md` (and [migration](references/migration.md) for "why did this change").
 4. Confirm version-sensitive answers against the installed package: `uv run python -c "import jinja2; print(jinja2.__version__)"`.
 
-**Done when:** every cited filter, test, option or tag is traced to a curated reference or raw doc — not to memory.
+**Done when:** trace every cited filter, test, option, or tag to a reference or raw doc — never to memory.
 
 ## Triggers
 
-- `jinja`, `jinja2`, `Jinja template`, `Environment`, `FileSystemLoader`, `PackageLoader`, `select_autoescape`
-- `{{ }}`, `{% for %}`, `{% if %}`, `{% block %}`, `{% extends %}`, `super()`, `{% include %}`, `{% import %}`, `{% macro %}`
-- `filter` (`map`, `select`, `groupby`, `default`), `test` (`is defined`, `divisibleby`), `tojson`, `|safe`
-- `whitespace control`, `trim_blocks`, `lstrip_blocks`, `keep_trailing_newline`, `Undefined` / `StrictUndefined`
-- `SandboxedEnvironment`, `SecurityError`, `NativeEnvironment`, `jinja2.ext.i18n`, `{% trans %}`, custom extension
-- Flask `render_template` internals, Django→Jinja migration, Mako→Jinja migration, `TemplateNotFound`, `TemplateSyntaxError`
+- `jinja`, `jinja2`, `Jinja template`, `Environment`, `FileSystemLoader`, `PackageLoader`, `select_autoescape`.
+- `{{ }}`, `{% for %}`, `{% if %}`, `super()`, `{% macro %}`.
+- `{% block %}`, `{% extends %}`, `{% include %}`, `{% import %}`.
+- `filter` (`map`, `select`, `groupby`, `default`), `test` (`is defined`, `divisibleby`), `tojson`, `|safe`.
+- `whitespace control`, `trim_blocks`, `lstrip_blocks`, `keep_trailing_newline`, `Undefined` / `StrictUndefined`.
+- `SandboxedEnvironment`, `SecurityError`, `NativeEnvironment`, `jinja2.ext.i18n`, `{% trans %}`, custom extension.
+- Flask `render_template` internals, Django→Jinja migration, Mako→Jinja migration, `TemplateNotFound`, `TemplateSyntaxError`.
