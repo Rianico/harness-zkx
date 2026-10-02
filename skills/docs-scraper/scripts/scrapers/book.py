@@ -25,6 +25,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
 from pathlib import Path
+from typing import override
 
 from .base import DocumentationScraper
 
@@ -361,6 +362,7 @@ class BookScraper(DocumentationScraper):
             text = clean_pdftotext(text)
         return text, method
 
+    @override
     def run(self) -> None:
         if not self.path.exists():
             raise FileNotFoundError(f"Document not found: {self.path}")
@@ -380,14 +382,14 @@ class BookScraper(DocumentationScraper):
 
         # Write full document + sliced chunks.
         full_path = self.output_dir / f"{self.path.stem}.md"
-        full_path.write_text(cleaned, encoding="utf-8")
+        _ = full_path.write_text(cleaned, encoding="utf-8")
 
         chunks = slice_document_by_headings(cleaned, max_tokens=self.max_tokens)
         if len(chunks) > 1:
             parts_dir = self.output_dir / "parts"
             parts_dir.mkdir(exist_ok=True)
             for idx, chunk in enumerate(chunks, start=1):
-                (parts_dir / f"part-{idx:03d}.md").write_text(chunk, encoding="utf-8")
+                _ = (parts_dir / f"part-{idx:03d}.md").write_text(chunk, encoding="utf-8")
 
         print(f"Extracted via: {method}")
         print(f"Output: {full_path}")

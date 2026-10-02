@@ -169,7 +169,7 @@ class TestExtractText:
         f = tmp_path / "doc.xyz"
         f.write_text("data", encoding="utf-8")
         with pytest.raises(ValueError, match="Unsupported format"):
-            extract_text(f)
+            _ = extract_text(f)
 
 
 class TestBookScraper:

@@ -136,13 +136,13 @@ def sanitize(text: str, check_only: bool = False) -> tuple[str, dict[str, object
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sanitize untrusted documents for LLM consumption")
-    parser.add_argument("file", type=Path, help="File to sanitize")
-    parser.add_argument(
+    _ = parser.add_argument("file", type=Path, help="File to sanitize")
+    _ = parser.add_argument(
         "--check",
         action="store_true",
         help="Scan only, do not modify file",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--output",
         type=Path,
         help="Output file (default: overwrite input or stdout for --check)",
