@@ -246,7 +246,7 @@ Turns URLs in text into clickable links [006-templates.md#urlize](jinja-raw/006-
 | `target` / `rel` | Add the `target` / `rel` attribute |
 | `extra_schemes` | Recognize additional schemes |
 
-`extra_schemes` defaults to `env.policies["urlize.extra_schemes"]`, which defaults to no extra schemes. Links without a scheme get `https://` since 3.0. A Markdown library is usually a better choice for comprehensive formatting.
+`extra_schemes` defaults to `env.policies["urlize.extra_schemes"]`, which defaults to no extra schemes. Links without a scheme get `https://` since 3.0. A Markdown library is usually a better choice for full formatting.
 ### `urlencode(value)`, `xmlattr(d, autospace=True)`
 `urlencode` quotes data for a URL path or query with UTF-8 [006-templates.md#urlencode](jinja-raw/006-templates.md). A string goes to `urllib.parse.quote()`, a dict or iterable of `(key, value)` pairs to `urllib.parse.urlencode()`. When given a string, `/` is not quoted; use `|replace("/", "%2F")` for quoted slashes.
 
