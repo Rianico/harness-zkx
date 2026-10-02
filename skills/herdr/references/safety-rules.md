@@ -17,7 +17,7 @@ Depth for `$SKILL_DIR/SKILL.md`. Read before any consent-gated or irreversible a
 
 ## Worktrees
 
-Where a repository declares a worktree tool (`wt.toml` / `.config/wt.toml`), create worktrees through it rather than `herdr worktree` — repo hooks, port allocation, and the pre-merge gate run only there (see [branch-worktree-pr](../../branch-worktree-pr/SKILL.md)).
+Create worktrees through the repository's worktree tool rather than `herdr worktree` — repo hooks, port allocation, and the pre-merge gate run only there. A global Worktrunk install counts: detect `wt` on `PATH` (`which wt`) just as you would a repo-local `wt.toml` / `.config/wt.toml`, and prefer `herdr_worktree.py` for lane allocation (see [branch-worktree-pr](../../branch-worktree-pr/SKILL.md)).
 
 ## Consent-gated or irreversible actions
 

@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **herdr:** pre-provision isolated worktrees for lane coordination (#184)
 * **ai-engineering:** unify ASD-STE100 linting helper across harness and scrapers (#183)
 * **docs-scraper:** enhance with PDF/book ingestion, sanitization, and ASD-STE100 rules (#181)
 * **harness-audit:** implement audit-skills workload for discovery audit and trigger eval capture (#171)

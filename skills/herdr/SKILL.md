@@ -178,7 +178,7 @@ For multi-tier lanes where an in-lane Task Manager coordinates one or more Imple
 
 Before starting any agent or orchestrating tasks, confirm with the user which role should use which coding agent kind, provider, and model (e.g. `pi` with Anthropic `claude-3-7-sonnet`, `qoderclicn` with specific model). Never assume or pick defaults. See `$SKILL_DIR/references/agent-bootstrap.md` for the confirmation template, bootstrap command matrix, and provider/model flags.
 
-Default to a sibling pane in the current tab and the current working directory. Do not create a workspace, tab, worktree, or different cwd unless the user explicitly requests that topology or location.
+Default to a sibling pane in the current tab and the current working directory. Do not create a workspace, tab, worktree, or different cwd unless the user explicitly requests that topology or location — except for multi-agent lane coordination (or whenever a worktree tool such as `wt` is present), where pre-allocating one isolated worktree per task group with `herdr_worktree.py` is required and overrides this single-agent `$PWD` default (see [Hierarchical Lane Coordination](references/lane-coordination.md)).
 
 Split with `herdr-pane`, which runs the env check, resolves the caller, picks the direction from the caller's aspect ratio (`wide -> right`, `tall -> down`), and preserves the caller's `$PWD` and focus — one command, no `pane layout` round trip:
 
@@ -326,9 +326,9 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 ## Local helpers (not upstream)
 
 > [!IMPORTANT] Method Constraint
-> Always execute these 9 harness scripts in `$SKILL_DIR/scripts/` instead of bare `herdr` CLI commands. Bare CLI commands bypass argument quoting, caller context injection, target safety checks, and delivery verification.
+> Always execute these 10 harness scripts in `$SKILL_DIR/scripts/` instead of bare `herdr` CLI commands. Bare CLI commands bypass argument quoting, caller context injection, target safety checks, and delivery verification.
 
-All 9 scripts in `$SKILL_DIR/scripts/` are authoritative and documented here or in the orientation section above, with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+All 10 scripts in `$SKILL_DIR/scripts/` are authoritative and documented here or in the orientation section above, with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) and `herdr_worktree.py` (a worktree allocator that needs only `wt`/`git`) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
@@ -362,6 +362,19 @@ uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal --dry-run  # print the herd
 ```
 
 Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`.
+
+### `herdr-worktree` — one isolated worktree per lane
+
+Allocates the worktree a lane's panes run in, so Task Manager and Implementer start inside an isolated tree instead of improvising `.claude/worktrees/` directories in the repository root (which trips Worktrunk's `branch_worktree_mismatch` guard). Prefers Worktrunk (`wt`) when it is on `PATH` and falls back to `git worktree` under a predictable sibling path (`<repo>.<sanitized-branch>`):
+
+```bash
+WORKTREE_PATH=$(uv run "$SKILL_DIR/scripts/herdr_worktree.py" allocate feat/184-worktree --base main)
+uv run "$SKILL_DIR/scripts/herdr_worktree.py" allocate feat/184-worktree --json
+uv run "$SKILL_DIR/scripts/herdr_worktree.py" resolve feat/184-worktree
+uv run "$SKILL_DIR/scripts/herdr_worktree.py" list --json
+```
+
+`allocate` prints only the absolute path, so `CWD=$(...)` substitution works; `--json` adds the engine and status. `resolve` and `list` read existing state. Unlike its siblings this helper needs no `HERDR_ENV=1` session — it only shells out to `wt`/`git`.
 
 ### `herdr-dispatch` — manager-side task dispatch
 
@@ -440,4 +453,4 @@ uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role user
 uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role all --json
 ```
 
-Tests for all nine: `tests/herdr/`.
+Tests for all ten: `tests/herdr/`.
