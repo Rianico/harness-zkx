@@ -58,7 +58,7 @@ Technical names stay verbatim. Do not paraphrase an identifier to satisfy a word
 
 ## Words that add nothing
 
-Cut unless they carry weight: comprehensive, robust, cleanly, properly, simply, just, basically, essentially, in order to, it should be noted that, a number of.
+Cut unless they carry weight: comprehensive, robust, properly, various, should work, cleanly, basically, essentially, in order to, it should be noted that, a number of.
 
 "Simply" and "just" are worth singling out: they tell the reader the following material is easy, which is redundant, occasionally wrong, and reads as dismissive. Same family as [grading your own work](../SKILL.md#report-what-ran).
 
