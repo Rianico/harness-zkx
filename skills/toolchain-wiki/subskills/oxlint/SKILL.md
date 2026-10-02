@@ -34,10 +34,10 @@ Top keys: `rules`, `categories` (`correctness` default), `plugins` (`--import-pl
 
 ## Writing Linter Rules
 
-Read `$SKILL_DIR/references/oxc-raw/003-linter.md` for intent, then:
+Read `$SKILL_DIR/references/oxc-raw/003-linter.md` for intent first.
 
 - Categories left-to-right: `-D correctness -A no-debugger`, `-A all -D no-debugger` (`-A/--allow`, `-W/--warn`, `-D/--deny`).
-- Plugins built-in (no dep tree) — enable via flags or `plugins` in config: `--import-plugin --react-plugin --jest-plugin --vitest-plugin --jsx-a11y-plugin --promise-plugin` etc.; disable with `--disable-unicorn-plugin`. Ruleset 500+; list via `oxlint --rules`.
+- Plugins built-in (no dep tree). Enable via flags (`--import-plugin`, `--react-plugin`, etc.) or `plugins` in config. Disable with `--disable-unicorn-plugin`. Ruleset 500+. List via `oxlint --rules`.
 - JS plugins (**alpha**) for ESLint compat — `jsPlugins` in config; see `$SKILL_DIR/references/oxc-raw/004-config.md` + <https://oxc.rs/docs/guide/usage/linter/js-plugins>.
 - **Custom rules:** canonical doc is <https://oxc.rs/docs/contribute/linter/adding-rules> — scrape to `.lsz/tmp/oxc-rules` then curate to `$SKILL_DIR/references/linter-rules.md` if needed. Current snapshot lacks `adding-rules.md` — run `scrape.py site https://oxc.rs/docs/contribute/linter/adding-rules.md --output-dir .lsz/tmp/oxc-rules --force` before writing rules.
 - Type-aware: `oxlint --type-aware` / `--type-check` (tsgo, TS 7); `options: { typeAware: true }`.
@@ -69,7 +69,7 @@ For freshness, re-scrape via `uv run $SKILL_DIR/../../../docs-scraper/scripts/sc
 
 ## When to Use Raw
 
-Read `references/oxc-raw/` when curated lacks flag/option, you need full API surface, or curated conflicts with observation — raw is authoritative.
+Read `references/oxc-raw/` when curated lacks a flag or conflicts with observation — raw is authoritative.
 
 ## Path Convention
 
