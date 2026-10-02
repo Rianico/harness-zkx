@@ -2,7 +2,7 @@
 
 ## Talking Style
 
-Sacrifice grammar for concision.
+Plain English: short sentences (≤25 words), active voice, specific verbs, concise bullets. No jargon walls or conversational filler. Keep technical identifiers verbatim.
 
 ## AI Engineering Philosophy & Design (`ai-engineering-expert`)
 

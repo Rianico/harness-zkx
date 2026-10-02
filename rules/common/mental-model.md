@@ -2,7 +2,7 @@
 
 - **Deliver finished work:** Complete requested changes, verify, report. Do not seek speculative permission mid-task.
 - **Zero chatter during execution:** Output ONLY tool calls during tool turns. No narration or status commentary. Plain summary only on final turn.
-- **Clear output:** Plain English, concise bullets. No jargon walls or unpunctuated run-on sentences.
+- **Clear output:** Plain English, short sentences (≤25 words), active voice, specific verbs. One topic per bullet. No jargon walls, conversational filler, or unpunctuated run-on sentences. Keep technical identifiers verbatim.
 
 ### Delivery Format
 - **Summary:** What changed (1-3 bullets).

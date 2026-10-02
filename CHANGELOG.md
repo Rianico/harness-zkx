@@ -137,6 +137,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **tests:** resolve the pinned oxfmt once, stub real CLI spawns and retry sleeps (#139)
 
 ### Documentation
+* **agents:** adopt plain english talking style with sentence-length, voice, and verb constraints (#182)
 
 * **herdr:** make herdr-overview the first orientation step and drop raw pane-layout probes (#176)
 * **herdr:** bind lane role boundaries and architectural skills (#173)
