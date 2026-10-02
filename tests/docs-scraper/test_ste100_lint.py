@@ -48,6 +48,28 @@ class TestSplitSentences:
         sentences = split_sentences(text)
         assert len(sentences) == 2
 
+    def test_markdown_tables_stripped(self):
+        text = (
+            "Before table.\n\n"
+            "| Col A | Col B | Col C |\n"
+            "| :--- | :--- | :--- |\n"
+            "| val 1 | val 2 | val 3 |\n"
+            "| val 4 | val 5 | val 6 |\n\n"
+            "After table."
+        )
+        sentences = split_sentences(text)
+        assert sentences == ["Before table.", "After table."]
+
+    def test_inline_code_token_replacement(self):
+        text = "Run `some long command with several flags` now."
+        sentences = split_sentences(text)
+        assert sentences == ["Run code now."]
+
+    def test_bullet_list_items_not_glommed(self):
+        text = "- item one\n- item two\n- item three"
+        sentences = split_sentences(text)
+        assert sentences == ["- item one", "- item two", "- item three"]
+
 
 class TestLintSentenceLengths:
     """STE-100 Rule 6.5: max words per sentence."""
@@ -67,6 +89,35 @@ class TestLintSentenceLengths:
         issues = lint_sentence_lengths(text, max_words=20)
         # Only "Before." and "After." are prose sentences — both short.
         assert len(issues) == 0
+
+    def test_markdown_tables_not_runaway_sentences(self):
+        table_text = (
+            "| Col 1 | Col 2 | Col 3 | Col 4 | Col 5 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| a | b | c | d | e |\n"
+            "| f | g | h | i | j |\n"
+            "| k | l | m | n | o |\n"
+            "| p | q | r | s | t |\n"
+        )
+        issues = lint_sentence_lengths(table_text, max_words=20)
+        assert issues == []
+
+    def test_inline_code_not_inflating_word_count(self):
+        text = "Execute `uv run python script.py --param1 val1 --param2 val2 --param3 val3` now."
+        issues = lint_sentence_lengths(text, max_words=20)
+        assert issues == []
+
+    def test_bullet_list_items_not_glommed_length(self):
+        text = (
+            "- First short bullet item\n"
+            "- Second short bullet item\n"
+            "- Third short bullet item\n"
+            "- Fourth short bullet item\n"
+            "- Fifth short bullet item\n"
+        )
+        # Glommed together this would be 20+ words; individually each is 4 words.
+        issues = lint_sentence_lengths(text, max_words=10)
+        assert issues == []
 
     def test_custom_max_words(self):
         text = "A sentence with four words. A sentence with four words too."
@@ -106,6 +157,11 @@ class TestLintBannedWords:
             assert term, f"Empty term in banned words: {reason}"
             assert reason, f"Empty reason for term: {term}"
             assert " " in term or term.isalpha(), f"Multi-word term '{term}' with unexpected format"
+
+    def test_code_blocks_ignored(self):
+        """Banned words inside fenced code blocks do NOT trigger lint issues."""
+        text = "```\nThis is a comprehensive and robust guide.\n```\nNormal sentence."
+        assert lint_banned_words(text) == []
 
 
 class TestLintInjections:

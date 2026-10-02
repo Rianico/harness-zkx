@@ -9,7 +9,8 @@
   // (two skills both exporting `conftest`) and grows the warning budget.
   "executionEnvironments": [
     { "root": "skills/skill-comply", "extraPaths": ["skills/skill-comply"] },
-    { "root": "skills/docs-scraper/scripts", "extraPaths": ["skills/docs-scraper/scripts"] },
+    { "root": "skills/docs-scraper/scripts", "extraPaths": ["skills/docs-scraper/scripts", "skills/ai-engineering-expert/subskills/skill-authoring/scripts"] },
+    { "root": "skills/ai-engineering-expert/subskills/skill-authoring/scripts", "extraPaths": ["skills/ai-engineering-expert/subskills/skill-authoring/scripts"] },
     { "root": "skills/branch-worktree-pr/scripts", "extraPaths": ["skills/branch-worktree-pr/scripts"] },
     { "root": "skills/herdr/scripts", "extraPaths": ["skills/herdr/scripts"] },
     { "root": "skills/eval-gate/scripts", "extraPaths": ["skills/eval-gate/scripts"] },
@@ -22,7 +23,12 @@
     // test directory.
     {
       "root": "tests",
-      "extraPaths": ["tests/docs-scraper", "skills/docs-scraper/scripts", "skills/docs-scraper/scripts/scrapers"],
+      "extraPaths": [
+        "tests/docs-scraper",
+        "skills/docs-scraper/scripts",
+        "skills/docs-scraper/scripts/scrapers",
+        "skills/ai-engineering-expert/subskills/skill-authoring/scripts"
+      ],
       "reportMissingParameterType": false,
       "reportUnknownParameterType": false,
       "reportUnannotatedClassAttribute": false,

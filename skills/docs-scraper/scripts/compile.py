@@ -44,58 +44,40 @@ class _CurationResult(TypedDict):
 
 # ── ASD-STE100 deterministic checks ────────────────────────────────────────────
 
-# STE-100 Rule 1.3: use only approved words. These fluff terms have no
-# deterministic meaning and are banned in procedural/instructional prose.
-STE100_BANNED_WORDS: dict[str, str] = {
-    "comprehensive": "use a specific scope instead",
-    "robust": "use a concrete guarantee instead",
-    "properly": "use the exact condition instead",
-    "various": "list items explicitly instead",
-    "should work": "state the deterministic behavior instead",
-}
+try:
+    from ste100 import (
+        STE100_BANNED_WORDS,
+        STE100_MAX_SENTENCE_WORDS,
+        lint_banned_words,
+        lint_sentence_lengths,
+        split_sentences,
+    )
+except ImportError:
+    repo_root = Path(__file__).resolve().parents[3]
+    ste100_dir = str(
+        repo_root / "skills" / "ai-engineering-expert" / "subskills" / "skill-authoring" / "scripts"
+    )
+    if ste100_dir not in sys.path:
+        sys.path.insert(0, ste100_dir)
+    from ste100 import (
+        STE100_BANNED_WORDS,
+        STE100_MAX_SENTENCE_WORDS,
+        lint_banned_words,
+        lint_sentence_lengths,
+        split_sentences,
+    )
 
-# STE-100 Rule 6.5: keep procedural sentences to 20 words or fewer.
-STE100_MAX_SENTENCE_WORDS = 20
-
-
-_STRIP_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
-
-
-def _strip_code_blocks(text: str) -> str:
-    """Blank out fenced code blocks so code lines are not linted as prose."""
-    return _STRIP_CODE_RE.sub(" ", text)
-
-
-def split_sentences(text: str) -> list[str]:
-    """Split prose into sentences on `.`, `!`, `?` terminators.
-
-    Code blocks are blanked first so they are never treated as sentences.
-    """
-    clean = _strip_code_blocks(text)
-    parts = re.split(r"(?<=[.!?])\s+", clean)
-    return [part.strip() for part in parts if part.strip()]
-
-
-def lint_sentence_lengths(text: str, max_words: int = STE100_MAX_SENTENCE_WORDS) -> list[str]:
-    """Return issues for sentences exceeding ``max_words`` words."""
-    issues: list[str] = []
-    for sentence in split_sentences(text):
-        words = len(sentence.split())
-        if words > max_words:
-            preview = sentence[:80] + ("..." if len(sentence) > 80 else "")
-            issues.append(f"Sentence has {words} words (max {max_words}): {preview}")
-    return issues
-
-
-def lint_banned_words(text: str) -> list[str]:
-    """Return issues for STE-100 banned fluff terms."""
-    issues: list[str] = []
-    for term, reason in STE100_BANNED_WORDS.items():
-        escaped = re.escape(term).replace(r"\ ", r"\s+")
-        pattern = re.compile(rf"\b{escaped}\b", re.IGNORECASE)
-        for match in pattern.finditer(text):
-            issues.append(f"Banned STE-100 term '{match.group(0)}': {reason}")
-    return issues
+__all__ = [
+    "STE100_BANNED_WORDS",
+    "STE100_MAX_SENTENCE_WORDS",
+    "lint_banned_words",
+    "lint_injections",
+    "lint_sentence_lengths",
+    "split_sentences",
+    "validate_skill_md",
+    "validate_triggers",
+    "validate_yaml_file",
+]
 
 
 def lint_injections(text: str) -> list[str]:
