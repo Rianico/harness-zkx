@@ -38,8 +38,8 @@ To resolve all three anti-patterns and manage context pressure asymmetry, enforc
 1. **Tier 1: Lane-Level Coordination (Herdr Inter-Pane)**
    - **Topology**: Root Orchestrator ↔ Task Manager ↔ Implementers across dedicated Herdr panes.
    - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py`.
-   - **Scope**: Lane planning, worktree lifecycle, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
-   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator provisions topology but never dispatches worker tickets directly (#166).
+   - **Scope**: In-lane execution inside the lane's pre-provisioned `$WORKTREE_PATH`: lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
+   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator pre-provisions the lane worktree and topology but never dispatches worker tickets directly (#166). TM and Implementer run natively inside `$WORKTREE_PATH` from turn zero; neither creates ad-hoc worktrees or nested directories.
 
 2. **Tier 2: Role-Internal Subagent Delegation (Context Isolation)**
    - **Topology**: Host pane ↔ Ephemeral platform subagents (`Agent`, `invoke_subagent`, scratch tasks).
@@ -91,7 +91,7 @@ The Root Orchestrator owns the problem definition, global constraints, topology 
 
 - **Explicit Allow List**:
   - Confirm role-to-agent mapping (role, agent kind, provider, model) with user before lane provisioning (#159).
-  - Allocate panes, tabs, and worktrees for lane topology.
+  - Pre-allocate one isolated worktree per lane with `herdr_worktree.py allocate`, then allocate panes and tabs for lane topology and launch them inside it with `--cwd "$WORKTREE_PATH"`.
   - Boot TM and Implementers with verified bootstrap flags (or allocate panes and delegate boot verification to TM per #167).
   - Issue brief to TM specifying intent, goal, constraints, acceptance criteria, verification contract, and sizing budget.
   - Re-brief or escalate when TM reports `BLOCKED` or `REJECTED`.
@@ -126,7 +126,7 @@ The Task Manager owns in-lane triage, decomposition, scope boundaries, design ju
   - Exercise independent design judgment (data structures, algorithms, internal interfaces, refactoring depth).
   - Author tickets specifying target files, scope boundaries, constraints, and explicit test/evidence requirements.
   - Dispatch tickets to workers via `herdr_dispatch.py` and await `herdr_reply.py`.
-  - Run verification gates (tests, linter, typecheck) in TM pane against worker diffs.
+  - Run verification gates (tests, linter, typecheck) in the TM pane against worker diffs, executed natively inside the lane's `$WORKTREE_PATH`.
   - Spawn internal subagents for code review under `keel`, `coding-protocol`, and `programming-expert`.
   - Issue review verdicts (`PASS`, `REWORK`, `REJECT`) mapping findings to threatened invariants.
   - Dispatch rework tickets on gate failures or review findings with targeted diagnostics.

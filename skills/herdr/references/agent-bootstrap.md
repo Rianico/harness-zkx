@@ -98,12 +98,16 @@ Flags before `--` belong to Herdr (`herdr agent start <name> --kind <kind> --pan
 
 ## 4. Startup Checklist
 
-Follow this 5-step sequence when provisioning any coding agent in Herdr:
+Follow this 6-step sequence when provisioning any coding agent in Herdr:
 
-1. **User Confirmation**: Confirm role ↔ agent kind ↔ provider ↔ model mapping with user.
-2. **Pane Allocation**: Split pane with `--no-focus` and `--cwd "$PWD"` (or worktree path).
+0. **Worktree Pre-provisioning**: For multi-agent lane coordination, allocate one isolated worktree for the lane before any pane starts, so Task Manager and Implementer run inside it from turn zero.
    ```bash
-   herdr pane split --current --direction right --cwd "$PWD" --no-focus
+   WORKTREE_PATH=$(uv run "$SKILL_DIR/scripts/herdr_worktree.py" allocate <branch-name>)
+   ```
+1. **User Confirmation**: Confirm role ↔ agent kind ↔ provider ↔ model mapping with user.
+2. **Pane Allocation**: Split pane with `--no-focus` and `--cwd "$WORKTREE_PATH"` (the worktree pre-provisioned in Step 0).
+   ```bash
+   herdr pane split --current --direction right --cwd "$WORKTREE_PATH" --no-focus
    ```
 3. **Agent Start**: Launch agent with native arguments placed strictly after `--`.
    ```bash
