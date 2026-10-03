@@ -66,6 +66,7 @@ class Options:
 
     direction: str | None = None
     pane: str | None = None
+    label: str | None = None
     cwd: str | None = None
     ratio: float | None = None
     env: list[str] = field(default_factory=list)
@@ -90,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--pane", metavar="ID", help="split this pane instead of the calling pane"
     )
+    _ = parser.add_argument("-l", "--label", metavar="LABEL", help="visible label for the new pane")
     _ = parser.add_argument(
         "--cwd", metavar="DIR", help="working directory for the new pane (default: $PWD)"
     )
@@ -178,16 +180,32 @@ def build_split_argv(
     return argv
 
 
-def format_summary(new_pane: str, direction: str, caller: str, cwd: str, focus: bool) -> str:
-    return (
+def format_summary(
+    new_pane: str,
+    direction: str,
+    caller: str,
+    cwd: str,
+    focus: bool,
+    *,
+    label: str | None = None,
+) -> str:
+    summary = (
         f"new pane {new_pane}  direction={direction}  caller={caller}  "
         f"cwd={cwd}  focus={'new pane' if focus else 'caller'}"
     )
+    if label:
+        summary += f"  label={label}"
+    return summary
 
 
 def split_pane(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
+    if options.label is not None:
+        if not options.label.strip():
+            raise UsageError("--label must not be empty")
+        if "\n" in options.label or "\r" in options.label:
+            raise UsageError("--label cannot contain newlines")
     cwd = resolve_cwd(options.cwd, env)
     caller = options.pane or current_pane_id(herdr, env)
     direction = (
@@ -206,14 +224,26 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
     )
     if options.dry_run:
         print(shlex.join(argv))
+        if options.label:
+            rename_argv = [herdr, "pane", "rename", "<new_pane_id>", options.label]
+            print(shlex.join(rename_argv))
         return EXIT_OK
     raw = run_herdr_checked(argv, env)
+    new_pane = text_field(raw, "result", "pane", "pane_id")
+    if options.label:
+        rename_argv = [herdr, "pane", "rename", new_pane, options.label]
+        _ = run_herdr_checked(rename_argv, env)
     if options.json:
         print(raw, end="" if raw.endswith("\n") else "\n")
         return EXIT_OK
     print(
         format_summary(
-            text_field(raw, "result", "pane", "pane_id"), direction, caller, cwd, options.focus
+            new_pane,
+            direction,
+            caller,
+            cwd,
+            options.focus,
+            label=options.label,
         )
     )
     return EXIT_OK

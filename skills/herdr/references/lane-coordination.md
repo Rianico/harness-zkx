@@ -13,10 +13,14 @@ When a workflow requires both high-level coordination (triage, planning, verific
 
 `herdr-prompt` and `herdr-dispatch` automatically inject caller context and sibling workers into the recipient's turn:
 ```text
+[2026-10-03T06:19:12.983Z]
 Caller: pane=w1:p1 label=orchestrator agent=orchestrator
 Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
 Workers: impl-1@w1:p3, impl-2@w1:p4
 ```
+
+> [!IMPORTANT] Name Every Pane Immediately
+> Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
 
 > [!NOTE] Worker Target Parsing
 > The `Workers:` header lists workers as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string.
@@ -92,6 +96,7 @@ The Root Orchestrator owns the problem definition, global constraints, topology 
 - **Explicit Allow List**:
   - Confirm role-to-agent mapping (role, agent kind, provider, model) with user before lane provisioning (#159).
   - Pre-allocate one isolated worktree per lane with `herdr_worktree.py allocate`, then allocate panes and tabs for lane topology and launch them inside it with `--cwd "$WORKTREE_PATH"`.
+  - Name Every Pane Immediately: Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
   - Boot TM and Implementers with verified bootstrap flags (or allocate panes and delegate boot verification to TM per #167).
   - Issue brief to TM specifying intent, goal, constraints, acceptance criteria, verification contract, and sizing budget.
   - Re-brief or escalate when TM reports `BLOCKED` or `REJECTED`.
@@ -411,3 +416,5 @@ sequenceDiagram
    - **Subagents must NEVER interact with Herdr**: They do not run `herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`, or any Herdr CLI commands.
    - **Single Interface**: External lane communication is owned exclusively by the pane agents (TM and Implementer).
    - **No Agent-ception**: Internal subagents must not spawn further nested subagents.
+4. **Name Every Pane Immediately**:
+   - Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.

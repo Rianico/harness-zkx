@@ -16,8 +16,10 @@ Herdr organizes terminals into workspaces, tabs, and panes, recognizes coding ag
 Before issuing any control command, verify that this agent is running inside a Herdr-managed pane:
 
 ```bash
-test "${HERDR_ENV:-}" = 1
+[ "${HERDR_ENV:-}" = 1 ]
 ```
+
+Prefer bracket syntax `[` over `test`: tool-rewriting extensions (such as `rtk` in `pix-optimizer`) hook `test` as an application test runner (e.g. `npm test`), causing `sh: 1: command not found`.
 
 If the check fails, say that you are not running inside Herdr and stop. Do not inspect or control the focused Herdr session from outside Herdr.
 
@@ -92,6 +94,9 @@ So give both the same string, in one command:
 uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer    # this pane's label and its agent name
 ```
 
+> [!IMPORTANT] Name Every Pane Immediately
+> Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
+
 `herdr-label` labels the calling pane and names its agent identically, so the name a person sees is the name you can address. It takes `--pane <id>` for another pane, `--label-only` when a multi-word label or an existing agent name must survive, and `--clear` to drop both.
 
 When a person says "hand off to <name>", pass that name straight to the prompt helper:
@@ -153,6 +158,7 @@ Multi-agent coordination is event-driven via completion callbacks:
 **Every handoff carries the caller's context, and requires a reply.** A worker cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and Herdr skill notice, and closes with the reply contract:
 
 ```text
+[2026-10-03T06:19:12.983Z]
 Caller: pane=w1:p1 label=orchestrator agent=orchestrator
 Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
 
@@ -312,6 +318,7 @@ Prefer `--source recent-unwrapped` for logs and transcripts. The other read sour
 ## Safety and coordination rules
 
 - Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_overview.py`, `herdr_pane.py`, `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`), NOT bare `herdr` CLI commands, for orientation, layout, agent communication, prompting, and waiting.
+- Name Every Pane Immediately: Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
 - Orient with `herdr-overview` before enumerating panes, tabs, or agents. Do not run `herdr pane layout`, `pane list`, `tab list`, `workspace list`, or `agent list` to reconstruct layout.
 - NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. If target resolution fails or target has no agent, use the alternatives above (queue/watch, start agent, graceful abort). Raw text sent to a shell executes as shell commands.
 - Confirm role-to-agent mapping (kind, provider, model) with user before starting agents or orchestrating; never assume or pick defaults.
@@ -357,11 +364,12 @@ The whole env-check → resolve → split sequence, as one command:
 uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical          # stack a pane below the caller (--direction down)
 uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal        # place a pane right of the caller (--direction right)
 uv run "$SKILL_DIR/scripts/herdr_pane.py"                   # caller wider than tall -> right, else down
+uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical --label reviewer  # split and label in one command (-l)
 uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical --focus --ratio 0.3 --env FOO=bar --cwd /tmp
 uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal --dry-run  # print the herdr command, split nothing
 ```
 
-Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…`.
+Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…  label=…` (with label when set).
 
 ### `herdr-worktree` — one isolated worktree per lane
 
