@@ -7,7 +7,8 @@ import re
 import sys
 from pathlib import Path
 
-# STE-100 Rule 1.3: use only approved words. These fluff terms have no
+# STE-100 Rule 1.1: use only approved words. Rule 1.3 requires that an
+# approved word carries only its approved meaning. These fluff terms have no
 # deterministic meaning and are banned in procedural/instructional prose.
 STE100_BANNED_WORDS: dict[str, str] = {
     "comprehensive": "use a specific scope instead",
@@ -191,11 +192,31 @@ def split_sentences(text: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
+_PARENTHETICAL_RE = re.compile(r"\([^()]*\)")
+
+
+def _count_ste_words(sentence: str) -> int:
+    r"""Count words by the STE-100 Rule 8.5-8.7 conventions.
+
+    Rule 8.5: text in parentheses counts as one word.
+    Rule 8.6: each element (number, abbreviation, identifier, symbol, unit) counts as one word.
+    Rule 8.7: a hyphenated word counts as one word.
+    Rules 8.6 and 8.7 hold already, because a whitespace split keeps each token intact.
+    """
+    collapsed = sentence
+    for _ in range(4):
+        reduced = _PARENTHETICAL_RE.sub("word", collapsed)
+        if reduced == collapsed:
+            break
+        collapsed = reduced
+    return len(collapsed.split())
+
+
 def lint_sentence_lengths(text: str, max_words: int = STE100_MAX_SENTENCE_WORDS) -> list[str]:
-    """Return issues for sentences exceeding ``max_words`` words."""
+    """Return issues for sentences exceeding ``max_words`` words by the Rule 8.5-8.7 count."""
     issues: list[str] = []
     for sentence in split_sentences(text):
-        words = len(sentence.split())
+        words = _count_ste_words(sentence)
         if words > max_words:
             preview = sentence[:80] + ("..." if len(sentence) > 80 else "")
             issues.append(f"Sentence has {words} words (max {max_words}): {preview}")

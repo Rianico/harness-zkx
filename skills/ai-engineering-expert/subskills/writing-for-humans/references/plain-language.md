@@ -20,6 +20,8 @@ Adapted from `warpdotdev/common-skills@b811c24` (MIT, © Denver Technologies, In
 >   - Rule 5.1: procedural sentences ≤20 words.
 >   - Section 6: descriptive sentences ≤25 words.
 >   - Rule 8.1: semicolon ban.
+>   - Rule 8.5-8.7: count parentheticals, elements, and hyphenated words as one word.
+> - **Enforcement status:** `ste100.py` enforces Rules 3.7, 5.1, and 8.1, plus the lexical bans, deterministically. Rule 2.1 (multi-word nouns) and the Section 6 descriptive rules stay review judgment calls. No reliable deterministic check exists for noun chains.
 > - **Intentional CS Adaptations / Deviations:**
 >   1. **Dictionary Decoupling:** Replaced Part 2 aerospace dictionary with CS Ubiquitous Language and insulated code tokens.
 >   2. **Epistemic Modality:** Preserved `MUST`, `SHOULD`, `MAY`, and `could` for system certainty and confidence bounds. Issue 9 Rule 3.4 bans auxiliary verbs, but computing requires them.
