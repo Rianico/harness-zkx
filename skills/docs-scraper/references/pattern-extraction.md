@@ -112,7 +112,7 @@ Aim for this complexity split across modules:
 
 ### Selection Lessons
 
-- **Prefer generalizable patterns:** Example-specific code confuses users. Patterns should work with any input, not just tutorial data.
+- **Prefer generalizable patterns:** Example-specific code confuses users. Patterns must work with any input, not just tutorial data.
 - **Include state management patterns:** Users struggle with stateful components. Cover state initialization, updates, and synchronization.
 - **Show error recovery:** Users don't know how to handle failures. Include try-catch patterns and fallback behaviors.
 

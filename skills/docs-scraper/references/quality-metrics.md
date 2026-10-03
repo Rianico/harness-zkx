@@ -10,14 +10,17 @@ overall_score = weighted_average(criterion_scores)
 
 ## Deterministic Gates (Non-Scored)
 
-These are binary pass/fail checks in `scripts/compile.py validate-skill` — NOT part of the 0-1 weighted average. Any failure blocks compilation regardless of score.
+These are binary pass/fail checks in `scripts/compile.py validate-skill` — NOT part of the 0-1 weighted average. Any failure blocks compilation regardless of score. Style checks derive from ASD-STE100 Issue 9 (published January 15, 2025).
 
 | Gate | Rule | Enforcement |
 |------|------|-------------|
-| Sanitization | No zero-width/bidi/invisible control codepoints | `sanitize.py` strips before compile; presence = Error |
+| Sanitization | No zero-width/bidi/invisible control codepoints | `sanitize.py` strips before compile. Presence is an Error |
 | Prompt injection | No known injection patterns (4 compiled regexes) | `lint_injections()` on SKILL.md body + reference files |
-| STE-100 sentence length | Max 20 words per sentence (code blocks excluded) | `lint_sentence_lengths()` |
-| STE-100 banned words | No fluff: comprehensive, robust, properly, various, should work | `lint_banned_words()` (case-insensitive) |
+| ASD-STE100 Issue 9 sentence length | Max 20 words per sentence (code blocks excluded) | `lint_sentence_lengths()` (Warning) |
+| ASD-STE100 Issue 9 banned words | No fluff or marketing terms: comprehensive, robust, properly, various, should work, seamless, cutting-edge, effortless, blazing-fast, state-of-the-art, game-changing | `lint_banned_words()` (case-insensitive Error) |
+| ASD-STE100 Issue 9 phrasal verbs | No soft phrasal verbs: spin up, kick off, dive into, reach out, circle back, touch base | `lint_phrasal_verbs()` (Error) |
+| ASD-STE100 Issue 9 semicolons | No semicolons in prose outside code, URLs, and HTML comments | `lint_semicolons()` (Warning) |
+| ASD-STE100 Issue 9 nominalizations | Flag smothered verbs (perform/conduct/carry out/make + verbal noun) | `lint_nominalizations()` (Warning) |
 
 ## Criteria
 ### 1. Trigger Coverage (20%)

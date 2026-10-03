@@ -13,7 +13,7 @@ disable-model-invocation: true
 # Documentation Pipeline
 
 > [!tip] Router
-> Source-as-verb: `auto` dispatches by URL/content; explicit `lsp|ptx|runtime|driver|rust|site|skills` overrides. Second route `to-skill` builds a layered skill. Human or `$skill` dispatch only (`disable-model-invocation:true`).
+> Source-as-verb: `auto` dispatches by URL/content. Explicit `lsp|ptx|runtime|driver|rust|site|skills` overrides. Second route `to-skill` builds a layered skill. Human or `$skill` dispatch only (`disable-model-invocation:true`).
 
 Core = script + converter. Per-source cleanup lives in `references/*` loaded on demand.
 
@@ -69,9 +69,9 @@ Details per scraper → `references/*.md`.
 **Yes — first-class, with fallback.**
 
 `site` scraper discovers URLs via:
-1. `GET /llms.txt` — parses markdown links `[Title](URL)` + bare URLs, respects `## Optional` section (see `references/llms-txt-patterns.md`). Curated, high-signal; preferred when present.
+1. `GET /llms.txt` — parses markdown links `[Title](URL)` + bare URLs, respects `## Optional` section (see `references/llms-txt-patterns.md`). Curated, high-signal. Preferred when present.
 2. `GET /sitemap.xml` — parses `<loc>` tags, recurses into sitemap indexes (depth ≤2), validates URLs. Exhaustive fallback.
-3. Deduplication: `llms.txt` wins on overlap; `sitemap.xml` adds only unseen URLs.
+3. Deduplication: `llms.txt` wins on overlap. `sitemap.xml` adds only unseen URLs.
 4. Detection: `check_llms_txt()` now tries `HEAD /llms.txt` then falls back to `GET` (handles 405/403 on static/CDN hosts).
 
 `site --base-url https://example.com` emits `{urls, source, metrics: {total, llms_txt, sitemap_xml, deduplicated}}`. `fetch_urls()` also writes `metrics.json`. Non-site scrapers (lsp/ptx/cuda/rust/skills) do not use llms.txt — they hit fixed upstream URLs or cargo/docs.rs.
@@ -105,16 +105,16 @@ All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser
 - `rust` — `cargo-docs-md` pipeline: clone → `cargo +nightly doc` (JSON) → `cargo docs-md --dir` → flatten `module/index.md→module.md` → rewrite links → verify.
 - `skills` — `npx -y skills add <repo> --list` + `npx add <repo> --skill` via `skills` CLI, staged to `.lsz/tmp/skill-compose/<run>/stage`.
 - `book` — monolithic file ingestion: extraction cascade `docling → pdftotext → pypdf` (PDF), zipfile+BS4 (EPUB), zipfile+XML (DOCX). Deterministic `clean_pdftotext()` strips running headers/footers (page-repetition >50%), edge page numbers (Arabic+Roman), joins hyphen-wraps. Sliced into heading-anchored chunks (`--max-tokens`). Output routed through `sanitize.py` (zero-width/bidi/Trojan Source + prompt injection scan).
-- `sanitize` — CLI `sanitize.py <file> [--check]` strips invisible/zero-width/bidi codepoints (34 total) and scans 4 injection patterns; emits `{clean, removed, injections}` report.
+- `sanitize` — CLI `sanitize.py <file> [--check]` strips invisible/zero-width/bidi codepoints (34 total) and scans 4 injection patterns. It emits `{clean, removed, injections}` report.
 
 ## Metrics
 
 - **Discovery metrics** (site): `metrics: {total, llms_txt, sitemap_xml, deduplicated, sources}` returned by `discover_urls()` and printed as JSON in `site --base-url` mode.
-- **Fetch metrics** (site): `metrics.json` in output dir — `{total, success, blocked, failed, success_rate, total_bytes, avg_bytes, formats: {markdown, html}, elapsed_seconds, base_url}` + `README.md` page index. Format counts track cascade effectiveness (markdown = negotiation/.md/defuddle/jina hit; html = fell through to conversion).
+- **Fetch metrics** (site): `metrics.json` in output dir — `{total, success, blocked, failed, success_rate, total_bytes, avg_bytes, formats: {markdown, html}, elapsed_seconds, base_url}` + `README.md` page index. Format counts track cascade effectiveness (markdown = negotiation/.md/defuddle/jina hit, html = fell through to conversion).
 - **CUDA metrics**: `_create_index` + cleanup reports `files: total_original→total_new bytes (reduction%)`, output dir size.
 - **Rust metrics**: post-run `Generated N markdown files`, `verify_links` broken-link count, `flattened N files`.
 - **Skill quality metrics**: `references/quality-metrics.md` — 6 criteria (Trigger Coverage 20%, Pattern Usefulness 20%, Beginner Friendliness 15%, Documentation Completeness 15%, Navigation Clarity 15%, Graceful Degradation 15%) scored 0-1, compiled by `scripts/compile.py validate-skill/validate-triggers`.
-- **Sanitization & STE-100** (deterministic, no AI): `compile.py` runs `lint_injections()` + STE-100 checks — `lint_banned_words()` (fluff: comprehensive/robust/properly/various/should work), `lint_sentence_lengths()` (max 20 words, code blocks stripped), on SKILL.md body and every reference file. `sanitize.py` strips threat codepoints before compilation.
+- **Sanitization & STE-100** (deterministic, no AI): `compile.py` runs `lint_injections()` + STE-100 checks (`lint_banned_words()`, `lint_phrasal_verbs()`, `lint_sentence_lengths()`, `lint_semicolons()`, `lint_nominalizations()`) on `SKILL.md` body and reference files. `sanitize.py` strips threat codepoints before compilation.
 ## References
 
 - `references/lsp-patterns.md` — emoji anchor cleanup
@@ -124,10 +124,10 @@ All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser
 - `references/cleanup-patterns.md` + `section-extraction.md` — generic cleanup/splitting
 - `references/cli-scrape-standards.md` — CLI globals extraction
 - `references/skillsh-compose.md` — skill.sh compose wiring
-- `references/module-detection.md` `trigger-extraction.md` `pattern-extraction.md` `extraction-rules.md` `skill-template.md` `quality-metrics.md` `compilation-contract.md` — to-skill pipeline (load only during `to-skill`; extraction-rules and compilation-contract now include ASD-STE100 guidelines)
+- `references/module-detection.md` `trigger-extraction.md` `pattern-extraction.md` `extraction-rules.md` `skill-template.md` `quality-metrics.md` `compilation-contract.md` — to-skill pipeline (load only during `to-skill`. Extraction-rules and compilation-contract now include ASD-STE100 guidelines)
 
 ## Docs-to-Skill Pipeline
 
 Two layers: curated `references/<module>.md` (80% queries) + raw `references/<skill>-raw/` (self-contained). No intermediate wiki.
 
-Phase 0 fetch via `scrape.py auto` to `.lsz/tmp` or `references/<name>-raw/`; Phases 1-4 delegate to `ai-engineering-expert` (`skill-authoring`) for module/trigger/pattern extraction and generation. Keep `to-skill` thin — do not duplicate `quality-metrics` here.
+Phase 0 fetch via `scrape.py auto` to `.lsz/tmp` or `references/<name>-raw/`. Phases 1-4 delegate to `ai-engineering-expert` (`skill-authoring`) for module/trigger/pattern extraction and generation. Keep `to-skill` thin — do not duplicate `quality-metrics` here.

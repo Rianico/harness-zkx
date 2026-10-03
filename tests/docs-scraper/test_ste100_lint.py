@@ -156,7 +156,9 @@ class TestLintBannedWords:
         for term, reason in STE100_BANNED_WORDS.items():
             assert term, f"Empty term in banned words: {reason}"
             assert reason, f"Empty reason for term: {term}"
-            assert " " in term or term.isalpha(), f"Multi-word term '{term}' with unexpected format"
+            assert " " in term or "-" in term or term.isalpha(), (
+                f"Multi-word term '{term}' with unexpected format"
+            )
 
     def test_code_blocks_ignored(self):
         """Banned words inside fenced code blocks do NOT trigger lint issues."""

@@ -20,7 +20,7 @@ Run the top-level help (`wt --help` or equivalent HTML landing page) and extract
 - `-y, --yes` — skip approval prompts
 - `-h, --help` — print help
 
-Store as a reusable table; do not re-parse per command.
+Store as a reusable table. Do not re-parse per command.
 
 ### b) Merge per-command + automation + globals for every subcommand
 
@@ -186,10 +186,10 @@ Checks:
 - Every `*.md` contains `Global Options` header or `-C <path>` string.
 - Worktrunk `wt merge` file contains both `--no-squash` and `-C`.
 
-Exit `0` = pass; non-zero prints missing-flags report.
+Exit `0` = pass. Non-zero prints missing-flags report.
 
 > [!note] Scraped output exception
-> This reference itself is **standard markdown** (scraped docs use standard markdown per repo rule). Skills/notes use Obsidian callouts and wikilinks; scraper output stays standard markdown — this file bridges both by documenting the standard in Obsidian-flavored reference form while prescribing standard markdown for output.
+> This reference itself is **standard markdown** (scraped docs use standard markdown per repo rule). Skills/notes use Obsidian callouts and wikilinks, while scraper output stays standard markdown — this file bridges both by documenting the standard in Obsidian-flavored reference form while prescribing standard markdown for output.
 
 ## Links
 

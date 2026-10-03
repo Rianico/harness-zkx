@@ -46,9 +46,13 @@ class _CurationResult(TypedDict):
 
 try:
     from ste100 import (
+        STE100_BANNED_PHRASAL_VERBS,
         STE100_BANNED_WORDS,
         STE100_MAX_SENTENCE_WORDS,
         lint_banned_words,
+        lint_nominalizations,
+        lint_phrasal_verbs,
+        lint_semicolons,
         lint_sentence_lengths,
         split_sentences,
     )
@@ -60,18 +64,26 @@ except ImportError:
     if ste100_dir not in sys.path:
         sys.path.insert(0, ste100_dir)
     from ste100 import (
+        STE100_BANNED_PHRASAL_VERBS,
         STE100_BANNED_WORDS,
         STE100_MAX_SENTENCE_WORDS,
         lint_banned_words,
+        lint_nominalizations,
+        lint_phrasal_verbs,
+        lint_semicolons,
         lint_sentence_lengths,
         split_sentences,
     )
 
 __all__ = [
+    "STE100_BANNED_PHRASAL_VERBS",
     "STE100_BANNED_WORDS",
     "STE100_MAX_SENTENCE_WORDS",
     "lint_banned_words",
     "lint_injections",
+    "lint_nominalizations",
+    "lint_phrasal_verbs",
+    "lint_semicolons",
     "lint_sentence_lengths",
     "split_sentences",
     "validate_skill_md",
@@ -275,20 +287,32 @@ def validate_skill_md(skill_file: Path) -> _ValidationResult:
     # STE-100 and injection checks on the body (frontmatter excluded).
     body = content[frontmatter_end + 3 :]
     banned = lint_banned_words(body)
+    phrasal = lint_phrasal_verbs(body)
     injections = lint_injections(body)
     long_sentences = lint_sentence_lengths(body)
+    semicolons = lint_semicolons(body)
+    nominalizations = lint_nominalizations(body)
 
     for issue in banned:
+        result["issues"].append(issue)
+    for issue in phrasal:
         result["issues"].append(issue)
     for issue in injections:
         result["issues"].append(issue)
     for warning in long_sentences:
         result["warnings"].append(warning)
+    for warning in semicolons:
+        result["warnings"].append(warning)
+    for warning in nominalizations:
+        result["warnings"].append(warning)
 
     result["stats"]["ste100_banned"] = len(banned)
+    result["stats"]["ste100_phrasal"] = len(phrasal)
     result["stats"]["injections"] = len(injections)
     result["stats"]["long_sentences"] = len(long_sentences)
-    if banned or injections:
+    result["stats"]["semicolons"] = len(semicolons)
+    result["stats"]["nominalizations"] = len(nominalizations)
+    if banned or phrasal or injections:
         result["valid"] = False
     result["stats"]["frontmatter"] = frontmatter
 

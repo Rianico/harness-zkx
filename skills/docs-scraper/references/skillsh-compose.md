@@ -1,7 +1,7 @@
 # Skill Composition via skill.sh — Workflow Wiring
 
 > Phases **B/C are LLM responsibilities** under `ai-engineering-expert` guidance.
-> This doc wires the workflow; it does not deterministically merge skills.
+> This doc wires the workflow. It does not deterministically merge skills.
 
 ## When to Use
 
@@ -65,11 +65,11 @@ uv run $SKILL_DIR/scripts/scrape.py skills <inputs> --run big-run --method clone
 uv run $SKILL_DIR/scripts/scrape.py skills <inputs> --method npx
 ```
 
-`--method auto` (default) maps to `npx`; `raw`/`clone` are deprecated aliases that map to `npx`. Clone cache is handled by npx (XDG), staging is reused across runs.
+`--method auto` (default) maps to `npx`. `raw`/`clone` are deprecated aliases that map to `npx`. Clone cache is handled by npx (XDG), staging is reused across runs.
 
 ## Compose — Phases B/C (LLM under ai-engineering-expert)
 
-> Do not script the merge. The LLM decides composition; the doc below is the checklist it follows.
+> Do not script the merge. The LLM decides composition. The doc below is the checklist it follows.
 
 ### 1. Read staged sources
 
@@ -79,9 +79,9 @@ uv run $SKILL_DIR/scripts/scrape.py skills <inputs> --method npx
 
 ### 2. Design the new skill (ai-engineering-expert)
 
-- **Single responsibility:** one concept per output skill; if sources span distinct responsibilities, split or choose narrowest surface that satisfies actual use (graded surfaces).
+- **Single responsibility:** one concept per output skill. If sources span distinct responsibilities, split or choose narrowest surface that satisfies actual use (graded surfaces).
 - **Description budget:** ≤300 chars, front-loaded leading word, trigger vocab (`use when…`, `when the user…`), third-person. CI gates this (`context-check`).
-- **Invocation class:** declare `disable-model-invocation` explicitly; skill list metadata always costs context.
+- **Invocation class:** declare `disable-model-invocation` explicitly. Skill list metadata always costs context.
 - **Progressive disclosure:** 20% in `SKILL.md` (solves 80%), deep detail behind `references/` pointers. No 500-line spec paste in body.
 - **Frontmatter attribution:** every composed `SKILL.md` must include `meta: sources:` in frontmatter (list of original skill.sh URLs) as authoritative attribution. Body `> [!tip] Attribution` callout is supplementary and must point to `sources/` inside the skill (not `.lsz/tmp/.../stage/`). Copy URLs from `manifest.json` inputs (`skillsh_url` / `source`). Example:
   ```yaml
@@ -113,7 +113,7 @@ out/<new-skill>/
 ```
 
 - Body uses Obsidian-flavored markdown by default (wikilinks `[[Note]]`, callouts `> [!type]`, `==highlight==`).
-- SKILL.md frontmatter follows `skill-conventions.md` rules (no Obsidian properties there). Must include `meta.sources` list (see above) for attribution; body callout supplements but frontmatter is source of truth.
+- SKILL.md frontmatter follows `skill-conventions.md` rules (no Obsidian properties there). Must include `meta.sources` list (see above) for attribution. Body callout supplements but frontmatter is source of truth.
 - Validate after write: `uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check` (hard fail if description budget/trigger vocab missing).
 
 ### 4. Verify
@@ -124,13 +124,13 @@ out/<new-skill>/
 
 ## Multi-Run Notes
 
-- `--run <slug>` isolates runs; omit ⇒ single run at `staging_base` (not nested).
+- `--run <slug>` isolates runs. Omit ⇒ single run at `staging_base` (not nested).
 - Re-running with same `--run` overwrites that run's `stage/` (to update sources). Different slugs coexist.
-- Cache is shared; re-staging same skill in another run hits cache, no re-download unless `--force`.
+- Cache is shared. Re-staging same skill in another run hits cache, no re-download unless `--force`.
 
 ## Troubleshooting
 
 - **npx timeout / clone:** large repos (e.g., agentic-awesome-skills ~1.9k skills) may time out. Raise `SKILLS_CLONE_TIMEOUT_MS=600000` (10m) or clone manually and pass local path to `skills add`.
-- **No skills discovered (`--list` empty):** parser may miss names if CLI output format changes. Run `npx -y skills add <repo> --list` manually to verify; scraper will still attempt `npx add <repo> -y` (install all) as fallback.
+- **No skills discovered (`--list` empty):** parser may miss names if CLI output format changes. Run `npx -y skills add <repo> --list` manually to verify. Scraper will still attempt `npx add <repo> -y` (install all) as fallback.
 - **Private repo:** ensure git auth: `ssh-add -l` (SSH) or `gh auth status` (HTTPS). npx clones via https/ssh with `GIT_SSH_COMMAND` support.
-- **Staging location:** npx installs to isolated work dir under `run/_npx/` then copied to `stage/<owner>/<repo>/<skill>/`; check `manifest.json` for `error` entries if staging empty.
+- **Staging location:** npx installs to isolated work dir under `run/_npx/` then copied to `stage/<owner>/<repo>/<skill>/`. Check `manifest.json` for `error` entries if staging empty.
