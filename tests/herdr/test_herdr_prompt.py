@@ -6,6 +6,7 @@ recorded argv, which is what proves byte-for-byte delivery.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -477,11 +478,68 @@ def test_broadcast_dry_run_prints_one_argv_per_target(stub: StubHarness, tmp_pat
 # ── integration: caller context (#106, #119) ─────────────────────────────────────────
 
 
+def test_build_resume_cmd_for_all_supported_kinds() -> None:
+    # agy
+    assert herdr_prompt.build_resume_cmd("agy", "uuid-123") == "agy --conversation=uuid-123"
+    assert herdr_prompt.build_resume_cmd("agy", None) is None
+
+    # pi
+    assert (
+        herdr_prompt.build_resume_cmd("pi", "/path/to/session.jsonl")
+        == "pi --resume /path/to/session.jsonl"
+    )
+    assert herdr_prompt.build_resume_cmd("pi", "sess-id-456") == "pi --session sess-id-456"
+    assert herdr_prompt.build_resume_cmd("pi", None) is None
+
+    # claude
+    assert herdr_prompt.build_resume_cmd("claude", "sess-789") == "claude --resume sess-789"
+    assert herdr_prompt.build_resume_cmd("claude", None) is None
+
+    # qodercli / qoderclicn
+    assert herdr_prompt.build_resume_cmd("qodercli", None) == "qodercli resume"
+    assert herdr_prompt.build_resume_cmd("qoderclicn", None) == "qoderclicn resume"
+    assert herdr_prompt.build_resume_cmd("qodercli", "any") == "qodercli resume"
+
+    # unsupported or None
+    assert herdr_prompt.build_resume_cmd("gemini", "123") is None
+    assert herdr_prompt.build_resume_cmd(None, "123") is None
+    assert herdr_prompt.build_resume_cmd(None, None) is None
+
+
 def test_caller_block_renders_all_fields() -> None:
     caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
     assert (
         herdr_prompt.render_caller_block(caller)
         == "Caller: pane=w1:p1 label=orchestrator agent=orchestrator"
+    )
+
+
+def test_caller_block_renders_all_fields_including_kind_session_and_resume() -> None:
+    caller = herdr_prompt.CallerContext(
+        pane_id="w1:p1",
+        label="orchestrator",
+        agent="orchestrator",
+        kind="pi",
+        session_id="/tmp/session.jsonl",
+        resume_cmd="pi --resume /tmp/session.jsonl",
+    )
+    assert (
+        herdr_prompt.render_caller_block(caller)
+        == 'Caller: pane=w1:p1 label=orchestrator agent=orchestrator kind=pi session=/tmp/session.jsonl resume="pi --resume /tmp/session.jsonl"'
+    )
+
+
+def test_caller_block_renders_qodercli_resume() -> None:
+    caller = herdr_prompt.CallerContext(
+        pane_id="w1:p2",
+        label="worker",
+        agent="t7-impl",
+        kind="qodercli",
+        resume_cmd="qodercli resume",
+    )
+    assert (
+        herdr_prompt.render_caller_block(caller)
+        == 'Caller: pane=w1:p2 label=worker agent=t7-impl kind=qodercli resume="qodercli resume"'
     )
 
 
@@ -515,12 +573,38 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
-    assert text.startswith("Caller: pane=w9:p1 agent=reviewer")
+    lines = text.splitlines()
+    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
+    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
     assert "\n\nhi\n\n" in text
     assert (
         'uv run ~/.agents/skills/herdr/scripts/herdr_reply.py reviewer "<STATUS> <artifacts> <issues>"'
         in text
+    )
+
+
+def test_resolve_caller_extracts_kind_session_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {
+                "pane_id": "w9:p1",
+                "name": "reviewer",
+                "agent": "pi",
+                "agent_session": {"kind": "path", "value": "/tmp/session.jsonl"},
+            }
+        ],
+    }
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (prompt_call,) = stub.prompts()
+    text = prompt_call[4]
+    lines = text.splitlines()
+    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
+    assert (
+        lines[1]
+        == 'Caller: pane=w9:p1 agent=reviewer kind=pi session=/tmp/session.jsonl resume="pi --resume /tmp/session.jsonl"'
     )
 
 
@@ -530,8 +614,10 @@ def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> 
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
-    assert prompt_call[4].startswith("Caller: pane=w9:p2 label=scratch pad")
-    assert "agent=" not in prompt_call[4].splitlines()[0]
+    lines = prompt_call[4].splitlines()
+    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
+    assert lines[1].startswith("Caller: pane=w9:p2 label=scratch pad")
+    assert "agent=" not in lines[1]
     assert "cannot be addressed" in prompt_call[4]
 
 
@@ -553,7 +639,9 @@ def test_broadcast_prepends_identically_per_target(stub: StubHarness, tmp_path: 
     (first, second) = stub.prompts()
     assert (first[3], second[3]) == ("worker1", "worker2")
     assert first[4] == second[4]
-    assert first[4].startswith("Caller: pane=w9:p1 agent=reviewer")
+    lines = first[4].splitlines()
+    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
+    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
 
 
 def test_dry_run_renders_caller_payload_without_prompting(
@@ -564,7 +652,9 @@ def test_dry_run_renders_caller_payload_without_prompting(
     assert stub.prompts() == []
     argv: list[str] = json.loads(done.stdout)
     assert argv[3] == "reviewer"
-    assert argv[4].startswith("Caller: pane=w9:p1 agent=reviewer")
+    lines = argv[4].splitlines()
+    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
+    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in argv[4]
     assert "~/.agents/skills/herdr/scripts/herdr_reply.py reviewer" in argv[4]
 

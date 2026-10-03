@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -46,7 +47,9 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     (call,) = stub.prompts()
     assert call[1:4] == ["agent", "prompt", "reviewer"]
     text = call[4]
-    assert text.startswith("Caller: pane=w9:p1 agent=reviewer")
+    lines = text.splitlines()
+    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
+    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
     assert "\n\ndo this\n\n" in text
     assert (

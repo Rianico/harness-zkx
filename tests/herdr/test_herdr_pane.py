@@ -73,6 +73,20 @@ def test_build_split_argv_rejects_bad_ratio() -> None:
         )
 
 
+def test_format_summary_with_and_without_label() -> None:
+    without = herdr_pane.format_summary("w9:p2", "down", "w9:p1", "/tmp", False)
+    assert without == "new pane w9:p2  direction=down  caller=w9:p1  cwd=/tmp  focus=caller"
+    assert "label=" not in without
+
+    with_label = herdr_pane.format_summary(
+        "w9:p2", "right", "w9:p1", "/tmp", True, label="reviewer"
+    )
+    assert (
+        with_label
+        == "new pane w9:p2  direction=right  caller=w9:p1  cwd=/tmp  focus=new pane  label=reviewer"
+    )
+
+
 # ── integration: guard and preconditions ────────────────────────────────────────────
 
 
@@ -215,6 +229,66 @@ def test_dry_run_prints_command_without_splitting(stub: StubHarness) -> None:
     assert str(stub.herdr) in done.stdout
     assert "pane split" in done.stdout
     assert "--direction right" in done.stdout
+
+
+def test_label_renames_new_pane(stub: StubHarness) -> None:
+    done = stub.run("horizontal", "--label", "reviewer")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "label=reviewer" in done.stdout
+    calls = stub.calls()
+    assert any(call[1:5] == ["pane", "rename", "w9:pNEW", "reviewer"] for call in calls)
+
+
+def test_short_label_flag_renames_new_pane(stub: StubHarness) -> None:
+    done = stub.run("vertical", "-l", "impl-auth")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "label=impl-auth" in done.stdout
+    calls = stub.calls()
+    assert any(call[1:5] == ["pane", "rename", "w9:pNEW", "impl-auth"] for call in calls)
+
+
+def test_label_dry_run_prints_split_and_rename_commands(stub: StubHarness) -> None:
+    done = stub.run("horizontal", "--label", "reviewer", "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.splits() == []
+    lines = done.stdout.strip().splitlines()
+    assert len(lines) == 2
+    assert "pane split" in lines[0]
+    assert "pane rename" in lines[1]
+    assert "<new_pane_id>" in lines[1]
+    assert "reviewer" in lines[1]
+
+
+def test_label_empty_rejected(stub: StubHarness) -> None:
+    done = stub.run("vertical", "--label", "")
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "must not be empty" in done.stderr
+    assert stub.splits() == []
+
+
+def test_label_whitespace_rejected(stub: StubHarness) -> None:
+    done = stub.run("vertical", "--label", "   ")
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "must not be empty" in done.stderr
+    assert stub.splits() == []
+
+
+def test_label_newline_rejected(stub: StubHarness) -> None:
+    done = stub.run("vertical", "--label", "foo\nbar")
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "cannot contain newlines" in done.stderr
+    assert stub.splits() == []
+
+
+def test_label_rename_failure_is_reported(stub: StubHarness) -> None:
+    done = stub.run(
+        "vertical",
+        "--label",
+        "reviewer",
+        state={**DEFAULT_STATE, "pane_rename_error": "rename failed"},
+    )
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "rename failed" in done.stderr
 
 
 # ── integration: failure paths ──────────────────────────────────────────────────────

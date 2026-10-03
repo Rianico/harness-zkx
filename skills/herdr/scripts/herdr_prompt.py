@@ -47,6 +47,7 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
@@ -184,11 +185,33 @@ def read_payload(source: str | None) -> str:
 
 @dataclass(frozen=True)
 class CallerContext:
-    """Who is handing off: pane id, visible label, and addressable agent name."""
+    """Who is handing off: pane id, visible label, addressable agent name, kind, and session."""
 
     pane_id: str
     label: str | None = None
     agent: str | None = None
+    kind: str | None = None
+    session_id: str | None = None
+    resume_cmd: str | None = None
+
+
+def build_resume_cmd(kind: str | None, session_id: str | None) -> str | None:
+    """Build the agent-native resume command string for the caller, if known."""
+    if kind == "agy":
+        return f"agy --conversation={session_id}" if session_id else None
+    if kind == "pi":
+        if not session_id:
+            return None
+        return (
+            f"pi --resume {session_id}"
+            if session_id.endswith(".jsonl")
+            else f"pi --session {session_id}"
+        )
+    if kind == "claude":
+        return f"claude --resume {session_id}" if session_id else None
+    if kind in ("qodercli", "qoderclicn"):
+        return f"{kind} resume"
+    return None
 
 
 def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
@@ -201,12 +224,29 @@ def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
             label = entry_optional_text(entry, "label")
             break
     agent: str | None = None
+    kind: str | None = None
+    session_id: str | None = None
+    resume_cmd: str | None = None
     agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
     for entry in agents:
         if entry_optional_text(entry, "pane_id") == pane_id:
             agent = entry_optional_text(entry, "name")
+            kind = entry_optional_text(entry, "agent")
+            sess = entry.get("agent_session")
+            if isinstance(sess, dict):
+                val = sess.get("value")
+                if isinstance(val, str) and val:
+                    session_id = val
+            resume_cmd = build_resume_cmd(kind, session_id)
             break
-    return CallerContext(pane_id=pane_id, label=label, agent=agent)
+    return CallerContext(
+        pane_id=pane_id,
+        label=label,
+        agent=agent,
+        kind=kind,
+        session_id=session_id,
+        resume_cmd=resume_cmd,
+    )
 
 
 def _single_line(value: str, limit: int = 64) -> str:
@@ -217,11 +257,18 @@ def _single_line(value: str, limit: int = 64) -> str:
 def render_caller_block(caller: CallerContext) -> str:
     """Render the `Caller:` header; absent fields are omitted, never invented."""
     fields = f"pane={caller.pane_id}"
-    label = _single_line(caller.label) if caller.label else ""
-    if label:
-        fields += f" label={label}"
+    if caller.label:
+        label = _single_line(caller.label)
+        if label:
+            fields += f" label={label}"
     if caller.agent:
         fields += f" agent={caller.agent}"
+    if caller.kind:
+        fields += f" kind={caller.kind}"
+    if caller.session_id:
+        fields += f" session={caller.session_id}"
+    if caller.resume_cmd:
+        fields += f' resume="{caller.resume_cmd}"'
     return f"Caller: {fields}"
 
 
@@ -302,7 +349,8 @@ def resolve_workspace_workers(
 
 def wrap_with_caller(payload: str, caller: CallerContext, *, workers: Sequence[str] = ()) -> str:
     """Prepend the caller block, skill notice, and append the reply contract around the payload."""
-    header_lines = [render_caller_block(caller), SKILL_NOTICE]
+    ts = f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
+    header_lines = [ts, render_caller_block(caller), SKILL_NOTICE]
     if workers:
         header_lines.append(f"Workers: {', '.join(workers)}")
     header = "\n".join(header_lines)
