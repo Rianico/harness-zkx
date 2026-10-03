@@ -91,9 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--pane", metavar="ID", help="split this pane instead of the calling pane"
     )
-    _ = parser.add_argument(
-        "-l", "--label", metavar="LABEL", help="visible label for the new pane"
-    )
+    _ = parser.add_argument("-l", "--label", metavar="LABEL", help="visible label for the new pane")
     _ = parser.add_argument(
         "--cwd", metavar="DIR", help="working directory for the new pane (default: $PWD)"
     )
