@@ -65,6 +65,7 @@ class Finding:
     check: str
     detail: str
     fixable: bool = True
+    hint: str | None = None
 
 
 def run_git(cmd: list[str]) -> str:
@@ -256,7 +257,13 @@ def check_ledger(
         if ref is None:
             if identity in baseline:
                 continue
-            findings.append(Finding("provenance", f"entry carries no (#N): {identity!r}"))
+            findings.append(
+                Finding(
+                    "provenance",
+                    f"entry carries no (#N): {identity!r}",
+                    hint="Stamp (#N) into the entry, or run pr-land (pr.py auto-attributes after PR creation).",
+                )
+            )
         elif pr is not None and ref == pr:
             continue
         elif landing == "squash":
@@ -350,6 +357,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[waived] [{finding.check}] {finding.detail}", file=sys.stderr)
     for finding in blocking:
         print(f"[{finding.check}] {finding.detail}", file=sys.stderr)
+        if finding.hint:
+            print(f"  → {finding.hint}", file=sys.stderr)
     if waiver_clean:
         print(f"waiver recorded: {waiver_clean}", file=sys.stderr)
     if not blocking:
