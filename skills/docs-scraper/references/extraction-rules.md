@@ -77,11 +77,11 @@ Group extracted atomic notes into themes first, then write summaries based on th
 
 ### One-Idea-Per-Paragraph
 
-Each paragraph covers exactly one point. Keep sentences under 20 words (STE-100 Rule 6.5).
+Each paragraph covers exactly one point (STE-100 Rule 6.5). Keep procedural sentences under 20 words (STE-100 Rule 5.1).
 
 **Bad:**
 
-> The switch command allows you to switch between worktrees and it supports several shortcuts like ^ for the default branch, @ for current, and - for previous, plus you can create new worktrees with --create.
+> `The switch command allows you to switch between worktrees and it supports several shortcuts like ^ for the default branch, @ for current, and - for previous, plus you can create new worktrees with --create.`
 
 **Good:**
 
@@ -137,23 +137,29 @@ For high-stakes content (security parameters, destructive operations, breaking c
 ---
 ## Rule Set 4: ASD-STE100 Style Guidelines
 
-Generated reference files MUST follow ASD-STE100 Simplified Technical English. These are deterministic checks in `scripts/compile.py validate-skill` (no AI judgment — mechanical pass/fail).
+Generated reference files MUST follow ASD-STE100 Simplified Technical English (Issue 9, published January 15, 2025). These are deterministic checks in `scripts/compile.py validate-skill` (no AI judgment — mechanical pass/fail).
 
 ### Approved Vocabulary
 
 Avoid fluff words that add no technical meaning. Replace with the approved form:
 
-| Banned         | Replace with            |
-| -------------- | ----------------------- |
-| comprehensive  | complete                |
-| robust         | stable / reliable       |
-| properly       | correctly               |
-| various        | specify the exact count |
-| should work    | works (or "must work") |
+| Banned           | Replace with                |
+| ---------------- | --------------------------- |
+| comprehensive    | complete                    |
+| robust           | stable / reliable           |
+| properly         | correctly                   |
+| various          | specify the exact count     |
+| should work      | works (or "must work")      |
+| seamless         | specific interface/protocol |
+| cutting-edge     | exact version/technique     |
+| effortless       | automated / script          |
+| blazing-fast     | latency / throughput metric |
+| state-of-the-art | baseline / benchmark result |
+| game-changing    | measurable improvement      |
 
-### Sentence Length (Rule 6.5)
+### Sentence Length (Rule 5.1)
 
-Max 20 words per sentence. Code blocks, inline code spans, and frontmatter are excluded before splitting. Long sentences must be split or rewritten.
+Max 20 words per procedural sentence (Rule 5.1). Code blocks, inline code spans, and frontmatter are excluded before splitting. Long sentences must be split or rewritten.
 
 ### One Instruction Per Sentence
 
@@ -166,6 +172,27 @@ Write exactly one instruction per sentence. Use imperative mood and active voice
 **Good:**
 
 > Configure the tool. Run the tests.
+
+### Banned Phrasal Verbs
+
+Avoid vague phrasal verbs. Replace with specific technical verbs:
+
+| Banned | Replace with |
+| ------ | ------------ |
+| `spin up` | start, initialize, provision |
+| `kick off` | start, begin, trigger |
+| `dive into` | inspect, examine, detail |
+| `reach out` | contact, query, message |
+| `circle back` | revisit, follow up, return |
+| `touch base` | confer, contact, sync |
+
+### Technical Token Insulation
+
+Insulate all code identifiers, CLI flags, commands, and paths in backticks (`foo`, `path/to/file`). Backticked tokens are protected from word-count inflation and translation drift.
+
+### Modality Preservation
+
+Preserve standard normative keywords (`MUST`, `SHOULD`, `MAY`). Do not soften hard invariants (`MUST`) or over-constrain optional paths (`MAY`).
 
 ### Judgment-Aid Schemas
 

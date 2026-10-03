@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **ai-engineering:** adapt ASD-STE100 Issue 9 across writing subskills, system prompt rules, and the deterministic linter (#188)
 * **changelog-gate:** guide remediation on red provenance gate (#187)
 * **herdr:** pre-provision isolated worktrees for lane coordination (#185)
 * **ai-engineering:** unify ASD-STE100 linting helper across harness and scrapers (#183)

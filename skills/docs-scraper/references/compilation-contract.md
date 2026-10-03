@@ -72,16 +72,22 @@ uv run scripts/compile.py validate-skill .lsz/{topic}/draft/skills/{name}/
     "references_count": 15
   },
   "issues": [],
-  "warnings": []
-}
-```
+  "warnings": [],
   "stats": {
     "long_sentences": 0,
-    "banned_words": 0,
+    "ste100_banned": 0,
+    "ste100_phrasal": 0,
+    "semicolons": 0,
+    "nominalizations": 0,
     "injections": 0,
     "sanitized": 0
-  },
+  }
+}
+```
+
 **Deterministic Checks:**
+
+Style and structural constraints derive from ASD-STE100 Issue 9 (published January 15, 2025).
 
 | Check | Error Level | Description |
 |-------|-------------|-------------|
@@ -98,8 +104,11 @@ uv run scripts/compile.py validate-skill .lsz/{topic}/draft/skills/{name}/
 | Link existence | Warning | Internal links exist |
 | Trigger duplicates | Warning | No duplicates across modules |
 | Trigger format | Error | No regex/special chars |
-| Sentence length (STE-100) | Error | Max 20 words per sentence (code blocks excluded) |
-| Banned words (STE-100) | Error | No fluff: comprehensive, robust, properly, various, should work |
+| Sentence length (ASD-STE100 Issue 9) | Warning | Max 20 words per sentence (code blocks excluded) |
+| Banned words (ASD-STE100 Issue 9) | Error | No fluff or marketing terms: comprehensive, robust, properly, various, should work, seamless, cutting-edge, effortless, blazing-fast, state-of-the-art, game-changing |
+| Phrasal verbs (ASD-STE100 Issue 9) | Error | No soft phrasal verbs: spin up, kick off, dive into, reach out, circle back, touch base |
+| Semicolons (ASD-STE100 Issue 9) | Warning | No semicolons in prose (use separate sentences) |
+| Nominalizations (ASD-STE100 Issue 9) | Warning | Flag smothered verbs (e.g. perform validation -> validate) |
 | Prompt injection | Error | No known injection patterns in body or reference files |
 | Sanitized codepoints | Error | No zero-width/bidi/invisible control codepoints |
 ## Stage 3: LLM Evaluator

@@ -12,8 +12,8 @@ Managed sub-skill of `ai-engineering-expert`. Load when `$domain` is `writing-fo
 `ai-engineering-expert` task drafts, reviews, or revises a document a human maintainer triages — a GitHub
 issue, discussion post, RFC, or proposal. This is the sibling of `writing-for-agents`: same discipline of
 goal-first structure, inverted voice — you are persuading a busy volunteer, not instructing a runtime.
-For sentence-level plain language rules (STE-100, sentence length, active voice), see sibling reference
-[`writing-for-agents/references/human-facing-prose.md`](../writing-for-agents/references/human-facing-prose.md).
+For sentence-level plain language rules (CS-adapted STE-100, active voice with named actors, nominalization removal, sentence length ≤25 words), see co-located reference
+[`references/plain-language.md`](references/plain-language.md).
 
 This skill teaches how to **shape a proposal so a maintainer can decide on it in one read** — not how to
 run the project yourself. You are the proposer; a maintainer with fragmented attention is the reader.
@@ -37,8 +37,7 @@ Everything below only earns its keep against that decision.
 
 1. **Problem before mechanism.** Establish the friction is real and worth fixing before describing any
    implementation. No maintainer can evaluate a solution to an unagreed problem.
-2. **Evidence over adjectives.** Replace "very common", "arguably the worst", "clearly" with counts, logs,
-   or links. A single concrete transcript snippet carries more evidentiary weight than paragraphs of assertion.
+2. **Evidence over adjectives.** Replace "very common", "arguably the worst", "clearly", and marketing adjectives (`robust`, `seamless`, `cutting-edge`) with counts, logs, or links. A single concrete transcript snippet carries more evidentiary weight than paragraphs of assertion.
 3. **Isolate distinct root causes.** Split separate failure modes into distinct proposals. Blending external
    concurrency with self-inflicted tool errors inflates perceived complexity and stalls review on the hardest piece.
 4. **No presumed machinery.** Never specify hooks, interfaces, or observability the project may not have
@@ -82,6 +81,8 @@ Answer every question honestly; a single "no" means revise before filing.
 7. Is the call to action unambiguous about the requested decision or feedback?
 8. Does the draft avoid mentioning what the proposer does next unless the user clearly intended to volunteer it?
 9. Can a maintainer grasp problem, scope, and ask in a rapid skim (~60 seconds)?
+10. Is the prose written in active voice with named actors, short sentences (≤25 words), and smothered verbs (nominalizations) removed?
+11. Are marketing adjectives (`robust`, `seamless`, `cutting-edge`) and soft phrasal verbs (`spin up`, `kick off`) replaced with concrete metrics or specific verbs?
 
 ## Anti-patterns (illustrative pairs)
 
@@ -107,8 +108,8 @@ Answer every question honestly; a single "no" means revise before filing.
 - **When to load:** `ai-engineering-expert` loads this sub-skill when `$domain` is `writing-for-humans` or when any
   workflow drafts, reviews, or revises human-facing issues, RFCs, or discussion posts.
 - **Sibling boundary:** Use `writing-for-agents` for agent-consumed instructions (`SKILL.md`, `AGENTS.md`). For
-  sentence-level plain language rules (STE-100, sentence length, active voice), consult
-  [`writing-for-agents/references/human-facing-prose.md`](../writing-for-agents/references/human-facing-prose.md).
+  sentence-level plain language rules (CS-adapted STE-100, active voice with named actors, nominalization removal, sentence length ≤25 words), consult
+  co-located [`references/plain-language.md`](references/plain-language.md).
 - **Verification:** Validate frontmatter deterministically with
   `uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check`. Review drafts semantically via a
   Skeptic subagent checking for unverified assertions, presumed architecture, and missing non-goals.
