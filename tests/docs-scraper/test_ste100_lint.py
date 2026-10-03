@@ -72,7 +72,7 @@ class TestSplitSentences:
 
 
 class TestLintSentenceLengths:
-    """STE-100 Rule 6.5: max words per sentence."""
+    """STE-100 Rule 5.1: max words per sentence."""
 
     def test_short_sentences_pass(self):
         text = "Short sentence. Also short."

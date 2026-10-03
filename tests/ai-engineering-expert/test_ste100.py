@@ -91,7 +91,7 @@ class TestSentenceSplitting:
 
 
 class TestSentenceLengths:
-    """STE-100 Rule 6.5 sentence length verification."""
+    """STE-100 Rule 5.1 sentence length verification."""
 
     def test_short_sentences_pass(self):
         text = "Short sentence one. Short sentence two."
@@ -120,6 +120,31 @@ class TestSentenceLengths:
         issues = lint_sentence_lengths(text, max_words=4)
         assert len(issues) == 1
         assert "5 words (max 4)" in issues[0]
+
+    def test_parenthetical_text_counts_as_one_word(self):
+        """STE-100 Rule 8.5: text in parentheses counts as one word."""
+        base = "Configure the production runtime environment for every connected client device across all regions now"
+        text = f"{base} (see the migration appendix notes for details)."
+        assert len(text.split()) > 20
+        assert lint_sentence_lengths(text, max_words=20) == []
+
+    def test_nested_parenthetical_text_counts_as_one_word(self):
+        """STE-100 Rule 8.5: nested parentheses still count as one word."""
+        logis = "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau"
+        text = f"{logis} (see the note (with an inner aside) here)."
+        assert lint_sentence_lengths(text, max_words=20) == []
+
+    def test_hyphenated_words_count_as_one_word(self):
+        """STE-100 Rule 8.7: a hyphenated word counts as one word."""
+        text = "state-of-the-art production-ready enterprise-grade latency-sensitive configuration."
+        assert lint_sentence_lengths(text, max_words=8) == []
+
+    def test_parenthetical_does_not_mask_long_sentence(self):
+        """STE-100 Rule 8.5 is a counting rule, not an exemption for long sentences."""
+        text = " ".join(["word"] * 21) + " (short)."
+        issues = lint_sentence_lengths(text, max_words=20)
+        assert len(issues) == 1
+        assert "22 words" in issues[0]
 
 
 class TestBannedWords:
