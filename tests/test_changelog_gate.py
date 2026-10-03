@@ -208,6 +208,54 @@ def test_ledger_blocks_an_entry_with_no_pr_attribution(tmp_path: Path) -> None:
     assert "entry carries no (#N)" in result.stderr
 
 
+def test_unattributed_entry_prints_remediation_hint(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): add a thing (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "[provenance] entry carries no (#N): '**thing:** add a thing'" in result.stderr
+    hint = (
+        "  → Stamp (#N) into the entry, or run pr-land (pr.py auto-attributes after PR creation)."
+    )
+    assert hint in result.stderr
+    lines = result.stderr.splitlines()
+    finding_idx = lines.index("[provenance] entry carries no (#N): '**thing:** add a thing'")
+    assert lines[finding_idx + 1] == hint
+
+
+def test_waived_unattributed_entry_omits_remediation_hint(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** add a thing"), ["feat(thing): add a thing (#1)"])
+
+    result = _run(repo, "ledger", "--waiver", "legacy debt accepted")
+
+    assert result.returncode == 0, result.stderr
+    assert "[waived] [provenance] entry carries no (#N): '**thing:** add a thing'" in result.stderr
+    assert "  →" not in result.stderr
+
+
+def test_other_findings_omit_remediation_hint(tmp_path: Path) -> None:
+    (tmp_path / "commit").mkdir()
+    repo_commit = _repo(
+        tmp_path / "commit", _ledger("* **thing:** add a thing (#99)"), ["feat(thing): a (#1)"]
+    )
+    res_commit = _ledger_check(repo_commit)
+    assert res_commit.returncode == 1, res_commit.stderr
+    assert "(#99) resolves to no commit" in res_commit.stderr
+    assert "  →" not in res_commit.stderr
+
+    (tmp_path / "dup").mkdir()
+    repo_dup = _repo(
+        tmp_path / "dup",
+        _ledger("* **thing:** add a thing (#1)", "* **thing:** add a thing (#1)"),
+        ["feat(thing): a (#1)"],
+    )
+    res_dup = _ledger_check(repo_dup)
+    assert res_dup.returncode == 1, res_dup.stderr
+    assert "duplicate-identity" in res_dup.stderr
+    assert "  →" not in res_dup.stderr
+
+
 def test_ledger_blocks_an_attribution_that_resolves_to_no_commit(tmp_path: Path) -> None:
     repo = _repo(tmp_path, _ledger("* **thing:** add a thing (#99)"), ["feat(thing): a (#1)"])
 
