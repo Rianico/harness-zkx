@@ -66,6 +66,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **herdr:** add herdr-prompt for byte-exact payload delivery
 
 ### Bug Fixes
+* **ai-engineering:** bring skill bodies into STE-100 compliance and support --preserve in linter ([#190](https://github.com/Rianico/harness-zkx/issues/190))
 * **skill-authoring:** count sentence words by ASD-STE100 Rule 8.5-8.7 and correct the Rule 1.1 and 5.1 citations (#189)
 * **harness-audit:** read event-stream session logs, name all edit error codes, and report delivery-cap truncation (#179)
 * **gh-router:** require a drafted PR body in pr-land and compose the preflight with pr-enhance ([#177](https://github.com/Rianico/harness-zkx/issues/177)) (#180)
