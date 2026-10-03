@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **changelog-gate:** guide remediation on red provenance gate
+* **changelog-gate:** guide remediation on red provenance gate (#187)
 * **herdr:** pre-provision isolated worktrees for lane coordination (#185)
 * **ai-engineering:** unify ASD-STE100 linting helper across harness and scrapers (#183)
 * **docs-scraper:** enhance with PDF/book ingestion, sanitization, and ASD-STE100 rules (#181)
