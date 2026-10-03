@@ -16,14 +16,14 @@ metadata:
 
 # AI Engineering Expert
 
-Core principles for building robust AI systems in the LSZ harness. This file holds the 20% that solves 80% of problems; deep methodology lives in subskills and their references.
+Core principles for building reliable AI systems in the LSZ harness. This file holds the 20% that solves 80% of problems. Deep methodology lives in subskills and their references.
 
 ## The Foundation: GDD (Goal-Driven Development)
 
-The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs are fundamentally **Probabilistic Machines** trying to operate in a **Deterministic World**, we use **GDD** to bridge this gap through three non-negotiable pillars:
+The ultimate goal of AI Engineering is to achieve **Human Goals**. LLMs are fundamentally **Probabilistic Machines** operating in a **Deterministic World**. We use **GDD** to bridge this gap through three non-negotiable pillars:
 
 1. **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task.
-2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model _says_ it did; we only trust what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
+2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model _says_ it did. We only trust what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
 3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules. When an agent fails, classify root cause into four distinct archetypes:
    - **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → deterministic tools (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
    - **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → refine prompt contracts (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
@@ -32,9 +32,9 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. Because LLMs 
 
 ## Information Boundary Design
 
-- Tool owns what it can deterministically verify; model owns intent. Never require the model to supply verification data or to re-read just to keep a check honest.
-- Expose minimal anchors/handles for the model to reference; hide verbose content and persistence details behind the tool. The model copies the handle, the tool resolves and verifies.
-- Grade the boundary by determinism: hard checks (content, type, existence) → tool; qualitative choices (what to change, wording) → model.
+- Tool owns what it can deterministically verify. Model owns intent. Never require the model to supply verification data or to re-read just to keep a check honest.
+- Expose minimal anchors/handles for the model to reference. Hide verbose content and persistence details behind the tool. The model copies the handle, the tool resolves and verifies.
+- Grade the boundary by determinism: hard checks (content, type, existence) go to the tool. Qualitative choices (what to change, wording) go to the model.
 
 > Reference: [Information boundary pattern](references/information-boundary.md)
 
@@ -82,9 +82,9 @@ All work splits into implementation and review:
 
 ### Examples
 
-- `developer` agent in TDD: keep agent generic; load `tdd-expert` skill for methodology; inject scope boundaries in the TDD workflow prompt
+- `developer` agent in TDD: keep the agent generic. Load the `tdd-expert` skill for methodology. Inject scope boundaries in the TDD workflow prompt.
 - `onboarding` agent: load `onboarding` skill for codebase-specific context
-- `code-reviewer` agent: keep it generally reusable; inject "do not replay TDD verification" only in the code-review workflow
+- `code-reviewer` agent: keep it generally reusable. Inject "do not replay TDD verification" only in the code-review workflow
 
 ---
 
@@ -92,7 +92,7 @@ All work splits into implementation and review:
 
 The 20% of knowledge that solves 80% of problems lives in SKILL.md files. The deep 80% lives in reference files behind context pointers. This applies recursively at every level -- parent spine, subskills, and subskill references.
 
-Every line in a SKILL.md earns its place by passing the test: does this solve 80% of problems? If it's deep methodology, edge-case patterns, or platform-specific detail, disclose it behind a pointer. If the pointer fires unreliably on must-have material, sharpen its wording first; pull it inline only if that fails.
+Every line in a SKILL.md earns its place by passing the test: does this solve 80% of problems? If it's deep methodology, edge-case patterns, or platform-specific detail, disclose it behind a pointer. If the pointer fires unreliably on must-have material, sharpen its wording first. Pull it inline only if that fails.
 
 - **Root steering files (`AGENTS.md`, `CLAUDE.md`):** Keep minimal. Use strictly for **navigation pointers**, never inline specs.
 - **Prune No-Ops:** Aggressively delete steering instructions that don't measurably alter agent decisions.
@@ -112,17 +112,17 @@ Every skill declares one of two classes via the canonical `disable-model-invocat
 | Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously; description triggers discovery                                  |
 | `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke; on Pi omitted from `<available_skills>` XML (true zero-load) |
 
-Origin: Claude Code `disable-model-invocation`. Pi ≥0.84.4 advances it — `formatSkillsForPrompt` filters `disableModelInvocation=true` skills and **removes them from the `<available_skills>` XML** injected into the system prompt, so they pay **zero context/metadata cost**. Claude's original gating is selection-only (description stays listed, model instructed not to pick it); Pi strips it from context entirely — no description, no tokens, no attention — reachable only via explicit `/skill:name`.
+Origin: Claude Code `disable-model-invocation`. Pi ≥0.84.4 advances this design. `formatSkillsForPrompt` filters `disableModelInvocation=true` skills. It **removes them from the `<available_skills>` XML** injected into the system prompt, paying **zero context/metadata cost**. Claude's original gating is selection-only (description stays listed, model instructed not to pick it). Pi strips it from context entirely — no description, no tokens, no attention. It is reachable only via explicit `/skill:name`.
 
 ### Description Principles & Budget
 
-Every skill's `description` is its top-level machine-readable trigger and permanent context-load footprint. Grounded in empirical function-calling benchmarks, descriptions reject pseudo-syntax annotations (`TRIGGER:`) in favor of natural language conditionals and symptom hooks within a strict 300-character budget:
+Every skill's `description` is its top-level machine-readable trigger and permanent context-load footprint. Grounded in empirical function-calling benchmarks, descriptions reject pseudo-syntax annotations (`TRIGGER:`). They use natural language conditionals and symptom hooks within a strict 300-character budget:
 
 1. **What it is (Role/Identity Anchor):** Category noun defining nature and domain (e.g., *Methodology spine...*, *Verification gate...*, *CLI reference...*). Front-load in first 50 chars.
 2. **What it does (Active Capabilities & Outputs):** Third-person present tense verbs defining concrete operations and deliverables (e.g., *audits test refutability and invariants...*, *synthesizes multi-stack test runners...*).
 3. **When to use (Activation Boundary via `Use when...`):** **Required.** Explicit condition starting with `Use when...` (or `when the user...`). Benchmarks show natural language conditionals activate model routing policy heads far more reliably than passive topic summaries.
 4. **Symptom Keywords Standard:** **Fundamental standard.** Users describe problems and symptoms, not solutions. Must include concrete failure states, bug indicators, debugging signals, and pain phrases (e.g., *flaky tests*, *drift*, *messy code*, *memory leak*, *crash*, *slow*).
-5. **Negative Boundary:** **Opt-in.** Clause specifying when NOT to use the skill (e.g., *Do not use for unit testing; defer to Y for Z*). Proven highest-leverage lever to eliminate false-positive collisions between adjacent skills.
+5. **Negative Boundary:** **Opt-in.** Clause specifying when NOT to use the skill (e.g., *Do not use for unit testing -- defer to Y for Z*). Proven highest-leverage lever to eliminate false-positive collisions between adjacent skills.
 
 **Enforcement Rules:**
 - Must be present, non-empty, and written with YAML block scalar `>-`
@@ -133,7 +133,7 @@ Every skill's `description` is its top-level machine-readable trigger and perman
 
 ### Platform Sync
 
-Claude Code `SKILL.md` is the canonical format. Scripts generate platform-specific artifacts; Pi handles the field natively at prompt build:
+Claude Code `SKILL.md` is the canonical format. Scripts generate platform-specific artifacts. Pi handles the field natively at prompt build:
 
 `SKILL.md` (canonical) → `validate-deps.py sync` → `agents/openai.yaml` (generated) · Pi ≥0.84.4 `formatSkillsForPrompt` → strip from `<available_skills>` XML
 
@@ -199,7 +199,7 @@ uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-che
 
 ## High-Fidelity Handoffs
 
-**The Handoff is the Mission Bridge.** In complex multi-agent systems or long-running tasks, the handoff document distills Goals, Reasoning, and Intent from a sprawling session into a single source of truth.
+**The Handoff is the Mission Bridge**. Multi-agent systems and long-running tasks require reliable handoffs. The handoff document distills Goals, Reasoning, and Intent from a sprawling session into a single source of truth.
 
 | Requirement          | Description                                                            |
 | -------------------- | ---------------------------------------------------------------------- |
@@ -233,7 +233,7 @@ Use the handoff document as the index for durable artifacts (`design.md`, `linea
 
 ## Subagent-First Execution
 
-**The orchestrator never does implementation work.** All code writing, file editing, test execution, doc updates, and review work happens in subagents.
+**The orchestrator never does implementation work**. All code writing, file editing, test execution, doc updates, and review work happens in subagents.
 
 | Orchestrator DOES                    | Orchestrator NEVER DOES                  |
 | ------------------------------------ | ---------------------------------------- |
@@ -245,7 +245,7 @@ Use the handoff document as the index for durable artifacts (`design.md`, `linea
 
 ### Execution Profile Boundary
 - **Heavy Mutation & Implementation**: Subagent-first is mandatory. Keeps orchestrator context clean and isolates trial-and-error churn.
-- **Diagnostic & Audit Pipelines**: Standalone retrospective audits (`harness-audit`) may run as in-process linear pipelines when strictly isolated to scratch/report directories. However, **mid-session diagnostics** (e.g. diagnosing why a skill failed to trigger during an active task) **must be dispatched to a subagent with forked context** to prevent diagnostic meta-chatter from bloating the parent session's working memory.
+- **Diagnostic & Audit Pipelines**: Standalone retrospective audits (`harness-audit`) may run as in-process linear pipelines in scratch directories. Dispatch **mid-session diagnostics** (such as trigger failures) to a subagent with forked context. This prevents diagnostic meta-chatter from bloating the parent session's working memory.
 
 ### Dispatch Pattern
 
@@ -266,7 +266,7 @@ prompt: |
 
 ### Pointer-Based State Passing
 
-Subagents exchange state through **file paths**, not content. The orchestrator passes pointers; subagents read/write artifacts at those paths. Preserves orchestrator context budget and supports large artifacts.
+Subagents exchange state through **file paths**, not content. The orchestrator passes pointers. Subagents read and write artifacts at those paths. Preserves orchestrator context budget and supports large artifacts.
 
 ### Anti-Patterns
 
@@ -281,7 +281,7 @@ Reference: [Subagent-first execution](references/subagent-first-execution.md)
 
 ## Artifact Hygiene
 
-Every modification must preserve or improve organization. Additive changes without consolidation create bloat; scattered knowledge creates discovery failures.
+Every modification must preserve or improve organization. Additive changes without consolidation create bloat. Scattered knowledge creates discovery failures.
 
 **Before any update:** audit the target, identify redundancy, find the right home.
 
@@ -310,8 +310,8 @@ uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py lint   # fr
 Design decisions the architecture makes intentionally:
 
 - **Latency vs Context Efficiency** -- On-demand skill loading adds a small runtime penalty (model must call `Skill` tool to retrieve deep knowledge). This keeps the base context window focused on the user's immediate request. Load only what is needed for the current sub-task.
-- **Hero-Mode Prevention** -- Generic agents are prone to ignoring delegation instructions. Orchestration skills and complex workflow skills that dispatch agents SHOULD use explicit execution schemas with stable Agent dispatch templates to force the model into orchestration mode.
-- **Tooling Preference** -- When using shell-based search, prefer `rg` for content search and `fd` for file discovery over `grep`, `find`, and agent built-in search tools. Reserve `ls` and `tree` for structural inspection.
+- **Hero-Mode Prevention** -- Generic agents are prone to ignoring delegation instructions. Skills that dispatch agents SHOULD use explicit execution schemas. Stable Agent dispatch templates force the model into orchestration mode.
+- **Tooling Preference** -- For shell search, prefer `rg` for content search and `fd` for file discovery. Avoid `grep`, `find`, and built-in search tools. Reserve `ls` and `tree` for structural inspection.
 
 ---
 
@@ -319,8 +319,8 @@ Design decisions the architecture makes intentionally:
 
 When workflow steps are plain shell that the model rewrites each time, they add variance. Tighten by packing.
 
-- **Pack plain steps into scripts.** Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/` — shell for file and branch work, Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`.
-- **Fix inside the copy.** If a merge shows a conflict, the main flow does not edit files. A separate worker opens that copy's folder, checks `git status`, fixes each file (`git rm` for delete vs change, `git add` after), runs `npm run typecheck && npm test`, then `GIT_EDITOR=true git rebase --continue` and tries the merge again.
+- **Pack plain steps into scripts**. Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/`. Use shell for file and branch work. Use Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`.
+- **Fix inside the copy**. If a merge shows a conflict, the main flow does not edit files. A separate worker opens that copy's folder and checks `git status`. The worker fixes each file (`git rm` for delete vs change, `git add` after). It runs `npm run typecheck && npm test`, executes `GIT_EDITOR=true git rebase --continue`, and retries the merge.
 - **Use plain words.** Keep prompts as `branch, copy, merge, conflict, fix, test, check, file, folder`. Plain words travel reliably and keep the guide short.
   Each fix must remove the inline lines it replaces. Otherwise the guide grows.
 

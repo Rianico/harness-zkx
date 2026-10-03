@@ -6,8 +6,8 @@ Instead, both modes in this harness are **STE Flavors** adapted for computing. T
 
 1. **The Lexical (Vocabulary) Dial:** Rich technical vocabulary and verbatim code tokens are always permitted. We only ban subjective marketing adjectives (`robust`, `seamless`, `cutting-edge`) and ambiguous soft phrasal verbs (`spin up`, `touch base`).
 2. **The Structural (Grammar) Dial:** Dictates sentence structure and rigidity based on target audience:
-   - **Machine-Targeted STE Flavor** (formerly Strict Structural Mode): Designed for machine-parsed and model-primary artifacts. These include tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), and procedural runbooks (`SKILL.md` body, `AGENTS.md`). It imposes strict structural rules. Requirements include 1 action per sentence, second-person imperative, and front-loaded guards (`If X, then Y`). It limits instructions to ≤20 words, requires zero synonym rotation, and enforces backticked token insulation.
-   - **Human-Targeted STE Flavor** (Narrative Mode): Designed for human-judged decision artifacts. These include PR descriptions, ADRs, RFCs, GitHub issues, CHANGELOGs, and review comments. It employs active voice with named actors, ≤25 words per sentence, 60-second scannability, nominalization removal, and evidence over adjectives. See [../../writing-for-humans/references/plain-language.md](../../writing-for-humans/references/plain-language.md).
+   - **Machine-Targeted STE Flavor** (formerly Strict Structural Mode): Designed for machine-parsed and model-primary artifacts. Machine-Targeted STE applies to tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), and procedural runbooks (`AGENTS.md`, procedural `SKILL.md` bodies). It imposes strict structural rules. Requirements include 1 action per sentence, second-person imperative, and front-loaded guards (`If X, then Y`). It limits instructions to ≤20 words, requires zero synonym rotation, and enforces backticked token insulation.
+   - **Human-Targeted STE Flavor** (Narrative Mode): Designed for human-judged decision artifacts. These include PR descriptions, ADRs, RFCs, GitHub issues, CHANGELOGs, and review comments. Human-facing guidelines (such as `subskills/writing-for-humans`) follow Human-Targeted STE. It employs active voice with named actors, ≤25 words per sentence, 60-second scannability, nominalization removal, and evidence over adjectives. See [../../writing-for-humans/references/plain-language.md](../../writing-for-humans/references/plain-language.md).
 
 > [!note] Authoritative Provenance: ASD-STE100 Issue 9 (published January 15, 2025).
 > - **Adopted Structural Rules:**
@@ -32,6 +32,7 @@ Instead, both modes in this harness are **STE Flavors** adapted for computing. T
 - Protecting code and paths: [Technical token insulation](#technical-token-insulation).
 - Domain consistency: [Zero synonym rotation](#zero-synonym-rotation).
 - Preserving uncertainty and confidence bounds: [Modality preservation](#modality-preservation).
+- Preserving test assertions and contracts: [Rewriting pinned text](#rewriting-pinned-text).
 - Side-by-side patterns: [Comparative grammar table](#comparative-grammar-table).
 - Mode selection: [Timing arbitration table](#timing-arbitration-table).
 
@@ -116,6 +117,22 @@ Preserve epistemic modalities to accurately communicate system confidence and co
 - **Do not soften `MUST` into `SHOULD`:** Weakening invariants leads to silent validation bypasses.
 - Preserve probabilistic confidence indicators (`may fail under high concurrency`) so the agent factors uncertainty into error handling.
 
+## Rewriting pinned text
+
+A phrase pin is a prose constraint (e.g., case-sensitive test assertion). An example pin is a behavioral contract. Rewriting prose to follow STE can silently break phrase pins.
+
+Follow these three rules when rewriting pinned text:
+
+1. Prefer an example pin over a phrase pin.
+2. Keep pinned phrases verbatim as fixed islands inside STE prose.
+3. Move a pin in the same change that rewrites its sentence.
+
+Pass `--preserve <string>` to `ste100.py` to fail if a rewrite drops a pinned substring. You can pass `--preserve <string>` multiple times to check multiple pins.
+
+```bash
+python3 skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py <path> --preserve <string>
+```
+
 ## Comparative grammar table
 
 | Dimension | Trailing / Permissive (Fragile) | Front-Loaded / Structural (Reliable) |
@@ -130,7 +147,7 @@ Preserve epistemic modalities to accurately communicate system confidence and co
 
 | Mode / Dimension | Scope / Artifacts | Key Rules & Sentence Length |
 | --- | --- | --- |
-| **Machine-Targeted STE Flavor** (Strict Structure) | Tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), procedural runbooks (`SKILL.md` body, `AGENTS.md`) | ≤20 words/instruction, 1 action/sentence, imperative, front-loaded guards, zero synonym rotation, token insulation |
-| **Human-Targeted STE Flavor** (Narrative Mode) | Human-primary decision artifacts (PR descriptions, ADRs, RFCs, GitHub issues, CHANGELOGs, review comments) | ≤25 words/sentence, active voice with named actors, nominalization removal, evidence over adjectives, 60s scannability |
+| **Machine-Targeted STE Flavor** (Strict Structure) | Tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), procedural runbooks (`AGENTS.md`, procedural `SKILL.md` bodies) | ≤20 words/instruction, 1 action/sentence, imperative, front-loaded guards, zero synonym rotation, token insulation |
+| **Human-Targeted STE Flavor** (Narrative Mode) | Human-primary decision artifacts (PR descriptions, ADRs, RFCs, GitHub issues, CHANGELOGs, review comments), human-facing guidelines (such as `subskills/writing-for-humans`) | ≤25 words/sentence, active voice with named actors, nominalization removal, evidence over adjectives, 60s scannability |
 | **Hybrid / Gray Areas** | Architecture reviews, complex diagnostics, proposals with embedded action blocks | Human-Targeted STE for exposition/rationale; Machine-Targeted STE for normative contracts, invariants, action blocks |
 | **Lexical vs. Structural Split** | Vocabulary rules vs. Grammar rules | Vocabulary: Rich CS terms allowed; fluff and soft phrasals banned (never use aerospace ~900-word dictionary). Grammar: ≤20 words for procedural instructions vs. ≤25 words for descriptive prose |

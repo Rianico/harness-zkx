@@ -22,6 +22,7 @@ from ste100 import (  # noqa: E402
     STE100_BANNED_PHRASAL_VERBS,
     STE100_BANNED_WORDS,
     STE100_MAX_SENTENCE_WORDS,
+    _lint_markdown_content,
     _strip_code_blocks,
     _strip_headings,
     _strip_html_entities,
@@ -30,6 +31,7 @@ from ste100 import (  # noqa: E402
     lint_banned_words,
     lint_nominalizations,
     lint_phrasal_verbs,
+    lint_preserved_phrases,
     lint_semicolons,
     lint_sentence_lengths,
     main,
@@ -412,3 +414,82 @@ class TestCLIEntryPoint:
             )
             exit_code = main([str(md_file)])
             assert exit_code == 0
+
+
+class TestPreservedPhrases:
+    """Preserved phrases verification (e.g. required contracts/phrases in files)."""
+
+    def test_clean_text_containing_preserved_phrase_passes(self):
+        content = "Every edit must have tests. Direct actions only."
+        assert lint_preserved_phrases(content, ["Every edit"]) == []
+
+    def test_missing_preserved_phrase_detected_and_flagged(self):
+        content = "Direct actions only."
+        issues = lint_preserved_phrases(content, ["Every edit"])
+        assert len(issues) == 1
+        assert "Missing preserved phrase (case-sensitive): 'Every edit'" in issues[0]
+
+    def test_case_sensitivity_strictly_checked(self):
+        content = "every edit must have tests."
+        issues = lint_preserved_phrases(content, ["Every edit"])
+        assert len(issues) == 1
+        assert "Missing preserved phrase (case-sensitive): 'Every edit'" in issues[0]
+
+    def test_multiple_preserved_phrases_all_must_be_present(self):
+        content = "First phrase here. Second phrase here."
+        assert lint_preserved_phrases(content, ["First phrase", "Second phrase"]) == []
+
+        one_missing = lint_preserved_phrases(content, ["First phrase", "Third phrase"])
+        assert len(one_missing) == 1
+        assert "Third phrase" in one_missing[0]
+
+        both_missing = lint_preserved_phrases(content, ["Alpha phrase", "Beta phrase"])
+        assert len(both_missing) == 2
+        assert any("Alpha phrase" in iss for iss in both_missing)
+        assert any("Beta phrase" in iss for iss in both_missing)
+
+    def test_empty_preserved_list_passes(self):
+        assert lint_preserved_phrases("Arbitrary text.", []) == []
+
+    def test_preserved_phrases_in_frontmatter_or_code_passes(self):
+        content = "---\nname: Special Header\n---\n```python\nrun_code()\n```\nBody text.\n"
+        issues = _lint_markdown_content(
+            content,
+            preserved=["Special Header", "run_code()"],
+        )
+        assert issues == []
+
+    def test_cli_preserve_single_phrase_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            md_file = Path(d) / "doc.md"
+            _ = md_file.write_text("# Doc\n\nEvery edit must have tests.\n")
+            exit_code = main([str(md_file), "--preserve", "Every edit"])
+            assert exit_code == 0
+
+    def test_cli_preserve_missing_phrase_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            md_file = Path(d) / "doc.md"
+            _ = md_file.write_text("# Doc\n\nOther sentence here.\n")
+            exit_code = main([str(md_file), "--preserve", "Every edit"])
+            assert exit_code == 1
+
+    def test_cli_preserve_case_sensitive_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            md_file = Path(d) / "doc.md"
+            _ = md_file.write_text("# Doc\n\nevery edit must have tests.\n")
+            exit_code = main([str(md_file), "--preserve", "Every edit"])
+            assert exit_code == 1
+
+    def test_cli_multiple_preserve_phrases(self):
+        with tempfile.TemporaryDirectory() as d:
+            md_file = Path(d) / "doc.md"
+            _ = md_file.write_text("# Doc\n\nFirst phrase. Second phrase.\n")
+            exit_code = main(
+                [str(md_file), "--preserve", "First phrase", "--preserve", "Second phrase"]
+            )
+            assert exit_code == 0
+
+            exit_code_missing = main(
+                [str(md_file), "--preserve", "First phrase", "--preserve", "Missing phrase"]
+            )
+            assert exit_code_missing == 1

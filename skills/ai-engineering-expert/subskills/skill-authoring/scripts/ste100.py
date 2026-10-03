@@ -305,7 +305,20 @@ def lint_nominalizations(text: str) -> list[str]:
     return issues
 
 
-def _lint_markdown_content(content: str, max_words: int = STE100_MAX_SENTENCE_WORDS) -> list[str]:
+def lint_preserved_phrases(content: str, preserved: list[str]) -> list[str]:
+    """Verify that required preserved phrases are present in raw content (case-sensitive)."""
+    issues: list[str] = []
+    for phrase in preserved:
+        if phrase not in content:
+            issues.append(f"Missing preserved phrase (case-sensitive): '{phrase}'")
+    return issues
+
+
+def _lint_markdown_content(
+    content: str,
+    max_words: int = STE100_MAX_SENTENCE_WORDS,
+    preserved: list[str] | None = None,
+) -> list[str]:
     """Run all STE-100 deterministic linters on markdown text, stripping frontmatter if present."""
     frontmatter_match = re.search(r"^---\n.*?\n---", content, re.DOTALL)
     body = content[frontmatter_match.end() :] if frontmatter_match else content
@@ -316,6 +329,7 @@ def _lint_markdown_content(content: str, max_words: int = STE100_MAX_SENTENCE_WO
     issues.extend(lint_phrasal_verbs(body))
     issues.extend(lint_semicolons(body))
     issues.extend(lint_nominalizations(body))
+    issues.extend(lint_preserved_phrases(content, preserved or []))
     return issues
 
 
@@ -331,6 +345,13 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=STE100_MAX_SENTENCE_WORDS,
         help=f"Maximum allowed words per sentence (default: {STE100_MAX_SENTENCE_WORDS})",
+    )
+    _ = parser.add_argument(
+        "--preserve",
+        action="append",
+        default=[],
+        metavar="TEXT",
+        help="Case-sensitive substring that must be present in the file",
     )
     args = parser.parse_args(argv)
 
@@ -358,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
             total_issues += 1
             continue
 
-        issues = _lint_markdown_content(content, max_words=args.max_words)
+        issues = _lint_markdown_content(content, max_words=args.max_words, preserved=args.preserve)
         if issues:
             total_issues += len(issues)
             print(f"FAIL  {file_path} ({len(issues)} issue{'s' if len(issues) != 1 else ''}):")
@@ -394,6 +415,7 @@ __all__ = [
     "lint_banned_words",
     "lint_nominalizations",
     "lint_phrasal_verbs",
+    "lint_preserved_phrases",
     "lint_semicolons",
     "lint_sentence_lengths",
     "main",
