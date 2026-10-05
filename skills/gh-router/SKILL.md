@@ -24,6 +24,7 @@ brief output — do not re-derive it with `gh pr view`, `gh run list`, or `gh ap
 | **0: Orientation** | | |
 | See where I stand | `$SKILL_DIR/scripts/state.sh` | 4 lines: branch→base divergence · PR state + checks · changelog guard · base tip |
 | **1: Prep & Authoring** | | |
+| Install the canonical PR template | `$SKILL_DIR/scripts/install-template.sh [--target DIR] [--check|--force|--dry-run]` | `installed:`/`already installed:`/`clean:`/`dry-run:` exit 0 · `drift:`/`missing:`/`refused:` exit 1 · usage exit 2 · missing/unusable source exit 3; `--target` must be an existing directory (default `.`), never overwrites without `--force` |
 | Draft PR body from the diff | `uv run $SKILL_DIR/subskills/pr-enhance/scripts/analyze-pr.py` | changed files, stats, categories |
 | Refresh existing PR description | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --body-file …` | reuses PR by head branch; pass title/body or untouched |
 | **2: Conflict Reconcile** | | |

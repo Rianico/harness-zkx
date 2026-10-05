@@ -190,8 +190,6 @@ ISSUE_FEATURE_REQUEST_YML = load_template("git/.github/ISSUE_TEMPLATE/02-feature
 
 ISSUE_CONFIG_YML = load_template("git/.github/ISSUE_TEMPLATE/config.yml")
 
-PULL_REQUEST_TEMPLATE_MD = load_template("git/.github/pull_request_template.md")
-
 CHANGELOG_MD = load_template("git/CHANGELOG.md")
 
 # Other flavors' static artifacts — same contract, one byte source per flavor.
@@ -237,7 +235,6 @@ GIT_COMPONENTS: set[str] = {
     "commitlint",  # commitlint.config.js
     "changelog-md",  # CHANGELOG.md
     "issue-templates",  # .github/ISSUE_TEMPLATE/* + config.yml
-    "pr-template",  # .github/pull_request_template.md
     "contributing",  # CONTRIBUTING.md
     "agents",  # AGENTS.md patch
     "gitignore",  # .gitignore append
@@ -516,11 +513,6 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
         "script": "changelog-script",
         "typecheck": "typecheck-budget",
         "issues": "issue-templates",
-        "pr-template": "pr-template",
-        "pr_template": "pr-template",
-        "pull-request": "pr-template",
-        "pull_request": "pr-template",
-        "pullrequest": "pr-template",
     }
     parts = [s.strip() for s in raw.split(",") if s.strip()]
     resolved: set[str] = set()
@@ -535,11 +527,42 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
     return resolved
 
 
+# pr-template retired to gh-router: the spellings must still exit 0 with a pointer, never
+# "unknown component" exit 2 — downstream automation calls `--update --only pr-template`.
+RETIRED_PR_TEMPLATE_SPELLINGS = {
+    "pr-template",
+    "pr_template",
+    "pull-request",
+    "pull_request",
+    "pullrequest",
+}
+_PR_TEMPLATE_RETIREMENT_NOTICE = "pr-template is retired; install it with skills/gh-router/scripts/install-template.sh --target ."
+_retirement_notice_shown = False
+
+
+def _note_pr_template_retirement() -> None:
+    global _retirement_notice_shown
+    if not _retirement_notice_shown:
+        _retirement_notice_shown = True
+        print(_PR_TEMPLATE_RETIREMENT_NOTICE, file=sys.stderr)
+
+
+def _drop_retired_pr_template(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    parts = [s for s in raw.split(",") if s.strip()]
+    kept = [s for s in parts if s.strip().lower() not in RETIRED_PR_TEMPLATE_SPELLINGS]
+    if len(kept) != len(parts):
+        _note_pr_template_retirement()
+    return ",".join(kept)
+
+
 def _resolve_selected(
     only: str | None, without: str | None, components: str | None, available: set[str]
 ) -> set[str]:
     # --components is alias for --only
-    effective_only = components if components is not None else only
+    effective_only = _drop_retired_pr_template(components if components is not None else only)
+    without = _drop_retired_pr_template(without)
     if effective_only is not None:
         sel = _parse_components(effective_only, available, "--only/--components")
         assert sel is not None
@@ -1180,10 +1203,6 @@ def do_git(
             dry_run,
         )
         _ = write_file(cwd / ".github" / "ISSUE_TEMPLATE" / "config.yml", ISSUE_CONFIG_YML, dry_run)
-    if "pr-template" in sel:
-        _ = write_file(
-            cwd / ".github" / "pull_request_template.md", PULL_REQUEST_TEMPLATE_MD, dry_run
-        )
     # migrate legacy markdown template (pre-YAML) — keep spine small
     legacy_md = cwd / ".github" / "ISSUE_TEMPLATE" / "bug_report.md"
     if legacy_md.exists():
@@ -1583,7 +1602,6 @@ def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, objec
         ".gitignore": exists(".gitignore"),
         "CONTRIBUTING.md": exists("CONTRIBUTING.md"),
         "AGENTS.md": exists("AGENTS.md"),
-        ".github/pull_request_template.md": exists(".github/pull_request_template.md"),
     }
 
     pyproject = read_text("pyproject.toml")
@@ -1762,12 +1780,6 @@ def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, objec
             ".github/workflows/changelog-check.yml",
             "absent — the CHANGELOG guard has no CI half",
             f"uv run {scaffold_root}/scripts/scaffold.py --update --only changelog-check",
-        )
-    if node_present and not files[".github/pull_request_template.md"]:
-        finding(
-            ".github/pull_request_template.md",
-            "absent — PR bodies lose the checklist and impact/risk line",
-            f"uv run {scaffold_root}/scripts/scaffold.py --update --only pr-template",
         )
     if changelog and not changelog_guard_absent:
         # Both defects are real and independent: a release needs the heading *and* a title the

@@ -8,6 +8,12 @@ disable-model-invocation: true
 
 # branch-worktree-pr — ==tight worktree== orchestration
 
+> [!warning] Deprecated — superseded by `gh-router`
+> This skill is retired for new work: `gh-router` `pr-enhance` drafts PR descriptions from the
+> resolved template and `pr-land` (`pr.py`) lands PRs. `scripts/open_pr.py` here creates bare
+> `Closes #N` bodies and must not be used. Use `gh-router` instead; this file stays until its
+> full retirement is decided.
+
 > **Type:** Orchestration — owns sequencing, checkpoints, and fan-out/fan-in. Delegates ==all== implementation to subagents. The orchestrator never writes code. All code-writing subagents MUST use `tdd` (`tdd-cycle` skill) — red → green → refactor — tests live in `tests/` per `AGENTS.md`.
 
 ## When to use

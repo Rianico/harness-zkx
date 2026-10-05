@@ -330,14 +330,16 @@ def test_merge_refuses_when_commit_enumeration_fails(tmp_path: Path) -> None:
     assert "pulls/7/merge" not in open(env["GH_LOG"]).read()
 
 
-def test_merge_template_body_falls_back_to_subjects(tmp_path: Path) -> None:
+def test_merge_template_body_refuses_without_explicit(tmp_path: Path) -> None:
+    """Fail-closed squash gate: a template body without --squash-message refuses the merge (exit 1, no PUT)."""
     env = make_gh_mock(tmp_path, COMMITS_TSV="ghuser\tWf Zyx\twf@x.io")
     template = open(os.path.join(REPO_ROOT, ".github", "pull_request_template.md")).read()
     assert "CODE_AUTHORS" in template
     r = run_merge(env, template)
-    assert r.returncode == 0
+    assert r.returncode == 1
+    assert "--squash-message" in r.stderr
     assert not os.path.exists(env["CAPTURE"])
-    assert "pulls/7/merge" in open(env["GH_LOG"]).read()
+    assert "pulls/7/merge" not in open(env["GH_LOG"]).read()
 
 
 def test_merge_token_bearing_body_refused(tmp_path: Path) -> None:
@@ -410,11 +412,12 @@ def test_check_dry_run_reports_when_nothing_to_append(tmp_path: Path) -> None:
 
 
 def test_check_template_body_reports_fallback(tmp_path: Path) -> None:
+    """Fail-closed squash gate: a template body without --squash-message refuses --check with exit 1."""
     template = open(os.path.join(REPO_ROOT, ".github", "pull_request_template.md")).read()
     env = make_gh_mock(tmp_path, COMMITS_TSV="ghuser\tWf Zyx\twf@x.io", PR_BODY=template)
     r = run_check(env)
-    assert r.returncode == 0
-    assert "omitted" in r.stdout
+    assert r.returncode == 1
+    assert "--squash-message" in r.stderr
     assert "Co-authored-by" not in r.stdout
 
 
