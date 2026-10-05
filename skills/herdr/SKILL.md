@@ -127,29 +127,29 @@ Multi-agent coordination is event-driven via completion callbacks:
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_label.py" orchestrator
    ```
-   Ensures the caller has a valid, addressable agent name so workers know whom to reply to.
+   Ensures the caller has a valid, addressable agent name so callees know whom to reply to.
 
 2. **Dispatch with Synthesized IDD/GDD Tickets & Task Leases:**
    ```bash
    # Dedicated dispatch helper (checks/acquires task leases, validates agent name):
-   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker --file task.md --no-wait
+   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --no-wait
 
    # Or bypass an existing active lease:
-   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker --file task.md --force --no-wait
+   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --force --no-wait
 
    # Or via herdr-prompt:
-   uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker --file task.md --wait --timeout 15000
+   uv run "$SKILL_DIR/scripts/herdr_prompt.py" callee --file task.md --wait --timeout 15000
    ```
    - **Synthesized IDD/GDD Ticket Format**: Dispatched tickets pair upstream teleological purpose (**IDD**: Problem, Proposed Outcome, Non-Negotiable Constraints) with downstream verifiable milestones (**GDD/EDD**: Check Command, Required Evidence), preventing both Goodhart gaming and semantic drift.
    - **Task Lease Invariant**: `herdr_dispatch.py` checks active ticket leases in `.lane/lease.json` (or `.herdr-lease.json`) before dispatching, preventing ticket collisions. Target identities are canonicalized across agent name and pane ID. Leases are acquired atomically pre-dispatch and rolled back if prompt delivery fails or is blocked. Leases are retained only on prompt acceptance (`EXIT_OK` or `WaitTimeout`), and automatically released upon delivery of `herdr_reply.py`.
-   - Never dispatch tasks via bare `herdr agent prompt worker` directly — doing so drops the `Caller:` context, the Resumption Triple, and the reply contract.
+   - Never dispatch tasks via bare `herdr agent prompt callee` directly — doing so drops the `Caller:` context, the Resumption Triple, and the reply contract.
    - *Prompt acceptance invariant*: Exit code 0 from `herdr agent prompt` confirms acceptance. Revision numbers are purely informational; prompts are never re-injected or dropped due to unchanged revisions (#193).
 
 3. **Yield turn on async execution:**
-   If `herdr-prompt` exits 4 (timeout) or was dispatched with `--no-wait`, the prompt was delivered and the worker is working asynchronously. The orchestrator yields turn (stops calling tools, enters idle).
+   If `herdr-prompt` exits 4 (timeout) or was dispatched with `--no-wait`, the prompt was delivered and the callee is working asynchronously. The orchestrator yields turn (stops calling tools, enters idle).
 
-4. **Worker executes completion callback (and releases lease):**
-   Upon completion or blocking, the worker executes the contract callback via `herdr_reply.py`, adhering to the settled **Final Reply Template** (`resp-format.md`):
+4. **Callee executes completion callback (and releases lease):**
+   Upon completion or blocking, the callee executes the contract callback via `herdr_reply.py`, adhering to the settled **Final Reply Template** (`resp-format.md`):
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md
    # Or inline:
@@ -166,7 +166,7 @@ Multi-agent coordination is event-driven via completion callbacks:
    - `## Issues` (P1/P2/P3 severity with file:line, invariant, defect, remediation; or `None`)
    - `## Suggestions` (optional non-blocking environment observations)
 
-   Delivering this reply prompts the caller pane directly without shell mangling, waking its turn with the result, and automatically releases the replying worker's active task lease. Never use bare `herdr agent prompt` directly for replies.
+   Delivering this reply prompts the caller pane directly without shell mangling, waking its turn with the result, and automatically releases the replying callee's active task lease. Never use bare `herdr agent prompt` directly for replies.
 
 5. **Subagent Observability & `herdr-wait`:**
    **Subagent-First Execution**: In lane coordination, agents MUST use subagents for heavy tasks (exploration, bulk edits, test triage, and crux review). When agents spawn subagents, they may report `idle` while subagents work (the False-Idle Phenomenon). Herdr exposes live subagent status via Session Navigator tokens (`tokens`), displayed as `delegating` in `herdr-overview`.
@@ -174,13 +174,22 @@ Multi-agent coordination is event-driven via completion callbacks:
    `herdr-wait` is strictly a fallback for non-agent panes or watchdog recovery; Dispatch-&-Yield is the primary coordination pattern.
    **Dispatch-&-Yield is REQUIRED (not advisory) for `agy` and revision-0 agents**: Agents with background subagents (such as `agy`) report `idle` while their subagents work, and weakly-recognized agents never advance revision past 0. `herdr-wait` and `herdr-prompt --wait` CANNOT reliably observe `agy` agents to completion (they fail fast with exit 2 or hang to timeout). You must dispatch with `herdr-dispatch` or `herdr-prompt --no-wait`, yield turn, and await the `herdr_reply.py` callback.
 
-**Every handoff carries the caller's context, and requires a reply.** A worker cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and Herdr skill notice, and closes with the reply contract:
+**Every handoff carries the caller's context, and requires a reply.** A callee cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and Herdr skill notice, and closes with the reply contract:
 
 ```text
 [2026-10-05T06:19:12.983Z]
-Caller: pane=w1:p1 label=orchestrator agent=orchestrator kind=pi session=/path/to/session.jsonl resume="pi --resume /path/to/session.jsonl" cwd=/Users/zhengxk/workspace
+tab: w1:t1
+  pane: w1:p1
+  label: orchestrator
+  agent: orchestrator
+kind: pi
+  session: /path/to/session.jsonl
+  resume: "pi --resume /path/to/session.jsonl"
+cwd: /Users/zhengxk/workspace
 Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
-Workers: impl-1@w1:p3, impl-2@w1:p4
+Group Members: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
+
+Callee: impl-1
 
 <the payload (Synthesized IDD/GDD Ticket)>
 
@@ -188,7 +197,7 @@ On completion, reply to the caller in one message using the herdr helper script:
   uv run ~/.agents/skills/herdr/scripts/herdr_reply.py orchestrator --file <reply-payload.md>
 ```
 
-`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked worker names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, injecting the **Resumption Triple** (`kind + session + cwd`) along with `pane`, `label`, `tab`, `agent`, and `resume="..."`. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
+`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked callee names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, injecting the **Resumption Triple** (`kind + session + cwd`) along with `pane`, `label`, `tab`, `agent`, and `resume="..."`. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
 
 Underlying commands, if you drive them directly:
 
@@ -281,25 +290,25 @@ If a wait fails or returns `blocked`, inspect `agent get` and the transcript bef
 
 The primary workflow for multi-agent fan-out is **Dispatch & Yield (Event-Driven)**:
 
-1. **Dispatch, then yield.** The canonical sequence — caller self-names, workers receive the caller context and reply contract, the orchestrator yields turn, the `herdr-reply` callback wakes it — is the Dispatch & Yield block above. Broadcast to several workers in one call:
+1. **Dispatch, then yield.** The canonical sequence — caller self-names, callees receive the caller context and reply contract, the orchestrator yields turn, the `herdr-reply` callback wakes it — is the Dispatch & Yield block above. Broadcast to several callees in one call:
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker1 worker2 --file task.md --no-wait
+uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee1 callee2 --file task.md --no-wait
 ```
 
 2. **Inspect session transcripts on wake**, never a poll loop:
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_transcript.py" worker1 --last
+uv run "$SKILL_DIR/scripts/herdr_transcript.py" callee1 --last
 ```
 
-**`herdr-wait` is strictly a fallback, not the primary coordination signal.** The event-driven callback model ensures completion arrives without the orchestrator holding a wait, burning context, or looping. External `agent_status` detection is untrustworthy for coding agents with background subagents (such as `agy`): the primary agent reports `idle` while waiting on subagents even though the task is still actively running, causing false early settlements or indefinite revision-0 holds. Event-driven `herdr_reply.py` callbacks are the only reliable completion signal. Keep `herdr-wait` strictly for non-agent panes, panes without an agent name, or watchdog recovery when a worker fails to report back. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. If using the barrier fallback:
+**`herdr-wait` is strictly a fallback, not the primary coordination signal.** The event-driven callback model ensures completion arrives without the orchestrator holding a wait, burning context, or looping. External `agent_status` detection is untrustworthy for coding agents with background subagents (such as `agy`): the primary agent reports `idle` while waiting on subagents even though the task is still actively running, causing false early settlements or indefinite revision-0 holds. Event-driven `herdr_reply.py` callbacks are the only reliable completion signal. Keep `herdr-wait` strictly for non-agent panes, panes without an agent name, or watchdog recovery when a callee fails to report back. Sequential `herdr agent wait A && herdr agent wait B` starves B while A runs: if B finishes or blocks in 10s and A runs 5 minutes, B is ignored for 5 minutes. If using the barrier fallback:
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_wait.py" worker1 worker2 --timeout 300000
+uv run "$SKILL_DIR/scripts/herdr_wait.py" callee1 callee2 --timeout 300000
 ```
 
-The barrier exits 3 the moment any target needs input — unblock it, then re-enter the barrier for the rest. Distrust its first tick: a worker that has not begun still reads `idle`, so a barrier can return in 0ms having observed the state *before* the work. Re-enter it rather than concluding the work is done.
+The barrier exits 3 the moment any target needs input — unblock it, then re-enter the barrier for the rest. Distrust its first tick: a callee that has not begun still reads `idle`, so a barrier can return in 0ms having observed the state *before* the work. Re-enter it rather than concluding the work is done.
 
 ### Sibling-reviewer pattern
 
@@ -406,15 +415,15 @@ uv run "$SKILL_DIR/scripts/herdr_worktree.py" list --json
 
 ### `herdr-dispatch` — manager-side task dispatch
 
-Dispatches a ticket file to one or more workers with caller context and reply contract, validates worker agent names (refusing kinds), and verifies post-dispatch delivery (`revision` increment) in one command:
+Dispatches a ticket file to one or more callees with caller context and reply contract, validates callee agent names (refusing kinds), and verifies post-dispatch delivery (`revision` increment) in one command:
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker --file task.md --no-wait
-uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker --file task.md --wait --timeout 15000
-uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker1 worker2 --file task.md --no-wait
+uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --no-wait
+uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --wait --timeout 15000
+uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee1 callee2 --file task.md --no-wait
 ```
 
-Requires `--file` so tickets are always dispatched from a durable file. Refuses agent kinds (e.g. `qodercli`) with the live agent names listed. Prints `prompted <worker> (<pane>)  bytes=...  revision=...` to verify delivery.
+Requires `--file` so tickets are always dispatched from a durable file. Refuses agent kinds (e.g. `qodercli`) with the live agent names listed. Prints `prompted <callee> (<pane>)  bytes=...  revision=...` to verify delivery.
 
 ### `herdr-reply` — callee completion callback
 
@@ -440,9 +449,9 @@ git diff | uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --wait
 uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dry-run
 ```
 
-Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Accepts several TARGETs for one broadcast (`herdr-prompt worker1 worker2 --file brief.md --no-wait`); `--no-wait` dispatches without waiting and is rejected alongside `--wait`. A `--wait` that times out after delivery exits 4 — prompt accepted, agent working asynchronously: yield turn and await reply callback, or resume with `herdr-wait` instead of resubmitting; only a true dispatch failure exits 1. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as one JSON array per target and submits nothing.
+Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Accepts several TARGETs for one broadcast (`herdr-prompt callee1 callee2 --file brief.md --no-wait`); `--no-wait` dispatches without waiting and is rejected alongside `--wait`. A `--wait` that times out after delivery exits 4 — prompt accepted, agent working asynchronously: yield turn and await reply callback, or resume with `herdr-wait` instead of resubmitting; only a true dispatch failure exits 1. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as one JSON array per target and submits nothing.
 
-Unless `--no-caller-context` is passed, it prepends the caller block, Herdr skill notice, sibling workers, and the completion-reply contract (see "Name a target, then hand off"), so the convention does not depend on a caller remembering it. When the caller has no agent name, the block says so instead of naming a target that cannot be reached. `--no-caller-context` warns loudly on stderr if targeting named agents.
+Unless `--no-caller-context` is passed, it prepends the caller block, Herdr skill notice, sibling callees, and the completion-reply contract (see "Name a target, then hand off"), so the convention does not depend on a caller remembering it. When the caller has no agent name, the block says so instead of naming a target that cannot be reached. `--no-caller-context` warns loudly on stderr if targeting named agents.
 
 ### `herdr-wait` — one barrier over many agents
 

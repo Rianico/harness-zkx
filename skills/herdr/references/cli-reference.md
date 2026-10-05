@@ -56,7 +56,7 @@ When target resolution fails or resolves to an idle shell pane:
   1. **Queue/watch**: wait for agent to start or monitor pane with `herdr pane wait-output`.
   2. **Start agent**: `herdr agent start <name> --kind <kind> --pane <id>` (diagnostics output exact copy-paste `Suggested recovery: herdr agent start ...`).
   3. **Auto-start**: pass `--auto-start <KIND>` to `herdr-reply` to start the agent automatically on an open shell pane.
-  4. **Graceful abort**: abort gracefully if caller or worker has exited.
+  4. **Graceful abort**: abort gracefully if caller or callee has exited.
 
 ## Agent start and prompt semantics
 

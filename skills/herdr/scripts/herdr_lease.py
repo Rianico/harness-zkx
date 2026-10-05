@@ -6,7 +6,7 @@
 """herdr-lease — task lease helper for Herdr multi-agent lanes.
 
 Maintains ticket leases in `.lane/lease.json` (or `.herdr-lease.json` in cwd / lane worktree)
-to prevent overlapping dispatches to workers with active in-flight tickets.
+to prevent overlapping dispatches to callees with active in-flight tickets.
 
 Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr`.
 """

@@ -5,13 +5,13 @@
 # ///
 """herdr-dispatch — manager-side task dispatch helper for Herdr multi-agent lanes.
 
-Dispatches a ticket file to one or more workers with caller context and reply contract,
+Dispatches a ticket file to one or more callees with caller context and reply contract,
 validates addressable agent names (refusing kinds), and verifies post-dispatch delivery
 in one command.
 
-    herdr-dispatch worker --file ticket.md --no-wait
-    herdr-dispatch worker --file ticket.md --wait --timeout 15000
-    herdr-dispatch worker1 worker2 --file ticket.md --no-wait
+    herdr-dispatch callee --file ticket.md --no-wait
+    herdr-dispatch callee --file ticket.md --wait --timeout 15000
+    herdr-dispatch callee1 callee2 --file ticket.md --no-wait
 
 Exit status: 0 accepted, 1 herdr failure, 2 usage or missing precondition,
 3 a target needs human input (blocked), 4 prompt delivered but wait timed out.
@@ -61,7 +61,7 @@ class Options(PromptOptions):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="herdr-dispatch",
-        description="Dispatch a ticket file to a Herdr worker with caller context and reply contract.",
+        description="Dispatch a ticket file to a Herdr callee with caller context and reply contract.",
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
             "3 a target needs human input, 4 prompt delivered but wait timed out\n\n"
@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         "targets",
         nargs="*",
         metavar="TARGET",
-        help="worker agent names or pane ids (one or more)",
+        help="callee agent names or pane ids (one or more)",
     )
     _ = parser.add_argument(
         "--file",
@@ -88,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--wait",
         action="store_true",
-        help="wait for worker to settle after receiving ticket",
+        help="wait for callee to settle after receiving ticket",
     )
     _ = parser.add_argument(
         "--no-wait",

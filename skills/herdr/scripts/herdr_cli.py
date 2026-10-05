@@ -305,7 +305,7 @@ def format_shell_pane_diagnostic(
         "Guidance and alternatives:\n"
         f"  1. Start an agent: {recovery_cmd}\n"
         "  2. Queue/watch: wait for agent to start or monitor pane with herdr pane wait-output\n"
-        "  3. Graceful abort: if caller/worker exited, abort gracefully\n"
+        "  3. Graceful abort: if caller/callee exited, abort gracefully\n"
         "  4. Safety warning: never fall back to bare pane send-text or pane send-keys into a shell pane.\n"
         f"Suggested recovery: {recovery_cmd}"
     )

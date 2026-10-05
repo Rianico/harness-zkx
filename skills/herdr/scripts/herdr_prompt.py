@@ -11,7 +11,7 @@ flags. No shell is involved, so quotes, backticks, ``$``, newlines, and code fen
 survive byte-for-byte.
 
     herdr-prompt reviewer --file brief.md --wait --timeout 120000
-    herdr-prompt reviewer worker --file brief.md --no-wait
+    herdr-prompt reviewer callee --file brief.md --no-wait
     herdr-prompt reviewer --file - < brief.md
     git diff | herdr-prompt reviewer --wait
     herdr-prompt --label "review pane" --file brief.md --wait
@@ -29,10 +29,10 @@ timed out first — the agent is working asynchronously: yield turn and await re
 callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Caller context is prepended by default (see `resolve_caller`): the payload opens
-with a `Caller:` block (including Herdr skill notice and sibling workers if present)
-and closes with the completion-reply contract via `herdr-reply`, so a worker
+with a grouped caller block (`tab:`/`kind:` anchors with indented members, the
+Herdr skill notice, `Group Members:`, and a per-target `Callee:` line)
+and closes with the completion-reply contract via `herdr-reply`, so a callee
 can answer the caller by name using the helper script without shell mangling.
-`--no-caller-context` sends the payload verbatim (with a loud warning for named targets);
 `--dry-run` shows the exact rendered payload that would be submitted.
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
@@ -261,28 +261,35 @@ def _single_line(value: str, limit: int = 64) -> str:
     return " ".join(value.split())[:limit]
 
 
-def render_caller_block(caller: CallerContext) -> str:
-    """Render the `Caller:` header; absent fields are omitted, never invented."""
-    fields = f"pane={caller.pane_id}"
-    if caller.label:
-        label = _single_line(caller.label)
-        if label:
-            fields += f" label={label}"
-    if caller.agent:
-        fields += f" agent={caller.agent}"
-    if caller.tab_id:
-        fields += f" tab={caller.tab_id}"
-    if caller.kind:
-        fields += f" kind={caller.kind}"
-    if caller.session_id:
-        fields += f" session={caller.session_id}"
-    if caller.cwd:
-        cwd = caller.cwd
-        fields += f' cwd="{cwd}"' if " " in cwd else f" cwd={cwd}"
-    if caller.resume_cmd:
-        fields += f' resume="{caller.resume_cmd}"'
-    return f"Caller: {fields}"
+def _scalar(value: str) -> str:
+    """Render a header value; quote only when a YAML reader would mangle it."""
+    if not value:
+        return ""
+    if '"' in value or "'" in value or "#" in value or '": "' in value or any(ch.isspace() for ch in value):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
 
+def render_caller_block(
+    caller: CallerContext, *, group_members: Sequence[str] = (), callee: str | None = None
+) -> str:
+    """Render the grouped caller header; absent fields render empty, never invented."""
+    label = _single_line(caller.label) if caller.label else ""
+    lines = [
+        f"tab: {_scalar(caller.tab_id or '')}",
+        f"  pane: {_scalar(caller.pane_id)}",
+        f"  label: {_scalar(label)}",
+        f"  agent: {_scalar(caller.agent or '')}",
+        f"kind: {_scalar(caller.kind or '')}",
+        f"  session: {_scalar(caller.session_id or '')}",
+        f"  resume: {_scalar(caller.resume_cmd or '')}",
+        f"cwd: {_scalar(caller.cwd or '')}",
+        SKILL_NOTICE,
+        f"Group Members: {', '.join(group_members)}",
+        "",
+        f"Callee: {_scalar(callee or '')}",
+    ]
+    return "\n".join(lines)
 
 SKILL_NOTICE = "Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI"
 
@@ -302,13 +309,13 @@ def render_reply_contract(caller: CallerContext) -> str:
     return f"On completion, reply to the caller in one message:\n  {note}"
 
 
-def resolve_workspace_workers(
+def resolve_group_members(
     herdr: str,
     caller_pane_id: str,
     target_panes: Sequence[str],
     env: Mapping[str, str],
 ) -> list[str]:
-    """Find other live agents in the caller's workspace (or target's workspace)."""
+    """Find every live agent in the caller's workspace (or target's workspace), caller first."""
     try:
         listed_panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
         agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
@@ -346,28 +353,37 @@ def resolve_workspace_workers(
         if tw and tw not in workspaces_to_check:
             workspaces_to_check.append(tw)
 
-    excluded_panes = {caller_pane_id} | resolved_targets
-    workers: list[str] = []
+    caller_name: str | None = None
+    for a in agents:
+        if entry_optional_text(a, "pane_id") == caller_pane_id:
+            caller_name = entry_optional_text(a, "name")
+            break
+    members: list[str] = []
+    if caller_name:
+        members.append(f"{caller_name}@{caller_pane_id}")
+    others: list[str] = []
     for a in agents:
         name = entry_optional_text(a, "name")
         pid = entry_optional_text(a, "pane_id")
-        if not name or not pid or pid in excluded_panes:
+        if not name or not pid or pid == caller_pane_id:
             continue
         if pane_ws.get(pid) in workspaces_to_check:
-            workers.append(f"{name}@{pid}")
+            others.append(f"{name}@{pid}")
+    members.extend(sorted(dict.fromkeys(others)))
+    return members
 
-    return sorted(dict.fromkeys(workers))
 
-
-def wrap_with_caller(payload: str, caller: CallerContext, *, workers: Sequence[str] = ()) -> str:
-    """Prepend the caller block, skill notice, and append the reply contract around the payload."""
+def wrap_with_caller(
+    payload: str,
+    caller: CallerContext,
+    *,
+    group_members: Sequence[str] = (),
+    callee: str | None = None,
+) -> str:
+    """Prepend the timestamped caller block and append the reply contract around the payload."""
     ts = f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
-    header_lines = [ts, render_caller_block(caller), SKILL_NOTICE]
-    if workers:
-        header_lines.append(f"Workers: {', '.join(workers)}")
-    header = "\n".join(header_lines)
+    header = f"{ts}\n{render_caller_block(caller, group_members=group_members, callee=callee)}"
     return f"{header}\n\n{payload}\n\n{render_reply_contract(caller)}"
-
 
 def build_prompt_argv(
     herdr: str,
@@ -605,10 +621,14 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
                 f"herdr-prompt: warning: --no-caller-context drops caller block and reply contract for target {target!r}; target cannot call back",
                 file=sys.stderr,
             )
+        payloads = {target: payload for target in targets}
     else:
         caller = resolve_caller(herdr, env)
-        workers = resolve_workspace_workers(herdr, caller.pane_id, targets, env)
-        payload = wrap_with_caller(payload, caller, workers=workers)
+        group_members = resolve_group_members(herdr, caller.pane_id, targets, env)
+        payloads = {
+            target: wrap_with_caller(payload, caller, group_members=group_members, callee=target)
+            for target in targets
+        }
     if options.wait:
         try:
             agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
@@ -631,7 +651,7 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
                         )
         except Exception:
             pass
-    dispatches = [prompt_one(herdr, target, payload, options, env) for target in targets]
+    dispatches = [prompt_one(herdr, target, payloads[target], options, env) for target in targets]
     blocked = sorted(dispatch.target for dispatch in dispatches if dispatch.blocked)
     if blocked:
         names = ", ".join(blocked)

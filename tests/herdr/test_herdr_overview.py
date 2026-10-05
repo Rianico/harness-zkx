@@ -449,7 +449,7 @@ def test_table_renders_delegating_when_idle_with_subagent_tokens() -> None:
     panes = (
         pane(
             "w9:p1",
-            name="worker",
+            name="callee",
             status="idle",
             tokens={"summary": "⏳ 1 subagent (developer)"},
         ),
@@ -466,7 +466,7 @@ def test_table_renders_delegating_when_title_suffix_has_hourglass() -> None:
     panes = (
         pane(
             "w9:p1",
-            name="worker",
+            name="callee",
             status="done",
             tokens={"title-suffix": "⏳developer"},
         ),
@@ -478,7 +478,7 @@ def test_table_renders_delegating_when_title_suffix_has_hourglass() -> None:
 
 def test_render_json_includes_tokens() -> None:
     tokens = {"summary": "⏳ 1 subagent (developer)", "title-suffix": "⏳developer"}
-    panes = (pane("w9:p1", name="worker", tokens=tokens),)
+    panes = (pane("w9:p1", name="callee", tokens=tokens),)
     overview = herdr_overview.build_overview(panes, {"w9": ("lane", 1)}, "all", ENV)
     data = json.loads(herdr_overview.render_json(overview))
     entry = data["workspaces"][0]["panes"][0]
@@ -487,7 +487,7 @@ def test_render_json_includes_tokens() -> None:
 
 def test_render_yaml_includes_tokens_mapping() -> None:
     tokens = {"summary": "⏳ 1 subagent (developer)"}
-    panes = (pane("w9:p1", name="worker", tokens=tokens),)
+    panes = (pane("w9:p1", name="callee", tokens=tokens),)
     overview = herdr_overview.build_overview(panes, {"w9": ("lane", 1)}, "all", ENV)
     parsed = yaml.safe_load(herdr_overview.render_yaml(overview))
     entry = parsed["workspaces"][0]["panes"][0]

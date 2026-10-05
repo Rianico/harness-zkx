@@ -33,7 +33,7 @@ def payload_file(tmp_path: Path, text: str = "TICKET BODY") -> Path:
 
 
 def test_dispatch_requires_file(stub: StubHarness) -> None:
-    done = stub.run("worker")
+    done = stub.run("callee")
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "--file" in done.stderr
     assert stub.prompts() == []
@@ -49,7 +49,18 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     text = call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
+    assert lines[1:9] == [
+        "tab: w9:t1",
+        "  pane: w9:p1",
+        "  label: ",
+        "  agent: reviewer",
+        "kind: pi",
+        "  session: ",
+        "  resume: ",
+        "cwd: /tmp/harness",
+    ]
+    assert "Group Members: reviewer@w9:p1" in text
+    assert "Callee: reviewer" in text
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
     assert "\n\ndo this\n\n" in text
     assert (
@@ -181,7 +192,8 @@ def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None
     parsed = cast(object, json.loads(done.stdout))
     assert isinstance(parsed, list)
     assert parsed[3] == "reviewer"
-    assert "Caller: pane=" in str(parsed[4])
+    assert "  pane: w9:p1" in str(parsed[4])
+    assert "Callee: reviewer" in str(parsed[4])
 
 
 def test_dispatch_rolls_back_lease_on_blocked_outcome(stub: StubHarness, tmp_path: Path) -> None:

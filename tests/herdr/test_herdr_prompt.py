@@ -405,8 +405,8 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
 
 def test_broadcast_delivers_same_payload_to_every_target(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run(
-        "worker1",
-        "worker2",
+        "callee1",
+        "callee2",
         "--file",
         str(payload_file(tmp_path, "hi")),
         "--no-wait",
@@ -414,10 +414,10 @@ def test_broadcast_delivers_same_payload_to_every_target(stub: StubHarness, tmp_
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (first, second) = stub.prompts()
-    assert (first[3], second[3]) == ("worker1", "worker2")
+    assert (first[3], second[3]) == ("callee1", "callee2")
     assert first[4] == second[4] == "hi"
-    assert "prompted worker1" in done.stdout
-    assert "prompted worker2" in done.stdout
+    assert "prompted callee1" in done.stdout
+    assert "prompted callee2" in done.stdout
 
 
 def test_wait_and_no_wait_together_are_rejected(stub: StubHarness, tmp_path: Path) -> None:
@@ -468,11 +468,11 @@ def test_broadcast_blocked_reports_exit_blocked(stub: StubHarness, tmp_path: Pat
 
 
 def test_broadcast_dry_run_prints_one_argv_per_target(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
+    done = stub.run("callee1", "callee2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     argv_lines: list[list[str]] = [json.loads(line) for line in done.stdout.splitlines()]
-    assert [argv[3] for argv in argv_lines] == ["worker1", "worker2"]
+    assert [argv[3] for argv in argv_lines] == ["callee1", "callee2"]
 
 
 # ── integration: caller context (#106, #119) ─────────────────────────────────────────
@@ -506,11 +506,38 @@ def test_build_resume_cmd_for_all_supported_kinds() -> None:
     assert herdr_prompt.build_resume_cmd(None, None) is None
 
 
+def test_scalar_quotes_only_when_yaml_would_mangle() -> None:
+    assert herdr_prompt._scalar("w1:p1") == "w1:p1"
+    assert herdr_prompt._scalar("/path/to/session.jsonl") == "/path/to/session.jsonl"
+    assert (
+        herdr_prompt._scalar("pi --resume /path/to/session.jsonl")
+        == '"pi --resume /path/to/session.jsonl"'
+    )
+    assert herdr_prompt._scalar("review pane X") == '"review pane X"'
+    assert herdr_prompt._scalar("a#b") == '"a#b"'
+    assert herdr_prompt._scalar("it's") == '"it\'s"'
+    assert herdr_prompt._scalar('say "hi"') == '"say \\"hi\\""'
+    assert herdr_prompt._scalar("back\\slash x") == '"back\\\\slash x"'
+    assert herdr_prompt._scalar("") == ""
+
+
 def test_caller_block_renders_all_fields() -> None:
     caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
-    assert (
-        herdr_prompt.render_caller_block(caller)
-        == "Caller: pane=w1:p1 label=orchestrator agent=orchestrator"
+    assert herdr_prompt.render_caller_block(caller) == "\n".join(
+        [
+            "tab: ",
+            "  pane: w1:p1",
+            "  label: orchestrator",
+            "  agent: orchestrator",
+            "kind: ",
+            "  session: ",
+            "  resume: ",
+            "cwd: ",
+            herdr_prompt.SKILL_NOTICE,
+            "Group Members: ",
+            "",
+            "Callee: ",
+        ]
     )
 
 
@@ -523,9 +550,25 @@ def test_caller_block_renders_all_fields_including_kind_session_and_resume() -> 
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --resume /tmp/session.jsonl",
     )
-    assert (
-        herdr_prompt.render_caller_block(caller)
-        == 'Caller: pane=w1:p1 label=orchestrator agent=orchestrator kind=pi session=/tmp/session.jsonl resume="pi --resume /tmp/session.jsonl"'
+    assert herdr_prompt.render_caller_block(
+        caller,
+        group_members=["orchestrator@w1:p1", "impl-1@w1:p3"],
+        callee="impl-1",
+    ) == "\n".join(
+        [
+            "tab: ",
+            "  pane: w1:p1",
+            "  label: orchestrator",
+            "  agent: orchestrator",
+            "kind: pi",
+            "  session: /tmp/session.jsonl",
+            '  resume: "pi --resume /tmp/session.jsonl"',
+            "cwd: ",
+            herdr_prompt.SKILL_NOTICE,
+            "Group Members: orchestrator@w1:p1, impl-1@w1:p3",
+            "",
+            "Callee: impl-1",
+        ]
     )
 
 
@@ -540,42 +583,78 @@ def test_caller_block_renders_all_fields_including_tab_cwd_and_resume() -> None:
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --resume /tmp/session.jsonl",
     )
-    assert (
-        herdr_prompt.render_caller_block(caller)
-        == 'Caller: pane=w1:p1 label=orchestrator agent=orchestrator tab=w1:t1 kind=pi session=/tmp/session.jsonl cwd="/path/to/my project" resume="pi --resume /tmp/session.jsonl"'
+    assert herdr_prompt.render_caller_block(caller) == "\n".join(
+        [
+            "tab: w1:t1",
+            "  pane: w1:p1",
+            "  label: orchestrator",
+            "  agent: orchestrator",
+            "kind: pi",
+            "  session: /tmp/session.jsonl",
+            '  resume: "pi --resume /tmp/session.jsonl"',
+            'cwd: "/path/to/my project"',
+            herdr_prompt.SKILL_NOTICE,
+            "Group Members: ",
+            "",
+            "Callee: ",
+        ]
     )
 
 
 def test_caller_block_renders_qodercli_resume() -> None:
     caller = herdr_prompt.CallerContext(
         pane_id="w1:p2",
-        label="worker",
+        label="callee",
         agent="t7-impl",
         kind="qodercli",
         resume_cmd="qodercli resume",
     )
-    assert (
-        herdr_prompt.render_caller_block(caller)
-        == 'Caller: pane=w1:p2 label=worker agent=t7-impl kind=qodercli resume="qodercli resume"'
+    assert herdr_prompt.render_caller_block(caller) == "\n".join(
+        [
+            "tab: ",
+            "  pane: w1:p2",
+            "  label: callee",
+            "  agent: t7-impl",
+            "kind: qodercli",
+            "  session: ",
+            '  resume: "qodercli resume"',
+            "cwd: ",
+            herdr_prompt.SKILL_NOTICE,
+            "Group Members: ",
+            "",
+            "Callee: ",
+        ]
     )
 
 
-def test_caller_block_omits_absent_fields_never_invents() -> None:
+def test_caller_block_renders_empty_unknowns_never_invents() -> None:
     caller = herdr_prompt.CallerContext(pane_id="w9:p1", agent="reviewer")
-    assert herdr_prompt.render_caller_block(caller) == "Caller: pane=w9:p1 agent=reviewer"
+    assert herdr_prompt.render_caller_block(caller) == "\n".join(
+        [
+            "tab: ",
+            "  pane: w9:p1",
+            "  label: ",
+            "  agent: reviewer",
+            "kind: ",
+            "  session: ",
+            "  resume: ",
+            "cwd: ",
+            herdr_prompt.SKILL_NOTICE,
+            "Group Members: ",
+            "",
+            "Callee: ",
+        ]
+    )
 
 
 def test_caller_block_sanitizes_label_to_single_line() -> None:
     caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="review\npane\tX", agent="reviewer")
-    assert (
-        herdr_prompt.render_caller_block(caller)
-        == "Caller: pane=w1:p1 label=review pane X agent=reviewer"
-    )
+    assert herdr_prompt.render_caller_block(caller).splitlines()[2] == '  label: "review pane X"' 
 
 
-def test_caller_block_omits_blank_label() -> None:
+def test_caller_block_renders_blank_label_empty() -> None:
     caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="   ", agent="reviewer")
-    assert herdr_prompt.render_caller_block(caller) == "Caller: pane=w1:p1 agent=reviewer"
+    assert herdr_prompt.render_caller_block(caller).splitlines()[2] == "  label: "
 
 
 def test_reply_contract_without_agent_is_unaddressable() -> None:
@@ -592,8 +671,19 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     text = prompt_call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
+    assert lines[1:9] == [
+        "tab: w9:t1",
+        "  pane: w9:p1",
+        "  label: ",
+        "  agent: reviewer",
+        "kind: pi",
+        "  session: ",
+        "  resume: ",
+        "cwd: /tmp/harness",
+    ]
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
+    assert "Group Members: reviewer@w9:p1" in text
+    assert "Callee: reviewer" in text
     assert "\n\nhi\n\n" in text
     assert (
         'uv run ~/.agents/skills/herdr/scripts/herdr_reply.py reviewer "<STATUS> <artifacts> <issues>"'
@@ -619,10 +709,18 @@ def test_resolve_caller_extracts_kind_session_and_resume(stub: StubHarness, tmp_
     text = prompt_call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert (
-        lines[1]
-        == 'Caller: pane=w9:p1 agent=reviewer tab=w9:t1 kind=pi session=/tmp/session.jsonl cwd=/tmp/harness resume="pi --resume /tmp/session.jsonl"'
-    )
+    assert lines[1:9] == [
+        "tab: w9:t1",
+        "  pane: w9:p1",
+        "  label: ",
+        "  agent: reviewer",
+        "kind: pi",
+        "  session: /tmp/session.jsonl",
+        '  resume: "pi --resume /tmp/session.jsonl"',
+        "cwd: /tmp/harness",
+    ]
+    assert "Group Members: reviewer@w9:p1" in text
+    assert "Callee: reviewer" in text
 
 
 def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> None:
@@ -633,8 +731,16 @@ def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> 
     (prompt_call,) = stub.prompts()
     lines = prompt_call[4].splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1].startswith("Caller: pane=w9:p2 label=scratch pad")
-    assert "agent=" not in lines[1]
+    assert lines[1:9] == [
+        "tab: w9:t1",
+        "  pane: w9:p2",
+        '  label: "scratch pad"',
+        "  agent: ",
+        "kind: ",
+        "  session: ",
+        "  resume: ",
+        "cwd: /tmp/scratch",
+    ]
     assert "cannot be addressed" in prompt_call[4]
 
 
@@ -650,15 +756,32 @@ def test_no_caller_context_sends_verbatim_without_lookups(
     assert "--no-caller-context drops caller block" in done.stderr
 
 
-def test_broadcast_prepends_identically_per_target(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("worker1", "worker2", "--file", str(payload_file(tmp_path, "hi")), "--no-wait")
+def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run("callee1", "callee2", "--file", str(payload_file(tmp_path, "hi")), "--no-wait")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (first, second) = stub.prompts()
-    assert (first[3], second[3]) == ("worker1", "worker2")
-    assert first[4] == second[4]
-    lines = first[4].splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
+    assert (first[3], second[3]) == ("callee1", "callee2")
+    first_lines = first[4].splitlines()
+    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", first_lines[0])
+    assert first_lines[1:9] == [
+        "tab: w9:t1",
+        "  pane: w9:p1",
+        "  label: ",
+        "  agent: reviewer",
+        "kind: pi",
+        "  session: ",
+        "  resume: ",
+        "cwd: /tmp/harness",
+    ]
+    assert "Group Members: reviewer@w9:p1" in first[4]
+    assert "Group Members: reviewer@w9:p1" in second[4]
+    assert first[4] != second[4]
+    assert "Callee: callee1" in first[4]
+    assert "Callee: callee2" in second[4]
+    assert first[4].splitlines()[1:] != second[4].splitlines()[1:]
+    body_first = "\n".join(first[4].splitlines()[1:]).replace("Callee: callee1", "Callee: X")
+    body_second = "\n".join(second[4].splitlines()[1:]).replace("Callee: callee2", "Callee: X")
+    assert body_first == body_second
 
 
 def test_dry_run_renders_caller_payload_without_prompting(
@@ -671,7 +794,17 @@ def test_dry_run_renders_caller_payload_without_prompting(
     assert argv[3] == "reviewer"
     lines = argv[4].splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1].startswith("Caller: pane=w9:p1 agent=reviewer")
+    assert lines[1:9] == [
+        "tab: w9:t1",
+        "  pane: w9:p1",
+        "  label: ",
+        "  agent: reviewer",
+        "kind: pi",
+        "  session: ",
+        "  resume: ",
+        "cwd: /tmp/harness",
+    ]
+    assert "Callee: reviewer" in argv[4]
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in argv[4]
     assert "~/.agents/skills/herdr/scripts/herdr_reply.py reviewer" in argv[4]
 
@@ -691,7 +824,7 @@ def test_refuses_target_that_is_an_agent_kind(stub: StubHarness, tmp_path: Path)
         "agents": [{"pane_id": "w9:p2", "name": "t7-impl", "agent": "qodercli"}],
         "panes": [
             *DEFAULT_STATE["panes"],
-            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "worker"},
+            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "callee"},
         ],
     }
     done = stub.run("qodercli", "--file", str(payload_file(tmp_path, "hi")), state=state)
@@ -707,7 +840,7 @@ def test_refuses_qoderclicn_target_that_is_an_agent_kind(stub: StubHarness, tmp_
         "agents": [{"pane_id": "w9:p2", "name": "t7-impl", "agent": "qoderclicn"}],
         "panes": [
             *DEFAULT_STATE["panes"],
-            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "worker"},
+            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "callee"},
         ],
     }
     done = stub.run("qoderclicn", "--file", str(payload_file(tmp_path, "hi")), state=state)
@@ -717,7 +850,7 @@ def test_refuses_qoderclicn_target_that_is_an_agent_kind(stub: StubHarness, tmp_
     assert stub.prompts() == []
 
 
-def test_workspace_workers_listed_in_caller_context(stub: StubHarness, tmp_path: Path) -> None:
+def test_group_members_listed_in_caller_context(stub: StubHarness, tmp_path: Path) -> None:
     state = {
         **DEFAULT_STATE,
         "agents": [
@@ -726,14 +859,15 @@ def test_workspace_workers_listed_in_caller_context(stub: StubHarness, tmp_path:
         ],
         "panes": [
             *DEFAULT_STATE["panes"],
-            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "worker"},
+            {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9", "label": "callee"},
         ],
     }
-    done = stub.run("worker", "--file", str(payload_file(tmp_path, "hi")), state=state)
+    done = stub.run("callee", "--file", str(payload_file(tmp_path, "hi")), state=state)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
-    assert "Workers: t7-impl@w9:p2" in text
+    assert "Group Members: reviewer@w9:p1, t7-impl@w9:p2" in text
+    assert "Callee: callee" in text
 
 
 def test_constant_nonzero_revision_accepted_without_retry(

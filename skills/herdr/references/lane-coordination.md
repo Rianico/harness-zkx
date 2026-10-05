@@ -9,21 +9,30 @@ Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract pro
 
 ## 1. Context & Motivation
 
-When a workflow requires both high-level coordination (triage, planning, verification, review) and focused code execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Workers)** in dedicated panes within a shared workspace or tab.
+When a workflow requires both high-level coordination (triage, planning, verification, review) and focused code execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Callees)** in dedicated panes within a shared workspace or tab.
 
-`herdr-prompt` and `herdr-dispatch` automatically inject caller context (including the **Resumption Triple**: `kind + session + cwd`), the Herdr skill notice, and sibling workers into the recipient's turn:
+`herdr-prompt` and `herdr-dispatch` automatically inject caller context (including the **Resumption Triple**: `kind + session + cwd`), the Herdr skill notice, and sibling callees into the recipient's turn:
 ```text
 [2026-10-05T06:19:12.983Z]
-Caller: pane=w1:p1 label=orchestrator agent=orchestrator kind=pi session=/path/to/session.jsonl resume="pi --resume /path/to/session.jsonl" cwd=/Users/zhengxk/workspace
+tab: w1:t1
+  pane: w1:p1
+  label: orchestrator
+  agent: orchestrator
+kind: pi
+  session: /path/to/session.jsonl
+  resume: "pi --resume /path/to/session.jsonl"
+cwd: /Users/zhengxk/workspace
 Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
-Workers: impl-1@w1:p3, impl-2@w1:p4
+Group Members: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
+
+Callee: impl-1
 ```
 
 > [!IMPORTANT] Name Every Pane Immediately
 > Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
 
-> [!NOTE] Worker Target Parsing
-> The `Workers:` header lists workers as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string.
+> [!NOTE] Callee Target Parsing
+> The `Group Members:` header lists callees as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string.
 
 ### Core Anti-Patterns & Their Tells
 
@@ -32,8 +41,8 @@ Without explicit, enforceable boundaries, multi-agent lanes degrade into three c
 | Anti-Pattern | Definition | The Tell That Exposes It | Failure Mode & Impact |
 |---|---|---|---|
 | **Anchored Brief** | The Orchestrator exceeds its intent/constraints scope by performing deep code reconnaissance and baking line-level implementation maps or design pre-decisions into the TM brief (#172). | The brief specifies exact line numbers, private function names, AST/parser instructions, internal state table indices, or pre-decided algorithms/precedence orders. | Pre-empts TM triage, strips TM of architectural ownership, and forces the TM into a pass-through router. |
-| **Router TM** | The TM fails to exercise decomposition, scoping, or design judgment, acting merely as a pass-through relay that forwards the brief verbatim or slices it mechanically (#172). | Worker tickets are copy-pasted verbatim from the brief; TM makes zero exploratory/triage tool calls before dispatching; tickets lack independent scoping, evidence criteria, or architecture invariant checks. | Workers receive un-scoped or over-anchored tickets; edge cases and module invariants are ignored; verification becomes a superficial check of whatever test was named in the brief. |
-| **Hero-Mode TM** | The TM receives the brief and, instead of delegating to assigned workers, directly invokes file-editing tools (`edit`, `write`, `bash`) to implement the changes itself (#153). | Assigned workers in `Workers:` remain completely idle (revision 0 or no dispatches); TM tool calls are dominated by file edits and compile/fix loops; TM context window rapidly exhausts. | Multi-agent topology is bypassed; lane loses division of labor; TM suffers context compaction degradation, losing ticket constraints and architectural invariants. |
+| **Router TM** | The TM fails to exercise decomposition, scoping, or design judgment, acting merely as a pass-through relay that forwards the brief verbatim or slices it mechanically (#172). | Callee tickets are copy-pasted verbatim from the brief; TM makes zero exploratory/triage tool calls before dispatching; tickets lack independent scoping, evidence criteria, or architecture invariant checks. | Callees receive un-scoped or over-anchored tickets; edge cases and module invariants are ignored; verification becomes a superficial check of whatever test was named in the brief. |
+| **Hero-Mode TM** | The TM receives the brief and, instead of delegating to assigned callees, directly invokes file-editing tools (`edit`, `write`, `bash`) to implement the changes itself (#153). | Assigned callees in `Group Members:` remain completely idle (revision 0 or no dispatches); TM tool calls are dominated by file edits and compile/fix loops; TM context window rapidly exhausts. | Multi-agent topology is bypassed; lane loses division of labor; TM suffers context compaction degradation, losing ticket constraints and architectural invariants. |
 
 ### Two-Tier Delegation Architecture: Lane Coordination vs. Role-Internal Subagents
 
@@ -41,14 +50,14 @@ To resolve all three anti-patterns and manage context pressure asymmetry, enforc
 
 > [!IMPORTANT] Subagent-First Execution Mandate
 > Subagent-First Execution is a **Universal Mandate across all coding agents**, regardless of underlying kind or engine (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, etc.). All coding agents in lane coordination (both Task Managers and Implementers) **MUST** use subagents for heavy tasks:
-> - **Implementers**: MUST delegate deep codebase exploration (Scout), multi-file code editing / refactoring (Editor), and test failure log triage (Test Runner) to ephemeral subagents. Direct execution of heavy work in the worker host pane exhausts context windows, triggers severe compaction degradation, and leads to instruction amnesia.
+> - **Implementers**: MUST delegate deep codebase exploration (Scout), multi-file code editing / refactoring (Editor), and test failure log triage (Test Runner) to ephemeral subagents. Direct execution of heavy work in the callee host pane exhausts context windows, triggers severe compaction degradation, and leads to instruction amnesia.
 > - **Task Managers**: MUST delegate crux adversarial code review under `keel`, `coding-protocol`, and `programming-expert` to an internal review subagent. Reviewing massive diffs directly in the TM pane blinds the TM to lane invariants and architectural oversight.
 
 1. **Tier 1: Lane-Level Coordination (Herdr Inter-Pane)**
    - **Topology**: Root Orchestrator ↔ Task Manager ↔ Implementers across dedicated Herdr panes.
    - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py` governed by Task Leases and Token Observability.
    - **Scope**: In-lane execution inside the lane's pre-provisioned `$WORKTREE_PATH`: lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
-   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator pre-provisions the lane worktree and topology but never dispatches worker tickets directly (#166). TM and Implementer run natively inside `$WORKTREE_PATH` from turn zero; neither creates ad-hoc worktrees or nested directories.
+   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator pre-provisions the lane worktree and topology but never dispatches callee tickets directly (#166). TM and Implementer run natively inside `$WORKTREE_PATH` from turn zero; neither creates ad-hoc worktrees or nested directories.
 
 2. **Tier 2: Role-Internal Subagent Delegation (Context Isolation)**
    - **Topology**: Host pane ↔ Ephemeral platform subagents (`Agent`, `invoke_subagent`, scratch tasks).
@@ -111,7 +120,7 @@ The Root Orchestrator owns the problem definition, global constraints, topology 
   - Pre-deciding design trade-offs belonging to the TM.
   - Writing code-granular or line-level requirements in the brief.
   - Editing source, test, or config files directly.
-  - Bypassing TM to dispatch tickets directly to lane workers (#166).
+  - Bypassing TM to dispatch tickets directly to lane callees (#166).
 
 ---
 
@@ -120,23 +129,23 @@ The Root Orchestrator owns the problem definition, global constraints, topology 
 The Task Manager owns in-lane triage, decomposition, scope boundaries, design judgment, ticket authoring, verification gate execution, and code review verdicts.
 
 - **Bound Architectural Skills**:
-  - `keel`: Discover, judge, and govern architectural seams, module boundaries, and domain state invariants. Ensure worker changes do not introduce structural drift, hidden coupling, or leaky abstractions.
-  - `coding-protocol`: Risk-scaled execution, evidence standards, and explicit verification contracts (`[action] -> [check]`). Demand concrete, reproducible test evidence from workers.
+  - `keel`: Discover, judge, and govern architectural seams, module boundaries, and domain state invariants. Ensure callee changes do not introduce structural drift, hidden coupling, or leaky abstractions.
+  - `coding-protocol`: Risk-scaled execution, evidence standards, and explicit verification contracts (`[action] -> [check]`). Demand concrete, reproducible test evidence from callees.
   - `programming-expert`: Language-level correctness, idiomatic implementation, error handling, type soundness, and deep design (narrow interfaces, absorbing complexity, rejecting classitis). Distinguish permitted design deepening from harmful scope creep.
 - **Mandatory Review Lens**:
   - Every review finding MUST be explicitly mapped to the invariant it threatens.
   - Green gate passes (tests, linter) are necessary but NEVER sufficient; an explicit review verdict is required for every ticket (#166).
 - **Code Review via Internal Subagents**:
   - The TM MUST use internal ephemeral subagents for code review.
-  - Spawns an internal subagent (e.g. `Agent` / `invoke_subagent`) equipped with `keel`, `coding-protocol`, and `programming-expert` to review the worker diff.
+  - Spawns an internal subagent (e.g. `Agent` / `invoke_subagent`) equipped with `keel`, `coding-protocol`, and `programming-expert` to review the callee diff.
   - **Rationale**: Keeps the TM's context window pristine, eliminates reviewer fatigue, prevents context compaction degradation across long multi-ticket runs, and ensures an adversarial, objective review.
   - Subagent returns structured review findings with invariant mapping; TM renders the formal review verdict.
 - **Explicit Allow List**:
   - Decompose orchestrator brief into atomic, single-intent tickets.
   - Exercise independent design judgment (data structures, algorithms, internal interfaces, refactoring depth).
   - Author tickets specifying target files, scope boundaries, constraints, and explicit test/evidence requirements.
-  - Dispatch tickets to workers via `herdr_dispatch.py` and await `herdr_reply.py`.
-  - Run verification gates (tests, linter, typecheck) in the TM pane against worker diffs, executed natively inside the lane's `$WORKTREE_PATH`.
+  - Dispatch tickets to callees via `herdr_dispatch.py` and await `herdr_reply.py`.
+  - Run verification gates (tests, linter, typecheck) in the TM pane against callee diffs, executed natively inside the lane's `$WORKTREE_PATH`.
   - Spawn internal subagents for code review under `keel`, `coding-protocol`, and `programming-expert`.
   - Issue review verdicts (`PASS`, `REWORK`, `REJECT`) mapping findings to threatened invariants.
   - Dispatch rework tickets on gate failures or review findings with targeted diagnostics.
@@ -147,12 +156,12 @@ The Task Manager owns in-lane triage, decomposition, scope boundaries, design ju
   - Acting as a pass-through router ("Router TM") that forwards brief requirements without decomposition, scoping, or design judgment.
   - Accepting green gates as a substitute for code review without an explicit review verdict (#166).
   - Flagging cohesive internal refactoring (design deepening) as scope creep when it strengthens invariants without expanding public surfaces.
-  - Ignoring assigned workers in `Workers:`.
+  - Ignoring assigned callees in `Group Members:`.
   - Allowing internal subagents to invoke Herdr CLI or `herdr_reply.py`.
 
 ---
 
-### C. Implementer (Worker) Contract
+### C. Implementer (Callee) Contract
 
 The Implementer owns execution, mutation, and concrete evidence production. It translates assigned ticket requirements into atomic, verified commits.
 
@@ -190,10 +199,10 @@ Each artifact in the lane coordination lifecycle has **exactly one author role**
 | **Brief** | Root Orchestrator | Task Manager | Global intent, constraints, acceptance criteria, verification contract, and go/no-go sizing budget. Free of line-level internals. |
 | **Ticket** | Task Manager | Implementer | Decomposed task specification with bounded scope, test criteria, and evidence expectations. |
 | **Diff** | Implementer | Task Manager | Source, test, and config mutations fulfilling ticket requirements. Accompanied by atomic commit. |
-| **Gate Output** | Task Manager | Task Manager / Orchestrator | Verbatim logs from formal test, lint, and typecheck suites executed in the TM pane against the worker diff. |
+| **Gate Output** | Task Manager | Task Manager / Orchestrator | Verbatim logs from formal test, lint, and typecheck suites executed in the TM pane against the callee diff. |
 | **Review Verdict** | Task Manager | Task Manager / Implementer | Semantic evaluation under `keel`, `coding-protocol`, and `programming-expert` (authored via TM review subagent), mapping every finding to the invariant it threatens. |
 | **Completion Callback** | Task Manager | Root Orchestrator | Final lane delivery report (`COMPLETED`, `BLOCKED`, `REJECTED`) containing branch name, commit SHAs, gate output summary, and review findings. |
-| *(Worker Callback)* | Implementer | Task Manager | Intra-lane progress report (`COMPLETED`, `BLOCKED`, `REJECTED`) containing commit SHA and concrete test evidence. |
+| *(Callee Callback)* | Implementer | Task Manager | Intra-lane progress report (`COMPLETED`, `BLOCKED`, `REJECTED`) containing commit SHA and concrete test evidence. |
 
 ---
 
@@ -205,14 +214,23 @@ Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatica
 
 ```text
 [2026-10-05T06:19:12.983Z]
-Caller: pane=w1:p1 label=orchestrator agent=orchestrator tab=w1:t1 kind=pi session=/path/to/session.jsonl resume="pi --resume /path/to/session.jsonl" cwd=/Users/zhengxk/workspace
+tab: w1:t1
+  pane: w1:p1
+  label: orchestrator
+  agent: orchestrator
+kind: pi
+  session: /path/to/session.jsonl
+  resume: "pi --resume /path/to/session.jsonl"
+cwd: /Users/zhengxk/workspace
 Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
-Workers: impl-1@w1:p3, impl-2@w1:p4
+Group Members: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
+
+Callee: impl-1
 ```
 
 - **Resumption Triple (`kind + session + cwd`)**: Guarantees that any participant, watchdog, or human operator can re-enter or resume the exact calling agent session in the identical working directory without amnesia.
 - **Topological Coordinates (`pane`, `label`, `tab`, `agent`)**: Identifies physical and logical coordinates in Herdr.
-- **`Workers:` List**: Injects assigned implementers as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
+- **`Group Members:` List**: Injects assigned implementers as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
 
 ---
 
@@ -223,18 +241,18 @@ The orchestrator brief defines the problem, boundary constraints, acceptance cri
 ```markdown
 # TASK: <Feature / Bug Name>
 
-Lane: `<lane-label>` | TM: `<tm-name>` | Workers: `<worker-names>`
-Role Assignment: TM=`<kind>` (`<provider>/<model>`), Workers=`<kind>` (`<provider>/<model>`) [Bootstrap: `<flags>`]
+Lane: `<lane-label>` | TM: `<tm-name>` | Callees: `<callee-names>`
+Role Assignment: TM=`<kind>` (`<provider>/<model>`), Callees=`<kind>` (`<provider>/<model>`) [Bootstrap: `<flags>`]
 
 ## Role & Delegation Mandate
 You are the **Task Manager** for this lane. You hold **coordination, design judgment, and review authority ONLY**.
 - **HARD CONSTRAINT**: Do NOT edit source code, test files, or configuration files directly.
-- **DELEGATION**: Decompose requirements into atomic tickets and dispatch them to worker(s) (`<worker-names>`) using:
-  `uv run ~/.agents/skills/herdr/scripts/herdr_dispatch.py <worker-name> --file <ticket-path>`
-  *(Pass only the worker agent name before `@`, e.g., `impl-1`).*
+- **DELEGATION**: Decompose requirements into atomic tickets and dispatch them to callee(s) (`<callee-names>`) using:
+  `uv run ~/.agents/skills/herdr/scripts/herdr_dispatch.py <callee-name> --file <ticket-path>`
+  *(Pass only the callee agent name before `@`, e.g., `impl-1`).*
 - Await completion via `herdr_reply.py` callbacks.
-- **CODE REVIEW MANDATE**: On receiving worker completion, run verification gates AND spawn an internal subagent to conduct an adversarial crux code review under `keel`, `coding-protocol`, and `programming-expert`.
-- Note: Native platform subagent calls (`Agent` tool) in your pane are reserved for code review and triage; use exclusively the Herdr workers listed above for code mutation.
+- **CODE REVIEW MANDATE**: On receiving callee completion, run verification gates AND spawn an internal subagent to conduct an adversarial crux code review under `keel`, `coding-protocol`, and `programming-expert`.
+- Note: Native platform subagent calls (`Agent` tool) in your pane are reserved for code review and triage; use exclusively the Herdr callees listed above for code mutation.
 
 ## Intent (IDD) & Goals (GDD)
 - **Problem**: <High-level deficiency, friction, or behavioral regression in current world state>
@@ -251,7 +269,7 @@ You are the **Task Manager** for this lane. You hold **coordination, design judg
 - Seams touched: <Module boundaries affected>
 - Dependencies: <External package additions or modifications>
 - Test baseline: <Existing test fixtures vs required new coverage>
-- Sizing: <S/M/L estimate and worker topology suggestion>
+- Sizing: <S/M/L estimate and callee topology suggestion>
 
 ## Reporting
 On gate pass and review approval, reply to caller using the Final Reply Template:
@@ -262,7 +280,7 @@ On gate pass and review approval, reply to caller using the Final Reply Template
 
 ### B. Synthesized IDD/GDD Dispatch Template (TM → Implementer Ticket Contract)
 
-Every ticket dispatched to a worker pairs upstream teleological purpose (**IDD**) with downstream verifiable targets (**GDD/EDD**). This dual pairing prevents both specification gaming (Goodhart's Law) and semantic drift:
+Every ticket dispatched to a callee pairs upstream teleological purpose (**IDD**) with downstream verifiable targets (**GDD/EDD**). This dual pairing prevents both specification gaming (Goodhart's Law) and semantic drift:
 
 ```markdown
 # TICKET / BRIEF: <ID> — <Title>
@@ -280,7 +298,7 @@ Target files / Seams: <paths or boundary definitions>
 
 ## 3. Execution Strategy (Subagent-First Mandate)
 - Delegate heavy codebase exploration (Scout), multi-file code editing / refactoring (Editor), and test failure log triage (Test Runner) to ephemeral platform subagents.
-- Keep the worker host pane context lean: ingest only summaries, diffs, and artifact paths from subagents.
+- Keep the callee host pane context lean: ingest only summaries, diffs, and artifact paths from subagents.
 - **The Iron Curtain**: Never let subagents call Herdr CLI commands or scripts (`herdr_reply.py`, `herdr_dispatch.py`). Aggregate all results in this host pane.
 
 On completion, reply to the caller in one message using the herdr helper script:
@@ -327,18 +345,18 @@ continue | remediate | blocked
   - `REJECTED <reason>`: Requested change violates codebase invariants, architectural boundaries, or security constraints.
 - **Route**:
   - `continue`: 0 P1/P2 issues AND all verification checks green. Ready to proceed or merge.
-  - `remediate`: P1/P2 issues exist or tests failed, but remediation within the worker is possible.
+  - `remediate`: P1/P2 issues exist or tests failed, but remediation within the callee is possible.
   - `blocked`: Unresolvable conflict; escalate to Task Manager or Orchestrator.
 
 ---
 
 ### D. TM → Internal Code Review Subagent Contract
 
-When worker signals completion, the TM invokes an internal review subagent:
+When callee signals completion, the TM invokes an internal review subagent:
 
 ```markdown
 Role: Adversarial Crux Code Reviewer
-Task: Audit the worker diff for ticket `<ticket-name>` against codebase invariants.
+Task: Audit the callee diff for ticket `<ticket-name>` against codebase invariants.
 
 ## Review Lens & Standards
 Evaluate the diff strictly against three architectural skills:
@@ -348,7 +366,7 @@ Evaluate the diff strictly against three architectural skills:
 
 ## Verification Inputs
 - Ticket: `<path-to-ticket.md>`
-- Commit / Diff: `git diff <base-sha>..<worker-sha>`
+- Commit / Diff: `git diff <base-sha>..<callee-sha>`
 - Gate Output: `<path-to-gate-log or summary>`
 
 ## Return Contract
@@ -367,7 +385,7 @@ sequenceDiagram
     participant Orch as Root Orchestrator
     participant TM as Task Manager (tc-tm)
     participant Impl as Implementer (tc-impl)
-    participant ImplSub as Worker Subagent (Ephemeral)
+    participant ImplSub as Callee Subagent (Ephemeral)
     participant TMSub as Review Subagent (Ephemeral)
 
     Orch->>TM: herdr_dispatch.py tc-tm --file brief.md
@@ -404,7 +422,7 @@ sequenceDiagram
         TM->>Impl: herdr_dispatch.py tc-impl --file ticket_1_rework.md
         Note over Impl: Fixes code based on diagnostics
         Impl->>TM: herdr_reply.py tc-tm "COMPLETED <sha2> <evidence>"
-    else Worker Blocked
+    else Callee Blocked
         Impl->>TM: herdr_reply.py tc-tm "BLOCKED <reason>"
         Note over TM: Resolves blocker or escalates to Orchestrator
     end
@@ -418,7 +436,7 @@ sequenceDiagram
 2. **TM Triage & Decomposition**:
    - TM applies `keel` and `programming-expert` design judgment to evaluate the solution space.
    - Decomposes brief into atomic tickets with concrete evidence criteria.
-   - Dispatches first ticket via `herdr_dispatch.py <worker> --file <ticket>` and yields turn.
+   - Dispatches first ticket via `herdr_dispatch.py <callee> --file <ticket>` and yields turn.
    - Even single-ticket lanes go `Orch → TM → Impl` (#166).
 3. **Context-Isolated Implementation**:
    - Implementer executes under `keel`, `coding-protocol`, and `programming-expert`.
@@ -427,7 +445,7 @@ sequenceDiagram
 4. **Verification & Code Review Loop**:
    - **Gate Check**: TM runs test, lint, and typecheck gates in TM pane.
    - **Code Review**: On gate pass, TM spawns an internal review subagent to audit the diff against `keel`, `coding-protocol`, and `programming-expert`, mapping each finding to its threatened invariant (#166, #172).
-   - **Rework Handling**: If gates fail OR review reveals invariant violations, TM packages diagnostics into a rework ticket (`rework.md`) and redispatches to the worker. **TM never fixes code directly.**
+   - **Rework Handling**: If gates fail OR review reveals invariant violations, TM packages diagnostics into a rework ticket (`rework.md`) and redispatches to the callee. **TM never fixes code directly.**
 5. **Lane Completion**:
    - Once all tickets pass verification and code review, TM aggregates artifacts and signals completion to Root Orchestrator via `herdr_reply.py <orch> "COMPLETED <summary>"`.
 
@@ -444,7 +462,7 @@ The Tier 2 Subagent Delegation pattern applies universally to **any coding agent
 | `pi` | Pi Agent | `Agent` tool / extension subagent | `Agent(prompt=..., subagent_type=...)` | Ephemeral subagent session with isolated context |
 | `claude` | Claude Code | `Agent` / Task runner tool | `Agent(prompt=..., subagent_type=...)` | Ephemeral task context; returns structured summary |
 | `agy` | Antigravity / Gemini CLI | Subagent harness / scratch agent | Process-level subagent dispatch via `send_message` | Isolated subagent process & scratch workspace |
-| `cursor` | Cursor Agent | Background subagent / Composer | `@agent` invocation or background composer worker | Isolated worker thread; merges diff |
+| `cursor` | Cursor Agent | Background subagent / Composer | `@agent` invocation or background composer callee | Isolated callee thread; merges diff |
 | `cline` | Cline / Roo Code | Task tool / subtask dispatch | Platform task tool or nested session call | Disposable subtask context |
 | `codex` / `gemini` | OpenAI / Gemini CLI | Agent tool / sub-process runner | Subagent tool dispatch or child runner script | Ephemeral child context |
 
@@ -453,9 +471,9 @@ The Tier 2 Subagent Delegation pattern applies universally to **any coding agent
 | Role | Pattern | Trigger Condition | Delegation Action | Return Contract |
 |---|---|---|---|---|
 | **Implementer** | **Scout / Research** | Unfamiliar codebase or multi-file symbol dependency | Launch read-only subagent to locate symbols, callers, and file paths. | File paths, line ranges, architectural notes. Zero file dumps into parent context. |
-| **Implementer** | **Worker / Editor** | Repetitive multi-file changes or deep refactoring | Launch editing subagent with strict file-list scope and target diff requirements. | Diff summary and modified file paths. Parent verifies `git diff`. |
+| **Implementer** | **Callee / Editor** | Repetitive multi-file changes or deep refactoring | Launch editing subagent with strict file-list scope and target diff requirements. | Diff summary and modified file paths. Parent verifies `git diff`. |
 | **Implementer** | **Test Runner / Triage** | Test output exceeds 50 lines or complex failure traces | Launch subagent to run tests, isolate failures, and extract relevant error stacks. | Carmack-style failure summary (failing test, assertion line, minimal error cause). |
-| **Task Manager** | **Crux Code Reviewer** | Worker reports completion with diff | Launch read-only subagent to audit diff against `keel`, `coding-protocol`, and `programming-expert`. | Structured review findings mapped to threatened invariants + verdict. |
+| **Task Manager** | **Crux Code Reviewer** | Callee reports completion with diff | Launch read-only subagent to audit diff against `keel`, `coding-protocol`, and `programming-expert`. | Structured review findings mapped to threatened invariants + verdict. |
 
 ### Coordination Protocols & Invariants
 
@@ -467,7 +485,7 @@ The Tier 2 Subagent Delegation pattern applies universally to **any coding agent
 │        │ ▲                                    │ ▲      │
 │        │ └──────── herdr_reply.py ────────────┼─┘      │
 └────────┼──────────────────────────────────────┼────────┘
-         │ (TM-Internal Tier 2)                 │ (Worker-Internal Tier 2)
+         │ (TM-Internal Tier 2)                 │ (Callee-Internal Tier 2)
          ▼                                      ▼
 ┌───────────────────────┐            ┌───────────────────────┐
 │ Internal Subagents    │            │ Internal Subagents    │
@@ -505,15 +523,15 @@ Multi-agent coordination across Herdr lanes is governed by four core pillars tha
 - **Completion Callback**: The callee completes the ticket and issues a structured reply via `herdr_reply.py <caller> "<STATUS>..."` or `herdr_reply.py <caller> --file <reply.md>`. This wakes the caller's turn with the full execution results and status triad.
 
 ### 2. Task Leases (Race & Overwrite Prevention)
-- **Lease Store**: Maintains ticket leases in `.lane/lease.json` (falling back to `.herdr-lease.json` in cwd) to prevent overlapping dispatches to workers with active in-flight tickets.
+- **Lease Store**: Maintains ticket leases in `.lane/lease.json` (falling back to `.herdr-lease.json` in cwd) to prevent overlapping dispatches to callees with active in-flight tickets.
 - **Atomic File Updates**: All lease reads/writes use atomic file operations (`tempfile.mkstemp` beside the target file, flush, `os.fsync`, and atomic `os.replace`), preventing concurrent write corruption.
 - **Target Canonicalization**: Leases record both canonical agent name and `pane_id`. Queries via `get_lease` and `is_leased` match against lease key, stored `target`, or `pane_id`. Dispatches via `--label` or pane IDs seamlessly resolve to the canonical agent.
-- **Pre-Dispatch Check**: Before prompting a worker, `herdr_dispatch.py` checks whether the target has an active lease. If active and `--force` is not passed:
+- **Pre-Dispatch Check**: Before prompting a callee, `herdr_dispatch.py` checks whether the target has an active lease. If active and `--force` is not passed:
   ```text
-  herdr-dispatch: error: target worker-1 has an active ticket lease (ticket_1.md) issued by task-manager. Await reply or pass --force
+  herdr-dispatch: error: target callee-1 has an active ticket lease (ticket_1.md) issued by task-manager. Await reply or pass --force
   ```
 - **Pre-Dispatch Acquisition with Rollback**: `herdr_dispatch.py` acquires the lease *before* delivering the prompt. If the prompt fails, is rejected, or returns a blocked exit code (`EXIT_BLOCKED` / 3, `EXIT_HERDR` / 1), the acquired lease is automatically rolled back and released. Leases are retained only upon prompt acceptance (`EXIT_OK` / 0 or `WaitTimeout` / 4).
-- **Auto-Release on Reply**: When the worker delivers its completion callback via `herdr_reply.py`, `release_active_lease` automatically releases the *replying sender's* lease (`current_agent` or `HERDR_PANE_ID`). It **never** touches the caller/target's lease.
+- **Auto-Release on Reply**: When the callee delivers its completion callback via `herdr_reply.py`, `release_active_lease` automatically releases the *replying sender's* lease (`current_agent` or `HERDR_PANE_ID`). It **never** touches the caller/target's lease.
 - **Bypass**: Pass `--force` to intentionally supersede or reclaim an active lease.
 
 ### 3. Token Observability & The False-Idle Phenomenon

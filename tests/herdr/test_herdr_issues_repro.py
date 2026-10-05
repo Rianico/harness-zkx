@@ -175,7 +175,7 @@ def test_issue_a_detects_agent_kind_clue_from_label(reply_stub: StubHarness) -> 
                 "agent": None,
                 "agent_status": "unknown",
                 "cwd": "/tmp",
-                "label": "worker-pi",
+                "label": "callee-pi",
             }
         ],
         "process_info": {
@@ -185,9 +185,9 @@ def test_issue_a_detects_agent_kind_clue_from_label(reply_stub: StubHarness) -> 
             }
         },
     }
-    done = reply_stub.run("worker-pi", "COMPLETED", state=state)
+    done = reply_stub.run("callee-pi", "COMPLETED", state=state)
     assert done.returncode == herdr_cli.EXIT_USAGE
-    assert "Suggested recovery: herdr agent start worker-pi --kind pi --pane wM:p1N" in done.stderr
+    assert "Suggested recovery: herdr agent start callee-pi --kind pi --pane wM:p1N" in done.stderr
 
 
 def test_issue_a_prompt_label_diagnoses_no_agent(prompt_stub: StubHarness, tmp_path: Path) -> None:
