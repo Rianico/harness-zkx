@@ -107,9 +107,7 @@ def test_dispatch_constant_revision_accepted_without_retry(
     assert len(stub.prompts()) == 1
 
 
-def test_dispatch_refuses_when_target_has_active_lease(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_dispatch_refuses_when_target_has_active_lease(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     _ = herdr_lease.acquire_lease("reviewer", "old_ticket.md", "orch-1", base_dir=tmp_path)
@@ -127,9 +125,7 @@ def test_dispatch_refuses_when_target_has_active_lease(
     assert stub.prompts() == []
 
 
-def test_dispatch_force_bypasses_active_lease(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_dispatch_force_bypasses_active_lease(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     _ = herdr_lease.acquire_lease("reviewer", "old_ticket.md", "orch-1", base_dir=tmp_path)
@@ -147,9 +143,7 @@ def test_dispatch_force_bypasses_active_lease(
     assert lease["ticket"] == str(payload_file(tmp_path))
 
 
-def test_dispatch_acquires_lease_on_successful_dispatch(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_dispatch_acquires_lease_on_successful_dispatch(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     ticket = payload_file(tmp_path, "ticket content")
@@ -190,9 +184,7 @@ def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None
     assert "Caller: pane=" in str(parsed[4])
 
 
-def test_dispatch_rolls_back_lease_on_blocked_outcome(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_dispatch_rolls_back_lease_on_blocked_outcome(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     error = {"code": "agent_blocked", "message": "agent reviewer is blocked"}
@@ -207,9 +199,7 @@ def test_dispatch_rolls_back_lease_on_blocked_outcome(
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
-def test_dispatch_rolls_back_lease_on_herdr_failure(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_dispatch_rolls_back_lease_on_herdr_failure(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     error = {"code": "agent_crashed", "message": "agent target crashed"}
@@ -224,9 +214,7 @@ def test_dispatch_rolls_back_lease_on_herdr_failure(
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
-def test_dispatch_retains_lease_on_wait_timeout(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_dispatch_retains_lease_on_wait_timeout(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     error = {"code": "timeout", "message": "wait timed out"}
@@ -244,9 +232,7 @@ def test_dispatch_retains_lease_on_wait_timeout(
     assert lease["target"] == "reviewer"
 
 
-def test_dispatch_records_pane_id_and_canonical_name(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_dispatch_records_pane_id_and_canonical_name(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     done = stub.run(

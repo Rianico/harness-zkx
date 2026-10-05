@@ -245,21 +245,15 @@ def test_has_active_subagents() -> None:
     assert herdr_wait.has_active_subagents(
         herdr_wait.Snapshot("a", "idle", tokens={"summary": "2 subagents running"})
     )
-    assert not herdr_wait.has_active_subagents(
-        herdr_wait.Snapshot("a", "idle", tokens=None)
-    )
-    assert not herdr_wait.has_active_subagents(
-        herdr_wait.Snapshot("a", "idle", tokens={})
-    )
+    assert not herdr_wait.has_active_subagents(herdr_wait.Snapshot("a", "idle", tokens=None))
+    assert not herdr_wait.has_active_subagents(herdr_wait.Snapshot("a", "idle", tokens={}))
     assert not herdr_wait.has_active_subagents(
         herdr_wait.Snapshot("a", "idle", tokens={"summary": "ready"})
     )
 
 
 def test_is_settled_rejects_active_subagents() -> None:
-    snap_busy = herdr_wait.Snapshot(
-        "a", "idle", revision="r1", tokens={"summary": "⏳ 1 subagent"}
-    )
+    snap_busy = herdr_wait.Snapshot("a", "idle", revision="r1", tokens={"summary": "⏳ 1 subagent"})
     snap_free = herdr_wait.Snapshot("a", "idle", revision="r1", tokens=None)
     wanted = ["idle", "done"]
 

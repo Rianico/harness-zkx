@@ -269,9 +269,7 @@ def test_auto_start_dry_run_skips_submitting(stub: StubHarness) -> None:
     assert stub.prompts() == []
 
 
-def test_reply_releases_lease_for_current_agent(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_reply_releases_lease_for_current_agent(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     _ = herdr_lease.acquire_lease("reviewer", "task.md", "orchestrator", base_dir=tmp_path)
@@ -282,9 +280,7 @@ def test_reply_releases_lease_for_current_agent(
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
-def test_reply_does_not_release_lease_for_target_caller(
-    stub: StubHarness, tmp_path: Path
-) -> None:
+def test_reply_does_not_release_lease_for_target_caller(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
     # Orchestrator is the target/caller receiving the reply, not the sender
