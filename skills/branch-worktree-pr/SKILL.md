@@ -247,7 +247,7 @@ git log --oneline <target> ^origin/main | head
 **Done when** `wt list` shows the copy gone, `git log --oneline <target> ^origin/main`
 has the copy's change, branch no longer resolves.
 
-**If router reports conflict (`rebase incomplete` / `Unmerged paths` / exit 2) → dispatch fixer inside the copy.** Do not edit the parent folder. Base dispatches a fixer that triggers `resolving-merge-conflicts`:
+**If router reports conflict (`rebase incomplete` / `Unmerged paths` / exit 2) → dispatch fixer inside the copy.** Do not edit the parent folder. Base dispatches a fixer that triggers the `gh-router` skill's `pr-conflict` subskill:
 
 ```text
 Agent (conflict-fixer):
@@ -263,7 +263,7 @@ Agent (conflict-fixer):
     Use plain words: branch, copy, merge, conflict, fix, test, check, file, folder.
 ```
 
-Fixer invokes `resolving-merge-conflicts` (trigger phrase above) and follows that skill inside the copy: check git status, fix each file, add, test, check, then `GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C <copy-path> rebase --continue` loop and retry `uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>` until exit 0. Main waits, checks router exits 0, then moves on. If router reported gate (no conflict markers, exit 1) → same fixer shape but fix test/typecheck, no rebase step.
+Fixer invokes the `gh-router` skill's `pr-conflict` subskill (trigger phrase above) and follows that skill inside the copy: check git status, fix each file, add, test, check, then `GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C <copy-path> rebase --continue` loop and retry `uv run $SKILL_DIR/scripts/merge_copy.py <copy-path> <target>` until exit 0. Main waits, checks router exits 0, then moves on. If router reported gate (no conflict markers, exit 1) → same fixer shape but fix test/typecheck, no rebase step.
 
 > [!warning] Never bypass — the guard is the point
 > If `merge_copy.py` exits non-zero for _any_ reason (conflict `exit 2`, gate `exit 1`, or leftover untracked `??` like `node_modules` / new test file not yet staged), the orchestrator's **only** move is to dispatch the fixer subagent **in that copy** (`inherit_context: true`, `cwd: <copy-path>`). Never `git -C <copy> add` / `commit` / `wt remove --force` / `git branch -D` from the orchestrator — that bypasses the `pre-merge` gate that `wt` exists to enforce. The fixer owns `git status --porcelain` in the copy, cleans stray untracked, stages tracked (`--stage tracked`), commits, and retries `merge_copy.py` until `exit 0`. Main only verifies `wt list` shows copy gone and `git log <target> ^origin/main` contains the change.

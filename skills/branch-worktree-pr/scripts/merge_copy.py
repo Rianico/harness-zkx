@@ -11,7 +11,7 @@ cd issues (wt switch never cds in pi bash) and avoids staging .lsz/.pi.
 Headless note: when rebase hits conflict, fixer must use
   GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true git -C <path> rebase --continue
 This script only detects and exits — it does not rebase or fix hunks.
-Hunk work belongs to fixer via resolving-merge-conflicts skill.
+Hunk work belongs to fixer via the gh-router skill's pr-conflict subskill.
 """
 
 from __future__ import annotations
