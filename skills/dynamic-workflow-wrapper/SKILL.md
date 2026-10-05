@@ -25,6 +25,8 @@ node "$SKILL_DIR/scripts/install-agents.mjs" --check
 
 Canonical roles live in `$SKILL_DIR/references/agents/` (`developer`, `gate-runner`, `code-reviewer`, `ticket-planner`, `merger`), locked by `$SKILL_DIR/references/agents.lock.json`, installed to `<repo>/.pi/agents/`. Editing a role is a cross-repository contract change: bump the lock in the same commit and tell the operator to re-run `--refresh`.
 
+`conflict-fixer` is installed from the same directory, but `branch-worktree-pr` dispatches it ad hoc inside a worktree copy to repair one failed merge attempt. It is deliberately outside the batch roster above, because `converge-tasks.js` never dispatches it.
+
 **Done when** `--check` exits 0.
 
 ## Step 1 — Preflight & detect stack
