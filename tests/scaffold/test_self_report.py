@@ -386,7 +386,7 @@ def test_pr_template_component_retires_with_a_pointer(tmp_path, capsys):
     """All five retired spellings exit 0, write no template, and name the gh-router installer."""
     _seed_repo(tmp_path)
     for spelling in ("pr-template", "pr_template", "pull-request", "pull_request", "pullrequest"):
-        scaffold._retirement_notice_shown = False
+        setattr(scaffold, "_retirement_notice_shown", False)
         capsys.readouterr()
         assert _run_main(
             "--update", "--only", spelling, "--no-format", "--cwd", str(tmp_path)

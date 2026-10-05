@@ -19,7 +19,7 @@ CANONICAL = REPO_ROOT / "skills/gh-router/references/pull_request_template.md"
 
 def run_analyze(*args: str, cwd: Path, template_src: str | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    env.pop("GH_ROUTER_TEMPLATE_SRC", None)
+    _ = env.pop("GH_ROUTER_TEMPLATE_SRC", None)
     if template_src is not None:
         env["GH_ROUTER_TEMPLATE_SRC"] = template_src
     return subprocess.run(
@@ -43,7 +43,7 @@ def snapshot(root: Path) -> dict[str, bytes]:
 def test_print_template_prefers_repo_template(tmp_path: Path) -> None:
     repo_tpl = tmp_path / ".github" / "pull_request_template.md"
     repo_tpl.parent.mkdir(parents=True)
-    repo_tpl.write_text("## Why\n")
+    _ = repo_tpl.write_text("## Why\n")
     r = run_analyze("--print-template", cwd=tmp_path)
     assert r.returncode == 0, r.stderr
     assert Path(r.stdout.strip()) == repo_tpl.resolve()
@@ -66,9 +66,9 @@ def test_print_template_exits_three_when_no_schema_exists(tmp_path: Path) -> Non
 
 def test_analysis_modes_never_write(tmp_path: Path) -> None:
     """Never-write invariant: --print-template and the analysis mode leave the tree byte-identical."""
-    (tmp_path / "notes.md").write_text("keep\n")
+    _ = (tmp_path / "notes.md").write_text("keep\n")
     (tmp_path / "data").mkdir()
-    (tmp_path / "data" / "x.py").write_text("print(1)\n")
+    _ = (tmp_path / "data" / "x.py").write_text("print(1)\n")
     before = snapshot(tmp_path)
 
     r = run_analyze("--print-template", cwd=tmp_path)

@@ -67,7 +67,7 @@ def test_no_clobber_refusal_keeps_existing_bytes(tmp_path: Path) -> None:
     dest = dest_of(tmp_path)
     dest.parent.mkdir(parents=True)
     original = b"hand-written template\n"
-    dest.write_bytes(original)
+    _ = dest.write_bytes(original)
     r = run_installer("--target", str(tmp_path))
     assert r.returncode == 1
     assert "refused" in r.stderr
@@ -79,7 +79,7 @@ def test_no_clobber_refusal_keeps_existing_bytes(tmp_path: Path) -> None:
 def test_force_overwrites_existing(tmp_path: Path) -> None:
     dest = dest_of(tmp_path)
     dest.parent.mkdir(parents=True)
-    dest.write_text("stale\n")
+    _ = dest.write_text("stale\n")
     r = run_installer("--target", str(tmp_path), "--force")
     assert r.returncode == 0, r.stderr
     assert dest.read_bytes() == CANONICAL.read_bytes()
@@ -88,7 +88,7 @@ def test_force_overwrites_existing(tmp_path: Path) -> None:
 def test_check_clean_exits_zero_and_writes_nothing(tmp_path: Path) -> None:
     dest = dest_of(tmp_path)
     dest.parent.mkdir(parents=True)
-    dest.write_bytes(CANONICAL.read_bytes())
+    _ = dest.write_bytes(CANONICAL.read_bytes())
     before = dest.stat().st_mtime_ns
     r = run_installer("--target", str(tmp_path), "--check")
     assert r.returncode == 0
@@ -99,9 +99,9 @@ def test_check_clean_exits_zero_and_writes_nothing(tmp_path: Path) -> None:
 def test_check_drifted_exits_one_naming_drift(tmp_path: Path) -> None:
     dest = dest_of(tmp_path)
     dest.parent.mkdir(parents=True)
-    dest.write_bytes(CANONICAL.read_bytes())
+    _ = dest.write_bytes(CANONICAL.read_bytes())
     with dest.open("ab") as fh:
-        fh.write(b"\nextra\n")
+        _ = fh.write(b"\nextra\n")
     r = run_installer("--target", str(tmp_path), "--check")
     assert r.returncode == 1
     assert "drift" in r.stdout
@@ -119,7 +119,7 @@ def test_check_missing_exits_one_without_writing(tmp_path: Path) -> None:
 def test_check_does_not_require_force(tmp_path: Path) -> None:
     dest = dest_of(tmp_path)
     dest.parent.mkdir(parents=True)
-    dest.write_bytes(CANONICAL.read_bytes())
+    _ = dest.write_bytes(CANONICAL.read_bytes())
     r = run_installer("--target", str(tmp_path), "--check")
     assert r.returncode == 0, f"--check on an existing file must not demand --force: {r.stderr}"
 
@@ -135,7 +135,7 @@ def test_dry_run_overwrite_is_announced_not_applied(tmp_path: Path) -> None:
     dest = dest_of(tmp_path)
     dest.parent.mkdir(parents=True)
     original = b"keep me\n"
-    dest.write_bytes(original)
+    _ = dest.write_bytes(original)
     r = run_installer("--target", str(tmp_path), "--dry-run", "--force")
     assert r.returncode == 0
     assert "would overwrite" in r.stdout
@@ -180,11 +180,11 @@ def test_installer_touches_no_second_file(tmp_path: Path) -> None:
     """Whole-tree snapshot: a regression writing anywhere outside $TARGET/.github/ fails here."""
     dest = dest_of(tmp_path)
     dest.parent.mkdir(parents=True)
-    dest.write_text("stale\n")
-    (dest.parent / "notes.md").write_bytes(b"inside\n")
-    (tmp_path / "README.md").write_bytes(b"outside\n")
+    _ = dest.write_text("stale\n")
+    _ = (dest.parent / "notes.md").write_bytes(b"inside\n")
+    _ = (tmp_path / "README.md").write_bytes(b"outside\n")
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_bytes(b"print(1)\n")
+    _ = (tmp_path / "src" / "main.py").write_bytes(b"print(1)\n")
 
     before = _snapshot(tmp_path)
     r = run_installer("--target", str(tmp_path), "--force")
