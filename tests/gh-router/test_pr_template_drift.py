@@ -16,9 +16,7 @@ CANONICAL = REPO_ROOT / "skills/gh-router/references/pull_request_template.md"
 
 def test_repo_template_matches_canonical_bytes() -> None:
     fix = "skills/gh-router/scripts/install-template.sh --target . --force"
-    assert INSTALLED.is_file(), (
-        f"{INSTALLED} missing — refresh it with: {fix}"
-    )
+    assert INSTALLED.is_file(), f"{INSTALLED} missing — refresh it with: {fix}"
     assert CANONICAL.is_file(), (
         f"{CANONICAL} missing — the canonical template is the drift-guard source of truth"
     )

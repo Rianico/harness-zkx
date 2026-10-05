@@ -17,7 +17,9 @@ ANALYZE = REPO_ROOT / "skills/gh-router/subskills/pr-enhance/scripts/analyze-pr.
 CANONICAL = REPO_ROOT / "skills/gh-router/references/pull_request_template.md"
 
 
-def run_analyze(*args: str, cwd: Path, template_src: str | None = None) -> subprocess.CompletedProcess[str]:
+def run_analyze(
+    *args: str, cwd: Path, template_src: str | None = None
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     _ = env.pop("GH_ROUTER_TEMPLATE_SRC", None)
     if template_src is not None:
@@ -34,9 +36,7 @@ def run_analyze(*args: str, cwd: Path, template_src: str | None = None) -> subpr
 
 def snapshot(root: Path) -> dict[str, bytes]:
     return {
-        str(p.relative_to(root)): p.read_bytes()
-        for p in sorted(root.rglob("*"))
-        if p.is_file()
+        str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()
     }
 
 

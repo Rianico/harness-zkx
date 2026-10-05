@@ -422,15 +422,13 @@ def test_pr_sh_forwards_squash_message(tmp_path: Path) -> None:
     mock_bin.mkdir()
     gh_mock = mock_bin / "gh"
     _ = gh_mock.write_text(
-        '#!/usr/bin/env bash\n'
+        "#!/usr/bin/env bash\n"
         'if [[ "$*" =~ pulls\\?head= ]]; then echo "null"; exit 0; fi\n'
         "exit 0\n",
         encoding="utf-8",
     )
     gh_mock.chmod(0o755)
-    _ = subprocess.run(
-        ["git", "init", "-q"], cwd=tmp_path, capture_output=True, check=True
-    )
+    _ = subprocess.run(["git", "init", "-q"], cwd=tmp_path, capture_output=True, check=True)
     _ = subprocess.run(
         ["git", "remote", "add", "origin", "https://github.com/test/repo.git"],
         cwd=tmp_path,
@@ -487,11 +485,15 @@ def test_check_trailers_enforces_title_budget_on_existing_pr(
     monkeypatch.setattr(pr_mod, "run_command", fake_run)
 
     long_title = "feat: " + "a" * 110
-    rc = check_trailers("test/repo", "feat-branch", "## Summary\nok\n", body_supplied=True, title=long_title)
+    rc = check_trailers(
+        "test/repo", "feat-branch", "## Summary\nok\n", body_supplied=True, title=long_title
+    )
     assert rc == 1
     assert "commit title exceeds 100 chars" in capsys.readouterr().err
 
-    short_rc = check_trailers("test/repo", "feat-branch", "## Summary\nok\n", body_supplied=True, title="feat: short")
+    short_rc = check_trailers(
+        "test/repo", "feat-branch", "## Summary\nok\n", body_supplied=True, title="feat: short"
+    )
     assert short_rc == 0
 
 

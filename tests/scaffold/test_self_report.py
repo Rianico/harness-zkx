@@ -386,11 +386,11 @@ def test_pr_template_component_retires_with_a_pointer(tmp_path, capsys):
     """All five retired spellings exit 0, write no template, and name the gh-router installer."""
     _seed_repo(tmp_path)
     for spelling in ("pr-template", "pr_template", "pull-request", "pull_request", "pullrequest"):
-        setattr(scaffold, "_retirement_notice_shown", False)
+        scaffold._retirement_notice_shown = False  # pyright: ignore[reportAttributeAccessIssue]
         capsys.readouterr()
-        assert _run_main(
-            "--update", "--only", spelling, "--no-format", "--cwd", str(tmp_path)
-        ) == (0), spelling
+        assert _run_main("--update", "--only", spelling, "--no-format", "--cwd", str(tmp_path)) == (
+            0
+        ), spelling
         err = capsys.readouterr().err
         assert "install-template.sh" in err, spelling
         assert "unknown component" not in err, spelling
