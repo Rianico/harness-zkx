@@ -13,6 +13,14 @@ in one command.
     herdr-dispatch callee --file ticket.md --wait --timeout 15000
     herdr-dispatch callee1 callee2 --file ticket.md --no-wait
 
+Draft flow: `herdr-dispatch --draft callee [--file ticket.md]` prints (or writes)
+a ticket skeleton whose routing is prefilled from live state. The model fills the
+Task/Context/Acceptance sections and deletes the `herdr-draft: unfilled` marker,
+then dispatches that file with `--file`. Dispatch refuses a ticket that still
+carries the marker, or one whose three sections are all empty. Free-form tickets
+pass untouched: `{{...}}` text is reported inside a refusal message, never a
+rejection reason on its own.
+
 Exit status: 0 accepted, 1 herdr failure, 2 usage or missing precondition,
 3 a target needs human input (blocked), 4 prompt delivered but wait timed out.
 
@@ -23,9 +31,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
@@ -56,6 +67,7 @@ class Options(PromptOptions):
     """CLI options; `argparse` writes into this typed namespace."""
 
     force: bool = False
+    draft: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,9 +88,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = parser.add_argument(
         "--file",
-        required=True,
         metavar="PATH",
-        help="ticket payload file (required); '-' reads stdin verbatim",
+        help="ticket payload file (required unless --draft); '-' reads stdin verbatim",
+    )
+    _ = parser.add_argument(
+        "--draft",
+        action="store_true",
+        help="print a ticket skeleton with routing prefilled (or write it to --file); send nothing",
     )
     _ = parser.add_argument(
         "--label",
@@ -141,12 +157,122 @@ def resolve_target_identity(
     return target, None
 
 
+PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
+DRAFT_MARKER = "herdr-draft: unfilled"
+DRAFT_SECTIONS = ("## Task", "## Context", "## Acceptance criteria")
+
+
+def find_unfilled_placeholders(ticket: str) -> list[str]:
+    """Return sorted `{{...}}` tokens for the refusal diagnostic; never a rejection reason alone."""
+    return sorted(set(PLACEHOLDER_RE.findall(ticket)))
+
+
+def ticket_is_untouched_skeleton(ticket: str) -> bool:
+    """Check whether every `--draft` semantic section is present and empty."""
+    bodies: list[str] = []
+    for section in DRAFT_SECTIONS:
+        start = ticket.find(section)
+        if start < 0:
+            return False
+        rest = ticket[start + len(section) :]
+        end = len(rest)
+        for marker in ("\n## ", "\n# "):
+            at = rest.find(marker)
+            if at >= 0:
+                end = min(end, at)
+        bodies.append(rest[:end].strip())
+    return all(body == "" for body in bodies)
+
+
+def validate_ticket(ticket: str) -> None:
+    """Refuse tickets the model must still fill in; free-form tickets pass untouched."""
+    if DRAFT_MARKER in ticket:
+        placeholders = find_unfilled_placeholders(ticket)
+        detail = f"; unfilled placeholders: {', '.join(placeholders[:5])}" if placeholders else ""
+        raise UsageError(
+            f"ticket still carries the draft marker ({DRAFT_MARKER}){detail}; "
+            "fill the sections and delete the marker before dispatch"
+        )
+    if ticket_is_untouched_skeleton(ticket):
+        raise UsageError(
+            "ticket has empty Task/Context/Acceptance sections; fill it before dispatch"
+        )
+
+
+def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, str]) -> str:
+    """Render a ticket skeleton; routing comes from live state, sections stay empty for the model."""
+    from herdr_prompt import resolve_caller
+
+    caller = resolve_caller(herdr, env)
+    ts = f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
+    caller_name = caller.agent or caller.label or caller.pane_id
+    caller_ref = f"{caller_name}@{caller.pane_id}" if caller.agent else caller.pane_id
+    details = (
+        " ".join(
+            part
+            for part in (
+                f"(tab {caller.tab_id}" if caller.tab_id else "(",
+                f"kind {caller.kind}" if caller.kind else "",
+            )
+            if part
+        ).rstrip()
+        + ")"
+    )
+    lines = [
+        "# Ticket draft",
+        "<!-- herdr-draft: unfilled — fill Task/Context/Acceptance, then delete this line. -->",
+        "",
+        "## Routing (prefilled by the script; the dispatch envelope stays authoritative)",
+        "",
+        f"- Caller: {caller_ref} {details}",
+        f"- Drafted: {ts}",
+    ]
+    for target in targets:
+        canonical, pane = resolve_target_identity(herdr, target, env)
+        if pane and canonical != pane:
+            ref = f"{canonical}@{pane}"
+        elif pane:
+            ref = pane
+        else:
+            ref = target
+        lines.append(f"- Callee: {ref}")
+    lines.extend(
+        [
+            "",
+            "## Task",
+            "",
+            "## Context",
+            "",
+            "## Acceptance criteria",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
-    if not options.file:
-        raise UsageError("pass --file PATH to dispatch a ticket")
     require_herdr_env(env)
     herdr = find_herdr(env)
     targets = resolve_targets(options, herdr, env)
+
+    if options.draft:
+        skeleton = render_draft_skeleton(herdr, targets, env)
+        if options.file and options.file != "-":
+            _ = Path(options.file).write_text(skeleton + "\n", encoding="utf-8")
+            print(f"herdr-dispatch: draft written to {options.file}", file=sys.stderr)
+        else:
+            print(skeleton)
+        return EXIT_OK
+    ticket_path = options.file
+    if ticket_path is None:
+        raise UsageError("pass --file PATH to dispatch a ticket")
+    if ticket_path != "-":
+        try:
+            ticket = Path(ticket_path).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise UsageError(
+                f"cannot read ticket file {ticket_path}: {exc.strerror or exc}"
+            ) from exc
+        validate_ticket(ticket)
 
     if not options.force and not options.dry_run:
         for target in targets:
@@ -169,7 +295,7 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     if not options.dry_run:
         for target in targets:
             canonical, pane = resolve_target_identity(herdr, target, env)
-            _ = acquire_lease(canonical, options.file, caller_name, pane_id=pane, env=env)
+            _ = acquire_lease(canonical, ticket_path, caller_name, pane_id=pane, env=env)
             acquired_targets.append(canonical)
 
     try:

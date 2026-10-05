@@ -282,3 +282,68 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert "usage: herdr-dispatch" in done.stdout
+
+
+def test_dispatch_draft_prints_skeleton_with_prefilled_routing(stub: StubHarness) -> None:
+    done = stub.run("callee", "--draft")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    assert "- Caller: reviewer@w9:p1 (tab w9:t1 kind pi)" in done.stdout
+    assert "- Callee: callee" in done.stdout
+    assert re.search(r"^- Drafted: \[\d{4}-\d{2}-\d{2}T", done.stdout, re.MULTILINE)
+    assert "## Task" in done.stdout
+    assert "## Context" in done.stdout
+    assert "## Acceptance criteria" in done.stdout
+    assert "herdr-draft: unfilled" in done.stdout
+
+
+def test_dispatch_draft_writes_skeleton_to_file(stub: StubHarness, tmp_path: Path) -> None:
+    path = tmp_path / "draft.md"
+    done = stub.run("callee", "--draft", "--file", str(path))
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    assert "## Task" not in done.stdout
+    skeleton = path.read_text(encoding="utf-8")
+    assert "- Caller: reviewer@w9:p1 (tab w9:t1 kind pi)" in skeleton
+    assert "- Callee: callee" in skeleton
+
+
+def test_dispatch_accepts_free_form_ticket_with_braces(stub: StubHarness, tmp_path: Path) -> None:
+    """`{{...}}` is a diagnostic, never a rejection reason on its own."""
+    ticket = payload_file(tmp_path, "Ship it to {{branch}} on {{host}}.")
+    done = stub.run("callee", "--file", str(ticket), "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+
+def test_dispatch_refuses_live_draft_marker(stub: StubHarness, tmp_path: Path) -> None:
+    ticket = payload_file(
+        tmp_path,
+        "<!-- herdr-draft: unfilled — fill Task/Context/Acceptance, then delete this line. -->\n\n"
+        "## Task\n\nShip {{branch}}.\n\n## Context\n\nSome context.\n\n"
+        "## Acceptance criteria\n\nTests pass.\n",
+    )
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "still carries the draft marker" in done.stderr
+    assert "{{branch}}" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_dispatch_refuses_untouched_skeleton(stub: StubHarness, tmp_path: Path) -> None:
+    ticket = payload_file(
+        tmp_path,
+        "## Routing\n\n- Caller: reviewer@w9:p1\n\n## Task\n\n## Context\n\n## Acceptance criteria\n",
+    )
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "empty Task/Context/Acceptance sections" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: Path) -> None:
+    ticket = payload_file(
+        tmp_path,
+        "## Task\n\nShip the fix.\n\n## Context\n\n\n## Acceptance criteria\n",
+    )
+    done = stub.run("callee", "--file", str(ticket), "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr

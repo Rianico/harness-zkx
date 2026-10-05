@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **herdr:** add `herdr-dispatch --draft` ticket skeletons with prefilled routing (#195)
 * **herdr:** subagent-first coordination, task leases, and fix prompt delivery (#194)
 * **ai-engineering:** adapt ASD-STE100 Issue 9 across writing subskills, system prompt rules, and the deterministic linter (#188)
 * **changelog-gate:** guide remediation on red provenance gate (#187)

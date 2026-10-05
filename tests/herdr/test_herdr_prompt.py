@@ -649,7 +649,7 @@ def test_caller_block_renders_empty_unknowns_never_invents() -> None:
 
 def test_caller_block_sanitizes_label_to_single_line() -> None:
     caller = herdr_prompt.CallerContext(pane_id="w1:p1", label="review\npane\tX", agent="reviewer")
-    assert herdr_prompt.render_caller_block(caller).splitlines()[2] == '  label: "review pane X"' 
+    assert herdr_prompt.render_caller_block(caller).splitlines()[2] == '  label: "review pane X"'
 
 
 def test_caller_block_renders_blank_label_empty() -> None:

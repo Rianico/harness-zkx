@@ -265,10 +265,17 @@ def _scalar(value: str) -> str:
     """Render a header value; quote only when a YAML reader would mangle it."""
     if not value:
         return ""
-    if '"' in value or "'" in value or "#" in value or '": "' in value or any(ch.isspace() for ch in value):
+    if (
+        '"' in value
+        or "'" in value
+        or "#" in value
+        or '": "' in value
+        or any(ch.isspace() for ch in value)
+    ):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
     return value
+
 
 def render_caller_block(
     caller: CallerContext, *, group_members: Sequence[str] = (), callee: str | None = None
@@ -290,6 +297,7 @@ def render_caller_block(
         f"Callee: {_scalar(callee or '')}",
     ]
     return "\n".join(lines)
+
 
 SKILL_NOTICE = "Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI"
 
@@ -384,6 +392,7 @@ def wrap_with_caller(
     ts = f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
     header = f"{ts}\n{render_caller_block(caller, group_members=group_members, callee=callee)}"
     return f"{header}\n\n{payload}\n\n{render_reply_contract(caller)}"
+
 
 def build_prompt_argv(
     herdr: str,
