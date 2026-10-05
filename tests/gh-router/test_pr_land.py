@@ -18,12 +18,18 @@ PR_TEMPLATE = REPO_ROOT / ".github/pull_request_template.md"
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
+import pr as pr_mod  # noqa: E402
 from pr import (  # noqa: E402
     PrError,
+    RefusalError,
+    UsageError,
+    check_trailers,
     clean_squash_body,
     is_unfilled_body,
+    merge_pr,
     parse_args,
     pr_conflict_verdict,
+    resolve_squash_message,
     run_command,
     squash_message,
     stamp_changelog,
@@ -101,7 +107,7 @@ def test_parse_args_tracks_supplied_title_and_body() -> None:
 
 
 def test_squash_message_falls_back_when_body_is_template_or_empty() -> None:
-    """When PR body matches the template or is empty, squash_message returns empty to let GitHub use commit subjects."""
+    """squash_message keeps the empty sentinel for template/empty bodies; the merge/check layer refuses that case (see test_merge_pr_never_omits_commit_message)."""
     template_content = (
         PR_TEMPLATE.read_text(encoding="utf-8")
         if PR_TEMPLATE.is_file()
@@ -117,6 +123,376 @@ def test_squash_message_falls_back_when_body_is_template_or_empty() -> None:
     # Authored body -> preserved
     authored = "feat: add cool feature\n\nCo-authored-by: someone <someone@example.com>"
     assert squash_message(authored, template_path=PR_TEMPLATE) == authored
+
+
+def test_parse_args_squash_message_flags() -> None:
+    """--squash-message and --squash-message-file set supplied; both together or missing arg is a usage error."""
+    opts = parse_args(["--squash-message", "feat: x"])
+    assert opts.squash_message == "feat: x"
+    assert opts.squash_message_supplied
+
+    opts = parse_args(["--squash-message-file", "tmp/msg.md"])
+    assert opts.squash_message_file == Path("tmp/msg.md")
+    assert opts.squash_message_supplied
+
+    with pytest.raises(UsageError):
+        parse_args(["--squash-message", "a", "--squash-message-file", "b"])
+    with pytest.raises(UsageError):
+        parse_args(["--squash-message"])
+    with pytest.raises(UsageError):
+        parse_args(["--squash-message-file"])
+
+
+def test_resolve_squash_message_prefers_explicit() -> None:
+    """An explicit message wins over the body and is sanitized through clean_squash_body."""
+    explicit = (
+        "## Summary\nChosen message.\n\n"
+        "## Architecture\n```mermaid\ngraph TD\n    A --> B\n```\n\n"
+        "<details><summary>out</summary>\ntrace\n</details>\n\n"
+        "Co-authored-by: X <x@y>\nCloses #12\n"
+    )
+    out = resolve_squash_message("## Summary\nignored\n", explicit=explicit, supplied=True)
+    assert "Chosen message." in out
+    assert "Co-authored-by: X <x@y>" in out
+    assert "Closes #12" in out
+    assert "A --> B" not in out
+    assert "<details" not in out
+    assert "ignored" not in out
+
+    assert resolve_squash_message("", explicit="feat: only this", supplied=True) == (
+        "feat: only this"
+    )
+    with pytest.raises(UsageError):
+        resolve_squash_message("## Summary\nwhatever\n", explicit="   ", supplied=True)
+
+
+def test_resolve_squash_message_refuses_fallback_without_explicit(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A fallback body without an explicit message must raise RefusalError with remediation."""
+    with pytest.raises(RefusalError):
+        resolve_squash_message("", explicit=None, supplied=False)
+    err = capsys.readouterr().err
+    assert "--squash-message" in err
+    assert "remediation:" in err
+
+
+def test_merge_pr_never_omits_commit_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The merge argv always carries exactly one commit_message; a fallback body refuses with no merge call."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        joined = " ".join(cmd)
+        if "mergeable_state" in joined:
+            out = "clean"
+        elif "api user" in joined:
+            out = "merger"
+        elif "/commits" in joined:
+            out = "ghuser\tWf Zyx\twf@x.io\n"
+        else:
+            out = '{"merged":true}'
+        return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
+
+    monkeypatch.setattr(pr_mod, "run_command", fake_run)
+
+    assert (
+        merge_pr("test/repo", "7", "main", "feat: x", "## Summary\nReal.\n\nCloses #12\n") is True
+    )
+    merge_calls = [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
+    assert len(merge_calls) == 1
+    msg_fields = [a for a in merge_calls[0] if a.startswith("commit_message=")]
+    assert len(msg_fields) == 1
+    assert "Closes #12" in msg_fields[0]
+
+    calls.clear()
+    assert merge_pr("test/repo", "7", "main", "feat: x", "") is False
+    assert not [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
+
+
+def test_check_trailers_refuses_fallback_without_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """check_trailers mirrors the merge gate: fallback body without explicit message returns 1."""
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        joined = " ".join(cmd)
+        out = "7" if "pulls?head=" in joined else ""
+        return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
+
+    monkeypatch.setattr(pr_mod, "run_command", fake_run)
+
+    rc = check_trailers("test/repo", "feat-branch", "", body_supplied=True)
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "--squash-message" in err
+
+
+def test_resolve_squash_message_refuses_raw_token_body_with_explicit() -> None:
+    """A PR body still holding the raw CODE_AUTHORS token is refused even with an explicit message."""
+    template = (
+        PR_TEMPLATE.read_text(encoding="utf-8")
+        if PR_TEMPLATE.is_file()
+        else "intro\n\n<!-- CODE_AUTHORS: fill me -->\n"
+    )
+    with pytest.raises(RefusalError):
+        resolve_squash_message(template, explicit="feat(scope): real", supplied=True)
+
+
+def test_clean_squash_body_preserves_evidence_section() -> None:
+    """## Evidence is authored corpus content, not review-only; it must survive untouched."""
+    raw_body = """## Summary
+Feature works.
+
+## Evidence
+uv run pytest tests/x -q → 5 passed
+manual check: button renders
+
+## Verification Evidence
+<details><summary>log</summary>
+trace
+</details>
+
+Closes #12
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert (
+        "## Evidence\nuv run pytest tests/x -q → 5 passed\nmanual check: button renders" in cleaned
+    )
+    assert "## Verification Evidence" not in cleaned
+    assert "trace" not in cleaned
+    assert "Closes #12" in cleaned
+
+
+def test_clean_squash_body_strips_mermaid_fence_under_authored_heading() -> None:
+    """Balanced mermaid strip must bite under an authored heading (mutation: MERMAID_FENCE_RE.sub)."""
+    raw_body = """## Summary
+Feature works.
+```mermaid
+graph TD
+    A --> B
+```
+- authored tail
+
+## What Changed
+- real change
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "Feature works." in cleaned
+    assert "A --> B" not in cleaned
+    assert "```mermaid" not in cleaned
+    assert "- authored tail" in cleaned
+    assert "## What Changed\n- real change" in cleaned
+
+
+def test_clean_squash_body_strips_unclosed_mermaid_under_authored_heading() -> None:
+    """Unclosed mermaid strip must bite under an authored heading (mutation: _strip_unclosed mermaid line)."""
+    raw_body = """## Summary
+Feature works.
+```mermaid
+graph TD
+    A --> B
+
+## What Changed
+- real change
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "Feature works." in cleaned
+    assert "A --> B" not in cleaned
+    assert "```mermaid" not in cleaned
+    assert "## What Changed\n- real change" in cleaned
+
+
+def test_clean_squash_body_strips_details_block_under_authored_heading() -> None:
+    """Balanced <details> strip must bite under an authored heading (mutation: DETAILS_BLOCK_RE.sub)."""
+    raw_body = """## Summary
+Feature works.
+<details><summary>log</summary>
+trace line
+</details>
+- authored tail
+
+## What Changed
+- real change
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "Feature works." in cleaned
+    assert "trace line" not in cleaned
+    assert "<details" not in cleaned
+    assert "- authored tail" in cleaned
+    assert "## What Changed\n- real change" in cleaned
+
+
+def test_clean_squash_body_strips_bullet_prefixed_details_block() -> None:
+    """A list-marker-prefixed <details> block is stripped, later bullets survive."""
+    raw_body = """## Summary
+Feature works.
+- <details><summary>log</summary>
+  trace
+  </details>
+- real point
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "trace" not in cleaned
+    assert "<details" not in cleaned
+    assert "- real point" in cleaned
+    assert "Feature works." in cleaned
+
+
+def test_clean_squash_body_preserves_prose_mentions_of_details() -> None:
+    """Mentions of <details> mid-line are prose; nothing may be deleted (P2 counterexamples)."""
+    mention_unclosed = (
+        "## Summary\nStrips `<details>` ephemera from squash bodies.\n\n"
+        "- bullet under summary\n\n## What Changed\n- real change\n\nCloses #12\n"
+    )
+    cleaned = clean_squash_body(mention_unclosed)
+    assert "Strips `<details>` ephemera from squash bodies." in cleaned
+    assert "- bullet under summary" in cleaned
+    assert "## What Changed\n- real change" in cleaned
+    assert "Closes #12" in cleaned
+
+    mention_balanced = (
+        "## Summary\nWe render a <details> collapsible for logs.\n\n"
+        "Closes #12\n\n## Evidence\nmanual check; the closer is </details>.\n"
+    )
+    cleaned = clean_squash_body(mention_balanced)
+    assert "We render a <details> collapsible for logs." in cleaned
+    assert "Closes #12" in cleaned
+    assert "## Evidence\nmanual check; the closer is </details>." in cleaned
+
+
+def test_clean_squash_body_preserves_midline_details_closer() -> None:
+    """A </details> quoted in later prose must not start or extend a cross-section deletion."""
+    raw_body = """## Summary
+Feature works.
+<details><summary>log</summary>
+trace line
+</details>
+
+## What Changed
+- real change
+- note: legacy prose mentioned <details> tags
+
+## Decisions
+- use </details> only inside blocks
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "trace line" not in cleaned
+    assert "<details><summary>" not in cleaned
+    assert "## What Changed\n- real change" in cleaned
+    assert "- note: legacy prose mentioned <details> tags" in cleaned
+    assert "## Decisions\n- use </details> only inside blocks" in cleaned
+
+
+def test_clean_squash_body_is_idempotent() -> None:
+    """Double-sanitizing (build_squash_message cleans again) must be a fixed point."""
+    raw_body = """## Summary
+Feature works.
+
+## What Changed
+- item 1
+
+## Verification Evidence
+<details><summary>log</summary>
+trace
+</details>
+
+## Architecture
+```mermaid
+graph TD
+    A --> B
+```
+
+Co-authored-by: X <x@y>
+Closes #12
+"""
+    once = clean_squash_body(raw_body)
+    twice = clean_squash_body(once)
+    assert twice == once
+    assert "Feature works." in once
+    assert "## What Changed\n- item 1" in once
+    assert "Co-authored-by: X <x@y>" in once
+    assert "Closes #12" in once
+
+
+def test_pr_sh_forwards_squash_message(tmp_path: Path) -> None:
+    """pr.sh must forward --squash-message to parse_args with flag-dependent observable."""
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+    gh_mock = mock_bin / "gh"
+    _ = gh_mock.write_text(
+        '#!/usr/bin/env bash\n'
+        'if [[ "$*" =~ pulls\\?head= ]]; then echo "null"; exit 0; fi\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    gh_mock.chmod(0o755)
+    _ = subprocess.run(
+        ["git", "init", "-q"], cwd=tmp_path, capture_output=True, check=True
+    )
+    _ = subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/test/repo.git"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    env = {**os.environ, "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}"}
+
+    with_flag = subprocess.run(
+        [
+            "bash",
+            str(PR_SH),
+            "--check",
+            "--head",
+            "feat-x",
+            "--body",
+            "",
+            "--squash-message",
+            "",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=120,
+    )
+    assert with_flag.returncode == 2, with_flag.stderr
+    assert "--squash-message is empty" in with_flag.stderr
+
+    without_flag = subprocess.run(
+        ["bash", str(PR_SH), "--check", "--head", "feat-x", "--body", ""],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=120,
+    )
+    assert without_flag.returncode == 1, without_flag.stderr
+    assert "remediation:" in without_flag.stderr
+    assert "--squash-message" in without_flag.stderr
+
+
+def test_check_trailers_enforces_title_budget_on_existing_pr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--check must refuse an over-budget title on an existing PR, same as the merge gate."""
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        joined = " ".join(cmd)
+        out = "7" if "pulls?head=" in joined else ""
+        return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
+
+    monkeypatch.setattr(pr_mod, "run_command", fake_run)
+
+    long_title = "feat: " + "a" * 110
+    rc = check_trailers("test/repo", "feat-branch", "## Summary\nok\n", body_supplied=True, title=long_title)
+    assert rc == 1
+    assert "commit title exceeds 100 chars" in capsys.readouterr().err
+
+    short_rc = check_trailers("test/repo", "feat-branch", "## Summary\nok\n", body_supplied=True, title="feat: short")
+    assert short_rc == 0
 
 
 CONFLICT_CASES = [
@@ -764,6 +1140,144 @@ Closes #123
     assert "## Summary\nAdd important feature.\n\n**Impact**: 2 files · **Risk**: Low" in cleaned
     assert "## What Changed\n- item 1\n- item 2" in cleaned
     assert "Closes #123" in cleaned
+
+
+def test_clean_squash_body_strips_mermaid_and_details_leaks() -> None:
+    """Review-only mermaid and <details> leaks must not survive into squash history."""
+    raw_body = """## Summary
+Add important feature.
+
+**Impact**: 2 files · **Risk**: Low
+
+## Architecture
+```mermaid
+graph TD
+    A --> B
+```
+
+## Verification Evidence
+<details><summary>Output</summary>
+
+trace: pytest exit 0
+
+</details>
+
+## Blast Radius & Safety
+- touches only squash logic
+
+## What Changed
+- item 1
+- item 2
+
+Co-authored-by: X <x@y>
+Closes #12
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "## Summary\nAdd important feature." in cleaned
+    assert "**Impact**: 2 files · **Risk**: Low" in cleaned
+    assert "## Blast Radius & Safety" in cleaned
+    assert "## What Changed\n- item 1\n- item 2" in cleaned
+    assert "Co-authored-by: X <x@y>" in cleaned
+    assert "Closes #12" in cleaned
+    assert "A --> B" not in cleaned
+    assert "trace" not in cleaned
+    assert "## Architecture" not in cleaned
+    assert "## Verification Evidence" not in cleaned
+    assert "<details" not in cleaned
+
+
+def test_clean_squash_body_strips_unclosed_details() -> None:
+    """An unclosed <details> block strips to end of text."""
+    raw_body = "## Summary\nFine.\n\n## Notes\n<details><summary>Output</summary>\ntrace tail\n"
+    cleaned = clean_squash_body(raw_body)
+    assert "## Summary\nFine." in cleaned
+    assert "<details" not in cleaned
+    assert "trace tail" not in cleaned
+
+
+def test_clean_squash_body_unclosed_mermaid_keeps_following_sections() -> None:
+    """An unclosed mermaid fence must not delete later authored sections or Closes."""
+    raw_body = """## Summary
+Real motivation.
+
+## Architecture
+```mermaid
+graph TD
+    A --> B
+
+## What Changed
+- real change
+
+Closes #12
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "Real motivation." in cleaned
+    assert "## Architecture" not in cleaned
+    assert "A --> B" not in cleaned
+    assert "## What Changed" in cleaned
+    assert "- real change" in cleaned
+    assert "Closes #12" in cleaned
+
+
+def test_clean_squash_body_unclosed_details_keeps_following_sections() -> None:
+    """An unclosed <details> block must not delete later authored sections or Closes."""
+    raw_body = """## Summary
+Real motivation.
+
+## Verification Evidence
+<details><summary>Output</summary>
+trace line 1
+
+## What Changed
+- real change
+
+Closes #12
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "Real motivation." in cleaned
+    assert "## Verification Evidence" not in cleaned
+    assert "trace line 1" not in cleaned
+    assert "<details" not in cleaned
+    assert "## What Changed" in cleaned
+    assert "- real change" in cleaned
+    assert "Closes #12" in cleaned
+
+
+def test_clean_squash_body_unclosed_mermaid_keeps_trailing_closes_and_trailer() -> None:
+    """An unclosed mermaid fence with no following heading must keep trailing Closes/trailer."""
+    raw_body = """## Summary
+S.
+
+## Architecture
+```mermaid
+graph LR
+  A --> B
+Closes #12
+Co-authored-by: Real <r@e.com>
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "## Summary\nS." in cleaned
+    assert "A --> B" not in cleaned
+    assert "graph LR" not in cleaned
+    assert "Closes #12" in cleaned
+    assert "Co-authored-by: Real <r@e.com>" in cleaned
+
+
+def test_clean_squash_body_unclosed_details_keeps_trailing_closes() -> None:
+    """An unclosed <details> as final section must keep a trailing Closes line."""
+    raw_body = """## Summary
+S.
+
+## Verification Evidence
+<details><summary>Output</summary>
+trace line 1
+Closes #7
+"""
+    cleaned = clean_squash_body(raw_body)
+    assert "## Summary\nS." in cleaned
+    assert "trace line 1" not in cleaned
+    assert "<details" not in cleaned
+    assert "Closes #7" in cleaned
 
 
 def test_clean_squash_body_refuses_raw_token() -> None:

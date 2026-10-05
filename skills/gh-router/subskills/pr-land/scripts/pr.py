@@ -4,14 +4,18 @@
 # ///
 """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
 
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
   --no-stamp : do not auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger
+  --squash-message / --squash-message-file : explicit squash commit message (mutually exclusive)
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
 except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
 script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
+A squash merge never omits commit_message: it is either the explicit --squash-message (file) or a
+message derived from the PR body. An empty or template-only body without an explicit message is
+refused (exit 1) instead of letting GitHub synthesize commit subjects.
 Opening a PR requires a description: an empty body or the unfilled repo template is refused pre-create.
 Commit title length is strictly limited to 100 characters (TITLE (#NUM) <= 100).
 Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
@@ -34,6 +38,19 @@ CLOSING_RE = re.compile(
     re.IGNORECASE,
 )
 PROCEDURAL_SECTION_RE = re.compile(r"^#{1,6}\s+(Checklist|Landing)\b", re.IGNORECASE)
+REVIEW_ONLY_SECTION_RE = re.compile(
+    r"^#{1,6}\s+(Architecture|Verification Evidence)\b", re.IGNORECASE
+)
+MERMAID_FENCE_RE = re.compile(
+    r"^[ \t]*```mermaid\b.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE | re.IGNORECASE
+)
+MERMAID_UNCLOSED_OPENER_RE = re.compile(r"^[ \t]*```mermaid\b", re.IGNORECASE)
+DETAILS_BLOCK_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?<details\b.*?</details>", re.DOTALL | re.MULTILINE | re.IGNORECASE
+)
+DETAILS_UNCLOSED_OPENER_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?<details\b", re.MULTILINE | re.IGNORECASE
+)
 HEADING_RE = re.compile(r"^#{1,6}\s+\S")
 DIRECTIVE_RE = re.compile(r"^[ \t]*(Landing|Ledger-Waiver):", re.IGNORECASE)
 EMPTY_BULLET_RE = re.compile(r"^[ \t]*[*+-][ \t]*$")
@@ -104,16 +121,20 @@ class PrOptions:
     no_stamp: bool = False
     title_supplied: bool = False
     body_supplied: bool = False
+    squash_message: str | None = None
+    squash_message_file: Path | None = None
+    squash_message_supplied: bool = False
 
 
 def print_usage() -> None:
     usage = """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
   --no-stamp : do not auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger
   --body/--body-file : required to open a PR; the caller drafts the description (pr-enhance workflow). An empty body or the unfilled repo template is refused.
+  --squash-message/--squash-message-file : explicit squash commit message (mutually exclusive); a squash merge never omits commit_message (explicit or derived) — an empty/template body without an explicit message is refused (exit 1), never GitHub's commit-subject synthesis.
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
 except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
 script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
@@ -131,6 +152,9 @@ def parse_args(args: list[str]) -> PrOptions:
     body: str | None = None
     body_supplied = False
     body_file: Path | None = None
+    squash_message: str | None = None
+    squash_message_file: Path | None = None
+    squash_message_supplied = False
     watch = False
     merge = False
     check = False
@@ -168,6 +192,18 @@ def parse_args(args: list[str]) -> PrOptions:
             body_file = Path(args[i + 1])
             body_supplied = True
             i += 2
+        elif arg == "--squash-message":
+            if i + 1 >= len(args):
+                raise UsageError("missing argument for --squash-message")
+            squash_message = args[i + 1]
+            squash_message_supplied = True
+            i += 2
+        elif arg == "--squash-message-file":
+            if i + 1 >= len(args):
+                raise UsageError("missing argument for --squash-message-file")
+            squash_message_file = Path(args[i + 1])
+            squash_message_supplied = True
+            i += 2
         elif arg == "--watch":
             watch = True
             i += 1
@@ -204,6 +240,9 @@ def parse_args(args: list[str]) -> PrOptions:
         else:
             raise UsageError(f"unknown arg: {arg}")
 
+    if squash_message is not None and squash_message_file is not None:
+        raise UsageError("--squash-message and --squash-message-file are mutually exclusive")
+
     return PrOptions(
         base=base,
         head=head,
@@ -217,6 +256,9 @@ def parse_args(args: list[str]) -> PrOptions:
         no_stamp=no_stamp,
         title_supplied=title_supplied,
         body_supplied=body_supplied,
+        squash_message=squash_message,
+        squash_message_file=squash_message_file,
+        squash_message_supplied=squash_message_supplied,
     )
 
 
@@ -573,16 +615,56 @@ def check_title_length(title: str, num: str | int) -> None:
         raise RefusalError(f"commit title exceeds {SQUASH_TITLE_MAX} chars: {header}")
 
 
+def _is_stop_line(line: str) -> bool:
+    return bool(HEADING_RE.match(line) or is_closing_line(line) or is_trailer_line(line))
+
+
+def _strip_unclosed(text: str, opener: re.Pattern[str]) -> str:
+    """Drop each unclosed construct from its opener line up to (exclusive) the
+    first heading, closing keyword, or trailer line."""
+    out: list[str] = []
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        if opener.search(lines[i]):
+            i += 1
+            while i < len(lines) and not _is_stop_line(lines[i]):
+                i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out)
+
+
 def clean_squash_body(body: str) -> str:
+    """Strip review-only ephemera from a squash body.
+
+    Removal order is deterministic: HTML comments → mermaid fences → <details>
+    blocks → review-only sections → procedural sections → directives →
+    empty-section pruning. <details> removal runs before pruning so a section
+    holding only a details block becomes empty and is dropped. Unclosed
+    mermaid/<details> strips stop before the next heading, Closes keyword, or
+    Co-authored-by trailer, so the sanitizer never removes those lines. Fenced
+    ephemera are anchored at line start (optionally after a list marker): a
+    <details> opened mid-line is prose, not markup, and is not stripped; a line
+    that begins with the tag is an opener.
+    """
     refuse_raw_token(body)
     text = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
+    # Closing/trailer lines are safe by construction: _strip_unclosed stops
+    # before CLOSING_RE/TRAILER_RE lines and section scanning exits on them,
+    # so every such line in text survives into pruned.
+    text = MERMAID_FENCE_RE.sub("", text)
+    text = _strip_unclosed(text, MERMAID_UNCLOSED_OPENER_RE)
+    text = DETAILS_BLOCK_RE.sub("", text)
+    text = _strip_unclosed(text, DETAILS_UNCLOSED_OPENER_RE)
 
     lines: list[str] = []
     in_procedural_section = False
 
     for line in text.splitlines():
         if HEADING_RE.match(line):
-            if PROCEDURAL_SECTION_RE.match(line):
+            if PROCEDURAL_SECTION_RE.match(line) or REVIEW_ONLY_SECTION_RE.match(line):
                 in_procedural_section = True
                 continue
             in_procedural_section = False
@@ -661,6 +743,63 @@ def refuse_unfilled_body(body: str) -> None:
         file=sys.stderr,
     )
     raise RefusalError("PR body is empty or an unfilled template")
+
+
+def resolve_squash_message(
+    body: str,
+    *,
+    explicit: str | None,
+    supplied: bool,
+    template_path: Path | None = None,
+) -> str:
+    """Single decision point for the squash commit message (fail closed).
+
+    The PR body's raw CODE_AUTHORS token is refused on both paths. An explicit
+    message is sanitized through clean_squash_body; an empty one is a usage
+    error. Without an explicit message the PR body must yield a non-empty
+    derived squash message, or the merge is refused — GitHub's commit-subject
+    synthesis is never an outcome.
+    """
+    if supplied:
+        refuse_raw_token(body)
+        cleaned = clean_squash_body(explicit or "")
+        if not cleaned.strip():
+            raise UsageError("--squash-message is empty")
+        return cleaned
+    derived = squash_message(body, template_path=template_path)
+    if not derived.strip():
+        print(
+            "refusing squash merge: PR body is empty or the unfilled repo template",
+            file=sys.stderr,
+        )
+        print(
+            "remediation: draft the description via the pr-enhance workflow, "
+            "then pass an explicit message with --squash-message (or --squash-message-file)",
+            file=sys.stderr,
+        )
+        raise RefusalError("squash message refused: body is empty or the repo template")
+    return derived
+
+
+def resolve_squash_override(options: PrOptions, cwd: Path | None = None) -> tuple[str | None, bool]:
+    explicit = options.squash_message
+    if options.squash_message_file:
+        mf = (
+            options.squash_message_file
+            if options.squash_message_file.is_absolute()
+            else ((cwd or Path.cwd()) / options.squash_message_file)
+        )
+        if not mf.is_file():
+            raise UsageError(
+                f"squash message file not found or not readable: {options.squash_message_file}"
+            )
+        try:
+            explicit = mf.read_text(encoding="utf-8")
+        except OSError:
+            raise UsageError(
+                f"squash message file not found or not readable: {options.squash_message_file}"
+            ) from None
+    return explicit, options.squash_message_supplied
 
 
 def build_squash_message(msg: str, merger: str, tsv: str) -> str:
@@ -947,6 +1086,8 @@ def check_trailers(
     title: str = "",
     template_path: Path | None = None,
     cwd: Path | None = None,
+    squash_message_override: str | None = None,
+    squash_message_supplied: bool = False,
 ) -> int:
     owner = repo.split("/")[0]
     res = run_command(
@@ -975,14 +1116,13 @@ def check_trailers(
             except RefusalError:
                 return 1
 
-        if is_fallback_body(body, template_path=template_path):
-            print(
-                "commit_message will be omitted (body empty or repo template); GitHub builds the squash message"
-            )
-            return 0
-
         try:
-            refuse_raw_token(body)
+            resolved_msg = resolve_squash_message(
+                body,
+                explicit=squash_message_override,
+                supplied=squash_message_supplied,
+                template_path=template_path,
+            )
         except RefusalError:
             return 1
 
@@ -1011,7 +1151,7 @@ def check_trailers(
             if cfg_res.returncode == 0:
                 merger = cfg_res.stdout.strip()
 
-        new_trailers = pr_co_author_trailers(tsv, merger=merger, body=body)
+        new_trailers = pr_co_author_trailers(tsv, merger=merger, body=resolved_msg)
         if new_trailers.strip():
             print(new_trailers, end="")
         else:
@@ -1019,6 +1159,11 @@ def check_trailers(
         return 0
 
     num = found
+
+    try:
+        check_title_length(title, num)
+    except RefusalError:
+        return 1
 
     if not body_supplied:
         body_res = run_command(
@@ -1031,11 +1176,15 @@ def check_trailers(
             )
         body = body_res.stdout
 
-    if is_fallback_body(body, template_path=template_path):
-        print(
-            "commit_message will be omitted (body empty or repo template); GitHub builds the squash message"
+    try:
+        resolved_msg = resolve_squash_message(
+            body,
+            explicit=squash_message_override,
+            supplied=squash_message_supplied,
+            template_path=template_path,
         )
-        return 0
+    except RefusalError:
+        return 1
 
     merger_res = run_command(
         ["gh", "api", "user", "--jq", ".login"],
@@ -1066,11 +1215,11 @@ def check_trailers(
     tsv = tsv_res.stdout
 
     try:
-        _ = build_squash_message(body, merger, tsv)
+        _ = build_squash_message(resolved_msg, merger, tsv)
     except RefusalError:
         return 1
 
-    new_trailers = pr_co_author_trailers(tsv, merger=merger, body=body)
+    new_trailers = pr_co_author_trailers(tsv, merger=merger, body=resolved_msg)
     if new_trailers.strip():
         print(new_trailers, end="")
     else:
@@ -1218,6 +1367,8 @@ def merge_pr(
     body: str,
     template_path: Path | None = None,
     cwd: Path | None = None,
+    squash_message_override: str | None = None,
+    squash_message_supplied: bool = False,
 ) -> bool:
     check_title_length(title, num)
     state = "unknown"
@@ -1245,13 +1396,20 @@ def merge_pr(
         "-f",
         f"commit_title={header}",
     ]
-    msg = squash_message(body, template_path=template_path)
-    if msg:
-        try:
-            msg = finalize_squash_message(repo, num, msg, cwd=cwd)
-        except RefusalError:
-            return False
-        merge_args.extend(["-f", f"commit_message={msg}"])
+    try:
+        msg = resolve_squash_message(
+            body,
+            explicit=squash_message_override,
+            supplied=squash_message_supplied,
+            template_path=template_path,
+        )
+    except RefusalError:
+        return False
+    try:
+        msg = finalize_squash_message(repo, num, msg, cwd=cwd)
+    except RefusalError:
+        return False
+    merge_args.extend(["-f", f"commit_message={msg}"])
 
     m_res = run_command(
         ["gh", "api", f"repos/{repo}/pulls/{num}/merge", "-X", "PUT", *merge_args],
@@ -1406,6 +1564,7 @@ def main(argv: list[str] | None = None) -> int:
         options = parse_args(argv)
         head = resolve_head(options.head)
         title, body, title_supplied, body_supplied = resolve_title_and_body(options)
+        squash_override, squash_supplied = resolve_squash_override(options)
         repo = resolve_repo(head)
 
         if options.check:
@@ -1415,6 +1574,8 @@ def main(argv: list[str] | None = None) -> int:
                 body=body,
                 body_supplied=body_supplied,
                 title=title,
+                squash_message_override=squash_override,
+                squash_message_supplied=squash_supplied,
             )
 
         base = resolve_base(options.base, repo)
@@ -1448,6 +1609,8 @@ def main(argv: list[str] | None = None) -> int:
                 base=base,
                 title=final_title,
                 body=final_body,
+                squash_message_override=squash_override,
+                squash_message_supplied=squash_supplied,
             ):
                 return 1
         return 0

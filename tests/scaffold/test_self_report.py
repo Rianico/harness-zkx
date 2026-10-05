@@ -92,7 +92,6 @@ def test_check_reports_drift_and_fails_the_run(tmp_path, capsys):
     assert _run_main("--check", "--cwd", str(tmp_path)) == 1
     out = capsys.readouterr().out
     assert "stale      commitlint.config.js" in out
-    assert "missing    .github/pull_request_template.md" in out
     assert "drift " in out
 
 
@@ -135,7 +134,6 @@ def test_json_plan_is_machine_readable(tmp_path, capsys):
     assert plan["drift"] is True
     kinds = {(entry["path"], entry["kind"]) for entry in plan["entries"]}
     assert ("commitlint.config.js", "stale") in kinds
-    assert (".github/pull_request_template.md", "missing") in kinds
     assert all({"kind", "area", "detail", "remedy"} <= set(f) for f in plan["findings"])
 
 
@@ -374,7 +372,6 @@ def test_detect_findings_name_the_remedy(tmp_path):
     areas = {f["area"] for f in data["findings"]}
     remedies = " ".join(f["remedy"] for f in data["findings"])
 
-    assert ".github/pull_request_template.md" in areas
     assert ".releaserc.json" in areas
     assert "CHANGELOG.md" in areas
     # One defect, two halves: the remedy must name the file edit *and* the config, because
@@ -385,10 +382,19 @@ def test_detect_findings_name_the_remedy(tmp_path):
     assert data["changelog"]["title_line"] == 3  # version heading, blank, then the title
 
 
-def test_detect_census_counts_the_pr_template(tmp_path):
-    data = scaffold.detect_project(tmp_path)
-
-    assert data["files"][".github/pull_request_template.md"] is False
+def test_pr_template_component_retires_with_a_pointer(tmp_path, capsys):
+    """All five retired spellings exit 0, write no template, and name the gh-router installer."""
+    _seed_repo(tmp_path)
+    for spelling in ("pr-template", "pr_template", "pull-request", "pull_request", "pullrequest"):
+        scaffold._retirement_notice_shown = False
+        capsys.readouterr()
+        assert _run_main(
+            "--update", "--only", spelling, "--no-format", "--cwd", str(tmp_path)
+        ) == (0), spelling
+        err = capsys.readouterr().err
+        assert "install-template.sh" in err, spelling
+        assert "unknown component" not in err, spelling
+    assert not (tmp_path / ".github" / "pull_request_template.md").exists()
 
 
 def test_detect_reports_a_vendored_sibling_skill(tmp_path):

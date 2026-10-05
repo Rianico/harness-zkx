@@ -4,6 +4,7 @@
 .lsz/*
 !.lsz/config.yaml
 .pi/
+.lane/
 
 # Agent user-specific files (keep rules tracked)
 .claude/skills/

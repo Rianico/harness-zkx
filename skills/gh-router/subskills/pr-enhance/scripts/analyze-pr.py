@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import json
+import os
 import re
 import subprocess
 import sys
 from collections import defaultdict
 from collections.abc import Mapping
+from pathlib import Path
 
 
 class PRAnalyzer:
@@ -186,7 +188,36 @@ def _analyze_pr_via_gh(target: str) -> dict[str, object]:
     return {"error": f"cannot fetch PR {target}"}
 
 
+def _resolve_template_path(cwd: Path | None = None) -> Path | None:
+    """Read-only drafting-schema resolution: repo template first, else the canonical.
+
+    Never creates or installs anything; GH_ROUTER_TEMPLATE_SRC overrides the canonical
+    path, mirroring install-template.sh.
+    """
+    repo = cwd or Path.cwd()
+    repo_template = repo / ".github" / "pull_request_template.md"
+    if repo_template.is_file():
+        return repo_template.resolve()
+    override = os.environ.get("GH_ROUTER_TEMPLATE_SRC")
+    canonical = (
+        Path(override)
+        if override
+        else Path(__file__).resolve().parents[3] / "references" / "pull_request_template.md"
+    )
+    return canonical.resolve() if canonical.is_file() else None
+
+
 if __name__ == "__main__":
+    if "--print-template" in sys.argv[1:]:
+        resolved = _resolve_template_path()
+        if resolved is None:
+            print(
+                "error: no PR template found in repo .github/ or at the canonical path",
+                file=sys.stderr,
+            )
+            sys.exit(3)
+        print(resolved)
+        sys.exit(0)
     raw_arg = sys.argv[1] if len(sys.argv) > 1 else _infer_base()
     if _is_pr_target(raw_arg):
         try:

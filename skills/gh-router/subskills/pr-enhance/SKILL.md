@@ -20,35 +20,9 @@ You are a PR optimization expert specializing in creating high-quality pull requ
 When invoked via `/pr-enhance [base|pr_url]` (default: inferred from context — PR base or cwd's base, fallback `main`):
 
 1. **Analyze** — `uv run $SKILL_DIR/scripts/analyze-pr.py [base|pr_url] > tmp/pr.json` — captures files changed, stats, categories (base, PR URL, or number; inferred from context if omitted). Keep artifacts in tmp dir (ephemeral).
-2. **Draft** — from `tmp/pr.json` generate PR description and save to `tmp/pr_body.md`:
+2. **Draft** — resolve the drafting schema read-only: if the target repo has `.github/pull_request_template.md`, that is the schema; otherwise use the canonical `skills/gh-router/references/pull_request_template.md` (two hops up from `$SKILL_DIR`). `uv run $SKILL_DIR/scripts/analyze-pr.py --print-template` prints the resolved path (exit 3 when neither exists) — run it with the **target repo as the working directory**, because the repo-local lookup is cwd-relative and a probe from another repo silently resolves that repo's schema. From `tmp/pr.json`, generate the PR description into `tmp/pr_body.md` following the resolved template's headings and order — never a hard-coded skeleton.
 
-   ````markdown
-   ## Summary
-
-   [2-3 sentence why, based on diff]
-   **Impact**: [X] files ([Y] +, [Z] -) · **Risk**: Low/Medium/High
-
-   ## What Changed
-
-   [grouped by feature/system; flag migrations/API changes]
-
-   ## Architecture
-
-   [Mermaid before/after only if structural shift]
-
-   ```mermaid
-   graph LR
-     ...
-   ```
-   ````
-
-   ## Checklist
-
-   [review checklist derived from categories]
-
-   <!-- Closing directives: one issue per line with keyword (never comma-separated like "Closes #1, #2") -->
-   Closes #NN
-   ````
+   pr-enhance never mutates the target repo's `.github/` — no template install, no lazy fixups — and never writes into an upstream contributor's repo. Its only artifacts are its own `tmp/` scratch files (`pr.json`, `pr_body.md`), cleaned after the PR opens. When the repo has no template, draft the canonical shape and *mention* `skills/gh-router/scripts/install-template.sh` in the PR text; do not run it.
 
    Extract related issue numbers from the branch name, commit messages, or user request. Always emit them on standalone lines at the bottom (`Closes #NN` / `Fixes #NN`) so GitHub links and auto-closes them upon merge.
 

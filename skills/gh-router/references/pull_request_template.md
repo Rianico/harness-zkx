@@ -3,24 +3,29 @@
 ## Summary
 
 <!-- 2-3 sentences: why this change, user-visible effect. -->
-
-**Impact**: <!-- X files (Y +, Z -) --> · **Risk**: <!-- Low | Medium | High -->
-<!-- Risk: Low = docs/tests only; Medium = isolated feature/fix; High = cross-module contract, migration, or BREAKING CHANGE -->
+<!-- Review path (optional): start at <file:line>. -->
 
 ## What Changed
 
-<!-- Grouped by system/feature, not a file list. Flag migrations, contract, or payload changes. -->
+<!-- Grouped by system/feature, not a file list. For a large refactor, add a short sequence
+outline. Flag migrations, contract, or payload changes. -->
 
 -
+
+## Blast Radius & Safety
+
+**Downstream consumers:**
+**Breaking changes:**
+**Data / state invariants:**
+**Rollback / containment:**
+
+## Evidence
+
+<!-- Exact commands run and what they assert; link the CI run. -->
 
 ## Architecture
 
 <!-- Mermaid before/after only when structural seams, layering, or data-flow changes; delete the section otherwise. -->
-
-```mermaid
-graph LR
-  A --> B
-```
 
 ## Landing
 

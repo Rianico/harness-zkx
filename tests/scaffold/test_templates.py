@@ -114,7 +114,6 @@ RAW_SHA256: dict[str, str] = {
     "git/.github/ISSUE_TEMPLATE/01-bug_report.yml": "042c8a9647b165ef3c354cfd60e1a1b619b81b86f60bdc5fec65e324e061d676",
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
     "git/.github/ISSUE_TEMPLATE/config.yml": "27539305684d7673d88e80ec149c4ec9714da05a054b09fee67d56b8a7e5a820",
-    "git/.github/pull_request_template.md": "aaff215842b25cea942d57535618713a78ced4fb4efcb42758f1536358392c95",
     "git/.github/workflows/changelog-check.yml": "1e22e730b88f0b822d911694b445f82d26f57872832f620531b0a8114ca5788c",
     "git/.releaserc.json": "52456699a2335afa7662868c37207021c7ddffa2f3537d9d8056cda09f74319a",
     "git/CHANGELOG.md": "4f54bff5b026e07b59863211308e82335c0691389775863eb9611c5a884840f4",
@@ -130,9 +129,9 @@ RAW_SHA256: dict[str, str] = {
 
 # Re-pin only when the byte change is intended — the failure message prints the new digests.
 RENDERED_SHA256: dict[str, str] = {
-    "CONTRIBUTING.default (project_name=demo)": "dec6d0f6235cbd378ce0888e425bf88747d9405edbab18f94be766e9ea705bba",
-    "CONTRIBUTING.python (project_name=demo)": "eef62add1cac7d2c111c8cc845489126f81756b6c6134dc23d7d5dd530ab1d11",
-    "CONTRIBUTING.typescript (project_name=demo)": "7a25dc4e715952d49284575cbd4c8de95894ee30666d4c669bbd27acff66eb34",
+    "CONTRIBUTING.default (project_name=demo)": "656e87cde47a27f9d469fe1f86c5cae6e8e2da2cf182fc5481121b915c076a52",
+    "CONTRIBUTING.python (project_name=demo)": "31cc0367c0c8b64d7e1196446c232a876c899192c5b6528974be3538b54b72e8",
+    "CONTRIBUTING.typescript (project_name=demo)": "cea0c8f0d3c226d95d79e134e28b92113895ffa8c892bf38edf14f3295d3df35",
     "ci/release.yml[node+coverage]": "d7018000329223d8f4d03e05ff50393403c8f362bd8fbfd47ebfa6b0204152ab",
     "ci/release.yml[node]": "5fc8d4685e7bb4012f5fc5f2df1f7c48033ab4271cfbea6c85a0bfcdb6343946",
     "ci/release.yml[python+coverage]": "08460696bcc7cb359fb5d0db1f75998ee3a5690b1301dd5875fc8bcef2471487",
@@ -265,7 +264,6 @@ def test_generator_ships_raw_template_bytes_verbatim(tmp_path):
             "git/.github/ISSUE_TEMPLATE/02-feature_request.yml"
         ),
         ".github/ISSUE_TEMPLATE/config.yml": "git/.github/ISSUE_TEMPLATE/config.yml",
-        ".github/pull_request_template.md": "git/.github/pull_request_template.md",
         "commitlint.config.js": "git/commitlint.config.js",
         "CHANGELOG.md": "git/CHANGELOG.md",
     }

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import sys
 
 SKILL_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "skills" / "scaffold"
@@ -48,7 +49,10 @@ def test_git_run_writes_no_skills_directory(tmp_path):
 def test_dry_run_does_not_offer_a_skill_projection(tmp_path, capsys):
     scaffold.do_git(tmp_path, "demo", dry_run=True)
 
-    assert "gh-router" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    # Shipped prose may *name* the gh-router template (ownership moved there); what stays
+    # forbidden is any action writing under a skills/ tree.
+    assert not re.search(r"^would[^\n]*skills/", out, re.MULTILINE), out
 
 
 def test_update_leaves_a_vendored_copy_to_the_project(tmp_path):
