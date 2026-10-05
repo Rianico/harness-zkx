@@ -1,6 +1,6 @@
 ---
 description: >-
-  Native toolchain wiki router for JS/TS/Python — Oxlint/Oxfmt, Basedpyright, Worktrunk, Jinja. Use when configuring linters, formatters, type checking, parallel worktrees, or Jinja templates.
+  Native toolchain wiki router for JS/TS/Python — Oxlint/Oxfmt, Basedpyright, Worktrunk (wt), Jinja. Use when configuring linters, formatters, type checking, or Jinja templates, or managing git worktrees with wt (create, switch, merge, parallel worktrees).
 metadata:
   manage:
     - oxlint
