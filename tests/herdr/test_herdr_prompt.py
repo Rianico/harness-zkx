@@ -529,6 +529,23 @@ def test_caller_block_renders_all_fields_including_kind_session_and_resume() -> 
     )
 
 
+def test_caller_block_renders_all_fields_including_tab_cwd_and_resume() -> None:
+    caller = herdr_prompt.CallerContext(
+        pane_id="w1:p1",
+        label="orchestrator",
+        agent="orchestrator",
+        tab_id="w1:t1",
+        cwd="/path/to/my project",
+        kind="pi",
+        session_id="/tmp/session.jsonl",
+        resume_cmd="pi --resume /tmp/session.jsonl",
+    )
+    assert (
+        herdr_prompt.render_caller_block(caller)
+        == 'Caller: pane=w1:p1 label=orchestrator agent=orchestrator tab=w1:t1 kind=pi session=/tmp/session.jsonl cwd="/path/to/my project" resume="pi --resume /tmp/session.jsonl"'
+    )
+
+
 def test_caller_block_renders_qodercli_resume() -> None:
     caller = herdr_prompt.CallerContext(
         pane_id="w1:p2",
@@ -604,7 +621,7 @@ def test_resolve_caller_extracts_kind_session_and_resume(stub: StubHarness, tmp_
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
     assert (
         lines[1]
-        == 'Caller: pane=w9:p1 agent=reviewer kind=pi session=/tmp/session.jsonl resume="pi --resume /tmp/session.jsonl"'
+        == 'Caller: pane=w9:p1 agent=reviewer tab=w9:t1 kind=pi session=/tmp/session.jsonl cwd=/tmp/harness resume="pi --resume /tmp/session.jsonl"'
     )
 
 
@@ -719,27 +736,20 @@ def test_workspace_workers_listed_in_caller_context(stub: StubHarness, tmp_path:
     assert "Workers: t7-impl@w9:p2" in text
 
 
-def test_prompt_fails_on_stale_revision(stub: StubHarness, tmp_path: Path) -> None:
+def test_constant_nonzero_revision_accepted_without_retry(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #193: exit code 0 means prompt accepted; constant revision does not retry or drop."""
     state = {
         **DEFAULT_STATE,
         "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r1"]},
     }
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), state=state)
-    assert done.returncode == herdr_cli.EXIT_HERDR
-    assert "prompt dropped (revision remained r1)" in done.stderr
-    assert len(stub.prompts()) == 2
-
-
-def test_prompt_retries_and_succeeds_on_startup_race(stub: StubHarness, tmp_path: Path) -> None:
-    state = {
-        **DEFAULT_STATE,
-        "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r2"]},
-    }
-    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), state=state)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "prompt dropped" not in done.stderr
     assert "prompted reviewer" in done.stdout
-    assert "revision=r2" in done.stdout
-    assert len(stub.prompts()) == 2
+    assert "revision=r1" in done.stdout
+    assert len(stub.prompts()) == 1
 
 
 def test_revision_zero_agent_accepted_without_retry(stub: StubHarness, tmp_path: Path) -> None:

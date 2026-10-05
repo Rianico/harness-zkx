@@ -11,10 +11,10 @@ Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract pro
 
 When a workflow requires both high-level coordination (triage, planning, verification, review) and focused code execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Workers)** in dedicated panes within a shared workspace or tab.
 
-`herdr-prompt` and `herdr-dispatch` automatically inject caller context and sibling workers into the recipient's turn:
+`herdr-prompt` and `herdr-dispatch` automatically inject caller context (including the **Resumption Triple**: `kind + session + cwd`), the Herdr skill notice, and sibling workers into the recipient's turn:
 ```text
-[2026-10-03T06:19:12.983Z]
-Caller: pane=w1:p1 label=orchestrator agent=orchestrator
+[2026-10-05T06:19:12.983Z]
+Caller: pane=w1:p1 label=orchestrator agent=orchestrator kind=pi session=/path/to/session.jsonl resume="pi --resume /path/to/session.jsonl" cwd=/Users/zhengxk/workspace
 Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
 Workers: impl-1@w1:p3, impl-2@w1:p4
 ```
@@ -39,9 +39,14 @@ Without explicit, enforceable boundaries, multi-agent lanes degrade into three c
 
 To resolve all three anti-patterns and manage context pressure asymmetry, enforce a clean two-tier delegation architecture:
 
+> [!IMPORTANT] Subagent-First Execution Mandate
+> Subagent-First Execution is a **Universal Mandate across all coding agents**, regardless of underlying kind or engine (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, etc.). All coding agents in lane coordination (both Task Managers and Implementers) **MUST** use subagents for heavy tasks:
+> - **Implementers**: MUST delegate deep codebase exploration (Scout), multi-file code editing / refactoring (Editor), and test failure log triage (Test Runner) to ephemeral subagents. Direct execution of heavy work in the worker host pane exhausts context windows, triggers severe compaction degradation, and leads to instruction amnesia.
+> - **Task Managers**: MUST delegate crux adversarial code review under `keel`, `coding-protocol`, and `programming-expert` to an internal review subagent. Reviewing massive diffs directly in the TM pane blinds the TM to lane invariants and architectural oversight.
+
 1. **Tier 1: Lane-Level Coordination (Herdr Inter-Pane)**
    - **Topology**: Root Orchestrator ↔ Task Manager ↔ Implementers across dedicated Herdr panes.
-   - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py`.
+   - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py` governed by Task Leases and Token Observability.
    - **Scope**: In-lane execution inside the lane's pre-provisioned `$WORKTREE_PATH`: lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
    - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator pre-provisions the lane worktree and topology but never dispatches worker tickets directly (#166). TM and Implementer run natively inside `$WORKTREE_PATH` from turn zero; neither creates ad-hoc worktrees or nested directories.
 
@@ -194,9 +199,26 @@ Each artifact in the lane coordination lifecycle has **exactly one author role**
 
 ## 4. Canonical Prompt Contracts
 
+### The Injected Context Header & The Resumption Triple
+
+Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects a structured header at turn zero before the ticket payload. The header captures lane topology and the **Resumption Triple** (`kind + session + cwd`), ensuring full context fidelity, debugging observability, and seamless session resumption:
+
+```text
+[2026-10-05T06:19:12.983Z]
+Caller: pane=w1:p1 label=orchestrator agent=orchestrator tab=w1:t1 kind=pi session=/path/to/session.jsonl resume="pi --resume /path/to/session.jsonl" cwd=/Users/zhengxk/workspace
+Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+Workers: impl-1@w1:p3, impl-2@w1:p4
+```
+
+- **Resumption Triple (`kind + session + cwd`)**: Guarantees that any participant, watchdog, or human operator can re-enter or resume the exact calling agent session in the identical working directory without amnesia.
+- **Topological Coordinates (`pane`, `label`, `tab`, `agent`)**: Identifies physical and logical coordinates in Herdr.
+- **`Workers:` List**: Injects assigned implementers as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
+
+---
+
 ### A. Root Orchestrator → TM Brief Contract
 
-The orchestrator brief defines the problem, constraints, acceptance criteria, verification contract, and sizing budget. It does not dictate implementation internals:
+The orchestrator brief defines the problem, boundary constraints, acceptance criteria, verification contract, and sizing budget. It does not dictate implementation internals:
 
 ```markdown
 # TASK: <Feature / Bug Name>
@@ -214,16 +236,15 @@ You are the **Task Manager** for this lane. You hold **coordination, design judg
 - **CODE REVIEW MANDATE**: On receiving worker completion, run verification gates AND spawn an internal subagent to conduct an adversarial crux code review under `keel`, `coding-protocol`, and `programming-expert`.
 - Note: Native platform subagent calls (`Agent` tool) in your pane are reserved for code review and triage; use exclusively the Herdr workers listed above for code mutation.
 
-## Intent & Goal
-<High-level problem statement and desired outcome>
+## Intent (IDD) & Goals (GDD)
+- **Problem**: <High-level deficiency, friction, or behavioral regression in current world state>
+- **Proposed Outcome**: <Observable change in behavior or capability once resolved>
+- **Non-Negotiable Constraints**: <Backwards compatibility, community rules, performance ceilings, forbidden patterns>
 
-## Constraints
-<Non-negotiables: backwards compatibility, community rules, performance ceilings, forbidden patterns>
+## Acceptance Criteria (BDD)
+<Observable behavioral criteria (Given/When/Then scenarios)>
 
-## Acceptance Criteria
-<Observable behavioral criteria (Given/When/Then or testable scenarios)>
-
-## Verification Contract
+## Verification Contract (EDD)
 <Which command proves completion, expected gate results, and who verifies what>
 
 ## Sizing & Seams (Reconnaissance Budget)
@@ -233,49 +254,85 @@ You are the **Task Manager** for this lane. You hold **coordination, design judg
 - Sizing: <S/M/L estimate and worker topology suggestion>
 
 ## Reporting
-On gate pass and review approval, reply to caller:
+On gate pass and review approval, reply to caller using the Final Reply Template:
   `uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller-name> "<STATUS> <summary>"`
 ```
 
 ---
 
-### B. TM → Implementer Ticket Contract
+### B. Synthesized IDD/GDD Dispatch Template (TM → Implementer Ticket Contract)
 
-The ticket body specifies task scope, constraints, required evidence, and status triad expectations:
+Every ticket dispatched to a worker pairs upstream teleological purpose (**IDD**) with downstream verifiable targets (**GDD/EDD**). This dual pairing prevents both specification gaming (Goodhart's Law) and semantic drift:
 
 ```markdown
-# TICKET: <Component / Step Name>
+# TICKET / BRIEF: <ID> — <Title>
 
-Target files: <paths>
+Target files / Seams: <paths or boundary definitions>
 
-## Requirements
-<Atomic, unambiguous scope of modification>
+## 1. Intent (IDD)
+- **Problem**: <Concrete deficiency, friction, or behavioral regression in current world state>
+- **Proposed Outcome**: <Observable change in behavior, capability, or invariant once resolved>
+- **Non-Negotiable Constraints**: <Invariants, boundary rules, banned patterns, backwards compatibility>
 
-## Architectural Lens
-Apply `keel` (structural integrity, invariants), `coding-protocol` (risk-scaled execution, minimal diff), and `programming-expert` (idiomatic code, type soundness).
+## 2. Verification Contract (GDD/EDD)
+- **Check Command**: `<deterministic command proving environmental truth, e.g. uv run pytest tests/...>`
+- **Required Evidence**: `<concrete proof required: red-then-green test logs, exit code 0, commit SHA>`
 
-## Verification & Evidence Required
-- Local check command: `<test-command>`
-- Produce concrete evidence: red-then-green test logs and commit SHA (assertions of "tests pass" are rejected).
+## 3. Execution Strategy (Subagent-First Mandate)
+- Delegate heavy codebase exploration (Scout), multi-file code editing / refactoring (Editor), and test failure log triage (Test Runner) to ephemeral platform subagents.
+- Keep the worker host pane context lean: ingest only summaries, diffs, and artifact paths from subagents.
+- **The Iron Curtain**: Never let subagents call Herdr CLI commands or scripts (`herdr_reply.py`, `herdr_dispatch.py`). Aggregate all results in this host pane.
 
-## Constraints
-- Keep change scoped strictly to this ticket.
-- Do not modify unrequested public APIs or configuration files.
-
-## Execution Strategy (Context Isolation)
-- If this task requires broad exploration, multi-file refactoring, or verbose test debugging: spawn internal subagents (`Agent` / `invoke_subagent`) to isolate heavy observations.
-- Keep the worker pane context lean: ingest only summaries and artifact paths from subagents.
-- Do NOT let subagents call Herdr scripts; aggregate results in this worker pane.
-
-Status contract (reply via herdr_reply helper):
-- `COMPLETED <commit-sha> <test-summary>` on clean pass
-- `BLOCKED <reason>` if dependencies missing or spec ambiguous
-- `REJECTED <reason>` if requirements contradict codebase invariants
+On completion, reply to the caller in one message using the herdr helper script:
+  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller-name> --file <reply-payload.md>
+  # (Or inline: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller-name> "<PAYLOAD>")
 ```
 
 ---
 
-### C. TM → Internal Code Review Subagent Contract
+### C. The Final Reply Template (Aligned with `resp-format.md`)
+
+All completion replies delivered via `herdr_reply.py` adhere strictly to the dual-mode response format defined in `skills/dynamic-workflow-wrapper/references/resp-format.md` and `skills/ai-engineering-expert/references/resp-format.md`:
+
+```markdown
+Sender: pane=<pane-id> label=<label> agent=<agent> kind=<kind> session=<session-path> cwd=<cwd> resume="<resume-cmd>"
+
+COMPLETED <commit-sha>
+<!-- Or: BLOCKED <concise-reason> | REJECTED <invariant-violation-reason> -->
+
+## Summary
+<Carmack-style delivery: technical approach, architectural rationale, state tradeoffs, ≤100 words>
+
+## Artifacts
+- <absolute/path/to/file> (<diff | spec | report | eval | pr>)
+
+## Evidence
+- <check_name>: PASS | FAIL (`<command>`) [tail ≤20 lines on failure]
+
+## Route
+continue | remediate | blocked
+
+## Issues
+- [P1|P2|P3] <file>:<line> — <Invariant / Contract>: <Defect description>. Remediation: <Concrete fix>
+<!-- Or: None -->
+
+## Suggestions (Optional)
+- [<Category>] <observation>. Workaround: <workaround>. Suggestion: <suggestion>
+```
+
+#### Status Triad & Routing Semantics
+- **Status Triad**:
+  - `COMPLETED <commit-sha>`: All requirements met, all deterministic verification checks green, clean commit created.
+  - `BLOCKED <reason>`: Unresolvable environmental blocker, missing dependencies, or contradictory specification.
+  - `REJECTED <reason>`: Requested change violates codebase invariants, architectural boundaries, or security constraints.
+- **Route**:
+  - `continue`: 0 P1/P2 issues AND all verification checks green. Ready to proceed or merge.
+  - `remediate`: P1/P2 issues exist or tests failed, but remediation within the worker is possible.
+  - `blocked`: Unresolvable conflict; escalate to Task Manager or Orchestrator.
+
+---
+
+### D. TM → Internal Code Review Subagent Contract
 
 When worker signals completion, the TM invokes an internal review subagent:
 
@@ -378,6 +435,19 @@ sequenceDiagram
 
 ## 6. Context Isolation via Subagents (Tier 2)
 
+### Universal Subagent Tooling by Agent Kind
+
+The Tier 2 Subagent Delegation pattern applies universally to **any coding agent kind** deployed in a lane pane (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, etc.). Every agent kind delegates heavy, noisy tasks to its platform-native subagent mechanism:
+
+| Agent Kind | Engine / Platform | Native Subagent Mechanism | Invocation / Dispatch Pattern | Context Isolation Boundary |
+|---|---|---|---|---|
+| `pi` | Pi Agent | `Agent` tool / extension subagent | `Agent(prompt=..., subagent_type=...)` | Ephemeral subagent session with isolated context |
+| `claude` | Claude Code | `Agent` / Task runner tool | `Agent(prompt=..., subagent_type=...)` | Ephemeral task context; returns structured summary |
+| `agy` | Antigravity / Gemini CLI | Subagent harness / scratch agent | Process-level subagent dispatch via `send_message` | Isolated subagent process & scratch workspace |
+| `cursor` | Cursor Agent | Background subagent / Composer | `@agent` invocation or background composer worker | Isolated worker thread; merges diff |
+| `cline` | Cline / Roo Code | Task tool / subtask dispatch | Platform task tool or nested session call | Disposable subtask context |
+| `codex` / `gemini` | OpenAI / Gemini CLI | Agent tool / sub-process runner | Subagent tool dispatch or child runner script | Ephemeral child context |
+
 ### Delegation Patterns
 
 | Role | Pattern | Trigger Condition | Delegation Action | Return Contract |
@@ -418,3 +488,60 @@ sequenceDiagram
    - **No Agent-ception**: Internal subagents must not spawn further nested subagents.
 4. **Name Every Pane Immediately**:
    - Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
+
+---
+
+## 7. Advanced Communication & Coordination Protocol
+
+Multi-agent coordination across Herdr lanes is governed by four core pillars that eliminate race conditions, prevent context destruction, and resolve observability blindness.
+
+### 1. Dispatch-and-Yield (Async Event-Driven Turn Model)
+- **Asynchronous Handoff**: Multi-agent coordination in Herdr is strictly event-driven. Tasks are dispatched asynchronously using:
+  ```bash
+  uv run ~/.agents/skills/herdr/scripts/herdr_dispatch.py <target> --file <ticket.md> --no-wait
+  ```
+- **Immediate Yield**: After dispatching, the caller **immediately yields its turn** (stops calling tools, enters idle). It does NOT enter busy-polling loops or launch external wait barriers.
+- **The Resumption Triple (`kind + session + cwd`)**: The dispatch helper injects the caller's complete execution environment coordinates (`pane`, `label`, `tab`, `agent`, `kind`, `session`, `cwd`, and `resume`). When the callee wakes the caller via a reply, the caller's turn resumes with full session continuity and zero context amnesia.
+- **Completion Callback**: The callee completes the ticket and issues a structured reply via `herdr_reply.py <caller> "<STATUS>..."` or `herdr_reply.py <caller> --file <reply.md>`. This wakes the caller's turn with the full execution results and status triad.
+
+### 2. Task Leases (Race & Overwrite Prevention)
+- **Lease Store**: Maintains ticket leases in `.lane/lease.json` (falling back to `.herdr-lease.json` in cwd) to prevent overlapping dispatches to workers with active in-flight tickets.
+- **Atomic File Updates**: All lease reads/writes use atomic file operations (`tempfile.mkstemp` beside the target file, flush, `os.fsync`, and atomic `os.replace`), preventing concurrent write corruption.
+- **Target Canonicalization**: Leases record both canonical agent name and `pane_id`. Queries via `get_lease` and `is_leased` match against lease key, stored `target`, or `pane_id`. Dispatches via `--label` or pane IDs seamlessly resolve to the canonical agent.
+- **Pre-Dispatch Check**: Before prompting a worker, `herdr_dispatch.py` checks whether the target has an active lease. If active and `--force` is not passed:
+  ```text
+  herdr-dispatch: error: target worker-1 has an active ticket lease (ticket_1.md) issued by task-manager. Await reply or pass --force
+  ```
+- **Pre-Dispatch Acquisition with Rollback**: `herdr_dispatch.py` acquires the lease *before* delivering the prompt. If the prompt fails, is rejected, or returns a blocked exit code (`EXIT_BLOCKED` / 3, `EXIT_HERDR` / 1), the acquired lease is automatically rolled back and released. Leases are retained only upon prompt acceptance (`EXIT_OK` / 0 or `WaitTimeout` / 4).
+- **Auto-Release on Reply**: When the worker delivers its completion callback via `herdr_reply.py`, `release_active_lease` automatically releases the *replying sender's* lease (`current_agent` or `HERDR_PANE_ID`). It **never** touches the caller/target's lease.
+- **Bypass**: Pass `--force` to intentionally supersede or reclaim an active lease.
+
+### 3. Token Observability & The False-Idle Phenomenon
+- **The False-Idle Phenomenon**: When a primary coding agent (Implementer or TM) invokes internal subagents (e.g. AGY subagents, Claude Code task runners, or platform subagent tools), the parent turn yields or pauses to wait for the subagent's result. During this window, traditional process inspectors and terminal listeners see the host agent process as `idle`. External observers relying purely on `agent_status` misinterpret this as task completion or an abandoned turn.
+- **Session Navigator Tokens**: Herdr resolves this observability gap by exposing live Session Navigator tokens:
+  ```json
+  "tokens": {
+    "summary": "⏳ 1 subagent (developer)",
+    "title-suffix": "⏳developer"
+  }
+  ```
+- **`herdr-overview` Integration**: When `agent_status` is `idle` or `done` while active subagent tokens (`⏳` in `summary` or `title-suffix`) are present, `herdr-overview` displays the agent's state as `delegating`. In JSON and YAML formats, the full `tokens` mapping is serialized under each pane.
+- **`herdr-wait` Subagent-Aware Settle Detection**: In `herdr-wait`, the settle predicate inspects both `tokens.summary` and `tokens.title-suffix`. An agent reporting `idle` or `done` while active subagent tokens are present is treated as **UNSETTLED**, preventing premature wait barrier exit or false failures.
+
+### 4. The Iron Curtain & Unified Message Format
+- **The Iron Curtain (Strict Boundary Invariant)**:
+  - Role-internal subagents (Tier 2) are strictly private, ephemeral tools for the host pane agent.
+  - **The Invariant**: Subagents **NEVER** invoke Herdr CLI commands, **NEVER** inspect pane layouts, and **NEVER** invoke `herdr_reply.py` or `herdr_dispatch.py`.
+  - **Single Interface**: Only the parent agent owning the Herdr pane may communicate with the lane. The parent ingests structured summaries and artifact pointers from subagents, verifies diffs and evidence, and interfaces with the rest of the lane.
+- **Synthesized IDD/GDD Communication Invariant**:
+  - Every dispatch pairs upstream teleological purpose (**IDD**: Problem, Proposed Outcome, Non-Negotiable Constraints) with downstream verifiable targets (**GDD/EDD**: Check Command, Required Evidence).
+  - This pairing eliminates both Goodhart specification gaming and semantic drift.
+- **Dual-Mode Response Contract**:
+  - All replies delivered across the lane follow the **Final Reply Template** aligned with `dynamic-workflow-wrapper/references/resp-format.md`:
+    - Status Triad: `COMPLETED <sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
+    - `## Summary` (Carmack-style technical rationale, ≤100 words)
+    - `## Artifacts` (absolute paths with kinds: diff, spec, report, eval)
+    - `## Evidence` (deterministic command checks: PASS / FAIL)
+    - `## Route` (`continue | remediate | blocked`)
+    - `## Issues` (P1/P2/P3 severity with file:line, invariant, defect, remediation)
+    - `## Suggestions` (optional non-blocking environment observations)

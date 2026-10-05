@@ -269,6 +269,34 @@ def test_auto_start_dry_run_skips_submitting(stub: StubHarness) -> None:
     assert stub.prompts() == []
 
 
+def test_reply_releases_lease_for_current_agent(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease("reviewer", "task.md", "orchestrator", base_dir=tmp_path)
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is not None
+
+    done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_reply_does_not_release_lease_for_target_caller(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    # Orchestrator is the target/caller receiving the reply, not the sender
+    _ = herdr_lease.acquire_lease("orchestrator", "task.md", "prev", base_dir=tmp_path)
+    assert herdr_lease.get_lease("orchestrator", base_dir=tmp_path) is not None
+
+    done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    # Calling herdr-reply must NOT release target's active lease
+    assert herdr_lease.get_lease("orchestrator", base_dir=tmp_path) is not None
+
+
 def test_pep723_metadata_precedes_docstring() -> None:
     header = SCRIPT.read_text().split('"""', 1)[0]
     assert header.startswith("#!/usr/bin/env python3\n")

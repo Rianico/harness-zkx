@@ -235,6 +235,66 @@ def test_is_recognized_gate() -> None:
     assert not herdr_wait.is_recognized(herdr_wait.Snapshot("a", "idle", revision="0"))
 
 
+def test_has_active_subagents() -> None:
+    assert herdr_wait.has_active_subagents(
+        herdr_wait.Snapshot("a", "idle", tokens={"summary": "⏳ 1 subagent (developer)"})
+    )
+    assert herdr_wait.has_active_subagents(
+        herdr_wait.Snapshot("a", "idle", tokens={"title-suffix": "⏳developer"})
+    )
+    assert herdr_wait.has_active_subagents(
+        herdr_wait.Snapshot("a", "idle", tokens={"summary": "2 subagents running"})
+    )
+    assert not herdr_wait.has_active_subagents(
+        herdr_wait.Snapshot("a", "idle", tokens=None)
+    )
+    assert not herdr_wait.has_active_subagents(
+        herdr_wait.Snapshot("a", "idle", tokens={})
+    )
+    assert not herdr_wait.has_active_subagents(
+        herdr_wait.Snapshot("a", "idle", tokens={"summary": "ready"})
+    )
+
+
+def test_is_settled_rejects_active_subagents() -> None:
+    snap_busy = herdr_wait.Snapshot(
+        "a", "idle", revision="r1", tokens={"summary": "⏳ 1 subagent"}
+    )
+    snap_free = herdr_wait.Snapshot("a", "idle", revision="r1", tokens=None)
+    wanted = ["idle", "done"]
+
+    assert not herdr_wait.is_settled(snap_busy, wanted)
+    assert herdr_wait.is_settled(snap_free, wanted)
+
+
+def test_wait_treats_subagents_as_unsettled_until_cleared(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {"a": {"agent_status": "idle", "revision": "r1"}},
+        "agent_get_tokens_seq": {"a": [{"summary": "⏳ 1 subagent"}, None]},
+    }
+    done = stub.run("a", "--interval", "0.01", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "idle" in done.stdout
+
+
+def test_wait_times_out_if_subagents_never_clear(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {
+            "a": {
+                "agent_status": "idle",
+                "revision": "r1",
+                "tokens": {"summary": "⏳ 1 subagent (developer)"},
+            }
+        },
+    }
+    done = stub.run("a", "--interval", "0.01", "--timeout", "100", state=state)
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "timed out after 100ms" in done.stderr
+    assert "a (idle)" in done.stderr
+
+
 def test_any_exits_on_first_settled_target(stub: StubHarness) -> None:
     state = settled_state(a={"agent_status": "working"}, b={"agent_status": "done"})
     done = stub.run("a", "b", "--any", "--interval", "0.01", state=state)

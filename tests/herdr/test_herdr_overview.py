@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import herdr_cli
@@ -50,6 +50,7 @@ def pane(
     name: str | None = None,
     label: str | None = None,
     cwd: str | None = "/tmp/work",
+    tokens: Mapping[str, str] | None = None,
 ) -> herdr_overview.Pane:
     return herdr_overview.Pane(
         pane_id=pane_id,
@@ -61,6 +62,7 @@ def pane(
         label=label,
         cwd=cwd,
         current=False,
+        tokens=tokens,
     )
 
 
@@ -288,6 +290,7 @@ def test_render_yaml_round_trips_hostile_labels_and_paths() -> None:
         "label": NASTY,
         "current": True,
         "cwd": NASTY,
+        "tokens": None,
     }
 
 
@@ -419,6 +422,76 @@ def test_a_malformed_pane_list_is_reported(stub: StubHarness) -> None:
 def test_conflicting_scope_flags_are_rejected(stub: StubHarness) -> None:
     done = stub.run("--tab", "--current", env=PANE_ENV)
     assert done.returncode == herdr_cli.EXIT_USAGE
+
+
+# ── unit: token observability ─────────────────────────────────────────────────────────
+
+
+def test_parse_panes_reads_tokens_from_pane_or_agent() -> None:
+    raw_panes = json_panes(
+        {
+            "pane_id": "w9:p1",
+            "tab_id": "w9:t1",
+            "workspace_id": "w9",
+            "tokens": {"summary": "⏳ 1 subagent (developer)"},
+        },
+        {"pane_id": "w9:p2", "tab_id": "w9:t1", "workspace_id": "w9"},
+    )
+    agent_names = {"w9:p1": "dev1", "w9:p2": "dev2"}
+    agent_tokens = {"w9:p2": {"summary": "⏳ 2 subagents (scout, editor)"}}
+
+    panes = herdr_overview.parse_panes(raw_panes, agent_names, agent_tokens)
+    assert panes[0].tokens == {"summary": "⏳ 1 subagent (developer)"}
+    assert panes[1].tokens == {"summary": "⏳ 2 subagents (scout, editor)"}
+
+
+def test_table_renders_delegating_when_idle_with_subagent_tokens() -> None:
+    panes = (
+        pane(
+            "w9:p1",
+            name="worker",
+            status="idle",
+            tokens={"summary": "⏳ 1 subagent (developer)"},
+        ),
+        pane("w9:p2", name="reviewer", status="idle", tokens=None),
+    )
+    overview = herdr_overview.build_overview(panes, {"w9": ("lane", 1)}, "all", ENV)
+    lines = herdr_overview.render_table(overview, "/home/tester").splitlines()
+    first, second = lines[2], lines[3]
+    assert "delegating" in first
+    assert "idle" in second
+
+
+def test_table_renders_delegating_when_title_suffix_has_hourglass() -> None:
+    panes = (
+        pane(
+            "w9:p1",
+            name="worker",
+            status="done",
+            tokens={"title-suffix": "⏳developer"},
+        ),
+    )
+    overview = herdr_overview.build_overview(panes, {"w9": ("lane", 1)}, "all", ENV)
+    lines = herdr_overview.render_table(overview, "/home/tester").splitlines()
+    assert "delegating" in lines[2]
+
+
+def test_render_json_includes_tokens() -> None:
+    tokens = {"summary": "⏳ 1 subagent (developer)", "title-suffix": "⏳developer"}
+    panes = (pane("w9:p1", name="worker", tokens=tokens),)
+    overview = herdr_overview.build_overview(panes, {"w9": ("lane", 1)}, "all", ENV)
+    data = json.loads(herdr_overview.render_json(overview))
+    entry = data["workspaces"][0]["panes"][0]
+    assert entry["tokens"] == tokens
+
+
+def test_render_yaml_includes_tokens_mapping() -> None:
+    tokens = {"summary": "⏳ 1 subagent (developer)"}
+    panes = (pane("w9:p1", name="worker", tokens=tokens),)
+    overview = herdr_overview.build_overview(panes, {"w9": ("lane", 1)}, "all", ENV)
+    parsed = yaml.safe_load(herdr_overview.render_yaml(overview))
+    entry = parsed["workspaces"][0]["panes"][0]
+    assert entry["tokens"] == tokens
 
 
 # ── metadata: PEP 723 conformance ───────────────────────────────────────────────────
