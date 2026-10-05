@@ -165,6 +165,11 @@ if args[:2] == ["agent", "get"]:
     }
     if static.get("session"):
         agent["agent_session"] = {"kind": "path", "value": static["session"]}
+    tokens_seq = state.get("agent_get_tokens_seq", {}).get(target)
+    if tokens_seq is not None:
+        agent["tokens"] = tokens_seq[min(max(prior, 0), len(tokens_seq) - 1)]
+    elif "tokens" in static:
+        agent["tokens"] = static["tokens"]
     print(json.dumps({"id": "cli:agent:get", "result": {"agent": agent, "type": "agent"}}))
     raise SystemExit(0)
 

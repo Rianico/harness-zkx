@@ -52,6 +52,7 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
+from herdr_lease import release_lease
 
 STDIN = "-"
 BLOCKED = "blocked"
@@ -219,6 +220,50 @@ def settled_state(raw: str) -> str | None:
     return state if isinstance(state, str) and state else None
 
 
+def resolve_current_agent(herdr: str, env: Mapping[str, str]) -> str | None:
+    """Resolve the calling agent's name (or pane id) from environment and herdr state."""
+    pane_id = env.get("HERDR_PANE_ID")
+    if not pane_id:
+        try:
+            done = run_herdr([herdr, "pane", "current"], env)
+            if done.returncode == 0:
+                result = decode_response(done.stdout).get("result", {})
+                if isinstance(result, dict):
+                    pane = result.get("pane", {})
+                    if isinstance(pane, dict):
+                        pane_id = pane.get("pane_id")
+        except Exception:
+            pass
+    if not pane_id:
+        return None
+    try:
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+        for a in agents:
+            if entry_optional_text(a, "pane_id") == pane_id:
+                name = entry_optional_text(a, "name")
+                if name:
+                    return name
+    except Exception:
+        pass
+    return pane_id
+
+
+def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
+    """Release active task lease for the replying sender (current agent or current pane).
+
+    NEVER release target's lease: target is the caller (e.g. task-manager).
+    Only the sender's lease is released upon sending a reply.
+    """
+    try:
+        sender = resolve_current_agent(herdr, env)
+        if not sender:
+            sender = env.get("HERDR_PANE_ID")
+        if sender:
+            _ = release_lease(sender, env=env)
+    except Exception:
+        pass
+
+
 def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
@@ -292,6 +337,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             print(f"herdr-reply: {target}: {detail}", file=sys.stderr)
             return EXIT_BLOCKED
         if code == TIMEOUT_CODE:
+            release_active_lease(herdr, env)
             raise WaitTimeout(
                 f"reply delivered to {target} but wait timed out; caller is processing asynchronously"
             )
@@ -301,6 +347,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 raise UsageError(diag)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
+    release_active_lease(herdr, env)
     _ = decode_response(done.stdout)
     state = settled_state(done.stdout)
     if options.json:

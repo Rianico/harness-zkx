@@ -94,6 +94,7 @@ class Snapshot:
     revision: str | None = None
     session: str | None = None
     elapsed_ms: int = 0
+    tokens: Mapping[str, str] | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -194,13 +195,16 @@ def snapshot_agent(herdr: str, target: str, env: Mapping[str, str]) -> Snapshot:
     session: str | None = None
     if isinstance(session_raw, dict):
         session = entry_optional_text(session_raw, "value")
-    elif isinstance(session_raw, str) and session_raw:
-        session = session_raw
+    tokens_raw = agent.get("tokens")
+    tokens: dict[str, str] | None = None
+    if isinstance(tokens_raw, dict):
+        tokens = {str(k): str(v) for k, v in tokens_raw.items() if isinstance(v, str)}
     return Snapshot(
         target=target,
         status=status,
         revision=revision,
         session=session,
+        tokens=tokens,
     )
 
 
@@ -212,6 +216,26 @@ def is_recognized(snap: Snapshot) -> bool:
     settles the barrier; the wait is failed fast (exit 2) instead of hanging.
     """
     return snap.revision != "0"
+
+
+def has_active_subagents(snap: Snapshot) -> bool:
+    """True when tokens indicate active subagents (e.g. ⏳ in summary or title-suffix)."""
+    if not snap.tokens:
+        return False
+    summary = snap.tokens.get("summary", "")
+    title_suffix = snap.tokens.get("title-suffix", "")
+    return "⏳" in summary or "subagent" in summary.lower() or "⏳" in title_suffix
+
+
+def is_settled(snap: Snapshot, wanted: Sequence[str]) -> bool:
+    """Check if agent is settled: in wanted states, recognized, and without active subagents."""
+    if snap.status not in wanted:
+        return False
+    if not is_recognized(snap):
+        return False
+    if has_active_subagents(snap):
+        return False
+    return True
 
 
 def format_table(snaps: Sequence[Snapshot]) -> str:
@@ -250,6 +274,7 @@ def emit(snaps: Sequence[Snapshot], *, as_json: bool) -> None:
                             "revision": snap.revision,
                             "elapsed_ms": snap.elapsed_ms,
                             "session": snap.session,
+                            "tokens": dict(snap.tokens) if snap.tokens is not None else None,
                         }
                         for snap in snaps
                     }
@@ -316,7 +341,9 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
             print(f"herdr-wait: {names} need human input (blocked)", file=sys.stderr)
             return EXIT_BLOCKED
         held_now = {
-            snap.target: snap for snap in snaps if snap.status in wanted and not is_recognized(snap)
+            snap.target: snap
+            for snap in snaps
+            if snap.status in wanted and not is_recognized(snap) and not has_active_subagents(snap)
         }
         # A revision-0 target never advances to recognized, so ANY held target
         # dooms the ALL barrier and ALL held doom --any too: fail fast, never
@@ -372,7 +399,7 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
             )
             return EXIT_USAGE
 
-        matched = [snap.target for snap in snaps if snap.status in wanted and is_recognized(snap)]
+        matched = [snap.target for snap in snaps if is_settled(snap, wanted)]
         if options.any and matched:
             emit(snaps, as_json=options.json)
             return EXIT_OK

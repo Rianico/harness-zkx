@@ -18,10 +18,33 @@ metadata:
 
 Core principles for building reliable AI systems in the LSZ harness. This file holds the 20% that solves 80% of problems. Deep methodology lives in subskills and their references.
 
-## The Foundation: GDD (Goal-Driven Development)
+## The Foundation: IDD (Intent-Driven Development) & GDD (Goal-Driven Development)
 
-The ultimate goal of AI Engineering is to achieve **Human Goals**. LLMs are fundamentally **Probabilistic Machines** operating in a **Deterministic World**. We use **GDD** to bridge this gap through three non-negotiable pillars:
+The ultimate purpose of AI Engineering is to translate **Human Intent** into verifiable reality. LLMs are fundamentally **Probabilistic Engines** operating within a **Deterministic World**. We bridge this gap by establishing **IDD** as the upstream teleological root and **GDD** as the derived operational spine:
 
+### 1. IDD (Intent-Driven Development): Source of Authority
+Answers *"Why are we changing reality?"* Intent anchors teleological purpose and boundary invariants before any code or goals are authored. It is defined by the **4-part Intent Formula**:
+- **Problem**: Concrete deficiency, friction, or behavioral regression in the current world state.
+- **Proposed Outcome**: Observable change in behavior, capability, or invariant once resolved.
+- **Affected Seams**: Architectural boundaries, module interfaces, or protocols touched.
+- **Non-Negotiable Constraints**: Invariants, backwards compatibility, performance ceilings, or forbidden patterns.
+
+### 2. GDD (Goal-Driven Development): Derived Operational Spine
+Derives verifiable milestone world states and operational targets from Intent. Answers *"What world state confirms the intent was realized?"*
+
+### 3. The Derivation Chain
+$$\text{Intent (IDD)} \longrightarrow \text{Derived Goals (GDD)} \longrightarrow \text{BDD Contracts (Given/When/Then)} \longrightarrow \text{EDD Verification (Environmental Truth)}$$
+
+1. **Intent (IDD)** establishes the human purpose and boundary invariants.
+2. **Derived Goals (GDD)** operationalize intent into discrete, ordered milestone states.
+3. **BDD Contracts** define behavioral specifications via Given/When/Then acceptance criteria.
+4. **EDD Verification** executes deterministic environment checks (`test`, `lint`, `typecheck`) to prove environmental truth.
+
+### 4. Why Both Are Strictly Required
+- **Goal without Intent causes Specification Gaming (Goodhart's Law)**: An agent given a goal without understanding the underlying intent optimizes for the metric or test directly (e.g. mock tautologies, stubbing out checks, deleting assertions, or breaking cross-cutting invariants) while defeating the human purpose.
+- **Intent without Goal causes Semantic Drift & Unbounded Refactors**: An agent given pure intent without crisp milestone goals and verification gates wanders aimlessly, refactoring unrelated files, over-engineering architectures, and never converging on verifiable completion.
+
+### 5. Execution Pillars
 1. **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task.
 2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model _says_ it did. We only trust what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
 3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules. When an agent fails, classify root cause into four distinct archetypes:
@@ -29,6 +52,7 @@ The ultimate goal of AI Engineering is to achieve **Human Goals**. LLMs are fund
    - **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → refine prompt contracts (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
    - **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → enforce via Context Pressure Asymmetry (move to Skeptic reviewer) or build a hard tool gate. Prune ignored prose.
    - **Route Friction** (model bypassed rule because compliance was too manual or multi-step) → pack steps into a script (`scripts/<cmd>`). Make the governed path the cheapest path.
+4. **Unified Message Format:** All inter-agent dispatches and completion replies adhere to an isomorphic dual-mode contract (Markdown prose and structured JSON schema) covering Summary (Carmack-style), Artifacts, Evidence, Route, and Issues. (See [Subagent Response Format](references/resp-format.md) and [Lane Coordination](../herdr/references/lane-coordination.md)).
 
 ## Information Boundary Design
 
@@ -233,18 +257,26 @@ Use the handoff document as the index for durable artifacts (`design.md`, `linea
 
 ## Subagent-First Execution
 
-**The orchestrator never does implementation work**. All code writing, file editing, test execution, doc updates, and review work happens in subagents.
+> [!IMPORTANT] Universal Mandate Across All Coding Agents
+> Subagent-First Execution is a **Universal Mandate across all coding agents**, regardless of underlying engine (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, etc.).
+>
+> Any coding agent handling tasks with high noise (e.g. broad codebase exploration, recursive symbol searches, multi-file bulk editing, verbose build/test traces, adversarial crux review) or where only the final conclusion/artifact is needed **MUST delegate to ephemeral subagents**. This guarantees:
+> 1. **Context Isolation**: High-entropy intermediate output (hundreds of lines of file dumps, compile errors, stack traces) stays trapped in disposable subagent contexts.
+> 2. **Parallel Execution**: Independent investigations or reviews execute concurrently across separate context budgets.
+> 3. **Compaction Prevention**: The primary agent's working memory remains lean and focused, avoiding compaction degradation, instruction amnesia, and lost constraints.
+>
+> **The orchestrator never does implementation work**. Implementers never do heavy exploration, bulk refactoring, or verbose test triage directly in the host pane.
 
-| Orchestrator DOES                    | Orchestrator NEVER DOES                  |
+| Primary Agent DOES                   | Primary Agent NEVER DOES                 |
 | ------------------------------------ | ---------------------------------------- |
-| Route tasks to appropriate subagents | Write code directly                      |
-| Dispatch with structured prompts     | Edit files directly                      |
-| Monitor for completion/failure       | Run tests directly                       |
+| Route tasks to appropriate subagents | Write code directly in orchestrator role |
+| Dispatch with structured prompts     | Edit files directly without scoping      |
+| Monitor for completion/failure       | Run verbose tests directly in host pane  |
 | Receive and synthesize summaries     | Read full artifact contents into context |
-| Pass pointers between phases         | Re-process subagent outputs              |
+| Pass pointers between phases         | Re-process raw subagent observation logs |
 
 ### Execution Profile Boundary
-- **Heavy Mutation & Implementation**: Subagent-first is mandatory. Keeps orchestrator context clean and isolates trial-and-error churn.
+- **Heavy Mutation & Implementation**: Subagent-first is mandatory. Keeps primary agent context clean and isolates trial-and-error churn.
 - **Diagnostic & Audit Pipelines**: Standalone retrospective audits (`harness-audit`) may run as in-process linear pipelines in scratch directories. Dispatch **mid-session diagnostics** (such as trigger failures) to a subagent with forked context. This prevents diagnostic meta-chatter from bloating the parent session's working memory.
 
 ### Dispatch Pattern

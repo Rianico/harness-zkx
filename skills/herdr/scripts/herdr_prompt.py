@@ -44,7 +44,6 @@ import argparse
 import json
 import os
 import sys
-import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -185,7 +184,7 @@ def read_payload(source: str | None) -> str:
 
 @dataclass(frozen=True)
 class CallerContext:
-    """Who is handing off: pane id, visible label, addressable agent name, kind, and session."""
+    """Who is handing off: pane id, visible label, addressable agent name, kind, session, tab, cwd."""
 
     pane_id: str
     label: str | None = None
@@ -193,6 +192,8 @@ class CallerContext:
     kind: str | None = None
     session_id: str | None = None
     resume_cmd: str | None = None
+    tab_id: str | None = None
+    cwd: str | None = None
 
 
 def build_resume_cmd(kind: str | None, session_id: str | None) -> str | None:
@@ -218,10 +219,14 @@ def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
     """Read the caller from HERDR_PANE_ID (or `pane current`), the pane list, and the agent list."""
     pane_id = env.get("HERDR_PANE_ID") or current_pane_id(herdr, env)
     label: str | None = None
+    tab_id: str | None = None
+    cwd: str | None = None
     listed = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
     for entry in listed:
         if entry_optional_text(entry, "pane_id") == pane_id:
             label = entry_optional_text(entry, "label")
+            tab_id = entry_optional_text(entry, "tab_id")
+            cwd = entry_optional_text(entry, "cwd")
             break
     agent: str | None = None
     kind: str | None = None
@@ -246,6 +251,8 @@ def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
         kind=kind,
         session_id=session_id,
         resume_cmd=resume_cmd,
+        tab_id=tab_id,
+        cwd=cwd,
     )
 
 
@@ -263,10 +270,15 @@ def render_caller_block(caller: CallerContext) -> str:
             fields += f" label={label}"
     if caller.agent:
         fields += f" agent={caller.agent}"
+    if caller.tab_id:
+        fields += f" tab={caller.tab_id}"
     if caller.kind:
         fields += f" kind={caller.kind}"
     if caller.session_id:
         fields += f" session={caller.session_id}"
+    if caller.cwd:
+        cwd = caller.cwd
+        fields += f' cwd="{cwd}"' if " " in cwd else f" cwd={cwd}"
     if caller.resume_cmd:
         fields += f' resume="{caller.resume_cmd}"'
     return f"Caller: {fields}"
@@ -545,10 +557,6 @@ def prompt_one(
         print(json.dumps(argv))
         return Dispatch(target)
 
-    pre_rev, pane = (
-        fetch_agent_revision(herdr, target, env) if not options.no_caller_context else (None, None)
-    )
-
     done = run_herdr(argv, env)
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
@@ -569,38 +577,7 @@ def prompt_one(
     post_rev, post_pane = (
         fetch_agent_revision(herdr, target, env) if not options.no_caller_context else (None, None)
     )
-    if post_pane:
-        pane = post_pane
-
-    # Weakly-recognized agents (e.g. agy) never advance revision past "0", so a
-    # same-revision read there is not a dropped prompt; retrying would duplicate
-    # the injection. Accept a successful exit verbatim when pre is "0".
-    if pre_rev is not None and pre_rev != "0" and (post_rev is None or post_rev == pre_rev):
-        time.sleep(0.1)
-        retry_done = run_herdr(argv, env)
-        if retry_done.returncode != 0:
-            detail = (
-                retry_done.stderr or retry_done.stdout
-            ).strip() or f"exit status {retry_done.returncode}"
-            code = error_code(retry_done.stderr)
-            if code == BLOCKED_CODE:
-                print(f"herdr-prompt: {target}: {detail}", file=sys.stderr)
-                return Dispatch(target, blocked=True)
-            if code == TIMEOUT_CODE:
-                return Dispatch(target, wait_timed_out=True)
-            raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
-        done = retry_done
-        post_rev, post_pane = (
-            fetch_agent_revision(herdr, target, env)
-            if not options.no_caller_context
-            else (None, None)
-        )
-        if post_pane:
-            pane = post_pane
-        if post_rev is None or post_rev == pre_rev:
-            raise HerdrError(
-                f"herdr agent prompt {target} failed: prompt dropped (revision remained {pre_rev})"
-            )
+    pane = post_pane
 
     _ = decode_response(done.stdout)
     state = settled_state(done.stdout)

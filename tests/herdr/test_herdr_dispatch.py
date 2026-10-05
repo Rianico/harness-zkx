@@ -85,7 +85,7 @@ def test_dispatch_refuses_qoderclicn_agent_kind(stub: StubHarness, tmp_path: Pat
 def test_dispatch_reports_delivery_revision(stub: StubHarness, tmp_path: Path) -> None:
     state = {
         **DEFAULT_STATE,
-        "agent_get_rev_seq": {"reviewer": ["r98", "r99"]},
+        "agent_get_rev_seq": {"reviewer": ["r99"]},
         "agent_get": {"reviewer": {"pane_id": "w9:p1"}},
     }
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), state=state)
@@ -94,27 +94,70 @@ def test_dispatch_reports_delivery_revision(stub: StubHarness, tmp_path: Path) -
     assert "revision=r99" in done.stdout
 
 
-def test_dispatch_fails_on_stale_revision(stub: StubHarness, tmp_path: Path) -> None:
+def test_dispatch_constant_revision_accepted_without_retry(
+    stub: StubHarness, tmp_path: Path
+) -> None:
     state = {
         **DEFAULT_STATE,
         "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r1"]},
     }
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), state=state)
-    assert done.returncode == herdr_cli.EXIT_HERDR
-    assert "prompt dropped (revision remained r1)" in done.stderr
-    assert len(stub.prompts()) == 2
-
-
-def test_dispatch_retries_and_succeeds_on_startup_race(stub: StubHarness, tmp_path: Path) -> None:
-    state = {
-        **DEFAULT_STATE,
-        "agent_get_rev_seq": {"reviewer": ["r1", "r1", "r2"]},
-    }
-    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), state=state)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
-    assert "prompted reviewer" in done.stdout
-    assert "revision=r2" in done.stdout
-    assert len(stub.prompts()) == 2
+    assert "prompt dropped" not in done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_refuses_when_target_has_active_lease(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease("reviewer", "old_ticket.md", "orch-1", base_dir=tmp_path)
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert (
+        "target reviewer has an active ticket lease (old_ticket.md) issued by orch-1. Await reply or pass --force"
+        in done.stderr
+    )
+    assert stub.prompts() == []
+
+
+def test_dispatch_force_bypasses_active_lease(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease("reviewer", "old_ticket.md", "orch-1", base_dir=tmp_path)
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--force",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert lease["ticket"] == str(payload_file(tmp_path))
+
+
+def test_dispatch_acquires_lease_on_successful_dispatch(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    ticket = payload_file(tmp_path, "ticket content")
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert lease["ticket"] == str(ticket)
+    assert lease["caller"] == "reviewer"
 
 
 def test_dispatch_accepts_revision_zero_without_retry(stub: StubHarness, tmp_path: Path) -> None:
@@ -139,6 +182,71 @@ def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None
     assert isinstance(parsed, list)
     assert parsed[3] == "reviewer"
     assert "Caller: pane=" in str(parsed[4])
+
+
+def test_dispatch_rolls_back_lease_on_blocked_outcome(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    error = {"code": "agent_blocked", "message": "agent reviewer is blocked"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        env={"PWD": str(tmp_path)},
+        state={**DEFAULT_STATE, "prompt_error": error},
+    )
+    assert done.returncode == herdr_cli.EXIT_BLOCKED
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_dispatch_rolls_back_lease_on_herdr_failure(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    error = {"code": "agent_crashed", "message": "agent target crashed"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        env={"PWD": str(tmp_path)},
+        state={**DEFAULT_STATE, "prompt_error": error},
+    )
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_dispatch_retains_lease_on_wait_timeout(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    error = {"code": "timeout", "message": "wait timed out"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--wait",
+        env={"PWD": str(tmp_path)},
+        state={**DEFAULT_STATE, "prompt_error": error},
+    )
+    assert done.returncode == 4
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert lease["target"] == "reviewer"
+
+
+def test_dispatch_records_pane_id_and_canonical_name(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert lease["target"] == "reviewer"
+    assert lease.get("pane_id") == "w9:p1"
+    assert herdr_lease.get_lease("w9:p1", base_dir=tmp_path) == lease
 
 
 def test_pep723_metadata_precedes_docstring() -> None:

@@ -30,7 +30,7 @@ When the check passes, the `herdr` binary in `PATH` talks to the current session
 
 ## Orient with `herdr-overview` first
 
-One call answers "what is here, and which pane or agent do I act on?" — pane ids, agent kinds, agent names, labels, and cwd, grouped by workspace, with the calling pane marked `*`. It joins pane labels with agent names, which no single `herdr` list command returns. Reach for it before any `workspace list`, `tab list`, `pane list`, `pane layout`, or `agent list` probe: those return overlapping subsets, cost several round trips, and bloat the context.
+One call answers "what is here, and which pane or agent do I act on?" — pane ids, agent kinds, agent names, labels, live subagent tokens (`delegating` state), and cwd, grouped by workspace, with the calling pane marked `*`. It joins pane labels with agent names and subagent tokens, which no single `herdr` list command returns. Reach for it before any `workspace list`, `tab list`, `pane list`, `pane layout`, or `agent list` probe: those return overlapping subsets, cost several round trips, and bloat the context.
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace: YAML when piped, table on a TTY
@@ -129,46 +129,66 @@ Multi-agent coordination is event-driven via completion callbacks:
    ```
    Ensures the caller has a valid, addressable agent name so workers know whom to reply to.
 
-2. **Dispatch with short grace period or fire-and-forget:**
+2. **Dispatch with Synthesized IDD/GDD Tickets & Task Leases:**
    ```bash
-   # Dedicated dispatch helper (validates agent name, verifies delivery revision):
+   # Dedicated dispatch helper (checks/acquires task leases, validates agent name):
    uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker --file task.md --no-wait
+
+   # Or bypass an existing active lease:
+   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" worker --file task.md --force --no-wait
 
    # Or via herdr-prompt:
    uv run "$SKILL_DIR/scripts/herdr_prompt.py" worker --file task.md --wait --timeout 15000
    ```
-   Never dispatch tasks via bare `herdr agent prompt worker` directly — doing so drops the `Caller:` context and reply contract.
+   - **Synthesized IDD/GDD Ticket Format**: Dispatched tickets pair upstream teleological purpose (**IDD**: Problem, Proposed Outcome, Non-Negotiable Constraints) with downstream verifiable milestones (**GDD/EDD**: Check Command, Required Evidence), preventing both Goodhart gaming and semantic drift.
+   - **Task Lease Invariant**: `herdr_dispatch.py` checks active ticket leases in `.lane/lease.json` (or `.herdr-lease.json`) before dispatching, preventing ticket collisions. Target identities are canonicalized across agent name and pane ID. Leases are acquired atomically pre-dispatch and rolled back if prompt delivery fails or is blocked. Leases are retained only on prompt acceptance (`EXIT_OK` or `WaitTimeout`), and automatically released upon delivery of `herdr_reply.py`.
+   - Never dispatch tasks via bare `herdr agent prompt worker` directly — doing so drops the `Caller:` context, the Resumption Triple, and the reply contract.
+   - *Prompt acceptance invariant*: Exit code 0 from `herdr agent prompt` confirms acceptance. Revision numbers are purely informational; prompts are never re-injected or dropped due to unchanged revisions (#193).
 
 3. **Yield turn on async execution:**
    If `herdr-prompt` exits 4 (timeout) or was dispatched with `--no-wait`, the prompt was delivered and the worker is working asynchronously. The orchestrator yields turn (stops calling tools, enters idle).
 
-4. **Worker executes completion callback:**
-   Upon completion or blocking, the worker executes the contract callback via `herdr_reply.py`:
+4. **Worker executes completion callback (and releases lease):**
+   Upon completion or blocking, the worker executes the contract callback via `herdr_reply.py`, adhering to the settled **Final Reply Template** (`resp-format.md`):
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "<STATUS> <artifacts> <issues>"
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md
+   # Or inline:
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED <sha> ..."
    # Or auto-start the caller agent if its turn exited back to an open shell pane:
-   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "<STATUS> <artifacts> <issues>" --auto-start pi
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md --auto-start pi
    ```
-   This delivers prompt input directly to the orchestrator pane without shell mangling, waking its turn with the result. Never use bare `herdr agent prompt` directly for replies.
+   The reply payload contains:
+   - Status Triad: `COMPLETED <commit-sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
+   - `## Summary` (Carmack-style technical rationale, ≤100 words)
+   - `## Artifacts` (absolute paths with kinds: diff, spec, report, eval, pr)
+   - `## Evidence` (deterministic command checks: PASS / FAIL)
+   - `## Route` (`continue | remediate | blocked`)
+   - `## Issues` (P1/P2/P3 severity with file:line, invariant, defect, remediation; or `None`)
+   - `## Suggestions` (optional non-blocking environment observations)
 
-5. **`herdr-wait` is strictly a fallback; Dispatch-&-Yield is REQUIRED for `agy` / revision-0:**
-   Do not poll workers with loops or barriers during normal execution. `herdr-wait` is strictly a fallback for non-agent panes, panes lacking an agent name, or watchdog recovery.
-   **Dispatch-&-Yield is REQUIRED (not advisory) for `agy` and revision-0 agents**: Agents with background subagents (such as `agy`) report `idle` while their subagents work, and weakly-recognized agents never advance revision past 0. `herdr-wait` and `herdr-prompt --wait` CANNOT reliably observe `agy` agents to completion (they fail fast with exit 2 or hang to timeout). You must dispatch with `herdr-dispatch` or `herdr-prompt --no-wait`, yield turn, and await the `herdr-reply` callback.
+   Delivering this reply prompts the caller pane directly without shell mangling, waking its turn with the result, and automatically releases the replying worker's active task lease. Never use bare `herdr agent prompt` directly for replies.
+
+5. **Subagent Observability & `herdr-wait`:**
+   **Subagent-First Execution**: In lane coordination, agents MUST use subagents for heavy tasks (exploration, bulk edits, test triage, and crux review). When agents spawn subagents, they may report `idle` while subagents work (the False-Idle Phenomenon). Herdr exposes live subagent status via Session Navigator tokens (`tokens`), displayed as `delegating` in `herdr-overview`.
+   `herdr-wait` is subagent-aware: it checks `tokens.summary` and `tokens.title-suffix`, treating any agent with active subagent tokens as UNSETTLED (preventing premature wait barrier exits).
+   `herdr-wait` is strictly a fallback for non-agent panes or watchdog recovery; Dispatch-&-Yield is the primary coordination pattern.
+   **Dispatch-&-Yield is REQUIRED (not advisory) for `agy` and revision-0 agents**: Agents with background subagents (such as `agy`) report `idle` while their subagents work, and weakly-recognized agents never advance revision past 0. `herdr-wait` and `herdr-prompt --wait` CANNOT reliably observe `agy` agents to completion (they fail fast with exit 2 or hang to timeout). You must dispatch with `herdr-dispatch` or `herdr-prompt --no-wait`, yield turn, and await the `herdr_reply.py` callback.
 
 **Every handoff carries the caller's context, and requires a reply.** A worker cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and Herdr skill notice, and closes with the reply contract:
 
 ```text
-[2026-10-03T06:19:12.983Z]
-Caller: pane=w1:p1 label=orchestrator agent=orchestrator
+[2026-10-05T06:19:12.983Z]
+Caller: pane=w1:p1 label=orchestrator agent=orchestrator kind=pi session=/path/to/session.jsonl resume="pi --resume /path/to/session.jsonl" cwd=/Users/zhengxk/workspace
 Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+Workers: impl-1@w1:p3, impl-2@w1:p4
 
-<the payload>
+<the payload (Synthesized IDD/GDD Ticket)>
 
 On completion, reply to the caller in one message using the herdr helper script:
-  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py orchestrator "<STATUS> <artifacts> <issues>"
+  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py orchestrator --file <reply-payload.md>
 ```
 
-`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked worker names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, reading the pane id from `HERDR_PANE_ID` (falling back to `herdr pane current --current`), the label from `herdr pane list`, and the agent name from `herdr agent list`; `--no-caller-context` opts out for a broadcast where no single caller owns the result. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
+`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked worker names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, injecting the **Resumption Triple** (`kind + session + cwd`) along with `pane`, `label`, `tab`, `agent`, and `resume="..."`. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
 
 Underlying commands, if you drive them directly:
 
@@ -178,7 +198,7 @@ Underlying commands, if you drive them directly:
 
 The full split, including which response returns which name, is in `$SKILL_DIR/references/cli-reference.md`.
 
-For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for non-overlapping role boundaries (Orchestrator, TM, Implementer), bound architectural skills (`keel`, `coding-protocol`, `programming-expert`), reconnaissance budgets, TM code review subagents, and implementer context isolation.
+For multi-tier lanes where an in-lane Task Manager coordinates one or more Implementers, see [Hierarchical Lane Coordination](references/lane-coordination.md) for non-overlapping role boundaries (Orchestrator, TM, Implementer), bound architectural skills (`keel`, `coding-protocol`, `programming-expert`), reconnaissance budgets, TM code review subagents, implementer context isolation, the subagent-first execution mandate, task leases, and token observability.
 
 ## Start and coordinate an agent
 

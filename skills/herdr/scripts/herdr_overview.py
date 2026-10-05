@@ -82,6 +82,7 @@ class Pane:
     label: str | None
     cwd: str | None
     current: bool
+    tokens: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -174,13 +175,33 @@ def parse_agent_names(raw: str) -> dict[str, str]:
     return names
 
 
+def parse_agent_tokens(raw: str) -> dict[str, Mapping[str, str]]:
+    """Read agent tokens herdr tracks per pane, if present."""
+    tokens_by_pane: dict[str, Mapping[str, str]] = {}
+    for entry in entries(raw, "result", "agents"):
+        pane_id = entry_optional_text(entry, "pane_id")
+        raw_tokens = entry.get("tokens")
+        if pane_id and isinstance(raw_tokens, dict):
+            tokens_by_pane[pane_id] = {
+                str(k): str(v) for k, v in raw_tokens.items() if isinstance(v, str)
+            }
+    return tokens_by_pane
+
+
 def parse_panes(
     raw: str,
     agent_names: Mapping[str, str],
+    agent_tokens: Mapping[str, Mapping[str, str]] | None = None,
 ) -> tuple[Pane, ...]:
     panes: list[Pane] = []
     for entry in entries(raw, "result", "panes"):
         pane_id = entry_text(entry, "pane_id", where="pane list entry")
+        tokens: Mapping[str, str] | None = None
+        raw_tokens = entry.get("tokens")
+        if isinstance(raw_tokens, dict) and raw_tokens:
+            tokens = {str(k): str(v) for k, v in raw_tokens.items() if isinstance(v, str)}
+        elif agent_tokens and pane_id in agent_tokens:
+            tokens = agent_tokens[pane_id]
         panes.append(
             Pane(
                 pane_id=pane_id,
@@ -192,6 +213,7 @@ def parse_panes(
                 label=entry_optional_text(entry, "label"),
                 cwd=entry_optional_text(entry, "cwd"),
                 current=False,
+                tokens=tokens,
             )
         )
     return tuple(panes)
@@ -331,6 +353,12 @@ def render_yaml(overview: Overview) -> str:
             lines.append(f"        label: {_scalar(pane.label)}")
             lines.append(f"        current: {_scalar(pane.current)}")
             lines.append(f"        cwd: {_scalar(pane.cwd)}")
+            if pane.tokens is not None:
+                lines.append("        tokens:")
+                for k in sorted(pane.tokens.keys()):
+                    lines.append(f"          {_scalar(k)}: {_scalar(pane.tokens[k])}")
+            else:
+                lines.append("        tokens: null")
     return "\n".join(lines) + "\n"
 
 
@@ -360,6 +388,7 @@ def render_json(overview: Overview) -> str:
                         "label": pane.label,
                         "current": pane.current,
                         "cwd": pane.cwd,
+                        "tokens": dict(pane.tokens) if pane.tokens is not None else None,
                     }
                     for pane in group.panes
                 ],
@@ -378,11 +407,21 @@ def _display_cwd(cwd: str | None, home: str | None) -> str:
     return cwd
 
 
+def _display_state(pane: Pane) -> str:
+    status = pane.agent_status or DASH
+    if pane.agent_status in ("idle", "done") and pane.tokens:
+        summary = pane.tokens.get("summary", "")
+        title_suffix = pane.tokens.get("title-suffix", "")
+        if "⏳" in summary or "subagent" in summary.lower() or "⏳" in title_suffix:
+            return "delegating"
+    return status
+
+
 def _cells(pane: Pane, home: str | None) -> tuple[str, ...]:
     return (
         pane.pane_id,
         pane.agent or DASH,
-        pane.agent_status or DASH,
+        _display_state(pane),
         pane.name or DASH,
         pane.label or DASH,
         pane.tab_id,
@@ -433,7 +472,11 @@ def run(options: Options, env: Mapping[str, str]) -> int:
     workspaces_raw = run_herdr_checked([herdr, "workspace", "list"], env)
 
     overview = build_overview(
-        parse_panes(panes_raw, parse_agent_names(agents_raw)),
+        parse_panes(
+            panes_raw,
+            parse_agent_names(agents_raw),
+            parse_agent_tokens(agents_raw),
+        ),
         parse_workspaces(workspaces_raw),
         scope,
         env,
