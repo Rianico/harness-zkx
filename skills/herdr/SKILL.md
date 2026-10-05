@@ -423,7 +423,15 @@ uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --wait --tim
 uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee1 callee2 --file task.md --no-wait
 ```
 
-Requires `--file` so tickets are always dispatched from a durable file. Refuses agent kinds (e.g. `qodercli`) with the live agent names listed. Prints `prompted <callee> (<pane>)  bytes=...  revision=...` to verify delivery.
+Requires `--file` unless `--draft` is passed, so tickets are dispatched from a durable file. Refuses agent kinds (e.g. `qodercli`) with the live agent names listed. Prints `prompted <callee> (<pane>)  bytes=...  revision=...` to verify delivery.
+
+`--draft` prints a ticket skeleton with routing prefilled from live state (or writes it to `--file`) and sends nothing:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --draft --file task.md
+```
+
+Fill the Task/Context/Acceptance sections and delete the `herdr-draft: unfilled` marker, then dispatch that file with `--file`. Dispatch refuses a ticket that still carries the marker, or whose three sections are all empty; free-form tickets pass untouched.
 
 ### `herdr-reply` — callee completion callback
 
