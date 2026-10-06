@@ -37,7 +37,7 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
   - Boundary & state governance: `skills/keel/SKILL.md`.
 - **Tests**:
   - Strict placement: all tests live under root `tests/<name>/` matching `skills/<name>/`. Never place tests inside `skills/`.
-  - Run all: `uv run pytest`.
+  - Run all: `bash scripts/check.sh` (or `uv run pytest` alone).
   - Test naming: `tests/<skill>/test_<component>.py`. Conftest handles runtime `sys.path`.
 - **Multi-Agent Contract (Herdr)**:
   - When running under Herdr (`HERDR_ENV=1`), always use harness scripts in `skills/herdr/scripts/` (never raw CLI):
@@ -48,4 +48,4 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
 - **Contribution & Changelog**:
   - Conventional commits (`CONTRIBUTING.md`). Ledger gated in CI (`changelog-check.yml`).
 - **Runtime**:
-  - Python 3.14 via `uv run` (`pyproject.toml`). Quality: `oxlint`, `ruff`, `validate-deps.py`, `basedpyright`.
+  - Python 3.14 via `uv run` (`pyproject.toml`). Quality: `oxlint`, `ruff`, `validate-deps.py`, `basedpyright --warnings`. `scripts/check.sh` is the single local gate mirroring CI.

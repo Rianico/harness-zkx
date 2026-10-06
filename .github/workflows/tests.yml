@@ -80,5 +80,5 @@ jobs:
       - name: Check formatting
         run: uv run ruff format --check .
 
-      - name: Check the warning budget
-        run: uv run scripts/typecheck-budget.py
+      - name: Check types
+        run: uv run basedpyright --warnings
