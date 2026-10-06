@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "argv": [
+    "--repo",
+    "<REPO>",
+    "--summary"
+  ],
+  "returncode": 0,
+  "stdout_exact": "repo: /private/tmp/ra-golden/repo\nconflicted files: 1\n- app.py | type=text | stages=2,3 | hunks=1\nuse --file <path> for compact hunk details or --all for every file\n",
+  "stdout_normalized": "repo: <REPO_ROOT>\nconflicted files: 1\n- app.py | type=text | stages=2,3 | hunks=1\nuse --file <path> for compact hunk details or --all for every file\n",
+  "normalization": "line 1 repo absolute path replaced with <REPO_ROOT>; remainder compared byte-for-byte",
+  "repo_setup": {
+    "base_file": "common.txt",
+    "conflict_file": "app.py",
+    "branches": [
+      "main",
+      "feat/calc"
+    ],
+    "conflict_type": "add/add text hunks=1"
+  }
+}

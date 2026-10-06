@@ -14,6 +14,7 @@
     { "root": "skills/branch-worktree-pr/scripts", "extraPaths": ["skills/branch-worktree-pr/scripts"] },
     { "root": "skills/herdr/scripts", "extraPaths": ["skills/herdr/scripts"] },
     { "root": "skills/eval-gate/scripts", "extraPaths": ["skills/eval-gate/scripts"] },
+    { "root": "skills/gh-router/lib", "extraPaths": ["skills/gh-router/lib"] },
     // Test code is executed by pytest, not shipped: fixture-bag classes, callback parameters
     // that exist only for their arity, and deliberate pokes into module privates are the idiom
     // here. Annotation strictness (missing/unknown parameter types) and privacy checks stay on

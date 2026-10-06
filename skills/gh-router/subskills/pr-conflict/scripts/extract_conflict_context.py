@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import argparse
-import difflib
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict, cast
+
+_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
+from range_authority import build_diff, find_repo_root, get_commit_summary, run_git, truncate_lines
 
 START_RE = re.compile(r"^<<<<<<<(?: (.*))?$")
 BASE_RE = re.compile(r"^\|\|\|\|\|\|\|(?: (.*))?$")
@@ -63,32 +67,6 @@ class _IndexPreview(TypedDict):
     ours_vs_theirs_diff: NotRequired[list[str]]
 
 
-def run_git(repo_root: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", "-C", str(repo_root), *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or "unknown git error"
-        raise RuntimeError(f"git {' '.join(args)} failed: {message}")
-    return result.stdout
-
-
-def find_repo_root(start: Path) -> Path:
-    result = subprocess.run(
-        ["git", "-C", str(start), "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or "not a git repository"
-        raise RuntimeError(message)
-    return Path(result.stdout.strip()).resolve()
-
-
 def detect_git_operation(repo_root: Path) -> tuple[str, str | None, str | None]:
     """Detect git operation in progress and return (operation, ours_ref, theirs_ref)."""
     for op, theirs in [
@@ -123,40 +101,6 @@ def detect_git_operation(repo_root: Path) -> tuple[str, str | None, str | None]:
                     return ("rebase", "HEAD", "REBASE_HEAD")
 
     return ("unknown", None, None)
-
-
-def get_commit_summary(repo_root: Path, ref: str, path: str | None = None) -> dict[str, str] | None:
-    """Extract commit details (sha, author, relative_time/date, subject, body)."""
-    fmt = "%h%x00%an%x00%ar%x00%s%x00%b"
-    cmd = ["git", "-C", str(repo_root), "log", "-1", f"--format={fmt}", ref]
-    if path is not None:
-        cmd_with_path = [*cmd, "--", path]
-        res = subprocess.run(cmd_with_path, capture_output=True, text=True, check=False)
-        if res.returncode == 0 and res.stdout.strip():
-            parts = res.stdout.rstrip("\n").split("\x00", 4)
-            if len(parts) == 5:
-                return {
-                    "sha": parts[0],
-                    "author": parts[1],
-                    "date": parts[2],
-                    "relative_time": parts[2],
-                    "subject": parts[3],
-                    "body": parts[4].strip(),
-                }
-    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if res.returncode != 0 or not res.stdout.strip():
-        return None
-    parts = res.stdout.rstrip("\n").split("\x00", 4)
-    if len(parts) != 5:
-        return None
-    return {
-        "sha": parts[0],
-        "author": parts[1],
-        "date": parts[2],
-        "relative_time": parts[2],
-        "subject": parts[3],
-        "body": parts[4].strip(),
-    }
 
 
 def format_operation_description(
@@ -224,34 +168,6 @@ def read_stage_text(repo_root: Path, path: str, stage: int) -> list[str] | None:
     if "\x00" in result.stdout:
         return None
     return result.stdout.splitlines()
-
-
-def truncate_lines(lines: list[str], max_lines: int) -> list[str]:
-    if len(lines) <= max_lines:
-        return lines
-    omitted = len(lines) - max_lines
-    return [*lines[:max_lines], f"... ({omitted} more lines omitted)"]
-
-
-def build_diff(
-    left_lines: list[str],
-    right_lines: list[str],
-    left_label: str,
-    right_label: str,
-    max_lines: int,
-) -> list[str]:
-    diff = list(
-        difflib.unified_diff(
-            left_lines,
-            right_lines,
-            fromfile=left_label,
-            tofile=right_label,
-            lineterm="",
-        )
-    )
-    if not diff:
-        diff = ["(no textual diff)"]
-    return truncate_lines(diff, max_lines)
 
 
 def classify_conflict(stages: list[int], marker_hunks: int) -> str:
