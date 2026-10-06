@@ -38,8 +38,8 @@ class _Scaffold(Protocol):
     """The surface these tests read, so the dynamically-loaded module stops typing as `Any`.
 
     `_load` returns what `spec.loader.exec_module` produced, which the checker can only call
-    `Any`; every attribute read off it counts as a `reportAny` warning against the shrink-only
-    budget in `.config/basedpyright-baseline.txt`.
+    `Any`; the protocol types every attribute read off it, so a renamed or missing surface
+    fails here rather than at runtime.
     """
 
     OXFMT_VERSION: str

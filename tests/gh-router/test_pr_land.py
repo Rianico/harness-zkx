@@ -24,6 +24,7 @@ from pr import (  # noqa: E402
     RefusalError,
     UsageError,
     check_trailers,
+    checks_verdict,
     clean_squash_body,
     is_unfilled_body,
     merge_pr,
@@ -559,7 +560,7 @@ exit 0
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
 from pr import create_or_reuse_pr
-num, title, body = create_or_reuse_pr(
+num, title, body, created = create_or_reuse_pr(
     repo="test/repo",
     head_ref="feat-branch",
     base="main",
@@ -593,7 +594,7 @@ print(f"FINAL_BODY={{body}}")
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
 from pr import create_or_reuse_pr
-num, title, body = create_or_reuse_pr(
+num, title, body, created = create_or_reuse_pr(
     repo="test/repo",
     head_ref="feat-branch",
     base="main",
@@ -1358,3 +1359,206 @@ sys.exit(0)
     unfilled = refuse(template_literal, True)
     assert unfilled.returncode == 1, unfilled.stderr
     assert "unfilled repo template" in unfilled.stderr
+
+
+class _FakeRun:
+    """Stub pr_mod.run_command: records argv and returns canned gh/git outputs.
+
+    existing_pr selects the reuse path ("7") or the fresh-create path ("null").
+    ready_rc controls the gh pr ready outcome. reuse_draft adds isDraft=true to the
+    reuse payload (the same pulls?head= response the reuse path already fetches).
+    """
+
+    def __init__(
+        self, *, existing_pr: str = "null", ready_rc: int = 0, reuse_draft: bool = False
+    ) -> None:
+        self.calls: list[list[str]] = []
+        self.existing_pr = existing_pr
+        self.ready_rc = ready_rc
+        self.reuse_draft = reuse_draft
+
+    def __call__(self, cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        self.calls.append(list(cmd))
+        joined = " ".join(cmd)
+        out, err, rc = "", "", 0
+        if "rev-parse --abbrev-ref" in joined:
+            out = "feat-x\n"
+        elif "config --get branch." in joined:
+            rc = 1
+        elif "remote get-url" in joined:
+            out = "https://github.com/test/repo.git\n"
+        elif "default_branch" in joined:
+            out = "main\n"
+        elif "pulls?head=" in joined:
+            if self.existing_pr == "null":
+                out = "null\n"
+            else:
+                draft_flag = "true" if self.reuse_draft else "false"
+                out = f"{self.existing_pr}\t{draft_flag}\n"
+        elif "pulls -X POST" in joined:
+            out = "7\n"
+        elif "html_url" in joined:
+            out = "https://github.com/test/repo/pull/7\n"
+        elif "pr ready" in joined:
+            rc = self.ready_rc
+            err = "GraphQL: Something went wrong\n" if rc != 0 else ""
+        return subprocess.CompletedProcess(cmd, rc, out, err)
+
+
+def _write_changelog(tmp_path: Path) -> Path:
+    changelog = tmp_path / "CHANGELOG.md"
+    _ = changelog.write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** handshake entry\n",
+        encoding="utf-8",
+    )
+    return changelog
+
+
+def _main_args(*extra: str) -> list[str]:
+    return ["--head", "feat-x", "--title", "feat: x", "--body", "## Summary\nReal.\n", *extra]
+
+
+def test_draft_handshake_create_stamp_then_ready(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fresh create is draft=true, then changelog commit+push, then gh pr ready last (mutation: create arg draft=true -> draft=false)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    creates = [c for c in fake.calls if "pulls -X POST" in " ".join(c)]
+    assert len(creates) == 1
+    assert "draft=true" in creates[0]
+
+    assert any(c[:3] == ["git", "add", "CHANGELOG.md"] for c in fake.calls)
+    commits = [c for c in fake.calls if c[:2] == ["git", "commit"]]
+    assert len(commits) == 1
+    assert "chore(changelog): attribute #7 in unreleased ledger" in commits[0][-1]
+    assert ["git", "push", "origin", "feat-x"] in fake.calls
+
+    ready_calls = [c for c in fake.calls if "pr ready" in " ".join(c)]
+    assert len(ready_calls) == 1
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_draft_flag_skips_ready_flip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """--draft leaves the PR draft: created with draft=true but gh pr ready is ABSENT (mutation: drop options.draft guard in main -> ready appears)."""
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--draft"))
+    assert rc == 0, fake.calls
+
+    creates = [c for c in fake.calls if "pulls -X POST" in " ".join(c)]
+    assert len(creates) == 1
+    assert "draft=true" in creates[0]
+    assert not [c for c in fake.calls if "pr ready" in " ".join(c)]
+
+
+def test_reuse_existing_pr_never_touches_draft_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An existing open PR is reused untouched: no gh pr ready, no re-draft, no create (mutation: reuse branch returns created=True -> ready flip appears)."""
+    fake = _FakeRun(existing_pr="7")
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    assert not [c for c in fake.calls if "pr ready" in " ".join(c)]
+    assert not [c for c in fake.calls if "pulls -X POST" in " ".join(c)]
+    all_joined = " ".join(" ".join(c) for c in fake.calls)
+    assert "draft=" not in all_joined
+
+
+def test_ready_failure_exits_1_with_manual_fix(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Non-zero gh pr ready makes the program exit 1 naming the verbatim manual fix (mutation: ready_pr failure path return False -> return True)."""
+    fake = _FakeRun(ready_rc=1)
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 1
+
+    err = capsys.readouterr().err
+    assert "gh pr ready 7 --repo test/repo" in err
+    assert "still a draft" in err
+
+
+def test_no_stamp_skips_stamping_but_still_readies(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--no-stamp runs no stamp commands but the flip to ready still happens with a warning (mutation: gate the ready flip on not no_stamp -> ready absent)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--no-stamp"))
+    assert rc == 0, fake.calls
+
+    assert not [c for c in fake.calls if "CHANGELOG.md" in " ".join(c)]
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+    err = capsys.readouterr().err
+    assert "not stamped" in err
+    assert "changelog gate" in err
+
+
+def test_reuse_draft_pr_without_draft_flag_fails_loud(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reused draft PR without --draft exits 1 with the verbatim manual remediation and NEVER calls gh pr ready (mutation: auto-flip via ready_pr on reuse -> the no-mutation argv assert fails)."""
+    fake = _FakeRun(existing_pr="7", reuse_draft=True)
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 1, fake.calls
+
+    err = capsys.readouterr().err
+    assert (
+        "remediation: PR #7 is still a draft; run manually: gh pr ready 7 --repo test/repo" in err
+    )
+    assert not [c for c in fake.calls if c[:3] == ["gh", "pr", "ready"]]
+
+
+def test_reuse_draft_pr_with_draft_flag_proceeds(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A reused draft PR with --draft is the caller's stated intent: rc 0, no remediation, no flip (mutation: ignore options.draft on the reuse check -> rc flips to 1)."""
+    fake = _FakeRun(existing_pr="7", reuse_draft=True)
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--draft"))
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "remediation" not in err
+    assert not [c for c in fake.calls if c[:3] == ["gh", "pr", "ready"]]
+
+
+def test_checks_verdict_all_skipping_is_pending() -> None:
+    """An all-skipping rollup (draft PRs get zero CI runs) must never read as success (mutation: restore bucket in ("pass", "skipping") unconditional -> returns success)."""
+    assert checks_verdict("lint\tskipping\ntest\tskipping\n") == "pending"
+
+
+def test_checks_verdict_mixed_pass_and_skipping_is_success() -> None:
+    """Partially-skipped PRs stay success; skipping alone must not become a --watch timeout (mutation: treat any skipping as pending -> returns pending)."""
+    assert checks_verdict("build\tpass\nlint\tskipping\n") == "success"

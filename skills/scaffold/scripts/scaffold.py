@@ -213,7 +213,6 @@ def _load_sibling_script(name: str) -> str:
 CHANGELOG_UNRELEASED_PY = _load_sibling_script("changelog-unreleased.py")
 CHANGELOG_GATE_PY = _load_sibling_script("changelog-gate.py")
 RELEASE_CHANGELOG_MJS = _load_sibling_script("release-changelog.mjs")
-TYPECHECK_BUDGET_PY = _load_sibling_script("typecheck-budget.py")
 
 GITIGNORE_GIT = [".lsz/*", "!.lsz/config.yaml", ".pi/", "coverage/"]
 
@@ -231,7 +230,6 @@ GIT_COMPONENTS: set[str] = {
     "release-yml",  # .github/workflows/release.yml (git variant)
     "changelog-check",  # .github/workflows/changelog-check.yml
     "changelog-script",  # scripts/changelog-*.py + scripts/release-changelog.mjs
-    "typecheck-budget",  # scripts/typecheck-budget.py (basedpyright budget gate; opt-in, python flavor owns it)
     "commitlint",  # commitlint.config.js
     "changelog-md",  # CHANGELOG.md
     "issue-templates",  # .github/ISSUE_TEMPLATE/* + config.yml
@@ -511,7 +509,6 @@ def _parse_components(raw: str | None, available: set[str], flag: str) -> set[st
     alias = {
         "changelog": "changelog-md",
         "script": "changelog-script",
-        "typecheck": "typecheck-budget",
         "issues": "issue-templates",
     }
     parts = [s.strip() for s in raw.split(",") if s.strip()]
@@ -557,12 +554,45 @@ def _drop_retired_pr_template(raw: str | None) -> str | None:
     return ",".join(kept)
 
 
+# typecheck-budget retired for the native runner: the spellings must still exit 0 with a
+# pointer, never "unknown component" exit 2 — downstream automation calls
+# `--update --only typecheck-budget`.
+RETIRED_TYPECHECK_BUDGET_SPELLINGS = {
+    "typecheck-budget",
+    "typecheck_budget",
+    "typecheck",
+}
+_TYPECHECK_BUDGET_RETIREMENT_NOTICE = (
+    "typecheck-budget is retired; run native `uv run basedpyright --warnings` instead"
+)
+_typecheck_budget_retirement_notice_shown = False
+
+
+def _note_typecheck_budget_retirement() -> None:
+    global _typecheck_budget_retirement_notice_shown
+    if not _typecheck_budget_retirement_notice_shown:
+        _typecheck_budget_retirement_notice_shown = True
+        print(_TYPECHECK_BUDGET_RETIREMENT_NOTICE, file=sys.stderr)
+
+
+def _drop_retired_typecheck_budget(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    parts = [s for s in raw.split(",") if s.strip()]
+    kept = [s for s in parts if s.strip().lower() not in RETIRED_TYPECHECK_BUDGET_SPELLINGS]
+    if len(kept) != len(parts):
+        _note_typecheck_budget_retirement()
+    return ",".join(kept)
+
+
 def _resolve_selected(
     only: str | None, without: str | None, components: str | None, available: set[str]
 ) -> set[str]:
     # --components is alias for --only
     effective_only = _drop_retired_pr_template(components if components is not None else only)
+    effective_only = _drop_retired_typecheck_budget(effective_only)
     without = _drop_retired_pr_template(without)
+    without = _drop_retired_typecheck_budget(without)
     if effective_only is not None:
         sel = _parse_components(effective_only, available, "--only/--components")
         assert sel is not None
@@ -1156,11 +1186,7 @@ def do_git(
     sel = selected if selected is not None else GIT_COMPONENTS
     notes: list[str] = []
     if "releaserc" in sel:
-        _ = write_file(
-            cwd / ".releaserc.json",
-            releaserc_content(cwd, with_typecheck="typecheck-budget" in sel),
-            dry_run,
-        )
+        _ = write_file(cwd / ".releaserc.json", releaserc_content(cwd), dry_run)
     if "release-yml" in sel:
         rel = cwd / ".github" / "workflows" / "release.yml"
         if update and rel.exists():
@@ -1183,10 +1209,6 @@ def do_git(
         )
         _ = write_file(cwd / "scripts" / "changelog-gate.py", CHANGELOG_GATE_PY, dry_run)
         _ = write_file(cwd / "scripts" / "release-changelog.mjs", RELEASE_CHANGELOG_MJS, dry_run)
-    if "typecheck-budget" in sel:
-        # Split from `changelog-script`: a basedpyright budget gate is python tooling,
-        # not git contract — opt in explicitly, or take it with the python flavor.
-        _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
     if "commitlint" in sel:
         _ = write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
     if "changelog-md" in sel:
@@ -1229,9 +1251,7 @@ def do_git(
     if "gitignore" in sel:
         # The bytecode entry travels with the component that writes `scripts/*.py`, so a
         # `--without changelog-script` run does not claim litter it cannot create.
-        entries = GITIGNORE_GIT + (
-            GITIGNORE_PY_SCRIPTS if "changelog-script" in sel or "typecheck-budget" in sel else []
-        )
+        entries = GITIGNORE_GIT + (GITIGNORE_PY_SCRIPTS if "changelog-script" in sel else [])
         append_gitignore(cwd / ".gitignore", entries, dry_run)
     if "agents" in sel:
         patch_agents(
@@ -1242,15 +1262,6 @@ def do_git(
     return notes
 
 
-def _is_python_present(cwd: pathlib.Path) -> bool:
-    """Whether the target project uses Python: pyproject.toml, .python-version, or script exists."""
-    return (
-        (cwd / "pyproject.toml").exists()
-        or (cwd / ".python-version").exists()
-        or (cwd / "scripts" / "typecheck-budget.py").exists()
-    )
-
-
 def do_python(
     cwd: pathlib.Path,
     project_name: str,
@@ -1259,7 +1270,6 @@ def do_python(
     threshold: int,
     update: bool = False,
     merge_mixed: bool = False,
-    with_typecheck: bool = True,
 ) -> list[str]:
     notes: list[str] = []
     _ = write_file(cwd / ".python-version", PYTHON_VERSION, dry_run)
@@ -1309,16 +1319,6 @@ def do_python(
     )
     if note:
         notes.append(note)
-    # The python verify gates on this budget script (see the release.yml NOTE) — the
-    # python flavor owns it, so it is written here, not by the git contract.
-    if with_typecheck:
-        _ = write_file(cwd / "scripts" / "typecheck-budget.py", TYPECHECK_BUDGET_PY, dry_run)
-        if (cwd / ".releaserc.json").exists():
-            _ = write_file(
-                cwd / ".releaserc.json",
-                releaserc_content(cwd, with_typecheck=True),
-                dry_run,
-            )
     if with_coverage:
         print(
             f"NOTE: Python coverage wired — run `uv run pytest --cov --cov-fail-under={threshold}`",
@@ -1495,11 +1495,6 @@ def do_ci(
             f"NOTE: Node/TS coverage runs `pnpm run {coverage_script}` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
             file=sys.stderr,
         )
-    if variant == "python":
-        print(
-            "NOTE: python verify gates on scripts/typecheck-budget.py — seed the baseline once with `uv run scripts/typecheck-budget.py --seed`",
-            file=sys.stderr,
-        )
     _ = write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
     return []
 
@@ -1542,10 +1537,7 @@ def git_contract_drift(cwd: pathlib.Path, project_name: str) -> dict[str, int]:
     saved = (REPORT.mode, REPORT.cwd)
     REPORT.start(SUMMARY, cwd)
     try:
-        selected = (
-            GIT_COMPONENTS if _is_python_present(cwd) else (GIT_COMPONENTS - {"typecheck-budget"})
-        )
-        _ = do_git(cwd, project_name, dry_run=True, update=True, selected=selected)
+        _ = do_git(cwd, project_name, dry_run=True, update=True)
         counts: dict[str, int] = {}
         for entry in REPORT.drift_entries:
             counts[entry.kind] = counts.get(entry.kind, 0) + 1
@@ -2085,21 +2077,15 @@ def write_contributing(
     return f"{path.name}: preserved — {reason}; missing template sections: {', '.join(absent)}"
 
 
-def releaserc_content(cwd: pathlib.Path, *, with_typecheck: bool = True) -> str:
+def releaserc_content(cwd: pathlib.Path) -> str:
     """The release config this repo's package manager calls for.
 
     `.releaserc.json` ships a `package-lock.json` asset (the npm default); a pnpm repo needs
     `pnpm-lock.yaml` there. Resolving it *before* the write keeps `--check` honest — the plan
     compares the repo against the bytes the run would really produce, not against the raw
     template, so a pnpm repo stops reporting permanent drift.
-
-    `with_typecheck=False` drops the `.config/basedpyright-baseline.txt` asset: that file
-    only exists when the `typecheck-budget` component is selected (python repos), so a repo
-    without the component would otherwise release an asset that is never produced.
     """
     content = RELEASERC_JSON
-    if not with_typecheck:
-        content = content.replace(',\n          ".config/basedpyright-baseline.txt"', "")
     if _declares_pnpm(cwd):
         return content.replace('"package-lock.json"', '"pnpm-lock.yaml"')
     return content
@@ -3146,11 +3132,6 @@ def main() -> int:
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
-    if git_selected is not None and args.only is None and args.components is None:
-        # `typecheck-budget` is opt-in for git: a repo that did not ask for it
-        # (and does not have python present / flavor all / flavor python) must not inherit a basedpyright gate.
-        if flavor not in ("all", "python") and not _is_python_present(cwd):
-            git_selected.discard("typecheck-budget")
     if not args.no_format and not os.environ.get("SCAFFOLD_NO_FORMAT"):
         enable_formatter(cwd)
     notes: list[str] = []
@@ -3173,7 +3154,6 @@ def main() -> int:
                 threshold,
                 update=update,
                 merge_mixed=args.merge_mixed,
-                with_typecheck=git_selected is None or "typecheck-budget" in git_selected,
             )
         if flavor in ("rust", "all"):
             notes += do_rust(cwd, project_name, dry_run, with_coverage, threshold, update=update)

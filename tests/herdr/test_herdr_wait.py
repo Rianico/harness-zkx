@@ -190,26 +190,42 @@ def test_any_mode_fails_fast_when_all_targets_revision_zero(stub: StubHarness) -
     assert "timed out" not in done.stderr
 
 
-def test_periodic_hold_heartbeat_emitted(stub: StubHarness) -> None:
-    """--any mode with one live target keeps pulsing heartbeats for the held target."""
-    state = settled_state(
-        a={"agent_status": "done", "revision": "0"}, b={"agent_status": "working"}
+class _FakeTime:
+    """Monotonic clock and sleeper advanced only by explicit sleeps."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_periodic_hold_heartbeat_emitted(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--any mode with one live target keeps pulsing heartbeats for the held target.
+
+    The heartbeat is wall-clock-driven: in a subprocess run, slow `herdr` stub
+    spawns can burn the whole watchdog budget before the second held poll, so
+    the pulse never emits (flaky). Drive the loop with an injected fake
+    monotonic clock instead: time advances only when the loop sleeps, on exact
+    quarter-second steps, so the hold branch pulses deterministically.
+    """
+    stub.write_state(
+        settled_state(a={"agent_status": "done", "revision": "0"}, b={"agent_status": "working"})
     )
-    done = stub.run(
-        "a",
-        "b",
-        "--any",
-        "--interval",
-        "0.01",
-        "--hold-interval",
-        "0.03",
-        "--timeout",
-        "600",
-        state=state,
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(
+        targets=["a", "b"], any=True, timeout=1000, interval=0.25, hold_interval=0.5
     )
-    assert done.returncode == herdr_cli.EXIT_HERDR, done.stderr
-    assert "holding a (done, revision 0)" in done.stderr
-    assert "(still waiting)" in done.stderr
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    err = capsys.readouterr().err
+    assert rc == herdr_cli.EXIT_HERDR, err
+    assert "holding a (done, revision 0)" in err
+    assert "(still waiting)" in err
 
 
 def test_timeout_annotates_targets_held_on_revision_zero(stub: StubHarness) -> None:

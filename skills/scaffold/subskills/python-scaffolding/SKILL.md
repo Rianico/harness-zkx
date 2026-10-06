@@ -50,11 +50,11 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` (to
 2. Install: `uv sync --group dev` (pins `uv.lock`; `basedpyright` over `mypy` per `$SKILL_DIR/../basedpyright-expert/SKILL.md`).
 3. Proofread mixed warnings: `pyproject.toml` name/description, `AGENTS.md` 3-section preservation.
 4. Wire verification: `ruff check`, `ruff format --check`, `basedpyright`, `pytest` via `uv run`.
-5. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` + `uv sync && uv run ruff check . && uv run ruff format --check . && uv run basedpyright && uv run pytest`
+5. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor python --dry-run` + `uv sync && uv run ruff check . && uv run ruff format --check . && uv run basedpyright --warnings && uv run pytest`
 
 > [!tip] Verification — before every push/PR
 >
-> - `uv run ruff check . && uv run ruff format --check . && uv run basedpyright && uv run pytest` — if any fails → `BLOCKED`
+> - `uv run ruff check . && uv run ruff format --check . && uv run basedpyright --warnings && uv run pytest` — if any fails → `BLOCKED`
 > - Clean-build after `pyproject.toml` change; restart daemon after type-config change; clear test cache when stale
 
 ## Verification Split
@@ -70,4 +70,4 @@ If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-cove
 ## Relation to Other Subskills
 
 - Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`.
-- CI wiring belongs to `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`; Python CI job runs `uv run pytest` inside the shared verify gate.
+- CI wiring belongs to `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`; Python CI job runs `uv run pytest` inside the shared verify gate, which skips draft PRs and runs once they are ready.
