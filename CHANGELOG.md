@@ -73,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **herdr:** add herdr-label to name a pane and its agent together
 * **herdr:** add herdr-overview for a compact session view
 * **herdr:** add herdr-prompt for byte-exact payload delivery
+* **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
 * **ai-engineering:** bring skill bodies into STE-100 compliance and support --preserve in linter ([#190](https://github.com/Rianico/harness-zkx/issues/190)) (#191)

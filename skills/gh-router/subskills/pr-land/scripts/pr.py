@@ -63,6 +63,10 @@ HEADING_RE = re.compile(r"^#{1,6}\s+\S")
 DIRECTIVE_RE = re.compile(r"^[ \t]*(Landing|Ledger-Waiver):", re.IGNORECASE)
 EMPTY_BULLET_RE = re.compile(r"^[ \t]*[*+-][ \t]*$")
 
+_UNRELEASED_BULLET_RE = re.compile(r"^[*+-]\s+")
+_UNRELEASED_SECTION_RE = re.compile(r"^###\s+")
+_UNRELEASED_VERSION_END_RE = re.compile(r"^## \[[^\]]+\]", re.MULTILINE)
+_UNRELEASED_ATTR_RES: dict[str, re.Pattern[str]] = {}
 SQUASH_TITLE_MAX = 100
 CODE_AUTHORS_TOKEN = "CODE_AUTHORS"
 DEFAULT_TEMPLATE_PATH = Path(".github/pull_request_template.md")
@@ -1477,6 +1481,61 @@ def merge_pr(
     return True
 
 
+def _unreleased_attribution_re(pr_num: str) -> re.Pattern[str]:
+    """Cached end-of-entry attribution matcher for one PR number (keeps re.escape)."""
+    cached = _UNRELEASED_ATTR_RES.get(pr_num)
+    if cached is None:
+        cached = re.compile(r"\(#" + re.escape(pr_num) + r"\)(?:\s*\(BREAKING CHANGE\))?\s*$")
+        _UNRELEASED_ATTR_RES[pr_num] = cached
+    return cached
+
+
+def _read_unreleased_block(cwd: Path | None = None) -> str | None:
+    """Return the ## [Unreleased] block body, or None when absent or unreadable.
+
+    A missing file, undecodable bytes, and a missing Unreleased heading all
+    read as absent (None); the caller picks the advisory.
+    """
+    root = cwd or Path.cwd()
+    try:
+        content = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    except OSError, UnicodeDecodeError:
+        return None
+    if "## [Unreleased]" not in content:
+        return None
+    _, rest = content.split("## [Unreleased]", 1)
+    end = _UNRELEASED_VERSION_END_RE.search(rest)
+    return rest[: end.start()] if end else rest
+
+
+def unreleased_attributes_pr(pr_num: str, cwd: Path | None = None) -> bool:
+    """Return True when the ## [Unreleased] block carries a bullet entry for this PR.
+
+    Scans bullet lines only, and only after a ### section heading inside the
+    block (mirroring parse_unreleased_sections in scripts/changelog-gate.py);
+    an entry attributes N when it ends with (#N), optionally followed by
+    (BREAKING CHANGE). Mirrors ATTRIBUTION_RE in scripts/changelog-gate.py.
+    A missing or unreadable CHANGELOG.md, or no Unreleased block, reads as
+    unattributed (False).
+    """
+    block = _read_unreleased_block(cwd)
+    if block is None:
+        return False
+    attribution_re = _unreleased_attribution_re(pr_num)
+    in_section = False
+    for line in block.splitlines():
+        if _UNRELEASED_SECTION_RE.match(line):
+            in_section = True
+            continue
+        if not _UNRELEASED_BULLET_RE.match(line):
+            continue
+        if not in_section:
+            continue
+        if attribution_re.search(line.rstrip()):
+            return True
+    return False
+
+
 def stamp_changelog(
     head_ref: str,
     pr_num: str,
@@ -1651,12 +1710,59 @@ def main(argv: list[str] | None = None) -> int:
 
         if not options.no_stamp:
             _ = stamp_changelog(head, num)
+            if created and not unreleased_attributes_pr(num):
+                if _read_unreleased_block() is None:
+                    print(
+                        "warning: no ## [Unreleased] section in CHANGELOG.md; "
+                        "the Ledger floor gate requires one before this PR can land. "
+                        f"Add the section with an entry ending in (#{num}).",
+                        file=sys.stderr,
+                    )
+                elif options.draft:
+                    print(
+                        f"note: no ## [Unreleased] entry carries (#{num}); "
+                        "the Ledger floor gate rejects this PR once it goes ready. "
+                        f"Add an entry ending in (#{num}) before you flip it ready "
+                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"warning: no ## [Unreleased] entry carries (#{num}); "
+                        "the Ledger floor gate\n"
+                        f'("#{num} carries no entries in ## [Unreleased]") will reject this PR on the\n'
+                        f"ready flip. Add an entry ending in (#{num}), commit it to this branch, or\n"
+                        "leave the PR draft until the entry lands "
+                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
+                        file=sys.stderr,
+                    )
         elif created:
-            print(
-                f"warning: --no-stamp: head was not stamped for PR #{num} — "
-                "expect a red changelog gate until it is stamped and pushed",
-                file=sys.stderr,
-            )
+            if not unreleased_attributes_pr(num):
+                if _read_unreleased_block() is None:
+                    print(
+                        "warning: no ## [Unreleased] section in CHANGELOG.md; "
+                        "the Ledger floor gate requires one before this PR can land. "
+                        f"Add the section with an entry ending in (#{num}).",
+                        file=sys.stderr,
+                    )
+                elif options.draft:
+                    print(
+                        f"note: --no-stamp: head was not stamped for PR #{num} — "
+                        f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
+                        "(changelog gate) rejects this PR once it goes ready. "
+                        f"Add an entry ending in (#{num}) before you flip it ready.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"warning: --no-stamp: head was not stamped for PR #{num} — "
+                        f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
+                        f'("#{num} carries no entries in ## [Unreleased]") will reject this PR '
+                        "and the changelog gate stays red "
+                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR). "
+                        f"Add an entry ending in (#{num}) and push it, or re-run without --no-stamp.",
+                        file=sys.stderr,
+                    )
 
         if created and not options.draft:
             if not ready_pr(repo, num):
