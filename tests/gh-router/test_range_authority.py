@@ -17,8 +17,6 @@ if str(LIB_DIR) not in sys.path:
 
 from range_authority import MalformedSpec, RangeRefusal, exit_code_for, resolve_range
 
-COMMIT_ENV = {"GIT_CONFIG_NOSYSTEM": "1"}
-
 
 def _git(repo: Path, *args: str) -> str:
     completed = subprocess.run(
@@ -307,4 +305,84 @@ def test_resolution_is_immutable_and_json_ready(
     assert json.loads(json.dumps(payload)) == payload
     assert payload["counts"] == {"commits": 1, "only_in_base": 0}
     with pytest.raises(FrozenInstanceError):
-        resolution.mode = "..."  # type: ignore[misc]
+        resolution.mode = "..."  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def _build_criss_cross(repo: Path) -> None:
+    """Two branches that merge each other's commits: two merge bases."""
+    _ = _git(repo, "init")
+    _ = _git(repo, "config", "user.name", "Tester Author")
+    _ = _git(repo, "config", "user.email", "tester@example.com")
+    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = (repo / "root.txt").write_text("root\n", encoding="utf-8")
+    _ = _git(repo, "add", ".")
+    _ = _git(repo, "commit", "-m", "chore: root")
+    _ = _git(repo, "branch", "-M", "MA")
+    a1 = _commit(repo, "a1.txt", "a1\n", "feat: a1")
+    _ = _commit(repo, "a2.txt", "a2\n", "feat: a2")
+    root = _git(repo, "rev-list", "--max-parents=0", "HEAD")
+    _ = _git(repo, "checkout", "-b", "MB", root)
+    b1 = _commit(repo, "b1.txt", "b1\n", "feat: b1")
+    _ = _commit(repo, "b2.txt", "b2\n", "feat: b2")
+    _ = _git(repo, "-c", "core.editor=true", "merge", "--no-edit", a1)
+    _ = _git(repo, "checkout", "MA")
+    _ = _git(repo, "-c", "core.editor=true", "merge", "--no-edit", b1)
+
+
+def test_two_dot_vs_three_dot_criss_cross(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _build_criss_cross(tmp_path)
+    assert _git(tmp_path, "merge-base", "--all", "MA", "MB").count("\n") == 1
+    merge_base = _git(tmp_path, "merge-base", "MA", "MB").splitlines()[0]
+    expected_two = _git(tmp_path, "rev-list", "--reverse", "MA..MB").splitlines()
+    expected_two_base = _git(tmp_path, "rev-list", "--reverse", "MB..MA").splitlines()
+    expected_three = _git(tmp_path, "rev-list", "--reverse", f"{merge_base}..MB").splitlines()
+    expected_three_base = _git(tmp_path, "rev-list", "--reverse", f"{merge_base}..MA").splitlines()
+
+    two_dot = _resolve(tmp_path, monkeypatch, "MA..MB", "..")
+    three_dot = _resolve(tmp_path, monkeypatch, "MA...MB", "..")
+    assert list(two_dot.commits) != list(three_dot.commits)
+    assert list(two_dot.only_in_base) != list(three_dot.only_in_base)
+    assert list(two_dot.commits) == expected_two
+    assert list(two_dot.only_in_base) == expected_two_base
+    assert list(three_dot.commits) == expected_three
+    assert list(three_dot.only_in_base) == expected_three_base
+
+    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/main", "MA")
+    single_two = _resolve(tmp_path, monkeypatch, "MB", "..")
+    single_three = _resolve(tmp_path, monkeypatch, "MB", "...")
+    assert single_two.mode == ".."
+    assert single_three.mode == "..."
+    assert list(single_two.commits) == list(two_dot.commits)
+    assert list(single_three.commits) == list(three_dot.commits)
+
+
+def test_single_ref_prefers_origin_main_over_master(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _init_repo(tmp_path)
+    main_tip = _git(tmp_path, "rev-parse", "HEAD")
+    _ = _commit(tmp_path, "extra.txt", "extra\n", "feat: extra")
+    master_tip = _git(tmp_path, "rev-parse", "HEAD")
+    assert main_tip != master_tip
+    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/main", main_tip)
+    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/master", master_tip)
+
+    resolution = _resolve(tmp_path, monkeypatch, "HEAD", "...")
+
+    assert resolution.resolved_from == "origin/main"
+    assert resolution.base_ref == "origin/main"
+    assert resolution.merge_base == main_tip
+
+
+def test_single_ref_falls_back_to_origin_master(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _init_repo(tmp_path)
+    _ = _commit(tmp_path, "extra.txt", "extra\n", "feat: extra")
+    master_tip = _git(tmp_path, "rev-parse", "HEAD")
+    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/master", master_tip)
+
+    resolution = _resolve(tmp_path, monkeypatch, "HEAD", "...")
+
+    assert resolution.resolved_from == "origin/master"
+    assert resolution.base_ref == "origin/master"

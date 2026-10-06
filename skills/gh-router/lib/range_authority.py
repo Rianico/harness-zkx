@@ -19,6 +19,9 @@ abbreviated SHA). Only local plumbing runs here: ``rev-parse --verify``,
 ``merge-base`` and ``rev-list`` (plus ``rev-parse --show-toplevel`` for root
 discovery, mirroring ``lib/repo.sh`` practice of never touching the network).
 ``fetch``, ``ls-remote`` and ``remote`` never run.
+``merge_base`` is always the computed merge base of ``base_ref`` and ``head_ref`` — in
+``".."`` mode the range itself starts at ``base_ref`` as given, so consumers must read
+``base_ref`` (not ``merge_base``) for the base actually used.
 """
 
 from __future__ import annotations

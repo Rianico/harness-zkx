@@ -9,6 +9,7 @@ is deterministic) and compares normalised bytes exactly.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -78,3 +79,45 @@ def test_conflict_extractor_golden_bytes(tmp_path: Path) -> None:
     assert completed.returncode == golden["returncode"]
     assert golden["stdout_exact"].splitlines()[1:] == completed.stdout.splitlines()[1:]
     assert _normalise(completed.stdout) == golden["stdout_normalized"].encode("utf-8")
+
+
+FULL_GOLDEN_PATH = FIXTURES_DIR / "conflict_extractor_golden_full.json"
+
+
+def _normalise_full(stdout: str) -> bytes:
+    """Normalise only volatile fields; everything else compares byte-for-byte."""
+    text = re.sub(r"^repo: .*$", "repo: <REPO_ROOT>", stdout, flags=re.M)
+    text = re.sub(
+        r'^(\s*)"repo_root": "[^"]*"(,?)$',
+        r'\1"repo_root": "<REPO_ROOT>"\2',
+        text,
+        flags=re.M,
+    )
+    text = re.sub(r"\b[0-9a-f]{7,40}\b", "<SHA>", text)
+    text = re.sub(r"\b\d+ (second|minute|hour|day|week|month|year)s? ago\b", "<DURATION>", text)
+    return text.encode("utf-8")
+
+
+def test_conflict_extractor_full_goldens(tmp_path: Path) -> None:
+    golden = json.loads(FULL_GOLDEN_PATH.read_text(encoding="utf-8"))
+    assert [case["name"] for case in golden["cases"]] == [
+        "summary",
+        "json",
+        "json_all",
+        "all_capped",
+    ]
+    for case in golden["cases"]:
+        repo = tmp_path / case["name"]
+        repo.mkdir()
+        _build_conflict_repo(repo)
+        # Every recorded argv starts with the repo placeholder, so the command
+        # below replays exactly the argv the fixture records.
+        assert case["argv"][:2] == ["--repo", "<REPO>"]
+        argv = [part if part != "<REPO>" else str(repo) for part in case["argv"]]
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), *argv],
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == case["returncode"]
+        assert _normalise_full(completed.stdout) == case["stdout_normalized"].encode("utf-8")
