@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# pre-commit — runs the repo quality gate before each commit. Escape hatch: git commit --no-verify
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+exec scripts/check.sh "$@"

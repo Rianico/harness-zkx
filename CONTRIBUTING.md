@@ -13,11 +13,11 @@
 
 ## Before PR
 
-`uv run ruff check . && uv run ruff format --check . && uv run scripts/typecheck-budget.py && uv run pytest && uv run python3 scripts/changelog-gate.py ledger` must pass. See `AGENTS.md` for agent rules. The budget is inert until it is seeded once: `uv run scripts/typecheck-budget.py --seed`.
+`bash scripts/check.sh` (runs ruff check, ruff format --check, basedpyright --warnings, pytest) plus `uv run python3 scripts/changelog-gate.py ledger` must pass. The `.githooks/pre-commit` hook runs the gate automatically on commit; escape hatch: `git commit --no-verify`. Setup is one-time per clone: `git config core.hooksPath .githooks` — that setting is repository-local and not versioned, so a fresh clone needs it again. See `AGENTS.md` for agent rules.
 
 `ruff format` is gated too: the verify job runs `uv run ruff format --check .`, so the tree stays formatted. `[tool.ruff] exclude` keeps `*.md` out of that pass — ruff also reformats Python fences inside Markdown, and this repo's 73 reference docs are the product, not code to reflow.
 
-Type checking has two suppression layers, and only one of them is reviewed. `.config/basedpyright-baseline.txt` is the shrink-only budget that `scripts/typecheck-budget.py` enforces; `.basedpyright/baseline.json` is basedpyright's own baseline, applied first, so it masks whatever the budget does not record. Measure the true inventory with that layer set aside — never with `--writebaseline`, which absorbs the budget's own entries:
+Type checking is native: `uv run basedpyright --warnings`. There is no separate budget script anymore. `.basedpyright/baseline.json` is the only remaining baseline; it must stay empty and `tests/test_typecheck_native.py` keeps it that way. Measure the true inventory with that layer set aside — never with `--writebaseline`, which absorbs the current state into a masking baseline:
 
 ```
 uv run basedpyright --baselinefile /dev/null --outputjson > /tmp/tc.json

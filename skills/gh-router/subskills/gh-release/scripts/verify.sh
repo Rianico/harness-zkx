@@ -84,7 +84,7 @@ else
   # `uv run` throughout: the python branch targets uv projects, so bare tool names are not on
   # PATH, and the authoritative CI gate runs these same commands in this same order.
   run_step "ruff check" false uv run ruff check .
-  run_step "basedpyright" false uv run basedpyright
+  run_step "basedpyright" false uv run basedpyright --warnings
   run_step "pytest" true uv run pytest -q
 fi
 

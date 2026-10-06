@@ -1,4 +1,0 @@
-# basedpyright warnings the repo has not paid down yet: `count<TAB>path<TAB>rule`.
-# Shrink-only. `scripts/typecheck-budget.py --update-baseline` rewrites it to the entries that
-# still exist, and reports anything new as a finding instead of absorbing it. Errors are never
-# budgeted: they fail the check outright.
