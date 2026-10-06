@@ -209,7 +209,8 @@ _RULE_SAMPLES: dict[str, tuple[str, bool, str]] = {
 }
 
 
-def test_normalization_rules_match_declared_effects() -> None:
+def test_normaliser_implements_each_declared_rule() -> None:
+    """Scope: the normaliser only. Extractor-side changes are pinned by the golden."""
     golden = json.loads(FULL_GOLDEN_PATH.read_text(encoding="utf-8"))
     declared = golden["cases"][0]["normalization"]
     for rule in declared:
