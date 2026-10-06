@@ -336,3 +336,83 @@ def test_unknown_flag_exits_two_with_usage() -> None:
     result = _run("bash", "scripts/check.sh", "--bogus")
     assert result.returncode == 2
     assert "usage" in result.stderr
+
+
+def _init_flagged_repo(path: Path, *, bare: bool = False) -> Path:
+    """A real repo at `path`, optionally flagged `core.bare = true`."""
+    _ = subprocess.run(
+        ["git", "init", "-q", str(path)],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=STUB_TIMEOUT,
+    )
+    if bare:
+        _ = subprocess.run(
+            ["git", "-C", str(path), "config", "core.bare", "true"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=STUB_TIMEOUT,
+        )
+    return path
+
+
+def _stub_toolchain_env_probe(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    """A fake `uv` that logs its argv plus the git overrides it inherited."""
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    calls = tmp_path / "calls.log"
+    record = 'printf "%s\\nGIT_DIR=%s\\nGIT_WORK_TREE=%s\\n" "$*" "${GIT_DIR-}" "${GIT_WORK_TREE-}"'
+    stub = stub_bin / "uv"
+    _ = stub.write_text(
+        "\n".join(["#!/usr/bin/env bash", f'{record} >> "{calls}"', "exit 0"]) + "\n"
+    )
+    stub.chmod(0o755)
+    env = {**os.environ, "PATH": f"{stub_bin}{os.pathsep}{os.environ['PATH']}"}
+    return env, calls
+
+
+def test_check_script_refuses_bare_flagged_repo(tmp_path: Path) -> None:
+    """A `core.bare=true` shared config must refuse loudly and name the fix.
+
+    Every worktree shares one config, so a stray `core.bare` breaks work-tree
+    commands in the main checkout. Attesting such a tree would report green gates
+    for a repo the caller cannot even `git status`.
+    """
+    tree = tmp_path / "harness"
+    (tree / "scripts").mkdir(parents=True)
+    _ = shutil.copy2(CHECK_SCRIPT, tree / "scripts" / "check.sh")
+    _ = (tree / "pyproject.toml").write_text(
+        '[project]\nname = "claude-skills-harness"\n', encoding="utf-8"
+    )
+    _ = _init_flagged_repo(tree, bare=True)
+    env, calls = _stub_toolchain(tmp_path)
+    result = _run(
+        "bash", str(tree / "scripts" / "check.sh"), cwd=tree, env=env, timeout=STUB_TIMEOUT
+    )
+    assert result.returncode == 4, result.stdout + result.stderr
+    assert "flagged bare" in result.stderr
+    assert "git config core.bare false" in result.stderr
+    assert "checking" not in result.stdout, "refusal attested a bare tree"
+    assert not calls.exists(), "refusal ran gates anyway"
+
+
+def test_check_script_gates_inherit_no_caller_git_dir(tmp_path: Path) -> None:
+    """A caller's GIT_DIR must not reach the gates.
+
+    GIT_DIR outranks `cwd` and `-C`, so a leaked one redirects every git write the
+    pytest gate spawns into the caller's repo config — the leak that flags a real
+    repo bare and stamps a fixture identity into its shared config.
+    """
+    env, calls = _stub_toolchain_env_probe(tmp_path)
+    foreign = _make_foreign_repo(tmp_path)
+    env["GIT_DIR"] = str(foreign / ".git")
+    env["GIT_WORK_TREE"] = str(foreign)
+    result = _run("bash", str(CHECK_SCRIPT), env=env, timeout=STUB_TIMEOUT)
+    assert result.returncode == 0, result.stdout + result.stderr
+    records = calls.read_text().splitlines()
+    overrides = [line for line in records if line.startswith(("GIT_DIR=", "GIT_WORK_TREE="))]
+    assert set(overrides) == {"GIT_DIR=", "GIT_WORK_TREE="}, overrides
+    argv = [line for line in records if not line.startswith(("GIT_DIR=", "GIT_WORK_TREE="))]
+    assert argv == STUB_GATE_LOG
