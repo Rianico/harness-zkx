@@ -2,8 +2,7 @@
   "version": 1,
   "argv": [
     "--repo",
-    "<REPO>",
-    "--summary"
+    "<REPO>"
   ],
   "returncode": 0,
   "stdout_exact": "repo: /private/tmp/ra-golden/repo\nconflicted files: 1\n- app.py | type=text | stages=2,3 | hunks=1\nuse --file <path> for compact hunk details or --all for every file\n",

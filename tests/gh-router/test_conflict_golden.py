@@ -84,7 +84,35 @@ def test_conflict_extractor_golden_bytes(tmp_path: Path) -> None:
 FULL_GOLDEN_PATH = FIXTURES_DIR / "conflict_extractor_golden_full.json"
 
 
-def _normalise_full(stdout: str) -> bytes:
+# SHAs normalize to value-anchored tokens: each output's own intent blocks say
+# which sha is ours and which is theirs, so swapping the two slots changes the
+# normalized text and the guard fails. A global hex substitution would mask
+# exactly that inversion. The fixture declares this same list per case; the
+# guard asserts the declaration matches, so neither can drift silently.
+_NORMALIZATION_RULES: list[str] = [
+    "repo line value -> <REPO_ROOT> (whole-line match)",
+    "intent SHAs value-anchored -> <OURS_SHA> / <THEIRS_SHA>",
+    "relative durations ('N unit(s) ago') -> <DURATION>",
+]
+
+
+def _intent_shas(stdout: str, is_json: bool) -> tuple[str, str] | None:
+    """Return (ours_sha, theirs_sha) straight from the output's intent blocks."""
+    if is_json:
+        intent = json.loads(stdout)["conflicted_files"][0]["author_intent"]
+        assert intent["ours"]["ref"] == "HEAD"
+        assert intent["theirs"]["ref"] == "MERGE_HEAD"
+        return intent["ours"]["sha"], intent["theirs"]["sha"]
+    ours = re.search(r"ours \(HEAD\): \[([0-9a-f]{7,40})\]", stdout)
+    theirs = re.search(r"theirs \(MERGE_HEAD\): \[([0-9a-f]{7,40})\]", stdout)
+    if ours is None or theirs is None:
+        assert ours is None and theirs is None
+        assert not re.search(r"\b[0-9a-f]{7,40}\b", stdout), "unexpected volatile sha"
+        return None
+    return ours.group(1), theirs.group(1)
+
+
+def _normalise_full(stdout: str, is_json: bool) -> bytes:
     """Normalise only volatile fields; everything else compares byte-for-byte."""
     text = re.sub(r"^repo: .*$", "repo: <REPO_ROOT>", stdout, flags=re.M)
     text = re.sub(
@@ -93,7 +121,15 @@ def _normalise_full(stdout: str) -> bytes:
         text,
         flags=re.M,
     )
-    text = re.sub(r"\b[0-9a-f]{7,40}\b", "<SHA>", text)
+    anchored = _intent_shas(text, is_json)
+    if anchored is not None:
+        ours_sha, theirs_sha = anchored
+        assert ours_sha != theirs_sha
+        slots = re.compile(f"\\b({re.escape(theirs_sha)}|{re.escape(ours_sha)})\\b")
+        text = slots.sub(
+            lambda match: "<THEIRS_SHA>" if match.group(1) == theirs_sha else "<OURS_SHA>",
+            text,
+        )
     text = re.sub(r"\b\d+ (second|minute|hour|day|week|month|year)s? ago\b", "<DURATION>", text)
     return text.encode("utf-8")
 
@@ -112,6 +148,7 @@ def test_conflict_extractor_full_goldens(tmp_path: Path) -> None:
         _build_conflict_repo(repo)
         # Every recorded argv starts with the repo placeholder, so the command
         # below replays exactly the argv the fixture records.
+        assert case["normalization"] == _NORMALIZATION_RULES
         assert case["argv"][:2] == ["--repo", "<REPO>"]
         argv = [part if part != "<REPO>" else str(repo) for part in case["argv"]]
         completed = subprocess.run(
@@ -120,4 +157,7 @@ def test_conflict_extractor_full_goldens(tmp_path: Path) -> None:
             text=True,
         )
         assert completed.returncode == case["returncode"]
-        assert _normalise_full(completed.stdout) == case["stdout_normalized"].encode("utf-8")
+        is_json = "--json" in case["argv"]
+        assert _normalise_full(completed.stdout, is_json) == case["stdout_normalized"].encode(
+            "utf-8"
+        )
