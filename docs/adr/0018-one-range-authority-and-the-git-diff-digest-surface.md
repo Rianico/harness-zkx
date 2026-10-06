@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-Agents need a commit range as context. Two consumers need the same answer: the new digest surface and the landing script (`skills/gh-router/subskills/pr-land/scripts/pr.py`). Each resolves a base today, or will soon, with its own ad-hoc order.
+Agents need a commit range as context. Three consumers need the same answer: the new digest surface, the landing script (`skills/gh-router/subskills/pr-land/scripts/pr.py`), and the conflict extractor (issue #201). Each resolves a base today, or will soon, with its own ad-hoc order.
 
 The existing diff analyser cannot grow into this role. It is diff-only and PR-shaped. Placing the resolver inside the new subskill spreads the same risk: sibling subskills then depend on one subskill for a shared invariant.
 
@@ -31,6 +31,7 @@ The payload is versioned `schema: 1`. YAML is the default rendering and JSON is 
 
 ## Consequences
 
-- `git-diff-digest` renders the Diff Digest; `pr.py` reuses the same base without duplicating the order.
+- `git-diff-digest` renders the Diff Digest; `pr.py` and the conflict extractor (issue #201) reuse the same base without duplicating the order.
 - Presentation changes stay in the subskill. Range semantics stay in the shared module.
 - **Diff Digest**, **Range**, **Only in base**, and **Fingerprint** enter `CONTEXT.md`, disambiguated from **Changelog Digest**.
+- The local diff analyser (`skills/gh-router/subskills/pr-enhance/scripts/analyze-pr.py`) keeps its drafting-schema role; its diff-analysis role retires with its callers in #205.
