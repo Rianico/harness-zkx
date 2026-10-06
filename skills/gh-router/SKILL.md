@@ -5,11 +5,12 @@ description: >-
 argument-hint: |-
   gh-release [--dry-run] -- changelog and publish via dispatch
   pr-conflict [--file PATH] [--all] [--json] -- extract conflict hunks and commit intent
+  git-diff-digest <spec> [PATH_FILTER] [--commit SHA] [--file PATH] [--hunks] [--max-lines N] [--yaml|--json] -- brief a commit range
   pr-enhance [base|pr_url] -- PR description generation
   pr-refine <number> -- take over a contributor's PR (Flow A/B), then hand to pr-land
   pr-land [--watch --merge] -- create PR, watch checks, squash-merge
 metadata:
-  manage: [gh-release, pr-land, pr-enhance, pr-refine, pr-conflict]
+  manage: [gh-release, pr-land, pr-enhance, pr-refine, pr-conflict, git-diff-digest]
 ---
 
 # GH Router
@@ -23,6 +24,7 @@ brief output — do not re-derive it with `gh pr view`, `gh run list`, or `gh ap
 | --- | --- | --- |
 | **0: Orientation** | | |
 | See where I stand | `$SKILL_DIR/scripts/state.sh` | 4 lines: branch→base divergence · PR state + checks · changelog guard · base tip |
+| Brief a commit range | `uv run $SKILL_DIR/subskills/git-diff-digest/scripts/brief.py <spec>` | commits, files, areas, signals |
 | **1: Prep & Authoring** | | |
 | Install the canonical PR template | `$SKILL_DIR/scripts/install-template.sh [--target DIR] [--check|--force|--dry-run]` | `installed:`/`already installed:`/`clean:`/`dry-run:` exit 0 · `drift:`/`missing:`/`refused:` exit 1 · usage exit 2 · missing/unusable source exit 3; `--target` must be an existing directory (default `.`), never overwrites without `--force` |
 | Draft PR body from the diff | `uv run $SKILL_DIR/subskills/pr-enhance/scripts/analyze-pr.py` | changed files, stats, categories |
@@ -54,6 +56,7 @@ Run ids come from `$SKILL_DIR/scripts/ci.sh runs`, a PR's checks, or `gh run lis
 | `pr-conflict` | extract conflict hunks + commit intent → reconcile → continue | `git conflict`, `merge conflict`, `rebase conflict` |
 | `pr-enhance` | own-PR description and diagram generation | `submit PR`, own-PR prose |
 | `pr-refine` | refine / take over someone's PR up to push | `refine`, `take over`, `supersede`, land someone's PR |
+| `git-diff-digest` | range → brief payload (commits, files, areas, signals) | `what changed`, `base..head range`, `range brief` |
 
 Read `$SKILL_DIR/subskills/<name>/SKILL.md` for full flag options (`--title`, `--body-file`, `--check`, `--no-stamp`), title length limits, exit codes, and failure contracts.
 

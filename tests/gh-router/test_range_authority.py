@@ -268,6 +268,20 @@ def test_malformed_specs_exit2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, 
         assert exit_code_for(error) == 2
 
 
+def test_triple_colon_is_single_ref_refusal_exit3(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(RangeRefusal):
+        _ = resolve_range(":::", "..")
+    try:
+        _ = resolve_range(":::", "..")
+    except RangeRefusal as error:
+        assert exit_code_for(error) == 3
+
+
 def test_bogus_mode_is_malformed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _ = _init_repo(tmp_path)
     monkeypatch.chdir(tmp_path)
