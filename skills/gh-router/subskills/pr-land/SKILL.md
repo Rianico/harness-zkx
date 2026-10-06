@@ -31,7 +31,7 @@ Flags: `--base` (default `default_branch()` — push-remote slug → `origin/HEA
 
 The caller authors the description. Draft it with `pr-enhance` before landing:
 
-1. `uv run $SKILL_DIR/../pr-enhance/scripts/analyze-pr.py [base|pr_url] > tmp/pr.json`
+1. `uv run $SKILL_DIR/../git-diff-digest/scripts/brief.py '<base>...HEAD' --pr --yaml > tmp/pr.json` — the git-diff-digest brief is the change-fact source (replace `<base>` with the PR base).
 2. Draft `tmp/pr_body.md` from `tmp/pr.json` — see [pr-enhance](../pr-enhance/SKILL.md) §Workflow step 2.
 3. Pass `--body-file tmp/pr_body.md` to `pr.py`.
 
