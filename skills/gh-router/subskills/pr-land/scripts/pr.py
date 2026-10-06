@@ -38,6 +38,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
+from range_authority import RangeRefusal, RangeResolution, resolve_range
+
 SLUG_PATTERN = re.compile(r"^[^/: \t\r\n]+/[^/: \t\r\n]+$")
 TRAILER_RE = re.compile(r"^[ \t]*co-authored-by:[ \t]*", re.IGNORECASE)
 EMAIL_KEY_RE = re.compile(r"^[ \t]*co-authored-by:[^<]*<([^<>]+)>", re.IGNORECASE)
@@ -365,6 +370,67 @@ def default_branch(repo: str, cwd: Path | None = None) -> str | None:
     return None
 
 
+def _authority_resolve(spec: str, mode: str, cwd: Path | None = None) -> RangeResolution:
+    """Resolve *spec* through the shared range authority inside the target repo.
+
+    resolve_range discovers its repo from the process cwd, so temporarily
+    chdir when the caller targets another checkout. Restores cwd on return.
+    """
+    if cwd is None:
+        return resolve_range(spec, mode)
+    previous = Path.cwd()
+    target = cwd if cwd.is_absolute() else previous / cwd
+    os.chdir(target)
+    try:
+        return resolve_range(spec, mode)
+    finally:
+        os.chdir(previous)
+
+
+def _local_base_from_authority(cwd: Path | None = None) -> str:
+    """Resolve the local base through the shared range authority (bare branch name).
+
+    Single-ref resolution walks the authority's ordered local candidates
+    (origin/HEAD, then origin/main, then origin/master) without touching the
+    network. The result is stripped to the bare branch name GitHub's
+    `-f base=` expects.
+    """
+    resolution = _authority_resolve("HEAD", "..", cwd)
+    base_ref = resolution.base_ref
+    if base_ref == "origin/HEAD":
+        sym = run_command(
+            ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+            cwd=cwd,
+        )
+        if sym.returncode == 0 and sym.stdout.strip():
+            out = sym.stdout.strip()
+            if out.startswith("origin/"):
+                out = out.removeprefix("origin/")
+            if out:
+                return out
+        raise RefusalError(
+            "cannot resolve PR base: the git-diff-digest range authority "
+            "resolved origin/HEAD but it names no branch"
+        )
+    if base_ref.startswith("origin/"):
+        return base_ref.removeprefix("origin/")
+    return base_ref
+
+
+def _digest_range_spec(base: str, head_ref: str, cwd: Path | None = None) -> str:
+    """Build the `git log` range so trailer authors equal the digest's commit set.
+
+    The resolved base goes first as a two-dot range; when it cannot resolve
+    locally the digest's own single-ref derivation is used instead. Raises
+    RangeRefusal when neither resolves.
+    """
+    try:
+        resolution = _authority_resolve(f"{base}..{head_ref}", "..", cwd)
+    except RangeRefusal:
+        resolution = _authority_resolve(head_ref, "..", cwd)
+    return f"{resolution.base_ref}..{head_ref}"
+
+
 def resolve_base(base: str | None, repo: str, cwd: Path | None = None) -> str:
     if base:
         return base
@@ -381,7 +447,14 @@ def resolve_base(base: str | None, repo: str, cwd: Path | None = None) -> str:
             out = out.removeprefix("origin/")
         if out:
             return out
-    return "main"
+    try:
+        return _local_base_from_authority(cwd=cwd)
+    except RangeRefusal as exc:
+        raise RefusalError(
+            "cannot resolve PR base: no explicit --base, no GitHub default_branch, "
+            "and the git-diff-digest range authority found no local base "
+            f"({exc})"
+        ) from exc
 
 
 def resolve_title_and_body(
@@ -757,8 +830,8 @@ def refuse_unfilled_body(body: str) -> None:
     else:
         print("refusing PR: no description supplied", file=sys.stderr)
     print(
-        "remediation: draft the description via the pr-enhance workflow "
-        "(analyze-pr.py → draft → tmp/pr_body.md), then pass it with --body-file",
+        "remediation: draft the description from the git-diff-digest surface "
+        "(skills/gh-router/subskills/git-diff-digest), then pass it with --body-file",
         file=sys.stderr,
     )
     raise RefusalError("PR body is empty or an unfilled template")
@@ -1145,16 +1218,18 @@ def check_trailers(
         except RefusalError:
             return 1
 
-        log_res = run_command(
-            ["git", "log", f"origin/main..{head_ref}", "--pretty=format:\t%an\t%ae"],
-            cwd=cwd,
-        )
-        if log_res.returncode != 0:
+        try:
+            base = resolve_base(None, repo, cwd=cwd)
+            digest_range = _digest_range_spec(base, head_ref, cwd=cwd)
+        except RefusalError, RangeRefusal:
+            digest_range = None
+        log_res: subprocess.CompletedProcess[str] | None = None
+        if digest_range is not None:
             log_res = run_command(
-                ["git", "log", f"main..{head_ref}", "--pretty=format:\t%an\t%ae"],
+                ["git", "log", digest_range, "--pretty=format:\t%an\t%ae"],
                 cwd=cwd,
             )
-        if log_res.returncode != 0:
+        if log_res is None or log_res.returncode != 0:
             log_res = run_command(
                 ["git", "log", "-1", "--pretty=format:\t%an\t%ae", head_ref],
                 cwd=cwd,
@@ -1352,8 +1427,8 @@ def create_or_reuse_pr(
     if not body_supplied:
         print("refusing to open PR: no --body/--body-file supplied", file=sys.stderr)
         print(
-            "remediation: draft the description via the pr-enhance workflow "
-            "(analyze-pr.py → draft → tmp/pr_body.md), then re-run with --body-file",
+            "remediation: draft the description from the git-diff-digest surface "
+            "(skills/gh-router/subskills/git-diff-digest), then re-run with --body-file",
             file=sys.stderr,
         )
         raise RefusalError("no PR body supplied")
