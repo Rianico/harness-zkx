@@ -10,6 +10,9 @@ set -euo pipefail
 # `cd -P`/`pwd -P` resolve the root physically, so the printed root is the true
 # directory (a symlinked entry point cannot attest the directory it was linked into).
 unset CDPATH
+# A parent's GIT_DIR/GIT_WORK_TREE outranks both `cwd` and `git -C`, so a stray one
+# would redirect every git call the gates spawn into another repo's config.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd -P)"
 # Loud ownership check: a wrong tree must fail, never attest. The root's
@@ -22,6 +25,15 @@ if [ ! -f "$ROOT_PYPROJECT" ] ||
   exit 3
 fi
 cd "$REPO_ROOT"
+# Refuse to grade a repo flagged bare: worktrees share one config, so a stray
+# `core.bare = true` breaks every work-tree command in the main checkout.
+if command -v git >/dev/null 2>&1 &&
+  [ "$(git config --get core.bare 2>/dev/null || true)" = "true" ]; then
+  echo "refusing: $REPO_ROOT is flagged bare (core.bare=true)" >&2
+  echo "fix: git config core.bare false" >&2
+  exit 4
+fi
+
 echo "==> checking $REPO_ROOT"
 
 usage() {
