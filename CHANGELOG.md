@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **gh-router:** one range authority and the git-diff-digest range surface with brief payload
+* **gh-router:** one range authority and the git-diff-digest range surface with brief payload, pr landing view, and verify readout
 * **ci:** draft PR handshake, staged fail-fast CI pipeline, and scaffold typecheck-budget retirement (#198)
 * **ci:** replace typecheck warning budget with native basedpyright gate and unify local checks in check.sh (#197)
 * **gh-router:** canonical PR template, installer script, fail-closed squash gate, and scaffold retirement (#196)

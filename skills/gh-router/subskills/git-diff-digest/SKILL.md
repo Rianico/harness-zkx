@@ -4,7 +4,7 @@ description: >-
   Commit-range brief payloads from local git history. Resolves a caller-supplied spec through the shared range authority and emits versioned commit, file, area, and signal rows with honest caps. Use when an agent needs what-changed context for a base..head interval without raw gh or network calls.
 arguments: range_spec
 argument-hint: |-
-  "<spec> [PATH_FILTER] [--mode ..|...] [--commit SHA] [--file PATH] [--hunks] [--context N] [--max-lines N] [--group-by area|category|status] [--yaml|--json]"
+  "<spec> [PATH_FILTER] [--mode ..|...] [--commit SHA] [--file PATH] [--hunks] [--context N] [--max-lines N] [--group-by area|category|status] [--yaml|--json] [--pr [SPEC]] [--verify FINGERPRINT]"
 metadata:
   managed-by: gh-router
 ---
@@ -23,7 +23,7 @@ uv run $SKILL_DIR/scripts/brief.py 'main...HEAD' --yaml > tmp/range.yaml
 uv run $SKILL_DIR/scripts/brief.py 'a1b2c3 d4e5f6' --mode .. --commit a1b2c3 --hunks
 ```
 
-Default output is the text brief (precomputed overview: commit count+kinds, file counts by change kind, per-area rollup, churn ranking, test-line share, author count, date span). `--yaml` is the structured default, `--json` the alternate; both decode to equal mappings. Drill down with `--commit`, `--file`, `--hunks` (`--context N`), `--max-lines N`, `--group-by area|category|status`, and an optional `PATH_FILTER`. Full flag and payload detail lives in [references/digest-schema.md](references/digest-schema.md).
+Default output is the text brief (precomputed overview: commit count+kinds, file counts by change kind, per-area rollup, churn ranking, test-line share, author count, date span). `--yaml` is the structured default, `--json` the alternate; both decode to equal mappings. Drill down with `--commit`, `--file`, `--hunks` (`--context N`), `--max-lines N`, `--group-by area|category|status`, and an optional `PATH_FILTER`. `--pr [SPEC]` (default `HEAD`) adds the `landing` block for the same range; `--verify FINGERPRINT` recomputes the range fingerprint and reports hit or mismatch. Full flag and payload detail lives in [references/digest-schema.md](references/digest-schema.md).
 
 ## Invariants & Gates
 
@@ -31,7 +31,7 @@ Default output is the text brief (precomputed overview: commit count+kinds, file
 - **Honest Caps**: `truncated.*` counts omitted rows (0 when none); `range.counts` always carries true totals; every capped block prints its remainder plus a ready-to-paste rerun command quoting the same spec.
 - **Full Bodies**: commit bodies render untruncated with conventional kind/scope, `#N`/sha refs, and each commit's own file rows.
 - **No Directives**: the payload carries facts only — commits, files, areas, signals — and never guidance prose.
-- **Fail-Loud Exits**: `0` ok · `2` malformed spec or usage · `3` refusal (unknown ref, commit outside the interval) · `1` unexpected failure.
+- **Fail-Loud Exits**: `0` ok (range, pr, verify hit) · `2` malformed spec, fingerprint shape, or usage · `3` refusal (unknown ref, commit outside the interval, empty pr range, verify mismatch) · `1` unexpected failure.
 
 ## Flow
 

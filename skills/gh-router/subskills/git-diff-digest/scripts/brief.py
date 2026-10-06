@@ -21,7 +21,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 _BRIEF_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
 if _BRIEF_LIB_DIR not in sys.path:
@@ -39,10 +39,10 @@ _BRIEF_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 _BRIEF_HELP_LINES = (
     "Usage: brief.py SPEC [PATH_FILTER] [options]",
     "Brief a commit interval through the shared range authority (local git only).",
-    "  SPEC                 range spec, e.g. 'base...HEAD' or 'a1b2c3 d4e5f6'",
+    "  SPEC                 range spec, e.g. 'base...HEAD' or 'a1b2c3 d4e5f6' (--pr [SPEC] landing view, default HEAD)",
     "  PATH_FILTER          optional path prefix narrowing file and area rows",
     "  --mode ..|...        operator when SPEC carries none (default: ...)",
-    "  --commit SHA          narrow commit rows to one member of the interval",
+    "  --commit SHA          narrow commit rows to one member (--verify FINGERPRINT checks range fingerprint)",
     "  --file PATH           repeatable path narrowing file and area rows",
     "  --hunks              include unified hunks in text output (--context N)",
     "  --max-lines N        cap per capped block; remainder printed (default: 40)",
@@ -212,6 +212,18 @@ class _BriefTruncated(TypedDict):
     commits: int
 
 
+class _BriefLanding(TypedDict):
+    commits: int
+    conventional: int
+    multi_entry: bool
+
+
+class _BriefVerification(TypedDict):
+    expected: str
+    actual: str
+    ok: bool
+
+
 class _BriefPayload(TypedDict):
     schema: int
     range: _BriefRange
@@ -220,6 +232,8 @@ class _BriefPayload(TypedDict):
     files: list[_BriefFile]
     signals: _BriefSignals
     truncated: _BriefTruncated
+    landing: NotRequired[_BriefLanding]
+    verification: NotRequired[_BriefVerification]
 
 
 class _BriefNumstatRow(TypedDict):
@@ -249,6 +263,8 @@ class _BriefArgs:
     brief_yaml: bool
     brief_json: bool
     brief_help: bool
+    pr: str | None
+    verify: str | None
 
 
 def _parse_brief_conventional(subject: str) -> tuple[str | None, str | None, bool]:
@@ -438,12 +454,14 @@ def _build_brief(
     file_filter: list[str],
     group_by: str,
     max_lines: int,
+    want_landing: bool = False,
 ) -> tuple[_BriefPayload, str, str]:
     """Assemble the payload; also returns the (old, new) diff endpoints."""
     resolution = resolve_range(spec_in, mode)
     wanted = [path_filter] if path_filter else []
     wanted.extend(file_filter)
     commits = [_read_brief_commit(repo_root, sha) for sha in resolution.commits]
+    full_commits = list(commits)
     if commit_filter is not None:
         wanted_commit = commit_filter.lower()
         if not re.fullmatch(r"[0-9a-f]{4,40}", wanted_commit):
@@ -549,6 +567,14 @@ def _build_brief(
             "commits": len(commits) - len(shown_commits),
         },
     }
+    if want_landing:
+        conventional = sum(1 for entry in full_commits if entry["type"] is not None)
+        total = len(full_commits)
+        payload["landing"] = {
+            "commits": total,
+            "conventional": conventional,
+            "multi_entry": total > 1,
+        }
     return (payload, old_endpoint, new_endpoint)
 
 
@@ -683,6 +709,13 @@ def render_brief_text(
         + ", ".join(signals["evidence_candidates"])
         + "]"
     )
+    landing = payload.get("landing")
+    if landing is not None:
+        multi = "yes" if landing["multi_entry"] else "no"
+        lines.append(
+            f"landing: commits {landing['commits']} "
+            f"conventional {landing['conventional']} multi-entry {multi}"
+        )
     return "\n".join(lines)
 
 
@@ -703,6 +736,47 @@ def _read_brief_hunks(
     return hunks
 
 
+def _resolve_pr_spec(spec: str | None, pr: str) -> str:
+    """Resolve the pr range spec from positional SPEC and the --pr value."""
+    if pr != "HEAD":
+        if spec is not None:
+            raise MalformedSpec("--pr SPEC and positional SPEC are exclusive")
+        return pr
+    if spec is not None:
+        return spec
+    return "HEAD"
+
+
+def _is_brief_fingerprint(value: str) -> bool:
+    """Check the expected fingerprint shape (64 hex chars)."""
+    return re.fullmatch(r"[0-9a-fA-F]{64}", value.strip()) is not None
+
+
+def render_verify_hit_text(payload: _BriefPayload) -> str:
+    """Render the verify hit readout with fingerprint and base provenance."""
+    block = payload["range"]
+    return (
+        f"brief '{block['spec_in']}' ({block['mode']}): verified fingerprint "
+        f"{block['fingerprint']} via {block['resolved_from']} "
+        f"merge-base {block['merge_base'][:12]} only-in-base {block['only_in_base']}"
+    )
+
+
+def build_verify_mismatch_error(
+    spec_in: str, expected: str, payload: _BriefPayload
+) -> RangeRefusal:
+    """Name the moved field set when the recomputed fingerprint differs."""
+    block = payload["range"]
+    actual = block["fingerprint"]
+    return RangeRefusal(
+        f"fingerprint mismatch for '{spec_in}': expected {expected} got {actual} "
+        f"(spec '{block['spec_in']}' mode {block['mode']} "
+        f"merge_base {block['merge_base']} via {block['resolved_from']} "
+        f"commits {block['counts']['commits']}); "
+        "check spec, merge_base, or commit set"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="brief.py", add_help=False)
     _ = parser.add_argument("spec", nargs="?", default=None)
@@ -717,6 +791,8 @@ def main() -> int:
     _ = parser.add_argument("--group-by", default="area")
     _ = parser.add_argument("--yaml", dest="brief_yaml", action="store_true")
     _ = parser.add_argument("--json", dest="brief_json", action="store_true")
+    _ = parser.add_argument("--pr", nargs="?", const="HEAD", default=None)
+    _ = parser.add_argument("--verify", default=None)
     _ = parser.add_argument("-h", "--help", dest="brief_help", action="store_true")
     ns = parser.parse_args()
     args = _BriefArgs(
@@ -733,12 +809,14 @@ def main() -> int:
         brief_yaml=bool(ns.brief_yaml),
         brief_json=bool(ns.brief_json),
         brief_help=bool(ns.brief_help),
+        pr=str(ns.pr) if ns.pr is not None else None,
+        verify=str(ns.verify) if ns.verify is not None else None,
     )
     if args.brief_help:
         print("\n".join(_BRIEF_HELP_LINES))
         return 0
-    if not args.spec:
-        parser.error("SPEC is required")
+    if args.pr is not None and args.verify is not None:
+        parser.error("--pr and --verify are exclusive")
     if args.brief_yaml and args.brief_json:
         parser.error("--yaml and --json are exclusive")
     if args.max_lines <= 0:
@@ -749,19 +827,90 @@ def main() -> int:
         parser.error("--mode must be .. or ...")
     if args.group_by not in ("area", "category", "status"):
         parser.error("--group-by must be area, category, or status")
+    pr_spec = ""
+    if args.pr is not None:
+        if args.path_filter is not None and args.pr != "HEAD":
+            parser.error("--pr SPEC takes no positional PATH_FILTER; use --file")
+    elif args.verify is not None:
+        if not args.spec:
+            parser.error("SPEC is required")
+        if not _is_brief_fingerprint(args.verify):
+            parser.error("--verify needs a 64-char fingerprint")
+    else:
+        if not args.spec:
+            parser.error("SPEC is required")
     try:
         repo_root = find_repo_root(Path(args.repo).resolve())
         os.chdir(repo_root)
-        payload, old_endpoint, new_endpoint = _build_brief(
-            args.spec,
-            args.mode,
-            repo_root,
-            args.path_filter,
-            args.commit,
-            args.file,
-            args.group_by,
-            args.max_lines,
-        )
+        if args.pr is not None:
+            assert args.pr is not None
+            pr_spec = _resolve_pr_spec(args.spec, args.pr)
+            payload, old_endpoint, new_endpoint = _build_brief(
+                pr_spec,
+                args.mode,
+                repo_root,
+                args.path_filter,
+                args.commit,
+                args.file,
+                args.group_by,
+                args.max_lines,
+                True,
+            )
+            if payload["range"]["counts"]["commits"] == 0:
+                only = payload["range"]["only_in_base"]
+                raise RangeRefusal(
+                    "head is behind its base; nothing to land "
+                    f"\u2014 rebase or check the base (only-in-base {only})"
+                )
+        elif args.verify is not None:
+            assert args.spec is not None
+            payload, old_endpoint, new_endpoint = _build_brief(
+                args.spec,
+                args.mode,
+                repo_root,
+                args.path_filter,
+                args.commit,
+                args.file,
+                args.group_by,
+                args.max_lines,
+            )
+            actual = payload["range"]["fingerprint"]
+            expected = args.verify.strip().lower()
+            if actual.lower() != expected:
+                raise build_verify_mismatch_error(args.spec, expected, payload)
+            payload["verification"] = {
+                "expected": expected,
+                "actual": actual,
+                "ok": True,
+            }
+            if args.brief_json:
+                print(json.dumps(payload, indent=2))
+                return 0
+            if args.brief_yaml:
+                try:
+                    import yaml
+                except ImportError:
+                    print(
+                        "brief: structured YAML needs the pyyaml dependency",
+                        file=sys.stderr,
+                    )
+                    return 1
+                print(yaml.safe_dump(payload, sort_keys=False), end="")
+                return 0
+            print(render_verify_hit_text(payload))
+            return 0
+        else:
+            assert args.spec is not None
+            payload, old_endpoint, new_endpoint = _build_brief(
+                args.spec,
+                args.mode,
+                repo_root,
+                args.path_filter,
+                args.commit,
+                args.file,
+                args.group_by,
+                args.max_lines,
+            )
     except (MalformedSpec, RangeRefusal) as error:
         print(f"brief: {error}", file=sys.stderr)
         return exit_code_for(error)

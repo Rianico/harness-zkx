@@ -14,8 +14,9 @@ uv run $SKILL_DIR/scripts/brief.py SPEC [PATH_FILTER] [options]
 `SPEC` is `base...head`, `base..head`, a single ref (base auto-resolved:
 explicit base, then `origin/HEAD`, `origin/main`, `origin/master`), or a
 whitespace-separated sha pair. When `SPEC` carries no operator, `--mode`
-(`..` or `...`, default `...`) applies. `PATH_FILTER` narrows file and area
-rows by exact path or subtree prefix.
+(`..` or `...`, default `...`) applies. `--pr [SPEC]` defaults to `HEAD` as a
+single ref with the same base order and `--mode` applying. `PATH_FILTER`
+narrows file and area rows by exact path or subtree prefix.
 
 ## Flags
 
@@ -31,6 +32,8 @@ rows by exact path or subtree prefix.
 | `--group-by KEY` | Area rollup key: `area` (top directory), `category`, or `status`. |
 | `--yaml` | Structured payload as YAML (the structured default). |
 | `--json` | Structured payload as JSON (alternate; decodes to an equal mapping). |
+| `--pr [SPEC]` | Landing view for the range through the range authority only (local git only); `SPEC` optional, default `HEAD` as a single ref with `--mode` applying; adds the `landing` block to the text brief and the payload; zero-commit head refuses exit `3`. |
+| `--verify FINGERPRINT` | Recompute the range fingerprint for `SPEC` and compare to the expected 64-char value: hit exits `0` with confirmation, miss exits `3` naming `spec`, `merge_base`, or the commit set; malformed values exit `2`. |
 
 `--yaml` and `--json` are exclusive. `--hunks` affects the text brief only,
 so the structured keys below stay fixed.
@@ -58,7 +61,8 @@ so the structured keys below stay fixed.
   (manifest paths changed), `changelog` (bool), `renames` (new paths),
   `evidence_candidates` (changed test and workflow paths).
 - `truncated`: `files` and `commits` omitted-row counts (`0` when none).
-
+- `landing` (pr view only): `commits` (range commit count), `conventional` (count of conventional subjects), `multi_entry` (true when the change set carries more than one commit that would each merit a changelog entry, i.e. `commits > 1`). Rendered in the text brief and the payload.
+- `verification` (verify view with `--json`/`--yaml` on hit): `expected`, `actual`, `ok`.
 `PATH_FILTER` / `--file` narrow the file view (`files`, `areas`,
 `range.counts` over that view); `signals` and the fingerprint stay
 range-wide. `--commit` narrows commit rows only.
@@ -71,9 +75,16 @@ range-wide. `--commit` narrows commit rows only.
   a ready-to-paste rerun quoting the same spec, e.g.
   `uv run $SKILL_DIR/subskills/git-diff-digest/scripts/brief.py 'main...HEAD' --mode ... --max-lines 42`.
 - **Fingerprint**: `sha256(spec_in, mode, merge_base, ordered commit shas)`.
+  Emitted in every readout (range, pr, verify); `resolved_from` is present in
+  text and payload; `only_in_base` is present in the text brief.
   Caps and flags change the rendering, never the fingerprint.
+- **Pr**: full range payload plus `landing`; zero-commit head refuses exit `3`
+  with a model-facing fix (head is behind its base; nothing to land).
+- **Verify**: recompute and compare field by field (`spec`, `merge_base`,
+  commit set); hit exits `0` confirming, miss exits `3` naming what moved.
 - **Facts only**: the payload carries commits, files, areas, and signals —
   no guidance prose.
-- **Exit codes** (via `range_authority.exit_code_for`): `0` ok · `2`
-  malformed spec or usage · `3` refusal (unknown ref, commit outside the
-  interval) · `1` unexpected failure.
+- **Exit codes** (via `range_authority.exit_code_for`): `0` ok (range, pr,
+  verify hit) · `2` malformed spec, fingerprint shape, or usage · `3` refusal
+  (unknown ref, commit outside the interval, empty pr range, verify mismatch)
+  · `1` unexpected failure.
