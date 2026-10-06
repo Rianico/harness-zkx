@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import herdr_cli
+import herdr_prompt
 import pytest
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
@@ -49,18 +50,16 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     text = call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "tab: w9:t1",
-        "  pane: w9:p1",
-        "  label: ",
-        "  agent: reviewer",
-        "kind: pi",
-        "  session: ",
-        "  resume: ",
-        "cwd: /tmp/harness",
+    assert lines[1:7] == [
+        "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "Group: reviewer@w9:p1",
+        "Cwd: /tmp/harness",
+        herdr_prompt.SKILL_NOTICE,
+        "",
+        "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
     ]
-    assert "Group Members: reviewer@w9:p1" in text
-    assert "Callee: reviewer" in text
+    assert "Group: reviewer@w9:p1" in text
+    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
     assert "\n\ndo this\n\n" in text
     assert (
@@ -192,8 +191,8 @@ def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None
     parsed = cast(object, json.loads(done.stdout))
     assert isinstance(parsed, list)
     assert parsed[3] == "reviewer"
-    assert "  pane: w9:p1" in str(parsed[4])
-    assert "Callee: reviewer" in str(parsed[4])
+    assert "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
+    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
 
 
 def test_dispatch_rolls_back_lease_on_blocked_outcome(stub: StubHarness, tmp_path: Path) -> None:
@@ -288,8 +287,8 @@ def test_dispatch_draft_prints_skeleton_with_prefilled_routing(stub: StubHarness
     done = stub.run("callee", "--draft")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
-    assert "- Caller: reviewer@w9:p1 (tab w9:t1 kind pi)" in done.stdout
-    assert "- Callee: callee" in done.stdout
+    assert "- Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in done.stdout
+    assert "- Receiver: callee" in done.stdout
     assert re.search(r"^- Drafted: \[\d{4}-\d{2}-\d{2}T", done.stdout, re.MULTILINE)
     assert "## Task" in done.stdout
     assert "## Context" in done.stdout
@@ -304,8 +303,8 @@ def test_dispatch_draft_writes_skeleton_to_file(stub: StubHarness, tmp_path: Pat
     assert stub.prompts() == []
     assert "## Task" not in done.stdout
     skeleton = path.read_text(encoding="utf-8")
-    assert "- Caller: reviewer@w9:p1 (tab w9:t1 kind pi)" in skeleton
-    assert "- Callee: callee" in skeleton
+    assert "- Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in skeleton
+    assert "- Receiver: callee" in skeleton
 
 
 def test_dispatch_accepts_free_form_ticket_with_braces(stub: StubHarness, tmp_path: Path) -> None:
@@ -332,7 +331,7 @@ def test_dispatch_refuses_live_draft_marker(stub: StubHarness, tmp_path: Path) -
 def test_dispatch_refuses_untouched_skeleton(stub: StubHarness, tmp_path: Path) -> None:
     ticket = payload_file(
         tmp_path,
-        "## Routing\n\n- Caller: reviewer@w9:p1\n\n## Task\n\n## Context\n\n## Acceptance criteria\n",
+        "## Routing\n\n- Sender: reviewer@w9:p1\n\n## Task\n\n## Context\n\n## Acceptance criteria\n",
     )
     done = stub.run("callee", "--file", str(ticket), "--no-wait")
     assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr

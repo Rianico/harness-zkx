@@ -37,7 +37,8 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
   - Boundary & state governance: `skills/keel/SKILL.md`.
 - **Tests**:
   - Strict placement: all tests live under root `tests/<name>/` matching `skills/<name>/`. Never place tests inside `skills/`.
-  - Run all: `bash scripts/check.sh` (or `uv run pytest` alone).
+  - Iterate narrow: `uv run pytest tests/<skill>` (or one file or test id). The full suite takes minutes, so rerun only the package you touched.
+  - Land once: `bash scripts/check.sh` before handing off or pushing; add `--skip-tests` for a lint-and-types-only pass.
   - Test naming: `tests/<skill>/test_<component>.py`. Conftest handles runtime `sys.path`.
 - **Multi-Agent Contract (Herdr)**:
   - When running under Herdr (`HERDR_ENV=1`), always use harness scripts in `skills/herdr/scripts/` (never raw CLI):
@@ -47,5 +48,6 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
   - GitHub CLI (`gh`). Vocabulary: `docs/agents/triage-labels.md`. Guide: `docs/agents/issue-tracker.md`.
 - **Contribution & Changelog**:
   - Conventional commits (`CONTRIBUTING.md`). Ledger gated in CI (`changelog-check.yml`).
+  - `.githooks/pre-commit` runs `scripts/check.sh` on every commit, pytest included. Prefix `HARNESS_CHECK_SKIP_TESTS=1` once the suite has passed for the change; keep `--no-verify` for emergencies.
 - **Runtime**:
   - Python 3.14 via `uv run` (`pyproject.toml`). Quality: `oxlint`, `ruff`, `validate-deps.py`, `basedpyright --warnings`. `scripts/check.sh` is the single local gate mirroring CI.

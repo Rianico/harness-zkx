@@ -12,8 +12,8 @@ Never assume or default to a specific agent kind, provider, or model.
 
 ### Information Required from User
 1. **Roles needed**: e.g., Task Manager (TM), Implementer, Reviewer, Researcher.
-2. **Agent kind (`--kind`) per role**: e.g., `pi`, `qoderclicn` / `qodercli`, `claude`, `agy`.
-3. **Provider and model per role**: e.g., `pi` with `--provider anthropic --model claude-3-7-sonnet`, `qoderclicn` with `-m qwen-max`, `claude` with `--model claude-3-7-sonnet`.
+2. **Agent kind (`--kind`) per role**: e.g., `pi`, `qodercli`, `claude`, `agy`. Use a name from `herdr agent start --help`; the Qoder builds share one kind (see [Qoder CLI](agents/qodercli.md)).
+3. **Provider and model per role**: e.g., `pi` with `--provider anthropic --model claude-3-7-sonnet`, `qodercli` with `-m qwen-max`, `claude` with `--model claude-3-7-sonnet`.
 
 ### Standard Confirmation Template
 
@@ -25,7 +25,7 @@ Before provisioning Herdr lanes and launching agents, please confirm the role co
 | Role | Agent Kind (`--kind`) | Provider | Model | Native Flags |
 |---|---|---|---|---|
 | Task Manager | pi | anthropic | claude-3-7-sonnet | `--approve` |
-| Implementer | qodercli | custom | deepseek-r1 | `--permission-mode accept_edits` |
+| Implementer | qodercli | custom | deepseek-r1 | `--permission-mode bypass_permissions` |
 | Reviewer | pi | google | gemini-2.5-pro | `--approve` |
 
 Please approve this configuration or provide desired overrides for agent kind, provider, or model.
@@ -38,7 +38,7 @@ Please approve this configuration or provide desired overrides for agent kind, p
 | Kind | Details | Command / Binary | Folder Trust / Approval Behavior | Provider & Model Flags | Key Quirks |
 |---|---|---|---|---|---|
 | `pi` | [pi.md](agents/pi.md) | `pi` | Supports `--approve` (`-a`) to trust project-local files and skip interactive trust prompts. | `--provider <name>`, `--model <pattern>` (or `<provider>/<model>`) | Structured JSONL session files in `~/.pi/agent/sessions/`. |
-| `qoderclicn` / `qodercli` | [qodercli.md](agents/qodercli.md) | `qodercli` / `qoderclicn` | **Requires trusting the folder in terminal UI**. If untrusted, displays an interactive terminal trust prompt. Automated `--approve` flag is **NOT** supported for folder trust. Operator must confirm trust interactively in terminal or via `herdr agent send-keys` before prompting. | `-m`, `--model <model>` | Permission bypass via `--permission-mode accept_edits` (or `--dangerously-skip-permissions` if authorized). |
+| `qodercli` | [qodercli.md](agents/qodercli.md) | `qodercli` / `qoderclicn` | **Blocking trust selector on an untrusted folder.** `agent start` still reports `interactive_ready: true` and a `Ready` title, and a prompt is swallowed by the selector. Clear it with one bare Enter or pre-seed `permissions.trustDirectories`. No `--approve` flag exists. | `-m`, `--model <model>`, `--reasoning-effort`, `--thinking` | YOLO via `--permission-mode bypass_permissions`, which does not skip folder trust. Trust and hooks are per config root: `~/.qoder` vs `~/.qoder-cn`. |
 | `claude` | [claude.md](agents/claude.md) | `claude` | Prompts on first run in folder; accepts `--dangerously-skip-permissions` (consent-gated). | `--model <model>` | Interactive auth/login check on startup. |
 | `agy` | [agy.md](agents/agy.md) | `agy` | Standard project trust configuration. | `--model <model>` | Weakly recognized in some versions (revision 0, no session path); status bar may read `WORKING` while settled. |
 | `gemini` | [gemini.md](agents/gemini.md) | `gemini` | Workspace approval on directory change. | `--model <model>` | Terminal wrapper integration. |
@@ -68,9 +68,15 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
    ```
 4. **Folder Trust Handling**:
    - For `pi`: Ensure `--approve` was passed after `--`.
-   - For `qoderclicn` / `qodercli`: Inspect pane output (`herdr agent read <name> --source recent-unwrapped`) to check for interactive folder trust prompts, and confirm trust before proceeding.
+   - For `qodercli`: `agent start` reports `interactive_ready: true` and a `Ready` title even while the trust selector is up, so read the pane. Either send one bare Enter (`herdr agent send-keys <name> enter`) and confirm the `YOLO` status line, or pre-seed `permissions.trustDirectories` in the config root the binary reads (`~/.qoder`, or `~/.qoder-cn` for the CN build) before starting. A prompt cannot dismiss the selector. See [Qoder CLI](agents/qodercli.md).
    - For other agents: Inspect pane output for any initial consent/login prompts.
 5. **State Settling**: Wait until the agent settles into `idle` or `done` before dispatching tickets or prompts.
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_wait.py" <name> --timeout 30000
    ```
+6. **Name the Pane**: The agent name dies with the agent while the pane label survives, so a restart or a new occupant can inherit a stale label. Set both in one step, then confirm the session is consistent:
+   ```bash
+   uv run "$SKILL_DIR/scripts/herdr_label.py" <name> --pane <pane_id>
+   uv run "$SKILL_DIR/scripts/herdr_label.py" --verify   # exit 3 on a live agent that disagrees with its label
+   ```
+   After an agent exits or is replaced, `herdr-label --sync` converges the pair again — it relabels from the agent name, or names an agent that came back without one from the label it left behind.

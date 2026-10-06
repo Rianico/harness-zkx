@@ -11,28 +11,13 @@ Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract pro
 
 When a workflow requires both high-level coordination (triage, planning, verification, review) and focused code execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Callees)** in dedicated panes within a shared workspace or tab.
 
-`herdr-prompt` and `herdr-dispatch` automatically inject caller context (including the **Resumption Triple**: `kind + session + cwd`), the Herdr skill notice, and sibling callees into the recipient's turn:
-```text
-[2026-10-05T06:19:12.983Z]
-tab: w1:t1
-  pane: w1:p1
-  label: orchestrator
-  agent: orchestrator
-kind: pi
-  session: /path/to/session.jsonl
-  resume: "pi --resume /path/to/session.jsonl"
-cwd: /Users/zhengxk/workspace
-Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
-Group Members: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
-
-Callee: impl-1
-```
+`herdr-prompt` and `herdr-dispatch` open every dispatch with the script-rendered `Sender:`/`Receiver:` envelope — position fields, the Herdr skill notice, the live `Group:` roster, and the **resumption triple** (`kind + session + cwd`) — and close it with the reply contract. The canonical sample and its rules live in `$SKILL_DIR/SKILL.md` under **Know your post**; this file does not restate them.
 
 > [!IMPORTANT] Name Every Pane Immediately
 > Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
 
-> [!NOTE] Callee Target Parsing
-> The `Group Members:` header lists callees as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string.
+> [!NOTE] Receiver Target Parsing
+> The `Group:` line lists participants as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **live agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string — or the pane id, which is the only other target `herdr agent prompt` accepts. A pane `label` is never a target; use the pane id or `--label` to resolve it. `Receiver(You)` renders the position ref when the target resolves to a live pane or agent name, and the bare target token when it does not.
 
 ### Core Anti-Patterns & Their Tells
 
@@ -42,7 +27,7 @@ Without explicit, enforceable boundaries, multi-agent lanes degrade into three c
 |---|---|---|---|
 | **Anchored Brief** | The Orchestrator exceeds its intent/constraints scope by performing deep code reconnaissance and baking line-level implementation maps or design pre-decisions into the TM brief (#172). | The brief specifies exact line numbers, private function names, AST/parser instructions, internal state table indices, or pre-decided algorithms/precedence orders. | Pre-empts TM triage, strips TM of architectural ownership, and forces the TM into a pass-through router. |
 | **Router TM** | The TM fails to exercise decomposition, scoping, or design judgment, acting merely as a pass-through relay that forwards the brief verbatim or slices it mechanically (#172). | Callee tickets are copy-pasted verbatim from the brief; TM makes zero exploratory/triage tool calls before dispatching; tickets lack independent scoping, evidence criteria, or architecture invariant checks. | Callees receive un-scoped or over-anchored tickets; edge cases and module invariants are ignored; verification becomes a superficial check of whatever test was named in the brief. |
-| **Hero-Mode TM** | The TM receives the brief and, instead of delegating to assigned callees, directly invokes file-editing tools (`edit`, `write`, `bash`) to implement the changes itself (#153). | Assigned callees in `Group Members:` remain completely idle (revision 0 or no dispatches); TM tool calls are dominated by file edits and compile/fix loops; TM context window rapidly exhausts. | Multi-agent topology is bypassed; lane loses division of labor; TM suffers context compaction degradation, losing ticket constraints and architectural invariants. |
+| **Hero-Mode TM** | The TM receives the brief and, instead of delegating to assigned callees, directly invokes file-editing tools (`edit`, `write`, `bash`) to implement the changes itself (#153). | Assigned callees in `Group:` remain completely idle (revision 0 or no dispatches); TM tool calls are dominated by file edits and compile/fix loops; TM context window rapidly exhausts. | Multi-agent topology is bypassed; lane loses division of labor; TM suffers context compaction degradation, losing ticket constraints and architectural invariants. |
 
 ### Two-Tier Delegation Architecture: Lane Coordination vs. Role-Internal Subagents
 
@@ -156,7 +141,7 @@ The Task Manager owns in-lane triage, decomposition, scope boundaries, design ju
   - Acting as a pass-through router ("Router TM") that forwards brief requirements without decomposition, scoping, or design judgment.
   - Accepting green gates as a substitute for code review without an explicit review verdict (#166).
   - Flagging cohesive internal refactoring (design deepening) as scope creep when it strengthens invariants without expanding public surfaces.
-  - Ignoring assigned callees in `Group Members:`.
+  - Ignoring assigned callees in `Group:`.
   - Allowing internal subagents to invoke Herdr CLI or `herdr_reply.py`.
 
 ---
@@ -210,27 +195,11 @@ Each artifact in the lane coordination lifecycle has **exactly one author role**
 
 ### The Injected Context Header & The Resumption Triple
 
-Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects a structured header at turn zero before the ticket payload. The header captures lane topology and the **Resumption Triple** (`kind + session + cwd`), ensuring full context fidelity, debugging observability, and seamless session resumption:
+Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects the envelope at turn zero, before the ticket payload (see **Know your post** in `$SKILL_DIR/SKILL.md`). The envelope carries lane topology and the **resumption triple**, giving full context fidelity, debugging observability, and seamless session resumption. `Receiver(You)` sits at the bottom of the header and names the recipient with its own position, so an agent that was addressed in a broadcast can read its role straight off the message. `herdr_reply.py` wraps a completion reply in the same envelope.
 
-```text
-[2026-10-05T06:19:12.983Z]
-tab: w1:t1
-  pane: w1:p1
-  label: orchestrator
-  agent: orchestrator
-kind: pi
-  session: /path/to/session.jsonl
-  resume: "pi --resume /path/to/session.jsonl"
-cwd: /Users/zhengxk/workspace
-Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
-Group Members: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
-
-Callee: impl-1
-```
-
-- **Resumption Triple (`kind + session + cwd`)**: Guarantees that any participant, watchdog, or human operator can re-enter or resume the exact calling agent session in the identical working directory without amnesia.
-- **Topological Coordinates (`pane`, `label`, `tab`, `agent`)**: Identifies physical and logical coordinates in Herdr.
-- **`Group Members:` List**: Injects assigned implementers as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
+- **Resumption Triple (`kind + session + cwd`)**: any participant, watchdog, or human operator can re-enter or resume the exact sending agent session in the identical working directory without amnesia. `kind` rides the `Sender:` line; `session` and `cwd` ride `Resume:` and `Cwd:`.
+- **Topological coordinates**: the `Sender:` line carries `agent`, `pane`, `tab`, and `label`; `Receiver(You)` closes the envelope alone and carries the same coordinates for the addressee.
+- **`Group:` roster**: lists lane participants as `name@pane_id`, sending agent first. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
 
 ---
 
@@ -272,8 +241,8 @@ You are the **Task Manager** for this lane. You hold **coordination, design judg
 - Sizing: <S/M/L estimate and callee topology suggestion>
 
 ## Reporting
-On gate pass and review approval, reply to caller using the Final Reply Template:
-  `uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller-name> "<STATUS> <summary>"`
+On gate pass and review approval, reply to the sender using the Final Reply Template:
+  `uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <sender-name> "<STATUS> <summary>"`
 ```
 
 ---
@@ -302,7 +271,7 @@ Target files / Seams: <paths or boundary definitions>
 - **The Iron Curtain**: Never let subagents call Herdr CLI commands or scripts (`herdr_reply.py`, `herdr_dispatch.py`). Aggregate all results in this host pane.
 
 On completion, reply to the caller in one message using the herdr helper script:
-  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller-name> --file <reply-payload.md>
+  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <sender-name> --file <reply-payload.md>
   # (Or inline: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller-name> "<PAYLOAD>")
 ```
 
@@ -310,11 +279,9 @@ On completion, reply to the caller in one message using the herdr helper script:
 
 ### C. The Final Reply Template (Aligned with `resp-format.md`)
 
-All completion replies delivered via `herdr_reply.py` adhere strictly to the dual-mode response format defined in `skills/dynamic-workflow-wrapper/references/resp-format.md` and `skills/ai-engineering-expert/references/resp-format.md`:
+All completion replies delivered via `herdr_reply.py` adhere strictly to the dual-mode response format defined in `skills/dynamic-workflow-wrapper/references/resp-format.md` and `skills/ai-engineering-expert/references/resp-format.md`. `herdr_reply.py` prepends the timestamped `Sender:`/`Receiver:` envelope itself, so the reply body below starts at the status line:
 
 ```markdown
-Sender: pane=<pane-id> label=<label> agent=<agent> kind=<kind> session=<session-path> cwd=<cwd> resume="<resume-cmd>"
-
 COMPLETED <commit-sha>
 <!-- Or: BLOCKED <concise-reason> | REJECTED <invariant-violation-reason> -->
 

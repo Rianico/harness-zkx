@@ -8,7 +8,7 @@ Depth for `$SKILL_DIR/SKILL.md`. Read before any consent-gated or irreversible a
 - NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. If target resolution fails or target has no agent, use safe alternatives (queue/watch via `herdr pane wait-output`, start agent via `herdr agent start`, or abort gracefully). Raw text sent to a shell executes directly as shell commands.
 - For `agy` and revision-0 agents, Dispatch-&-Yield is REQUIRED, not advisory. Never attempt to observe `agy` agents to completion via `herdr-wait` or `herdr-prompt --wait`.
 - Confirm role-to-agent mapping (role, agent kind, provider, and model) with the user before starting agents or orchestrating; never assume or pick defaults.
-- Verify folder trust and agent bootstrap state before dispatching tasks (`qoderclicn` requires terminal UI trust confirmation; `pi` requires `--approve` after `--`). Ensure agent settles into `idle` or `done` before prompting (see [Agent Bootstrap](agent-bootstrap.md)).
+- Verify folder trust and agent bootstrap state before dispatching tasks (`qodercli` blocks on a trust selector that only a bare Enter or a pre-seeded `permissions.trustDirectories` clears; `pi` requires `--approve` after `--`). Ensure agent settles into `idle` or `done` before prompting (see [Agent Bootstrap](agent-bootstrap.md)).
 - Use `--no-focus` for background work unless the user asked to switch context.
 - Use `--current`, an explicit pane ID, or a unique agent name. Do not rely on another client's focused pane.
 - Parse IDs from JSON responses. Do not derive them from sidebar order or examples.
