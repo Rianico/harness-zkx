@@ -61,7 +61,7 @@ so the structured keys below stay fixed.
   (manifest paths changed), `changelog` (bool), `renames` (new paths),
   `evidence_candidates` (changed test and workflow paths).
 - `truncated`: `files` and `commits` omitted-row counts (`0` when none).
-- `landing` (pr view only): `commits` (range commit count), `conventional` (count of conventional subjects), `multi_entry` (true when the change set carries more than one commit that would each merit a changelog entry, i.e. `commits > 1`). Rendered in the text brief and the payload.
+- `landing` (pr view only): `commits` (range commit count), `conventional` (count of conventional subjects), `multi_entry` (true when more than one conventional commit is present, i.e. `conventional > 1`). Rendered in the text brief and the payload.
 - `verification` (verify view with `--json`/`--yaml` on hit): `expected`, `actual`, `ok`.
 `PATH_FILTER` / `--file` narrow the file view (`files`, `areas`,
 `range.counts` over that view); `signals` and the fingerprint stay

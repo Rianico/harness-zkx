@@ -573,7 +573,7 @@ def _build_brief(
         payload["landing"] = {
             "commits": total,
             "conventional": conventional,
-            "multi_entry": total > 1,
+            "multi_entry": conventional > 1,
         }
     return (payload, old_endpoint, new_endpoint)
 
@@ -773,7 +773,8 @@ def build_verify_mismatch_error(
         f"(spec '{block['spec_in']}' mode {block['mode']} "
         f"merge_base {block['merge_base']} via {block['resolved_from']} "
         f"commits {block['counts']['commits']}); "
-        "check spec, merge_base, or commit set"
+        "the range moved since this fingerprint was taken \u2014 compare spec, "
+        "mode, merge_base and commit count above against the recorded digest"
     )
 
 
@@ -858,9 +859,14 @@ def main() -> int:
             )
             if payload["range"]["counts"]["commits"] == 0:
                 only = payload["range"]["only_in_base"]
+                if only == 0:
+                    raise RangeRefusal(
+                        "head is at or behind its base; nothing to land "
+                        f"— rebase or check the base (only-in-base {only})"
+                    )
                 raise RangeRefusal(
                     "head is behind its base; nothing to land "
-                    f"\u2014 rebase or check the base (only-in-base {only})"
+                    f"— rebase or check the base (only-in-base {only})"
                 )
         elif args.verify is not None:
             assert args.spec is not None

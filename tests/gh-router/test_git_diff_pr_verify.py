@@ -128,6 +128,67 @@ def test_pr_single_commit_is_not_multi_entry(tmp_path: Path) -> None:
     assert "multi-entry no" in text.stdout
 
 
+def _seed_mixed_repo(repo: Path) -> str:
+    _ = _git(repo, "init")
+    _ = _git(repo, "config", "user.name", "Tester Author")
+    _ = _git(repo, "config", "user.email", "tester@example.com")
+    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    _ = _git(repo, "add", ".")
+    _ = _git(repo, "commit", "-m", "chore: base")
+    base = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    _ = _git(repo, "checkout", "-b", "mixed")
+    for name, message in (
+        ("real.txt", "feat: real change"),
+        ("wip.txt", "wip wip"),
+        ("stuff.txt", "Update stuff"),
+    ):
+        _ = (repo / name).write_text(f"{name}\n", encoding="utf-8")
+        _ = _git(repo, "add", ".")
+        _ = _git(repo, "commit", "-m", message)
+    return base
+
+
+def test_pr_mixed_range_is_not_multi_entry(tmp_path: Path) -> None:
+    base = _seed_mixed_repo(tmp_path)
+    payload = _payload(tmp_path, "--pr", f"{base}...mixed", "--json")
+    assert payload["landing"] == {"commits": 3, "conventional": 1, "multi_entry": False}
+    text = _run_brief(tmp_path, "--pr", f"{base}...mixed")
+    assert text.returncode == 0, text.stderr
+    assert "landing: commits 3 conventional 1 multi-entry no" in text.stdout
+    conv_sha = _git(tmp_path, "rev-parse", "mixed~2")
+    narrowed = _payload(tmp_path, "--pr", f"{base}...mixed", "--commit", conv_sha, "--json")
+    assert len(narrowed["commits"]) == 1
+    assert narrowed["landing"]["commits"] == narrowed["range"]["counts"]["commits"] == 3
+    assert narrowed["landing"]["multi_entry"] is False
+
+
+def test_pr_two_conventional_commits_are_multi_entry(tmp_path: Path) -> None:
+    base = _seed_mixed_repo(tmp_path)
+    _ = _git(tmp_path, "checkout", "-q", "mixed")
+    _ = (tmp_path / "second.txt").write_text("second\n", encoding="utf-8")
+    _ = _git(tmp_path, "add", ".")
+    _ = _git(tmp_path, "commit", "-m", "fix: second change")
+    payload = _payload(tmp_path, "--pr", f"{base}...mixed", "--json")
+    assert payload["landing"] == {"commits": 4, "conventional": 2, "multi_entry": True}
+
+
+def test_pr_level_with_base_refuses_at_or_behind(tmp_path: Path) -> None:
+    _ = _git(tmp_path, "init")
+    _ = _git(tmp_path, "config", "user.name", "Tester Author")
+    _ = _git(tmp_path, "config", "user.email", "tester@example.com")
+    _ = _git(tmp_path, "config", "commit.gpgsign", "false")
+    _ = (tmp_path / "f.txt").write_text("v1\n", encoding="utf-8")
+    _ = _git(tmp_path, "add", ".")
+    _ = _git(tmp_path, "commit", "-m", "chore: base")
+    base = _git(tmp_path, "rev-parse", "--abbrev-ref", "HEAD")
+    _ = _git(tmp_path, "checkout", "-b", "level")
+    result = _run_brief(tmp_path, "--pr", f"{base}...level")
+    assert result.returncode == 3
+    assert "head is at or behind its base; nothing to land" in result.stderr
+    assert "only-in-base 0" in result.stderr
+
+
 def test_pr_behind_base_refuses_with_fix(tmp_path: Path) -> None:
     _ = _git(tmp_path, "init")
     _ = _git(tmp_path, "config", "user.name", "Tester Author")
@@ -190,7 +251,8 @@ def test_verify_miss_commit_set_names_field(tmp_path: Path) -> None:
     result = _run_brief(tmp_path, spec, "--verify", expected)
     assert result.returncode == 3
     assert "fingerprint mismatch" in result.stderr
-    assert "commit set" in result.stderr
+    assert "commit count" in result.stderr
+    assert "the range moved since this fingerprint was taken" in result.stderr
     assert "merge_base" in result.stderr
     assert "spec" in result.stderr
 
