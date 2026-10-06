@@ -108,6 +108,188 @@ def test_clear_drops_both_names(stub: StubHarness) -> None:
     ]
 
 
+# ── unit: the label/agent-name pair ────────────────────────────────────────────
+
+
+def test_pairs_reports_only_panes_hosting_an_agent() -> None:
+    panes = [
+        {"pane_id": "w9:p1", "label": "reviewer"},
+        {"pane_id": "w9:p2", "label": "scratch-pad"},
+    ]
+    agents = [{"pane_id": "w9:p1", "name": "reviewer"}]
+    assert herdr_label.pairs(panes, agents) == [("w9:p1", "reviewer", "reviewer")]
+
+
+def test_a_label_left_by_a_departed_agent_is_not_a_mismatch() -> None:
+    panes = [{"pane_id": "w9:p2", "label": "pr-orchestrator"}]
+    assert herdr_label.pair_mismatches(panes, []) == []
+
+
+def test_pair_mismatches_finds_a_stale_label_on_a_recovered_pane() -> None:
+    panes = [{"pane_id": "w9:p2", "label": "pr-orchestrator"}]
+    agents = [{"pane_id": "w9:p2", "name": "buildbot"}]
+    assert herdr_label.pair_mismatches(panes, agents) == [("w9:p2", "pr-orchestrator", "buildbot")]
+
+
+def test_pair_mismatches_finds_a_missing_label() -> None:
+    panes = [{"pane_id": "w9:p2"}]
+    agents = [{"pane_id": "w9:p2", "name": "buildbot"}]
+    assert herdr_label.pair_mismatches(panes, agents) == [("w9:p2", None, "buildbot")]
+
+
+def test_a_descriptive_label_is_reported_not_reconciled() -> None:
+    panes = [{"pane_id": "w9:p2", "label": "review pane"}]
+    agents = [{"pane_id": "w9:p2", "name": "buildbot"}]
+    assert herdr_label.pair_mismatches(panes, agents) == []
+    assert herdr_label.descriptive_labels(panes, agents) == [("w9:p2", "review pane", "buildbot")]
+
+
+def test_a_recovered_pane_can_take_its_name_back_from_the_label() -> None:
+    panes = [{"pane_id": "w9:p2", "label": "pr-orchestrator"}]
+    agents = [{"pane_id": "w9:p2", "agent": "agy"}]
+    assert herdr_label.unnamed_agents(panes, agents) == [("w9:p2", "pr-orchestrator")]
+    assert herdr_label.restorable_agents(panes, agents) == [("w9:p2", "pr-orchestrator")]
+
+
+def test_a_label_already_used_by_another_agent_is_not_restorable() -> None:
+    panes = [{"pane_id": "w9:p2", "label": "pr-orchestrator"}]
+    agents = [
+        {"pane_id": "w9:p2", "agent": "agy"},
+        {"pane_id": "w9:p9", "name": "pr-orchestrator", "agent": "pi"},
+    ]
+    assert herdr_label.restorable_agents(panes, agents) == []
+
+
+def test_a_descriptive_label_cannot_restore_a_name() -> None:
+    panes = [{"pane_id": "w9:p2", "label": "review pane"}]
+    agents = [{"pane_id": "w9:p2", "agent": "agy"}]
+    assert herdr_label.restorable_agents(panes, agents) == []
+
+
+# ── integration: convergence and unnamed agents ────────────────────────────────
+
+
+def test_sync_names_an_agent_that_lost_its_name(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "panes": [{"pane_id": "w9:p1", "label": "reviewer"}],
+        "agents": [{"pane_id": "w9:p1", "agent": "pi", "agent_status": "idle"}],
+    }
+    done = stub.run("--sync", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "renamed w9:p1  agent=- -> reviewer" in done.stdout
+    assert renames(stub) == [["agent", "rename", "w9:p1", "reviewer"]]
+
+
+def test_verify_reports_an_unnamed_agent_without_failing_the_gate(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "panes": [{"pane_id": "w9:p1", "label": "reviewer"}],
+        "agents": [{"pane_id": "w9:p1", "agent": "pi", "agent_status": "idle"}],
+    }
+    done = stub.run("--verify", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "unnamed live agents (1): w9:p1" in done.stdout
+    assert "run herdr-label --sync" in done.stdout
+
+    as_json = stub.run("--verify", "--json", env=PANE_ENV, state=state)
+    payload = json.loads(as_json.stdout)
+    assert payload["in_sync"] is True
+    assert payload["unnamed"] == [{"pane_id": "w9:p1", "label": "reviewer"}]
+    assert payload["restorable"] == ["w9:p1"]
+
+
+# ── integration: --verify ─────────────────────────────────────────────────────
+
+
+def test_verify_passes_when_every_live_agent_owns_its_label(stub: StubHarness) -> None:
+    state = {**DEFAULT_STATE, "panes": [{"pane_id": "w9:p1", "label": "reviewer"}]}
+    done = stub.run("--verify", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "labels in sync with agent names" in done.stdout
+    assert renames(stub) == []
+
+
+def test_verify_flags_a_live_agent_whose_pane_was_never_labelled(stub: StubHarness) -> None:
+    done = stub.run("--verify", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_BLOCKED
+    assert "w9:p1  label=-  agent=reviewer" in done.stdout
+
+
+def test_verify_reports_a_stale_label_and_exits_blocked(stub: StubHarness) -> None:
+    state = {**DEFAULT_STATE, "panes": [{"pane_id": "w9:p1", "label": "buildbot"}]}
+    done = stub.run("--verify", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_BLOCKED
+    assert "w9:p1" in done.stdout
+    assert "label=buildbot" in done.stdout
+    assert "--sync" in done.stdout
+    assert renames(stub) == []
+
+
+def test_verify_json_reports_the_pair(stub: StubHarness) -> None:
+    state = {**DEFAULT_STATE, "panes": [{"pane_id": "w9:p1", "label": "buildbot"}]}
+    done = stub.run("--verify", "--json", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_BLOCKED
+    payload = json.loads(done.stdout)
+    assert payload["in_sync"] is False
+    assert payload["mismatches"] == [{"pane_id": "w9:p1", "label": "buildbot", "agent": "reviewer"}]
+
+
+def test_verify_scopes_to_one_pane(stub: StubHarness) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "stale-name"},
+            {"pane_id": "w9:p9", "label": "buildbot"},
+        ],
+        "agents": [*DEFAULT_STATE["agents"], SECOND_AGENT],
+    }
+    scoped = stub.run("--verify", "--pane", "w9:p9", env=PANE_ENV, state=state)
+    assert scoped.returncode == herdr_cli.EXIT_OK, scoped.stderr
+    unscoped = stub.run("--verify", env=PANE_ENV, state=state)
+    assert unscoped.returncode == herdr_cli.EXIT_BLOCKED
+    assert "w9:p1" in unscoped.stdout
+
+
+# ── integration: --sync ───────────────────────────────────────────────────────
+
+
+def test_sync_renames_only_the_drifting_pane(stub: StubHarness) -> None:
+    state = {**DEFAULT_STATE, "panes": [{"pane_id": "w9:p1", "label": "buildbot"}]}
+    done = stub.run("--sync", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "labelled w9:p1  label=buildbot -> reviewer" in done.stdout
+    assert renames(stub) == [["pane", "rename", "w9:p1", "reviewer"]]
+
+
+def test_sync_leaves_a_descriptive_label_alone(stub: StubHarness) -> None:
+    state = {**DEFAULT_STATE, "panes": [{"pane_id": "w9:p1", "label": "review pane"}]}
+    done = stub.run("--sync", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "already in sync" in done.stdout
+    assert renames(stub) == []
+
+
+def test_sync_dry_run_renames_nothing(stub: StubHarness) -> None:
+    state = {**DEFAULT_STATE, "panes": [{"pane_id": "w9:p1", "label": "buildbot"}]}
+    done = stub.run("--sync", "--dry-run", env=PANE_ENV, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "pane" in done.stdout and "reviewer" in done.stdout
+    assert renames(stub) == []
+
+
+def test_verify_rejects_a_name_argument(stub: StubHarness) -> None:
+    done = stub.run("reviewer", "--verify", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "pass --verify or --sync alone" in done.stderr
+
+
+def test_verify_and_sync_together_are_rejected(stub: StubHarness) -> None:
+    done = stub.run("--verify", "--sync", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not both" in done.stderr
+
+
 def test_pane_flag_targets_another_pane(stub: StubHarness) -> None:
     state = {**DEFAULT_STATE, "agents": [SECOND_AGENT]}
     done = stub.run("buildbot", "--pane", "w9:p9", env=PANE_ENV, state=state)

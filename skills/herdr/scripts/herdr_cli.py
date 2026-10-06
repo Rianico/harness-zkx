@@ -169,6 +169,15 @@ def current_pane_id(herdr: str, env: Mapping[str, str]) -> str:
     return text_field(raw, "result", "pane", "pane_id")
 
 
+def fetch_inventory(
+    herdr: str, env: Mapping[str, str]
+) -> tuple[list[Mapping[str, object]], list[Mapping[str, object]]]:
+    """Read the pane and agent inventories once, so every identity comes from one snapshot."""
+    panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    return panes, agents
+
+
 def error_code(stderr: str) -> str | None:
     """Read the error code from herdr's stderr envelope, if it carries one."""
     try:

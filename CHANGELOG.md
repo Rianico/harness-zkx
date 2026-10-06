@@ -17,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **ci:** draft PR handshake, staged fail-fast CI pipeline, and scaffold typecheck-budget retirement (#198)
 * **ci:** replace typecheck warning budget with native basedpyright gate and unify local checks in check.sh (#197)
 * **gh-router:** canonical PR template, installer script, fail-closed squash gate, and scaffold retirement (#196)
+* **herdr:** add `herdr-label --verify` / `--sync` to catch and converge pane label and agent name drift
+* **herdr:** compact the caller block into a script-rendered envelope that closes with `Receiver(You)`, and inject it into replies too
+* **herdr:** document Qoder CLI folder trust, the extra CR, and YOLO bootstrap
 * **herdr:** add `herdr-dispatch --draft` ticket skeletons with prefilled routing (#195)
 * **herdr:** subagent-first coordination, task leases, and fix prompt delivery (#194)
 * **ai-engineering:** adapt ASD-STE100 Issue 9 across writing subskills, system prompt rules, and the deterministic linter (#188)

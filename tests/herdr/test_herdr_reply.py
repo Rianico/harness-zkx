@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import herdr_cli
+import herdr_prompt
 import pytest
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
@@ -43,9 +44,14 @@ def test_positional_message_is_delivered_verbatim(stub: StubHarness) -> None:
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[1:4] == ["agent", "prompt", "orchestrator"]
-    assert call[4] == METACHARS
-    assert "Caller:" not in call[4]
-    assert "reply to the caller" not in call[4]
+    assert call[4].endswith(METACHARS)
+    envelope = call[4].splitlines()
+    assert envelope[1] == "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
+    assert envelope[2] == herdr_prompt.SKILL_NOTICE
+    assert envelope[3] == ""
+    assert envelope[4] == "Receiver(You): orchestrator"
+    assert "Cwd:" not in call[4], "a reply stays short: no resumption fields"
+    assert "reply to the sender" not in call[4]
     assert "replied to orchestrator" in done.stdout
 
 
@@ -54,14 +60,16 @@ def test_file_payload_is_delivered_verbatim(stub: StubHarness, tmp_path: Path) -
     done = stub.run("orchestrator", "--file", str(path))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
-    assert call[4] == METACHARS
+    assert call[4].endswith(METACHARS)
+    assert "Receiver(You): orchestrator" in call[4]
 
 
 def test_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
     done = stub.run("orchestrator", stdin=METACHARS)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
-    assert call[4] == METACHARS
+    assert call[4].endswith(METACHARS)
+    assert "Receiver(You): orchestrator" in call[4]
 
 
 def test_missing_target_is_rejected(stub: StubHarness) -> None:
@@ -133,7 +141,8 @@ def test_dry_run_prints_argv_without_submitting(stub: StubHarness) -> None:
 
     parsed = cast(object, json.loads(done.stdout))
     assert isinstance(parsed, list)
-    assert parsed[1:5] == ["agent", "prompt", "orchestrator", "COMPLETED"]
+    assert parsed[1:4] == ["agent", "prompt", "orchestrator"]
+    assert parsed[4].endswith("COMPLETED")
 
 
 def test_wait_and_timeout_forwarded(stub: StubHarness) -> None:
@@ -180,7 +189,8 @@ def test_auto_start_starts_agent_on_shell_pane_and_delivers_reply(stub: StubHarn
         ]
     ]
     (call,) = stub.prompts()
-    assert call[1:5] == ["agent", "prompt", "lens-orchestrator", "COMPLETED"]
+    assert call[1:4] == ["agent", "prompt", "lens-orchestrator"]
+    assert call[4].endswith("COMPLETED")
     assert "replied to lens-orchestrator (wM:p1N)" in done.stdout
 
 
@@ -221,7 +231,8 @@ def test_auto_start_on_pane_id_with_label(stub: StubHarness) -> None:
         ]
     ]
     (call,) = stub.prompts()
-    assert call[1:5] == ["agent", "prompt", "lens-orchestrator", "COMPLETED"]
+    assert call[1:4] == ["agent", "prompt", "lens-orchestrator"]
+    assert call[4].endswith("COMPLETED")
 
 
 def test_auto_start_when_target_already_has_live_agent_skips_start(stub: StubHarness) -> None:
@@ -229,7 +240,8 @@ def test_auto_start_when_target_already_has_live_agent_skips_start(stub: StubHar
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.starts() == []
     (call,) = stub.prompts()
-    assert call[1:5] == ["agent", "prompt", "reviewer", "COMPLETED"]
+    assert call[1:4] == ["agent", "prompt", "reviewer"]
+    assert call[4].endswith("COMPLETED")
 
 
 def test_auto_start_with_unrecognized_kind_fails(stub: StubHarness) -> None:

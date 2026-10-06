@@ -5,7 +5,7 @@
 # ///
 """herdr-dispatch — manager-side task dispatch helper for Herdr multi-agent lanes.
 
-Dispatches a ticket file to one or more callees with caller context and reply contract,
+Dispatches a ticket file to one or more callees with the Sender/Receiver envelope and reply contract,
 validates addressable agent names (refusing kinds), and verifies post-dispatch delivery
 in one command.
 
@@ -35,7 +35,6 @@ import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
@@ -73,7 +72,7 @@ class Options(PromptOptions):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="herdr-dispatch",
-        description="Dispatch a ticket file to a Herdr callee with caller context and reply contract.",
+        description="Dispatch a ticket file to a Herdr callee with the Sender/Receiver envelope and reply contract.",
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
             "3 a target needs human input, 4 prompt delivered but wait timed out\n\n"
@@ -128,7 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--no-caller-context",
         action="store_true",
-        help="send payload verbatim without caller block and reply contract (warns loudly)",
+        help="send payload verbatim without the Sender/Receiver envelope and reply contract (warns loudly)",
     )
     _ = parser.add_argument(
         "--force",
@@ -201,31 +200,17 @@ def validate_ticket(ticket: str) -> None:
 
 def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, str]) -> str:
     """Render a ticket skeleton; routing comes from live state, sections stay empty for the model."""
-    from herdr_prompt import resolve_caller
+    from herdr_prompt import resolve_caller, sender_ref, utc_stamp
 
-    caller = resolve_caller(herdr, env)
-    ts = f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
-    caller_name = caller.agent or caller.label or caller.pane_id
-    caller_ref = f"{caller_name}@{caller.pane_id}" if caller.agent else caller.pane_id
-    details = (
-        " ".join(
-            part
-            for part in (
-                f"(tab {caller.tab_id}" if caller.tab_id else "(",
-                f"kind {caller.kind}" if caller.kind else "",
-            )
-            if part
-        ).rstrip()
-        + ")"
-    )
+    sender = resolve_caller(herdr, env)
     lines = [
         "# Ticket draft",
         "<!-- herdr-draft: unfilled — fill Task/Context/Acceptance, then delete this line. -->",
         "",
         "## Routing (prefilled by the script; the dispatch envelope stays authoritative)",
         "",
-        f"- Caller: {caller_ref} {details}",
-        f"- Drafted: {ts}",
+        f"- Sender: {sender_ref(sender)}",
+        f"- Drafted: {utc_stamp()}",
     ]
     for target in targets:
         canonical, pane = resolve_target_identity(herdr, target, env)
@@ -235,7 +220,7 @@ def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, 
             ref = pane
         else:
             ref = target
-        lines.append(f"- Callee: {ref}")
+        lines.append(f"- Receiver: {ref}")
     lines.extend(
         [
             "",

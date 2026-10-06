@@ -25,6 +25,40 @@ If the check fails, say that you are not running inside Herdr and stop. Do not i
 
 When the check passes, the `herdr` binary in `PATH` talks to the current session. Use it to inspect neighboring work, create terminal layout, start agents and commands, read output, and wait for state changes.
 
+## Know your post
+
+Your post is your agent name at your pane id. Read it from the environment, never guess it:
+
+```bash
+printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_TAB_ID" "$HERDR_PANE_ID"
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --current
+```
+
+`herdr-label` turns a bare pane into a post: it sets the pane label and the agent name to the same string, so the name a person reads off the border is the name you can address.
+
+Every cross-pane message carries a script-rendered envelope:
+
+```text
+[2026-10-05T06:19:12.983Z]
+Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi
+Group: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
+Resume: "pi --resume /path/to/session.jsonl"
+Cwd: /Users/zhengxk/workspace
+Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+
+Receiver(You): impl-1@w1:p3 - tab w1:t1 - kind pi
+```
+
+`herdr-prompt`, `herdr-dispatch`, and `herdr-reply` render those lines from live Herdr state and prepend them to every payload, in both directions. Role, position, roster, and the resumption triple (`kind + session + cwd`) therefore arrive with the message whether or not the sender remembered them; an absent field renders no line at all. `Receiver(You)` closes the envelope alone and names *you* with *your* position — read it first when several panes were addressed at once. Relay a message with its envelope intact; a message that arrives without a `Sender:` line did not come from these scripts.
+
+The token before `@` is the **live agent name**, the only human-readable target `herdr agent prompt` accepts besides the pane id. A pane **label** is border decoration and is never a target, so it always rides its own `label` field — a pane that carries only a label renders as its pane id:
+
+```text
+Sender: w1:p4 - label pr-orchestrator - tab w1:t1 - kind agy
+```
+
+To address that pane, use its pane id, or let `herdr-prompt --label pr-orchestrator` resolve the label for you. See `$SKILL_DIR/references/cli-reference.md` for the full names/labels/targets rules.
+
 > [!IMPORTANT] Orient First, Then Use Harness Scripts
 > Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_overview.py`, `herdr_pane.py`, `herdr_prompt.py`, `herdr_reply.py`, `herdr_dispatch.py`), NOT bare `herdr` CLI commands, for orientation, layout, agent communication, prompting, and waiting.
 
@@ -70,15 +104,9 @@ For the live instance of this topology, orient with `herdr-overview` above inste
 > [!WARNING] Shell Input Constraint
 > NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. In a raw shell pane, this executes prompt text directly as shell commands.
 
-## Use IDs and caller context
+## Use IDs and the calling pane
 
 Public IDs are opaque stable handles: workspace `w1`, tab `w1:t1`, pane `w1:p1`.
-
-Herdr injects the caller's context into each managed pane:
-
-```bash
-printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_TAB_ID" "$HERDR_PANE_ID"
-```
 
 Prefer `--current` when a pane command should target the calling pane. Omitting a target may use the UI-focused pane, which can belong to the user or another client.
 
@@ -98,6 +126,15 @@ uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer    # this pane's label and i
 > Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
 
 `herdr-label` labels the calling pane and names its agent identically, so the name a person sees is the name you can address. It takes `--pane <id>` for another pane, `--label-only` when a multi-word label or an existing agent name must survive, and `--clear` to drop both.
+
+The pair is not stable on its own: the **agent name dies with the agent** while the **label outlives it**, so every exit leaves a labelled pane that nothing can address, and the next occupant inherits the stale label. `herdr-label` sets both in one command, and the two checks keep them together:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_label.py" --verify   # exit 3 when a live agent disagrees with its label
+uv run "$SKILL_DIR/scripts/herdr_label.py" --sync     # converge both directions, idempotent
+```
+
+`--sync` sets a drifting label from the agent name, and names an agent that came back without one from the label that survived. A descriptive `--label-only` label and a pane with no agent are reported, never guessed at. Run `--verify` before a dispatch wave and `--sync` after any agent exits or restarts.
 
 When a person says "hand off to <name>", pass that name straight to the prompt helper:
 
@@ -142,7 +179,7 @@ Multi-agent coordination is event-driven via completion callbacks:
    ```
    - **Synthesized IDD/GDD Ticket Format**: Dispatched tickets pair upstream teleological purpose (**IDD**: Problem, Proposed Outcome, Non-Negotiable Constraints) with downstream verifiable milestones (**GDD/EDD**: Check Command, Required Evidence), preventing both Goodhart gaming and semantic drift.
    - **Task Lease Invariant**: `herdr_dispatch.py` checks active ticket leases in `.lane/lease.json` (or `.herdr-lease.json`) before dispatching, preventing ticket collisions. Target identities are canonicalized across agent name and pane ID. Leases are acquired atomically pre-dispatch and rolled back if prompt delivery fails or is blocked. Leases are retained only on prompt acceptance (`EXIT_OK` or `WaitTimeout`), and automatically released upon delivery of `herdr_reply.py`.
-   - Never dispatch tasks via bare `herdr agent prompt callee` directly — doing so drops the `Caller:` context, the Resumption Triple, and the reply contract.
+   - Never dispatch tasks via bare `herdr agent prompt callee` directly — doing so drops the `Sender:`/`Receiver:` envelope, the resumption triple, and the reply contract.
    - *Prompt acceptance invariant*: Exit code 0 from `herdr agent prompt` confirms acceptance. Revision numbers are purely informational; prompts are never re-injected or dropped due to unchanged revisions (#193).
 
 3. **Yield turn on async execution:**
@@ -174,30 +211,18 @@ Multi-agent coordination is event-driven via completion callbacks:
    `herdr-wait` is strictly a fallback for non-agent panes or watchdog recovery; Dispatch-&-Yield is the primary coordination pattern.
    **Dispatch-&-Yield is REQUIRED (not advisory) for `agy` and revision-0 agents**: Agents with background subagents (such as `agy`) report `idle` while their subagents work, and weakly-recognized agents never advance revision past 0. `herdr-wait` and `herdr-prompt --wait` CANNOT reliably observe `agy` agents to completion (they fail fast with exit 2 or hang to timeout). You must dispatch with `herdr-dispatch` or `herdr-prompt --no-wait`, yield turn, and await the `herdr_reply.py` callback.
 
-**Every handoff carries the caller's context, and requires a reply.** A callee cannot address an orchestrator it was never told about, and a caller left to infer completion falls back on polling. So the prompt opens with the caller and Herdr skill notice, and closes with the reply contract:
+**Every handoff carries the envelope, and requires a reply.** A callee cannot address a sender it was never told about, and a sender left to infer completion falls back on polling. So the prompt opens with the envelope from "Know your post" and closes with the reply contract:
 
 ```text
-[2026-10-05T06:19:12.983Z]
-tab: w1:t1
-  pane: w1:p1
-  label: orchestrator
-  agent: orchestrator
-kind: pi
-  session: /path/to/session.jsonl
-  resume: "pi --resume /path/to/session.jsonl"
-cwd: /Users/zhengxk/workspace
-Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
-Group Members: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
-
-Callee: impl-1
+<envelope: timestamp, Sender, Group, Resume, Cwd, Herdr notice, blank line, Receiver(You)>
 
 <the payload (Synthesized IDD/GDD Ticket)>
 
-On completion, reply to the caller in one message using the herdr helper script:
+On completion, reply to the sender in one message using the herdr helper script:
   uv run ~/.agents/skills/herdr/scripts/herdr_reply.py orchestrator --file <reply-payload.md>
 ```
 
-`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked callee names what it needs instead of waiting silently. `herdr-prompt` prepends both blocks, injecting the **Resumption Triple** (`kind + session + cwd`) along with `pane`, `label`, `tab`, `agent`, and `resume="..."`. The **agent name** is the load-bearing part — the pane id and label tell a person where to look, and only the name is addressable.
+`STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked callee names what it needs instead of waiting silently. The **agent name** is the load-bearing part of a `Sender:` line — the pane id and label tell a person where to look, and only the name is addressable.
 
 Underlying commands, if you drive them directly:
 
@@ -211,7 +236,7 @@ For multi-tier lanes where an in-lane Task Manager coordinates one or more Imple
 
 ## Start and coordinate an agent
 
-Before starting any agent or orchestrating tasks, confirm with the user which role should use which coding agent kind, provider, and model (e.g. `pi` with Anthropic `claude-3-7-sonnet`, `qoderclicn` with specific model). Never assume or pick defaults. See `$SKILL_DIR/references/agent-bootstrap.md` for the confirmation template, bootstrap command matrix, and provider/model flags.
+Before starting any agent or orchestrating tasks, confirm with the user which role should use which coding agent kind, provider, and model (e.g. `pi` with Anthropic `claude-3-7-sonnet`, `qodercli` with a specific model). Never assume or pick defaults. See `$SKILL_DIR/references/agent-bootstrap.md` for the confirmation template, bootstrap command matrix, and provider/model flags.
 
 Default to a sibling pane in the current tab and the current working directory. Do not create a workspace, tab, worktree, or different cwd unless the user explicitly requests that topology or location — except for multi-agent lane coordination (or whenever a worktree tool such as `wt` is present), where pre-allocating one isolated worktree per task group with `herdr_worktree.py` is required and overrides this single-agent `$PWD` default (see [Hierarchical Lane Coordination](references/lane-coordination.md)).
 
@@ -239,7 +264,7 @@ herdr agent start reviewer --kind <kind> --pane <returned-pane-id> -- <agent-arg
 
 Different coding agents have different bootstrap commands and folder trust requirements:
 - `pi`: supports `--approve` (`-a`) after `--` to trust project-local files without interactive blocking.
-- `qoderclicn` / `qodercli`: requires trusting the folder in the terminal UI on first launch; cannot be bypassed with `--approve`. Operator must ensure the folder is trusted in terminal before automated prompts can proceed.
+- `qodercli`: YOLO via `--permission-mode bypass_permissions` after `--`, and requires trusting the folder before automated prompts reach it. `agent start` still reports `interactive_ready: true` while the trust selector is up, and its `Ready` title is false — read the pane, then send one bare Enter (`herdr agent send-keys <name> enter`) or pre-seed `permissions.trustDirectories` in the config root the binary reads.
 - Full agent matrix, model flags, and quirks: `$SKILL_DIR/references/agent-bootstrap.md`.
 
 A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Verify folder trust and wait until the agent settles (`idle` or `done`) before prompting it.
@@ -351,7 +376,7 @@ Prefer `--source recent-unwrapped` for logs and transcripts. The other read sour
 - Orient with `herdr-overview` before enumerating panes, tabs, or agents. Do not run `herdr pane layout`, `pane list`, `tab list`, `workspace list`, or `agent list` to reconstruct layout.
 - NEVER use `herdr pane send-text` or `herdr pane send-keys` to deliver prompts or replies. If target resolution fails or target has no agent, use the alternatives above (queue/watch, start agent, graceful abort). Raw text sent to a shell executes as shell commands.
 - Confirm role-to-agent mapping (kind, provider, model) with user before starting agents or orchestrating; never assume or pick defaults.
-- Verify folder trust and startup readiness before automated prompting (`qoderclicn` requires terminal trust; `pi` accepts `--approve`). See `$SKILL_DIR/references/agent-bootstrap.md`.
+- Verify folder trust and startup readiness before automated prompting (`qodercli` blocks on a trust selector that `agent start` does not report and that a prompt cannot dismiss; `pi` accepts `--approve`). See `$SKILL_DIR/references/agent-bootstrap.md`.
 - Use `--no-focus` for background work unless the user asked to switch context.
 - Use `--current`, an explicit pane ID, or a unique agent name. Do not rely on another client's focused pane.
 - Parse IDs from JSON responses. Do not derive them from sidebar order or examples.
@@ -435,7 +460,7 @@ Fill the Task/Context/Acceptance sections and delete the `herdr-draft: unfilled`
 
 ### `herdr-reply` — callee completion callback
 
-Delivers `<STATUS> <artifacts> <issues>` or a result payload back to the caller agent without shell mangling, without injecting another `Caller:` header or reply contract:
+Delivers `<STATUS> <artifacts> <issues>` or a result payload to the sender agent, wrapped in the same timestamped envelope `herdr-prompt` uses, with `Receiver(You)` naming the sender it is answering. A reply carries no `Group:`, `Resume:`, or `Cwd:` — it reports a result, it does not re-open the lane:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED artifacts=[...] issues=[]"
@@ -459,7 +484,7 @@ uv run "$SKILL_DIR/scripts/herdr_prompt.py" reviewer --file brief.md --wait --dr
 
 Reads the payload from `--file` (or stdin when `--file` is omitted or `-`) and forwards `--wait`, `--until`, and `--timeout`. Accepts several TARGETs for one broadcast (`herdr-prompt callee1 callee2 --file brief.md --no-wait`); `--no-wait` dispatches without waiting and is rejected alongside `--wait`. A `--wait` that times out after delivery exits 4 — prompt accepted, agent working asynchronously: yield turn and await reply callback, or resume with `herdr-wait` instead of resubmitting; only a true dispatch failure exits 1. `--label <LABEL>` takes an exact pane label instead of a TARGET, failing with the candidates when more than one pane carries it. `--dry-run` prints the exact argv as one JSON array per target and submits nothing.
 
-Unless `--no-caller-context` is passed, it prepends the caller block, Herdr skill notice, sibling callees, and the completion-reply contract (see "Name a target, then hand off"), so the convention does not depend on a caller remembering it. When the caller has no agent name, the block says so instead of naming a target that cannot be reached. `--no-caller-context` warns loudly on stderr if targeting named agents.
+Unless `--no-caller-context` is passed, it prepends the `Sender:`/`Receiver:` envelope, the Herdr skill notice, the live `Group:` roster, the resumption fields, and the completion-reply contract (see "Name a target, then hand off"), so the convention does not depend on a sender remembering it. When the sending pane has no agent name, the contract says so instead of naming a target that cannot be reached. `--no-caller-context` warns loudly on stderr if targeting named agents.
 
 ### `herdr-wait` — one barrier over many agents
 

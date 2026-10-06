@@ -28,11 +28,12 @@ Exit status: 0 accepted (``--wait`` settled without needing input), 1 herdr fail
 timed out first — the agent is working asynchronously: yield turn and await reply
 callback, or resume with ``herdr-wait`` instead of resubmitting.
 
-Caller context is prepended by default (see `resolve_caller`): the payload opens
-with a grouped caller block (`tab:`/`kind:` anchors with indented members, the
-Herdr skill notice, `Group Members:`, and a per-target `Callee:` line)
-and closes with the completion-reply contract via `herdr-reply`, so a callee
-can answer the caller by name using the helper script without shell mangling.
+Sender context is prepended by default (see `resolve_caller`): the payload opens
+with the `Sender:`/`Receiver:` envelope (position fields, the Herdr skill notice,
+the live `Group:` roster, and the resumption fields) and closes with the
+completion-reply contract via `herdr-reply`, so a callee can answer the sender by
+name using the helper script without shell mangling. The envelope is script-rendered,
+never model-authored, so it cannot be forgotten.
 `--dry-run` shows the exact rendered payload that would be submitted.
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
@@ -63,6 +64,7 @@ from herdr_cli import (
     entries,
     entry_optional_text,
     error_code,
+    fetch_inventory,
     find_herdr,
     guard,
     require_herdr_env,
@@ -149,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--no-caller-context",
         action="store_true",
-        help="send the payload verbatim without the caller block and reply contract",
+        help="send the payload verbatim without the Sender/Receiver envelope and reply contract",
     )
     return parser
 
@@ -184,7 +186,7 @@ def read_payload(source: str | None) -> str:
 
 @dataclass(frozen=True)
 class CallerContext:
-    """Who is handing off: pane id, visible label, addressable agent name, kind, session, tab, cwd."""
+    """The envelope sender: pane id, visible label, addressable agent name, kind, session, tab, cwd."""
 
     pane_id: str
     label: str | None = None
@@ -215,14 +217,26 @@ def build_resume_cmd(kind: str | None, session_id: str | None) -> str | None:
     return None
 
 
-def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
-    """Read the caller from HERDR_PANE_ID (or `pane current`), the pane list, and the agent list."""
-    pane_id = env.get("HERDR_PANE_ID") or current_pane_id(herdr, env)
+def _session_value(entry: Mapping[str, object]) -> str | None:
+    """Read the agent-native session handle out of an agent list entry."""
+    sess = entry.get("agent_session")
+    if isinstance(sess, dict):
+        val = sess.get("value")
+        if isinstance(val, str) and val:
+            return val
+    return None
+
+
+def build_identity(
+    panes: Sequence[Mapping[str, object]],
+    agents: Sequence[Mapping[str, object]],
+    pane_id: str,
+) -> CallerContext:
+    """Build the envelope identity for one pane from the pane and agent inventories."""
     label: str | None = None
     tab_id: str | None = None
     cwd: str | None = None
-    listed = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
-    for entry in listed:
+    for entry in panes:
         if entry_optional_text(entry, "pane_id") == pane_id:
             label = entry_optional_text(entry, "label")
             tab_id = entry_optional_text(entry, "tab_id")
@@ -231,18 +245,11 @@ def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
     agent: str | None = None
     kind: str | None = None
     session_id: str | None = None
-    resume_cmd: str | None = None
-    agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
     for entry in agents:
         if entry_optional_text(entry, "pane_id") == pane_id:
             agent = entry_optional_text(entry, "name")
             kind = entry_optional_text(entry, "agent")
-            sess = entry.get("agent_session")
-            if isinstance(sess, dict):
-                val = sess.get("value")
-                if isinstance(val, str) and val:
-                    session_id = val
-            resume_cmd = build_resume_cmd(kind, session_id)
+            session_id = _session_value(entry)
             break
     return CallerContext(
         pane_id=pane_id,
@@ -250,10 +257,40 @@ def resolve_caller(herdr: str, env: Mapping[str, str]) -> CallerContext:
         agent=agent,
         kind=kind,
         session_id=session_id,
-        resume_cmd=resume_cmd,
+        resume_cmd=build_resume_cmd(kind, session_id),
         tab_id=tab_id,
         cwd=cwd,
     )
+
+
+def resolve_caller(
+    herdr: str,
+    env: Mapping[str, str],
+    *,
+    inventory: tuple[Sequence[Mapping[str, object]], Sequence[Mapping[str, object]]] | None = None,
+) -> CallerContext:
+    """Read the caller from HERDR_PANE_ID (or `pane current`), the pane list, and the agent list."""
+    pane_id = env.get("HERDR_PANE_ID") or current_pane_id(herdr, env)
+    panes, agents = inventory if inventory else fetch_inventory(herdr, env)
+    return build_identity(panes, agents, pane_id)
+
+
+def resolve_receiver(
+    panes: Sequence[Mapping[str, object]],
+    agents: Sequence[Mapping[str, object]],
+    target: str,
+) -> CallerContext | None:
+    """Resolve a target to its pane identity: a pane id, or the unique live agent name herdr accepts."""
+    pane_ids = {entry_optional_text(entry, "pane_id") for entry in panes}
+    pane_id = target if target in pane_ids else None
+    if pane_id is None:
+        for entry in agents:
+            if entry_optional_text(entry, "name") == target:
+                pane_id = entry_optional_text(entry, "pane_id")
+                break
+    if not pane_id:
+        return None
+    return build_identity(panes, agents, pane_id)
 
 
 def _single_line(value: str, limit: int = 64) -> str:
@@ -277,61 +314,81 @@ def _scalar(value: str) -> str:
     return value
 
 
-def render_caller_block(
-    caller: CallerContext, *, group_members: Sequence[str] = (), callee: str | None = None
+def sender_ref(sender: CallerContext) -> str:
+    """Render the targetable `<agent>@<pane>` ref plus position fields; a pane label is never a name."""
+    label = _single_line(sender.label) if sender.label else ""
+    parts = [f"{sender.agent}@{sender.pane_id}" if sender.agent else sender.pane_id]
+    if label and label != sender.agent:
+        parts.append(f"label {_scalar(label)}")
+    if sender.tab_id:
+        parts.append(f"tab {_scalar(sender.tab_id)}")
+    if sender.kind:
+        parts.append(f"kind {_scalar(sender.kind)}")
+    return " - ".join(parts)
+
+
+def receiver_ref(receiver: str | CallerContext) -> str:
+    """Render the addressee as a position ref when it resolved, else as the bare target token."""
+    if isinstance(receiver, CallerContext):
+        return sender_ref(receiver)
+    return _scalar(receiver)
+
+
+def render_envelope(
+    sender: CallerContext,
+    *,
+    receiver: str | CallerContext | None = None,
+    group_members: Sequence[str] = (),
+    include_recovery: bool = True,
 ) -> str:
-    """Render the grouped caller header; absent fields render empty, never invented."""
-    label = _single_line(caller.label) if caller.label else ""
-    lines = [
-        f"tab: {_scalar(caller.tab_id or '')}",
-        f"  pane: {_scalar(caller.pane_id)}",
-        f"  label: {_scalar(label)}",
-        f"  agent: {_scalar(caller.agent or '')}",
-        f"kind: {_scalar(caller.kind or '')}",
-        f"  session: {_scalar(caller.session_id or '')}",
-        f"  resume: {_scalar(caller.resume_cmd or '')}",
-        f"cwd: {_scalar(caller.cwd or '')}",
-        SKILL_NOTICE,
-        f"Group Members: {', '.join(group_members)}",
-        "",
-        f"Callee: {_scalar(callee or '')}",
-    ]
+    """Render the envelope; the receiver closes it alone, and an absent field renders no line."""
+    lines = [f"Sender: {sender_ref(sender)}"]
+    if group_members:
+        lines.append(f"Group: {', '.join(group_members)}")
+    if include_recovery:
+        if sender.resume_cmd:
+            lines.append(f"Resume: {_scalar(sender.resume_cmd)}")
+        if sender.cwd:
+            lines.append(f"Cwd: {_scalar(sender.cwd)}")
+    lines.append(SKILL_NOTICE)
+    if receiver:
+        lines.append("")
+        lines.append(f"Receiver(You): {receiver_ref(receiver)}")
     return "\n".join(lines)
+
+
+def utc_stamp() -> str:
+    """Timestamp an envelope; both directions stamp, so a transcript reads in order."""
+    return f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
 
 
 SKILL_NOTICE = "Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI"
 
 
-def render_reply_contract(caller: CallerContext) -> str:
+def render_reply_contract(sender: CallerContext) -> str:
     """Render the completion-reply contract; without an agent name no target is addressable."""
-    if caller.agent:
-        contract = f'  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py {caller.agent} "<STATUS> <artifacts> <issues>"'
+    if sender.agent:
+        contract = f'  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py {sender.agent} "<STATUS> <artifacts> <issues>"'
         return (
-            "On completion, reply to the caller in one message using the herdr helper script:\n"
+            "On completion, reply to the sender in one message using the herdr helper script:\n"
             f"{contract}"
         )
     note = (
-        "(the calling pane has no agent name; reply cannot be addressed — "
+        "(the sending pane has no agent name; reply cannot be addressed — "
         "report completion to the user instead)"
     )
-    return f"On completion, reply to the caller in one message:\n  {note}"
+    return f"On completion, reply to the sender in one message:\n  {note}"
 
 
 def resolve_group_members(
-    herdr: str,
+    panes: Sequence[Mapping[str, object]],
+    agents: Sequence[Mapping[str, object]],
     caller_pane_id: str,
     target_panes: Sequence[str],
-    env: Mapping[str, str],
 ) -> list[str]:
     """Find every live agent in the caller's workspace (or target's workspace), caller first."""
-    try:
-        listed_panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
-        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
-    except HerdrError:
-        return []
-
     pane_ws: dict[str, str] = {}
-    for p in listed_panes:
+    for p in panes:
         pid = entry_optional_text(p, "pane_id")
         ws = entry_optional_text(p, "workspace_id")
         if pid and ws:
@@ -381,17 +438,20 @@ def resolve_group_members(
     return members
 
 
-def wrap_with_caller(
+def wrap_with_envelope(
     payload: str,
-    caller: CallerContext,
+    sender: CallerContext,
     *,
     group_members: Sequence[str] = (),
-    callee: str | None = None,
+    receiver: str | CallerContext | None = None,
+    include_recovery: bool = True,
 ) -> str:
-    """Prepend the timestamped caller block and append the reply contract around the payload."""
-    ts = f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
-    header = f"{ts}\n{render_caller_block(caller, group_members=group_members, callee=callee)}"
-    return f"{header}\n\n{payload}\n\n{render_reply_contract(caller)}"
+    """Prepend the timestamped envelope and append the reply contract around the payload."""
+    header = (
+        f"{utc_stamp()}\n"
+        f"{render_envelope(sender, receiver=receiver, group_members=group_members, include_recovery=include_recovery)}"
+    )
+    return f"{header}\n\n{payload}\n\n{render_reply_contract(sender)}"
 
 
 def build_prompt_argv(
@@ -627,15 +687,21 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
     if options.no_caller_context:
         for target in targets:
             print(
-                f"herdr-prompt: warning: --no-caller-context drops caller block and reply contract for target {target!r}; target cannot call back",
+                f"herdr-prompt: warning: --no-caller-context drops the Sender/Receiver envelope and reply contract for target {target!r}; target cannot call back",
                 file=sys.stderr,
             )
         payloads = {target: payload for target in targets}
     else:
-        caller = resolve_caller(herdr, env)
-        group_members = resolve_group_members(herdr, caller.pane_id, targets, env)
+        panes, agents = fetch_inventory(herdr, env)
+        caller = resolve_caller(herdr, env, inventory=(panes, agents))
+        group_members = resolve_group_members(panes, agents, caller.pane_id, targets)
         payloads = {
-            target: wrap_with_caller(payload, caller, group_members=group_members, callee=target)
+            target: wrap_with_envelope(
+                payload,
+                caller,
+                group_members=group_members,
+                receiver=resolve_receiver(panes, agents, target) or target,
+            )
             for target in targets
         }
     if options.wait:

@@ -5,9 +5,10 @@
 # ///
 """herdr-reply — send a completion reply callback to a caller agent without shell mangling.
 
-Mirrors `herdr-prompt` for the callee → caller direction. Delivers `<STATUS> <artifacts> <issues>`
-or a result payload verbatim to the caller's agent name, without injecting another `Caller:` header
-or reply contract.
+Delivers `<STATUS> <artifacts> <issues>` or a result payload to the caller's agent
+name, wrapped in the same timestamped `Sender:`/`Receiver:` envelope `herdr-prompt`
+uses, so the party reading a reply always knows who reported and to whom. The
+envelope is script-rendered, never model-authored, so it cannot be forgotten.
 
     herdr-reply orchestrator "COMPLETED artifacts=[...] issues=[]"
     herdr-reply orchestrator --file result.md
@@ -43,6 +44,7 @@ from herdr_cli import (
     entries,
     entry_optional_text,
     error_code,
+    fetch_inventory,
     find_herdr,
     format_shell_pane_diagnostic,
     guard,
@@ -53,6 +55,12 @@ from herdr_cli import (
     verify_target_not_bare_shell,
 )
 from herdr_lease import release_lease
+from herdr_prompt import (
+    render_envelope,
+    resolve_caller,
+    resolve_receiver,
+    utc_stamp,
+)
 
 STDIN = "-"
 BLOCKED = "blocked"
@@ -316,6 +324,13 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         verify_target_not_bare_shell(herdr, target, env)
 
     payload = read_payload(options.file, options.message)
+    panes, agents = fetch_inventory(herdr, env)
+    reply_envelope = render_envelope(
+        resolve_caller(herdr, env, inventory=(panes, agents)),
+        receiver=resolve_receiver(panes, agents, target) or target,
+        include_recovery=False,
+    )
+    payload = f"{utc_stamp()}\n{reply_envelope}\n\n{payload}"
 
     argv = [herdr, "agent", "prompt", target, payload]
     if options.wait:
