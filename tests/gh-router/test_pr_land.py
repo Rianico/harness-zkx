@@ -34,6 +34,7 @@ from pr import (  # noqa: E402
     run_command,
     squash_message,
     stamp_changelog,
+    unreleased_attributes_pr,
 )
 
 
@@ -1405,12 +1406,16 @@ class _FakeRun:
         return subprocess.CompletedProcess(cmd, rc, out, err)
 
 
-def _write_changelog(tmp_path: Path) -> Path:
-    changelog = tmp_path / "CHANGELOG.md"
-    _ = changelog.write_text(
-        "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** handshake entry\n",
-        encoding="utf-8",
+def _write_changelog(
+    tmp_path: Path, entry: str | None = "* **pr-land:** handshake entry\n"
+) -> Path:
+    body = (
+        f"# Changelog\n\n## [Unreleased]\n\n### Features\n{entry}"
+        if entry
+        else "# Changelog\n\n## [Unreleased]\n\n### Features\n"
     )
+    changelog = tmp_path / "CHANGELOG.md"
+    _ = changelog.write_text(body, encoding="utf-8")
     return changelog
 
 
@@ -1419,7 +1424,7 @@ def _main_args(*extra: str) -> list[str]:
 
 
 def test_draft_handshake_create_stamp_then_ready(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Fresh create is draft=true, then changelog commit+push, then gh pr ready last (mutation: create arg draft=true -> draft=false)."""
     _ = _write_changelog(tmp_path)
@@ -1443,6 +1448,10 @@ def test_draft_handshake_create_stamp_then_ready(
     ready_calls = [c for c in fake.calls if "pr ready" in " ".join(c)]
     assert len(ready_calls) == 1
     assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+    err = capsys.readouterr().err
+    assert "carries" not in err
+    assert "no ## [Unreleased]" not in err
 
 
 def test_draft_flag_skips_ready_flip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -1562,3 +1571,284 @@ def test_checks_verdict_all_skipping_is_pending() -> None:
 def test_checks_verdict_mixed_pass_and_skipping_is_success() -> None:
     """Partially-skipped PRs stay success; skipping alone must not become a --watch timeout (mutation: treat any skipping as pending -> returns pending)."""
     assert checks_verdict("build\tpass\nlint\tskipping\n") == "success"
+
+
+def test_ready_flip_warns_when_unreleased_carries_no_entry_for_pr(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unattributed Unreleased warns with the gate text yet still flips ready with rc 0 (mutation: drop the warning branch -> gate text vanishes; gate the flip on attribution -> ready absent)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+
+    def _no_stamp(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "warning: no ## [Unreleased] entry carries (#7)" in err
+    assert "carries no entries in ## [Unreleased]" in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_ready_flip_stays_silent_when_entry_carries_pr_number(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An entry ending in (#7) silences the advisory while the flip still happens (mutation: scan every line instead of bullets -> heading text could false-positive; match mid-entry (#7) -> silence without a real entry)."""
+    _ = _write_changelog(tmp_path, entry="* **pr-land:** handshake entry (#7)\n")
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "warning:" not in err
+    assert "carries" not in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_draft_flag_prints_milder_note_when_unattributed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--draft downgrades the advisory to note: with no ready call and rc 0 (mutation: reuse the warning: branch under --draft -> stderr gains warning:; call ready_pr under --draft -> ready appears)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+
+    def _no_stamp_draft(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp_draft)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--draft"))
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "note: no ## [Unreleased] entry carries (#7)" in err
+    assert "warning:" not in err
+    assert not [c for c in fake.calls if "pr ready" in " ".join(c)]
+
+
+def test_no_stamp_stays_silent_when_entry_carries_pr_number(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--no-stamp with an attributed entry prints nothing about the changelog (mutation: warn unconditionally under --no-stamp -> not stamped appears)."""
+    _ = _write_changelog(tmp_path, entry="* **pr-land:** handshake entry (#7)\n")
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--no-stamp"))
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "not stamped" not in err
+    assert "carries" not in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_no_stamp_warns_when_unreleased_carries_no_entry_for_pr(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--no-stamp without attribution warns once naming the missing stamp and the gate (mutation: keep the old static warning -> gate text missing; skip the scan -> warning fires even when attributed)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--no-stamp"))
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "not stamped" in err
+    assert "changelog gate" in err
+    assert "carries no entries in ## [Unreleased]" in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_unreleased_attributes_pr_matches_gate_attribution_rules(tmp_path: Path) -> None:
+    """unreleased_attributes_pr mirrors the gate end-of-entry rule: (#N) and (#N) (BREAKING CHANGE) count, anything else does not (mutation: accept mid-entry (#N) -> outside-block case flips true; drop the BREAKING CHANGE tail -> breaking case flips false)."""
+
+    def scan(content: str | None, pr_num: str = "7") -> bool:
+        target = tmp_path / "CHANGELOG.md"
+        if content is None:
+            if target.exists():
+                target.unlink()
+        else:
+            _ = target.write_text(content, encoding="utf-8")
+        return unreleased_attributes_pr(pr_num, cwd=tmp_path)
+
+    assert (
+        scan(
+            "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** handshake entry (#7)\n"
+        )
+        is True
+    )
+    assert (
+        scan(
+            "# Changelog\n\n## [Unreleased]\n\n### Features\n* **scope:** breaking change (#7) (BREAKING CHANGE)\n"
+        )
+        is True
+    )
+    assert (
+        scan(
+            "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** handshake entry (#3)\n"
+        )
+        is False
+    )
+    assert scan("# Changelog\n\n### Features\n* **pr-land:** handshake entry (#7)\n") is False
+    assert scan(None) is False
+    assert (
+        scan(
+            "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** handshake entry\n\n## [1.0.0] - 2026-01-01\n* initial entry (#7)\n"
+        )
+        is False
+    )
+
+
+def test_unreleased_attributes_pr_non_utf8_reads_unattributed(tmp_path: Path) -> None:
+    """Non-UTF-8 CHANGELOG bytes read as unattributed False, never a crash (mutation: narrow the guard to OSError -> UnicodeDecodeError escapes)."""
+    target = tmp_path / "CHANGELOG.md"
+    _ = target.write_bytes(b"# \xff\xfe\n")
+    assert unreleased_attributes_pr("7", cwd=tmp_path) is False
+
+
+def test_non_utf8_changelog_no_stamp_still_readies(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Non-UTF-8 CHANGELOG under --no-stamp still flips ready with rc 0 and no traceback (mutation: let the decode error propagate -> traceback, ready absent)."""
+    _ = (tmp_path / "CHANGELOG.md").write_bytes(b"# \xff\xfe\n")
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--no-stamp"))
+    assert rc == 0, fake.calls
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
+
+
+def test_loose_bullet_without_section_is_unattributed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A (#7) bullet with no ### section above it does not attribute, yet still warns and readies (mutation: drop the section gate -> scan flips true, gate text vanishes)."""
+    _ = (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n* loose entry (#7)\n", encoding="utf-8"
+    )
+    assert unreleased_attributes_pr("7", cwd=tmp_path) is False
+
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+
+    def _no_stamp(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+    err = capsys.readouterr().err
+    assert "carries no entries in ## [Unreleased]" in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_sectioned_bullet_attributes_pr(tmp_path: Path) -> None:
+    """A (#7) bullet under a ### section attributes True (mutation: require a blank line after the heading -> flips false)."""
+    _ = (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** entry (#7)\n",
+        encoding="utf-8",
+    )
+    assert unreleased_attributes_pr("7", cwd=tmp_path) is True
+
+
+def test_no_stamp_draft_prints_milder_note(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--no-stamp --draft downgrades to note: keeping the --no-stamp framing and no ready flip (mutation: reuse the warning: branch -> harsh form appears; flip ready under --draft -> ready appears)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args("--no-stamp", "--draft"))
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "note:" in err
+    assert "not stamped" in err
+    assert "changelog gate" in err
+    assert "warning:" not in err
+    assert not [c for c in fake.calls if "pr ready" in " ".join(c)]
+
+
+def test_absent_unreleased_block_warns_naming_missing_section(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No ## [Unreleased] block warns naming the missing section, never quoting the gate finding (mutation: reuse the block-exists text -> 'carries no entries' appears)."""
+    _ = (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n### Features\n* **pr-land:** entry (#7)\n", encoding="utf-8"
+    )
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+
+    def _no_stamp(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+    err = capsys.readouterr().err
+    assert "no ## [Unreleased] section" in err
+    assert "carries no entries" not in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_baseline_entry_stamp_is_noop_and_advisory_silent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A baseline-listed entry makes the real stamp a no-op while the (#7) entry keeps the advisory silent (mutation: ignore baseline in stamp -> a commit appears)."""
+    _ = (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n"
+        "* legacy baseline entry\n"
+        "* **pr-land:** handshake entry (#7)\n",
+        encoding="utf-8",
+    )
+    config_dir = tmp_path / ".config"
+    config_dir.mkdir()
+    _ = (config_dir / "changelog-unattributed-baseline.txt").write_text(
+        "# legacy baseline\nlegacy baseline entry\n", encoding="utf-8"
+    )
+    fake = _FakeRun()
+    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    assert not [c for c in fake.calls if c[:2] == ["git", "commit"]]
+    err = capsys.readouterr().err
+    assert "warning:" not in err
+    assert "carries" not in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
