@@ -239,6 +239,20 @@ class StubHarness:
     def starts(self) -> list[list[str]]:
         return [call for call in self.calls() if call[1:3] == ["agent", "start"]]
 
+    def base_env(self) -> dict[str, str]:
+        """Environment pointing a helper (subprocess or in-process) at this stub."""
+        return {
+            "PATH": f"{self.bin_dir}:{os.environ.get('PATH', '')}",
+            "HERDR_ENV": "1",
+            "PWD": str(self.tmp_path),
+            "STUB_HERDR_LOG": str(self.log_path),
+            "STUB_HERDR_STATE": str(self.state_path),
+        }
+
+    def write_state(self, state: Mapping[str, object]) -> None:
+        """Seed `state.json` for an in-process run; `run` writes it per invocation itself."""
+        _ = self.state_path.write_text(json.dumps(dict(state)))
+
     def run(
         self,
         *args: str,
@@ -246,16 +260,8 @@ class StubHarness:
         env: Mapping[str, str | None] | None = None,
         stdin: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        _ = self.state_path.write_text(
-            json.dumps(dict(state if state is not None else DEFAULT_STATE))
-        )
-        full_env: dict[str, str] = {
-            "PATH": f"{self.bin_dir}:{os.environ.get('PATH', '')}",
-            "HERDR_ENV": "1",
-            "PWD": str(self.tmp_path),
-            "STUB_HERDR_LOG": str(self.log_path),
-            "STUB_HERDR_STATE": str(self.state_path),
-        }
+        self.write_state(dict(state if state is not None else DEFAULT_STATE))
+        full_env = self.base_env()
         for key, value in (env or {}).items():
             if value is None:
                 _ = full_env.pop(key, None)

@@ -453,13 +453,13 @@ def test_r2_do_ci_update_returns_preserve_note(tmp_path: Path):
     assert "# CUSTOM MARKER" in rel.read_text(encoding="utf-8")
 
 
-def test_python_verify_note_states_the_budget_seed_step(
+def test_python_ci_variant_no_longer_notes_the_budget_seed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The python verify gates on the budget script, which stays inert until one `--seed` run.
+    """The budget-seed note retired with the component: verify runs native `basedpyright`.
 
-    Without the note the gate reads as a hard failure on a fresh tree: `--seed` is the only
-    way to record a starting point, and nothing else in the run mentions it.
+    `uv run basedpyright --warnings` needs no baseline and no `--seed` ceremony, so the
+    python CI variant prints no typecheck advice at all.
     """
     code = _run_main(
         "--flavor",
@@ -472,7 +472,7 @@ def test_python_verify_note_states_the_budget_seed_step(
         str(tmp_path),
     )
     assert code == 0
-    assert "typecheck-budget.py --seed" in capsys.readouterr().err
+    assert "typecheck-budget" not in capsys.readouterr().err
 
 
 def test_r2_all_update_preserves_release_yml(tmp_path: Path):

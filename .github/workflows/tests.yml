@@ -5,23 +5,90 @@ permissions:
 
 on:
   push:
+    branches: [main]
     paths:
       - 'skills/**/*.py'
       - 'tests/**/*.py'
       - 'pyproject.toml'
-      - 'scripts/**/*.py'
+      - 'scripts/**'
+      - '.githooks/**'
       - '.github/workflows/tests.yml'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'skills/**/*.py'
       - 'tests/**/*.py'
       - 'pyproject.toml'
-      - 'scripts/**/*.py'
+      - 'scripts/**'
+      - '.githooks/**'
       - '.github/workflows/tests.yml'
 
 jobs:
+  # changelog-gate replicates the ledger gate of changelog-check.yml `check` (that
+  # file is the source; the Ledger floor step below is copied verbatim) so a fast
+  # changelog failure aborts this pipeline before the slow suites run.
+  # tests/test_ci_workflows.py pins the copy against drift.
+  # The copy's precondition: with an empty PR_NUMBER the floor runs the durable
+  # ledger check, which demands every entry resolve to a commit reachable from
+  # HEAD; that holds on `main` only, so `on.push` above is main-scoped and on PRs
+  # the `--pr` floor applies instead. Tradeoff: pushing a branch with no open PR
+  # no longer runs tests.yml; PR-event coverage (incl. ready_for_review) is what
+  # pr.py --watch polls. Guarding only this job instead would not work: a skipped
+  # `needs:` dep silently skips typecheck and tests.
+  changelog-gate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      # The deterministic floor (ADR-0016), replacing the old synchronisation
+      # check: the ledger is curated, not a projection of commit subjects, so
+      # `update`-equality is no longer the invariant. On a PR the floor is given
+      # the landing declaration and the PR number; on main it is the durable
+      # run, where every entry must resolve to a landing commit.
+      - name: Ledger floor
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -o pipefail
+          if [ -z "$PR_NUMBER" ]; then
+            python scripts/changelog-gate.py ledger
+            exit $?
+          fi
+          waiver=$(printf '%s\n' "$PR_BODY" \
+            | sed -n 's/^[[:space:]]*[Ll]edger-[Ww]aiver:[[:space:]]*//p' \
+            | head -n 1)
+          landing=$(printf '%s\n' "$PR_BODY" \
+            | sed -n 's/^[[:space:]]*Landing:[[:space:]]*\([a-z]*\).*/\1/p' \
+            | head -n 1)
+          args=(--pr "$PR_NUMBER")
+          if [ -n "$waiver" ]; then
+            echo "waiver: $waiver"
+            args+=(--waiver "$waiver")
+          fi
+          if [ -n "$landing" ]; then
+            echo "landing: $landing"
+            args+=(--landing "$landing")
+          fi
+          python scripts/changelog-gate.py ledger "${args[@]}"
+
   tests:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    needs: [changelog-gate, typecheck]
     permissions:
       contents: read
 
@@ -48,10 +115,12 @@ jobs:
           uv sync --frozen --group dev --no-install-package basedpyright --no-install-package nodejs-wheel-binaries
 
       - name: Run all tests
-        run: uv run pytest
+        run: uv run --no-sync pytest
 
   typecheck:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    needs: [changelog-gate]
     permissions:
       contents: read
 

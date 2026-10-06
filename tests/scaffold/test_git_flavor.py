@@ -83,25 +83,29 @@ def test_node_repo_receives_no_typecheck_budget_and_no_baseline(tmp_path: pathli
     assert _run_main("--cwd", str(tmp_path), "--check") == 0
 
 
-def test_python_repo_receives_typecheck_budget_and_baseline(tmp_path: pathlib.Path):
+def test_python_repo_receives_no_typecheck_budget_and_no_baseline(tmp_path: pathlib.Path):
+    """The retired budget component left the scaffold entirely — the python flavor ships none."""
     _ = (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo-py"\n', encoding="utf-8")
     assert _run_main("--cwd", str(tmp_path), "--flavor", "all") == 0
-    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    assert not (tmp_path / "scripts" / "typecheck-budget.py").exists()
     releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
-    assert ".config/basedpyright-baseline.txt" in releaserc
+    assert ".config/basedpyright-baseline.txt" not in releaserc
     assert _run_main("--cwd", str(tmp_path), "--check") == 0
 
 
-def test_python_repo_git_flavor_receives_typecheck_budget_and_baseline(tmp_path: pathlib.Path):
+def test_python_repo_git_flavor_receives_no_typecheck_budget_and_no_baseline(
+    tmp_path: pathlib.Path,
+):
     _ = (tmp_path / ".python-version").write_text("3.14\n", encoding="utf-8")
     assert _run_main("--cwd", str(tmp_path), "--flavor", "git") == 0
-    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    assert not (tmp_path / "scripts" / "typecheck-budget.py").exists()
     releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
-    assert ".config/basedpyright-baseline.txt" in releaserc
+    assert ".config/basedpyright-baseline.txt" not in releaserc
     assert _run_main("--cwd", str(tmp_path), "--check") == 0
 
 
-def test_node_repo_can_opt_in_to_typecheck_budget(tmp_path: pathlib.Path):
+def test_node_repo_cannot_opt_in_to_typecheck_budget_anymore(tmp_path: pathlib.Path):
+    """The old opt-in spelling is the retirement bridge: notice, exit 0, no budget script."""
     _ = (tmp_path / "package.json").write_text('{"name": "demo-node"}\n', encoding="utf-8")
     assert (
         _run_main(
@@ -114,12 +118,13 @@ def test_node_repo_can_opt_in_to_typecheck_budget(tmp_path: pathlib.Path):
         )
         == 0
     )
-    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    assert not (tmp_path / "scripts" / "typecheck-budget.py").exists()
     releaserc = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
-    assert ".config/basedpyright-baseline.txt" in releaserc
+    assert ".config/basedpyright-baseline.txt" not in releaserc
 
 
-def test_python_repo_can_opt_out_of_typecheck_budget(tmp_path: pathlib.Path):
+def test_python_repo_without_typecheck_budget_writes_no_budget(tmp_path: pathlib.Path):
+    """`--without` the retired spelling is also a bridge, not an error or a gate."""
     _ = (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo-py"\n', encoding="utf-8")
     assert (
         _run_main(
@@ -137,15 +142,30 @@ def test_python_repo_can_opt_out_of_typecheck_budget(tmp_path: pathlib.Path):
     assert ".config/basedpyright-baseline.txt" not in releaserc
 
 
-def test_python_flavor_updates_existing_releaserc(tmp_path: pathlib.Path):
+def test_python_flavor_leaves_existing_releaserc_untouched(tmp_path: pathlib.Path):
+    """No flavor rewrites `.releaserc.json` for a typecheck baseline any more — none exists."""
     _ = (tmp_path / "package.json").write_text('{"name": "demo"}\n', encoding="utf-8")
     assert _run_main("--cwd", str(tmp_path), "--flavor", "git") == 0
-    releaserc_before = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
-    assert ".config/basedpyright-baseline.txt" not in releaserc_before
+    releaserc_before = (tmp_path / ".releaserc.json").read_bytes()
 
     _ = (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\n', encoding="utf-8")
     assert _run_main("--cwd", str(tmp_path), "--flavor", "python") == 0
-    assert (tmp_path / "scripts" / "typecheck-budget.py").exists()
-    releaserc_after = (tmp_path / ".releaserc.json").read_text(encoding="utf-8")
-    assert ".config/basedpyright-baseline.txt" in releaserc_after
+    assert not (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    assert (tmp_path / ".releaserc.json").read_bytes() == releaserc_before
     assert _run_main("--cwd", str(tmp_path), "--check") == 0
+
+
+def test_typecheck_budget_component_retires_with_a_pointer(tmp_path, capsys):
+    """All three retired spellings exit 0, write nothing, and name the native runner."""
+    _ = (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo-py"\n', encoding="utf-8")
+    for spelling in ("typecheck-budget", "typecheck_budget", "typecheck"):
+        scaffold._typecheck_budget_retirement_notice_shown = False  # pyright: ignore[reportAttributeAccessIssue]
+        capsys.readouterr()
+        assert _run_main("--update", "--only", spelling, "--no-format", "--cwd", str(tmp_path)) == (
+            0
+        ), spelling
+        err = capsys.readouterr().err
+        assert "basedpyright" in err, spelling
+        assert "unknown component" not in err, spelling
+    assert not (tmp_path / "scripts" / "typecheck-budget.py").exists()
+    assert not (tmp_path / ".releaserc.json").exists()

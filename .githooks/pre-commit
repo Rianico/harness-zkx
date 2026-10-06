@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# pre-commit — runs the repo quality gate before each commit. Escape hatch: git commit --no-verify
+# pre-commit — runs the repo quality gate before each commit.
+# Normal escape hatch: HARNESS_CHECK_SKIP_TESTS=1 git commit ...
+# `git commit --no-verify` only as a last resort.
 set -euo pipefail
 
-REPO_ROOT=$(git rev-parse --show-toplevel)
-cd "$REPO_ROOT"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$HOOK_DIR/.."
+
+if [ "${HARNESS_CHECK_SKIP_TESTS:-}" = "1" ]; then
+  exec scripts/check.sh --skip-tests
+fi
 exec scripts/check.sh "$@"

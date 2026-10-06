@@ -8,8 +8,15 @@ Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--
   --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
-  --no-stamp : do not auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger
+  --draft : leave the PR a draft after stamping (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
+  --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens
+    (the caller owns the changelog) — the head was not stamped, so expect a red changelog gate
   --squash-message / --squash-message-file : explicit squash commit message (mutually exclusive)
+Draft handshake: every NEWLY CREATED PR is created as a draft (draft=true), stamped (commit+push), then explicitly
+readied via `gh pr ready <num> --repo <repo>` so CI's ready_for_review event fires. A gh pr ready failure
+prints the exact manual fix and exits 1: a draft that never went ready is not success. An existing open
+PR is reused untouched — never readied, never re-drafted; a reused draft without --draft fails loudly with
+the same manual remediation and exits 1.
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
 except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
 script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
@@ -19,10 +26,11 @@ refused (exit 1) instead of letting GitHub synthesize commit subjects.
 Opening a PR requires a description: an empty body or the unfilled repo template is refused pre-create.
 Commit title length is strictly limited to 100 characters (TITLE (#NUM) <= 100).
 Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
-Exit: 0 ok | 1 checks failed, body refused, or merge refused | 2 usage or unusable head ref
+Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -132,15 +140,15 @@ Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--
   --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
   --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
-  --no-stamp : do not auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger
+  --draft : leave the PR a draft (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
+  --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens (caller owns the changelog) — head unstamped, expect a red changelog gate
   --body/--body-file : required to open a PR; the caller drafts the description (pr-enhance workflow). An empty body or the unfilled repo template is refused.
   --squash-message/--squash-message-file : explicit squash commit message (mutually exclusive); a squash merge never omits commit_message (explicit or derived) — an empty/template body without an explicit message is refused (exit 1), never GitHub's commit-subject synthesis.
-Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author
-except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the
-script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
+Draft handshake: a NEWLY CREATED PR is created as a draft (draft=true), stamped (commit+push), then readied via gh pr ready so CI's ready_for_review fires; a failed flip prints the verbatim manual fix and exits 1. Existing open PRs are reused untouched — never readied, never re-drafted; a reused draft without --draft fails loudly with the same manual remediation and exits 1.
+Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
 Commit title length is strictly limited to 100 characters (TITLE (#NUM) <= 100).
 Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
-Exit: 0 ok | 1 checks failed, body refused, or merge refused | 2 usage or unusable head ref"""
+Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref"""
     print(usage)
 
 
@@ -408,6 +416,8 @@ def checks_verdict(payload: str) -> str:
     total = 0
     failed = 0
     pending = 0
+    passed = 0
+    skipping = 0
     for line in payload.splitlines():
         line = line.strip()
         if not line:
@@ -421,14 +431,19 @@ def checks_verdict(payload: str) -> str:
         total += 1
         if bucket in ("fail", "cancel"):
             failed += 1
-        elif bucket in ("pass", "skipping"):
-            pass
+        elif bucket == "pass":
+            passed += 1
+        elif bucket == "skipping":
+            skipping += 1
         else:
             pending += 1
 
     if failed > 0:
         return "failure"
     if total == 0 or pending > 0:
+        return "pending"
+    if passed == 0 and skipping > 0:
+        # All reported checks skipped (draft PRs get all-skipped runs): zero CI is not green.
         return "pending"
     return "success"
 
@@ -1237,8 +1252,15 @@ def create_or_reuse_pr(
     body_supplied: bool,
     draft: bool = False,
     cwd: Path | None = None,
-) -> tuple[str, str, str]:
-    """Create or reuse open PR for head_ref. Returns (num, final_title, final_body)."""
+) -> tuple[str, str, str, bool]:
+    """Create or reuse open PR for head_ref. Returns (num, final_title, final_body, created).
+
+    New PRs are always created as a draft (draft=true); the caller flips them ready after
+    stamping via ready_pr, honoring the retained draft flag at the flip, not here. An
+    existing open PR is reused untouched: its draft state is never changed. A reused draft
+    PR without --draft is a silent no-op hole: it now refuses (exit 1) with the verbatim
+    manual remediation instead of returning success on a draft that never runs CI.
+    """
     template_path = (cwd / DEFAULT_TEMPLATE_PATH) if cwd else DEFAULT_TEMPLATE_PATH
     if body_supplied and is_unfilled_body(body, template_path=template_path):
         refuse_unfilled_body(body)
@@ -1250,7 +1272,7 @@ def create_or_reuse_pr(
             "api",
             f"repos/{repo}/pulls?head={owner}:{head_ref}&state=open",
             "--jq",
-            ".[0].number",
+            r'.[0] // empty | "\(.number)\t\(.isDraft)"',
         ],
         cwd=cwd,
     )
@@ -1260,8 +1282,21 @@ def create_or_reuse_pr(
         )
     existing = res.stdout.strip()
     if existing and existing != "null":
-        num = existing
+        fields = existing.split("\t")
+        num = fields[0].strip()
+        is_draft = len(fields) > 1 and fields[1].strip().lower() == "true"
         print(f"found existing PR #{num}", file=sys.stderr)
+        if is_draft and not draft:
+            print(
+                f"reused PR #{num} is still a draft and --draft was not passed; "
+                "reuse never mutates draft state, so CI never ran",
+                file=sys.stderr,
+            )
+            print(
+                f"remediation: PR #{num} is still a draft; run manually: gh pr ready {num} --repo {repo}",
+                file=sys.stderr,
+            )
+            raise RefusalError(f"reused PR #{num} is still a draft")
         patch_args: list[str] = []
         updated_fields: list[str] = []
         final_title = title
@@ -1307,9 +1342,8 @@ def create_or_reuse_pr(
                 )
             fields_str = ", ".join(updated_fields)
             print(f"updating PR #{num}: {fields_str}", file=sys.stderr)
-        return num, final_title, final_body
+        return num, final_title, final_body, False
 
-    draft_flag = "true" if draft else "false"
     final_body = body
     if not body_supplied:
         print("refusing to open PR: no --body/--body-file supplied", file=sys.stderr)
@@ -1336,7 +1370,7 @@ def create_or_reuse_pr(
             "-f",
             f"body={final_body}",
             "-F",
-            f"draft={draft_flag}",
+            "draft=true",
             "--jq",
             ".number",
         ],
@@ -1345,8 +1379,29 @@ def create_or_reuse_pr(
     if create_res.returncode != 0:
         raise PrError(f"failed to create PR: {create_res.stderr.strip() or 'gh api failed'}")
     num = create_res.stdout.strip()
-    print(f"created PR #{num}", file=sys.stderr)
-    return num, title, final_body
+    print(f"created PR #{num} (draft)", file=sys.stderr)
+    return num, title, final_body, True
+
+
+def ready_pr(repo: str, num: str, cwd: Path | None = None) -> bool:
+    """Flip a draft PR to ready so CI's ready_for_review event fires.
+
+    Prints the command to stderr before running it. A non-zero gh pr ready is not
+    silent: the exact manual fix is printed verbatim and the caller must exit 1 —
+    a draft that never went ready is not success.
+    """
+    cmd = ["gh", "pr", "ready", num, "--repo", repo]
+    print(" ".join(cmd), file=sys.stderr)
+    res = run_command(cmd, cwd=cwd)
+    if res.returncode != 0:
+        detail = res.stderr.strip() or "gh pr ready failed"
+        print(f"gh pr ready failed for PR #{num}: {detail}", file=sys.stderr)
+        print(
+            f"remediation: PR #{num} is still a draft; run manually: gh pr ready {num} --repo {repo}",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def pr_url(repo: str, num: str, cwd: Path | None = None) -> str:
@@ -1530,6 +1585,8 @@ def stamp_changelog(
         commit_res = run_command(
             ["git", "commit", "-m", f"chore(changelog): attribute #{pr_num} in unreleased ledger"],
             cwd=cwd,
+            timeout=60.0,
+            env={**os.environ, "HARNESS_CHECK_SKIP_TESTS": "1"},
         )
         if commit_res.returncode != 0:
             print(
@@ -1579,7 +1636,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         base = resolve_base(options.base, repo)
-        num, final_title, final_body = create_or_reuse_pr(
+        num, final_title, final_body, created = create_or_reuse_pr(
             repo=repo,
             head_ref=head,
             base=base,
@@ -1594,6 +1651,16 @@ def main(argv: list[str] | None = None) -> int:
 
         if not options.no_stamp:
             _ = stamp_changelog(head, num)
+        elif created:
+            print(
+                f"warning: --no-stamp: head was not stamped for PR #{num} — "
+                "expect a red changelog gate until it is stamped and pushed",
+                file=sys.stderr,
+            )
+
+        if created and not options.draft:
+            if not ready_pr(repo, num):
+                return 1
 
         if options.watch:
             if not watch_checks(repo, num, base):
