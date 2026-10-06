@@ -13,7 +13,7 @@
 
 ## Before PR
 
-`bash scripts/check.sh` (runs ruff check, ruff format --check, basedpyright --warnings, pytest) plus `uv run python3 scripts/changelog-gate.py ledger` must pass. The `.githooks/pre-commit` hook runs the gate automatically on commit; escape hatch: `git commit --no-verify`. Setup is one-time per clone: `git config core.hooksPath .githooks` — that setting is repository-local and not versioned, so a fresh clone needs it again. See `AGENTS.md` for agent rules.
+`bash scripts/check.sh` (runs ruff check, ruff format --check, basedpyright --warnings, pytest) plus `uv run python3 scripts/changelog-gate.py ledger` must pass. The `.githooks/pre-commit` hook runs the gate automatically on commit. Normal escape hatch when the suite is not yours to run: `HARNESS_CHECK_SKIP_TESTS=1 git commit ...` runs the gate without pytest. `git commit --no-verify` is a last resort only — repo rules (`rules/common/gotcha.md`) forbid agents from using it. Setup is one-time per clone: `git config core.hooksPath .githooks` — that setting is repository-local and not versioned, so a fresh clone needs it again. See `AGENTS.md` for agent rules.
 
 `ruff format` is gated too: the verify job runs `uv run ruff format --check .`, so the tree stays formatted. `[tool.ruff] exclude` keeps `*.md` out of that pass — ruff also reformats Python fences inside Markdown, and this repo's 73 reference docs are the product, not code to reflow.
 

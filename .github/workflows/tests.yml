@@ -9,14 +9,16 @@ on:
       - 'skills/**/*.py'
       - 'tests/**/*.py'
       - 'pyproject.toml'
-      - 'scripts/**/*.py'
+      - 'scripts/**'
+      - '.githooks/**'
       - '.github/workflows/tests.yml'
   pull_request:
     paths:
       - 'skills/**/*.py'
       - 'tests/**/*.py'
       - 'pyproject.toml'
-      - 'scripts/**/*.py'
+      - 'scripts/**'
+      - '.githooks/**'
       - '.github/workflows/tests.yml'
 
 jobs:
@@ -48,7 +50,7 @@ jobs:
           uv sync --frozen --group dev --no-install-package basedpyright --no-install-package nodejs-wheel-binaries
 
       - name: Run all tests
-        run: uv run pytest
+        run: uv run --no-sync pytest
 
   typecheck:
     runs-on: ubuntu-latest
