@@ -25,7 +25,7 @@ if str(PR_SCRIPTS) not in sys.path:
 if str(LIB_DIR) not in sys.path:
     sys.path.insert(0, str(LIB_DIR))
 
-from pr import resolve_base  # noqa: E402
+from pr import RefusalError, resolve_base  # noqa: E402
 from range_authority import resolve_range  # noqa: E402
 
 
@@ -120,10 +120,78 @@ exit 1
     return bindir
 
 
+def _make_master_only_repo(repo: Path) -> None:
+    """Synthetic repo: only refs/remotes/origin/master, no origin/HEAD."""
+    _ = subprocess.run(["git", "init", "-b", "master", str(repo)], capture_output=True, check=True)
+    _ = _git(repo, "config", "user.name", "Master Synthetic")
+    _ = _git(repo, "config", "user.email", "synthetic@x.io")
+    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    _ = _git(repo, "add", "base.txt")
+    _ = _git(
+        repo,
+        "-c",
+        "user.name=Base Bau",
+        "-c",
+        "user.email=base@x.io",
+        "commit",
+        "-m",
+        "chore: master base",
+    )
+    master_sha = _git(repo, "rev-parse", "HEAD").strip()
+    _ = _git(repo, "update-ref", "refs/remotes/origin/master", master_sha)
+    _ = _git(repo, "checkout", "-b", "feature")
+    _ = (repo / "work.txt").write_text("work\n", encoding="utf-8")
+    _ = _git(repo, "add", "work.txt")
+    _ = _git(
+        repo,
+        "-c",
+        "user.name=Wren",
+        "-c",
+        "user.email=wren@x.io",
+        "commit",
+        "-m",
+        "feat: wren work",
+    )
+
+
+def _make_no_candidate_repo(repo: Path) -> None:
+    """Synthetic repo: no origin/HEAD, no origin/main, no origin/master."""
+    _ = subprocess.run(["git", "init", "-b", "trunk", str(repo)], capture_output=True, check=True)
+    _ = _git(repo, "config", "user.name", "No Candidate")
+    _ = _git(repo, "config", "user.email", "synthetic@x.io")
+    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    _ = _git(repo, "add", "base.txt")
+    _ = _git(
+        repo,
+        "-c",
+        "user.name=Base Bau",
+        "-c",
+        "user.email=base@x.io",
+        "commit",
+        "-m",
+        "chore: trunk base",
+    )
+    _ = _git(repo, "checkout", "-b", "feature")
+    _ = (repo / "solo.txt").write_text("solo\n", encoding="utf-8")
+    _ = _git(repo, "add", "solo.txt")
+    _ = _git(
+        repo,
+        "-c",
+        "user.name=Solo",
+        "-c",
+        "user.email=solo@x.io",
+        "commit",
+        "-m",
+        "feat: solo work",
+    )
+
+
 def test_resolve_base_prefers_origin_head_over_literal_main(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """resolve_base on a trunk repo returns trunk, never the old literal main."""
+    """resolve_base follows origin/HEAD first (pre-existing behaviour, not the guard)."""
     repo = tmp_path / "trunk-repo"
     _make_trunk_repo(repo)
     _no_main_refs(repo)
@@ -189,3 +257,78 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
     )
     assert res.returncode == 0, res.stderr
     assert set(res.stdout.splitlines()) == expected
+
+
+def _mocked_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, repo: Path) -> dict[str, str]:
+    bindir = _make_gh_mock(tmp_path / "bin")
+    log = tmp_path / "gh.log"
+    _ = log.write_text("", encoding="utf-8")
+    monkeypatch.setenv("GH_LOG", str(log))
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+    return {
+        **os.environ,
+        "PATH": f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}",
+        "GH_LOG": str(log),
+    }
+
+
+def test_resolve_base_prefers_origin_master_without_origin_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No origin/HEAD + origin/master only resolves to master, never literal main."""
+    repo = tmp_path / "master-repo"
+    _make_master_only_repo(repo)
+    _ = _mocked_env(tmp_path, monkeypatch, repo)
+    assert resolve_base(None, "test/repo", cwd=repo) == "master"
+
+
+def test_resolve_base_refuses_with_no_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No origin/HEAD/main/master raises naming the range authority."""
+    repo = tmp_path / "no-candidate-repo"
+    _make_no_candidate_repo(repo)
+    _ = _mocked_env(tmp_path, monkeypatch, repo)
+    with pytest.raises(RefusalError, match="git-diff-digest range authority"):
+        _ = resolve_base(None, "test/repo", cwd=repo)
+
+
+def test_check_dry_run_refuses_loudly_with_no_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--check with no resolvable base exits 1 with the refusal, not a lone author."""
+    repo = tmp_path / "no-candidate-repo"
+    _make_no_candidate_repo(repo)
+    env = _mocked_env(tmp_path, monkeypatch, repo)
+    res = subprocess.run(
+        [
+            sys.executable,
+            str(PR_PY),
+            "--check",
+            "--head",
+            "feature",
+            "--title",
+            "feat: x",
+            "--body",
+            "## Summary\nReal work.\n",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+    )
+    assert res.returncode == 1, res.stdout
+    assert "cannot resolve PR base" in res.stderr
+    assert "Co-authored-by" not in res.stdout
+
+
+def test_dangling_origin_head_falls_through_to_origin_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """origin/HEAD naming a missing branch is treated as absent."""
+    repo = tmp_path / "dangling-repo"
+    _make_trunk_repo(repo)
+    _ = _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _ = _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
+    _ = _mocked_env(tmp_path, monkeypatch, repo)
+    assert resolve_base(None, "test/repo", cwd=repo) == "main"

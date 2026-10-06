@@ -387,6 +387,15 @@ def _authority_resolve(spec: str, mode: str, cwd: Path | None = None) -> RangeRe
         os.chdir(previous)
 
 
+def _remote_branch_exists(name: str, cwd: Path | None = None) -> bool:
+    """True when refs/remotes/origin/<name> resolves locally (no network)."""
+    res = run_command(
+        ["git", "rev-parse", "--verify", "-q", f"refs/remotes/origin/{name}"],
+        cwd=cwd,
+    )
+    return res.returncode == 0
+
+
 def _local_base_from_authority(cwd: Path | None = None) -> str:
     """Resolve the local base through the shared range authority (bare branch name).
 
@@ -406,8 +415,11 @@ def _local_base_from_authority(cwd: Path | None = None) -> str:
             out = sym.stdout.strip()
             if out.startswith("origin/"):
                 out = out.removeprefix("origin/")
-            if out:
+            if out and _remote_branch_exists(out, cwd=cwd):
                 return out
+            for fallback in ("main", "master"):
+                if _remote_branch_exists(fallback, cwd=cwd):
+                    return fallback
         raise RefusalError(
             "cannot resolve PR base: the git-diff-digest range authority "
             "resolved origin/HEAD but it names no branch"
@@ -445,7 +457,7 @@ def resolve_base(base: str | None, repo: str, cwd: Path | None = None) -> str:
         out = sym_res.stdout.strip()
         if out.startswith("origin/"):
             out = out.removeprefix("origin/")
-        if out:
+        if out and _remote_branch_exists(out, cwd=cwd):
             return out
     try:
         return _local_base_from_authority(cwd=cwd)
@@ -865,8 +877,9 @@ def resolve_squash_message(
             file=sys.stderr,
         )
         print(
-            "remediation: draft the description via the pr-enhance workflow, "
-            "then pass an explicit message with --squash-message (or --squash-message-file)",
+            "remediation: draft the description from the git-diff-digest surface "
+            "(skills/gh-router/subskills/git-diff-digest), then pass an explicit "
+            "message with --squash-message (or --squash-message-file)",
             file=sys.stderr,
         )
         raise RefusalError("squash message refused: body is empty or the repo template")
@@ -1221,7 +1234,10 @@ def check_trailers(
         try:
             base = resolve_base(None, repo, cwd=cwd)
             digest_range = _digest_range_spec(base, head_ref, cwd=cwd)
-        except RefusalError, RangeRefusal:
+        except RefusalError as exc:
+            print(f"{exc}", file=sys.stderr)
+            return 1
+        except RangeRefusal:
             digest_range = None
         log_res: subprocess.CompletedProcess[str] | None = None
         if digest_range is not None:
