@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **ci:** replace typecheck warning budget with native basedpyright gate and unify local checks in check.sh
+* **ci:** replace typecheck warning budget with native basedpyright gate and unify local checks in check.sh (#197)
 * **gh-router:** canonical PR template, installer script, fail-closed squash gate, and scaffold retirement (#196)
 * **herdr:** add `herdr-dispatch --draft` ticket skeletons with prefilled routing (#195)
 * **herdr:** subagent-first coordination, task leases, and fix prompt delivery (#194)
