@@ -259,8 +259,10 @@ def test_rerun_commands_close_the_loop(tmp_path: Path) -> None:
     commits_command, commits_cap = _rerun_line(text.stdout, "commits")
     capped = json.loads(_run_brief(tmp_path, spec, "--json", "--max-lines", "2").stdout)
     assert commits_cap == 2 + capped["truncated"]["commits"]
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
     rerun = subprocess.run(
-        shlex.split(commits_command), capture_output=True, text=True, cwd=tmp_path
+        shlex.split(commits_command), capture_output=True, text=True, cwd=elsewhere
     )
     assert rerun.returncode == 0, rerun.stderr
     assert "more commits omitted" not in rerun.stdout
@@ -272,10 +274,21 @@ def test_rerun_commands_close_the_loop(tmp_path: Path) -> None:
     capped_files = json.loads(_run_brief(tmp_path, spec, "--json", "--max-lines", "4").stdout)
     assert capped_files["truncated"]["commits"] == 0
     assert files_cap == 4 + capped_files["truncated"]["files"]
+    lookalike = tmp_path / "lookalike"
+    lookalike.mkdir()
+    _ = _git(lookalike, "init")
+    _ = _git(lookalike, "config", "user.name", "Other")
+    _ = _git(lookalike, "config", "user.email", "other@x.io")
+    _ = _git(lookalike, "config", "commit.gpgsign", "false")
+    _ = (lookalike / "other.txt").write_text("other\n", encoding="utf-8")
+    _ = _git(lookalike, "add", ".")
+    _ = _git(lookalike, "commit", "-m", "chore: unrelated")
+    _ = _git(lookalike, "checkout", "-b", "feature")
     files_rerun = subprocess.run(
-        shlex.split(files_command), capture_output=True, text=True, cwd=tmp_path
+        shlex.split(files_command), capture_output=True, text=True, cwd=lookalike
     )
     assert files_rerun.returncode == 0, files_rerun.stderr
+    assert capped_files["range"]["fingerprint"][:12] in files_rerun.stdout
     assert "omitted" not in files_rerun.stdout
 
 
@@ -308,6 +321,10 @@ def test_commit_filter_refusals_are_truthful(tmp_path: Path) -> None:
     assert revspec.returncode == 3
     assert "not a revspec" in revspec.stderr
     assert "4-40 hex chars" in revspec.stderr
+    for short_token in ("a", "84", "abc"):
+        short = _run_brief(tmp_path, spec, "--commit", short_token)
+        assert short.returncode == 3
+        assert f"commit prefix too short (min 4 hex chars): {short_token}" in short.stderr
 
     head_sha = _git(tmp_path, "rev-parse", "feature")
     inside = _payload(tmp_path, spec, "--json", "--commit", head_sha)
@@ -322,14 +339,18 @@ def test_commit_filter_refusals_are_truthful(tmp_path: Path) -> None:
     _ = _git(tmp_path, "checkout", "-q", "feature")
     tree = _git(tmp_path, "write-tree")
     parent = _git(tmp_path, "rev-parse", "HEAD")
-    for _ in range(1100):
-        parent = _git(tmp_path, "commit-tree", tree, "-p", parent, "-m", "chore: pad")
-    _ = _git(tmp_path, "update-ref", "refs/heads/feature", parent)
-    padded = _payload(tmp_path, spec, "--json", "--max-lines", "5000")["commits"]
-    prefixes: dict[str, list[str]] = {}
-    for entry in padded:
-        prefixes.setdefault(entry["sha"][:4], []).append(entry["short"])
-    collisions = {prefix: shorts for prefix, shorts in prefixes.items() if len(shorts) > 1}
+    collisions: dict[str, list[str]] = {}
+    for _ in range(20):
+        for _ in range(100):
+            parent = _git(tmp_path, "commit-tree", tree, "-p", parent, "-m", "chore: pad")
+        _ = _git(tmp_path, "update-ref", "refs/heads/feature", parent)
+        padded = _payload(tmp_path, spec, "--json", "--max-lines", "5000")["commits"]
+        prefixes: dict[str, list[str]] = {}
+        for entry in padded:
+            prefixes.setdefault(entry["sha"][:4], []).append(entry["short"])
+        collisions = {prefix: shorts for prefix, shorts in prefixes.items() if len(shorts) > 1}
+        if collisions:
+            break
     assert collisions, "no ambiguous 4-char prefix after padding"
     prefix, shorts = sorted(collisions.items())[0]
     ambiguous = _run_brief(tmp_path, spec, "--commit", prefix)

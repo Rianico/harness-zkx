@@ -464,11 +464,13 @@ def _build_brief(
     full_commits = list(commits)
     if commit_filter is not None:
         wanted_commit = commit_filter.lower()
-        if not re.fullmatch(r"[0-9a-f]{4,40}", wanted_commit):
+        if not re.fullmatch(r"[0-9a-f]{1,40}", wanted_commit):
             raise RangeRefusal(
                 "commit must be a full or short sha "
                 f"(4-40 hex chars), not a revspec: {commit_filter}"
             )
+        if len(wanted_commit) < 4:
+            raise RangeRefusal(f"commit prefix too short (min 4 hex chars): {commit_filter}")
         commits = [
             entry
             for entry in commits
@@ -595,15 +597,17 @@ def build_brief_payload(
     return payload
 
 
-def _rerun_brief_command(spec_in: str, mode: str, extra: str) -> str:
+def _rerun_brief_command(spec_in: str, mode: str, extra: str, repo_root: str) -> str:
     script = Path(__file__).resolve()
-    return f"uv run {script} '{spec_in}' --mode {mode}{extra}"
+    return f"uv run {script} '{spec_in}' --mode {mode}{extra} --repo {repo_root}"
 
 
 def render_brief_text(
     payload: _BriefPayload,
     hunks: dict[str, list[str]] | None = None,
     max_lines: int = 40,
+    *,
+    repo_root: str,
 ) -> str:
     """Render the default text brief: precomputed overview plus capped rows."""
     block = payload["range"]
@@ -674,7 +678,10 @@ def render_brief_text(
         lines.append(
             f"  ... ({omitted_commits} more commits omitted; rerun: "
             + _rerun_brief_command(
-                block["spec_in"], block["mode"], f" --max-lines {max_lines + omitted_commits}"
+                block["spec_in"],
+                block["mode"],
+                f" --max-lines {max_lines + omitted_commits}",
+                repo_root,
             )
             + ")"
         )
@@ -691,7 +698,10 @@ def render_brief_text(
         lines.append(
             f"  ... ({omitted_files} more files omitted; rerun: "
             + _rerun_brief_command(
-                block["spec_in"], block["mode"], f" --max-lines {max_lines + omitted_files}"
+                block["spec_in"],
+                block["mode"],
+                f" --max-lines {max_lines + omitted_files}",
+                repo_root,
             )
             + ")"
         )
@@ -943,7 +953,7 @@ def main() -> int:
         hunks = _read_brief_hunks(
             repo_root, old_endpoint, new_endpoint, hunk_paths, args.context, args.max_lines
         )
-    print(render_brief_text(payload, hunks, args.max_lines))
+    print(render_brief_text(payload, hunks, args.max_lines, repo_root=str(repo_root)))
     return 0
 
 

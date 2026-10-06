@@ -161,3 +161,57 @@ def test_conflict_extractor_full_goldens(tmp_path: Path) -> None:
         assert _normalise_full(completed.stdout, is_json) == case["stdout_normalized"].encode(
             "utf-8"
         )
+
+
+_SAMPLE_TEXT = (
+    "repo: /tmp/somewhere/repo\n"
+    "conflicted files: 1\n"
+    "  merge (merging bbbbbbb into aaaaaaa)\n"
+    "  ours (HEAD): [aaaaaaa]\n"
+    "  theirs (MERGE_HEAD): [bbbbbbb]\n"
+    "  author date 3 hours ago\n"
+)
+
+_SAMPLE_JSON = json.dumps(
+    {
+        "repo_root": "/tmp/somewhere/repo",
+        "conflicted_files": [
+            {
+                "operation": "merge (merging bbbbbbb into aaaaaaa)",
+                "author_intent": {
+                    "ours": {"ref": "HEAD", "sha": "aaaaaaa"},
+                    "theirs": {"ref": "MERGE_HEAD", "sha": "bbbbbbb"},
+                },
+            }
+        ],
+    }
+)
+
+# Each declared rule maps to (sample_input, is_json, expected_substring).
+# An unknown declaration raises KeyError; an edited transformation drops the
+# expected token. Either way the guard fails.
+_RULE_SAMPLES: dict[str, tuple[str, bool, str]] = {
+    "repo line value -> <REPO_ROOT> (whole-line match)": (
+        _SAMPLE_TEXT,
+        False,
+        "repo: <REPO_ROOT>",
+    ),
+    "intent SHAs value-anchored -> <OURS_SHA> / <THEIRS_SHA>": (
+        _SAMPLE_JSON,
+        True,
+        '"operation": "merge (merging <THEIRS_SHA> into <OURS_SHA>)"',
+    ),
+    "relative durations ('N unit(s) ago') -> <DURATION>": (
+        _SAMPLE_TEXT,
+        False,
+        "<DURATION>",
+    ),
+}
+
+
+def test_normalization_rules_match_declared_effects() -> None:
+    golden = json.loads(FULL_GOLDEN_PATH.read_text(encoding="utf-8"))
+    declared = golden["cases"][0]["normalization"]
+    for rule in declared:
+        sample, is_json, expected = _RULE_SAMPLES[rule]
+        assert expected in _normalise_full(sample, is_json).decode("utf-8"), rule
