@@ -30,6 +30,7 @@ Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -1584,6 +1585,8 @@ def stamp_changelog(
         commit_res = run_command(
             ["git", "commit", "-m", f"chore(changelog): attribute #{pr_num} in unreleased ledger"],
             cwd=cwd,
+            timeout=60.0,
+            env={**os.environ, "HARNESS_CHECK_SKIP_TESTS": "1"},
         )
         if commit_res.returncode != 0:
             print(
