@@ -209,7 +209,7 @@ The versioned payload (`schema: 1`) produced by the `git-diff-digest` subskill f
 _Avoid_: digest, diff dump, summary.
 
 **Range**:
-The commit interval the Diff Digest describes, in two forms: the caller-supplied spec (`range.spec_in`) and the resolved interval. `resolve_range(spec, mode)` takes both. Base resolution is local-first and ordered: explicit base → `origin/HEAD` → `origin/main` → `origin/master`, with no network access.
+The commit interval the Diff Digest describes, in two forms: the caller-supplied spec (`range.spec_in`) and the resolved interval. `resolve_range(spec, mode)` takes the spec and the mode. Base resolution is local-first and ordered: explicit base → `origin/HEAD` → `origin/main` → `origin/master`, with no network access.
 _Avoid_: revision, branch interval.
 
 **Only in base**:

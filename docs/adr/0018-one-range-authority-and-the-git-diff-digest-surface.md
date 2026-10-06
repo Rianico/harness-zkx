@@ -14,7 +14,7 @@ The existing diff analyser cannot grow into this role. It is diff-only and PR-sh
 
 ## Decision
 
-One shared Python module in `skills/gh-router/lib/` owns base and range resolution. Both the new digest surface and `pr.py` consume it. The shared module owns no presentation.
+One shared Python module in `skills/gh-router/lib/` owns base and range resolution. The digest surface, `pr.py`, and the conflict extractor consume it. The shared module owns no presentation.
 
 Base resolution is local-first and ordered: explicit base → `origin/HEAD` → `origin/main` → `origin/master`. It never touches the network.
 
