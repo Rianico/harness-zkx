@@ -446,12 +446,22 @@ def _build_brief(
     commits = [_read_brief_commit(repo_root, sha) for sha in resolution.commits]
     if commit_filter is not None:
         wanted_commit = commit_filter.lower()
+        if not re.fullmatch(r"[0-9a-f]{4,40}", wanted_commit):
+            raise RangeRefusal(
+                "commit must be a full or short sha "
+                f"(4-40 hex chars), not a revspec: {commit_filter}"
+            )
         commits = [
             entry
             for entry in commits
             if entry["sha"].lower() == wanted_commit
             or entry["sha"].lower().startswith(wanted_commit)
         ]
+        if len(commits) > 1:
+            shorts = ", ".join(entry["short"] for entry in commits)
+            raise RangeRefusal(
+                f"ambiguous commit prefix: {commit_filter} matches {shorts}; use a longer prefix"
+            )
         if not commits:
             raise RangeRefusal(f"commit not in range: {commit_filter}")
     if resolution.mode == "...":
@@ -560,10 +570,8 @@ def build_brief_payload(
 
 
 def _rerun_brief_command(spec_in: str, mode: str, extra: str) -> str:
-    return (
-        "uv run $SKILL_DIR/subskills/git-diff-digest/scripts/brief.py"
-        f" '{spec_in}' --mode {mode}{extra}"
-    )
+    script = Path(__file__).resolve()
+    return f"uv run {script} '{spec_in}' --mode {mode}{extra}"
 
 
 def render_brief_text(

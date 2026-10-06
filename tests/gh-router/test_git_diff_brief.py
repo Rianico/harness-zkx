@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -236,6 +237,106 @@ def test_honest_caps_true_totals_and_remainder(tmp_path: Path) -> None:
     assert f"'{spec}'" in text.stdout
     assert "omitted" in text.stdout
     assert text.stdout.count("brief.py") >= 2
+
+
+def _rerun_line(output: str, kind: str) -> tuple[str, int]:
+    """Split the printed rerun command for KIND off its line; return it and its cap."""
+    line = next(line for line in output.splitlines() if f"more {kind} omitted; rerun:" in line)
+    command = line.split("rerun: ", 1)[1].rstrip()
+    assert command.endswith(")"), f"rerun line is not closed: {line}"
+    command = command[:-1]
+    found = re.search(r"--max-lines (\d+)", command)
+    assert found is not None, f"no --max-lines in rerun: {command}"
+    cap = int(found.group(1))
+    return command, cap
+
+
+def test_rerun_commands_close_the_loop(tmp_path: Path) -> None:
+    seeds = _seed_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    text = _run_brief(tmp_path, spec, "--max-lines", "2")
+    assert text.returncode == 0, text.stderr
+    commits_command, commits_cap = _rerun_line(text.stdout, "commits")
+    capped = json.loads(_run_brief(tmp_path, spec, "--json", "--max-lines", "2").stdout)
+    assert commits_cap == 2 + capped["truncated"]["commits"]
+    rerun = subprocess.run(
+        shlex.split(commits_command), capture_output=True, text=True, cwd=tmp_path
+    )
+    assert rerun.returncode == 0, rerun.stderr
+    assert "more commits omitted" not in rerun.stdout
+
+    files_text = _run_brief(tmp_path, spec, "--max-lines", "4")
+    assert files_text.returncode == 0, files_text.stderr
+    assert "more commits omitted" not in files_text.stdout
+    files_command, files_cap = _rerun_line(files_text.stdout, "files")
+    capped_files = json.loads(_run_brief(tmp_path, spec, "--json", "--max-lines", "4").stdout)
+    assert capped_files["truncated"]["commits"] == 0
+    assert files_cap == 4 + capped_files["truncated"]["files"]
+    files_rerun = subprocess.run(
+        shlex.split(files_command), capture_output=True, text=True, cwd=tmp_path
+    )
+    assert files_rerun.returncode == 0, files_rerun.stderr
+    assert "omitted" not in files_rerun.stdout
+
+
+def test_fingerprint_identifies_the_range(tmp_path: Path) -> None:
+    seeds = _seed_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    first = _payload(tmp_path, spec, "--json")["range"]["fingerprint"]
+    again = _payload(tmp_path, spec, "--json")["range"]["fingerprint"]
+    assert first == again
+
+    _ = _git(tmp_path, "checkout", "-q", "feature")
+    _ = (tmp_path / "extra.txt").write_text("extra\n", encoding="utf-8")
+    _ = _git(tmp_path, "add", ".")
+    _ = _git(tmp_path, "commit", "-m", "docs: extra line")
+    moved = _payload(tmp_path, spec, "--json")["range"]["fingerprint"]
+    assert moved != first
+
+    narrow = _payload(tmp_path, spec, "--json", "--max-lines", "1")["range"]["fingerprint"]
+    wide = _payload(tmp_path, spec, "--json", "--max-lines", "40")["range"]["fingerprint"]
+    assert narrow == wide == moved
+
+
+def test_commit_filter_refusals_are_truthful(tmp_path: Path) -> None:
+    seeds = _seed_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    members = _payload(tmp_path, spec, "--json")["commits"]
+    assert len(members) == 4
+
+    revspec = _run_brief(tmp_path, spec, "--commit", "HEAD")
+    assert revspec.returncode == 3
+    assert "not a revspec" in revspec.stderr
+    assert "4-40 hex chars" in revspec.stderr
+
+    head_sha = _git(tmp_path, "rev-parse", "feature")
+    inside = _payload(tmp_path, spec, "--json", "--commit", head_sha)
+    assert len(inside["commits"]) == 1
+    assert inside["commits"][0]["sha"] == head_sha
+
+    base_sha = _git(tmp_path, "rev-parse", seeds["base"])
+    outside = _run_brief(tmp_path, spec, "--commit", base_sha)
+    assert outside.returncode == 3
+    assert f"commit not in range: {base_sha}" in outside.stderr
+
+    _ = _git(tmp_path, "checkout", "-q", "feature")
+    tree = _git(tmp_path, "write-tree")
+    parent = _git(tmp_path, "rev-parse", "HEAD")
+    for _ in range(1100):
+        parent = _git(tmp_path, "commit-tree", tree, "-p", parent, "-m", "chore: pad")
+    _ = _git(tmp_path, "update-ref", "refs/heads/feature", parent)
+    padded = _payload(tmp_path, spec, "--json", "--max-lines", "5000")["commits"]
+    prefixes: dict[str, list[str]] = {}
+    for entry in padded:
+        prefixes.setdefault(entry["sha"][:4], []).append(entry["short"])
+    collisions = {prefix: shorts for prefix, shorts in prefixes.items() if len(shorts) > 1}
+    assert collisions, "no ambiguous 4-char prefix after padding"
+    prefix, shorts = sorted(collisions.items())[0]
+    ambiguous = _run_brief(tmp_path, spec, "--commit", prefix)
+    assert ambiguous.returncode == 3
+    assert prefix in ambiguous.stderr
+    for short in shorts:
+        assert short in ambiguous.stderr
 
 
 def test_exit_two_malformed_and_exit_three_unknown_ref(tmp_path: Path) -> None:
