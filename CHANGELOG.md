@@ -76,7 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
-* **check-gate:** scrub git repo-location overrides and refuse a bare-flagged repo, so a leaked GIT_DIR can no longer redirect the suite's git writes
+* **check-gate:** scrub git repo-location overrides and refuse a bare-flagged repo, so a leaked GIT_DIR can no longer redirect the suite's git writes (#213)
 * **ai-engineering:** bring skill bodies into STE-100 compliance and support --preserve in linter ([#190](https://github.com/Rianico/harness-zkx/issues/190)) (#191)
 * **skill-authoring:** count sentence words by ASD-STE100 Rule 8.5-8.7 and correct the Rule 1.1 and 5.1 citations (#189)
 * **harness-audit:** read event-stream session logs, name all edit error codes, and report delivery-cap truncation (#179)
