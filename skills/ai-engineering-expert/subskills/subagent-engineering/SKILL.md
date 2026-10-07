@@ -43,7 +43,7 @@ Maximize context efficiency and reduce latency by launching independent subagent
 
 ## Intent vs Execution
 
-Orchestrator owns intent; subagent owns execution. The orchestrator grills the user via Dialog Contracts (e.g., `Project Shape → Verification Gate → Coverage → CI Release`) to capture `flavor`, gates, `coverage threshold`, and `CI variant` as flags/pointers. The subagent executes generation and verification (`uv run $SKILL_DIR/scripts/scaffold.py --flavor python --with-coverage 80`, `pytest`, `lint`) and must not re-grill the user; it returns a structured result. Prevents hero-mode and preserves observation quality — intent is grilling, execution is tool-owned.
+Orchestrator owns intent; subagent owns execution. The orchestrator grills the user via Dialog Contracts (e.g., `Project Shape → Verification Gate → Coverage → CI Release`) to capture `flavor`, gates, `coverage threshold`, and `CI variant` as flags/pointers. The subagent executes generation and verification (`uv run skills/scaffold/scripts/scaffold.py --flavor python --with-coverage 80`, `pytest`, `lint`) and must not re-grill the user; it returns a structured result. Prevents hero-mode and preserves observation quality — intent is grilling, execution is tool-owned.
 
 ## Native Agent Orchestration Constraints
 

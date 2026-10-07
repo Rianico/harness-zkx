@@ -12,6 +12,8 @@ This is not a context optimization—it is a fundamental architectural constrain
 - Parallelizable work (multiple subagents can run concurrently)
 - Isolated failure domains (subagent errors don't corrupt orchestrator state)
 
+**Execution Profile Boundary** (the one exception): standalone retrospective audits (`harness-audit`) may run as in-process linear pipelines in scratch directories. Mid-session diagnostics (such as trigger failures) still dispatch to a subagent with forked context, so diagnostic meta-chatter never bloats the parent session's working memory.
+
 ## Orchestrator vs Subagent Responsibilities
 
 ### Orchestrator DOES
@@ -128,34 +130,19 @@ Orchestrator creates topic root once, passes it to each phase. Phases write to t
 
 ## Subagent Summary Contract
 
-Every subagent MUST return a brief, structured summary. The orchestrator's context depends on it.
+Every subagent returns the canonical structured response ([resp-format.md](resp-format.md)): `## Summary`, `## Artifacts`, `## Evidence`, `## Route`, `## Issues`. The orchestrator's context depends on it.
 
 ### Summary Style: BurntSushi's PR Approach
 
-Summaries are complete, coherent, reviewable units:
+The Summary is a complete, coherent, reviewable unit:
 - State approach and reasoning, not just "what was done"
 - Deliver a position that can be critiqued
 - Not "let me try something and see what you think"
 - But "here's my approach, here's the reasoning, tell me where I'm wrong"
 
-### Summary Format
-
-```markdown
-## Summary
-<approach taken, reasoning behind key decisions, and outcome>
-
-## Artifacts
-- <path to primary output>
-- <path to secondary outputs if any>
-
-## Trade-offs (optional)
-- <key trade-off or constraint for next phase>
-```
-
 ### Size Constraints
 
-- Status-only reports: ≤100 words, bullet list
-- Decision/constraint reports: ≤150 words, star rules format
+- ≤100 words, bullet-friendly
 - Never return full artifact contents in the summary
 
 ### Example (Good)

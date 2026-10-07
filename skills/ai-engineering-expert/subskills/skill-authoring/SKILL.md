@@ -89,6 +89,8 @@ Then ask the user:
 
 ## Required Frontmatter
 
+Frontmatter follows the open Agent Skills spec ([agentskills.io](https://agentskills.io)): `name` and `description` are required; `license`, `compatibility`, `metadata`, and `allowed-tools` are optional base fields. Claude Code and Pi frontmatter attributes are enhancements on that base — Pi's semantics are the default where they diverge (see the [reference](references/skill-authoring.md)).
+
 - `name`: **Required** -- must match directory name (lowercase, hyphens, max 64 chars)
 - `description`: **Required** -- what it is + what it does + when to use (`Use when...`), third-person, trigger vocabulary. Use `>-` block scalar.
 
@@ -209,7 +211,7 @@ For complete step-by-step troubleshooting when a skill fails to fire, over-trigg
 - `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line using the `|` or `>-` block scalar: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
 - `allowed-tools`: Tool allowlist without permission prompts
 - `user-invocable`: Show in `/` menu (default: `true`). Set `false` for internal skills accessed only through routing commands.
-- `disable-model-invocation`: Origin: Claude Code. On Claude: prevents automatic loading (description stays listed — selection-only). On Pi ≥0.84.4: **removed from `<available_skills>` XML** (`formatSkillsForPrompt` filters `!disableModelInvocation`) — true zero context/metadata cost, only `/skill:name` reaches it (default: `false`). Do NOT use for skills accessed through routing commands — it blocks both automatic loading AND explicit invocation via `Skill` tool on Claude, and on Pi hides the skill from model context entirely.
+- `disable-model-invocation`: Invocation-class enhancement beyond the open spec — shared by Claude Code and Pi, with Pi's zero-load semantics as the default; mechanics live in the parent [Context-Load Policy](../../references/context-load-policy.md). Do NOT use for skills accessed through routing commands: it blocks automatic loading AND explicit invocation via the `Skill` tool on Claude, and hides the skill from model context entirely on Pi.
 - `model`: Override model (`opus`, `sonnet`, `haiku`, `inherit`)
 - `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)
 
@@ -226,7 +228,7 @@ For complete step-by-step troubleshooting when a skill fails to fire, over-trigg
 - Scripts: `uv run $SKILL_DIR/scripts/xxx.py` -- runs from any directory
 - Raw docs: `$SKILL_DIR/references/<skill-name>-raw/` in prose -- self-contained within skill
 - Avoid `cd` prefixes -- scripts should handle paths internally
-- Use `~/.claude/lsz/$SKILL_DIR/` for runtime artifacts (results, temp files)
+- Use `~/.claude/lsz/<skill-name>/` for runtime artifacts (results, temp files)
 - Scripts are invoked via `uv run` with inline script metadata for dependencies
 
 **User Interaction**

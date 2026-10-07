@@ -20,39 +20,36 @@ Core principles for building reliable AI systems in the LSZ harness. This file h
 
 ## The Foundation: IDD (Intent-Driven Development) & GDD (Goal-Driven Development)
 
-The ultimate purpose of AI Engineering is to translate **Human Intent** into verifiable reality. LLMs are fundamentally **Probabilistic Engines** operating within a **Deterministic World**. We bridge this gap by establishing **IDD** as the upstream teleological root and **GDD** as the derived operational spine:
+AI engineering translates **Human Intent** into verifiable reality. LLMs are **Probabilistic Engines** operating in a **Deterministic World**. **IDD** is the upstream source of authority; **GDD** is the derived operational spine.
 
 ### 1. IDD (Intent-Driven Development): Source of Authority
-Answers *"Why are we changing reality?"* Intent anchors teleological purpose and boundary invariants before any code or goals are authored. It is defined by the **4-part Intent Formula**:
+Answers *"Why are we changing reality?"* Anchors teleological purpose and boundary invariants before any code or goals are authored. Defined by the **4-part Intent Formula**:
 - **Problem**: Concrete deficiency, friction, or behavioral regression in the current world state.
 - **Proposed Outcome**: Observable change in behavior, capability, or invariant once resolved.
 - **Affected Seams**: Architectural boundaries, module interfaces, or protocols touched.
 - **Non-Negotiable Constraints**: Invariants, backwards compatibility, performance ceilings, or forbidden patterns.
 
 ### 2. GDD (Goal-Driven Development): Derived Operational Spine
-Derives verifiable milestone world states and operational targets from Intent. Answers *"What world state confirms the intent was realized?"*
+Derives verifiable milestone world states from Intent. Answers *"What world state confirms the intent was realized?"*
 
 ### 3. The Derivation Chain
-$$\text{Intent (IDD)} \longrightarrow \text{Derived Goals (GDD)} \longrightarrow \text{BDD Contracts (Given/When/Then)} \longrightarrow \text{EDD Verification (Environmental Truth)}$$
-
 1. **Intent (IDD)** establishes the human purpose and boundary invariants.
 2. **Derived Goals (GDD)** operationalize intent into discrete, ordered milestone states.
-3. **BDD Contracts** define behavioral specifications via Given/When/Then acceptance criteria.
-4. **EDD Verification** executes deterministic environment checks (`test`, `lint`, `typecheck`) to prove environmental truth.
+3. **BDD Contracts** define behavior via Given/When/Then acceptance criteria — the shared contract that turns a creative guessing task into a structured translation task.
+4. **EDD Verification** executes deterministic environment checks (`test`, `lint`, `typecheck`). We never trust what the model _says_ it did, only what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
 
-### 4. Why Both Are Strictly Required
-- **Goal without Intent causes Specification Gaming (Goodhart's Law)**: An agent given a goal without understanding the underlying intent optimizes for the metric or test directly (e.g. mock tautologies, stubbing out checks, deleting assertions, or breaking cross-cutting invariants) while defeating the human purpose.
-- **Intent without Goal causes Semantic Drift & Unbounded Refactors**: An agent given pure intent without crisp milestone goals and verification gates wanders aimlessly, refactoring unrelated files, over-engineering architectures, and never converging on verifiable completion.
+Both ends are strictly required. A goal without intent invites **Specification Gaming** (Goodhart's Law): the agent optimizes the metric or test directly — mock tautologies, stubbed checks, deleted assertions, broken cross-cutting invariants — and defeats the human purpose. Intent without goal invites **Semantic Drift**: unbounded refactors of unrelated files that never converge on verifiable completion.
 
-### 5. Execution Pillars
-1. **BDD (Behavior-Driven Development) for Intent Alignment:** We bridge the Intent-Code gap by forcing a **Shared Contract**. BDD (Given/When/Then scenarios) transforms a creative guessing task into a structured translation task.
-2. **EDD (Eval-Driven Development) for Empirical Truth:** We never trust what the model _says_ it did. We only trust what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
-3. **Semantic vs. Deterministic Split:** Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules. When an agent fails, classify root cause into four distinct archetypes:
-   - **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → deterministic tools (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
-   - **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → refine prompt contracts (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
-   - **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → enforce via Context Pressure Asymmetry (move to Skeptic reviewer) or build a hard tool gate. Prune ignored prose.
-   - **Route Friction** (model bypassed rule because compliance was too manual or multi-step) → pack steps into a script (`scripts/<cmd>`). Make the governed path the cheapest path.
-4. **Unified Message Format:** All inter-agent dispatches and completion replies adhere to an isomorphic dual-mode contract (Markdown prose and structured JSON schema) covering Summary (Carmack-style), Artifacts, Evidence, Route, and Issues. (See [Subagent Response Format](references/resp-format.md) and [Lane Coordination](../herdr/references/lane-coordination.md)).
+### 4. Root-Cause Archetypes for Agent Failure
+Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules. When an agent fails, classify the root cause:
+
+- **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → deterministic tools (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
+- **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → refine prompt contracts (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
+- **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → enforce via Context Pressure Asymmetry (move to Skeptic reviewer) or build a hard tool gate. Prune ignored prose.
+- **Route Friction** (model bypassed rule because compliance was too manual or multi-step) → pack steps into a script (`scripts/<cmd>`). Make the governed path the cheapest path.
+
+### 5. Unified Message Format
+All inter-agent dispatches and completion replies adhere to an isomorphic dual-mode contract (Markdown prose and structured JSON schema) covering Summary (Carmack-style), Artifacts, Evidence, Route, and Issues. (See [Subagent Response Format](references/resp-format.md) and [Lane Coordination](../herdr/references/lane-coordination.md)).
 
 ## Information Boundary Design
 
@@ -118,7 +115,7 @@ The 20% of knowledge that solves 80% of problems lives in SKILL.md files. The de
 
 Every line in a SKILL.md earns its place by passing the test: does this solve 80% of problems? If it's deep methodology, edge-case patterns, or platform-specific detail, disclose it behind a pointer. If the pointer fires unreliably on must-have material, sharpen its wording first. Pull it inline only if that fails.
 
-- **Root steering files (`AGENTS.md`, `CLAUDE.md`):** Keep minimal. Use strictly for **navigation pointers**, never inline specs.
+- **Root steering file: `AGENTS.md`** — the open standard ([agents.md](https://agents.md); closest file wins, nested files supported). `CLAUDE.md` and other agent variants are compatibility mirrors. Keep minimal: strictly **navigation pointers**, never inline specs.
 - **Prune No-Ops:** Aggressively delete steering instructions that don't measurably alter agent decisions.
 
 ---
@@ -136,51 +133,13 @@ Every skill declares one of two classes via the canonical `disable-model-invocat
 | Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously; description triggers discovery                                  |
 | `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke; on Pi omitted from `<available_skills>` XML (true zero-load) |
 
-Origin: Claude Code `disable-model-invocation`. Pi ≥0.84.4 advances this design. `formatSkillsForPrompt` filters `disableModelInvocation=true` skills. It **removes them from the `<available_skills>` XML** injected into the system prompt, paying **zero context/metadata cost**. Claude's original gating is selection-only (description stays listed, model instructed not to pick it). Pi strips it from context entirely — no description, no tokens, no attention. It is reachable only via explicit `/skill:name`.
+Base standard: the open Agent Skills spec ([agentskills.io](https://agentskills.io)). `disable-model-invocation` is an enhancement beyond the spec, shared by Claude Code and Pi; Pi's semantics are the default — `formatSkillsForPrompt` strips flagged skills from the system-prompt XML entirely: no description, no tokens, no attention, reachable only via `/skill:name`. Claude's gating is selection-only (description stays listed). So on Pi, `explicit-only` is the correct way to remove a skill from model context — never add a pointer to it from an always-loaded doc.
 
-### Description Principles & Budget
+### Description Budget
 
-Every skill's `description` is its top-level machine-readable trigger and permanent context-load footprint. Grounded in empirical function-calling benchmarks, descriptions reject pseudo-syntax annotations (`TRIGGER:`). They use natural language conditionals and symptom hooks within a strict 300-character budget:
+Every description is a machine-readable trigger and a permanent context-load footprint within a **300-character hard gate**. Follow the tripartite formula — what it is (front-loaded in the first 50 chars), what it does (third-person verbs), when to use (**required** `Use when...` clause) — plus symptom keywords (fundamental standard: users report *flaky tests*, *drift*, *crash*, not solutions), an opt-in negative boundary for adjacent-skill collisions, and no `TRIGGER:` pseudo-syntax. `validate-deps.py context-check` enforces the hard gates and warns on contract misses; semantic quality is enforced by `skill-authoring` methodology.
 
-1. **What it is (Role/Identity Anchor):** Category noun defining nature and domain (e.g., *Methodology spine...*, *Verification gate...*, *CLI reference...*). Front-load in first 50 chars.
-2. **What it does (Active Capabilities & Outputs):** Third-person present tense verbs defining concrete operations and deliverables (e.g., *audits test refutability and invariants...*, *synthesizes multi-stack test runners...*).
-3. **When to use (Activation Boundary via `Use when...`):** **Required.** Explicit condition starting with `Use when...` (or `when the user...`). Benchmarks show natural language conditionals activate model routing policy heads far more reliably than passive topic summaries.
-4. **Symptom Keywords Standard:** **Fundamental standard.** Users describe problems and symptoms, not solutions. Must include concrete failure states, bug indicators, debugging signals, and pain phrases (e.g., *flaky tests*, *drift*, *messy code*, *memory leak*, *crash*, *slow*).
-5. **Negative Boundary:** **Opt-in.** Clause specifying when NOT to use the skill (e.g., *Do not use for unit testing -- defer to Y for Z*). Proven highest-leverage lever to eliminate false-positive collisions between adjacent skills.
-
-**Enforcement Rules:**
-- Must be present, non-empty, and written with YAML block scalar `>-`
-- Maximum 300 characters (hard gate)
-- Must contain explicit `Use when...` clause (contract check)
-- Strict third-person perspective (never first/second person: "I can...", "You can...")
-- No legacy `TRIGGER:` tags (script flags as deprecated)
-
-### Platform Sync
-
-Claude Code `SKILL.md` is the canonical format. Scripts generate platform-specific artifacts. Pi handles the field natively at prompt build:
-
-`SKILL.md` (canonical) → `validate-deps.py sync` → `agents/openai.yaml` (generated) · Pi ≥0.84.4 `formatSkillsForPrompt` → strip from `<available_skills>` XML
-
-| Canonical field                                                                  | Generated field (OpenAI)                  | Pi ≥0.84.4 runtime                            |
-| -------------------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------- |
-| `name`                                                                           | `interface.display_name`                  | `<name>` in `<available_skills>` when visible |
-| `description`                                                                    | `interface.short_description`             | `<description>` when visible                  |
-| `disable-model-invocation: true`                                                 | `policy.allow_implicit_invocation: false` | **Removed from XML** — zero-load              |
-| `disable-model-invocation: false`                                                | `policy.allow_implicit_invocation: true`  | Listed in XML — normal load                   |
-| Sync always regenerates output from canonical source. No drift detection needed. |
-
-### Enforcement
-
-`validate-deps.py context-check` deterministically enforces:
-
-- **Hard Gates (fail CI):** Missing/empty description, or description over 300 chars.
-- **Contract Warnings (pass CI, flagged for remediation):**
-  - Missing required `Use when...` trigger clause.
-  - Missing symptom keywords / problem-framing signals.
-  - Presence of deprecated `TRIGGER:` tags.
-- **Opt-in Detection:** Records presence of negative boundary clauses (`Do not use for...`, `defer to...`).
-
-Semantic quality rules (tripartite structure, third-person voice, front-loaded leading words, deduplication) are enforced by `skill-authoring` methodology during authoring.
+Canonical `SKILL.md` frontmatter is the single source: `validate-deps.py sync` regenerates `agents/openai.yaml`, and Pi applies invocation-class filtering at prompt build.
 
 Reference: [Context-load policy contract](references/context-load-policy.md)
 
@@ -234,14 +193,15 @@ uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-che
 
 ### Subagent Response Contract
 
-Every subagent MUST return a structured response:
+Every subagent MUST return the canonical structured response ([resp-format.md](references/resp-format.md)):
 
-| Field                 | Purpose                                                  |
-| --------------------- | -------------------------------------------------------- |
-| **Summary**           | Concise bullet list of work completed                    |
-| **Artifact Pointers** | Absolute file paths to generated plans, code, or reviews |
-| **Route/Status**      | Explicit signal: `COMPLETED`, `REJECTED`, `BLOCKED`      |
-| **Issues**            | List of discovered risks or required follow-ups          |
+| Field        | Purpose                                                        |
+| ------------ | -------------------------------------------------------------- |
+| **Summary**  | Approach and reasoning, ≤100 words — not a play-by-play log    |
+| **Artifacts**| Absolute file paths to generated plans, code, or reviews       |
+| **Evidence** | Deterministic check results (`name`: PASS/FAIL + command)      |
+| **Route**    | `continue`, `remediate`, or `blocked`                          |
+| **Issues**   | Discovered risks, each with severity, `file:line`, remediation |
 
 ### Pointer Continuity
 
@@ -267,13 +227,7 @@ Use the handoff document as the index for durable artifacts (`design.md`, `linea
 >
 > **The orchestrator never does implementation work**. Implementers never do heavy exploration, bulk refactoring, or verbose test triage directly in the host pane.
 
-| Primary Agent DOES                   | Primary Agent NEVER DOES                 |
-| ------------------------------------ | ---------------------------------------- |
-| Route tasks to appropriate subagents | Write code directly in orchestrator role |
-| Dispatch with structured prompts     | Edit files directly without scoping      |
-| Monitor for completion/failure       | Run verbose tests directly in host pane  |
-| Receive and synthesize summaries     | Read full artifact contents into context |
-| Pass pointers between phases         | Re-process raw subagent observation logs |
+The primary agent routes, dispatches with structured prompts, monitors, synthesizes summaries, and passes pointers between phases. It never writes code, edits files, runs verbose tests in the host pane, or reads full artifact contents into context.
 
 ### Execution Profile Boundary
 - **Heavy Mutation & Implementation**: Subagent-first is mandatory. Keeps primary agent context clean and isolates trial-and-error churn.
@@ -293,21 +247,16 @@ prompt: |
     Return format per skills/ai-engineering-expert/references/resp-format.md:
     ## Summary
     ## Artifacts
+    ## Evidence
     ## Route (if applicable)
+    ## Issues
 ```
 
 ### Pointer-Based State Passing
 
 Subagents exchange state through **file paths**, not content. The orchestrator passes pointers. Subagents read and write artifacts at those paths. Preserves orchestrator context budget and supports large artifacts.
 
-### Anti-Patterns
-
-- **Hero mode orchestrator** -- "Let me just write this quick fix directly"
-- **Context hoarding** -- Reading full artifact contents instead of dispatching a subagent
-- **Sequential when parallel is possible** -- Running review agents one after another instead of concurrently
-- **Unstructured subagent output** -- Prose without Summary/Artifacts/Route fields
-
-Reference: [Subagent-first execution](references/subagent-first-execution.md)
+Reference: [Subagent-first execution](references/subagent-first-execution.md) — full DOES/NEVER tables, dispatch examples, summary style, anti-patterns.
 
 ---
 
@@ -351,14 +300,12 @@ Design decisions the architecture makes intentionally:
 
 When workflow steps are plain shell that the model rewrites each time, they add variance. Tighten by packing.
 
-- **Pack plain steps into scripts**. Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/`. Use shell for file and branch work. Use Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`.
-- **Fix inside the copy**. If a merge shows a conflict, the main flow does not edit files. A separate worker opens that copy's folder and checks `git status`. The worker fixes each file (`git rm` for delete vs change, `git add` after). It runs `npm run typecheck && npm test`, executes `GIT_EDITOR=true git rebase --continue`, and retries the merge.
+- **Pack plain steps into scripts**. Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/`. Use shell for file and branch work. Use Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`. Each packed fix removes the inline lines it replaces; otherwise the guide grows.
 - **Use plain words.** Keep prompts as `branch, copy, merge, conflict, fix, test, check, file, folder`. Plain words travel reliably and keep the guide short.
-  Each fix must remove the inline lines it replaces. Otherwise the guide grows.
 
 ## Sub-Skill Dispatch
 
-This skill manages five domain-specific sub-skills. Read the appropriate sub-skill based on the `domain` argument. When the task writes or edits any agent-consumed document (SKILL.md, AGENTS.md, CLAUDE.md, pointer docs), also load `writing-for-agents` — even when primary domain is `skill-authoring`.
+This skill manages five domain-specific sub-skills. Dispatch on task-match OR explicit `domain` argument — never wait for the user to name the domain. When the task writes or edits any agent-consumed document (SKILL.md, AGENTS.md, CLAUDE.md, pointer docs), also load `writing-for-agents` — even when the primary domain is `skill-authoring`.
 
 | Domain                 | Sub-Skill                                            | Covers                                                                                                                                                                                                    |
 | ---------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -368,4 +315,4 @@ This skill manages five domain-specific sub-skills. Read the appropriate sub-ski
 | `writing-for-agents`   | `$SKILL_DIR/subskills/writing-for-agents/SKILL.md`   | Agent-document writing — context pointers, hierarchy, progressive disclosure, completion criteria, leading words, pruning; use for any SKILL.md/AGENTS.md/CLAUDE.md or narrative rigor in skill-authoring |
 | `writing-for-humans`   | `$SKILL_DIR/subskills/writing-for-humans/SKILL.md`   | Human-facing proposal writing — problem-first framing, evidence grounding, scannability, explicit asks, non-goals; use for GitHub issues, RFCs, and proposals a maintainer triages |
 
-**Dispatch:** When `$domain` is provided, read the matching sub-skill file and follow its instructions. When no domain is specified, only the philosophy above is loaded.
+**Dispatch:** Read the matching sub-skill file and follow its instructions. With no matching domain or task, only the philosophy above is loaded.

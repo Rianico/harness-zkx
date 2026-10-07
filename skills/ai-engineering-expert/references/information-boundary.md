@@ -29,7 +29,7 @@ When in doubt, ask: _can this be checked without judgment?_ If yes, it belongs t
 
 ## Tool Owns Bytes — Deterministic Generation
 
-For byte-identical artifacts, the tool is source of truth: it embeds templates in `scripts/*.py`, emits via `--dry-run` diff and writes + `WARNING` on stderr for mixed deterministic+semantic files (model proofreads only warned sections). Expose minimal handles/flags (`--flavor`, `--with-coverage`), hide storage layout. Reference scaffold: `$SKILL_DIR/scripts/scaffold.py` owns `.releaserc.json`/`pyproject.toml`/`release.yml` bytes; deleted `references/*.md` dumps were duplicate truth (One Truth, Many Projections). Anti-pattern: model hand-copying templates from references — stale by construction.
+For byte-identical artifacts, the tool is source of truth: it embeds templates in `scripts/*.py`, emits via `--dry-run` diff and writes + `WARNING` on stderr for mixed deterministic+semantic files (model proofreads only warned sections). Expose minimal handles/flags (`--flavor`, `--with-coverage`), hide storage layout. Reference scaffold: `skills/scaffold/scripts/scaffold.py` owns `.releaserc.json`/`pyproject.toml`/`release.yml` bytes — template dumps in `references/` are duplicate truth (One Truth, Many Projections). Anti-pattern: model hand-copying templates from references — stale by construction.
 
 ## Illustrative Instantiation — Hash-Anchored Edit (pi-better-edit)
 

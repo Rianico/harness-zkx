@@ -90,7 +90,7 @@ All pairs are illustrative.
 ## Harness Wiring
 
 - **Verification:** Validate frontmatter deterministically with
-  `uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check`. Review drafts semantically via a
+  `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py context-check`. Review drafts semantically via a
   Skeptic subagent checking for unverified assertions, presumed architecture, and missing non-goals.
 
 ## Further reading

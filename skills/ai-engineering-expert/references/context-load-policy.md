@@ -11,9 +11,9 @@ Every skill declares one of two invocation classes via the canonical `disable-mo
 | Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously                                                | `allow_implicit_invocation: true`  | Listed in `<available_skills>` XML — normal load                                          |
 | `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke (description still listed — selection-only) | `allow_implicit_invocation: false` | **Removed from `<available_skills>` XML** — true zero-load; only `/skill:name` reaches it |
 
-**Origin:** Claude Code. **Pi ≥0.84.4 advances it** — `formatSkillsForPrompt` filters `disableModelInvocation=true` and omits the entry from the system-prompt XML entirely. Claude's gating is selection-only (description stays, model instructed not to pick it); Pi strips it from context (no tokens, no attention).
+**Base standard:** the open Agent Skills spec ([agentskills.io](https://agentskills.io)) — `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`. `disable-model-invocation` is an enhancement beyond that spec, shared by Claude Code and Pi. **Pi ≥0.84.4 semantics are the default enhancement** — `formatSkillsForPrompt` filters `disableModelInvocation=true` and omits the entry from the system-prompt XML entirely. Claude's gating is selection-only (description stays, model instructed not to pick it); Pi strips it from context (no tokens, no attention).
 
-**The field is canonical.** It controls Claude Code behavior, the generated `agents/openai.yaml`, and — on Pi — prompt inclusion. No separate platform-specific field exists in `SKILL.md` — the sync script maps this single field to each platform's mechanism; Pi applies the filter at prompt-build time.
+**The field is the single switch.** It controls Claude Code behavior, the generated `agents/openai.yaml`, and — on Pi — prompt inclusion. No separate platform-specific field exists in `SKILL.md` — the sync script maps this single field to each platform's mechanism; Pi applies the filter at prompt-build time.
 
 ## Selection vs Metadata Cost — Platform Divergence
 
