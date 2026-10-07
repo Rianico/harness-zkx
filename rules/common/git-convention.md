@@ -40,7 +40,6 @@
     - `CHANGELOG.md` starts with `# Changelog`.
     - Every PR entry under `## [Unreleased]` references the PR (`(#N)`).
     - Unattributed entries match baseline or PR waiver.
-  - On release: `scripts/release-changelog.mjs` promotes curated entries under `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and opens a fresh unreleased block. Hand-edits to versioned sections forbidden.
 - **PR tooling & squash-merge hygiene:**
   - `pr.py` (in the `gh-router` skill: `subskills/pr-land/scripts/pr.py`) auto-attributes `(#N)` upon PR creation so the changelog ledger gate stays green without manual intervention.
   - Squash commit body cleans ephemeral review and CI procedural noise (`## Checklist`, `Landing: squash`, `Ledger-Waiver:`, HTML comments, empty headings, fenced Mermaid diagrams, `<details>` blocks, `## Architecture`, and `## Verification Evidence`) while preserving authored sections (`## Summary`, `## What Changed`, `## Blast Radius & Safety`, `## Evidence`), `Closes #NN` issue closing directives, and `Co-authored-by:` trailers. `pr.py` supports explicit `--squash-message` / `--squash-message-file` and fails closed (exit 1) if the body is empty or unfilled without an explicit message, preventing mechanical commit subject dumps on squash.
@@ -66,4 +65,4 @@
 
 ## 6. Safeguards
 
-> [!warning] NEVER merge / tag / publish without approval — leave PR `OPEN` → `a:merge b:tag/release c:publish d:hold` confirm.
+> [!warning] NEVER merge / tag / publish without approval — leave PR `OPEN` → `a:merge b:tag/release c:publish d:hold` confirm. `gh-router` pr-land is the curated landing flow — open and merge PRs only when the user asks, never proactively.

@@ -10,5 +10,5 @@ Use standard markdown links `[text](path)` for cross-references in repo document
 Other Obsidian syntax is fine when it stays readable outside a vault: callouts `> [!type]`, `==highlight==`, tags `#tag`/`#nested/tag`. Wikilinks are correct only inside a real Obsidian vault — use the `obsidian-markdown` skill there.
 
 - Properties (`title`, `tags`, `date`, `aliases`, `cssclasses`) — only personal/task notes, never skill files or structured artifacts.
-- Exceptions: scraped/external docs → standard markdown; SKILL.md frontmatter → `skill-conventions.md`.
+- Exceptions: scraped/external docs → standard markdown; SKILL.md frontmatter → the `skill-authoring` reference (`skills/ai-engineering-expert/subskills/skill-authoring/references/skill-authoring.md`).
 - Deep syntax → `obsidian-markdown` skill.
