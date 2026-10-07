@@ -6,9 +6,9 @@ Blocking signals are hard gates. Never skip, escape, or bypass any gate or verif
 
 ## 0) Never skip / escape / bypass any gate or verification
 
-**When:** any gate blocks — `pi-lens` blocking / `blocking_provenance_untrusted`, `wt` pre-merge / pre-push (`commitlint`, CHANGELOG guard), CI (`tests`, `typecheck`, `lint`).
+**When:** any gate blocks — `pi-lens` blocking / `blocking_provenance_untrusted`, `wt` pre-merge (gate + changelog; truth in `.config/wt.toml`), CI (`tests`, `typecheck`, `lint`).
 
-**Don't:** `--no-verify`, `--no-gpg-sign` bypass, raw `git worktree add` / `git merge` to dodge `wt` hooks, commenting out / disabling any gate, modifying repository tooling/configs (`.config/wt.toml`, `.husky/`, lint configs, `tsconfig`, CI workflows) to silence gate errors or commitlint length limits, `--force` / force-merge to override, or blanket suppression.
+**Don't:** `--no-verify`, `--no-gpg-sign` bypass, raw `git worktree add` / `git merge` to dodge `wt` hooks, commenting out / disabling any gate, modifying repository tooling/configs (`.config/wt.toml`, `.githooks/`, lint configs, `tsconfig`, CI workflows) to silence gate errors or commitlint length limits, `--force` / force-merge to override, or blanket suppression.
 
 **Do:** fix code/config/docs at source → re-run that gate → green / `0 blocking` → clean operation. If false positive, suppress at smallest seam with invariant + owner (`// SAFETY:`, `// ast-grep-ignore:`, `# zizmor: ignore[...]`) — never bypass.
 
