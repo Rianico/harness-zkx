@@ -1,0 +1,81 @@
+{
+  "version": 2,
+  "source": "pre-refactor implementation at aeb65dea^",
+  "repo_setup": {
+    "base_file": "common.txt",
+    "conflict_file": "app.py",
+    "branches": [
+      "main",
+      "feat/calc"
+    ],
+    "conflict_type": "add/add text hunks=1"
+  },
+  "cases": [
+    {
+      "name": "summary",
+      "argv": [
+        "--repo",
+        "<REPO>"
+      ],
+      "returncode": 0,
+      "stdout_exact": "repo: /private/tmp/ra-golden/repo\nconflicted files: 1\n- app.py | type=text | stages=2,3 | hunks=1\nuse --file <path> for compact hunk details or --all for every file\n",
+      "stdout_normalized": "repo: <REPO_ROOT>\nconflicted files: 1\n- app.py | type=text | stages=2,3 | hunks=1\nuse --file <path> for compact hunk details or --all for every file\n",
+      "normalization": [
+        "repo line value -> <REPO_ROOT> (whole-line match)",
+        "intent SHAs value-anchored -> <OURS_SHA> / <THEIRS_SHA>",
+        "relative durations ('N unit(s) ago') -> <DURATION>"
+      ]
+    },
+    {
+      "name": "json",
+      "argv": [
+        "--repo",
+        "<REPO>",
+        "--json"
+      ],
+      "returncode": 0,
+      "stdout_exact": "{\n  \"repo_root\": \"/private/tmp/ra-golden/repo\",\n  \"conflicted_files\": [\n    {\n      \"path\": \"app.py\",\n      \"conflict_type\": \"text\",\n      \"stages\": [\n        2,\n        3\n      ],\n      \"marker_hunks\": 1,\n      \"parse_error\": null,\n      \"operation\": \"merge (merging 54074a5 into 419bbf8)\",\n      \"author_intent\": {\n        \"ours\": {\n          \"ref\": \"HEAD\",\n          \"sha\": \"419bbf8\",\n          \"author\": \"Tester Author\",\n          \"date\": \"13 seconds ago\",\n          \"subject\": \"fix(calc): hotfix main calc\",\n          \"body\": \"\"\n        },\n        \"theirs\": {\n          \"ref\": \"MERGE_HEAD\",\n          \"sha\": \"54074a5\",\n          \"author\": \"Tester Author\",\n          \"date\": \"13 seconds ago\",\n          \"subject\": \"feat(calc): implement feature calc\",\n          \"body\": \"\"\n        }\n      }\n    }\n  ]\n}\n",
+      "stdout_normalized": "{\n  \"repo_root\": \"<REPO_ROOT>\",\n  \"conflicted_files\": [\n    {\n      \"path\": \"app.py\",\n      \"conflict_type\": \"text\",\n      \"stages\": [\n        2,\n        3\n      ],\n      \"marker_hunks\": 1,\n      \"parse_error\": null,\n      \"operation\": \"merge (merging <THEIRS_SHA> into <OURS_SHA>)\",\n      \"author_intent\": {\n        \"ours\": {\n          \"ref\": \"HEAD\",\n          \"sha\": \"<OURS_SHA>\",\n          \"author\": \"Tester Author\",\n          \"date\": \"<DURATION>\",\n          \"subject\": \"fix(calc): hotfix main calc\",\n          \"body\": \"\"\n        },\n        \"theirs\": {\n          \"ref\": \"MERGE_HEAD\",\n          \"sha\": \"<THEIRS_SHA>\",\n          \"author\": \"Tester Author\",\n          \"date\": \"<DURATION>\",\n          \"subject\": \"feat(calc): implement feature calc\",\n          \"body\": \"\"\n        }\n      }\n    }\n  ]\n}\n",
+      "normalization": [
+        "repo line value -> <REPO_ROOT> (whole-line match)",
+        "intent SHAs value-anchored -> <OURS_SHA> / <THEIRS_SHA>",
+        "relative durations ('N unit(s) ago') -> <DURATION>"
+      ]
+    },
+    {
+      "name": "json_all",
+      "argv": [
+        "--repo",
+        "<REPO>",
+        "--json",
+        "--all"
+      ],
+      "returncode": 0,
+      "stdout_exact": "{\n  \"repo_root\": \"/private/tmp/ra-golden/repo\",\n  \"conflicted_files\": [\n    {\n      \"path\": \"app.py\",\n      \"conflict_type\": \"text\",\n      \"stages\": [\n        2,\n        3\n      ],\n      \"marker_hunks\": 1,\n      \"parse_error\": null,\n      \"operation\": \"merge (merging 54074a5 into 419bbf8)\",\n      \"author_intent\": {\n        \"ours\": {\n          \"ref\": \"HEAD\",\n          \"sha\": \"419bbf8\",\n          \"author\": \"Tester Author\",\n          \"date\": \"13 seconds ago\",\n          \"subject\": \"fix(calc): hotfix main calc\",\n          \"body\": \"\"\n        },\n        \"theirs\": {\n          \"ref\": \"MERGE_HEAD\",\n          \"sha\": \"54074a5\",\n          \"author\": \"Tester Author\",\n          \"date\": \"13 seconds ago\",\n          \"subject\": \"feat(calc): implement feature calc\",\n          \"body\": \"\"\n        }\n      },\n      \"hunks\": [\n        {\n          \"start_line\": 1,\n          \"end_line\": 5,\n          \"before_context\": [],\n          \"ours_label\": \"HEAD\",\n          \"ours\": [\n            \"def calc(): return 'main'\"\n          ],\n          \"base_label\": null,\n          \"base\": null,\n          \"theirs_label\": \"feat/calc\",\n          \"theirs\": [\n            \"def calc(): return 'feature'\"\n          ],\n          \"after_context\": [],\n          \"ours_vs_theirs_diff\": [\n            \"--- HEAD\",\n            \"+++ feat/calc\",\n            \"@@ -1 +1 @@\",\n            \"-def calc(): return 'main'\",\n            \"+def calc(): return 'feature'\"\n          ]\n        }\n      ]\n    }\n  ]\n}\n",
+      "stdout_normalized": "{\n  \"repo_root\": \"<REPO_ROOT>\",\n  \"conflicted_files\": [\n    {\n      \"path\": \"app.py\",\n      \"conflict_type\": \"text\",\n      \"stages\": [\n        2,\n        3\n      ],\n      \"marker_hunks\": 1,\n      \"parse_error\": null,\n      \"operation\": \"merge (merging <THEIRS_SHA> into <OURS_SHA>)\",\n      \"author_intent\": {\n        \"ours\": {\n          \"ref\": \"HEAD\",\n          \"sha\": \"<OURS_SHA>\",\n          \"author\": \"Tester Author\",\n          \"date\": \"<DURATION>\",\n          \"subject\": \"fix(calc): hotfix main calc\",\n          \"body\": \"\"\n        },\n        \"theirs\": {\n          \"ref\": \"MERGE_HEAD\",\n          \"sha\": \"<THEIRS_SHA>\",\n          \"author\": \"Tester Author\",\n          \"date\": \"<DURATION>\",\n          \"subject\": \"feat(calc): implement feature calc\",\n          \"body\": \"\"\n        }\n      },\n      \"hunks\": [\n        {\n          \"start_line\": 1,\n          \"end_line\": 5,\n          \"before_context\": [],\n          \"ours_label\": \"HEAD\",\n          \"ours\": [\n            \"def calc(): return 'main'\"\n          ],\n          \"base_label\": null,\n          \"base\": null,\n          \"theirs_label\": \"feat/calc\",\n          \"theirs\": [\n            \"def calc(): return 'feature'\"\n          ],\n          \"after_context\": [],\n          \"ours_vs_theirs_diff\": [\n            \"--- HEAD\",\n            \"+++ feat/calc\",\n            \"@@ -1 +1 @@\",\n            \"-def calc(): return 'main'\",\n            \"+def calc(): return 'feature'\"\n          ]\n        }\n      ]\n    }\n  ]\n}\n",
+      "normalization": [
+        "repo line value -> <REPO_ROOT> (whole-line match)",
+        "intent SHAs value-anchored -> <OURS_SHA> / <THEIRS_SHA>",
+        "relative durations ('N unit(s) ago') -> <DURATION>"
+      ]
+    },
+    {
+      "name": "all_capped",
+      "argv": [
+        "--repo",
+        "<REPO>",
+        "--all",
+        "--max-lines",
+        "3"
+      ],
+      "returncode": 0,
+      "stdout_exact": "== app.py ==\ntype: text\noperation: merge (merging 54074a5 into 419bbf8)\nauthor intent:\n  ours (HEAD): [419bbf8] by Tester Author, 13 seconds ago\n    subject: fix(calc): hotfix main calc\n  theirs (MERGE_HEAD): [54074a5] by Tester Author, 13 seconds ago\n    subject: feat(calc): implement feature calc\nstages: 2, 3\nhunks: 1\n\n[hunk 1] current lines 1-5\nbefore:\n  (empty)\nours (HEAD):\n  def calc(): return 'main'\ntheirs (feat/calc):\n  def calc(): return 'feature'\nours vs theirs diff:\n  --- HEAD\n  +++ feat/calc\n  @@ -1 +1 @@\n  ... (2 more lines omitted)\nafter:\n  (empty)\n",
+      "stdout_normalized": "== app.py ==\ntype: text\noperation: merge (merging <THEIRS_SHA> into <OURS_SHA>)\nauthor intent:\n  ours (HEAD): [<OURS_SHA>] by Tester Author, <DURATION>\n    subject: fix(calc): hotfix main calc\n  theirs (MERGE_HEAD): [<THEIRS_SHA>] by Tester Author, <DURATION>\n    subject: feat(calc): implement feature calc\nstages: 2, 3\nhunks: 1\n\n[hunk 1] current lines 1-5\nbefore:\n  (empty)\nours (HEAD):\n  def calc(): return 'main'\ntheirs (feat/calc):\n  def calc(): return 'feature'\nours vs theirs diff:\n  --- HEAD\n  +++ feat/calc\n  @@ -1 +1 @@\n  ... (2 more lines omitted)\nafter:\n  (empty)\n",
+      "normalization": [
+        "repo line value -> <REPO_ROOT> (whole-line match)",
+        "intent SHAs value-anchored -> <OURS_SHA> / <THEIRS_SHA>",
+        "relative durations ('N unit(s) ago') -> <DURATION>"
+      ]
+    }
+  ]
+}

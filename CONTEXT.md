@@ -201,8 +201,24 @@ The non-LLM checker over the ledger. Distinct from the Changelog Generator: the 
 _Avoid_: generator, sync check.
 
 **Changelog Curation**:
-The Semantic Ceiling's act on the digest — rewriting, merging, and retitling entries so the digest represents the change set rather than replaying it.
+The Semantic Ceiling's act on the Changelog Digest — rewriting, merging, and retitling entries so the Changelog Digest represents the change set rather than replaying it.
 _Avoid_: sorting, tidying, cleanup, pruning.
+
+**Diff Digest**:
+The versioned payload (`schema: 1`) produced by the `git-diff-digest` subskill from a commit range — the agent context for what changed. Distinct from its neighbour **Changelog Digest**: the Diff Digest describes the diff, the Changelog Digest renders the release ledger.
+_Avoid_: digest, diff dump, summary.
+
+**Range**:
+The commit interval the Diff Digest describes, in two forms: the caller-supplied spec (`range.spec_in`) and the resolved interval. `resolve_range(spec, mode)` takes the spec and the mode. Base resolution is local-first and ordered: explicit base → `origin/HEAD` → `origin/main` → `origin/master`, with no network access.
+_Avoid_: revision, branch interval.
+
+**Only in base**:
+Commits reachable from the base but not the head. They stay out of the Diff Digest by definition and appear only to explain an empty or surprising range.
+_Avoid_: extra commits, unrelated history.
+
+**Fingerprint**:
+The stable identity hash of a **Range**, carried in the Diff Digest payload's `range` block. It identifies the range, not the rendering: caps or flags (`--max-lines`) change the rendering while the range — and its fingerprint — stay the same.
+_Avoid_: hash, checksum, id.
 
 **Ticket-Boundary Check**:
 The deterministic floor run by `wt merge` on the single squashed commit: its subject is conventional and projects exactly one well-formed Changelog Entry.

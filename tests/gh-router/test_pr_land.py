@@ -1009,6 +1009,54 @@ dump_failure_logs("test/repo", "123")
     assert "run view 77777 --repo test/repo --log-failed" in calls
 
 
+def _make_preflight_repo(repo: Path, with_base: bool) -> None:
+    """Synthetic repo with a feat-branch head; optional origin/main + origin/HEAD."""
+    _ = subprocess.run(["git", "init", "-b", "main", str(repo)], capture_output=True, check=True)
+    for cfg in (
+        ["config", "user.name", "Preflight Synthetic"],
+        ["config", "user.email", "synthetic@x.io"],
+        ["config", "commit.gpgsign", "false"],
+    ):
+        _ = subprocess.run(["git", "-C", str(repo), *cfg], capture_output=True, check=True)
+    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    _ = subprocess.run(["git", "-C", str(repo), "add", "base.txt"], capture_output=True, check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "chore: base"],
+        capture_output=True,
+        check=True,
+    )
+    if with_base:
+        _ = subprocess.run(
+            ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+            capture_output=True,
+            check=True,
+        )
+        _ = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+            capture_output=True,
+            check=True,
+        )
+    _ = subprocess.run(
+        ["git", "-C", str(repo), "checkout", "-b", "feat-branch"],
+        capture_output=True,
+        check=True,
+    )
+    _ = (repo / "work.txt").write_text("work\n", encoding="utf-8")
+    _ = subprocess.run(["git", "-C", str(repo), "add", "work.txt"], capture_output=True, check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "feat: work"],
+        capture_output=True,
+        check=True,
+    )
+
+
 def test_check_trailers_local_preflight_no_remote_pr(tmp_path: Path) -> None:
     """check_trailers without open PR: exit 2 when no body supplied; exit 0 on valid body; exit 1 on bad title or raw token."""
     mock_bin = tmp_path / "bin"
@@ -1033,6 +1081,9 @@ exit 0
         "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}",
     }
 
+    repo = tmp_path / "preflight-repo"
+    _make_preflight_repo(repo, with_base=True)
+
     # Case 1: no open PR and no body_supplied -> returns 2
     test_no_body = f"""
 import sys
@@ -1046,7 +1097,7 @@ sys.exit(rc)
         capture_output=True,
         text=True,
         env=env,
-        cwd=REPO_ROOT,
+        cwd=repo,
     )
     assert res1.returncode == 2
     assert "no open PR for head feat-branch" in res1.stderr
@@ -1064,7 +1115,7 @@ sys.exit(rc)
         capture_output=True,
         text=True,
         env=env,
-        cwd=REPO_ROOT,
+        cwd=repo,
     )
     assert res2.returncode == 0
 
@@ -1081,7 +1132,7 @@ sys.exit(rc)
         capture_output=True,
         text=True,
         env=env,
-        cwd=REPO_ROOT,
+        cwd=repo,
     )
     assert res3.returncode == 1
     assert "raw CODE_AUTHORS token still present" in res3.stderr
@@ -1100,10 +1151,24 @@ sys.exit(rc)
         capture_output=True,
         text=True,
         env=env,
-        cwd=REPO_ROOT,
+        cwd=repo,
     )
     assert res4.returncode == 1
     assert "commit title exceeds 100 chars" in res4.stderr
+
+    # Case 5: no base candidates at all -> loud refusal, exit 1, never a lone author.
+    bare = tmp_path / "no-base-repo"
+    _make_preflight_repo(bare, with_base=False)
+    res5 = subprocess.run(
+        [sys.executable, "-c", test_valid],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=bare,
+    )
+    assert res5.returncode == 1, res5.stdout
+    assert "git-diff-digest range authority" in res5.stderr
+    assert "Co-authored-by" not in res5.stdout
 
 
 def test_clean_squash_body_strips_checklist_landing_and_comments() -> None:

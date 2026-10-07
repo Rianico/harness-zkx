@@ -14,6 +14,10 @@
     { "root": "skills/branch-worktree-pr/scripts", "extraPaths": ["skills/branch-worktree-pr/scripts"] },
     { "root": "skills/herdr/scripts", "extraPaths": ["skills/herdr/scripts"] },
     { "root": "skills/eval-gate/scripts", "extraPaths": ["skills/eval-gate/scripts"] },
+    { "root": "skills/gh-router/lib", "extraPaths": ["skills/gh-router/lib"] },
+    { "root": "skills/gh-router/subskills/pr-conflict/scripts", "extraPaths": ["skills/gh-router/subskills/pr-conflict/scripts", "skills/gh-router/lib"] },
+    { "root": "skills/gh-router/subskills/git-diff-digest/scripts", "extraPaths": ["skills/gh-router/subskills/git-diff-digest/scripts", "skills/gh-router/lib"] },
+    { "root": "skills/gh-router/subskills/pr-land/scripts", "extraPaths": ["skills/gh-router/subskills/pr-land/scripts", "skills/gh-router/lib"] },
     // Test code is executed by pytest, not shipped: fixture-bag classes, callback parameters
     // that exist only for their arity, and deliberate pokes into module privates are the idiom
     // here. Annotation strictness (missing/unknown parameter types) and privacy checks stay on
@@ -27,7 +31,8 @@
         "tests/docs-scraper",
         "skills/docs-scraper/scripts",
         "skills/docs-scraper/scripts/scrapers",
-        "skills/ai-engineering-expert/subskills/skill-authoring/scripts"
+        "skills/ai-engineering-expert/subskills/skill-authoring/scripts",
+        "skills/gh-router/lib"
       ],
       "reportMissingParameterType": false,
       "reportUnknownParameterType": false,
