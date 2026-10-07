@@ -155,7 +155,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **tests:** resolve the pinned oxfmt once, stub real CLI spawns and retry sleeps (#139)
 
 ### Documentation
-* **ai-engineering:** move shared plain-language rules to one `references/plain-language.md` and dedupe the writing-for-agents and writing-for-humans sub-skills against it
+* **ai-engineering:** move shared plain-language rules to one `references/plain-language.md` and dedupe the writing-for-agents and writing-for-humans sub-skills against it (#215)
 * **agents:** adopt plain english talking style with sentence-length, voice, and verb constraints (#182)
 
 * **herdr:** make herdr-overview the first orientation step and drop raw pane-layout probes (#176)
