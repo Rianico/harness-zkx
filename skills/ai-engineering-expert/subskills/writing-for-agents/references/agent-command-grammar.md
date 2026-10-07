@@ -1,53 +1,18 @@
 # Agent Command Grammar
 
-In Computer Science, we never use the rigid ~900-word aerospace dictionary from literal ASD-STE100. Doing so would break software engineering by banning fundamental terms like `parse`, `serialize`, `cache`, `timeout`, `spawn`, `dispatch`, and `mutex`.
+Machine-Targeted STE Flavor: the structural rules a model-primary artifact adds on top of the shared rules. Read [plain-language.md](../../../references/plain-language.md) first. It owns the lexical dial, mode selection, and every sentence-level rule. Those rules include active voice, nominalizations, banned words, one term per concept, normative keywords, and pinned-text rewrites.
 
-Instead, both modes in this harness are **STE Flavors** adapted for computing. They are governed by two independent dials:
+Apply this file to tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), and procedural runbooks (`AGENTS.md`, procedural `SKILL.md` bodies).
 
-1. **The Lexical (Vocabulary) Dial:** Rich technical vocabulary and verbatim code tokens are always permitted. We only ban subjective marketing adjectives (`robust`, `seamless`, `cutting-edge`) and ambiguous soft phrasal verbs (`spin up`, `touch base`).
-2. **The Structural (Grammar) Dial:** Dictates sentence structure and rigidity based on target audience:
-   - **Machine-Targeted STE Flavor** (formerly Strict Structural Mode): Designed for machine-parsed and model-primary artifacts. Machine-Targeted STE applies to tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), and procedural runbooks (`AGENTS.md`, procedural `SKILL.md` bodies). It imposes strict structural rules. Requirements include 1 action per sentence, second-person imperative, and front-loaded guards (`If X, then Y`). It limits instructions to ≤20 words, requires zero synonym rotation, and enforces backticked token insulation.
-   - **Human-Targeted STE Flavor** (Narrative Mode): Designed for human-judged decision artifacts. These include PR descriptions, ADRs, RFCs, GitHub issues, CHANGELOGs, and review comments. Human-facing guidelines (such as `subskills/writing-for-humans`) follow Human-Targeted STE. It employs active voice with named actors, ≤25 words per sentence, 60-second scannability, nominalization removal, and evidence over adjectives. See [../../writing-for-humans/references/plain-language.md](../../writing-for-humans/references/plain-language.md).
+| Rule | Limit |
+| --- | --- |
+| [Single action per sentence](#single-action-per-sentence) | 1 action, ≤20 words per instruction (STE Rule 5.1) |
+| [Front-loaded branching guards](#front-loaded-branching-guards) | `If <condition>, then <action>` |
+| [Technical token insulation](#technical-token-insulation) | Backtick every code token |
 
-> [!note] Authoritative Provenance: ASD-STE100 Issue 9 (published January 15, 2025).
-> - **Adopted Structural Rules:**
->   - Rule 1.1: plain words.
->   - Rule 2.1: multi-word nouns ≤3 words.
->   - Rule 3.7: smothered verbs and nominalizations.
->   - Rule 5.1: procedural sentences ≤20 words.
->   - Section 6: descriptive sentences ≤25 words.
->   - Rule 8.1: semicolon ban.
->   - Rule 8.5-8.7: count parentheticals, elements, and hyphenated words as one word.
-> - **Enforcement status:** `ste100.py` enforces Rules 3.7, 5.1, and 8.1, plus the lexical bans, deterministically. Rule 2.1 (multi-word nouns) and the Section 6 descriptive rules stay review judgment calls. No reliable deterministic check exists for noun chains.
-> - **Intentional CS Adaptations / Deviations:**
->   1. **Dictionary Decoupling:** Replaced Part 2 aerospace dictionary with CS Ubiquitous Language and insulated code tokens.
->   2. **Epistemic Modality:** Preserved `MUST`, `SHOULD`, `MAY`, and `could` for system certainty and confidence bounds. Issue 9 Rule 3.4 bans auxiliary verbs, but computing requires them.
->   3. **Marketing Fluff Extension:** Added empirical replacements for ungrounded superlatives (`robust`, `seamless`).
+## Single action per sentence
 
-## Which part of this file you need
-
-- The two dials: [Lexical vs. Structural dials](#the-two-dials-lexical-vs-structural).
-- Action structure: [Imperative mood and single action](#imperative-mood-and-single-action).
-- Conditional execution: [Front-loaded branching guards](#front-loaded-branching-guards).
-- Protecting code and paths: [Technical token insulation](#technical-token-insulation).
-- Domain consistency: [Zero synonym rotation](#zero-synonym-rotation).
-- Preserving uncertainty and confidence bounds: [Modality preservation](#modality-preservation).
-- Preserving test assertions and contracts: [Rewriting pinned text](#rewriting-pinned-text).
-- Side-by-side patterns: [Comparative grammar table](#comparative-grammar-table).
-- Mode selection: [Timing arbitration table](#timing-arbitration-table).
-
-## The two dials: Lexical vs. Structural
-
-| Dial | Scope | Rule in Computer Science |
-| --- | --- | --- |
-| **Lexical (Vocabulary)** | Word choice, terminology, identifiers | **Rich domain vocabulary allowed.** Never use the ~900-word aerospace dictionary. Use exact CS terms (`serialize`, `mutex`, `cache`). Ban only subjective marketing fluff and soft phrasals. |
-| **Structural (Grammar)** | Sentence syntax, clause count, branching | **Audience-dependent constraints.** Machine-targeted: ≤20 words, 1 action/sentence, front-loaded guards. Human-targeted: ≤25 words, active voice, 60s scannability. |
-
-## Imperative mood and single action
-
-Instruct the agent in the second-person imperative mood (`Run`, `Verify`, `Parse`, `Output`). 
-
-- Limit each sentence to exactly **one action**.
+- Limit each sentence to exactly one action.
 - Never join consecutive actions with `and then`, semicolons, or comma splices.
 - Compound sentences tempt the model into premature completion or partial step execution.
 
@@ -59,10 +24,10 @@ Instruct the agent in the second-person imperative mood (`Run`, `Verify`, `Parse
 
 ## Front-loaded branching guards
 
-Place conditional checks and guards **before** the action: `If <condition>, then <action>`.
+Place conditional checks and guards before the action: `If <condition>, then <action>`.
 
 - Trailing conditions (`<action> if <condition>`) cause agents to begin generating tool calls before attending to the guard.
-- Front-loading forces the attention head to evaluate the prerequisite state before emitting the command.
+- Front-loading forces the model to evaluate the prerequisite state before emitting the command.
 
 **Bad:**
 > Roll back the migration if any integration test fails.
@@ -81,7 +46,6 @@ Place conditional checks and guards **before** the action: `If <condition>, then
 Wrap every code symbol, CLI command, parameter, file path, and HTTP method in backticks (`` `...` ``):
 
 - Backticking shields tokens from natural language tokenization ambiguity.
-- Insulation prevents the agent from paraphrasing or translating identifiers (e.g. converting `nil` to "empty").
 - Deterministic linters exclude inline code spans from prose word count calculations.
 
 **Bad:**
@@ -89,65 +53,3 @@ Wrap every code symbol, CLI command, parameter, file path, and HTTP method in ba
 
 **Good:**
 > Run `uv run pytest -v` on `tests/unit/test_auth.py`.
-
-## Zero synonym rotation
-
-Bind exactly one term to each domain concept across the entire document.
-
-- Human writers rotate synonyms to avoid repetitive phrasing. For agents, synonym rotation is an ambiguity bug: the model searches for latent distinctions between `tenant`, `account`, and `organization`.
-- Adhere strictly to the ubiquitous language defined in the project's domain model.
-
-**Bad:**
-> Initialize the repository. Inspect files in the codebase. Commit updates to the project.
-
-**Good:**
-> Initialize the repository. Inspect files in the repository. Commit updates to the repository.
-
-## Modality preservation
-
-Preserve epistemic modalities to accurately communicate system confidence and constraint levels:
-
-| Modal | Semantic Role | Agent Behavior |
-| ----- | ------------- | -------------- |
-| `MUST` | Hard invariant | Never violate; halt and report error if impossible |
-| `SHOULD` | Strong default | Follow unless a specific, documented exception applies |
-| `MAY` / `could` | Permissible choice / Confidence bound | Explore when appropriate; do not treat as mandatory |
-
-- **Do not collapse `MAY` into `MUST`:** Over-constraining forces the agent into brittle dead-ends when encountering edge cases.
-- **Do not soften `MUST` into `SHOULD`:** Weakening invariants leads to silent validation bypasses.
-- Preserve probabilistic confidence indicators (`may fail under high concurrency`) so the agent factors uncertainty into error handling.
-
-## Rewriting pinned text
-
-A phrase pin is a prose constraint (e.g., case-sensitive test assertion). An example pin is a behavioral contract. Rewriting prose to follow STE can silently break phrase pins.
-
-Follow these three rules when rewriting pinned text:
-
-1. Prefer an example pin over a phrase pin.
-2. Keep pinned phrases verbatim as fixed islands inside STE prose.
-3. Move a pin in the same change that rewrites its sentence.
-
-Pass `--preserve <string>` to `ste100.py` to fail if a rewrite drops a pinned substring. You can pass `--preserve <string>` multiple times to check multiple pins.
-
-```bash
-python3 skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py <path> --preserve <string>
-```
-
-## Comparative grammar table
-
-| Dimension | Trailing / Permissive (Fragile) | Front-Loaded / Structural (Reliable) |
-| --------- | -------------------------------- | ------------------------------------- |
-| **Action count** | `Compile the binary and run tests.` | `Compile the binary. Run the tests.` |
-| **Branch guard** | `Retry the request if timeout occurs.` | `If a timeout occurs, retry the request.` |
-| **Token insulation** | `Call getUserById in api/users.ts.` | `Call \`getUserById\` in \`api/users.ts\`.` |
-| **Ubiquitous language** | `Fetch ticket, then close issue.` | `Fetch issue, then close issue.` |
-| **Modality precision** | `You should always check errors.` | `You MUST check errors.` |
-
-## Timing arbitration table
-
-| Mode / Dimension | Scope / Artifacts | Key Rules & Sentence Length |
-| --- | --- | --- |
-| **Machine-Targeted STE Flavor** (Strict Structure) | Tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), procedural runbooks (`AGENTS.md`, procedural `SKILL.md` bodies) | ≤20 words/instruction, 1 action/sentence, imperative, front-loaded guards, zero synonym rotation, token insulation |
-| **Human-Targeted STE Flavor** (Narrative Mode) | Human-primary decision artifacts (PR descriptions, ADRs, RFCs, GitHub issues, CHANGELOGs, review comments), human-facing guidelines (such as `subskills/writing-for-humans`) | ≤25 words/sentence, active voice with named actors, nominalization removal, evidence over adjectives, 60s scannability |
-| **Hybrid / Gray Areas** | Architecture reviews, complex diagnostics, proposals with embedded action blocks | Human-Targeted STE for exposition/rationale; Machine-Targeted STE for normative contracts, invariants, action blocks |
-| **Lexical vs. Structural Split** | Vocabulary rules vs. Grammar rules | Vocabulary: Rich CS terms allowed; fluff and soft phrasals banned (never use aerospace ~900-word dictionary). Grammar: ≤20 words for procedural instructions vs. ≤25 words for descriptive prose |
