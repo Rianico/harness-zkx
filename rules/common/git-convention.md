@@ -8,7 +8,7 @@
 
 ## 2. Repo identity
 
-- **Inference lies.** In a multi-remote checkout (fork + upstream, two projects), `gh repo view` and every `gh` command without `--repo` may resolve to the *upstream*, not the remote you push to. `origin` is not proof of the push target — `branch.<ref>.pushRemote` is.
+- **Inference lies.** In a multi-remote checkout (fork + upstream, two projects), `gh repo view` and every `gh` command without `--repo` may resolve to the _upstream_, not the remote you push to. `origin` is not proof of the push target — `branch.<ref>.pushRemote` is.
 - **Truth, in order:** `branch.<ref>.pushRemote` → `branch.<ref>.remote` → `origin`, then `git remote get-url --push <remote>` → `owner/name`.
 - **Pin it:** `--repo owner/name` on `gh run|pr|issue|release`, `gh api repos/owner/name/...`. `gh repo view` is a last-resort fallback only when no remote parses.
 - **Pre-flight:** before a repo-mutating call (dispatch, release, run lookup, PR/issue write), print the resolved slug and confirm it against `git remote -v`.
@@ -67,11 +67,3 @@
 ## 6. Safeguards
 
 > [!warning] NEVER merge / tag / publish without approval — leave PR `OPEN` → `a:merge b:tag/release c:publish d:hold` confirm.
-
-## 7. Reference
-
-- **Fan-out / hooks:** parallel & Wayfinder → `branch-worktree-pr` skill; ports/hooks/templates → `worktrunk-guide` + `.config/wt.toml`.
-- **PR lifecycle:** create/watch/squash-merge → `gh-router` skill subskill `pr-land` (one `pr.py --watch --merge` call — do not re-derive with bare `gh pr create`/`gh pr checks`/`gh pr merge`); conflicts/rebase → `pr-conflict`; release → `gh-release`; PR prose → `pr-enhance`.
-- **Changelog (ADR-0016 / Keep-a-Changelog):** `# Changelog` → `## [Unreleased]` (top) → `## [X.Y.Z] - YYYY-MM-DD` newest first. Subsections follow Conventional Commit categories (`### Features`, `### Bug Fixes`, `### Documentation`, `### Code Refactoring`, etc. — never `Added`/`Changed`/`Fixed`), one imperative bullet each. Curate in PR; on release, `release-changelog.mjs` shifts `[Unreleased]` into new version block.
-- **README (brooks-lint):** header (logo → h1 → tagline → lang switcher → `•` nav → shields → banner) → quote + narrative → Why (3 para) → Quick Start (read→act→result) → benchmark (table + command + `> **Scope & honesty.**`) → tools / tree / roadmap `<details>` / contributing / license. Bump version badge each release.
-- **Locale:** `README.md` is English source; translations mirror structure exactly, code/JSON/Mermaid identical, reciprocal links at top. Keep in sync — stale number is bug.
