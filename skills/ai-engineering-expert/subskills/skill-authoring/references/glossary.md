@@ -18,7 +18,7 @@ _Avoid_: Ability, tool, capability.
 
 ### User-Invoked
 
-A skill with `disable-model-invocation: true` — invisible to the agent's autonomous selection and reachable only by the human typing its name (`/skill:name`). **Origin:** Claude Code. **Pi ≥0.84.4 advances it:** `formatSkillsForPrompt` removes the entry from the `<available_skills>` XML, so on Pi the skill pays **zero context load / zero metadata cost** — the model never learns its name until the human invokes it. (Claude's original gating is selection-only; description stays listed.)
+A skill with `disable-model-invocation: true` — invisible to the agent's autonomous selection and reachable only by the human typing its name (`/skill:name`). An enhancement beyond the open Agent Skills spec, shared by Claude Code and Pi. **Pi ≥0.84.4 semantics are the default:** `formatSkillsForPrompt` removes the entry from the `<available_skills>` XML, so the skill pays **zero context load / zero metadata cost** — the model never learns its name until the human invokes it. (Claude's gating is selection-only; description stays listed.)
 _Avoid_: Procedure, workflow, command.
 
 ### Description
@@ -58,7 +58,7 @@ _Avoid_: Chunking, modularity.
 
 ### Invocation Class
 
-Whether a skill is reachable by model inference (`implicit-allowed`) or only by explicit name (`explicit-only`). Declared via the canonical `disable-model-invocation` field (origin: Claude Code). **Claude Code:** controls selection, not metadata presence. **Pi ≥0.84.4:** controls both — `true` removes the skill from `<available_skills>` XML.
+Whether a skill is reachable by model inference (`implicit-allowed`) or only by explicit name (`explicit-only`). Declared via the `disable-model-invocation` enhancement field (beyond the open spec; Pi's zero-load semantics are the default). **Claude Code:** controls selection, not metadata presence. **Pi ≥0.84.4:** controls both — `true` removes the skill from `<available_skills>` XML.
 _Avoid_: Invocation mode, trigger mode.
 
 ### Selection Mode
@@ -196,5 +196,5 @@ _Avoid_: Sync layer, shim.
 
 ### Compatibility Field
 
-A frontmatter key recognized by one platform (e.g., `disable-model-invocation` for Claude Code) that has no defined semantics in another target runtime. Must be paired with the supported platform mechanism via sync.
+A frontmatter key recognized by one platform (e.g., `user-invocable` for Claude Code) that has no defined semantics in another target runtime. Must be paired with the supported platform mechanism via sync.
 _Avoid_: Legacy field, foreign key.

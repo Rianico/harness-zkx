@@ -77,7 +77,7 @@ Do not make LLM API calls in CI unit tests. Reconcile trigger verification via a
 
 ## Runtime Trace Fixtures
 
-For testing invocation class behavior against live Codex surfaces. See the context-load policy runtime trace fixture spec for fixture design and test procedure.
+For testing invocation class behavior against live Codex surfaces (manual, not in CI). Fixture design and test procedure: `tests/context-load-fixtures/README.md` at the repo root.
 
 ## References
 

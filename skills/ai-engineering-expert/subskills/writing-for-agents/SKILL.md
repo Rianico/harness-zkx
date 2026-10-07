@@ -8,11 +8,11 @@ metadata:
 
 # Writing for Agents
 
-Managed sub-skill of `ai-engineering-expert`. Load when `$domain` is `writing-for-agents` or when any `ai-engineering-expert` task writes or edits an agent-consumed document. Read `$SKILL_DIR/subskills/writing-for-agents/SKILL.md` directly. Sub-skills stay hidden from automatic discovery.
+Managed sub-skill of `ai-engineering-expert`. Load when `$domain` is `writing-for-agents` or when any `ai-engineering-expert` task writes or edits an agent-consumed document. Sub-skills stay hidden from automatic discovery — the parent dispatches by reading this file directly.
 
 This skill teaches how to **shape a document so a later model run follows it reliably**. You are the designer. A future agent is the reader. The same levers apply to a skill, `AGENTS.md`, `CLAUDE.md`, or a doc reached by a pointer. The goal is the same _process_ every run, not identical output.
 
-**Sibling boundary.** Sentence-level rules for all prose live in [plain-language.md](../../references/plain-language.md). Machine-Targeted STE structure (single actions, front-loaded guards, token insulation) lives in [agent-command-grammar.md](references/agent-command-grammar.md). Issues, RFCs, and proposals a maintainer triages belong to [writing-for-humans](../writing-for-humans/SKILL.md). When the document is a skill, read [skill-mechanics.md](references/skill-mechanics.md) for frontmatter, invocation choice, and router skills. Context-load, invocation-class, and description-budget rules live only in the parent Context-Load Policy (`$SKILL_DIR/../..`).
+**Sibling boundary.** Sentence-level rules for all prose live in [plain-language.md](../../references/plain-language.md). Machine-Targeted STE structure (single actions, front-loaded guards, token insulation) lives in [agent-command-grammar.md](references/agent-command-grammar.md). Issues, RFCs, and proposals a maintainer triages belong to [writing-for-humans](../writing-for-humans/SKILL.md). When the document is a skill, read [skill-mechanics.md](references/skill-mechanics.md) for frontmatter, invocation choice, and router skills. Context-load, invocation-class, and description-budget rules live only in the parent's [context-load policy](../../references/context-load-policy.md).
 
 ## Start from intent, name the goal
 
@@ -35,7 +35,7 @@ A pointer states what the material is and does, and lists the **branches** (`Use
 - **Front-load the leading word**. The pointer is where the leading word triggers retrieval.
 - **One trigger per branch**. Synonyms that rename one branch duplicate it. Keep only genuinely distinct branches.
 - **Cut identity the body already carries**.
-- **Never point to an independent surface**. Prompt Templates (`/release`) and `disable-model-invocation: true` skills have zero model-visible metadata cost on Pi. Pi removes disabled skills from `<available_skills>` XML via `formatSkillsForPrompt`. The model never learns the skill name until a human enters `/skill:name`. An always-loaded pointer to an independent surface never fires and adds context load with zero retrieval benefit. Keep the command description as the sole index. Claude Code gating is selection-only, whereas Pi strips disabled skills from context.
+- **Never point to an independent surface**. Prompt Templates (`/release`) and `disable-model-invocation: true` skills are invisible to the model until a human enters them, so an always-loaded pointer to them never fires and adds context load with zero retrieval benefit. Keep the command description as the sole index. Mechanics: parent context-load policy.
 
 ## The two loads
 
@@ -124,7 +124,7 @@ Assume every document carries restatements that leading words can retire.
 - The **environment** is also a source of truth: `package.json` scripts, config files, directory structures, `--help` text. A document restating them is a **cache**. Cache only what inspection cannot reveal: unwritten conventions, reasons behind choices, subtle edge cases. Leave one-file and one-command lookups to the environment, so nothing goes stale.
 - Check every line for **relevance**. Lines lose relevance by missing the task, omitting needed disclosure, or going stale. Without pruning, text decays into **sediment**: stale layers that pile up because adding feels safe and removing feels risky.
 - Hunt **no-ops** sentence by sentence. An instruction the model already follows by default wastes context. The test is model-relative, settled by running the document rather than by debate. Delete a failing sentence whole. Weak leading words (_be thorough_) also fail the test. Replace them with stronger ones (_relentless_).
-- **Template projection rule**. If reference content duplicates a template, delete the reference. Keep the single source in `templates/` or a generator script, and leave a one-line pointer (`See $SKILL_DIR/scripts/*.py + --dry-run` and `uv run … --dry-run` preview). Scaffold deleted `deterministic-artifacts.md`, `python-templates.md`, and `rust-templates.md`, and retained `runtime-matrix` as a policy table. **Red flags**: duplicated template dumps and hand-copied `.releaserc.json` or `pyproject.toml` files in `references/`.
+- **Template projection rule**. If reference content duplicates a template, delete the reference. Keep the single source in `templates/` or a generator script, and leave a one-line pointer to the generator (`uv run $SKILL_DIR/scripts/<name>.py --dry-run` previews the output). **Red flags**: duplicated template dumps and hand-copied `.releaserc.json` or `pyproject.toml` files in `references/`.
 - **Cut in a pass, after drafting**. Draft thoroughly first. Then name the behavior each line alters or the branch it serves. Delete any line without one. Excess gathers in sections that feel obligatory: work inventories, duplicated facts, paraphrases of adjacent code.
 - **Keep-list when cutting**. Never cut an invariant, a completion criterion, a branch trigger, or the reason behind a choice. Cut mechanisms and restatements first.
 - **Do not manufacture**. When no alternative existed, state the decision plainly. Invented rejected options read like rationale while offering none.

@@ -4,16 +4,18 @@ Directory layout, file organization, and progressive disclosure patterns for LSZ
 
 ## Skill Location
 
-**All skills MUST be placed under `<project_root>/skills/`.**
+**Source of truth: `<project_root>/skills/<skill-name>/`.** Agents discover skills through the `.agents/skills/` convention (the Agent Skills / Pi discovery path): expose each skill by mirroring or symlinking it into `~/.agents/skills/<name>` or project `.agents/skills/<name>`. This repo symlinks `skills/<name>` into `.agents/skills/<name>`.
 
 ```
 <project_root>/
-└── skills/
-    └── <skill-name>/
-        └── ...
+├── skills/              # Source of truth
+│   └── <skill-name>/
+│       └── ...
+└── .agents/skills/      # Discovery mirror (symlinks), per the Agent Skills convention
+    └── <skill-name> -> ../../skills/<skill-name>
 ```
 
-Do NOT place skills in `.claude/skills/` or other locations.
+Do NOT author skills in `.claude/skills/` or other runtime-specific locations — those are generated or synced, never the source.
 
 ## Directory Layout
 
@@ -172,9 +174,9 @@ uv run $SKILL_DIR/scripts/helper.py
 - `cd` creates unnecessary state coupling
 - Direct invocation works from any working directory
 
-**Runtime artifacts location:**
+**Runtime artifacts location** (outside the skill tree — never commit or sync them):
 ```
-$SKILL_DIR/.tmp/      # Temporary chunk files, Results, temp files, cache
+~/.claude/lsz/<skill-name>/   # Temporary chunk files, results, temp files, cache
 ```
 
 **Use inline script metadata for dependencies for simple scenarios:**

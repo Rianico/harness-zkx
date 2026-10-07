@@ -1,0 +1,154 @@
+# Agent runtime directories
+.agents/
+.claude/agents/
+.lsz/*
+!.lsz/config.yaml
+.pi/
+.lane/
+
+# Agent user-specific files (keep rules tracked)
+.claude/skills/
+.claude/hooks/
+.claude/commands/
+.claude/settings.*
+
+.llm-lsp-cli/
+
+# Agent traces
+.traces/
+
+## npx skills
+.skills-lock.json
+
+# ADR — root pointer only; a blanket rule hides a stray copy at any depth
+/.adr-dir
+
+# extra repo
+everything-claude-code/
+# external skill library (warpdotdev/common-skills) — scratch checkout; absorb by copy
+common-skills/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# API keys and secrets
+*.key
+*.pem
+secrets.json
+config/secrets.yml
+.secrets
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.yarn/
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+.cache/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Task files (agent teams)
+tasks/
+
+# Personal configs (if any)
+personal/
+private/
+
+# Session templates (not committed)
+examples/sessions/*.tmp
+
+# Local drafts
+marketing/
+.dmux/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# Rust build artifacts
+lsz2/target/
+
+# Bootstrap pipeline outputs
+# Generated lock files in tool subdirectories
+.opencode/package-lock.json
+.opencode/node_modules/
+assets/images/security/badrudi-exploit.mp4
+results.json
+.venv/
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+bower_components/
+jspm_packages/
+site-packages/
+venv/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）
