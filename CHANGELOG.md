@@ -153,7 +153,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Performance Improvements
 
-* **tests:** run the suite under pytest-xdist, execute herdr and validate-deps helpers in-process, prove check-gate env scrubbing with a stub toolchain, and replace the SHA-collision brute force with a deterministic hash-object fixture
+* **tests:** run the suite under pytest-xdist, execute herdr and validate-deps helpers in-process, prove check-gate env scrubbing with a stub toolchain, and replace the SHA-collision brute force with a deterministic hash-object fixture (#219)
 * **tests:** resolve the pinned oxfmt once, stub real CLI spawns and retry sleeps (#139)
 
 ### Documentation
