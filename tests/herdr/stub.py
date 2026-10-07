@@ -13,6 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tests.in_process import run_script_in_process
+
 SCRIPTS_DIR = (Path(__file__).parent.parent.parent / "skills" / "herdr" / "scripts").resolve()
 
 STUB_SOURCE = '''#!/usr/bin/env python3
@@ -260,6 +262,14 @@ class StubHarness:
         env: Mapping[str, str | None] | None = None,
         stdin: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        """Run the helper script in-process; keeps each call's observable contract
+        (argv/env/stdin in, stdout/stderr/exit code out) while dropping the
+        per-call interpreter startup that dominated the herdr cluster's runtime.
+
+        The script sees exactly `base_env()` plus `env` overrides, like
+        `subprocess.run(env=...)` did: the stub `herdr` on PATH, the log/state
+        pointers, `HERDR_ENV`, and nothing else ambient.
+        """
         self.write_state(dict(state if state is not None else DEFAULT_STATE))
         full_env = self.base_env()
         for key, value in (env or {}).items():
@@ -268,23 +278,7 @@ class StubHarness:
             else:
                 full_env[key] = value
         argv = [sys.executable, str(self.script), *args]
-        if stdin is None:
-            return subprocess.run(
-                argv,
-                capture_output=True,
-                text=True,
-                env=full_env,
-                check=False,
-                stdin=subprocess.DEVNULL,
-            )
-        return subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            env=full_env,
-            check=False,
-            input=stdin,
-        )
+        return run_script_in_process(argv, env=full_env, stdin=stdin)
 
 
 def flag_value(call: list[str], flag: str) -> str:

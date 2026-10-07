@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
+
+from tests.gh_router_repos import git
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 LIB_DIR = REPO_ROOT / "skills" / "gh-router" / "lib"
@@ -18,32 +19,22 @@ if str(LIB_DIR) not in sys.path:
 from range_authority import MalformedSpec, RangeRefusal, exit_code_for, resolve_range
 
 
-def _git(repo: Path, *args: str) -> str:
-    completed = subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return completed.stdout.strip()
-
-
 def _init_repo(repo: Path) -> str:
-    _ = _git(repo, "init")
-    _ = _git(repo, "config", "user.name", "Tester Author")
-    _ = _git(repo, "config", "user.email", "tester@example.com")
-    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = git(repo, "init")
+    _ = git(repo, "config", "user.name", "Tester Author")
+    _ = git(repo, "config", "user.email", "tester@example.com")
+    _ = git(repo, "config", "commit.gpgsign", "false")
     _ = (repo / "common.txt").write_text("base line\n", encoding="utf-8")
-    _ = _git(repo, "add", ".")
-    _ = _git(repo, "commit", "-m", "chore: base commit")
-    return _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    _ = git(repo, "add", ".")
+    _ = git(repo, "commit", "-m", "chore: base commit")
+    return git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 
 
 def _commit(repo: Path, name: str, content: str, message: str) -> str:
     _ = (repo / name).write_text(content, encoding="utf-8")
-    _ = _git(repo, "add", ".")
-    _ = _git(repo, "commit", "-m", message)
-    return _git(repo, "rev-parse", "HEAD")
+    _ = git(repo, "add", ".")
+    _ = git(repo, "commit", "-m", message)
+    return git(repo, "rev-parse", "HEAD")
 
 
 def _resolve(repo: Path, monkeypatch: pytest.MonkeyPatch, spec: str, mode: str):  # type: ignore[no-untyped-def]
@@ -53,7 +44,7 @@ def _resolve(repo: Path, monkeypatch: pytest.MonkeyPatch, spec: str, mode: str):
 
 def test_linear_two_dot_range(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = _init_repo(tmp_path)
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     first = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
     second = _commit(tmp_path, "f2.txt", "two\n", "feat: two")
 
@@ -70,11 +61,11 @@ def test_diverged_three_dot_reports_both_sides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = _init_repo(tmp_path)
-    fork_point = _git(tmp_path, "rev-parse", "HEAD")
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    fork_point = git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
     head_tip = _commit(tmp_path, "f2.txt", "two\n", "feat: two")
-    _ = _git(tmp_path, "checkout", base)
+    _ = git(tmp_path, "checkout", base)
     base_tip = _commit(tmp_path, "b1.txt", "base\n", "fix: base work")
 
     resolution = _resolve(tmp_path, monkeypatch, f"{base}...feature", "...")
@@ -88,9 +79,9 @@ def test_diverged_three_dot_reports_both_sides(
 
 def test_two_dot_uses_base_as_given(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = _init_repo(tmp_path)
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
-    _ = _git(tmp_path, "checkout", base)
+    _ = git(tmp_path, "checkout", base)
     _ = _commit(tmp_path, "b1.txt", "base\n", "fix: base work")
 
     resolution = _resolve(tmp_path, monkeypatch, f"{base}..feature", "..")
@@ -106,10 +97,10 @@ def test_rebased_feature_has_empty_base_side(
 ) -> None:
     base = _init_repo(tmp_path)
     _ = _commit(tmp_path, "b1.txt", "base\n", "fix: base work")
-    base_tip = _git(tmp_path, "rev-parse", "HEAD")
-    _ = _git(tmp_path, "checkout", "-b", "feature", "HEAD~1")
+    base_tip = git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "checkout", "-b", "feature", "HEAD~1")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
-    _ = _git(tmp_path, "rebase", base)
+    _ = git(tmp_path, "rebase", base)
 
     resolution = _resolve(tmp_path, monkeypatch, f"{base}..feature", "..")
 
@@ -120,10 +111,10 @@ def test_rebased_feature_has_empty_base_side(
 
 def test_root_commit_is_merge_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = _init_repo(tmp_path)
-    root = _git(tmp_path, "rev-parse", "HEAD")
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    root = git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
-    _ = _git(tmp_path, "checkout", base)
+    _ = git(tmp_path, "checkout", base)
     _ = _commit(tmp_path, "b1.txt", "base\n", "fix: base work")
 
     resolution = _resolve(tmp_path, monkeypatch, f"{base}...feature", "...")
@@ -135,10 +126,10 @@ def test_root_commit_is_merge_base(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 def test_merge_commit_included(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = _init_repo(tmp_path)
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
-    _ = _git(tmp_path, "merge", "--no-ff", base, "-m", "merge: take base")
-    merge_sha = _git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "merge", "--no-ff", base, "-m", "merge: take base")
+    merge_sha = git(tmp_path, "rev-parse", "HEAD")
 
     resolution = _resolve(tmp_path, monkeypatch, f"{base}..feature", "..")
 
@@ -148,10 +139,10 @@ def test_merge_commit_included(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
 def test_sha_only_pair_matches_branch_form(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = _init_repo(tmp_path)
-    base_sha = _git(tmp_path, "rev-parse", "HEAD")
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    base_sha = git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
-    head_sha = _git(tmp_path, "rev-parse", "HEAD")
+    head_sha = git(tmp_path, "rev-parse", "HEAD")
 
     via_branches = _resolve(tmp_path, monkeypatch, f"{base}..feature", "..")
     via_dots = _resolve(tmp_path, monkeypatch, f"{base_sha}..{head_sha}", "..")
@@ -164,10 +155,10 @@ def test_sha_only_pair_matches_branch_form(tmp_path: Path, monkeypatch: pytest.M
 
 def test_single_ref_resolves_origin_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _ = _init_repo(tmp_path)
-    base_tip = _git(tmp_path, "rev-parse", "HEAD")
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    base_tip = git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
-    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/main", base_tip)
+    _ = git(tmp_path, "update-ref", "refs/remotes/origin/main", base_tip)
 
     resolution = _resolve(tmp_path, monkeypatch, "feature", "...")
 
@@ -178,12 +169,12 @@ def test_single_ref_resolves_origin_main(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_single_ref_prefers_origin_head(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _ = _init_repo(tmp_path)
-    base_tip = _git(tmp_path, "rev-parse", "HEAD")
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    base_tip = git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
-    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/main", base_tip)
-    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/master", base_tip)
-    _ = _git(
+    _ = git(tmp_path, "update-ref", "refs/remotes/origin/main", base_tip)
+    _ = git(tmp_path, "update-ref", "refs/remotes/origin/master", base_tip)
+    _ = git(
         tmp_path,
         "symbolic-ref",
         "refs/remotes/origin/HEAD",
@@ -230,8 +221,8 @@ def test_head_behind_base_reports_only_in_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = _init_repo(tmp_path)
-    _ = _git(tmp_path, "checkout", "-b", "feature")
-    _ = _git(tmp_path, "checkout", base)
+    _ = git(tmp_path, "checkout", "-b", "feature")
+    _ = git(tmp_path, "checkout", base)
     ahead = _commit(tmp_path, "b1.txt", "base\n", "fix: base work")
 
     resolution = _resolve(tmp_path, monkeypatch, f"{base}..feature", "..")
@@ -247,7 +238,7 @@ def test_identical_tips_resolve_empty(tmp_path: Path, monkeypatch: pytest.Monkey
 
     assert list(resolution.commits) == []
     assert list(resolution.only_in_base) == []
-    assert resolution.merge_base == _git(tmp_path, "rev-parse", "HEAD")
+    assert resolution.merge_base == git(tmp_path, "rev-parse", "HEAD")
 
 
 @pytest.mark.parametrize(
@@ -296,7 +287,7 @@ def test_resolution_is_immutable_and_json_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = _init_repo(tmp_path)
-    _ = _git(tmp_path, "checkout", "-b", "feature")
+    _ = git(tmp_path, "checkout", "-b", "feature")
     _ = _commit(tmp_path, "f1.txt", "one\n", "feat: one")
 
     resolution = _resolve(tmp_path, monkeypatch, f"{base}..feature", "..")
@@ -310,33 +301,33 @@ def test_resolution_is_immutable_and_json_ready(
 
 def _build_criss_cross(repo: Path) -> None:
     """Two branches that merge each other's commits: two merge bases."""
-    _ = _git(repo, "init")
-    _ = _git(repo, "config", "user.name", "Tester Author")
-    _ = _git(repo, "config", "user.email", "tester@example.com")
-    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = git(repo, "init")
+    _ = git(repo, "config", "user.name", "Tester Author")
+    _ = git(repo, "config", "user.email", "tester@example.com")
+    _ = git(repo, "config", "commit.gpgsign", "false")
     _ = (repo / "root.txt").write_text("root\n", encoding="utf-8")
-    _ = _git(repo, "add", ".")
-    _ = _git(repo, "commit", "-m", "chore: root")
-    _ = _git(repo, "branch", "-M", "MA")
+    _ = git(repo, "add", ".")
+    _ = git(repo, "commit", "-m", "chore: root")
+    _ = git(repo, "branch", "-M", "MA")
     a1 = _commit(repo, "a1.txt", "a1\n", "feat: a1")
     _ = _commit(repo, "a2.txt", "a2\n", "feat: a2")
-    root = _git(repo, "rev-list", "--max-parents=0", "HEAD")
-    _ = _git(repo, "checkout", "-b", "MB", root)
+    root = git(repo, "rev-list", "--max-parents=0", "HEAD")
+    _ = git(repo, "checkout", "-b", "MB", root)
     b1 = _commit(repo, "b1.txt", "b1\n", "feat: b1")
     _ = _commit(repo, "b2.txt", "b2\n", "feat: b2")
-    _ = _git(repo, "-c", "core.editor=true", "merge", "--no-edit", a1)
-    _ = _git(repo, "checkout", "MA")
-    _ = _git(repo, "-c", "core.editor=true", "merge", "--no-edit", b1)
+    _ = git(repo, "-c", "core.editor=true", "merge", "--no-edit", a1)
+    _ = git(repo, "checkout", "MA")
+    _ = git(repo, "-c", "core.editor=true", "merge", "--no-edit", b1)
 
 
 def test_two_dot_vs_three_dot_criss_cross(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _build_criss_cross(tmp_path)
-    assert _git(tmp_path, "merge-base", "--all", "MA", "MB").count("\n") == 1
-    merge_base = _git(tmp_path, "merge-base", "MA", "MB").splitlines()[0]
-    expected_two = _git(tmp_path, "rev-list", "--reverse", "MA..MB").splitlines()
-    expected_two_base = _git(tmp_path, "rev-list", "--reverse", "MB..MA").splitlines()
-    expected_three = _git(tmp_path, "rev-list", "--reverse", f"{merge_base}..MB").splitlines()
-    expected_three_base = _git(tmp_path, "rev-list", "--reverse", f"{merge_base}..MA").splitlines()
+    assert git(tmp_path, "merge-base", "--all", "MA", "MB").count("\n") == 1
+    merge_base = git(tmp_path, "merge-base", "MA", "MB").splitlines()[0]
+    expected_two = git(tmp_path, "rev-list", "--reverse", "MA..MB").splitlines()
+    expected_two_base = git(tmp_path, "rev-list", "--reverse", "MB..MA").splitlines()
+    expected_three = git(tmp_path, "rev-list", "--reverse", f"{merge_base}..MB").splitlines()
+    expected_three_base = git(tmp_path, "rev-list", "--reverse", f"{merge_base}..MA").splitlines()
 
     two_dot = _resolve(tmp_path, monkeypatch, "MA..MB", "..")
     three_dot = _resolve(tmp_path, monkeypatch, "MA...MB", "..")
@@ -347,7 +338,7 @@ def test_two_dot_vs_three_dot_criss_cross(tmp_path: Path, monkeypatch: pytest.Mo
     assert list(three_dot.commits) == expected_three
     assert list(three_dot.only_in_base) == expected_three_base
 
-    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/main", "MA")
+    _ = git(tmp_path, "update-ref", "refs/remotes/origin/main", "MA")
     single_two = _resolve(tmp_path, monkeypatch, "MB", "..")
     single_three = _resolve(tmp_path, monkeypatch, "MB", "...")
     assert single_two.mode == ".."
@@ -360,12 +351,12 @@ def test_single_ref_prefers_origin_main_over_master(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ = _init_repo(tmp_path)
-    main_tip = _git(tmp_path, "rev-parse", "HEAD")
+    main_tip = git(tmp_path, "rev-parse", "HEAD")
     _ = _commit(tmp_path, "extra.txt", "extra\n", "feat: extra")
-    master_tip = _git(tmp_path, "rev-parse", "HEAD")
+    master_tip = git(tmp_path, "rev-parse", "HEAD")
     assert main_tip != master_tip
-    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/main", main_tip)
-    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/master", master_tip)
+    _ = git(tmp_path, "update-ref", "refs/remotes/origin/main", main_tip)
+    _ = git(tmp_path, "update-ref", "refs/remotes/origin/master", master_tip)
 
     resolution = _resolve(tmp_path, monkeypatch, "HEAD", "...")
 
@@ -379,8 +370,8 @@ def test_single_ref_falls_back_to_origin_master(
 ) -> None:
     _ = _init_repo(tmp_path)
     _ = _commit(tmp_path, "extra.txt", "extra\n", "feat: extra")
-    master_tip = _git(tmp_path, "rev-parse", "HEAD")
-    _ = _git(tmp_path, "update-ref", "refs/remotes/origin/master", master_tip)
+    master_tip = git(tmp_path, "rev-parse", "HEAD")
+    _ = git(tmp_path, "update-ref", "refs/remotes/origin/master", master_tip)
 
     resolution = _resolve(tmp_path, monkeypatch, "HEAD", "...")
 

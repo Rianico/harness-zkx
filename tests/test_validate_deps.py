@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.in_process import run_script_in_process
+
 SCRIPT_PATH = (
     Path(__file__).parent.parent
     / "skills"
@@ -16,12 +18,8 @@ SCRIPT_PATH = (
 
 
 def run_validate_deps(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["uv", "run", str(SCRIPT_PATH), *args],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    # Same interpreter and venv the tests run in; `uv run` only wrapped python.
+    return run_script_in_process([sys.executable, str(SCRIPT_PATH), *args])
 
 
 def write_skill(root: Path, name: str, depends_on: str | None = None) -> None:

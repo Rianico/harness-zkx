@@ -9,10 +9,12 @@ Every test either passes `--skip-tests` (directly or via the env escape) or runs
 the script against a stubbed toolchain, so no test can launch a nested
 `uv run pytest`. The former `HARNESS_CHECK_GATE` skipif anti-recursion guard was
 redundant (the variable was write-only) and has been removed, with no new reader.
-Real-toolchain end-to-end tests probe `uv run --no-sync basedpyright --version`
-and skip when it fails; the CI pytest job runs `uv run --no-sync pytest` with
-basedpyright uninstalled, so that probe fails there, the five `@REQUIRES_UV` tests
-skip, and the stubbed-toolchain tests carry gate coverage in CI.
+Exactly one real end-to-end run remains: the cached `--skip-tests` execution
+behind the gate-banner tests probes `uv run --no-sync basedpyright --version`
+and skips when the toolchain is absent; the CI pytest job runs
+`uv run --no-sync pytest` with basedpyright uninstalled, so those two tests skip
+there. Everything else — gate order, graded root, env scrubbing — is proven
+through stubbed toolchains, which carry gate coverage in CI as well.
 """
 
 from __future__ import annotations
@@ -142,30 +144,33 @@ def _make_foreign_repo(tmp_path: Path) -> Path:
 def _assert_grades_harness_from_foreign_dir(tmp_path: Path, extra_env: dict[str, str]) -> None:
     """From a foreign git root, --skip-tests must still pass and name the harness root.
 
-    Pre-fix (`git rev-parse --show-toplevel`), check.sh would cd into the foreign
-    repo and gate 1 (`uv run ruff check .`) would fail on bad.py, so the exit-0
-    assert below is the discriminator.
+    The stub `uv` records `$PWD` per gate call, and that record is the
+    discriminator: pre-fix (`git rev-parse --show-toplevel`), check.sh cd'd into
+    the foreign repo and every gate would record the foreign root instead of the
+    harness root.
     """
     foreign = _make_foreign_repo(tmp_path)
+    env, calls = _stub_toolchain(tmp_path, log_pwd=True)
+    env.update(extra_env)
     result = _run(
-        "bash", str(CHECK_SCRIPT), "--skip-tests", cwd=foreign, env={**os.environ, **extra_env}
+        "bash", str(CHECK_SCRIPT), "--skip-tests", cwd=foreign, env=env, timeout=STUB_TIMEOUT
     )
     assert result.returncode == 0, f"graded the foreign tree:\n{result.stdout}\n{result.stderr}"
     assert f"==> checking {HARNESS_ROOT}" in result.stdout
+    records = calls.read_text().splitlines()
+    assert [line for line in records if not line.startswith("pwd=")] == STUB_GATE_LOG[:3]
+    assert set(line for line in records if line.startswith("pwd=")) == {f"pwd={HARNESS_ROOT}"}
 
 
-@REQUIRES_UV
 def test_check_script_grades_harness_root_not_caller_git_root(tmp_path: Path) -> None:
     _assert_grades_harness_from_foreign_dir(tmp_path, {})
 
 
-@REQUIRES_UV
 def test_check_script_grades_harness_root_despite_foreign_git_dir(tmp_path: Path) -> None:
     foreign = _make_foreign_repo(tmp_path)
     _assert_grades_harness_from_foreign_dir(tmp_path, {"GIT_DIR": str(foreign / ".git")})
 
 
-@REQUIRES_UV
 def test_check_script_grades_harness_root_despite_foreign_git_work_tree(
     tmp_path: Path,
 ) -> None:
@@ -222,16 +227,6 @@ def test_files_exist_and_are_executable() -> None:
     for path in (CHECK_SCRIPT, HOOK):
         assert path.is_file(), f"{path} missing"
         assert stat.S_IMODE(path.stat().st_mode) == 0o755, f"{path} is not mode 0755"
-
-
-def test_check_script_content_contract() -> None:
-    text = CHECK_SCRIPT.read_text(encoding="utf-8")
-    assert "set -euo pipefail" in text
-    previous = -1
-    for command in GATE_COMMANDS:
-        index = text.index(command)
-        assert index > previous, f"gate command out of order: {command!r}"
-        previous = index
 
 
 @REQUIRES_UV
