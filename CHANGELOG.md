@@ -78,6 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 * **check-gate:** scrub git repo-location overrides and refuse a bare-flagged repo, so a leaked GIT_DIR can no longer redirect the suite's git writes (#213)
+* **check-gate:** scrub git commit-identity overrides (`GIT_AUTHOR_*`/`GIT_COMMITTER_*`) in the session fixture, `git_env`, and `check.sh`, so a pre-commit hook's outer commit identity can no longer overwrite the suite's fixture commits (#216)
 * **ai-engineering:** bring skill bodies into STE-100 compliance and support --preserve in linter ([#190](https://github.com/Rianico/harness-zkx/issues/190)) (#191)
 * **skill-authoring:** count sentence words by ASD-STE100 Rule 8.5-8.7 and correct the Rule 1.1 and 5.1 citations (#189)
 * **harness-audit:** read event-stream session logs, name all edit error codes, and report delivery-cap truncation (#179)
