@@ -26,6 +26,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.git_env import GIT_IDENTITY_VARS, GIT_LOCATION_VARS
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # The root as check.sh prints it: physically resolved (pwd -P). On macOS this is
 # /private/tmp/..., so banner asserts must use the physical path, not a raw /tmp.
@@ -358,12 +360,18 @@ def _init_flagged_repo(path: Path, *, bare: bool = False) -> Path:
     return path
 
 
+# Every override class check.sh must scrub before it spawns a gate child.
+PROBED_GIT_VARS: tuple[str, ...] = (*GIT_LOCATION_VARS, *GIT_IDENTITY_VARS)
+
+
 def _stub_toolchain_env_probe(tmp_path: Path) -> tuple[dict[str, str], Path]:
     """A fake `uv` that logs its argv plus the git overrides it inherited."""
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir()
     calls = tmp_path / "calls.log"
-    record = 'printf "%s\\nGIT_DIR=%s\\nGIT_WORK_TREE=%s\\n" "$*" "${GIT_DIR-}" "${GIT_WORK_TREE-}"'
+    printf_fmt = "".join(f"{name}=%s\\n" for name in PROBED_GIT_VARS)
+    printf_args = " ".join(f'"${{{name}-}}"' for name in PROBED_GIT_VARS)
+    record = f'printf "%s\\n{printf_fmt}" "$*" {printf_args}'
     stub = stub_bin / "uv"
     _ = stub.write_text(
         "\n".join(["#!/usr/bin/env bash", f'{record} >> "{calls}"', "exit 0"]) + "\n"
@@ -398,21 +406,27 @@ def test_check_script_refuses_bare_flagged_repo(tmp_path: Path) -> None:
     assert not calls.exists(), "refusal ran gates anyway"
 
 
-def test_check_script_gates_inherit_no_caller_git_dir(tmp_path: Path) -> None:
-    """A caller's GIT_DIR must not reach the gates.
+def test_check_script_gates_inherit_no_caller_git_override(tmp_path: Path) -> None:
+    """A caller's git overrides must not reach the gates.
 
-    GIT_DIR outranks `cwd` and `-C`, so a leaked one redirects every git write the
-    pytest gate spawns into the caller's repo config — the leak that flags a real
-    repo bare and stamps a fixture identity into its shared config.
+    `GIT_DIR` outranks `cwd` and `-C`, so a leaked one redirects every git write
+    the pytest gate spawns into the caller's repo config — the leak that flags a
+    real repo bare and stamps a fixture identity into its shared config. The
+    identity overrides leak the other way: git exports the outer commit's
+    `GIT_AUTHOR_*`/`GIT_COMMITTER_*` into the hook, and a nested fixture repo then
+    commits as the caller instead of its own `user.name`.
     """
     env, calls = _stub_toolchain_env_probe(tmp_path)
     foreign = _make_foreign_repo(tmp_path)
     env["GIT_DIR"] = str(foreign / ".git")
     env["GIT_WORK_TREE"] = str(foreign)
+    for name in GIT_IDENTITY_VARS:
+        env[name] = "polluted"
     result = _run("bash", str(CHECK_SCRIPT), env=env, timeout=STUB_TIMEOUT)
     assert result.returncode == 0, result.stdout + result.stderr
     records = calls.read_text().splitlines()
-    overrides = [line for line in records if line.startswith(("GIT_DIR=", "GIT_WORK_TREE="))]
-    assert set(overrides) == {"GIT_DIR=", "GIT_WORK_TREE="}, overrides
-    argv = [line for line in records if not line.startswith(("GIT_DIR=", "GIT_WORK_TREE="))]
+    probed = set(PROBED_GIT_VARS)
+    overrides = [line for line in records if line.split("=", 1)[0] in probed]
+    assert set(overrides) == {f"{name}=" for name in PROBED_GIT_VARS}, overrides
+    argv = [line for line in records if line.split("=", 1)[0] not in probed]
     assert argv == STUB_GATE_LOG
