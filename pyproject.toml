@@ -19,6 +19,7 @@ dev = [
     "pydantic",
     "pytest>=9.1",
     "pytest-cov>=7",
+    "pytest-xdist>=3.6",
     "python-frontmatter>=1.3.0",
     "ruff>=0.16",
 ]
@@ -29,7 +30,7 @@ testpaths = [
 ]
 # skill-comply has its own pyproject.toml and needs to run from its directory
 pythonpath = ["."]
-addopts = "-q --tb=short"
+addopts = "-q --tb=short -n auto"
 
 [tool.ruff]
 line-length = 100
