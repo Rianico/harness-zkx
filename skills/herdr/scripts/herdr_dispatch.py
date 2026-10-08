@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.14"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """herdr-dispatch — manager-side task dispatch helper for Herdr multi-agent lanes.
 
@@ -161,6 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Task Group (Herdr Tab) label for the Hierarchy block; omitted when not given",
     )
+    _ = parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
+    )
     return parser
 
 
@@ -314,12 +319,22 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
                 )
 
     caller_name = "caller"
+    caller_recovery: dict[str, str] | None = None
     if not options.dry_run:
         try:
             caller_ctx = resolve_caller(herdr, env)
             caller_name = caller_ctx.agent or caller_ctx.label or caller_ctx.pane_id
+            subset = {
+                "pane_id": caller_ctx.pane_id,
+                "kind": caller_ctx.kind,
+                "session_path": caller_ctx.session_id,
+                "resume_cmd": caller_ctx.resume_cmd,
+                "cwd": caller_ctx.cwd,
+            }
+            filtered = {key: value for key, value in subset.items() if value}
+            caller_recovery = filtered or None
         except Exception:
-            pass
+            caller_recovery = None
 
     acquired_targets: list[str] = []
     if not options.dry_run:
@@ -333,6 +348,7 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
                 env=env,
                 ticket_id=ticket_id,
                 task_id=task_id,
+                caller_recovery=caller_recovery,
             )
             acquired_targets.append(canonical)
 

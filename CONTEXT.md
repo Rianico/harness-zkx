@@ -105,11 +105,11 @@ The identity of one task within a ticket, shaped `<ticket-id>#<task-slug>` (e.g.
 _Avoid_: subtask id, job id.
 
 **Dispatch**:
-The forward handoff that opens a task: it carries the ticket payload, binds the correlation IDs, and locks the lane lease at `.lane/lease.json`.
+The forward handoff that opens a task: it carries the ticket payload, binds the correlation IDs, and records the active lease plus the task trajectory in `.lane/tasks.yaml`.
 _Avoid_: send, submission.
 
 **Reply**:
-The callee's completion callback: a status triad plus `resp-format.md` evidence, keyed `In-Reply-To: <Task-ID>`, which releases the sender's lease.
+The callee's completion callback: a status triad plus `resp-format.md` evidence, keyed `In-Reply-To: <Task-ID>`, which appends the mapped status event to the task trajectory and soft-completes the sender's lease (dropping the lock, keeping the record).
 _Avoid_: response, answer.
 
 **Scoped Runtime Name**:

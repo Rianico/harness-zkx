@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.14"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """herdr-reply — send a completion reply callback to a caller agent without shell mangling.
 
@@ -37,6 +37,7 @@ from pathlib import Path
 from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
+    EXIT_USAGE,
     KNOWN_AGENT_KINDS,
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
@@ -56,7 +57,7 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
-from herdr_lease import get_lease, release_lease
+from herdr_lease import get_lease, get_task, record_event, release_lease
 from herdr_prompt import (
     render_envelope,
     resolve_caller,
@@ -87,6 +88,7 @@ class Options:
     json: bool = False
     dry_run: bool = False
     auto_start: str | None = None
+    verbose: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -129,7 +131,100 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="KIND",
         help="automatically start the agent on an open shell pane before delivering the reply",
     )
+    _ = parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
+    )
     return parser
+
+
+STATUS_MAP: dict[str, str] = {
+    "COMPLETED": "completed",
+    "BLOCKED": "blocked",
+    "REJECTED": "rework",
+}
+
+
+def parse_status_line(payload: str) -> tuple[str | None, str | None, str | None]:
+    """Map the payload's first non-empty line onto (status, sha, status_line).
+
+    The first token is upper-cased with a trailing `:` stripped: COMPLETED/BLOCKED/
+    REJECTED map to completed/blocked/rework; anything else maps to None. For COMPLETED,
+    the second token is treated as the commit SHA when present.
+    """
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        tokens = line.split()
+        token = tokens[0].rstrip(":").upper()
+        mapped = STATUS_MAP.get(token)
+        sha = tokens[1] if mapped == "completed" and len(tokens) > 1 else None
+        return mapped, sha, line
+    return None, None, None
+
+
+def recovery_file_arg(options: Options) -> str:
+    """The `--file` value for a recovery hint, or `<reply>` when reading stdin/positional."""
+    if options.file and options.file != STDIN:
+        return options.file
+    return "<reply>"
+
+
+def caller_recovery_for_reply(herdr: str, env: Mapping[str, str]) -> dict[str, object] | None:
+    """Resolve the caller-recovery metadata JIT: sender lease task_id -> task caller_recovery."""
+    try:
+        sender = resolve_current_agent(herdr, env)
+        if not sender:
+            return None
+        lease = get_lease(sender, env=env)
+        if not isinstance(lease, dict):
+            return None
+        task_id = lease.get("task_id")
+        if not isinstance(task_id, str):
+            return None
+        task = get_task(task_id, env=env)
+        if not isinstance(task, dict):
+            return None
+        recovery = task.get("caller_recovery")
+        if isinstance(recovery, dict) and recovery:
+            return dict(recovery)
+        return None
+    except Exception:
+        return None
+
+
+def format_reply_recovery_diagnostic(
+    target: str, recovery: Mapping[str, object], file_arg: str
+) -> str:
+    """Render the exact copy-paste recovery block for an exited reply target."""
+    pane_id = recovery.get("pane_id") or "<pane>"
+    kind = recovery.get("kind") or "<kind>"
+    resume_cmd = recovery.get("resume_cmd")
+    lines = [
+        f"herdr-reply: target agent {target!r} in pane {pane_id} has exited.",
+        "Suggested recovery:",
+        "  1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py "
+        f"{target} --file {file_arg} --auto-start {kind}",
+    ]
+    if resume_cmd:
+        lines.append(f"  2. Or resume manually in pane {pane_id}: {resume_cmd}")
+    return "\n".join(lines)
+
+
+def emit_recovery_diagnostic(
+    herdr: str, env: Mapping[str, str], target: str, file_arg: str
+) -> bool:
+    """Print the exact recovery block to stderr when the sender's task stored one.
+
+    Returns True when a recovery block was emitted (the caller should stop delivery).
+    """
+    recovery = caller_recovery_for_reply(herdr, env)
+    if recovery is None:
+        return False
+    print(format_reply_recovery_diagnostic(target, recovery, file_arg), file=sys.stderr)
+    return True
 
 
 def read_payload(source: str | None, message: str | None) -> str:
@@ -274,6 +369,42 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
         pass
 
 
+def record_sender_status(
+    herdr: str,
+    env: Mapping[str, str],
+    mapped: str | None,
+    sha: str | None,
+    status_line: str | None,
+) -> None:
+    """Append the sender's completion event to its task trajectory, when one is leased.
+
+    Resolves the sender's own lease; only a str `task_id` and a mapped status record an
+    event. A missing lease or an unmapped status is a no-op (the reply is still sent).
+    """
+    if not mapped:
+        return
+    try:
+        sender = resolve_current_agent(herdr, env)
+        if not sender:
+            return
+        lease = get_lease(sender, env=env)
+        if not isinstance(lease, dict):
+            return
+        task_id = lease.get("task_id")
+        if isinstance(task_id, str):
+            _ = record_event(
+                task_id,
+                mapped,
+                note=status_line,
+                sha=sha,
+                actor=sender,
+                event=mapped,
+                env=env,
+            )
+    except Exception:
+        pass
+
+
 def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
@@ -312,6 +443,8 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 _ = run_herdr_checked(start_argv, env)
             target = start_name
         else:
+            if emit_recovery_diagnostic(herdr, env, target, recovery_file_arg(options)):
+                return EXIT_USAGE
             diag = format_shell_pane_diagnostic(
                 target=target,
                 pane_id=shell_info.pane_id,
@@ -326,6 +459,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         verify_target_not_bare_shell(herdr, target, env)
 
     payload = read_payload(options.file, options.message)
+    mapped, sha, status_line = parse_status_line(payload)
     sender = resolve_current_agent(herdr, env)
     lease = get_lease(sender, env=env) if sender else None
     ticket_id: str | None = None
@@ -342,7 +476,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     reply_envelope = render_envelope(
         caller_ctx,
         receiver=resolve_receiver(panes, agents, target) or target,
-        include_recovery=False,
+        include_recovery=options.verbose,
         ticket_id=ticket_id,
         in_reply_to=in_reply_to,
         tab_id=caller_ctx.tab_id,
@@ -369,16 +503,20 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             print(f"herdr-reply: {target}: {detail}", file=sys.stderr)
             return EXIT_BLOCKED
         if code == TIMEOUT_CODE:
+            record_sender_status(herdr, env, mapped, sha, status_line)
             release_active_lease(herdr, env)
             raise WaitTimeout(
                 f"reply delivered to {target} but wait timed out; caller is processing asynchronously"
             )
         if code == "agent_not_found":
+            if emit_recovery_diagnostic(herdr, env, target, recovery_file_arg(options)):
+                return EXIT_USAGE
             diag = diagnose_agent_not_found(herdr, target, env)
             if diag:
                 raise UsageError(diag)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
+    record_sender_status(herdr, env, mapped, sha, status_line)
     release_active_lease(herdr, env)
     _ = decode_response(done.stdout)
     state = settled_state(done.stdout)

@@ -155,7 +155,7 @@ if args[:2] == ["agent", "get"]:
     if seq is not None:
         status = seq[min(max(prior, 0), len(seq) - 1)]
     else:
-        status = static.get("agent_status", "working")
+        status = static.get("agent_status", "idle")
     if rev_seq is not None:
         revision = rev_seq[min(max(prior, 0), len(rev_seq) - 1)]
     elif "revision" in static:
@@ -174,10 +174,16 @@ if args[:2] == ["agent", "get"]:
         except FileNotFoundError:
             pass
         revision = "r1" if prompts == 0 else f"r{1 + prompts}"
+    ready_seq = state.get("agent_get_ready_seq", {}).get(target)
+    if ready_seq is not None:
+        ready = ready_seq[min(max(prior, 0), len(ready_seq) - 1)]
+    else:
+        ready = static.get("interactive_ready", True)
     agent = {
         "name": target,
         "agent": "pi",
         "agent_status": status,
+        "interactive_ready": ready,
         "revision": revision,
     }
     if static.get("session"):

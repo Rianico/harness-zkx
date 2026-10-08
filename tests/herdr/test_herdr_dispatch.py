@@ -121,7 +121,7 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     text = call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:13] == [
+    assert lines[1:11] == [
         "Routing:",
         "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "  Group: [reviewer@w9:p1]",
@@ -130,11 +130,11 @@ def test_dispatch_injects_caller_context_and_reply_contract(
         "  Task-Group: w9:t1",
         "  Ticket-ID: ticket",
         "  Task-ID: ticket",
-        "Runtime:",
-        "  Cwd: /tmp/harness",
         "Protocol:",
         f"  {herdr_prompt.SKILL_NOTICE}",
     ]
+    assert "Runtime:" not in text
+    assert "Cwd:" not in text
     assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
@@ -247,6 +247,63 @@ def test_dispatch_acquires_lease_on_successful_dispatch(stub: StubHarness, tmp_p
     assert lease["caller"] == "reviewer"
 
 
+def test_dispatch_persists_caller_recovery_without_invented_keys(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    ticket = tmp_path / "182-herdr-msg-enhance.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    task = herdr_lease.get_task("#182-herdr-msg-enhance", base_dir=tmp_path)
+    assert task is not None
+    recovery = task["caller_recovery"]
+    assert recovery["pane_id"] == "w9:p1"
+    assert recovery["kind"] == "pi"
+    assert recovery["cwd"] == "/tmp/harness"
+    # The default stub caller has no session, so these keys must never appear.
+    assert "session_path" not in recovery
+    assert "resume_cmd" not in recovery
+
+
+def test_dispatch_multi_hop_same_task_id_preserves_trajectory(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    task_id = "#182-herdr-msg-enhance#full-stack"
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    first = stub.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--task-id",
+        task_id,
+        env={"PWD": str(tmp_path)},
+    )
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+
+    second = stub.run(
+        "callee2",
+        "--file",
+        str(ticket),
+        "--task-id",
+        task_id,
+        env={"PWD": str(tmp_path), "HERDR_PANE_ID": "w9:p2"},
+    )
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    trajectory = task["trajectory"]
+    assert [event["seq"] for event in trajectory] == [1, 2]
+    assert [event["event"] for event in trajectory] == ["dispatched", "dispatched"]
+    assert task["status"] == "dispatched"
+    assert task["assignee"] == "callee2"
+    assert task["caller_recovery"] == {"pane_id": "w9:p2", "cwd": "/tmp/scratch"}
+
+
 def test_dispatch_accepts_revision_zero_without_retry(stub: StubHarness, tmp_path: Path) -> None:
     """Inherits the herdr-prompt fix: revision-0 (agy) exit 0 is accepted, never re-sent."""
     state = {
@@ -342,7 +399,7 @@ def test_pep723_metadata_precedes_docstring() -> None:
     assert header.startswith("#!/usr/bin/env python3\n")
     assert "# /// script" in header
     assert 'requires-python = ">=3.14"' in header
-    assert "dependencies = []" in header
+    assert 'dependencies = ["pyyaml"]' in header
     assert header.rstrip().endswith("# ///")
 
 

@@ -11,7 +11,7 @@ Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract pro
 
 When a workflow requires both high-level coordination (triage, planning, verification, review) and focused code execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Callees)** in dedicated panes within a shared workspace or tab.
 
-`herdr-prompt` and `herdr-dispatch` open every dispatch with the script-rendered `Sender:`/`Receiver:` envelope — position fields, the Herdr skill notice, the live `Group:` roster, and the **resumption triple** (`kind + session + cwd`) — and close it with the reply contract. The canonical sample and its rules live in `$SKILL_DIR/SKILL.md` under **Know your post**; this file does not restate them.
+`herdr-prompt` and `herdr-dispatch` open every dispatch with the script-rendered `Sender:`/`Receiver:` envelope — position fields, the Herdr skill notice, the live `Group:` roster, and the correlation IDs — and close it with the reply contract. The canonical sample and its rules live in `$SKILL_DIR/SKILL.md` under **Know your post**; this file does not restate them.
 
 > [!IMPORTANT] Name Every Pane Immediately
 > Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
@@ -193,11 +193,11 @@ Each artifact in the lane coordination lifecycle has **exactly one author role**
 
 ## 4. Canonical Prompt Contracts
 
-### The Injected Context Header & The Resumption Triple
+### The Injected Context Header & Caller Recovery
 
-Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects the envelope at turn zero, before the ticket payload (see **Know your post** in `$SKILL_DIR/SKILL.md`). The envelope carries lane topology and the **resumption triple**, giving full context fidelity, debugging observability, and seamless session resumption. `Receiver(You)` sits at the bottom of the header and names the recipient with its own position, so an agent that was addressed in a broadcast can read its role straight off the message. `herdr_reply.py` wraps a completion reply in the same envelope.
+Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects the envelope at turn zero, before the ticket payload (see **Know your post** in `$SKILL_DIR/SKILL.md`). The envelope carries lane topology and the correlation IDs, giving full context fidelity and debugging observability. `Receiver(You)` sits at the bottom of the header and names the recipient with its own position, so an agent that was addressed in a broadcast can read its role straight off the message. `herdr_reply.py` wraps a completion reply in the same envelope.
 
-- **Resumption Triple (`kind + session + cwd`)**: any participant, watchdog, or human operator can re-enter or resume the exact sending agent session in the identical working directory without amnesia. `kind` rides the `Sender:` line; `session` and `cwd` ride `Resume:` and `Cwd:`.
+- **Caller recovery (`kind + session_path + cwd`)**: any participant, watchdog, or human operator can re-enter or resume the exact sending agent session in the identical working directory without amnesia. The resumption triple is no longer in the envelope; dispatch persists it as `caller_recovery` on the task record in `.lane/tasks.yaml`, retrieved just-in-time only when a reply target has exited or is a bare shell (see **JIT Diagnostic Recovery** in section 7). Pass `--verbose` to any of the three helpers to opt the forward-only `Runtime:` (Cwd/Resume) block back into the envelope for debugging.
 - **Topological coordinates**: the `Sender:` line carries `agent`, `pane`, `tab`, and `label`; `Receiver(You)` closes the envelope alone and carries the same coordinates for the addressee.
 - **`Group:` roster**: lists lane participants as `name@pane_id`, sending agent first. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
 
@@ -347,9 +347,9 @@ Return a structured review verdict:
 
 ### E. Layered Envelope (Style 2) & the Correlation IDs
 
-Every `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` message renders four nested YAML blocks instead of the old flat lines: `Routing:` (position refs and the live roster), `Hierarchy:` (task-group, Ticket-ID, Task-ID, and `In-Reply-To:` correlation), `Runtime:` (cwd and resumption fields), and `Protocol:` (the Herdr skill notice). An absent field renders no line.
+Every `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` message renders three nested YAML blocks instead of the old flat lines: `Routing:` (position refs and the live roster), `Hierarchy:` (task-group, Ticket-ID, Task-ID, and `In-Reply-To:` correlation), and `Protocol:` (the Herdr skill notice). An absent field renders no line. The forward-only `Runtime:` (Cwd/Resume) block is not part of the default envelope; `--verbose` opts it back in for debugging, and recovery metadata otherwise lives in `.lane/tasks.yaml`.
 
-Dispatch — forwards a ticket, with the correlation IDs that bind it to the lane lease:
+Dispatch — forwards a ticket, with the correlation IDs that bind it to the lane's task record:
 
 ```text
 [2026-10-05T06:19:12.983Z]
@@ -361,14 +361,11 @@ Hierarchy:
   Task-Group: msg-enhance (w1:t1)
   Ticket-ID: #182-herdr-msg-enhance
   Task-ID: #182-herdr-msg-enhance#impl-bootstrap
-Runtime:
-  Cwd: /Users/zhengxk/workspace
-  Resume: "pi --resume /path/to/session.jsonl"
 Protocol:
   Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
 ```
 
-Reply — reports a result: `Routing:` and `Hierarchy:` only, with `Task-Group:` (the tab) and `In-Reply-To:` naming the Task-ID it answers, and no forward-only `Runtime:` (the reply reuses the sender's session):
+Reply — reports a result: `Routing:` and `Hierarchy:` only, with `Task-Group:` (the tab) and `In-Reply-To:` naming the Task-ID it answers (no forward-only `Runtime:`; the reply reuses the sender's session):
 
 ```text
 [2026-10-05T06:31:04.117Z]
@@ -386,8 +383,8 @@ Protocol:
 #### Ticket-ID / Task-ID contract
 
 - **Ticket-ID** identifies the dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). `herdr-dispatch --ticket-id` sets it explicitly; when omitted, the dispatcher derives it deterministically from the ticket filename.
-- **Task-ID** identifies one task inside that ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). `herdr-dispatch --task-id` binds it to the lease and to the `Hierarchy:` block.
-- `herdr-reply` reads the replying sender's active lease and emits `Ticket-ID:` plus `In-Reply-To: <Task-ID>`, then releases that lease (never the target's). A missing lease omits both lines and the reply still sends.
+- **Task-ID** identifies one task inside that ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). `herdr-dispatch --task-id` binds it explicitly; when omitted it mirrors the derived Ticket-ID. It keys the task record in `.lane/tasks.yaml` and rides the `Hierarchy:` block.
+- `herdr-reply` reads the replying sender's active lease and emits `Ticket-ID:` plus `In-Reply-To: <Task-ID>`, appends the mapped status event to that task's `trajectory`, then soft-releases that lease (never the target's) while keeping the task record. A missing lease omits both lines and the reply still sends.
 
 #### Scoped-prefix rule
 
@@ -536,20 +533,31 @@ Multi-agent coordination across Herdr lanes is governed by four core pillars tha
   uv run ~/.agents/skills/herdr/scripts/herdr_dispatch.py <target> --file <ticket.md> --no-wait
   ```
 - **Immediate Yield**: After dispatching, the caller **immediately yields its turn** (stops calling tools, enters idle). It does NOT enter busy-polling loops or launch external wait barriers.
-- **The Resumption Triple (`kind + session + cwd`)**: The dispatch helper injects the caller's complete execution environment coordinates (`pane`, `label`, `tab`, `agent`, `kind`, `session`, `cwd`, and `resume`). When the callee wakes the caller via a reply, the caller's turn resumes with full session continuity and zero context amnesia.
+- **Caller Recovery (`kind + session_path + cwd`)**: The dispatch helper persists the caller's execution environment coordinates (`pane_id`, `kind`, `session_path`, `resume_cmd`, `cwd`) as `caller_recovery` on the task record in `.lane/tasks.yaml`; the envelope itself stays trimmed to Routing/Hierarchy/Protocol. When the callee wakes the caller via a reply, the caller's turn resumes with full session continuity and zero context amnesia.
 - **Completion Callback**: The callee completes the ticket and issues a structured reply via `herdr_reply.py <caller> "<STATUS>..."` or `herdr_reply.py <caller> --file <reply.md>`. This wakes the caller's turn with the full execution results and status triad.
 
-### 2. Task Leases (Race & Overwrite Prevention)
-- **Lease Store**: Maintains ticket leases in `.lane/lease.json` (falling back to `.herdr-lease.json` in cwd) to prevent overlapping dispatches to callees with active in-flight tickets.
-- **Atomic File Updates**: All lease reads/writes use atomic file operations (`tempfile.mkstemp` beside the target file, flush, `os.fsync`, and atomic `os.replace`), preventing concurrent write corruption.
+### 2. Task Leases & Trajectories (Race & Overwrite Prevention)
+- **Lease Store**: Maintains state in `.lane/tasks.yaml` with two top-level keys — `active_leases` (mutual-exclusion locks that prevent overlapping dispatches to callees with in-flight tickets) and `tasks` (durable records keyed by `task_id`). Each task carries `ticket_id`, `ticket_path`, `task_group`, `status`, `assignee`, `caller`, `caller_recovery`, and an append-only `trajectory` of `{seq, timestamp, event, actor, role, from_status, to_status, note, sha?}`. Canonical statuses: `dispatched`, `in_progress`, `blocked`, `completed`, `rework`.
+- **Read Fallback & Write Target**: Reads fall back `.lane/tasks.yaml` → `.lane/lease.yaml` → `.lane/lease.json` (a legacy JSON file loads as active leases with no trajectory); writes always go to `.lane/tasks.yaml`.
+- **Atomic File Updates**: All state reads/writes use atomic file operations (`tempfile.mkstemp` beside the target file, flush, `os.fsync`, and atomic `os.replace`), preventing concurrent write corruption.
 - **Target Canonicalization**: Leases record both canonical agent name and `pane_id`. Queries via `get_lease` and `is_leased` match against lease key, stored `target`, or `pane_id`. Dispatches via `--label` or pane IDs seamlessly resolve to the canonical agent.
 - **Pre-Dispatch Check**: Before prompting a callee, `herdr_dispatch.py` checks whether the target has an active lease. If active and `--force` is not passed:
   ```text
   herdr-dispatch: error: target callee-1 has an active ticket lease (ticket_1.md) issued by task-manager. Await reply or pass --force
   ```
 - **Pre-Dispatch Acquisition with Rollback**: `herdr_dispatch.py` acquires the lease *before* delivering the prompt. If the prompt fails, is rejected, or returns a blocked exit code (`EXIT_BLOCKED` / 3, `EXIT_HERDR` / 1), the acquired lease is automatically rolled back and released. Leases are retained only upon prompt acceptance (`EXIT_OK` / 0 or `WaitTimeout` / 4).
-- **Auto-Release on Reply**: When the callee delivers its completion callback via `herdr_reply.py`, `release_active_lease` automatically releases the *replying sender's* lease (`current_agent` or `HERDR_PANE_ID`). It **never** touches the caller/target's lease.
-- **Bypass**: Pass `--force` to intentionally supersede or reclaim an active lease.
+- **Dispatch Hook**: On acquisition, `herdr_dispatch.py` creates or updates the task record, appends a `dispatched` event (from `unassigned` to `dispatched`), and persists `caller_recovery` (`pane_id`, `kind`, `session_path`, `resume_cmd`, `cwd`; missing fields omitted; `session_path` is the agent session handle).
+- **Pre-Flight Readiness Gate**: Before injecting bytes, `herdr_dispatch.py` and `herdr_prompt.py` probe `herdr agent get <target>`, polling every 200ms up to 10s until `interactive_ready` is not false and `agent_status` is `idle` or `done`; a timeout aborts with a `UsageError` naming the auth/approval-dialog unblock path. Under `--no-wait` they then handshake up to 1.5s (100ms intervals) for a revision increment or `working`, failing (exit 1) when acceptance is unconfirmed. Caveat: an agent that reports `interactive_ready: true` while blocked on a trust selector (e.g. `qodercli`) cannot be detected by the gate.
+- **Reply Hook & Soft Completion**: When the callee delivers its completion callback via `herdr_reply.py`, it maps the payload's first token (`COMPLETED`→`completed`, `BLOCKED`→`blocked`, `REJECTED`→`rework`), appends that event (with the commit SHA and the status line as the note) to the *replying sender's* leased task `trajectory`, then drops only the sender's `active_leases` lock (`release_active_lease`, keyed by `current_agent` or `HERDR_PANE_ID`). It **never** touches the caller/target's lease, and it never deletes the task record — completion is soft.
+- **Inspection & Milestones**: `herdr_lease.py show [--yaml|--json] [--limit N]` prints active leases and recent tasks for compaction recovery; `herdr_lease.py transition <target|task-id> <status> [--note TEXT] [--actor NAME] [--role NAME]` appends a trajectory event and advances the status. Pass `--force` to intentionally supersede or reclaim an active lease.
+- **JIT Diagnostic Recovery**: When reply delivery fails because the caller agent exited or is a bare shell, `herdr_reply.py` reads `caller_recovery` for that caller from `.lane/tasks.yaml` and prints an exact copy-paste recovery block on stderr:
+  ```text
+  herdr-reply: target agent '<caller>' in pane <pane_id> has exited.
+  Suggested recovery:
+    1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller> --file <reply> --auto-start <kind>
+    2. Or resume manually in pane <pane_id>: <resume_cmd>
+  ```
+  `--auto-start <kind>` revives the agent, then delivers. With no stored recovery metadata it falls back to the older shell-pane diagnostic.
 
 ### 3. Token Observability & The False-Idle Phenomenon
 - **The False-Idle Phenomenon**: When a primary coding agent (Implementer or TM) invokes internal subagents (e.g. AGY subagents, Claude Code task runners, or platform subagent tools), the parent turn yields or pauses to wait for the subagent's result. During this window, traditional process inspectors and terminal listeners see the host agent process as `idle`. External observers relying purely on `agent_status` misinterpret this as task completion or an abandoned turn.
