@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **herdr:** task trajectory in tasks.yaml and pre-flight prompt readiness
+* **herdr:** task-group hierarchy, ticket/task correlation, and role bootstrap
 * **gh-router:** pr-land copy detector and strict squash shape gate on the explicit message (contract sections only, max 5 bullets and 15 lines, title type case-insensitive), refusing mechanic copies above 0.80 similarity (#221)
 * **gh-router:** `pr.py` split into `_github`, `_draft`, `_check`, `_changelog`, `_options` siblings behind a re-export block with `test_pr_arch.py` pinning the seam (#221)
 * **gh-router:** body/squash split in `CONTEXT.md`, `pr-land/SKILL.md`, and ADR-0019, plus a `writing-for-agents` rephrase pass over the doc series (#221)
