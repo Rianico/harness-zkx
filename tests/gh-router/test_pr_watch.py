@@ -19,6 +19,7 @@ PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
+import _github as github_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
 
 NUM = "999"
@@ -60,7 +61,7 @@ class FakeGh:
         self.poll_count = 0
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(pr_mod, "run_command", self.run)
+        monkeypatch.setattr(github_mod, "run_command", self.run)
         monkeypatch.setattr(pr_mod.time, "sleep", self.sleep)
 
     def sleep(self, seconds: float) -> None:

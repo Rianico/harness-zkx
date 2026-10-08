@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **gh-router:** pr-land `--merge` requires an explicit `--squash-message`/`--squash-message-file` and refuses without one (naming the flags and spec), ending the silent PR-body fallback; `--check` still previews the derived message (#220)
 * **gh-router:** draft-phase `--check` writing `draft.json` + curated `pr_body.md`, and a tightened prompt spine across the router and its subskills (#220)
 * **gh-router:** pr-land `--watch` fast-fails on a conflict or an unresolved mergeability (dirty debounced twice, `unknown` budgeted ~8s) with one slim stderr line per poll, and `--verbose` opts into the full failure logs (#220)
 * **gh-router:** draft `--check` title follows `--head`, warns on empty-range guesses, carries an advisory dirty block, and hints the curation spec (#220)

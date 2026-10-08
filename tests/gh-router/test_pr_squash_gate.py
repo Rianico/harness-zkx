@@ -104,7 +104,7 @@ def test_squash_title_accepts_conventional_shape(title: str) -> None:
     [
         "update docs",
         "feat(scope) missing the colon",
-        "Feat: capitalized type",
+        "Feature: capitalized non-type",
         "feat:",
         "feat:no space after the colon",
         "wip",
@@ -118,6 +118,60 @@ def test_squash_title_refuses_non_conventional_shape(
     err = capsys.readouterr().err
     assert "Conventional Commit" in err
     assert "rem" in err.lower()
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Feat: x",
+        "FIX: y",
+        "Feat(api): z",
+        "FEAT(api): z",
+    ],
+)
+def test_squash_title_accepts_a_mixed_case_type(title: str) -> None:
+    """The Convention names the type case-insensitively, so the title gate must fold it.
+
+    Agreement matters: `check_squash_body` already folds the type to decide `fix`,
+    so a case-sensitive title gate would refuse `FEAT: y` while the body gate read
+    the same title as a fix. One squash message must not be judged two ways.
+    """
+    check_squash_title(title, 12)
+
+
+@pytest.mark.parametrize("title", ["fix: y", "FIX: y"])
+def test_squash_title_and_body_gate_agree_a_fix_needs_root(title: str) -> None:
+    """A `fix` title the gate accepts is a `fix` to the body gate: it must name Root Cause.
+
+    The title gate and the body gate read the same string, so agreement means a title
+    accepted as a fix always demands `## Root Cause` — never one without the other.
+    """
+    check_squash_title(title, 13)
+    with pytest.raises(RefusalError):
+        check_squash_body("## Summary\nthe lock leaks\n", title=title)
+
+
+@pytest.mark.parametrize("title", ["feat: x", "Feat: x", "FEAT(api): z"])
+def test_squash_title_and_body_gate_agree_a_non_fix_skips_root(title: str) -> None:
+    """A non-`fix` type the gate accepts needs no Root Cause: the two gates agree."""
+    check_squash_title(title, 14)
+    check_squash_body("## Summary\nbound the retry loop\n", title=title)
+
+
+@pytest.mark.parametrize("title", ["Wip: x", "wip: x", "feat x"])
+def test_squash_title_pins_the_non_conventional_refusal_text(
+    title: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A genuinely non-conventional title keeps today's refusal and remediation bytes."""
+    with pytest.raises(RefusalError):
+        check_squash_title(title, 7)
+    expected = (
+        "refusing squash merge: commit title is not a Conventional Commit "
+        f'"type(scope): subject": {title} (#7)\n'
+        "remediation: rename the PR title to `type(scope): subject` "
+        "(feat, fix, docs, refactor, test, ...), then re-run\n"
+    )
+    assert capsys.readouterr().err == expected
 
 
 def test_squash_title_accepts_the_exact_length_limit() -> None:

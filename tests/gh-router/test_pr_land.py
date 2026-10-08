@@ -18,7 +18,12 @@ PR_TEMPLATE = REPO_ROOT / ".github/pull_request_template.md"
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
+import _github as github_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
+
+# From `_github`, not `pr`: the `pr` re-export is early-bound, so patching the seam would not
+# reach it (test_pr_arch guards this). This is the real function and its real timeout.
+from _github import run_command  # noqa: E402
 from pr import (  # noqa: E402
     PrError,
     RefusalError,
@@ -31,7 +36,6 @@ from pr import (  # noqa: E402
     parse_args,
     pr_conflict_verdict,
     resolve_squash_message,
-    run_command,
     squash_message,
     stamp_changelog,
     unreleased_attributes_pr,
@@ -146,10 +150,14 @@ def test_parse_args_squash_message_flags() -> None:
 
 
 def test_resolve_squash_message_prefers_explicit() -> None:
-    """An explicit message wins over the body and is sanitized through clean_squash_body."""
+    """An explicit message wins over the body and is sanitized through clean_squash_body.
+
+    The explicit text is contract-shaped: the strict shape gate (T2) refuses any
+    heading outside the contract's section names, so the surviving `<details>`
+    ephemera is what `clean_squash_body` still strips here.
+    """
     explicit = (
         "## Summary\nChosen message.\n\n"
-        "## Architecture\n```mermaid\ngraph TD\n    A --> B\n```\n\n"
         "<details><summary>out</summary>\ntrace\n</details>\n\n"
         "Co-authored-by: X <x@y>\nCloses #12\n"
     )
@@ -157,7 +165,6 @@ def test_resolve_squash_message_prefers_explicit() -> None:
     assert "Chosen message." in out
     assert "Co-authored-by: X <x@y>" in out
     assert "Closes #12" in out
-    assert "A --> B" not in out
     assert "<details" not in out
     assert "ignored" not in out
 
@@ -166,6 +173,27 @@ def test_resolve_squash_message_prefers_explicit() -> None:
     )
     with pytest.raises(UsageError):
         resolve_squash_message("## Summary\nwhatever\n", explicit="   ", supplied=True)
+
+
+def test_resolve_squash_message_refuses_review_only_ephemera_in_explicit(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A review-only heading or Mermaid fence in the explicit message refuses, never strips.
+
+    This exact text was silently sanitized before the strict shape gate: the
+    `## Architecture` heading and its Mermaid fence were stripped and the message
+    merged. The gate refuses instead — the same silent behaviour T1 removed the
+    PR-body fallback for.
+
+    Mutation: drop the `_non_contract_heading` branch in `check_explicit_squash_message`
+    -> the call returns the cleaned text and the `pytest.raises` fails.
+    """
+    explicit = (
+        "## Summary\nChosen message.\n\n## Architecture\n```mermaid\ngraph TD\n    A --> B\n```\n"
+    )
+    with pytest.raises(RefusalError):
+        resolve_squash_message("## Summary\nignored\n", explicit=explicit, supplied=True)
+    assert "non-contract heading" in capsys.readouterr().err
 
 
 def test_resolve_squash_message_refuses_fallback_without_explicit(
@@ -179,8 +207,42 @@ def test_resolve_squash_message_refuses_fallback_without_explicit(
     assert "remediation:" in err
 
 
-def test_merge_pr_never_omits_commit_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The merge argv always carries exactly one commit_message; a fallback body refuses with no merge call."""
+def test_resolve_squash_message_merge_path_requires_explicit(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A merge path (require_explicit) refuses even a valid body — no PR-body fallback.
+
+    Mutation: drop the `require_explicit and not supplied` branch -> the call returns the
+    derived message instead of raising (assert fails).
+    """
+    with pytest.raises(RefusalError):
+        resolve_squash_message(
+            "## Summary\nReal.\n", explicit=None, supplied=False, require_explicit=True
+        )
+    err = capsys.readouterr().err
+    assert "--merge requires an explicit squash commit message" in err
+    assert "--squash-message" in err and "--squash-message-file" in err
+    assert "CONTEXT.md" in err and "pr-land/SKILL.md" in err
+
+
+def test_resolve_squash_message_check_path_still_derives_from_the_body() -> None:
+    """--check keeps the default: a non-empty body derives a message (require_explicit=False).
+
+    Mutation: default `require_explicit=True` -> this call raises instead of returning.
+
+    The derived bytes match the explicit-message path, which is why the merge tests that now
+    pass the body as an explicit message stay byte-identical.
+    """
+    body = "## Summary\nReal.\n"
+    derived = resolve_squash_message(body, explicit=None, supplied=False)
+    assert derived == clean_squash_body(body)
+    assert derived == resolve_squash_message(body, explicit=body, supplied=True)
+
+
+def test_merge_pr_never_omits_commit_message(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The merge argv carries exactly one explicit commit_message; no explicit message refuses with no merge call."""
     calls: list[list[str]] = []
 
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -196,10 +258,20 @@ def test_merge_pr_never_omits_commit_message(monkeypatch: pytest.MonkeyPatch) ->
             out = '{"merged":true}'
         return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
 
-    monkeypatch.setattr(pr_mod, "run_command", fake_run)
+    monkeypatch.setattr(github_mod, "run_command", fake_run)
 
+    body = "## Summary\nReal.\n\nCloses #12\n"
     assert (
-        merge_pr("test/repo", "7", "main", "feat: x", "## Summary\nReal.\n\nCloses #12\n") is True
+        merge_pr(
+            "test/repo",
+            "7",
+            "main",
+            "feat: x",
+            body,
+            squash_message_override=body,
+            squash_message_supplied=True,
+        )
+        is True
     )
     merge_calls = [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
     assert len(merge_calls) == 1
@@ -208,8 +280,121 @@ def test_merge_pr_never_omits_commit_message(monkeypatch: pytest.MonkeyPatch) ->
     assert "Closes #12" in msg_fields[0]
 
     calls.clear()
-    assert merge_pr("test/repo", "7", "main", "feat: x", "") is False
+    assert merge_pr("test/repo", "7", "main", "feat: x", body) is False
     assert not [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
+    err = capsys.readouterr().err
+    assert "--merge requires an explicit squash commit message" in err
+    assert "--squash-message" in err and "--squash-message-file" in err
+    assert "CONTEXT.md" in err and "pr-land/SKILL.md" in err
+
+
+def test_merge_without_squash_message_refuses_before_any_gh_mutation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--merge with neither flag exits 1 naming the spec and creates/stamps/readies nothing.
+
+    Mutation: drop the `options.merge and not squash_supplied` guard in main() -> the merge
+    path runs, fake.calls fills with gh/git argv and stdout gains the PR line (assert fails).
+    """
+    monkeypatch.chdir(tmp_path)
+    fake = _MergeRun()
+    monkeypatch.setattr(github_mod, "run_command", fake)
+
+    rc = pr_mod.main(_main_args("--merge"))
+
+    captured = capsys.readouterr()
+    assert rc == 1, (captured.err, fake.calls)
+    assert fake.calls == [], fake.calls
+    assert captured.out == ""
+    assert "--merge requires an explicit squash commit message" in captured.err
+    assert "--squash-message" in captured.err and "--squash-message-file" in captured.err
+    assert "CONTEXT.md" in captured.err and "pr-land/SKILL.md" in captured.err
+
+
+def test_merge_with_missing_squash_message_file_is_a_usage_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A missing --squash-message-file exits 2 before any gh call (the existing UsageError path)."""
+    monkeypatch.chdir(tmp_path)
+    fake = _MergeRun()
+    monkeypatch.setattr(github_mod, "run_command", fake)
+
+    rc = pr_mod.main(_main_args("--merge", "--squash-message-file", str(tmp_path / "absent.md")))
+
+    captured = capsys.readouterr()
+    assert rc == 2, (captured.err, fake.calls)
+    assert fake.calls == []
+    assert "not found or not readable" in captured.err
+
+
+def test_merge_with_explicit_squash_message_reaches_the_merge_put(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An explicit --squash-message still merges: exactly one PUT carrying that message.
+
+    Mutation: flip `squash_message_supplied=squash_supplied` to `False` in main() -> the merge
+    refuses, so no PUT appears and the merge_calls assertion fails.
+    """
+    monkeypatch.chdir(tmp_path)
+    fake = _MergeRun()
+    monkeypatch.setattr(github_mod, "run_command", fake)
+
+    msg = "## Summary\nChosen.\n\nCloses #12\n"
+    rc = pr_mod.main(_main_args("--merge", "--squash-message", msg))
+
+    captured = capsys.readouterr()
+    assert rc == 0, (captured.err, fake.calls)
+    merge_calls = [
+        c for c in fake.calls if len(c) > 2 and c[1] == "api" and c[2].endswith("/merge")
+    ]
+    assert len(merge_calls) == 1, fake.calls
+    fields = [a for a in merge_calls[0] if a.startswith("commit_message=")]
+    assert len(fields) == 1
+    assert "Chosen." in fields[0]
+
+
+def test_merge_pr_override_counts_as_supplied_without_the_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An override without `squash_message_supplied=True` still counts: the value folds into the signal.
+
+    Mutation: drop `supplied = supplied or explicit is not None` in resolve_squash_message ->
+    the merge refuses, no PUT appears, and the merge_calls assertion fails.
+    """
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        joined = " ".join(cmd)
+        if "mergeable_state" in joined:
+            out = "clean"
+        elif "api user" in joined:
+            out = "merger"
+        elif "/commits" in joined:
+            out = "ghuser\tWf Zyx\twf@x.io\n"
+        else:
+            out = '{"merged":true}'
+        return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
+
+    monkeypatch.setattr(github_mod, "run_command", fake_run)
+
+    assert (
+        merge_pr(
+            "test/repo",
+            "7",
+            "main",
+            "feat: x",
+            "## Summary\nReal.\n",
+            squash_message_override="feat: x (#7)",
+            squash_message_supplied=False,
+        )
+        is True
+    )
+    merge_calls = [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
+    assert len(merge_calls) == 1
+    msg_fields = [a for a in merge_calls[0] if a.startswith("commit_message=")]
+    assert len(msg_fields) == 1
+    assert "feat: x (#7)" in msg_fields[0]
 
 
 def test_check_trailers_refuses_fallback_without_explicit(
@@ -223,7 +408,7 @@ def test_check_trailers_refuses_fallback_without_explicit(
         out = "7" if "pulls?head=" in joined else ""
         return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
 
-    monkeypatch.setattr(pr_mod, "run_command", fake_run)
+    monkeypatch.setattr(github_mod, "run_command", fake_run)
 
     rc = check_trailers("test/repo", "feat-branch", "", body_supplied=True)
     assert rc == 1
@@ -484,7 +669,7 @@ def test_check_trailers_enforces_title_budget_on_existing_pr(
         out = "7" if "pulls?head=" in joined else ""
         return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
 
-    monkeypatch.setattr(pr_mod, "run_command", fake_run)
+    monkeypatch.setattr(github_mod, "run_command", fake_run)
 
     long_title = "feat: " + "a" * 110
     rc = check_trailers(
@@ -849,8 +1034,9 @@ exit 0
     test_script = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
+import _github
 import pr
-pr.LOG_TIMEOUT = 0.2
+_github.LOG_TIMEOUT = 0.2  # `dump_failure_logs` reads the timeout where it is defined
 pr.dump_failure_logs("test/repo", "123")
 """
     res = subprocess.run(
@@ -1428,7 +1614,8 @@ sys.exit(0)
 
 
 class _FakeRun:
-    """Stub pr_mod.run_command: records argv and returns canned gh/git outputs.
+    """Stub `_github.run_command` (the seam pr.py and its siblings call): records argv
+    and returns canned gh/git outputs.
 
     existing_pr selects the reuse path ("7") or the fresh-create path ("null").
     ready_rc controls the gh pr ready outcome. reuse_draft adds isDraft=true to the
@@ -1471,6 +1658,47 @@ class _FakeRun:
         return subprocess.CompletedProcess(cmd, rc, out, err)
 
 
+class _MergeRun:
+    """Stub `_github.run_command` for the `--merge` end-to-end path.
+
+    Serves a fresh PR #7 (green checks, `mergeable_state clean`) so a full `main --merge`
+    run reaches exactly one merge PUT instead of polling to the 60x10s budget.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        self.calls.append(list(cmd))
+        joined = " ".join(cmd)
+        out, err, rc = "", "", 0
+        if "rev-parse --abbrev-ref" in joined:
+            out = "feat-x\n"
+        elif "config --get branch." in joined:
+            rc = 1
+        elif "remote get-url" in joined:
+            out = "https://github.com/test/repo.git\n"
+        elif "default_branch" in joined:
+            out = "main\n"
+        elif "pulls?head=" in joined:
+            out = "null\n"
+        elif "pulls -X POST" in joined:
+            out = "7\n"
+        elif "html_url" in joined:
+            out = "true\tclean\thttps://github.com/test/repo/pull/7\n"
+        elif ".mergeable_state" in joined:
+            out = "clean\n"
+        elif "pr checks" in joined:
+            out = "build\tpass\n"
+        elif "api user" in joined:
+            out = "merger\n"
+        elif "/commits" in joined:
+            out = "ghuser\tWf Zyx\twf@x.io\n"
+        elif "/merge" in joined:
+            out = '{"merged":true}\n'
+        return subprocess.CompletedProcess(cmd, rc, out, err)
+
+
 def _write_changelog(
     tmp_path: Path, entry: str | None = "* **pr-land:** handshake entry\n"
 ) -> Path:
@@ -1494,7 +1722,7 @@ def test_draft_handshake_create_stamp_then_ready(
     """Fresh create is draft=true, then changelog commit+push, then gh pr ready last (mutation: create arg draft=true -> draft=false)."""
     _ = _write_changelog(tmp_path)
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -1522,7 +1750,7 @@ def test_draft_handshake_create_stamp_then_ready(
 def test_draft_flag_skips_ready_flip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """--draft leaves the PR draft: created with draft=true but gh pr ready is ABSENT (mutation: drop options.draft guard in main -> ready appears)."""
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--draft"))
@@ -1539,7 +1767,7 @@ def test_reuse_existing_pr_never_touches_draft_state(
 ) -> None:
     """An existing open PR is reused untouched: no gh pr ready, no re-draft, no create (mutation: reuse branch returns created=True -> ready flip appears)."""
     fake = _FakeRun(existing_pr="7")
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -1558,7 +1786,7 @@ def test_ready_failure_exits_1_with_manual_fix(
 ) -> None:
     """Non-zero gh pr ready makes the program exit 1 naming the verbatim manual fix (mutation: ready_pr failure path return False -> return True)."""
     fake = _FakeRun(ready_rc=1)
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -1577,7 +1805,7 @@ def test_no_stamp_skips_stamping_but_still_readies(
     """--no-stamp runs no stamp commands but the flip to ready still happens with a warning (mutation: gate the ready flip on not no_stamp -> ready absent)."""
     _ = _write_changelog(tmp_path)
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--no-stamp"))
@@ -1597,7 +1825,7 @@ def test_reuse_draft_pr_without_draft_flag_fails_loud(
 ) -> None:
     """Reused draft PR without --draft exits 1 with the verbatim manual remediation and NEVER calls gh pr ready (mutation: auto-flip via ready_pr on reuse -> the no-mutation argv assert fails)."""
     fake = _FakeRun(existing_pr="7", reuse_draft=True)
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -1617,7 +1845,7 @@ def test_reuse_draft_pr_with_draft_flag_proceeds(
 ) -> None:
     """A reused draft PR with --draft is the caller's stated intent: rc 0, no remediation, no flip (mutation: ignore options.draft on the reuse check -> rc flips to 1)."""
     fake = _FakeRun(existing_pr="7", reuse_draft=True)
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--draft"))
@@ -1646,7 +1874,7 @@ def test_ready_flip_warns_when_unreleased_carries_no_entry_for_pr(
     """Unattributed Unreleased warns with the gate text yet still flips ready with rc 0 (mutation: drop the warning branch -> gate text vanishes; gate the flip on attribution -> ready absent)."""
     _ = _write_changelog(tmp_path)
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
 
     def _no_stamp(*args: object, **kwargs: object) -> bool:
         return False
@@ -1656,6 +1884,12 @@ def test_ready_flip_warns_when_unreleased_carries_no_entry_for_pr(
 
     rc = pr_mod.main(_main_args())
     assert rc == 0, fake.calls
+    # The `stamp_changelog` patch must be load-bearing: were it inert, the real stamp would
+    # commit and push through this fake. Assert no stamp-shaped call ever reached the seam.
+    stamp_calls = [
+        c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"], ["git", "push"])
+    ]
+    assert not stamp_calls, f"the real stamp must not run behind the patch: {stamp_calls}"
 
     err = capsys.readouterr().err
     assert "warning: no ## [Unreleased] entry carries (#7)" in err
@@ -1671,7 +1905,7 @@ def test_ready_flip_stays_silent_when_entry_carries_pr_number(
     """An entry ending in (#7) silences the advisory while the flip still happens (mutation: scan every line instead of bullets -> heading text could false-positive; match mid-entry (#7) -> silence without a real entry)."""
     _ = _write_changelog(tmp_path, entry="* **pr-land:** handshake entry (#7)\n")
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -1691,7 +1925,7 @@ def test_draft_flag_prints_milder_note_when_unattributed(
     """--draft downgrades the advisory to note: with no ready call and rc 0 (mutation: reuse the warning: branch under --draft -> stderr gains warning:; call ready_pr under --draft -> ready appears)."""
     _ = _write_changelog(tmp_path)
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
 
     def _no_stamp_draft(*args: object, **kwargs: object) -> bool:
         return False
@@ -1701,6 +1935,12 @@ def test_draft_flag_prints_milder_note_when_unattributed(
 
     rc = pr_mod.main(_main_args("--draft"))
     assert rc == 0, fake.calls
+    # The `stamp_changelog` patch must be load-bearing: were it inert, the real stamp would
+    # commit and push through this fake. Assert no stamp-shaped call ever reached the seam.
+    stamp_calls = [
+        c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"], ["git", "push"])
+    ]
+    assert not stamp_calls, f"the real stamp must not run behind the patch: {stamp_calls}"
 
     err = capsys.readouterr().err
     assert "note: no ## [Unreleased] entry carries (#7)" in err
@@ -1716,7 +1956,7 @@ def test_no_stamp_stays_silent_when_entry_carries_pr_number(
     """--no-stamp with an attributed entry prints nothing about the changelog (mutation: warn unconditionally under --no-stamp -> not stamped appears)."""
     _ = _write_changelog(tmp_path, entry="* **pr-land:** handshake entry (#7)\n")
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--no-stamp"))
@@ -1736,7 +1976,7 @@ def test_no_stamp_warns_when_unreleased_carries_no_entry_for_pr(
     """--no-stamp without attribution warns once naming the missing stamp and the gate (mutation: keep the old static warning -> gate text missing; skip the scan -> warning fires even when attributed)."""
     _ = _write_changelog(tmp_path)
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--no-stamp"))
@@ -1802,7 +2042,7 @@ def test_non_utf8_changelog_no_stamp_still_readies(
     """Non-UTF-8 CHANGELOG under --no-stamp still flips ready with rc 0 and no traceback (mutation: let the decode error propagate -> traceback, ready absent)."""
     _ = (tmp_path / "CHANGELOG.md").write_bytes(b"# \xff\xfe\n")
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--no-stamp"))
@@ -1822,7 +2062,7 @@ def test_loose_bullet_without_section_is_unattributed(
     assert unreleased_attributes_pr("7", cwd=tmp_path) is False
 
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
 
     def _no_stamp(*args: object, **kwargs: object) -> bool:
         return False
@@ -1852,7 +2092,7 @@ def test_no_stamp_draft_prints_milder_note(
     """--no-stamp --draft downgrades to note: keeping the --no-stamp framing and no ready flip (mutation: reuse the warning: branch -> harsh form appears; flip ready under --draft -> ready appears)."""
     _ = _write_changelog(tmp_path)
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--no-stamp", "--draft"))
@@ -1874,7 +2114,7 @@ def test_absent_unreleased_block_warns_naming_missing_section(
         "# Changelog\n\n### Features\n* **pr-land:** entry (#7)\n", encoding="utf-8"
     )
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
 
     def _no_stamp(*args: object, **kwargs: object) -> bool:
         return False
@@ -1906,7 +2146,7 @@ def test_baseline_entry_stamp_is_noop_and_advisory_silent(
         "# legacy baseline\nlegacy baseline entry\n", encoding="utf-8"
     )
     fake = _FakeRun()
-    monkeypatch.setattr(pr_mod, "run_command", fake)
+    monkeypatch.setattr(github_mod, "run_command", fake)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())

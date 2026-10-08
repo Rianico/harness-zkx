@@ -17,6 +17,8 @@ The measurements below were read on 2026-09-22 at `e3badd92` (`main`) and at `a6
 
 Amended by [17. Retire the clear subcommand from the release handoff](0017-retire-the-clear-subcommand-from-the-release-handoff.md)
 
+Relates to [19. Separate the PR body from the curated squash overview](0019-separate-the-pr-body-from-the-curated-squash-overview.md)
+
 ## Context
 
 `CHANGELOG.md` `## [Unreleased]` is the ledger: the record of what has landed but not been

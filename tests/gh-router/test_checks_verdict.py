@@ -11,6 +11,7 @@ cases can be pinned without a network, a token, or a pull request.
 
 from __future__ import annotations
 
+import ast
 import os
 import subprocess
 import sys
@@ -76,12 +77,33 @@ def test_verdict_ignores_check_names_entirely() -> None:
 
 
 def test_pr_no_longer_allowlists_check_names() -> None:
-    """The fix must not be reintroduced as another name list."""
-    text = PR_PY.read_text()
+    """The fix must not be reintroduced as another name list.
 
-    assert "checks_verdict" in text, "pr.py does not use the shared verdict"
-    assert "select(.name==" not in text, "pr.py filters checks by name again"
-    assert ".check_runs[]" not in text, "pr.py hand-rolls check-run aggregation again"
+    pr-land is several modules since the split, so the scan covers the whole module set:
+    a re-export line in `pr.py` alone would satisfy a single-file grep while proving nothing.
+    """
+    texts = {path.name: path.read_text() for path in sorted(SCRIPTS_DIR.glob("*.py"))}
+    assert texts, "pr-land scripts directory is empty"
+
+    # A call site, not just a binding: the definition in `_github.py` and the re-export line
+    # in `pr.py` both contain the substring `checks_verdict(`, so a text scan proves nothing.
+    # Parse each module and require a real `ast.Call` to the verdict.
+    callers = [
+        name
+        for name, text in texts.items()
+        if any(
+            isinstance(node, ast.Call)
+            and (
+                (isinstance(node.func, ast.Name) and node.func.id == "checks_verdict")
+                or (isinstance(node.func, ast.Attribute) and node.func.attr == "checks_verdict")
+            )
+            for node in ast.walk(ast.parse(text, filename=name))
+        )
+    ]
+    assert callers, "no pr-land module calls the shared checks_verdict"
+    for name, text in texts.items():
+        assert "select(.name==" not in text, f"{name} filters checks by name again"
+        assert ".check_runs[]" not in text, f"{name} hand-rolls check-run aggregation again"
 
 
 def test_squash_message_defaults_to_the_pr_body() -> None:

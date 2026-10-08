@@ -269,13 +269,23 @@ except Exception:
 
 
 def run_merge(
-    env: dict[str, str], body: str, title: str = "feat: x"
+    env: dict[str, str], body: str, title: str = "feat: x", explicit: bool = True
 ) -> subprocess.CompletedProcess[str]:
+    """Run merge_pr with an explicit message; `explicit=False` exercises the refusal path.
+
+    The merge path requires an explicit squash message, so the message defaults to the same
+    `B` body the old derived path used — byte-identical output keeps the assertions honest.
+    """
+    explicit_args = (
+        ', squash_message_override=os.environ.get("B", ""), squash_message_supplied=True'
+        if explicit
+        else ""
+    )
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
 from pr import merge_pr
-ok = merge_pr("t/r", "{NUM}", "main", os.environ.get("T", ""), os.environ.get("B", ""))
+ok = merge_pr("t/r", "{NUM}", "main", os.environ.get("T", ""), os.environ.get("B", ""){explicit_args})
 sys.exit(0 if ok else 1)
 """
     return subprocess.run(
@@ -334,11 +344,11 @@ def test_merge_refuses_when_commit_enumeration_fails(tmp_path: Path) -> None:
 
 
 def test_merge_template_body_refuses_without_explicit(tmp_path: Path) -> None:
-    """Fail-closed squash gate: a template body without --squash-message refuses the merge (exit 1, no PUT)."""
+    """A merge with no explicit message refuses (exit 1, no PUT) even for an unfilled template body."""
     env = make_gh_mock(tmp_path, COMMITS_TSV="ghuser\tWf Zyx\twf@x.io")
     template = open(os.path.join(REPO_ROOT, ".github", "pull_request_template.md")).read()
     assert "CODE_AUTHORS" in template
-    r = run_merge(env, template)
+    r = run_merge(env, template, explicit=False)
     assert r.returncode == 1
     assert "--squash-message" in r.stderr
     assert not os.path.exists(env["CAPTURE"])
