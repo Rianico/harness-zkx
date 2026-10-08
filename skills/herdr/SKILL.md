@@ -222,7 +222,7 @@ Multi-agent coordination is event-driven via completion callbacks:
 **Every handoff carries the envelope, and requires a reply.** A callee cannot address a sender it was never told about, and a sender left to infer completion falls back on polling. So the prompt opens with the envelope from "Know your post" and closes with the reply contract:
 
 ```text
-<envelope: timestamp, Sender, Group, Resume, Cwd, Herdr notice, blank line, Receiver(You)>
+<envelope: timestamp, Routing (Sender, Group, Receiver), Hierarchy (Task-Group, Ticket-ID, Task-ID), Runtime (Cwd, Resume), Protocol (Herdr notice)>
 
 <the payload (Synthesized IDD/GDD Ticket)>
 
@@ -401,9 +401,23 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 
 All 11 scripts in `$SKILL_DIR/scripts/` are authoritative and documented here or in the orientation section above, with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) and `herdr_worktree.py` (a worktree allocator that needs only `wt`/`git`) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
+| Script / Helper | Primary Purpose | Standard Invocation | Key Options |
+|---|---|---|---|
+| `herdr-overview` | Orient session, list task groups & panes | `uv run $SKILL_DIR/scripts/herdr_overview.py --tab` | `--tab [ID\|NAME]`, `--task-group <SLUG>`, `--format [rich\|markdown\|yaml\|json]`, `--json` |
+| `herdr-bootstrap` | Bootstrap agent with role invariant & scoped name | `uv run $SKILL_DIR/scripts/herdr_bootstrap.py <name> --kind <kind> --pane <id> --role <role>` | `--task-group <SLUG>`, `--model <M>`, `--cwd <DIR>`, `--dry-run` |
+| `herdr-label` | Name/label pane, scope role, rename tab | `uv run $SKILL_DIR/scripts/herdr_label.py <name> [--task-group <slug>]` | `--tab <NAME>`, `--task-group <SLUG>`, `--pane <ID>`, `--verify`, `--sync` |
+| `herdr-pane` | Split caller pane into new layout | `uv run $SKILL_DIR/scripts/herdr_pane.py horizontal --label <name>` | `--direction [down\|right]`, `--label <L>`, `--task-group <SLUG>`, `--cwd <DIR>`, `--no-focus` |
+| `herdr-worktree` | Allocate isolated git worktree per lane | `uv run $SKILL_DIR/scripts/herdr_worktree.py allocate <branch>` | `allocate`, `resolve`, `list`, `--base <B>`, `--json` |
+| `herdr-dispatch` | Dispatch ticket with task lease & envelope | `uv run $SKILL_DIR/scripts/herdr_dispatch.py <callee> --file <task.md> --no-wait` | `--ticket-id <ID>`, `--task-id <ID>`, `--draft`, `--wait`, `--no-wait`, `--force` |
+| `herdr-reply` | Deliver completion callback & release lease | `uv run $SKILL_DIR/scripts/herdr_reply.py <caller> --file <reply.md>` | Auto-populates `In-Reply-To` & `Ticket-ID`, `--auto-start <KIND>`, `--wait` |
+| `herdr-prompt` | Deliver byte-exact payload with envelope | `uv run $SKILL_DIR/scripts/herdr_prompt.py <target> --file <brief.md> --no-wait` | `--label <L>`, `--wait`, `--no-wait`, `--timeout <MS>`, `--no-caller-context` |
+| `herdr-wait` | Multi-agent state barrier (fallback) | `uv run $SKILL_DIR/scripts/herdr_wait.py <target1> <target2> --timeout 300000` | `--any`, `--until [idle\|done\|blocked]`, `--json` |
+| `herdr-transcript`| Read clean assistant text from session JSONL | `uv run $SKILL_DIR/scripts/herdr_transcript.py <target> --last` | `--last`, `--role [user\|assistant\|all]`, `--lines <N>`, `--json` |
+| `herdr-agy-bridge`| Install OSC 0 lifecycle hooks for Antigravity | `uv run $SKILL_DIR/scripts/herdr_agy_bridge.py --install` | `--install`, `--uninstall`, `--status`, `--project` |
+
 ### `herdr-overview` — the session at a glance
 
-Panes grouped by workspace with id, agent kind, agent name, label, and cwd; the calling pane marked `*`. Same script and flags as "Orient with `herdr-overview` first" above — that section is canonical.
+Panes grouped by workspace and Task Group (Tab) with id, agent kind, agent name, label, live subagent tokens (`delegating`), and cwd; the calling pane marked `*`. Interactive TTY defaults to a styled `rich` table; non-TTY / piped output defaults to clean Markdown tables (`--format markdown`). Pass `--json` or `--yaml` for data pipelines. Filter by tab or task group with `--tab [ID|NAME]` or `--task-group <NAME>`. Same script and flags as "Orient with `herdr-overview` first" above — that section is canonical.
 
 ### `herdr-label` — the one name that is both visible and addressable
 
@@ -431,11 +445,12 @@ uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical          # stack a pane below
 uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal        # place a pane right of the caller (--direction right)
 uv run "$SKILL_DIR/scripts/herdr_pane.py"                   # caller wider than tall -> right, else down
 uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical --label reviewer  # split and label in one command (-l)
+uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical --label impl-1 --task-group msg  # label: msg-impl-1
 uv run "$SKILL_DIR/scripts/herdr_pane.py" vertical --focus --ratio 0.3 --env FOO=bar --cwd /tmp
 uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal --dry-run  # print the herdr command, split nothing
 ```
 
-Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…  label=…` (with label when set).
+Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…  label=…` (with label when set). `--task-group <slug>` scopes `--label` before setting it (`reviewer` → `msg-reviewer`).
 
 ### `herdr-bootstrap` — stamp the role invariant, then start the agent
 
@@ -464,15 +479,16 @@ uv run "$SKILL_DIR/scripts/herdr_worktree.py" list --json
 
 ### `herdr-dispatch` — manager-side task dispatch
 
-Dispatches a ticket file to one or more callees with caller context and reply contract, validates callee agent names (refusing kinds), and verifies post-dispatch delivery (`revision` increment) in one command:
+Dispatches a ticket file to one or more callees with caller context and reply contract, validates callee agent names (refusing kinds), acquires a task lease, and verifies post-dispatch delivery (`revision` increment) in one command:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --no-wait
+uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --ticket-id "#182-msg" --task-id "#182-msg#impl-1" --no-wait
 uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --wait --timeout 15000
 uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee1 callee2 --file task.md --no-wait
 ```
 
-Requires `--file` unless `--draft` is passed, so tickets are dispatched from a durable file. Refuses agent kinds (e.g. `qodercli`) with the live agent names listed. Prints `prompted <callee> (<pane>)  bytes=...  revision=...` to verify delivery.
+Requires `--file` unless `--draft` is passed, so tickets are dispatched from a durable file. `--ticket-id <ID>` and `--task-id <ID>` explicitly set the correlation handles; when omitted, `herdr-dispatch` auto-derives the Ticket-ID from the file basename and Task-ID as `<ticket_id>#<target>`. Leases in `.lane/lease.json` store both IDs for `herdr-reply`. Refuses agent kinds (e.g. `qodercli`) with the live agent names listed. Prints `prompted <callee> (<pane>)  bytes=...  revision=...` to verify delivery.
 
 `--draft` prints a ticket skeleton with routing prefilled from live state (or writes it to `--file`) and sends nothing:
 
@@ -484,16 +500,17 @@ Fill the Task/Context/Acceptance sections and delete the `herdr-draft: unfilled`
 
 ### `herdr-reply` — callee completion callback
 
-Delivers `<STATUS> <artifacts> <issues>` or a result payload to the sender agent, wrapped in the same timestamped envelope `herdr-prompt` uses, with `Receiver(You)` naming the sender it is answering. A reply carries no `Group:`, `Resume:`, or `Cwd:` — it reports a result, it does not re-open the lane:
+Delivers `<STATUS> <artifacts> <issues>` or a result payload to the sender agent, wrapped in the Style-2 nested YAML envelope `herdr-prompt` uses, with `Receiver(You)` naming the sender it is answering:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED artifacts=[...] issues=[]"
 uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file result.md
 echo "COMPLETED" | uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator
 uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED" --wait --timeout 15000
+uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file result.md --auto-start pi
 ```
 
-Validates the target agent name (refusing kinds) and reports post-delivery revision in one line. Never use bare `herdr agent prompt` directly for replies.
+`herdr-reply` automatically inspects `.lane/lease.json` for the replying sender, populates `Ticket-ID:` and `In-Reply-To: <Task-ID>` in the `Hierarchy:` envelope block, and releases the active task lease upon successful prompt delivery. Validates the target agent name (refusing kinds) and reports post-delivery revision in one line. Never use bare `herdr agent prompt` directly for replies.
 
 ### `herdr-prompt` — deliver a payload verbatim
 

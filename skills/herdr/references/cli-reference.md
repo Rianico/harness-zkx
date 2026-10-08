@@ -45,7 +45,7 @@ Labels are **not unique**: `pane rename` accepts the same label on any number of
 
 Because a person names what they can see, `herdr-label` sets both to the same string, and `herdr-prompt --label` resolves an exact label to its pane id, failing with the candidate pane ids when several panes carry it.
 
-No single response answers "which pane is this, by name": `PaneInfo` carries `label` and never the agent `name`; `AgentInfo` carries `name` and never `label`. Joining the two by `pane_id` is what `herdr-overview` does. Pass `--json` (or `--format json`) to `herdr-overview` for machine parsing; piped output defaults to YAML with a `# Format: YAML (pass --json for JSON)` top comment header.
+No single response answers "which pane is this, by name": `PaneInfo` carries `label` and never the agent `name`; `AgentInfo` carries `name` and never `label`. Joining the two by `pane_id` is what `herdr-overview` does. Interactive TTY defaults to rich tables; piped output defaults to Markdown tables (`--format markdown`). Pass `--json` or `--yaml` for data pipelines. Filter by task group with `--tab [ID|NAME]` or `--task-group <NAME>`.
 
 ### Safe target resolution and raw shell prevention
 
