@@ -15,6 +15,7 @@ from pathlib import Path
 
 import herdr_cli
 import herdr_prompt
+import herdr_reply
 import pytest
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
@@ -46,10 +47,13 @@ def test_positional_message_is_delivered_verbatim(stub: StubHarness) -> None:
     assert call[1:4] == ["agent", "prompt", "orchestrator"]
     assert call[4].endswith(METACHARS)
     envelope = call[4].splitlines()
-    assert envelope[1] == "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
-    assert envelope[2] == herdr_prompt.SKILL_NOTICE
-    assert envelope[3] == ""
-    assert envelope[4] == "Receiver(You): orchestrator"
+    assert envelope[1] == "Routing:"
+    assert envelope[2] == "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
+    assert envelope[3] == "  Receiver(You): orchestrator"
+    assert envelope[4] == "Hierarchy:"
+    assert envelope[5] == "  Task-Group: w9:t1"
+    assert envelope[6] == "Protocol:"
+    assert envelope[7] == f"  {herdr_prompt.SKILL_NOTICE}"
     assert "Cwd:" not in call[4], "a reply stays short: no resumption fields"
     assert "reply to the sender" not in call[4]
     assert "replied to orchestrator" in done.stdout
@@ -305,12 +309,259 @@ def test_reply_does_not_release_lease_for_target_caller(stub: StubHarness, tmp_p
     assert herdr_lease.get_lease("orchestrator", base_dir=tmp_path) is not None
 
 
+def test_reply_populates_correlation_from_sender_lease_and_releases(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182-herdr-msg-enhance.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182-herdr-msg-enhance",
+        task_id="#182-herdr-msg-enhance#full-stack",
+    )
+    done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    text = call[4]
+    assert "  Ticket-ID: #182-herdr-msg-enhance" in text
+    assert "  In-Reply-To: #182-herdr-msg-enhance#full-stack" in text
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_reply_without_sender_lease_omits_correlation_and_still_sends(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert "Ticket-ID:" not in call[4]
+    assert "In-Reply-To:" not in call[4]
+
+
+def _shell_target_state() -> dict[str, object]:
+    """Default live sender plus a bare-shell pane labelled `lens-orchestrator`."""
+    return {
+        **DEFAULT_STATE,
+        "panes": [
+            *DEFAULT_STATE["panes"],
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "lens-orchestrator",
+            },
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+
+
+RECOVERY = {
+    "pane_id": "wM:p1N",
+    "kind": "pi",
+    "resume_cmd": "pi --resume sess.jsonl",
+    "cwd": "/repo",
+}
+
+
+def test_reply_records_completion_event_with_sha(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    task_id = "#183-tasks-yaml-and-preflight#full-stack"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "183_tasks_yaml_and_preflight_impl.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#183-tasks-yaml-and-preflight",
+        task_id=task_id,
+    )
+    done = stub.run("orchestrator", "COMPLETED deadbeef", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    assert task["status"] == "completed"
+    completed = [event for event in task["trajectory"] if event["event"] == "completed"]
+    assert len(completed) == 1
+    assert completed[-1]["sha"] == "deadbeef"
+    assert completed[-1]["to_status"] == "completed"
+    assert completed[-1]["note"] == "COMPLETED deadbeef"
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [("BLOCKED awaiting credentials", "blocked"), ("REJECTED diff too large", "rework")],
+)
+def test_reply_maps_blocked_and_rejected_statuses(
+    stub: StubHarness, tmp_path: Path, body: str, expected: str
+) -> None:
+    import herdr_lease
+
+    task_id = f"#183#{expected}"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "183_tasks_yaml_and_preflight_impl.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#183",
+        task_id=task_id,
+    )
+    done = stub.run("orchestrator", body, env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    assert task["status"] == expected
+    assert task["trajectory"][-1]["event"] == expected
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_reply_emits_recovery_diagnostic_for_exited_target(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "183_tasks_yaml_and_preflight_impl.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#183",
+        task_id="#183#recovery",
+        caller_recovery=RECOVERY,
+    )
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        env={"PWD": str(tmp_path)},
+        state=_shell_target_state(),
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "target agent 'lens-orchestrator' in pane wM:p1N has exited." in done.stderr
+    assert (
+        "uv run ~/.agents/skills/herdr/scripts/herdr_reply.py lens-orchestrator "
+        "--file <reply> --auto-start pi"
+    ) in done.stderr
+    assert "Or resume manually in pane wM:p1N: pi --resume sess.jsonl" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_reply_auto_start_revives_and_delivers_with_recovery(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "183_tasks_yaml_and_preflight_impl.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#183",
+        task_id="#183#active",
+        caller_recovery=RECOVERY,
+    )
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        "--auto-start",
+        "pi",
+        env={"PWD": str(tmp_path)},
+        state=_shell_target_state(),
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == [
+        [
+            str(stub.herdr),
+            "agent",
+            "start",
+            "lens-orchestrator",
+            "--kind",
+            "pi",
+            "--pane",
+            "wM:p1N",
+        ]
+    ]
+    (call,) = stub.prompts()
+    assert call[1:4] == ["agent", "prompt", "lens-orchestrator"]
+    assert call[4].endswith("COMPLETED")
+
+
+def test_reply_without_recovery_keeps_existing_shell_diagnostic(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        env={"PWD": str(tmp_path)},
+        state=_shell_target_state(),
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "no live agent" in done.stderr
+    assert "has exited" not in done.stderr
+    assert stub.prompts() == []
+
+
+def test_format_reply_recovery_diagnostic_exact_shape() -> None:
+    recovery = {
+        "pane_id": "wM:p1N",
+        "kind": "pi",
+        "resume_cmd": "pi --resume sess.jsonl",
+        "cwd": "/repo",
+    }
+    assert herdr_reply.format_reply_recovery_diagnostic(
+        "lens-orchestrator", recovery, "<reply>"
+    ) == (
+        "herdr-reply: target agent 'lens-orchestrator' in pane wM:p1N has exited.\n"
+        "Suggested recovery:\n"
+        "  1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py "
+        "lens-orchestrator --file <reply> --auto-start pi\n"
+        "  2. Or resume manually in pane wM:p1N: pi --resume sess.jsonl"
+    )
+    # Line 2 is omitted when no resume command is known.
+    assert herdr_reply.format_reply_recovery_diagnostic(
+        "callee", {"pane_id": "w1:p1", "kind": "claude"}, "reply.md"
+    ) == (
+        "herdr-reply: target agent 'callee' in pane w1:p1 has exited.\n"
+        "Suggested recovery:\n"
+        "  1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py "
+        "callee --file reply.md --auto-start claude"
+    )
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("COMPLETED deadbeef", ("completed", "deadbeef")),
+        ("BLOCKED: nope", ("blocked", None)),
+        ("REJECTED why", ("rework", None)),
+        ("hello there", (None, None)),
+        ("\n\ncompleted abc", ("completed", "abc")),
+        ("   ", (None, None)),
+    ],
+)
+def test_parse_status_line_maps_first_nonempty_line(
+    body: str, expected: tuple[str | None, str | None]
+) -> None:
+    mapped, sha, _ = herdr_reply.parse_status_line(body)
+    assert (mapped, sha) == expected
+
+
 def test_pep723_metadata_precedes_docstring() -> None:
     header = SCRIPT.read_text().split('"""', 1)[0]
     assert header.startswith("#!/usr/bin/env python3\n")
     assert "# /// script" in header
     assert 'requires-python = ">=3.14"' in header
-    assert "dependencies = []" in header
+    assert 'dependencies = ["pyyaml"]' in header
     assert header.rstrip().endswith("# ///")
 
 

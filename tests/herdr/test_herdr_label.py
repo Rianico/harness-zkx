@@ -24,6 +24,12 @@ PANE_ENV = {
 # w9:p1 hosts the agent `reviewer`; w9:p2 is a plain shell pane.
 SECOND_AGENT = {"pane_id": "w9:p9", "name": "buildbot", "agent": "pi", "agent_status": "idle"}
 
+# A state where w9:p2 hosts a live agent, so --task-group can prove both names move.
+P2_AGENT_STATE = {
+    **DEFAULT_STATE,
+    "agents": [{"pane_id": "w9:p2", "name": "reviewer", "agent": "pi", "agent_status": "idle"}],
+}
+
 
 @pytest.fixture
 def stub(stub_factory: Callable[[Path], StubHarness]) -> StubHarness:
@@ -378,6 +384,86 @@ def test_an_agent_rename_failure_is_reported(stub: StubHarness) -> None:
     assert done.returncode == herdr_cli.EXIT_HERDR
     assert "agent_not_found" in done.stderr
     assert "Traceback" not in done.stderr
+
+
+# ── integration: --tab (rename the calling Task Group) ─────────────────────────────
+
+
+def test_tab_renames_the_calling_tab(stub: StubHarness) -> None:
+    done = stub.run("--tab", "harness", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert [call[1:] for call in stub.tab_renames()] == [["tab", "rename", "w9:t1", "harness"]]
+
+
+def test_tab_resolves_through_pane_when_no_tab_env(stub: StubHarness) -> None:
+    done = stub.run("--tab", "harness", "--pane", "w9:p2", env={**PANE_ENV, "HERDR_TAB_ID": None})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert [call[1:] for call in stub.tab_renames()] == [["tab", "rename", "w9:t1", "harness"]]
+
+
+def test_tab_dry_run_prints_the_argv_and_renames_nothing(stub: StubHarness) -> None:
+    done = stub.run("--tab", "harness", "--dry-run", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.tab_renames() == []
+    (argv,) = json.loads(done.stdout)
+    assert argv[1:] == ["tab", "rename", "w9:t1", "harness"]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("reviewer", "--tab", "harness"),
+        ("--tab", "harness", "--verify"),
+        ("--tab", "harness", "--task-group", "msg"),
+        ("--tab", "harness", "--clear"),
+        ("--tab", "harness", "--label-only"),
+    ],
+)
+def test_tab_conflicts_are_rejected(stub: StubHarness, argv: tuple[str, ...]) -> None:
+    done = stub.run(*argv, env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "--tab cannot be combined with" in done.stderr
+    assert stub.tab_renames() == []
+
+
+# ── integration: --task-group scoping ──────────────────────────────────────────────
+
+
+def test_task_group_scopes_the_label_and_the_agent(stub: StubHarness) -> None:
+    done = stub.run(
+        "tm", "--task-group", "msg", "--pane", "w9:p2", env=PANE_ENV, state=P2_AGENT_STATE
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stdout.strip() == "named w9:p2  label=msg-tm  agent=msg-tm"
+    assert renames(stub) == [
+        ["pane", "rename", "w9:p2", "msg-tm"],
+        ["agent", "rename", "w9:p2", "msg-tm"],
+    ]
+
+
+def test_task_group_keeps_an_already_scoped_name(stub: StubHarness) -> None:
+    done = stub.run("msg-tm", "--task-group", "msg", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert renames(stub) == [
+        ["pane", "rename", "w9:p1", "msg-tm"],
+        ["agent", "rename", "w9:p1", "msg-tm"],
+    ]
+
+
+def test_task_group_rejects_an_overlong_scoped_name(stub: StubHarness) -> None:
+    done = stub.run("x" * 40, "--task-group", "msg", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not a valid agent name" in done.stderr
+    assert renames(stub) == []
+
+
+def test_naming_is_unchanged_without_task_group(stub: StubHarness) -> None:
+    done = stub.run("buildbot", env=PANE_ENV)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert renames(stub) == [
+        ["pane", "rename", "w9:p1", "buildbot"],
+        ["agent", "rename", "w9:p1", "buildbot"],
+    ]
 
 
 # ── metadata: PEP 723 conformance ───────────────────────────────────────────────────

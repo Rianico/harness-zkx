@@ -29,10 +29,15 @@ timed out first — the agent is working asynchronously: yield turn and await re
 callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Sender context is prepended by default (see `resolve_caller`): the payload opens
-with the `Sender:`/`Receiver:` envelope (position fields, the Herdr skill notice,
-the live `Group:` roster, and the resumption fields) and closes with the
-completion-reply contract via `herdr-reply`, so a callee can answer the sender by
-name using the helper script without shell mangling. The envelope is script-rendered,
+with the Style 2 nested envelope — `Routing:` (Sender, Group, and the
+`Receiver(You)` position field), `Hierarchy:` (Task-Group, Ticket-ID, Task-ID,
+and In-Reply-To correlation), and `Protocol:` (the Herdr skill notice) — and
+closes with the completion-reply contract via `herdr-reply`, so a callee can
+answer the sender by name using the helper script without shell mangling. The
+default envelope is strictly Routing/Hierarchy/Protocol; recovery metadata
+(`cwd`, session, resume command) is never in the default envelope and is
+retrieved just-in-time from `.lane/tasks.yaml`. Pass `--verbose` to restore the
+`Runtime:` (Cwd/Resume) block for debugging. The envelope is script-rendered,
 never model-authored, so it cannot be forgotten.
 `--dry-run` shows the exact rendered payload that would be submitted.
 
@@ -43,8 +48,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -80,6 +87,16 @@ PROMPT_STATES = "idle, working, blocked, done, or unknown"
 TIMEOUT_CODE = "timeout"
 EXIT_WAIT_TIMEOUT = 4
 
+READY_TIMEOUT_SECONDS = 10.0
+READY_INTERVAL_SECONDS = 0.2
+HANDSHAKE_TIMEOUT_SECONDS = 1.5
+HANDSHAKE_INTERVAL_SECONDS = 0.1
+
+
+def _sleep(seconds: float) -> None:
+    """Sleep seam: tests monkeypatch this module attribute to skip real delays."""
+    time.sleep(seconds)
+
 
 class WaitTimeout(Exception):
     """Prompt delivered but `--wait` timed out; the agent is still working (exit 4)."""
@@ -99,6 +116,10 @@ class Options:
     json: bool = False
     dry_run: bool = False
     no_caller_context: bool = False
+    ticket_id: str | None = None
+    task_id: str | None = None
+    task_group: str | None = None
+    verbose: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -152,6 +173,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-caller-context",
         action="store_true",
         help="send the payload verbatim without the Sender/Receiver envelope and reply contract",
+    )
+    _ = parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help=(
+            "include Runtime: Cwd/Resume recovery metadata; "
+            "default envelope is Routing/Hierarchy/Protocol only"
+        ),
     )
     return parser
 
@@ -339,21 +368,50 @@ def render_envelope(
     *,
     receiver: str | CallerContext | None = None,
     group_members: Sequence[str] = (),
-    include_recovery: bool = True,
+    include_recovery: bool = False,
+    ticket_id: str | None = None,
+    task_id: str | None = None,
+    task_group: str | None = None,
+    tab_id: str | None = None,
+    in_reply_to: str | None = None,
 ) -> str:
-    """Render the envelope; the receiver closes it alone, and an absent field renders no line."""
-    lines = [f"Sender: {sender_ref(sender)}"]
+    """Render the Style 2 envelope; the receiver closes the Routing block, and an absent field renders no line."""
+    routing = ["Routing:", f"  Sender: {sender_ref(sender)}"]
     if group_members:
-        lines.append(f"Group: {', '.join(group_members)}")
-    if include_recovery:
-        if sender.resume_cmd:
-            lines.append(f"Resume: {_scalar(sender.resume_cmd)}")
-        if sender.cwd:
-            lines.append(f"Cwd: {_scalar(sender.cwd)}")
-    lines.append(SKILL_NOTICE)
+        routing.append(f"  Group: [{', '.join(group_members)}]")
     if receiver:
-        lines.append("")
-        lines.append(f"Receiver(You): {receiver_ref(receiver)}")
+        routing.append(f"  Receiver(You): {receiver_ref(receiver)}")
+
+    hierarchy: list[str] = []
+    if task_group and tab_id:
+        hierarchy.append(f"  Task-Group: {task_group} ({tab_id})")
+    elif task_group:
+        hierarchy.append(f"  Task-Group: {task_group}")
+    elif tab_id:
+        hierarchy.append(f"  Task-Group: {tab_id}")
+    if ticket_id:
+        hierarchy.append(f"  Ticket-ID: {ticket_id}")
+    if task_id:
+        hierarchy.append(f"  Task-ID: {task_id}")
+    if in_reply_to:
+        hierarchy.append(f"  In-Reply-To: {in_reply_to}")
+
+    runtime: list[str] = []
+    if include_recovery:
+        if sender.cwd:
+            runtime.append(f"  Cwd: {_scalar(sender.cwd)}")
+        if sender.resume_cmd:
+            runtime.append(f"  Resume: {_scalar(sender.resume_cmd)}")
+
+    lines = [*routing]
+    if hierarchy:
+        lines.append("Hierarchy:")
+        lines.extend(hierarchy)
+    if runtime:
+        lines.append("Runtime:")
+        lines.extend(runtime)
+    lines.append("Protocol:")
+    lines.append(f"  {SKILL_NOTICE}")
     return "\n".join(lines)
 
 
@@ -444,13 +502,24 @@ def wrap_with_envelope(
     *,
     group_members: Sequence[str] = (),
     receiver: str | CallerContext | None = None,
-    include_recovery: bool = True,
+    include_recovery: bool = False,
+    ticket_id: str | None = None,
+    task_id: str | None = None,
+    task_group: str | None = None,
+    tab_id: str | None = None,
 ) -> str:
     """Prepend the timestamped envelope and append the reply contract around the payload."""
-    header = (
-        f"{utc_stamp()}\n"
-        f"{render_envelope(sender, receiver=receiver, group_members=group_members, include_recovery=include_recovery)}"
+    envelope = render_envelope(
+        sender,
+        receiver=receiver,
+        group_members=group_members,
+        include_recovery=include_recovery,
+        ticket_id=ticket_id,
+        task_id=task_id,
+        task_group=task_group,
+        tab_id=tab_id,
     )
+    header = f"{utc_stamp()}\n{envelope}"
     return f"{header}\n\n{payload}\n\n{render_reply_contract(sender)}"
 
 
@@ -591,6 +660,91 @@ def fetch_agent_revision(
     return None, None
 
 
+def _format_seconds(seconds: float) -> str:
+    """Render a timeout without a trailing `.0` so diagnostics read `10s`, not `10.0s`."""
+    return f"{seconds:g}"
+
+
+def agent_readiness(
+    herdr: str, target: str, env: Mapping[str, str]
+) -> tuple[bool, str | None, str | None]:
+    """Probe `herdr agent get <target>`; return (ready, status, revision).
+
+    ready is true only when the agent is settled (`idle`/`done`) and its
+    `interactive_ready` field is not explicitly false (a missing field counts as
+    ready, for back-compat). A non-zero exit or unreadable response is not ready.
+    """
+    done = run_herdr([herdr, "agent", "get", target], env)
+    if done.returncode != 0:
+        return (False, None, None)
+    try:
+        result = decode_response(done.stdout).get("result")
+    except HerdrError:
+        return (False, None, None)
+    if not isinstance(result, dict):
+        return (False, None, None)
+    agent = result.get("agent")
+    if not isinstance(agent, dict):
+        return (False, None, None)
+    raw_status = agent.get("agent_status")
+    status = raw_status if isinstance(raw_status, str) and raw_status else None
+    revision = agent.get("revision")
+    revision_str = str(revision) if revision is not None else None
+    ready = status in ("idle", "done") and agent.get("interactive_ready") is not False
+    return (ready, status, revision_str)
+
+
+def wait_for_ready(
+    herdr: str,
+    target: str,
+    env: Mapping[str, str],
+    *,
+    timeout: float = READY_TIMEOUT_SECONDS,
+    interval: float = READY_INTERVAL_SECONDS,
+) -> str | None:
+    """Block until the target settles, else fail naming the pane-unblock path.
+
+    The loop is attempt-counted (never wall-clocked) so a monkeypatched `_sleep`
+    runs it instantly; the immediate first probe means a settled agent never sleeps.
+    """
+    attempts = max(1, math.ceil(timeout / interval))
+    last_status: str | None = None
+    for attempt in range(attempts):
+        ready, status, _ = agent_readiness(herdr, target, env)
+        last_status = status
+        if ready:
+            return status
+        if attempt < attempts - 1:
+            _sleep(interval)
+    raise UsageError(
+        f"target {target!r} did not settle for prompt delivery within "
+        f"{_format_seconds(timeout)}s (last status={last_status or 'unknown'}): the agent may be "
+        "waiting on an auth/approval dialog; open the pane and clear it, then retry"
+    )
+
+
+def verify_prompt_accepted(
+    herdr: str,
+    target: str,
+    env: Mapping[str, str],
+    pre_revision: str | None,
+    *,
+    timeout: float = HANDSHAKE_TIMEOUT_SECONDS,
+    interval: float = HANDSHAKE_INTERVAL_SECONDS,
+) -> bool:
+    """Confirm a `--no-wait` prompt landed: the agent started working or its revision moved."""
+    attempts = max(1, math.ceil(timeout / interval))
+    for attempt in range(attempts):
+        _, status, revision = agent_readiness(herdr, target, env)
+        if status == "working":
+            return True
+        if revision is not None and pre_revision is not None and revision != pre_revision:
+            return True
+        if attempt < attempts - 1:
+            _sleep(interval)
+    return False
+
+
 def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> list[str]:
     """Pick the prompt targets: explicit TARGETs, or the pane carrying --label."""
     if options.label:
@@ -642,6 +796,12 @@ def prompt_one(
         print(json.dumps(argv))
         return Dispatch(target)
 
+    _ = wait_for_ready(herdr, target, env)
+
+    pre_revision: str | None = None
+    if options.no_wait:
+        pre_revision, _ = fetch_agent_revision(herdr, target, env)
+
     done = run_herdr(argv, env)
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
@@ -658,6 +818,15 @@ def prompt_one(
             if diag:
                 raise UsageError(diag)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
+
+    if options.no_wait and not verify_prompt_accepted(herdr, target, env, pre_revision):
+        _, last_status, _ = agent_readiness(herdr, target, env)
+        raise HerdrError(
+            f"prompt acceptance was not confirmed within "
+            f"{_format_seconds(HANDSHAKE_TIMEOUT_SECONDS)}s for {target} "
+            f"(last status={last_status or 'unknown'}, revision unchanged); the agent may not "
+            "have consumed the payload — verify with herdr-wait or resubmit"
+        )
 
     post_rev, post_pane = (
         fetch_agent_revision(herdr, target, env) if not options.no_caller_context else (None, None)
@@ -701,6 +870,11 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
                 caller,
                 group_members=group_members,
                 receiver=resolve_receiver(panes, agents, target) or target,
+                include_recovery=options.verbose,
+                ticket_id=options.ticket_id,
+                task_id=options.task_id,
+                task_group=options.task_group,
+                tab_id=caller.tab_id,
             )
             for target in targets
         }

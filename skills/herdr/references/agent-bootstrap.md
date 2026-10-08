@@ -80,3 +80,39 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
    uv run "$SKILL_DIR/scripts/herdr_label.py" --verify   # exit 3 on a live agent that disagrees with its label
    ```
    After an agent exits or is replaced, `herdr-label --sync` converges the pair again — it relabels from the agent name, or names an agent that came back without one from the label it left behind.
+
+---
+
+## 4. Role Invariant Bootstrap (`herdr-bootstrap`)
+
+A compacted agent forgets its lane: it stops delegating to subagents and exits without replying. `herdr_bootstrap.py` stamps a compaction-proof **ROLE INVARIANT** into the one surface the target agent reads at launch, sets the pane label to the scoped name, then starts the agent. Two delivery mechanisms follow from whether the kind accepts an inline system prompt:
+
+| Kind | Mechanism | Written artifact |
+|---|---|---|
+| `pi`, `claude` | `agent start --append-system-prompt <snippet>` | none |
+| `cline` | `AGENTS.md` append (prefers an existing `.clinerules`) | `.clinerules` \| `AGENTS.md` |
+| `codex`, `copilot`, `qodercli`, `agy`, unknown | `AGENTS.md` append | `AGENTS.md` |
+
+Only `pi` and `claude` receive `--append-system-prompt`; no permission or approval flags are injected (the operator's herdr config owns those); an unknown kind falls back to the universal `AGENTS.md` append. The target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-impl-1 --kind codex --pane w1:p3 --role impl-1 --task-group msg
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" --kind pi --pane w1:p3 --role tm --task-group msg --model claude-3-7-sonnet
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2 --role tm --dry-run
+```
+
+### The ROLE INVARIANT snippet
+
+```text
+ROLE INVARIANT: You are an {role} in a Herdr lane.
+1. Subagent-First: MUST delegate deep search, multi-file edits, and test triage to internal subagents.
+2. Reply Contract: MUST reply to caller via `uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>` upon completion or blocker. Never exit silently.
+```
+
+### The idempotent marker
+
+The file append is idempotent. The block is wrapped in `<!-- herdr-bootstrap:role-invariant -->` … `<!-- /herdr-bootstrap:role-invariant -->` and written only when the start marker is absent, so re-bootstrapping the same directory never duplicates the snippet and never rewrites an untouched file; existing content and its trailing newline are preserved.
+
+### Scoped-prefix rule
+
+Every lane name follows `<task-group-slug>-<role>[-<subrole|index>]`. For the `msg-enhance` lane: `msg-orch`, `msg-tm`, `msg-impl-1`, `msg-reviewer`. `--task-group <slug>` prefixes a bare role (`tm` → `msg-tm`, `impl-1` → `msg-impl-1`) and leaves an already-scoped value unchanged; the same string is the pane label and the agent name, and it must satisfy `[a-z][a-z0-9_-]{0,31}` (max 32 chars).

@@ -80,6 +80,26 @@ def find_herdr(env: Mapping[str, str]) -> str:
     return found
 
 
+AGENT_NAME_PATTERN = r"[a-z][a-z0-9_-]{0,31}"  # Herdr agent name: 1..32 chars
+
+
+def scoped_agent_name(role: str, task_group: str | None) -> str:
+    """Prefix a bare role with its task-group slug; already-scoped values pass through."""
+    if not task_group:
+        return role
+    if role == task_group or role.startswith(f"{task_group}-"):
+        return role
+    return f"{task_group}-{role}"
+
+
+def validate_agent_name(name: str) -> None:
+    """Reject a name Herdr would refuse, before any rename is attempted."""
+    if re.fullmatch(AGENT_NAME_PATTERN, name) is None:
+        raise UsageError(
+            f"{name!r} is not a valid agent name (want {AGENT_NAME_PATTERN} (max 32 chars))"
+        )
+
+
 def run_herdr(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
     """Run herdr and return the process; a non-zero status is the caller's to interpret."""
     try:

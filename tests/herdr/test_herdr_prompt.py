@@ -525,13 +525,15 @@ def test_envelope_renders_sender_alone_when_nothing_else_is_known() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
     assert herdr_prompt.render_envelope(sender) == "\n".join(
         [
-            "Sender: orchestrator@w1:p1",
-            herdr_prompt.SKILL_NOTICE,
+            "Routing:",
+            "  Sender: orchestrator@w1:p1",
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
         ]
     )
 
 
-def test_envelope_renders_position_receiver_group_and_resume() -> None:
+def test_envelope_renders_position_receiver_and_group() -> None:
     sender = herdr_prompt.CallerContext(
         pane_id="w1:p1",
         label="orchestrator",
@@ -540,18 +542,45 @@ def test_envelope_renders_position_receiver_group_and_resume() -> None:
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --resume /tmp/session.jsonl",
     )
-    assert herdr_prompt.render_envelope(
+    rendered = herdr_prompt.render_envelope(
         sender,
         receiver="impl-1",
         group_members=["orchestrator@w1:p1", "impl-1@w1:p3"],
-    ) == "\n".join(
+    )
+    assert rendered == "\n".join(
         [
-            "Sender: orchestrator@w1:p1 - kind pi",
-            "Group: orchestrator@w1:p1, impl-1@w1:p3",
-            'Resume: "pi --resume /tmp/session.jsonl"',
-            herdr_prompt.SKILL_NOTICE,
-            "",
-            "Receiver(You): impl-1",
+            "Routing:",
+            "  Sender: orchestrator@w1:p1 - kind pi",
+            "  Group: [orchestrator@w1:p1, impl-1@w1:p3]",
+            "  Receiver(You): impl-1",
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
+        ]
+    )
+    assert "Runtime:" not in rendered
+    assert "Resume:" not in rendered
+
+
+def test_envelope_renders_runtime_block_only_when_recovery_included() -> None:
+    sender = herdr_prompt.CallerContext(
+        pane_id="w1:p1",
+        label="orchestrator",
+        agent="orchestrator",
+        kind="pi",
+        cwd="/path/to/my project",
+        session_id="/tmp/session.jsonl",
+        resume_cmd="pi --resume /tmp/session.jsonl",
+    )
+    rendered = herdr_prompt.render_envelope(sender, include_recovery=True)
+    assert rendered == "\n".join(
+        [
+            "Routing:",
+            "  Sender: orchestrator@w1:p1 - kind pi",
+            "Runtime:",
+            '  Cwd: "/path/to/my project"',
+            '  Resume: "pi --resume /tmp/session.jsonl"',
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
         ]
     )
 
@@ -563,15 +592,16 @@ def test_envelope_renders_a_resolved_receiver_as_a_position_ref() -> None:
     )
     assert herdr_prompt.render_envelope(sender, receiver=receiver) == "\n".join(
         [
-            "Sender: orchestrator@w1:p1",
-            herdr_prompt.SKILL_NOTICE,
-            "",
-            "Receiver(You): impl-1@w1:p3 - tab w1:t1 - kind agy",
+            "Routing:",
+            "  Sender: orchestrator@w1:p1",
+            "  Receiver(You): impl-1@w1:p3 - tab w1:t1 - kind agy",
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
         ]
     )
 
 
-def test_envelope_renders_tab_cwd_and_resume() -> None:
+def test_envelope_omits_tab_cwd_and_resume_by_default() -> None:
     sender = herdr_prompt.CallerContext(
         pane_id="w1:p1",
         label="orchestrator",
@@ -582,14 +612,18 @@ def test_envelope_renders_tab_cwd_and_resume() -> None:
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --resume /tmp/session.jsonl",
     )
-    assert herdr_prompt.render_envelope(sender) == "\n".join(
+    rendered = herdr_prompt.render_envelope(sender)
+    assert rendered == "\n".join(
         [
-            "Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi",
-            'Resume: "pi --resume /tmp/session.jsonl"',
-            'Cwd: "/path/to/my project"',
-            herdr_prompt.SKILL_NOTICE,
+            "Routing:",
+            "  Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi",
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
         ]
     )
+    assert "Runtime:" not in rendered
+    assert "Cwd:" not in rendered
+    assert "Resume:" not in rendered
 
 
 def test_envelope_keeps_a_label_that_differs_from_the_agent_name() -> None:
@@ -600,13 +634,16 @@ def test_envelope_keeps_a_label_that_differs_from_the_agent_name() -> None:
         kind="qodercli",
         resume_cmd="qodercli resume",
     )
-    assert herdr_prompt.render_envelope(sender) == "\n".join(
+    rendered = herdr_prompt.render_envelope(sender)
+    assert rendered == "\n".join(
         [
-            "Sender: t7-impl@w1:p2 - label callee - kind qodercli",
-            'Resume: "qodercli resume"',
-            herdr_prompt.SKILL_NOTICE,
+            "Routing:",
+            "  Sender: t7-impl@w1:p2 - label callee - kind qodercli",
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
         ]
     )
+    assert "Runtime:" not in rendered
 
 
 def test_sender_ref_only_ever_uses_the_agent_name_as_the_target_token() -> None:
@@ -619,21 +656,82 @@ def test_sender_ref_only_ever_uses_the_agent_name_as_the_target_token() -> None:
 def test_envelope_omits_unknown_fields_never_invents() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w9:p1", agent="reviewer")
     assert herdr_prompt.render_envelope(sender) == "\n".join(
-        ["Sender: reviewer@w9:p1", herdr_prompt.SKILL_NOTICE]
+        [
+            "Routing:",
+            "  Sender: reviewer@w9:p1",
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
+        ]
     )
+
+
+def test_envelope_renders_hierarchy_block_from_correlation_params() -> None:
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
+    assert herdr_prompt.render_envelope(
+        sender,
+        ticket_id="#182-herdr-msg-enhance",
+        task_id="#182-herdr-msg-enhance#full-stack",
+        task_group="full-stack",
+        tab_id="w1:t2",
+    ) == "\n".join(
+        [
+            "Routing:",
+            "  Sender: orchestrator@w1:p1",
+            "Hierarchy:",
+            "  Task-Group: full-stack (w1:t2)",
+            "  Ticket-ID: #182-herdr-msg-enhance",
+            "  Task-ID: #182-herdr-msg-enhance#full-stack",
+            "Protocol:",
+            f"  {herdr_prompt.SKILL_NOTICE}",
+        ]
+    )
+
+
+def test_envelope_renders_task_group_alone_or_tab_alone() -> None:
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
+    only_group = herdr_prompt.render_envelope(sender, task_group="full-stack")
+    assert "  Task-Group: full-stack" in only_group
+    assert "(" not in only_group.splitlines()[3]
+    only_tab = herdr_prompt.render_envelope(sender, tab_id="w1:t2")
+    assert "  Task-Group: w1:t2" in only_tab
+
+
+def test_envelope_renders_in_reply_to() -> None:
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
+    rendered = herdr_prompt.render_envelope(sender, in_reply_to="#182-herdr-msg-enhance#full-stack")
+    assert "Hierarchy:" in rendered
+    assert "  In-Reply-To: #182-herdr-msg-enhance#full-stack" in rendered
+
+
+def test_envelope_omits_hierarchy_and_runtime_blocks_when_params_absent() -> None:
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
+    rendered = herdr_prompt.render_envelope(sender, include_recovery=False)
+    assert "Hierarchy:" not in rendered
+    assert "Runtime:" not in rendered
+    assert "Ticket-ID:" not in rendered
+    assert "Task-ID:" not in rendered
+    assert "In-Reply-To:" not in rendered
+
+
+def test_envelope_group_uses_bracket_form() -> None:
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
+    rendered = herdr_prompt.render_envelope(
+        sender, group_members=["orchestrator@w1:p1", "impl-1@w1:p3"]
+    )
+    assert "  Group: [orchestrator@w1:p1, impl-1@w1:p3]" in rendered
 
 
 def test_envelope_sanitizes_label_to_single_line() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="review\npane\tX", agent="reviewer")
     assert (
-        herdr_prompt.render_envelope(sender).splitlines()[0]
-        == 'Sender: reviewer@w1:p1 - label "review pane X"'
+        herdr_prompt.render_envelope(sender).splitlines()[1]
+        == '  Sender: reviewer@w1:p1 - label "review pane X"'
     )
 
 
 def test_envelope_drops_a_blank_label() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="   ", agent="reviewer")
-    assert herdr_prompt.render_envelope(sender).splitlines()[0] == "Sender: reviewer@w1:p1"
+    assert herdr_prompt.render_envelope(sender).splitlines()[1] == "  Sender: reviewer@w1:p1"
 
 
 def test_reply_contract_without_agent_is_unaddressable() -> None:
@@ -650,16 +748,18 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     text = prompt_call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:7] == [
-        "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Group: reviewer@w9:p1",
-        "Cwd: /tmp/harness",
-        herdr_prompt.SKILL_NOTICE,
-        "",
-        "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+    assert lines[1:9] == [
+        "Routing:",
+        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Group: [reviewer@w9:p1]",
+        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "Hierarchy:",
+        "  Task-Group: w9:t1",
+        "Protocol:",
+        f"  {herdr_prompt.SKILL_NOTICE}",
     ]
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
-    assert "Group: reviewer@w9:p1" in text
+    assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "\n\nhi\n\n" in text
     assert (
@@ -668,7 +768,9 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     )
 
 
-def test_resolve_caller_extracts_kind_session_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+def test_resolve_caller_extracts_kind_without_a_runtime_block(
+    stub: StubHarness, tmp_path: Path
+) -> None:
     state = {
         **DEFAULT_STATE,
         "agents": [
@@ -686,17 +788,18 @@ def test_resolve_caller_extracts_kind_session_and_resume(stub: StubHarness, tmp_
     text = prompt_call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:8] == [
-        "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Group: reviewer@w9:p1",
-        'Resume: "pi --resume /tmp/session.jsonl"',
-        "Cwd: /tmp/harness",
-        herdr_prompt.SKILL_NOTICE,
-        "",
-        "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+    assert lines[1:9] == [
+        "Routing:",
+        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Group: [reviewer@w9:p1]",
+        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "Hierarchy:",
+        "  Task-Group: w9:t1",
+        "Protocol:",
+        f"  {herdr_prompt.SKILL_NOTICE}",
     ]
-    assert "Group: reviewer@w9:p1" in text
-    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
+    assert "Runtime:" not in text
+    assert "Resume:" not in text
 
 
 def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> None:
@@ -707,13 +810,15 @@ def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> 
     (prompt_call,) = stub.prompts()
     lines = prompt_call[4].splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:7] == [
-        'Sender: w9:p2 - label "scratch pad" - tab w9:t1',
-        "Group: reviewer@w9:p1",
-        "Cwd: /tmp/scratch",
-        herdr_prompt.SKILL_NOTICE,
-        "",
-        "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+    assert lines[1:9] == [
+        "Routing:",
+        '  Sender: w9:p2 - label "scratch pad" - tab w9:t1',
+        "  Group: [reviewer@w9:p1]",
+        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "Hierarchy:",
+        "  Task-Group: w9:t1",
+        "Protocol:",
+        f"  {herdr_prompt.SKILL_NOTICE}",
     ]
     assert "cannot be addressed" in prompt_call[4]
 
@@ -726,7 +831,7 @@ def test_no_caller_context_sends_verbatim_without_lookups(
     (prompt_call,) = stub.prompts()
     assert prompt_call[4] == "hi"
     kinds = [call[1:3] for call in stub.calls()]
-    assert kinds == [["agent", "prompt"]]
+    assert kinds == [["agent", "get"], ["agent", "prompt"]]
     assert "--no-caller-context drops the Sender/Receiver envelope" in done.stderr
 
 
@@ -737,16 +842,18 @@ def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) 
     assert (first[3], second[3]) == ("callee1", "callee2")
     first_lines = first[4].splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", first_lines[0])
-    assert first_lines[1:7] == [
-        "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Group: reviewer@w9:p1",
-        "Cwd: /tmp/harness",
-        herdr_prompt.SKILL_NOTICE,
-        "",
-        "Receiver(You): callee1",
+    assert first_lines[1:9] == [
+        "Routing:",
+        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Group: [reviewer@w9:p1]",
+        "  Receiver(You): callee1",
+        "Hierarchy:",
+        "  Task-Group: w9:t1",
+        "Protocol:",
+        f"  {herdr_prompt.SKILL_NOTICE}",
     ]
-    assert "Group: reviewer@w9:p1" in first[4]
-    assert "Group: reviewer@w9:p1" in second[4]
+    assert "Group: [reviewer@w9:p1]" in first[4]
+    assert "Group: [reviewer@w9:p1]" in second[4]
     assert first[4] != second[4]
     assert "Receiver(You): callee1" in first[4]
     assert "Receiver(You): callee2" in second[4]
@@ -770,13 +877,15 @@ def test_dry_run_renders_caller_payload_without_prompting(
     assert argv[3] == "reviewer"
     lines = argv[4].splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:7] == [
-        "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Group: reviewer@w9:p1",
-        "Cwd: /tmp/harness",
-        herdr_prompt.SKILL_NOTICE,
-        "",
-        "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+    assert lines[1:9] == [
+        "Routing:",
+        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Group: [reviewer@w9:p1]",
+        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "Hierarchy:",
+        "  Task-Group: w9:t1",
+        "Protocol:",
+        f"  {herdr_prompt.SKILL_NOTICE}",
     ]
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in argv[4]
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in argv[4]
@@ -840,7 +949,7 @@ def test_group_members_listed_in_caller_context(stub: StubHarness, tmp_path: Pat
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
-    assert "Group: reviewer@w9:p1, t7-impl@w9:p2" in text
+    assert "Group: [reviewer@w9:p1, t7-impl@w9:p2]" in text
     assert "Receiver(You): t7-impl@w9:p2 - label callee - tab w9:t1 - kind qodercli" in text
 
 
@@ -871,3 +980,175 @@ def test_revision_zero_agent_accepted_without_retry(stub: StubHarness, tmp_path:
     assert "prompt dropped" not in done.stderr
     assert "prompted reviewer" in done.stdout
     assert len(stub.prompts()) == 1
+
+
+# ── integration: default envelope trim and --verbose opt-in ──────────────────────────
+
+
+def _session_caller_state() -> dict[str, object]:
+    return {
+        **DEFAULT_STATE,
+        "agents": [
+            {
+                "pane_id": "w9:p1",
+                "name": "reviewer",
+                "agent": "pi",
+                "agent_session": {"kind": "path", "value": "/tmp/session.jsonl"},
+            }
+        ],
+    }
+
+
+def test_default_envelope_omits_runtime_cwd_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "reviewer", "--file", str(payload_file(tmp_path, "hi")), state=_session_caller_state()
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (prompt_call,) = stub.prompts()
+    text = prompt_call[4]
+    assert "Runtime:" not in text
+    assert "Cwd:" not in text
+    assert "Resume:" not in text
+
+
+def test_verbose_flag_restores_runtime_cwd_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--verbose",
+        state=_session_caller_state(),
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (prompt_call,) = stub.prompts()
+    lines = prompt_call[4].splitlines()
+    assert "Runtime:" in lines
+    assert "  Cwd: /tmp/harness" in lines
+    assert '  Resume: "pi --resume /tmp/session.jsonl"' in lines
+
+
+def test_resolve_caller_captures_session_and_resume() -> None:
+    panes = [{"pane_id": "w9:p1", "tab_id": "w9:t1", "cwd": "/tmp/harness"}]
+    agents = [
+        {
+            "pane_id": "w9:p1",
+            "name": "reviewer",
+            "agent": "pi",
+            "agent_session": {"kind": "path", "value": "/tmp/session.jsonl"},
+        }
+    ]
+    caller = herdr_prompt.resolve_caller(
+        "herdr", {"HERDR_PANE_ID": "w9:p1"}, inventory=(panes, agents)
+    )
+    assert caller.session_id == "/tmp/session.jsonl"
+    assert caller.resume_cmd == "pi --resume /tmp/session.jsonl"
+
+
+# ── integration: pre-flight readiness gate and --no-wait handshake ──────────────────
+
+
+def _sleep_recorder() -> tuple[list[float], Callable[[float], None]]:
+    slept: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    return slept, fake_sleep
+
+
+def test_preflight_waits_until_the_target_settles(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working", "working", "idle"]}}
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    assert slept == [herdr_prompt.READY_INTERVAL_SECONDS, herdr_prompt.READY_INTERVAL_SECONDS]
+
+
+def test_preflight_timeout_aborts_before_prompting(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state({**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert len(slept) == 49
+    err = capsys.readouterr().err
+    assert "did not settle for prompt delivery" in err
+    assert "last status=working" in err
+    assert "auth/approval dialog" in err
+
+
+def test_no_wait_handshake_confirms_acceptance(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(DEFAULT_STATE)
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    assert slept == []
+
+
+def test_no_wait_handshake_reports_unconfirmed_acceptance(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["idle"]},
+            "agent_get_rev_seq": {"reviewer": ["r1"] * 40},
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_HERDR
+    assert len(stub.prompts()) == 1
+    assert len(slept) == 14
+    err = capsys.readouterr().err
+    assert "acceptance was not confirmed" in err
+
+
+def test_preflight_respects_explicit_interactive_ready_false(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["working", "idle"]},
+            "agent_get_ready_seq": {"reviewer": [False, True]},
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    assert len(slept) == 1

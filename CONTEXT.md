@@ -90,6 +90,32 @@ _Avoid_: Guessed semantic role.
 An explicit Markdown-readable marker that gives a source section a presentation role, such as an Obsidian-style callout or task checkbox. Role annotations allow richer generated views without requiring the renderer to guess meaning.
 _Avoid_: Custom opaque syntax, inferred role.
 
+## Herdr Lane Coordination
+
+**Task Group**:
+A Herdr Tab that hosts one coordinated lane. The tab title mirrors the group name, so the visible tab and the routing key are the same string.
+_Avoid_: Workspace group, pane cluster.
+
+**Ticket-ID**:
+The stable identity of a dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). It names the work across every task in the lane and travels on every envelope.
+_Avoid_: ticket number, issue key.
+
+**Task-ID**:
+The identity of one task within a ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). A reply carries it as `In-Reply-To: <Task-ID>`.
+_Avoid_: subtask id, job id.
+
+**Dispatch**:
+The forward handoff that opens a task: it carries the ticket payload, binds the correlation IDs, and records the active lease plus the task trajectory in `.lane/tasks.yaml`.
+_Avoid_: send, submission.
+
+**Reply**:
+The callee's completion callback: a status triad plus `resp-format.md` evidence, keyed `In-Reply-To: <Task-ID>`, which appends the mapped status event to the task trajectory and soft-completes the sender's lease (dropping the lock, keeping the record).
+_Avoid_: response, answer.
+
+**Scoped Runtime Name**:
+The task-group-scoped identity of a lane agent, shaped `<task-group-slug>-<role>[-<subrole|index>]` (e.g. `msg-tm`, `msg-impl-1`). The same string is the pane label and the agent name.
+_Avoid_: bare role name, raw role.
+
 ## Context Load
 
 **Context Load**:

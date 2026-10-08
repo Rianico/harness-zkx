@@ -49,6 +49,7 @@ from dataclasses import dataclass
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
+    AGENT_NAME_PATTERN,
     EXIT_BLOCKED,
     EXIT_OK,
     METHOD_CONSTRAINT_EPILOG,
@@ -61,9 +62,11 @@ from herdr_cli import (
     guard,
     require_herdr_env,
     run_herdr_checked,
+    scoped_agent_name,
+    validate_agent_name,
 )
 
-AGENT_NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
+AGENT_NAME = re.compile(rf"{AGENT_NAME_PATTERN}\Z")
 
 
 @dataclass
@@ -72,6 +75,8 @@ class Options:
 
     name: str = ""
     pane: str | None = None
+    tab: str | None = None
+    task_group: str | None = None
     label_only: bool = False
     clear: bool = False
     verify: bool = False
@@ -95,6 +100,18 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("name", nargs="?", metavar="NAME", help="the name to set")
     _ = parser.add_argument(
         "--pane", metavar="ID", help="label this pane instead of the calling pane"
+    )
+    _ = parser.add_argument(
+        "--tab",
+        metavar="NAME",
+        default=None,
+        help="rename the calling tab (Task Group) instead of labelling a pane",
+    )
+    _ = parser.add_argument(
+        "--task-group",
+        metavar="SLUG",
+        default=None,
+        help="scope NAME with this task-group slug before naming the pane and agent",
     )
     _ = parser.add_argument(
         "--label-only",
@@ -284,6 +301,62 @@ def check_pairs(options: Options, env: Mapping[str, str]) -> int:
     return EXIT_OK if not mismatches else EXIT_BLOCKED
 
 
+def pane_tab_id(herdr: str, pane_id: str, env: Mapping[str, str]) -> str:
+    """The tab id hosting `pane_id`, read from the pane inventory."""
+    panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    for entry in panes:
+        if entry_optional_text(entry, "pane_id") != pane_id:
+            continue
+        tab_id = entry_optional_text(entry, "tab_id")
+        if tab_id:
+            return tab_id
+    raise UsageError(f"cannot resolve a tab id for pane {pane_id!r}")
+
+
+def resolve_tab_id(herdr: str, options: Options, env: Mapping[str, str]) -> str:
+    """The tab to rename: the calling tab, the `--pane` tab, or the calling pane's tab."""
+    from_env = env.get("HERDR_TAB_ID")
+    if from_env:
+        return from_env
+    if options.pane:
+        return pane_tab_id(herdr, options.pane, env)
+    return pane_tab_id(herdr, current_pane_id(herdr, env), env)
+
+
+def rename_tab(options: Options, env: Mapping[str, str]) -> int:
+    conflicts = [
+        flag
+        for present, flag in (
+            (options.name, "NAME"),
+            (options.clear, "--clear"),
+            (options.label_only, "--label-only"),
+            (options.verify, "--verify"),
+            (options.sync, "--sync"),
+            (options.task_group, "--task-group"),
+        )
+        if present
+    ]
+    if conflicts:
+        raise UsageError(f"--tab cannot be combined with {', '.join(conflicts)}")
+    name = options.tab
+    if name is None:
+        raise UsageError("--tab requires a name")
+
+    require_herdr_env(env)
+    herdr = find_herdr(env)
+    tab_id = resolve_tab_id(herdr, options, env)
+    argv = [herdr, "tab", "rename", tab_id, name]
+    if options.dry_run:
+        print(json.dumps([argv]))
+        return EXIT_OK
+    raw = run_herdr_checked(argv, env)
+    if options.json:
+        print(raw, end="" if raw.endswith("\n") else "\n")
+        return EXIT_OK
+    print(f"renamed tab {tab_id}  name={name}")
+    return EXIT_OK
+
+
 def label_pane(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
@@ -293,6 +366,13 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
     if not options.clear and not options.name:
         raise UsageError("pass NAME, or --clear to drop the names")
 
+    # Scope a bare role with its task-group slug before any mutation, so an invalid
+    # scoped name never leaves a half-applied label or agent rename.
+    name = options.name
+    if options.task_group and options.name:
+        name = scoped_agent_name(options.name, options.task_group)
+        validate_agent_name(name)
+
     pane_id = options.pane or current_pane_id(herdr, env)
     agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
     hosts_agent = any(entry_optional_text(entry, "pane_id") == pane_id for entry in agents)
@@ -300,16 +380,16 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
 
     # Validate before mutating anything, so a bad name never leaves a half-applied label.
     if rename_agent and not options.clear:
-        if not AGENT_NAME.match(options.name):
+        if not AGENT_NAME.match(name):
             raise UsageError(
-                f"{options.name!r} is not a valid agent name (want [a-z][a-z0-9_-]{{0,31}}); "
+                f"{name!r} is not a valid agent name (want [a-z][a-z0-9_-]{{0,31}}); "
                 "use --label-only for a multi-word label"
             )
-        taken = conflict_with(agents, options.name, pane_id)
+        taken = conflict_with(agents, name, pane_id)
         if taken:
-            raise UsageError(f"agent name {options.name!r} is already used by pane {taken}")
+            raise UsageError(f"agent name {name!r} is already used by pane {taken}")
 
-    suffix = ["--clear"] if options.clear else [options.name]
+    suffix = ["--clear"] if options.clear else [name]
     pane_argv = [herdr, "pane", "rename", pane_id, *suffix]
     agent_argv = [herdr, "agent", "rename", pane_id, *suffix]
     if options.dry_run:
@@ -320,8 +400,8 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
     if rename_agent:
         _ = run_herdr_checked(agent_argv, env)
 
-    label_state = None if options.clear else options.name
-    agent_state = None if (options.clear or not rename_agent) else options.name
+    label_state = None if options.clear else name
+    agent_state = None if (options.clear or not rename_agent) else name
     if options.json:
         print(json.dumps({"pane_id": pane_id, "label": label_state, "agent": agent_state}))
     else:
@@ -333,6 +413,8 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     env_map = dict(os.environ if env is None else env)
     options = build_parser().parse_args(argv, namespace=Options())
+    if options.tab is not None:
+        return guard("herdr-label", lambda: rename_tab(options, env_map))
     action = check_pairs if (options.verify or options.sync) else label_pane
     return guard("herdr-label", lambda: action(options, env_map))
 

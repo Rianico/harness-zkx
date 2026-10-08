@@ -410,12 +410,12 @@ def test_issue_d_overview_format_json(overview_stub: StubHarness) -> None:
 
 
 def test_issue_d_overview_yaml_header_comment(overview_stub: StubHarness) -> None:
-    """Overview YAML output includes top guidance header comment."""
-    done = overview_stub.run()
+    """Overview --format yaml output includes top guidance header comment."""
+    done = overview_stub.run("--format", "yaml")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     first_line = done.stdout.splitlines()[0]
     assert first_line.startswith(
-        "# herdr-overview (format: YAML; pass --json for JSON, --format table for table)"
+        "# herdr-overview (format: YAML; pass --json for JSON, --format markdown for Markdown)"
     )
 
 
