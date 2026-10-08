@@ -4,7 +4,7 @@
 # Answers the four questions every turn starts with, one line each:
 #   branch  <head> → <base> (ahead N, behind M)
 #   pr      #<num> <mergeable>/<mergeState> checks <ok>/<total>
-#   guard   in sync | stale (N lines) | no changelog script
+#   guard   ledger ok | ledger has findings | no changelog script
 #   main    <sha> <subject> (<tag>)
 #
 # Usage: state.sh [--base <branch>] [--head <branch>] [--json]

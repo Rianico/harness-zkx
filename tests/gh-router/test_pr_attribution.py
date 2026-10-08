@@ -7,12 +7,14 @@ PUT's commit_message to $CAPTURE. Pure functions are driven via pr.py directly.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import stat
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -92,6 +94,7 @@ exit 3
         "PR_BODY": "",
         "PR_NUMBER": NUM,
         "OBSERVE_TSV": "",
+        "OUT_DIR": str(tmp_path / "draft"),
         **env_extra,
     }
     return env
@@ -361,7 +364,8 @@ def test_merge_refuses_overlong_title_before_api_call(tmp_path: Path) -> None:
 
 def test_merge_accepts_title_at_exact_limit(tmp_path: Path) -> None:
     env = make_gh_mock(tmp_path, COMMITS_TSV="me\tMe\tme@x.io")
-    r = run_merge(env, "Solo.\n", title="x" * 95)  # 95 + " (#7)" = 100
+    title = "feat: " + "x" * 89  # 95 chars: 95 + " (#7)" = 100, the shape still conventional
+    r = run_merge(env, "Solo.\n", title=title)
     assert r.returncode == 0
     assert os.path.exists(env["CAPTURE"])
 
@@ -375,15 +379,27 @@ def test_merge_body_with_long_lines_passes(tmp_path: Path) -> None:
     assert "pulls/7/merge" in open(env["GH_LOG"]).read()
 
 
-# --- --check dry run ---
+# --- --check draft phase ---
 
 
 def run_check(
     env: dict[str, str], *extra_args: str, use_sh: bool = False
 ) -> subprocess.CompletedProcess[str]:
+    # Pin a non-`fix` title: the shape gate infers the type from the title, and the
+    # ambient harness HEAD subject is not test state. A later `--title` in extra_args wins.
     cmd = ["bash", str(PR_SH)] if use_sh else [sys.executable, str(PR_PY)]
     return subprocess.run(
-        [*cmd, "--check", "--head", "feat-x", *extra_args],
+        [
+            *cmd,
+            "--check",
+            "--head",
+            "feat-x",
+            "--title",
+            "feat(gh-router): draft phase",
+            "--out-dir",
+            env["OUT_DIR"],
+            *extra_args,
+        ],
         capture_output=True,
         text=True,
         env={**os.environ, **env},
@@ -391,7 +407,17 @@ def run_check(
     )
 
 
-def test_check_dry_run_prints_trailers_and_creates_nothing(tmp_path: Path) -> None:
+def draft_files(env: dict[str, str]) -> tuple[Path, Path]:
+    out = Path(env["OUT_DIR"])
+    return out / "draft.json", out / "pr_body.md"
+
+
+def load_draft(env: dict[str, str]) -> dict[str, Any]:
+    draft_path, _ = draft_files(env)
+    return json.loads(draft_path.read_text(encoding="utf-8"))
+
+
+def test_check_writes_draft_and_body_instead_of_printing_trailers(tmp_path: Path) -> None:
     env = make_gh_mock(
         tmp_path,
         COMMITS_TSV="ghuser\tWf Zyx\twf@x.io\nme\tMe\tme@x.io",
@@ -399,19 +425,36 @@ def test_check_dry_run_prints_trailers_and_creates_nothing(tmp_path: Path) -> No
     )
     r = run_check(env)
     assert r.returncode == 0
-    assert r.stdout == "Co-authored-by: Wf Zyx <wf@x.io>\n"
+    draft_path, body_path = draft_files(env)
+    assert draft_path.is_file()
+    assert body_path.is_file()
+    assert "Co-authored-by" not in r.stdout
+    assert str(draft_path) in r.stdout
+    assert str(body_path) in r.stdout
     assert "pulls/7/merge" not in open(env["GH_LOG"]).read()
 
+    draft = load_draft(env)
+    assert draft["pr_number"] == NUM
+    assert str(draft["pr_url"]).endswith(f"/pull/{NUM}")
+    assert draft["status"] == "ok"
+    assert draft["trailers"] == "Co-authored-by: Wf Zyx <wf@x.io>\n"
+    body_text = body_path.read_text(encoding="utf-8")
+    assert "Summary." in body_text
+    assert "Co-authored-by: Wf Zyx <wf@x.io>" in body_text
 
-def test_check_dry_run_reports_when_nothing_to_append(tmp_path: Path) -> None:
+
+def test_check_draft_reports_no_trailers_without_printing_the_body(tmp_path: Path) -> None:
     env = make_gh_mock(tmp_path, COMMITS_TSV="me\tMe\tme@x.io", PR_BODY="Solo.\n")
     r = run_check(env)
     assert r.returncode == 0
-    assert r.stdout == ""
     assert "no co-author trailers" in r.stderr
+    assert "Solo." not in r.stdout
+    draft = load_draft(env)
+    assert draft["counts"]["trailers"] == 0
+    assert draft["squash_body"] == "Solo."
 
 
-def test_check_template_body_reports_fallback(tmp_path: Path) -> None:
+def test_check_template_body_refuses_and_still_emits_both_files(tmp_path: Path) -> None:
     """Fail-closed squash gate: a template body without --squash-message refuses --check with exit 1."""
     template = open(os.path.join(REPO_ROOT, ".github", "pull_request_template.md")).read()
     env = make_gh_mock(tmp_path, COMMITS_TSV="ghuser\tWf Zyx\twf@x.io", PR_BODY=template)
@@ -419,6 +462,12 @@ def test_check_template_body_reports_fallback(tmp_path: Path) -> None:
     assert r.returncode == 1
     assert "--squash-message" in r.stderr
     assert "Co-authored-by" not in r.stdout
+    draft_path, body_path = draft_files(env)
+    assert draft_path.is_file()
+    assert body_path.is_file()
+    draft = load_draft(env)
+    assert draft["status"] == "refused"
+    assert draft["trailers"] == ""
 
 
 def test_check_long_line_body_passes(tmp_path: Path) -> None:
@@ -430,15 +479,16 @@ def test_check_long_line_body_passes(tmp_path: Path) -> None:
     )
     r = run_check(env)
     assert r.returncode == 0
-    assert r.stdout == "Co-authored-by: Wf Zyx <wf@x.io>\n"
+    assert "Co-authored-by" not in r.stdout
+    assert load_draft(env)["counts"]["trailers"] == 1
 
 
 def test_check_refuses_raw_token_body(tmp_path: Path) -> None:
     env = make_gh_mock(tmp_path, PR_BODY="intro\n\n<!-- CODE_AUTHORS -->\n")
     r = run_check(env)
     assert r.returncode != 0
-    assert r.stdout == ""
     assert "CODE_AUTHORS" in r.stderr
+    assert "CODE_AUTHORS" not in r.stdout
 
 
 def test_check_evaluates_local_body_file(tmp_path: Path) -> None:
@@ -452,7 +502,12 @@ def test_check_evaluates_local_body_file(tmp_path: Path) -> None:
     )
     r = run_check(env, "--body-file", str(local_file))
     assert r.returncode == 0
-    assert r.stdout == "Co-authored-by: Wf Zyx <wf@x.io>\n"
+    assert "Remote body should not overwrite" not in r.stdout
+    _, body_path = draft_files(env)
+    body_text = body_path.read_text(encoding="utf-8")
+    assert "Local authored body." in body_text
+    assert "Co-authored-by: Wf Zyx <wf@x.io>" in body_text
+    assert "Remote body should not overwrite" not in body_text
 
 
 def test_check_evaluates_local_body_file_rejects_raw_token(tmp_path: Path) -> None:
@@ -470,15 +525,22 @@ def test_check_evaluates_local_body_file_rejects_raw_token(tmp_path: Path) -> No
 
 
 def test_check_pr_sh_wrapper_matches_pr_py(tmp_path: Path) -> None:
-    """pr.sh wrapper must work for --check and output the same trailers."""
+    """pr.sh wrapper must work for --check and emit the same draft bytes as pr.py."""
     env = make_gh_mock(
         tmp_path,
         COMMITS_TSV="ghuser\tWf Zyx\twf@x.io\nme\tMe\tme@x.io",
         PR_BODY="Summary.\n\nCloses #12\n",
     )
-    r = run_check(env, use_sh=True)
-    assert r.returncode == 0
-    assert r.stdout == "Co-authored-by: Wf Zyx <wf@x.io>\n"
+    r_py = run_check(env)
+    assert r_py.returncode == 0
+    draft_path, body_path = draft_files(env)
+    py_draft = draft_path.read_text(encoding="utf-8")
+    py_body = body_path.read_text(encoding="utf-8")
+
+    r_sh = run_check(env, use_sh=True)
+    assert r_sh.returncode == 0
+    assert draft_path.read_text(encoding="utf-8") == py_draft
+    assert body_path.read_text(encoding="utf-8") == py_body
 
 
 # --- pr-refine script ---

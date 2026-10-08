@@ -43,7 +43,9 @@ so the structured keys below stay fixed.
 - `range`: `spec_in`, `mode` (effective operator), `merge_base`,
   `only_in_base` (base-side count, always computed), `resolved_from`,
   `counts` (`commits`, `files`, `insertions`, `deletions`, `added`,
-  `modified`, `renamed`, `deleted`), `fingerprint`.
+  `modified`, `renamed`, `deleted`), `fingerprint`, and `fingerprint_staleness`
+  (the literal `stale-when-dirty`: the hash covers commits only, so uncommitted
+  edits leave it unchanged).
 - `commits` (oldest first): `sha`, `short`, `subject`, `type`, `scope`,
   `breaking` (`!` marker or `BREAKING CHANGE` body), `refs` (`numbers` from
   `#N`, `shas` in first-seen order), `author` (`name`, `email`), `date`
@@ -61,6 +63,18 @@ so the structured keys below stay fixed.
   (manifest paths changed), `changelog` (bool), `renames` (new paths),
   `evidence_candidates` (changed test and workflow paths).
 - `truncated`: `files` and `commits` omitted-row counts (`0` when none).
+- `dirty` (dirty tree only; a clean tree omits the key): `head` (worktree
+  short sha) and `branch` (worktree branch, `null` when detached), so a reader
+  can tell whether the dirt belongs to the range head; `porcelain`
+  (`git status --porcelain` rows) and `diff_stat` (`git diff HEAD --stat` rows,
+  so staged and unstaged text changes both appear). Both listings cap at
+  `--max-lines` rows with the shared `... (N more lines omitted)` remainder
+  row. The read runs with `--no-optional-locks` and is advisory: a failing
+  `git status` (unreadable index, stale lock) skips the block and warns,
+  never failing an otherwise successful brief. The text brief names the
+  worktree head on the `dirty:` line, prints `(no text diff)` when the tree is
+  dirty but no text diff rows exist (untracked-only), and emits one warning
+  naming `stale-when-dirty` on stderr.
 - `landing` (pr view only): `commits` (range commit count), `conventional` (count of conventional subjects), `multi_entry` (true when more than one conventional commit is present, i.e. `conventional > 1`). Rendered in the text brief and the payload.
 - `verification` (verify view with `--json`/`--yaml` on hit): `expected`, `actual`, `ok`.
 `PATH_FILTER` / `--file` narrow the file view (`files`, `areas`,
@@ -78,6 +92,10 @@ range-wide. `--commit` narrows commit rows only.
   Emitted in every readout (range, pr, verify); `resolved_from` is present in
   text and payload; `only_in_base` is present in the text brief.
   Caps and flags change the rendering, never the fingerprint.
+- **Commit-only**: the hash covers `spec_in`, `mode`, `merge_base`, and the
+  ordered commit shas, never the working tree. Uncommitted edits add the `dirty`
+  block and one stderr warning and never fail `--verify`: a matching fingerprint
+  beside a dirty tree is still a hit.
 - **Pr**: full range payload plus `landing`; zero-commit head refuses exit `3`
   with a model-facing fix (head is behind its base; nothing to land).
 - **Verify**: recompute and compare field by field (`spec`, `merge_base`,

@@ -34,6 +34,7 @@ def test_canonical_template_section_order() -> None:
     assert headings == [
         "## Summary",
         "## What Changed",
+        "## Root Cause",
         "## Blast Radius & Safety",
         "## Evidence",
         "## Architecture",
@@ -51,6 +52,22 @@ def test_canonical_template_section_order() -> None:
     ):
         assert label in text
     assert "CODE_AUTHORS" in text
+
+
+def test_canonical_template_ships_the_fix_only_root_cause_section() -> None:
+    """A `fix` PR follows a taught shape: the template carries the heading the gate wants."""
+    text = CANONICAL.read_text()
+    root_cause = text.index("## Root Cause")
+    assert text.index("## What Changed") < root_cause < text.index("## Blast Radius & Safety")
+    assert "FIX-ONLY" in text, "the section states that it is fix-only"
+    assert "Delete this whole" in text, "and that a non-fix change deletes it, as Architecture does"
+
+
+def test_canonical_template_sync_comment_names_the_source_repo() -> None:
+    """Downstream repos copy the file verbatim, so the sync instruction says where it lives."""
+    text = CANONICAL.read_text()
+    assert "In the gh-router source repo:" in text
+    assert "skills/gh-router/scripts/install-template.sh --target . --force" in text
 
 
 def test_fresh_install_creates_github_and_matches_canonical(tmp_path: Path) -> None:

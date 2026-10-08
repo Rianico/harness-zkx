@@ -46,6 +46,7 @@ def test_payload_exact_keys(tmp_path: Path) -> None:
         "resolved_from",
         "counts",
         "fingerprint",
+        "fingerprint_staleness",
     }
     assert set(range_block["counts"]) == {
         "commits",
@@ -57,6 +58,7 @@ def test_payload_exact_keys(tmp_path: Path) -> None:
         "renamed",
         "deleted",
     }
+    assert range_block["fingerprint_staleness"] == "stale-when-dirty"
     assert range_block["only_in_base"] == 1
     assert range_block["counts"]["commits"] == 4
     commit = next(c for c in payload["commits"] if c["scope"] == "api")
@@ -287,6 +289,241 @@ def _colliding_children(repo: Path, head: str, tree: str) -> None:
     assert _write_commit_object(repo, first_bytes) == first_sha
     assert _write_commit_object(repo, second_bytes) == second_sha
     _ = git(repo, "update-ref", "refs/heads/feature", second_sha)
+
+
+_DIRTY_WARNING = (
+    "brief: warning: dirty working tree; the range fingerprint reads stale-when-dirty "
+    "(uncommitted edits do not move it)"
+)
+
+
+def _leave_uncommitted_edits(repo: Path) -> None:
+    """Leave one modified tracked file plus one untracked file behind."""
+    _ = (repo / "src" / "app.py").write_text(
+        "print('v1')\nprint('v2')\nprint('v3')\n", encoding="utf-8"
+    )
+    _ = (repo / "scratch.txt").write_text("scratch\n", encoding="utf-8")
+
+
+def test_clean_tree_emits_no_dirty_block(tmp_path: Path) -> None:
+    """Pin the absence contract: a clean tree carries no `dirty` key at all.
+
+    Mutation that flips this test: return an empty `dirty` block instead of
+    None from `_read_brief_dirty` when porcelain is empty.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    payload = brief_payload(tmp_path, spec, "--json")
+    assert "dirty" not in payload
+    text = run_brief(tmp_path, spec)
+    assert text.returncode == 0, text.stderr
+    assert "dirty: " not in text.stdout
+    assert text.stderr == ""
+
+
+def test_dirty_tree_block_carries_porcelain_and_diff_stat(tmp_path: Path) -> None:
+    """A dirty tree adds both listings, in the payload and in the text brief.
+
+    Mutation that flips this test: read the stat with `git diff --stat`
+    (index vs worktree) instead of `git diff HEAD --stat`.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _leave_uncommitted_edits(tmp_path)
+    dirty = brief_payload(tmp_path, spec, "--json")["dirty"]
+    assert set(dirty) == {"head", "branch", "porcelain", "diff_stat"}
+    assert dirty["head"] == git(tmp_path, "rev-parse", "--short", "HEAD")
+    assert dirty["branch"] == seeds["base"]
+    raw = subprocess.run(
+        ["git", "-C", str(tmp_path), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert dirty["porcelain"] == raw.splitlines()
+    assert " M src/app.py" in dirty["porcelain"]
+    assert "?? scratch.txt" in dirty["porcelain"]
+    assert any("src/app.py" in line for line in dirty["diff_stat"])
+    assert dirty["diff_stat"][-1].strip() == "1 file changed, 2 insertions(+)"
+    text = run_brief(tmp_path, spec)
+    assert text.returncode == 0, text.stderr
+    assert "dirty: working tree has uncommitted changes" in text.stdout
+    assert "?? scratch.txt" in text.stdout
+    assert "src/app.py |" in text.stdout
+
+
+def test_staged_only_dirt_appears_in_diff_stat(tmp_path: Path) -> None:
+    """A staged-only change still shows in `diff_stat` (staged and unstaged).
+
+    Mutation that flips this test: read the stat with `git diff --stat`
+    (index vs worktree) instead of `git diff HEAD --stat`.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _ = (tmp_path / "staged.txt").write_text("staged\n", encoding="utf-8")
+    _ = git(tmp_path, "add", "staged.txt")
+    dirty = brief_payload(tmp_path, spec, "--json")["dirty"]
+    assert "A  staged.txt" in dirty["porcelain"]
+    assert any("staged.txt" in row for row in dirty["diff_stat"])
+    text = run_brief(tmp_path, spec)
+    assert text.returncode == 0, text.stderr
+    assert "staged.txt |" in text.stdout
+
+
+def test_untracked_only_dirt_prints_no_text_diff_marker(tmp_path: Path) -> None:
+    """An untracked-only tree carries no text diff, so the header says so.
+
+    Mutation that flips this test: drop the empty `diff_stat` branch in
+    `render_brief_text`, leaving a bare `  diff stat:` header.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _ = (tmp_path / "scratch.txt").write_text("scratch\n", encoding="utf-8")
+    dirty = brief_payload(tmp_path, spec, "--json")["dirty"]
+    assert dirty["porcelain"] == ["?? scratch.txt"]
+    assert dirty["diff_stat"] == []
+    text = run_brief(tmp_path, spec)
+    assert text.returncode == 0, text.stderr
+    assert "?? scratch.txt" in text.stdout
+    assert "  diff stat:" in text.stdout
+    assert "    (no text diff)" in text.stdout
+
+
+def test_deleted_file_dirt_appears_in_diff_stat(tmp_path: Path) -> None:
+    """A staged deletion still shows in `diff_stat`.
+
+    Mutation that flips this test: read the stat with `git diff --stat`
+    (index vs worktree) instead of `git diff HEAD --stat`.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _ = git(tmp_path, "checkout", "-q", "feature")
+    _ = git(tmp_path, "rm", "-q", "src/scanner.py")
+    dirty = brief_payload(tmp_path, spec, "--json")["dirty"]
+    assert "D  src/scanner.py" in dirty["porcelain"]
+    assert any("src/scanner.py" in row for row in dirty["diff_stat"])
+    assert any("deletion" in row for row in dirty["diff_stat"])
+
+
+def test_dirty_header_names_the_worktree_head(tmp_path: Path) -> None:
+    """The dirty block names the worktree HEAD, not the range head.
+
+    Mutation that flips this test: drop `head`/`branch` from
+    `_read_brief_dirty` (or the text dirty header).
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _leave_uncommitted_edits(tmp_path)
+    short = git(tmp_path, "rev-parse", "--short", "HEAD")
+    dirty = brief_payload(tmp_path, spec, "--json")["dirty"]
+    assert dirty["head"] == short
+    assert dirty["branch"] == seeds["base"]
+    text = run_brief(tmp_path, spec)
+    assert text.returncode == 0, text.stderr
+    expected = f"dirty: working tree has uncommitted changes at {short} ({seeds['base']})"
+    assert expected in text.stdout
+
+
+def test_dirty_rows_cap_with_remainder_marker(tmp_path: Path) -> None:
+    """Both dirty listings cap at `--max-lines` with the remainder marker.
+
+    Mutation that flips this test: return the raw porcelain/diff_stat lists
+    from `_read_brief_dirty` without `truncate_lines`.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _ = (tmp_path / "src" / "app.py").write_text(
+        "print('v1')\nprint('v2')\nprint('v3')\n", encoding="utf-8"
+    )
+    for index in range(5):
+        _ = (tmp_path / f"dirt{index}.txt").write_text(f"{index}\n", encoding="utf-8")
+    full = brief_payload(tmp_path, spec, "--json")["dirty"]
+    assert len(full["porcelain"]) == 6
+    capped = brief_payload(tmp_path, spec, "--json", "--max-lines", "2")["dirty"]
+    assert capped["porcelain"][:2] == full["porcelain"][:2]
+    assert capped["porcelain"][2] == "... (4 more lines omitted)"
+    text = run_brief(tmp_path, spec, "--max-lines", "2")
+    assert text.returncode == 0, text.stderr
+    assert "more lines omitted" in text.stdout
+
+
+def test_unreadable_dirty_state_is_advisory(tmp_path: Path) -> None:
+    """A failing dirty read skips the block and keeps exit 0.
+
+    Mutation that flips this test: let the `RuntimeError` from `run_git`
+    escape `_read_brief_dirty` (no try/except).
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _leave_uncommitted_edits(tmp_path)
+    _ = (tmp_path / ".git" / "index").write_bytes(b"garbage-not-an-index")
+    result = run_brief(tmp_path, spec, "--json")
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "dirty" not in payload
+    assert "dirty state unavailable" in result.stderr
+    assert payload["range"]["counts"]["commits"] == 4
+    text = run_brief(tmp_path, spec)
+    assert text.returncode == 0, text.stderr
+    assert "dirty: " not in text.stdout
+
+
+def test_fingerprint_reads_stale_when_dirty_and_the_tree_warns(tmp_path: Path) -> None:
+    """Staleness sits beside the fingerprint; a dirty tree warns, never fails.
+
+    Mutations that flip this test: (a) drop `fingerprint_staleness` from the
+    range block, (b) drop the stderr warning in `_warn_brief_dirty`, (c) drop
+    `stale-when-dirty` from the text fingerprint line.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    _leave_uncommitted_edits(tmp_path)
+    result = run_brief(tmp_path, spec, "--json")
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    fingerprint = payload["range"]["fingerprint"]
+    assert payload["range"]["fingerprint_staleness"] == "stale-when-dirty"
+    assert result.stderr.strip() == _DIRTY_WARNING
+
+    text = run_brief(tmp_path, spec)
+    assert text.returncode == 0, text.stderr
+    fingerprint_line = text.stdout.splitlines()[1]
+    assert fingerprint_line.rsplit(" ", 1)[-1] == "stale-when-dirty"
+    assert text.stderr.strip() == _DIRTY_WARNING
+
+    pr_text = run_brief(tmp_path, "--pr", spec)
+    assert pr_text.returncode == 0, pr_text.stderr
+    assert "stale-when-dirty" in pr_text.stdout
+
+    hit = run_brief(tmp_path, spec, "--verify", fingerprint)
+    assert hit.returncode == 0, hit.stderr
+    assert "stale-when-dirty" in hit.stdout
+    assert hit.stderr.strip() == _DIRTY_WARNING
+    verified = run_brief(tmp_path, spec, "--verify", fingerprint, "--json")
+    assert verified.returncode == 0, verified.stderr
+    assert json.loads(verified.stdout)["verification"]["ok"] is True
+
+
+def test_dirty_tree_never_moves_the_committed_range_facts(tmp_path: Path) -> None:
+    """The authority stays commit-only: uncommitted edits move nothing.
+
+    Mutation that flips this test: mix working-tree state into the fingerprint
+    material, e.g. append `run_git(repo_root, "status", "--porcelain")` inside
+    `_fingerprint_brief_payload`.
+    """
+    seeds = seed_diverged_repo(tmp_path)
+    spec = f"{seeds['base']}...feature"
+    clean = brief_payload(tmp_path, spec, "--json")
+    _leave_uncommitted_edits(tmp_path)
+    dirty = brief_payload(tmp_path, spec, "--json")
+    assert dirty["range"] == clean["range"]
+    assert "dirty" in dirty
+    assert "dirty" not in clean
+    capped = brief_payload(tmp_path, spec, "--json", "--max-lines", "1")
+    assert capped["dirty"]["porcelain"][0] == dirty["dirty"]["porcelain"][0]
+    assert "omitted" in capped["dirty"]["porcelain"][-1]
+    assert "omitted" in capped["dirty"]["diff_stat"][-1]
+    assert capped["range"] == clean["range"]
 
 
 def test_commit_filter_refusals_are_truthful(tmp_path: Path) -> None:

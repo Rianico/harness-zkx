@@ -235,7 +235,7 @@ _Avoid_: merge method, integration.
 ## Pull Request Lifecycle
 
 **PR Body Contract**:
-The structured Markdown document defining required sections (`Summary`, `What Changed`, `Blast Radius & Safety`, `Evidence`, `Landing`, `Checklist`) that governs pull request review and seeds the squash commit.
+The structured Markdown document defining required sections (`Summary`, `What Changed`, `Root Cause`, `Blast Radius & Safety`, `Evidence`, `Landing`, `Checklist`) that governs pull request review and seeds the squash commit. `Root Cause` is fix-only: required for a `fix` title, deleted whole for every other type — see the [PR body template](skills/gh-router/references/pull_request_template.md).
 _Avoid_: PR form, freeform description, issue body.
 
 **Blast Radius**:

@@ -12,8 +12,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_ENHANCE_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-enhance/scripts"
+PR_ENHANCE_SKILL = REPO_ROOT / "skills/gh-router/subskills/pr-enhance/SKILL.md"
+PR_LAND_SCRIPT = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.py"
 TOUCHED_DOCS = [
-    REPO_ROOT / "skills/gh-router/subskills/pr-enhance/SKILL.md",
+    PR_ENHANCE_SKILL,
     REPO_ROOT / "skills/gh-router/subskills/pr-land/SKILL.md",
     REPO_ROOT / "skills/gh-router/SKILL.md",
     REPO_ROOT / "skills/dynamic-workflow-wrapper/references/agents/merger.md",
@@ -110,3 +112,26 @@ def test_no_analyser_as_change_fact_source_in_docs() -> None:
             if "analyze-pr.py" in line and "--print-template" not in line:
                 offenders.append(f"{doc.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
     assert not offenders, "\n".join(offenders)
+
+
+def _draft_out_dir() -> str:
+    """`pr.py`'s default `--out-dir` (the draft phase's write path), read from the source."""
+    source = PR_LAND_SCRIPT.read_text(encoding="utf-8")
+    for node in ast.parse(source).body:
+        if not (isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)):
+            continue
+        if node.targets[0].id != "DRAFT_OUT_DIR":
+            continue
+        value = node.value
+        assert isinstance(value, ast.BinOp) and isinstance(value.op, ast.Div)
+        assert isinstance(value.left, ast.Call)
+        return f"{ast.literal_eval(value.left.args[0])}/{ast.literal_eval(value.right)}"
+    raise AssertionError("pr.py no longer defines DRAFT_OUT_DIR")
+
+
+def test_pr_enhance_drafts_the_body_where_pr_check_writes_it() -> None:
+    """The drafted body and `pr.py --check`'s output are one file, not two same-named ones."""
+    drafted = f"{_draft_out_dir()}/pr_body.md"
+    text = PR_ENHANCE_SKILL.read_text(encoding="utf-8")
+    assert drafted in text, f"pr-enhance must draft into {drafted}"
+    assert "`tmp/pr_body.md`" not in text, "a bare tmp/pr_body.md names the file nobody reads"
