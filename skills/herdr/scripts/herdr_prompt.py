@@ -29,11 +29,13 @@ timed out first — the agent is working asynchronously: yield turn and await re
 callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Sender context is prepended by default (see `resolve_caller`): the payload opens
-with the `Sender:`/`Receiver:` envelope (position fields, the Herdr skill notice,
-the live `Group:` roster, and the resumption fields) and closes with the
-completion-reply contract via `herdr-reply`, so a callee can answer the sender by
-name using the helper script without shell mangling. The envelope is script-rendered,
-never model-authored, so it cannot be forgotten.
+with the Style 2 nested envelope — `Routing:` (position fields and the live group
+roster), `Hierarchy:` (Task-Group, Ticket-ID, Task-ID, and In-Reply-To
+correlation), `Runtime:` (cwd and resumption fields), and `Protocol:` (the Herdr
+skill notice) — and closes with the completion-reply contract via `herdr-reply`,
+so a callee can answer the sender by name using the helper script without shell
+mangling. The envelope is script-rendered, never model-authored, so it cannot be
+forgotten.
 `--dry-run` shows the exact rendered payload that would be submitted.
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
@@ -99,6 +101,9 @@ class Options:
     json: bool = False
     dry_run: bool = False
     no_caller_context: bool = False
+    ticket_id: str | None = None
+    task_id: str | None = None
+    task_group: str | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -340,20 +345,49 @@ def render_envelope(
     receiver: str | CallerContext | None = None,
     group_members: Sequence[str] = (),
     include_recovery: bool = True,
+    ticket_id: str | None = None,
+    task_id: str | None = None,
+    task_group: str | None = None,
+    tab_id: str | None = None,
+    in_reply_to: str | None = None,
 ) -> str:
-    """Render the envelope; the receiver closes it alone, and an absent field renders no line."""
-    lines = [f"Sender: {sender_ref(sender)}"]
+    """Render the Style 2 envelope; the receiver closes the Routing block, and an absent field renders no line."""
+    routing = ["Routing:", f"  Sender: {sender_ref(sender)}"]
     if group_members:
-        lines.append(f"Group: {', '.join(group_members)}")
-    if include_recovery:
-        if sender.resume_cmd:
-            lines.append(f"Resume: {_scalar(sender.resume_cmd)}")
-        if sender.cwd:
-            lines.append(f"Cwd: {_scalar(sender.cwd)}")
-    lines.append(SKILL_NOTICE)
+        routing.append(f"  Group: [{', '.join(group_members)}]")
     if receiver:
-        lines.append("")
-        lines.append(f"Receiver(You): {receiver_ref(receiver)}")
+        routing.append(f"  Receiver(You): {receiver_ref(receiver)}")
+
+    hierarchy: list[str] = []
+    if task_group and tab_id:
+        hierarchy.append(f"  Task-Group: {task_group} ({tab_id})")
+    elif task_group:
+        hierarchy.append(f"  Task-Group: {task_group}")
+    elif tab_id:
+        hierarchy.append(f"  Task-Group: {tab_id}")
+    if ticket_id:
+        hierarchy.append(f"  Ticket-ID: {ticket_id}")
+    if task_id:
+        hierarchy.append(f"  Task-ID: {task_id}")
+    if in_reply_to:
+        hierarchy.append(f"  In-Reply-To: {in_reply_to}")
+
+    runtime: list[str] = []
+    if include_recovery:
+        if sender.cwd:
+            runtime.append(f"  Cwd: {_scalar(sender.cwd)}")
+        if sender.resume_cmd:
+            runtime.append(f"  Resume: {_scalar(sender.resume_cmd)}")
+
+    lines = [*routing]
+    if hierarchy:
+        lines.append("Hierarchy:")
+        lines.extend(hierarchy)
+    if runtime:
+        lines.append("Runtime:")
+        lines.extend(runtime)
+    lines.append("Protocol:")
+    lines.append(f"  {SKILL_NOTICE}")
     return "\n".join(lines)
 
 
@@ -445,12 +479,23 @@ def wrap_with_envelope(
     group_members: Sequence[str] = (),
     receiver: str | CallerContext | None = None,
     include_recovery: bool = True,
+    ticket_id: str | None = None,
+    task_id: str | None = None,
+    task_group: str | None = None,
+    tab_id: str | None = None,
 ) -> str:
     """Prepend the timestamped envelope and append the reply contract around the payload."""
-    header = (
-        f"{utc_stamp()}\n"
-        f"{render_envelope(sender, receiver=receiver, group_members=group_members, include_recovery=include_recovery)}"
+    envelope = render_envelope(
+        sender,
+        receiver=receiver,
+        group_members=group_members,
+        include_recovery=include_recovery,
+        ticket_id=ticket_id,
+        task_id=task_id,
+        task_group=task_group,
+        tab_id=tab_id,
     )
+    header = f"{utc_stamp()}\n{envelope}"
     return f"{header}\n\n{payload}\n\n{render_reply_contract(sender)}"
 
 
@@ -701,6 +746,10 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
                 caller,
                 group_members=group_members,
                 receiver=resolve_receiver(panes, agents, target) or target,
+                ticket_id=options.ticket_id,
+                task_id=options.task_id,
+                task_group=options.task_group,
+                tab_id=caller.tab_id,
             )
             for target in targets
         }

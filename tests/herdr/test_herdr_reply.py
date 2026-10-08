@@ -46,10 +46,13 @@ def test_positional_message_is_delivered_verbatim(stub: StubHarness) -> None:
     assert call[1:4] == ["agent", "prompt", "orchestrator"]
     assert call[4].endswith(METACHARS)
     envelope = call[4].splitlines()
-    assert envelope[1] == "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
-    assert envelope[2] == herdr_prompt.SKILL_NOTICE
-    assert envelope[3] == ""
-    assert envelope[4] == "Receiver(You): orchestrator"
+    assert envelope[1] == "Routing:"
+    assert envelope[2] == "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
+    assert envelope[3] == "  Receiver(You): orchestrator"
+    assert envelope[4] == "Hierarchy:"
+    assert envelope[5] == "  Task-Group: w9:t1"
+    assert envelope[6] == "Protocol:"
+    assert envelope[7] == f"  {herdr_prompt.SKILL_NOTICE}"
     assert "Cwd:" not in call[4], "a reply stays short: no resumption fields"
     assert "reply to the sender" not in call[4]
     assert "replied to orchestrator" in done.stdout
@@ -303,6 +306,38 @@ def test_reply_does_not_release_lease_for_target_caller(stub: StubHarness, tmp_p
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     # Calling herdr-reply must NOT release target's active lease
     assert herdr_lease.get_lease("orchestrator", base_dir=tmp_path) is not None
+
+
+def test_reply_populates_correlation_from_sender_lease_and_releases(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182-herdr-msg-enhance.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182-herdr-msg-enhance",
+        task_id="#182-herdr-msg-enhance#full-stack",
+    )
+    done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    text = call[4]
+    assert "  Ticket-ID: #182-herdr-msg-enhance" in text
+    assert "  In-Reply-To: #182-herdr-msg-enhance#full-stack" in text
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_reply_without_sender_lease_omits_correlation_and_still_sends(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert "Ticket-ID:" not in call[4]
+    assert "In-Reply-To:" not in call[4]
 
 
 def test_pep723_metadata_precedes_docstring() -> None:

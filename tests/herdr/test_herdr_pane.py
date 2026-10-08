@@ -307,6 +307,42 @@ def test_unusable_split_response_is_reported(stub: StubHarness) -> None:
     assert "result.pane.pane_id" in done.stderr
 
 
+# ── integration: --task-group scoping ──────────────────────────────────────────────
+
+
+def test_task_group_scopes_the_label_before_renaming(stub: StubHarness) -> None:
+    done = stub.run("horizontal", "-l", "tm", "--task-group", "msg")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "label=msg-tm" in done.stdout
+    assert any(call[1:5] == ["pane", "rename", "w9:pNEW", "msg-tm"] for call in stub.calls())
+
+
+def test_task_group_keeps_an_already_scoped_label(stub: StubHarness) -> None:
+    done = stub.run("vertical", "--label", "msg-tm", "--task-group", "msg")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert any(call[1:5] == ["pane", "rename", "w9:pNEW", "msg-tm"] for call in stub.calls())
+
+
+def test_task_group_rejects_an_invalid_scoped_label(stub: StubHarness) -> None:
+    done = stub.run("vertical", "-l", "x" * 40, "--task-group", "msg")
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not a valid agent name" in done.stderr
+    assert stub.splits() == []
+
+
+def test_task_group_without_label_has_no_effect(stub: StubHarness) -> None:
+    done = stub.run("vertical", "--task-group", "msg")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.splits()) == 1
+    assert not any(call[1:3] == ["pane", "rename"] for call in stub.calls())
+
+
+def test_a_descriptive_label_stays_allowed_without_task_group(stub: StubHarness) -> None:
+    done = stub.run("horizontal", "-l", "review pane")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert any(call[1:5] == ["pane", "rename", "w9:pNEW", "review pane"] for call in stub.calls())
+
+
 # ── metadata: PEP 723 conformance ────────────────────────────────────────────────────
 
 

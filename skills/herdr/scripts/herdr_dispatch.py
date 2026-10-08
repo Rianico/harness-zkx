@@ -76,6 +76,9 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
             "3 a target needs human input, 4 prompt delivered but wait timed out\n\n"
+            "ticket-id derivation: '-' (stdin) yields none; a filename stem starting with '#' is "
+            "used as-is; a stem matching ^\\d+([-_].+)?$ is prefixed with '#' (182-foo -> #182-foo); "
+            "any other stem is used verbatim (PROJ-182-foo -> PROJ-182-foo)\n\n"
             + METHOD_CONSTRAINT_EPILOG
         ),
     )
@@ -134,6 +137,30 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="bypass active ticket lease checks and dispatch anyway",
     )
+    _ = parser.add_argument(
+        "--ticket-id",
+        metavar="ID",
+        default=None,
+        help=(
+            "Ticket-ID for correlation (e.g. '#182-herdr-msg-enhance'); derived from the ticket "
+            "filename when omitted (see epilog for the derivation rule)"
+        ),
+    )
+    _ = parser.add_argument(
+        "--task-id",
+        metavar="ID",
+        default=None,
+        help=(
+            "Task-ID for correlation (e.g. '#182-herdr-msg-enhance#full-stack'); defaults to the "
+            "Ticket-ID when omitted"
+        ),
+    )
+    _ = parser.add_argument(
+        "--task-group",
+        metavar="NAME",
+        default=None,
+        help="Task Group (Herdr Tab) label for the Hierarchy block; omitted when not given",
+    )
     return parser
 
 
@@ -159,6 +186,19 @@ def resolve_target_identity(
 PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
 DRAFT_MARKER = "herdr-draft: unfilled"
 DRAFT_SECTIONS = ("## Task", "## Context", "## Acceptance criteria")
+DERIVE_TICKET_ID_RE = re.compile(r"^\d+([-_].+)?$")
+
+
+def derive_ticket_id(ticket_path: str) -> str | None:
+    """Derive the Ticket-ID from the ticket filename; '-' (stdin) has no stable identity."""
+    if ticket_path == "-":
+        return None
+    stem = Path(ticket_path).stem
+    if stem.startswith("#"):
+        return stem
+    if DERIVE_TICKET_ID_RE.match(stem):
+        return f"#{stem}"
+    return stem
 
 
 def find_unfilled_placeholders(ticket: str) -> list[str]:
@@ -259,6 +299,11 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
             ) from exc
         validate_ticket(ticket)
 
+    ticket_id = options.ticket_id or derive_ticket_id(ticket_path)
+    task_id = options.task_id or ticket_id
+    options.ticket_id = ticket_id
+    options.task_id = task_id
+
     if not options.force and not options.dry_run:
         for target in targets:
             canonical, pane = resolve_target_identity(herdr, target, env)
@@ -280,7 +325,15 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     if not options.dry_run:
         for target in targets:
             canonical, pane = resolve_target_identity(herdr, target, env)
-            _ = acquire_lease(canonical, ticket_path, caller_name, pane_id=pane, env=env)
+            _ = acquire_lease(
+                canonical,
+                ticket_path,
+                caller_name,
+                pane_id=pane,
+                env=env,
+                ticket_id=ticket_id,
+                task_id=task_id,
+            )
             acquired_targets.append(canonical)
 
     try:

@@ -36,20 +36,26 @@ uv run "$SKILL_DIR/scripts/herdr_overview.py" --current
 
 `herdr-label` turns a bare pane into a post: it sets the pane label and the agent name to the same string, so the name a person reads off the border is the name you can address.
 
-Every cross-pane message carries a script-rendered envelope:
+Every cross-pane message carries a script-rendered envelope of nested YAML blocks — `Routing:` (position refs and the live roster), `Hierarchy:` (Task-Group, Ticket-ID, Task-ID, and `In-Reply-To:`), `Runtime:` (cwd and resumption), and `Protocol:` (the Herdr skill notice):
 
 ```text
 [2026-10-05T06:19:12.983Z]
-Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi
-Group: orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4
-Resume: "pi --resume /path/to/session.jsonl"
-Cwd: /Users/zhengxk/workspace
-Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
-
-Receiver(You): impl-1@w1:p3 - tab w1:t1 - kind pi
+Routing:
+  Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi
+  Group: [orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4]
+  Receiver(You): impl-1@w1:p3 - tab w1:t1 - kind pi
+Hierarchy:
+  Task-Group: msg-enhance (w1:t1)
+  Ticket-ID: #182-herdr-msg-enhance
+  Task-ID: #182-herdr-msg-enhance#overview-rich
+Runtime:
+  Cwd: /Users/zhengxk/workspace
+  Resume: "pi --resume /path/to/session.jsonl"
+Protocol:
+  Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
 ```
 
-`herdr-prompt`, `herdr-dispatch`, and `herdr-reply` render those lines from live Herdr state and prepend them to every payload, in both directions. Role, position, roster, and the resumption triple (`kind + session + cwd`) therefore arrive with the message whether or not the sender remembered them; an absent field renders no line at all. `Receiver(You)` closes the envelope alone and names *you* with *your* position — read it first when several panes were addressed at once. Relay a message with its envelope intact; a message that arrives without a `Sender:` line did not come from these scripts.
+`herdr-prompt`, `herdr-dispatch`, and `herdr-reply` render those blocks from live Herdr state and prepend them to every payload, in both directions. Role, position, roster, and the resumption triple (`kind + session + cwd`) therefore arrive with the message whether or not the sender remembered them; an absent field renders no line at all. `Receiver(You)` closes the `Routing:` block and names *you* with *your* position — read it first when several panes were addressed at once. Relay a message with its envelope intact; a message that arrives without a `Sender:` line did not come from these scripts. The dispatch/reply Style 2 samples and the Ticket-ID/Task-ID contract live in [lane-coordination.md](references/lane-coordination.md).
 
 The token before `@` is the **live agent name**, the only human-readable target `herdr agent prompt` accepts besides the pane id. A pane **label** is border decoration and is never a target, so it always rides its own `label` field — a pane that carries only a label renders as its pane id:
 
@@ -70,7 +76,9 @@ One call answers "what is here, and which pane or agent do I act on?" — pane i
 uv run "$SKILL_DIR/scripts/herdr_overview.py"                 # every workspace: YAML when piped, table on a TTY
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --json          # JSON for programmatic parsing
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --workspace     # only the calling workspace
-uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling tab
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab           # only the calling tab (task group)
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --tab w1:t2      # only that tab, by id or label
+uv run "$SKILL_DIR/scripts/herdr_overview.py" --task-group msg-enhance  # only that task group by name
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling pane
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
 ```
@@ -256,6 +264,8 @@ An available shell pane must be at its interactive prompt, with the shell itself
 herdr agent start reviewer --kind <kind> --pane <returned-pane-id>
 ```
 
+`herdr_bootstrap.py` folds this sequence into one command: it stamps the ROLE INVARIANT (compaction-proof lane identity plus the subagent-first and reply mandates) into the launch surface, sets the pane label to the scoped name, and starts the agent. See [agent-bootstrap.md](references/agent-bootstrap.md) for the kind→mechanism matrix and the scoped-prefix rule.
+
 Always use the kind requested by the user. Run `herdr agent` to inspect installed kinds and list them when asking. Pass native agent arguments only after `--`:
 
 ```bash
@@ -387,9 +397,9 @@ Never take a consent-gated or irreversible action — closing others' workspaces
 ## Local helpers (not upstream)
 
 > [!IMPORTANT] Method Constraint
-> Always execute these 10 harness scripts in `$SKILL_DIR/scripts/` instead of bare `herdr` CLI commands. Bare CLI commands bypass argument quoting, caller context injection, target safety checks, and delivery verification.
+> Always execute these 11 harness scripts in `$SKILL_DIR/scripts/` instead of bare `herdr` CLI commands. Bare CLI commands bypass argument quoting, caller context injection, target safety checks, and delivery verification.
 
-All 10 scripts in `$SKILL_DIR/scripts/` are authoritative and documented here or in the orientation section above, with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) and `herdr_worktree.py` (a worktree allocator that needs only `wt`/`git`) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
+All 11 scripts in `$SKILL_DIR/scripts/` are authoritative and documented here or in the orientation section above, with their options and exit codes; execute them directly without viewing script sources or running `--help`. They run through the repo runtime so no PATH setup is needed. All but `herdr_agy_bridge.py` (a file installer that needs no Herdr session) and `herdr_worktree.py` (a worktree allocator that needs only `wt`/`git`) require `HERDR_ENV=1` and share the `herdr_cli.py` adapter (imported, never run). All exit `0` ok, `1` herdr failure, `2` usage or missing precondition; `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` add `3` for an agent that needs human input and `4` for a wait that timed out after delivery, `herdr-wait` adds `3` for a blocked target. `~/.local/bin/<helper>` symlinks to the same scripts are optional.
 
 ### `herdr-overview` — the session at a glance
 
@@ -406,9 +416,11 @@ uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --label-only  # multi-word l
 uv run "$SKILL_DIR/scripts/herdr_label.py" --clear             # drop both
 uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --json
 uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --dry-run   # print the calls, rename nothing
+uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer --task-group msg   # scoped name: msg-reviewer
+uv run "$SKILL_DIR/scripts/herdr_label.py" --tab msg-enhance     # rename the calling tab (Task Group)
 ```
 
-Refuses a name that breaks the agent-name pattern or that another live agent already holds, and validates before renaming anything, so a rejected name never leaves a half-applied label. A pane with no agent is labelled only; a pane with an agent needs `--label-only` for a multi-word label.
+Refuses a name that breaks the agent-name pattern or that another live agent already holds, and validates before renaming anything, so a rejected name never leaves a half-applied label. A pane with no agent is labelled only; a pane with an agent needs `--label-only` for a multi-word label. `--task-group <slug>` scopes a bare role before naming; `--tab <NAME>` renames the calling tab (or the `--pane` tab) instead of labelling a pane.
 
 ### `herdr-pane` — split the calling pane
 
@@ -424,6 +436,18 @@ uv run "$SKILL_DIR/scripts/herdr_pane.py" horizontal --dry-run  # print the herd
 ```
 
 Guards `HERDR_ENV=1`, resolves the caller with `herdr pane current --current`, picks the auto direction from `herdr pane layout --pane <id>`, prints `new pane <id>  direction=…  caller=…  cwd=…  focus=…  label=…` (with label when set).
+
+### `herdr-bootstrap` — stamp the role invariant, then start the agent
+
+Writes a compaction-proof `ROLE INVARIANT` into the surface the target agent reads at launch, sets the pane label to the scoped name, and starts the agent — so an agent that loses context keeps its lane, its subagent-first mandate, and its reply contract:
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-impl-1 --kind codex --pane w1:p3 --role impl-1 --task-group msg
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" --kind pi --pane w1:p3 --role tm --task-group msg --model claude-3-7-sonnet
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2 --role tm --dry-run
+```
+
+`pi` and `claude` receive the snippet inline through `agent start --append-system-prompt`; every other kind (`cline`, `codex`, `copilot`, `qodercli`, `agy`, and unknown kinds) reads it from an idempotent marker block appended to `AGENTS.md` (`cline` prefers an existing `.clinerules`). No permission or approval flags are injected — the operator's herdr config owns those. `--task-group <slug>` scopes a bare `--role` (`tm` → `msg-tm`); `--dry-run` prints the planned file path and start argv without mutating anything. Matrix, snippet, and marker: [agent-bootstrap.md](references/agent-bootstrap.md).
 
 ### `herdr-worktree` — one isolated worktree per lane
 
@@ -523,4 +547,4 @@ uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role user
 uv run "$SKILL_DIR/scripts/herdr_transcript.py" review1 --role all --json
 ```
 
-Tests for all ten: `tests/herdr/`.
+Tests for all eleven: `tests/herdr/`.

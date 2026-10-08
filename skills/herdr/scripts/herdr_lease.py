@@ -122,8 +122,14 @@ def acquire_lease(
     pane_id: str | None = None,
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
+    ticket_id: str | None = None,
+    task_id: str | None = None,
 ) -> dict[str, Any]:
-    """Record an active ticket lease for target with timestamp, storing target and pane_id."""
+    """Record an active ticket lease for target with timestamp, storing target and pane_id.
+
+    When supplied, ticket_id and task_id are persisted on the lease; when omitted,
+    the stored lease shape is unchanged.
+    """
     lease_file = resolve_lease_file(base_dir, env=env)
     leases = _read_leases(lease_file)
 
@@ -145,6 +151,10 @@ def acquire_lease(
     }
     if pane_id:
         lease["pane_id"] = pane_id
+    if ticket_id is not None:
+        lease["ticket_id"] = ticket_id
+    if task_id is not None:
+        lease["task_id"] = task_id
     leases[target] = lease
     _write_leases(lease_file, leases)
     return lease

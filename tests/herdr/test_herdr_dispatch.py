@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import herdr_cli
+import herdr_dispatch
 import herdr_prompt
 import pytest
 
@@ -40,6 +41,76 @@ def test_dispatch_requires_file(stub: StubHarness) -> None:
     assert stub.prompts() == []
 
 
+def test_derive_ticket_id_prefers_hash_prefixed_stem() -> None:
+    assert (
+        herdr_dispatch.derive_ticket_id("tickets/#182-herdr-msg-enhance.md")
+        == "#182-herdr-msg-enhance"
+    )
+    assert herdr_dispatch.derive_ticket_id("#182-herdr-msg-enhance.md") == "#182-herdr-msg-enhance"
+
+
+def test_derive_ticket_id_numbers_a_leading_digit_stem() -> None:
+    assert (
+        herdr_dispatch.derive_ticket_id("tickets/182-herdr-msg-enhance.md")
+        == "#182-herdr-msg-enhance"
+    )
+    assert herdr_dispatch.derive_ticket_id("182-foo.md") == "#182-foo"
+    assert herdr_dispatch.derive_ticket_id("182_foo.md") == "#182_foo"
+    assert herdr_dispatch.derive_ticket_id("42.md") == "#42"
+
+
+def test_derive_ticket_id_keeps_a_non_numeric_stem_verbatim() -> None:
+    assert herdr_dispatch.derive_ticket_id("PROJ-182-oauth-refresh.md") == "PROJ-182-oauth-refresh"
+
+
+def test_derive_ticket_id_returns_none_for_stdin() -> None:
+    assert herdr_dispatch.derive_ticket_id("-") is None
+
+
+def test_dispatch_persists_derived_ids_and_renders_hierarchy(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    import herdr_lease
+
+    ticket = tmp_path / "182-herdr-msg-enhance.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert lease["ticket_id"] == "#182-herdr-msg-enhance"
+    assert lease["task_id"] == "#182-herdr-msg-enhance"
+    (call,) = stub.prompts()
+    text = call[4]
+    assert "  Ticket-ID: #182-herdr-msg-enhance" in text
+    assert "  Task-ID: #182-herdr-msg-enhance" in text
+
+
+def test_dispatch_explicit_ids_override_derivation(stub: StubHarness, tmp_path: Path) -> None:
+    import herdr_lease
+
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--ticket-id",
+        "#182-herdr-msg-enhance",
+        "--task-id",
+        "#182-herdr-msg-enhance#full-stack",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert lease["ticket_id"] == "#182-herdr-msg-enhance"
+    assert lease["task_id"] == "#182-herdr-msg-enhance#full-stack"
+    (call,) = stub.prompts()
+    assert "  Ticket-ID: #182-herdr-msg-enhance" in call[4]
+    assert "  Task-ID: #182-herdr-msg-enhance#full-stack" in call[4]
+
+
 def test_dispatch_injects_caller_context_and_reply_contract(
     stub: StubHarness, tmp_path: Path
 ) -> None:
@@ -50,15 +121,21 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     text = call[4]
     lines = text.splitlines()
     assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:7] == [
-        "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Group: reviewer@w9:p1",
-        "Cwd: /tmp/harness",
-        herdr_prompt.SKILL_NOTICE,
-        "",
-        "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+    assert lines[1:13] == [
+        "Routing:",
+        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Group: [reviewer@w9:p1]",
+        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "Hierarchy:",
+        "  Task-Group: w9:t1",
+        "  Ticket-ID: ticket",
+        "  Task-ID: ticket",
+        "Runtime:",
+        "  Cwd: /tmp/harness",
+        "Protocol:",
+        f"  {herdr_prompt.SKILL_NOTICE}",
     ]
-    assert "Group: reviewer@w9:p1" in text
+    assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
     assert "\n\ndo this\n\n" in text

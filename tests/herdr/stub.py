@@ -79,6 +79,21 @@ if args[:2] == ["workspace", "list"]:
     print(json.dumps(payload))
     raise SystemExit(0)
 
+if args[:2] == ["tab", "list"]:
+    payload = {"id": "cli:tab:list", "result": {"tabs": state.get("tabs", []), "type": "tab_list"}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
+if args[:2] == ["tab", "rename"]:
+    if state.get("tab_rename_error"):
+        print(json.dumps({"error": state["tab_rename_error"], "id": "cli:tab:rename"}), file=sys.stderr)
+        raise SystemExit(1)
+    tab_id = args[2]
+    name = args[3] if len(args) > 3 else None
+    payload = {"id": "cli:tab:rename", "result": {"tab": {"tab_id": tab_id, "label": name}}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
 if args[:2] == ["pane", "rename"]:
     if state.get("pane_rename_error"):
         print(json.dumps({"error": state["pane_rename_error"], "id": "cli:pane:rename"}), file=sys.stderr)
@@ -190,6 +205,7 @@ DEFAULT_STATE = {
     "current": "w9:p1",
     "rect": {"width": 100, "height": 40},
     "workspaces": [{"workspace_id": "w9", "label": "harness", "number": 1}],
+    "tabs": [{"tab_id": "w9:t1", "workspace_id": "w9", "label": "harness"}],
     "agents": [{"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}],
     "panes": [
         {
@@ -237,6 +253,9 @@ class StubHarness:
 
     def prompts(self) -> list[list[str]]:
         return [call for call in self.calls() if call[1:3] == ["agent", "prompt"]]
+
+    def tab_renames(self) -> list[list[str]]:
+        return [call for call in self.calls() if call[1:3] == ["tab", "rename"]]
 
     def starts(self) -> list[list[str]]:
         return [call for call in self.calls() if call[1:3] == ["agent", "start"]]

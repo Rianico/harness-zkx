@@ -6,9 +6,11 @@
 """herdr-reply — send a completion reply callback to a caller agent without shell mangling.
 
 Delivers `<STATUS> <artifacts> <issues>` or a result payload to the caller's agent
-name, wrapped in the same timestamped `Sender:`/`Receiver:` envelope `herdr-prompt`
-uses, so the party reading a reply always knows who reported and to whom. The
-envelope is script-rendered, never model-authored, so it cannot be forgotten.
+name, wrapped in the same timestamped `Routing:`/`Hierarchy:`/`Protocol:` envelope
+`herdr-prompt` uses, so the party reading a reply always knows who reported and to
+whom. When the sender holds an active lease, its `Ticket-ID`/`Task-ID` ride along as
+`Ticket-ID:` and `In-Reply-To:` correlation lines. The envelope is script-rendered,
+never model-authored, so it cannot be forgotten.
 
     herdr-reply orchestrator "COMPLETED artifacts=[...] issues=[]"
     herdr-reply orchestrator --file result.md
@@ -54,7 +56,7 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
-from herdr_lease import release_lease
+from herdr_lease import get_lease, release_lease
 from herdr_prompt import (
     render_envelope,
     resolve_caller,
@@ -324,11 +326,26 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         verify_target_not_bare_shell(herdr, target, env)
 
     payload = read_payload(options.file, options.message)
+    sender = resolve_current_agent(herdr, env)
+    lease = get_lease(sender, env=env) if sender else None
+    ticket_id: str | None = None
+    in_reply_to: str | None = None
+    if isinstance(lease, dict):
+        lease_ticket = lease.get("ticket_id")
+        if isinstance(lease_ticket, str):
+            ticket_id = lease_ticket
+        lease_task = lease.get("task_id")
+        if isinstance(lease_task, str):
+            in_reply_to = lease_task
     panes, agents = fetch_inventory(herdr, env)
+    caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     reply_envelope = render_envelope(
-        resolve_caller(herdr, env, inventory=(panes, agents)),
+        caller_ctx,
         receiver=resolve_receiver(panes, agents, target) or target,
         include_recovery=False,
+        ticket_id=ticket_id,
+        in_reply_to=in_reply_to,
+        tab_id=caller_ctx.tab_id,
     )
     payload = f"{utc_stamp()}\n{reply_envelope}\n\n{payload}"
 

@@ -345,6 +345,56 @@ Return a structured review verdict:
 
 ---
 
+### E. Layered Envelope (Style 2) & the Correlation IDs
+
+Every `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` message renders four nested YAML blocks instead of the old flat lines: `Routing:` (position refs and the live roster), `Hierarchy:` (task-group, Ticket-ID, Task-ID, and `In-Reply-To:` correlation), `Runtime:` (cwd and resumption fields), and `Protocol:` (the Herdr skill notice). An absent field renders no line.
+
+Dispatch — forwards a ticket, with the correlation IDs that bind it to the lane lease:
+
+```text
+[2026-10-05T06:19:12.983Z]
+Routing:
+  Sender: msg-tm@w1:p1 - tab w1:t1 - kind pi
+  Group: [msg-tm@w1:p1, msg-impl-1@w1:p3]
+  Receiver(You): msg-impl-1@w1:p3 - tab w1:t1 - kind pi
+Hierarchy:
+  Task-Group: msg-enhance (w1:t1)
+  Ticket-ID: #182-herdr-msg-enhance
+  Task-ID: #182-herdr-msg-enhance#impl-bootstrap
+Runtime:
+  Cwd: /Users/zhengxk/workspace
+  Resume: "pi --resume /path/to/session.jsonl"
+Protocol:
+  Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+```
+
+Reply — reports a result: `Routing:` and `Hierarchy:` only, with `Task-Group:` (the tab) and `In-Reply-To:` naming the Task-ID it answers, and no forward-only `Runtime:` (the reply reuses the sender's session):
+
+```text
+[2026-10-05T06:31:04.117Z]
+Routing:
+  Sender: msg-impl-1@w1:p3 - tab w1:t1 - kind pi
+  Receiver(You): msg-tm@w1:p1 - tab w1:t1 - kind pi
+Hierarchy:
+  Task-Group: w1:t1
+  Ticket-ID: #182-herdr-msg-enhance
+  In-Reply-To: #182-herdr-msg-enhance#impl-bootstrap
+Protocol:
+  Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+```
+
+#### Ticket-ID / Task-ID contract
+
+- **Ticket-ID** identifies the dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). `herdr-dispatch --ticket-id` sets it explicitly; when omitted, the dispatcher derives it deterministically from the ticket filename.
+- **Task-ID** identifies one task inside that ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). `herdr-dispatch --task-id` binds it to the lease and to the `Hierarchy:` block.
+- `herdr-reply` reads the replying sender's active lease and emits `Ticket-ID:` plus `In-Reply-To: <Task-ID>`, then releases that lease (never the target's). A missing lease omits both lines and the reply still sends.
+
+#### Scoped-prefix rule
+
+Every lane agent name is `<task-group-slug>-<role>[-<subrole|index>]`. For the `msg-enhance` lane: `msg-orch`, `msg-tm`, `msg-impl-1`, `msg-reviewer`. `--task-group <slug>` prefixes a bare role (`herdr_bootstrap.py --role tm --task-group msg` → `msg-tm`) and leaves an already-scoped value unchanged; the scoped string is both the pane label and the agent name, and must satisfy `[a-z][a-z0-9_-]{0,31}` (max 32 chars).
+
+---
+
 ## 5. Execution Lifecycle
 
 ```mermaid

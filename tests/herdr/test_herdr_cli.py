@@ -98,3 +98,37 @@ def test_guard_maps_herdr_errors_to_exit_herdr(capsys: pytest.CaptureFixture[str
 
 def test_guard_passes_through_a_successful_action() -> None:
     assert herdr_cli.guard("herdr-x", lambda: int(herdr_cli.EXIT_OK)) == herdr_cli.EXIT_OK
+
+
+# ── unit: scoped agent naming ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("role", "task_group", "expected"),
+    [
+        ("tm", "msg", "msg-tm"),
+        ("msg-tm", "msg", "msg-tm"),
+        ("tm", None, "tm"),
+        ("tm", "", "tm"),
+        ("msg", "msg", "msg"),
+    ],
+)
+def test_scoped_agent_name_prefixes_and_passes_through(
+    role: str, task_group: str | None, expected: str
+) -> None:
+    assert herdr_cli.scoped_agent_name(role, task_group) == expected
+
+
+def test_scoped_agent_name_is_idempotent() -> None:
+    once = herdr_cli.scoped_agent_name("tm", "msg")
+    assert herdr_cli.scoped_agent_name(once, "msg") == once == "msg-tm"
+
+
+def test_validate_agent_name_accepts_a_scoped_name() -> None:
+    herdr_cli.validate_agent_name("msg-impl-1")
+
+
+@pytest.mark.parametrize("name", ["Message", "msg impl", "a" * 33])
+def test_validate_agent_name_rejects_violations(name: str) -> None:
+    with pytest.raises(herdr_cli.UsageError, match="not a valid agent name"):
+        herdr_cli.validate_agent_name(name)
