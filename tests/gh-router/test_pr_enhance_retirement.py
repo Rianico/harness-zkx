@@ -13,7 +13,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_ENHANCE_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-enhance/scripts"
 PR_ENHANCE_SKILL = REPO_ROOT / "skills/gh-router/subskills/pr-enhance/SKILL.md"
-PR_LAND_SCRIPT = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.py"
+PR_LAND_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
+DRAFT_MODULE = PR_LAND_SCRIPTS / "_draft.py"
 TOUCHED_DOCS = [
     PR_ENHANCE_SKILL,
     REPO_ROOT / "skills/gh-router/subskills/pr-land/SKILL.md",
@@ -115,18 +116,26 @@ def test_no_analyser_as_change_fact_source_in_docs() -> None:
 
 
 def _draft_out_dir() -> str:
-    """`pr.py`'s default `--out-dir` (the draft phase's write path), read from the source."""
-    source = PR_LAND_SCRIPT.read_text(encoding="utf-8")
+    """`pr.py --check`'s default `--out-dir` (the draft phase's write path), read from source.
+
+    The constant lives in the `_draft` sibling module, not in the entry script, since the
+    pr-land split. Reading `pr.py` for it would find nothing, so the assignment is asserted
+    to exist (`assert found`) rather than silently falling through as `None`.
+    """
+    source = DRAFT_MODULE.read_text(encoding="utf-8")
+    found = False
+    value: ast.expr | None = None
     for node in ast.parse(source).body:
         if not (isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)):
             continue
         if node.targets[0].id != "DRAFT_OUT_DIR":
             continue
         value = node.value
-        assert isinstance(value, ast.BinOp) and isinstance(value.op, ast.Div)
-        assert isinstance(value.left, ast.Call)
-        return f"{ast.literal_eval(value.left.args[0])}/{ast.literal_eval(value.right)}"
-    raise AssertionError("pr.py no longer defines DRAFT_OUT_DIR")
+        found = True
+    assert found, f"{DRAFT_MODULE.name} no longer defines DRAFT_OUT_DIR"
+    assert isinstance(value, ast.BinOp) and isinstance(value.op, ast.Div)
+    assert isinstance(value.left, ast.Call)
+    return f"{ast.literal_eval(value.left.args[0])}/{ast.literal_eval(value.right)}"
 
 
 def test_pr_enhance_drafts_the_body_where_pr_check_writes_it() -> None:

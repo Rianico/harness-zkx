@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **gh-router:** pr-land copy detector and strict squash shape gate on the explicit message (contract sections only, max 5 bullets and 15 lines, title type case-insensitive), refusing mechanic copies above 0.80 similarity (#221)
+* **gh-router:** `pr.py` split into `_github`, `_draft`, `_check`, `_changelog`, `_options` siblings behind a re-export block with `test_pr_arch.py` pinning the seam (#221)
+* **gh-router:** body/squash split in `CONTEXT.md`, `pr-land/SKILL.md`, and ADR-0019, plus a `writing-for-agents` rephrase pass over the doc series (#221)
+* **gh-router:** pr-land `--merge` requires an explicit `--squash-message`/`--squash-message-file` and refuses without one (naming the flags and spec), ending the silent PR-body fallback; `--check` still previews the derived message (#220)
 * **gh-router:** draft-phase `--check` writing `draft.json` + curated `pr_body.md`, and a tightened prompt spine across the router and its subskills (#220)
 * **gh-router:** pr-land `--watch` fast-fails on a conflict or an unresolved mergeability (dirty debounced twice, `unknown` budgeted ~8s) with one slim stderr line per poll, and `--verbose` opts into the full failure logs (#220)
 * **gh-router:** draft `--check` title follows `--head`, warns on empty-range guesses, carries an advisory dirty block, and hints the curation spec (#220)

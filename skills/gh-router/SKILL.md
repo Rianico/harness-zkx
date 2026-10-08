@@ -15,8 +15,7 @@ metadata:
 
 # GH Router
 
-Router for GitHub work: diagnose, reconcile, land, release. A fresh agent runs one script per operation and reads
-its brief output — never re-derive it with `gh pr view`, `gh run list`, or `gh api …/jobs`.
+Goal: route GitHub work — diagnose, reconcile, land, release. Run one script per operation. Read its brief output instead of re-deriving it with `gh pr view`, `gh run list`, or `gh api …/jobs`.
 
 ## Common operations
 
@@ -28,26 +27,23 @@ its brief output — never re-derive it with `gh pr view`, `gh run list`, or `gh
 | **1: Prep & Authoring** | | |
 | Install the canonical PR template | `$SKILL_DIR/scripts/install-template.sh [--target DIR] [--check] [--force] [--dry-run]` | `installed:` / `already installed:` / `clean:` / `dry-run:` exit 0 · `drift:` / `missing:` / `refused:` exit 1 · usage exit 2 · missing or unusable source exit 3 |
 | Draft a PR body from the digest | `uv run $SKILL_DIR/subskills/git-diff-digest/scripts/brief.py '<base>...HEAD' --pr --yaml` | the brief payload plus its `landing` block — the change-fact source for the body |
-| Refresh an open PR description | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --body-file …` | reuses the open PR for the head branch, PATCHes title/body, leaves its draft state alone; `PR <url>` on stdout |
+| Refresh an open PR description | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --body-file …` | reuses the open PR for the head branch, PATCHes title/body, leaves its draft state alone. Prints `PR <url>` on stdout |
 | **2: Conflict Reconcile** | | |
 | Triage unmerged conflicts | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py` | `repo: <root>` · `conflicted files: N` · one row per path: path, conflict type, stages, hunk count |
 | Inspect one conflict | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py --file <path>` | `operation:`, `author intent:` (ours/theirs sha, author, subject), compact hunks |
 | **3: Landing & CI** | | |
-| Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --watch --merge --body-file .lsz/tmp/pr_body.md` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
+| Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --watch --merge --body-file .lsz/tmp/pr_body.md --squash-message-file .lsz/tmp/squash_message.md` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
 | Watch a workflow | `$SKILL_DIR/scripts/ci.sh watch <run-id>` | quiet poll → `✔ run <id> completed: success`, else `✘ run <id> <conclusion>` exit 1 |
 | Recent runs and step costs | `$SKILL_DIR/scripts/ci.sh runs [--branch B] [--limit N]` | one line per run (`#<id> <name> <conclusion> <dur>s`) plus its slowest steps (`Run all tests=15s`) |
-| Why did a run fail | `$SKILL_DIR/scripts/ci.sh why <run-id>` | `▸ <job> › <step>` per failing step, then a 20-line log tail (exit 1); a green run reports `✔ run <conclusion> — nothing to explain` (exit 0) |
+| Why did a run fail | `$SKILL_DIR/scripts/ci.sh why <run-id>` | `▸ <job> › <step>` per failing step, then a 20-line log tail (exit 1). A green run reports `✔ run <conclusion> — nothing to explain` (exit 0) |
 | **4: Release & Sync** | | |
-| Preflight before releasing | `$SKILL_DIR/subskills/gh-release/scripts/check.sh` | tree, branch, and conventional-commit checks — one line each; exit 1 on a dirty tree, off `main`, or a commitlint rejection |
-| Verify before releasing | `$SKILL_DIR/subskills/gh-release/scripts/verify.sh` | one aggregated line, e.g. `✔ ruff check · basedpyright · pytest passed`; a failing step prints its tail only on failure |
+| Preflight before releasing | `$SKILL_DIR/subskills/gh-release/scripts/check.sh` | tree, branch, and conventional-commit checks — one line each. Exits 1 on a dirty tree, off `main`, or a commitlint rejection |
+| Verify before releasing | `$SKILL_DIR/subskills/gh-release/scripts/verify.sh` | one aggregated line, e.g. `✔ ruff check · basedpyright · pytest passed`. A failing step prints its tail only on failure |
 | Cut a release | `$SKILL_DIR/subskills/gh-release/scripts/dispatch.sh [--dry-run]` | next-version preview → publish confirm → dispatch → workflow completion |
 | Confirm a release landed | `$SKILL_DIR/subskills/gh-release/scripts/confirm.sh` | release tag, tag reachability from `main`, the `main` tip, and the changelog sections |
-| Sync the changelog after a merge | `$SKILL_DIR/scripts/changelog.sh sync [--apply]` | `✔ CHANGELOG.md ledger is valid and curated` exit 0, else `✘ … ledger has findings` exit 1; without the ledger gate: `rebuild would change N lines`, refusing more than 40 |
+| Sync the changelog after a merge | `$SKILL_DIR/scripts/changelog.sh sync [--apply]` | `✔ CHANGELOG.md ledger is valid and curated` exit 0, else `✘ … ledger has findings` exit 1. Without the ledger gate: `rebuild would change N lines`, refusing more than 40 |
 
-Run ids come from `$SKILL_DIR/scripts/ci.sh runs` or a PR's checks. `--help` prints the flag surface offline
-(`state.sh`, `ci.sh`, `changelog.sh`, `confirm.sh`, `install-template.sh`, `pr.sh`, `refine.sh`, `brief.py`,
-`extract_conflict_context.py`); `check.sh`, `verify.sh`, and `dispatch.sh` accept no `--help` — calling them starts
-the phase.
+Run ids come from `ci.sh runs` or a PR's checks. `--help` prints a script's flag surface offline. The scripts `check.sh`, `verify.sh`, and `dispatch.sh` accept no `--help` — calling them starts the phase.
 
 ## Subskills (load for the deep flow)
 
@@ -60,11 +56,10 @@ the phase.
 | `pr-refine` | refine / take over someone's PR up to push | `refine`, `take over`, `supersede`, land someone's PR |
 | `git-diff-digest` | range → brief payload (commits, files, areas, signals) | `what changed`, `base..head range`, `range brief` |
 
-Read `$SKILL_DIR/subskills/<name>/SKILL.md` for the deep flow: the `pr.py` flags (`--title`, `--body-file`,
-`--check`, `--out-dir`, `--no-stamp`, `--squash-message`), title length limits, gate refusals, and exit codes.
+Read `$SKILL_DIR/subskills/<name>/SKILL.md` for the deep flow: flags, title limits, gate refusals, and exit codes.
 
 ## Conventions
 
 - Scripts beat raw `gh`: same queries, one call, brief output, deterministic exit codes.
 - Exit codes: `0` ok · `1` failed check / verification · `2` usage · `3` missing tool.
-- `GH_RELEASE_QUIET=1` drops informational lines; `NO_COLOR` disables ANSI.
+- `GH_RELEASE_QUIET=1` drops informational lines. `NO_COLOR` disables ANSI.

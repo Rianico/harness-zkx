@@ -24,6 +24,7 @@ PR_PY = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.py"
 LONG_BODY_LINES = 20
 
 GH_STUB = """#!/usr/bin/env bash
+echo "$@" >> "$GH_LOG"
 for arg in "$@"; do
   if [[ "$arg" =~ pulls\\?head= ]]; then echo "null"; exit 0; fi
   if [[ "$arg" == "user" ]]; then echo "merger-user"; exit 0; fi
@@ -72,7 +73,10 @@ def _gh_env(tmp_path: Path) -> dict[str, str]:
     gh = bindir / "gh"
     _ = gh.write_text(GH_STUB, encoding="utf-8")
     gh.chmod(0o755)
-    return git_env(PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    return git_env(
+        PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}",
+        GH_LOG=str(tmp_path / "gh.log"),
+    )
 
 
 def _run_check(repo: Path, env: dict[str, str], *extra: str) -> subprocess.CompletedProcess[str]:
@@ -282,7 +286,7 @@ def test_dirty_block_reports_uncommitted_work(tmp_path: Path) -> None:
 
 
 def test_hint_carries_the_curation_spec(tmp_path: Path) -> None:
-    """The single stdout hint names the bullet order and the strip rules."""
+    """The single stdout hint names the bullet order, the strip rules, and the spec."""
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
@@ -295,3 +299,69 @@ def test_hint_carries_the_curation_spec(tmp_path: Path) -> None:
     assert r.stdout.count("hint:") == 1
     assert "Core" in r.stdout
     assert "Mermaid" in r.stdout
+    assert 'CONTEXT.md "Curated Squash Message"' in r.stdout
+    assert "pr-land SKILL.md Squash Shape" in r.stdout
+
+
+def test_check_merge_writes_the_draft_instead_of_refusing(
+    tmp_path: Path,
+) -> None:
+    """`--check --merge` keeps the read-only draft preflight: both files land and it exits 0
+    without requiring --squash-message (the `--check` gate wins over the merge-only gate).
+
+    Mutation: restore the guard `options.merge and not squash_supplied` (drop `not options.check`)
+    -> exit 1, both files absent (asserts fail).
+    """
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+
+    r = _run_check(repo, env, "--body-file", str(body_file), "--merge")
+
+    assert r.returncode == 0, r.stderr
+    assert (repo / ".lsz" / "tmp" / "draft.json").is_file()
+    assert (repo / ".lsz" / "tmp" / "pr_body.md").is_file()
+    assert "hint:" in r.stdout
+    assert "requires an explicit squash commit message" not in r.stderr
+
+
+def test_merge_empty_squash_message_file_exits_2_before_any_gh_call(tmp_path: Path) -> None:
+    """An empty --squash-message-file is a usage error (exit 2) raised in the main guard,
+    before create_or_reuse_pr: zero gh calls, no PR, no ready flip.
+
+    Mutation: move the emptiness check back into resolve_squash_message (drop it from the main
+    guard) -> the PR is created and `gh pr ready` runs first, so gh.log is non-empty (assert fails).
+    """
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    empty = tmp_path / "empty.md"
+    _ = empty.write_text("", encoding="utf-8")
+
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(PR_PY),
+            "--merge",
+            "--no-stamp",
+            "--head",
+            "feat-draft",
+            "--title",
+            "feat: x",
+            "--body",
+            "## Summary\nReal.\n",
+            "--squash-message-file",
+            str(empty),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+    )
+
+    assert r.returncode == 2, r.stderr
+    assert "--squash-message is empty" in r.stderr
+    gh_log = Path(env["GH_LOG"])
+    assert not gh_log.exists() or gh_log.read_text(encoding="utf-8") == "", gh_log
