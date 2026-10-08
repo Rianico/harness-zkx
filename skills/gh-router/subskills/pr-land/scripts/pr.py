@@ -4,14 +4,17 @@
 # ///
 """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
 
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
-  --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
-  --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
-  --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
+  --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
+  --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
+  --check : preflight + draft phase — run the merge gates, write <out-dir>/draft.json and
+    <out-dir>/pr_body.md, and print only counts, the two paths, and one curation hint (no PR created)
+  --out-dir DIR : directory for the --check draft files (default <repo-root>/.lsz/tmp); parents are created
   --draft : leave the PR a draft after stamping (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens
     (the caller owns the changelog) — the head was not stamped, so expect a red changelog gate
   --squash-message / --squash-message-file : explicit squash commit message (mutually exclusive)
+  --verbose : full failure logs (gh run view bodies + gh pr checks tail); default is slim — failing run id(s) + one gh run view pointer
 Draft handshake: every NEWLY CREATED PR is created as a draft (draft=true), stamped (commit+push), then explicitly
 readied via `gh pr ready <num> --repo <repo>` so CI's ready_for_review event fires. A gh pr ready failure
 prints the exact manual fix and exits 1: a draft that never went ready is not success. An existing open
@@ -24,9 +27,10 @@ A squash merge never omits commit_message: it is either the explicit --squash-me
 message derived from the PR body. An empty or template-only body without an explicit message is
 refused (exit 1) instead of letting GitHub synthesize commit subjects.
 Opening a PR requires a description: an empty body or the unfilled repo template is refused pre-create.
-Commit title length is strictly limited to 100 characters (TITLE (#NUM) <= 100).
-Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
-Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref
+Commit title is one Conventional Commit line `type(scope): subject (#NUM)` <= 100 chars; a fix
+body states Root, and the body stays at most 5 bullets.
+Env: GH_TOKEN via gh auth. PR URL on stdout (draft paths on --check), progress on stderr. Fails loud, no secrets in logs.
+Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref → default slim; --verbose dumps the logs
 """
 
 import json
@@ -35,13 +39,22 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NoReturn
 
 _LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
 if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
-from range_authority import RangeRefusal, RangeResolution, resolve_range
+from range_authority import (
+    MalformedSpec,
+    RangeRefusal,
+    RangeResolution,
+    find_repo_root,
+    get_commit_summary,
+    resolve_range,
+)
 
 SLUG_PATTERN = re.compile(r"^[^/: \t\r\n]+/[^/: \t\r\n]+$")
 TRAILER_RE = re.compile(r"^[ \t]*co-authored-by:[ \t]*", re.IGNORECASE)
@@ -67,18 +80,90 @@ DETAILS_UNCLOSED_OPENER_RE = re.compile(
 HEADING_RE = re.compile(r"^#{1,6}\s+\S")
 DIRECTIVE_RE = re.compile(r"^[ \t]*(Landing|Ledger-Waiver):", re.IGNORECASE)
 EMPTY_BULLET_RE = re.compile(r"^[ \t]*[*+-][ \t]*$")
+CHECKBOX_RE = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?\[[ xX]\](?:[ \t]|$)")
+SQUASH_BULLET_RE = re.compile(r"^[ \t]*(?:[*+-]|\d+[.)])[ \t]+\S")
+SQUASH_TITLE_RE = re.compile(
+    r"^(?P<type>[A-Za-z]+)(?:\((?P<scope>[^()\s]+)\))?(?P<breaking>!)?:[ \t]+(?P<subject>\S.*)$"
+)
+SQUASH_HEADING_RE = re.compile(r"^#{1,6}\s+(?P<name>.+?)[ \t]*#*[ \t]*$")
+SQUASH_LABEL_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?(?:\*\*)?(?P<name>[A-Za-z][A-Za-z &/-]*?)(?:\*\*)?[ \t]*:[ \t]*(?:\*\*)?[ \t]*(?P<rest>.*)$"
+)
+# The shipped PR template names containment with `**Rollback / containment:**`, so that
+# label opens Blast Radius just as a `Door:` line does; `Door:` stays canonical.
+DOOR_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?(?:\*\*)?(?:door|rollback[ \t]*/[ \t]*containment)(?:\*\*)?[ \t]*:",
+    re.IGNORECASE,
+)
+ROLLBACK_RE = re.compile(r"rollback", re.IGNORECASE)
+CLOSES_REF_RE = re.compile(
+    r"^(?:closes?|closed|fix(?:es|ed)?|resolve[sd]?)[ \t]+#\d", re.IGNORECASE
+)
+CLOSES_LINE_RE = re.compile(
+    r"^(?:closes?|closed|fix(?:es|ed)?|resolve[sd]?)[ \t]+#\d+$", re.IGNORECASE
+)
 
 _UNRELEASED_BULLET_RE = re.compile(r"^[*+-]\s+")
 _UNRELEASED_SECTION_RE = re.compile(r"^###\s+")
 _UNRELEASED_VERSION_END_RE = re.compile(r"^## \[[^\]]+\]", re.MULTILINE)
 _UNRELEASED_ATTR_RES: dict[str, re.Pattern[str]] = {}
 SQUASH_TITLE_MAX = 100
+# The squash body stays one screen: a short Core line, then the optional parts.
+SQUASH_BODY_MAX_BULLETS = 5
+CONVENTIONAL_TYPES = frozenset(
+    {
+        "feat",
+        "fix",
+        "docs",
+        "style",
+        "refactor",
+        "perf",
+        "test",
+        "build",
+        "ci",
+        "chore",
+        "revert",
+    }
+)
+FIX_TYPE = "fix"
+# Canonical body parts (the PR Body Contract) and the label aliases that open them.
+SQUASH_SECTIONS: dict[str, tuple[str, ...]] = {
+    "summary": ("summary", "what changed", "core"),
+    "root_cause": ("root cause", "root"),
+    "blast_radius": ("blast radius & safety", "blast radius and safety", "blast radius"),
+    "evidence": ("evidence", "proof"),
+    "links": ("links", "related issues"),
+}
+BEFORE_AFTER_ARROW = ("\u2192", "->")
+BEFORE_MARKERS = ("before", "was", "old", "prior")
+AFTER_MARKERS = ("after", "now", "new")
+# A bare label line (`**Before (command + output):**`) ends at its colon: it names a slot
+# and states no output, so the Evidence gate counts it only when output follows it.
+LABEL_ONLY_RE = re.compile(r":[ \t]*(?:[*_`]+[ \t]*)*$")
 CODE_AUTHORS_TOKEN = "CODE_AUTHORS"
 DEFAULT_TEMPLATE_PATH = Path(".github/pull_request_template.md")
+DRAFT_OUT_DIR = Path(".lsz") / "tmp"
+DRAFT_SCHEMA = "gh-router/pr-land/draft@1"
+DRAFT_BODY_MAX_LINES = 15
+DRAFT_BODY_PLACEHOLDER = (
+    "<!-- draft: no authored PR body resolved; replace this file with the curated description -->\n"
+    "## Summary\n\n## What Changed\n\n## Blast Radius & Safety\n\n## Evidence\n"
+)
 POLL_TRIES = 60
 POLL_INTERVAL = 10.0
-MERGE_STATE_TRIES = 5
-MERGE_STATE_INTERVAL = 2.0
+# Mergeability is computed lazily, so a `null`/`unknown` reading is retried UNKNOWN_TRIES times
+# UNKNOWN_INTERVAL apart before the gate refuses; the merge-wait shares that budget.
+UNKNOWN_TRIES = 5
+UNKNOWN_INTERVAL = 2.0
+MERGE_STATE_TRIES = UNKNOWN_TRIES
+MERGE_STATE_INTERVAL = UNKNOWN_INTERVAL
+# A `dirty` reading is confirmed DIRTY_STRIKES times, DIRTY_INTERVAL apart, before it fails the gate.
+DIRTY_STRIKES = 2
+DIRTY_INTERVAL = 3.0
+CONFLICT_FILES_MAX = 10
+CONFLICT_HELPER = (
+    "uv run skills/gh-router/subskills/pr-conflict/scripts/extract_conflict_context.py"
+)
 DEFAULT_TIMEOUT = 30.0
 LOG_TIMEOUT = 60.0
 
@@ -131,6 +216,7 @@ class PrOptions:
     title: str | None = None
     body: str | None = None
     body_file: Path | None = None
+    out_dir: Path | None = None
     watch: bool = False
     merge: bool = False
     check: bool = False
@@ -141,23 +227,24 @@ class PrOptions:
     squash_message: str | None = None
     squash_message_file: Path | None = None
     squash_message_supplied: bool = False
+    verbose: bool = False
 
 
 def print_usage() -> None:
     usage = """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--merge|--no-merge] [--draft] [--check] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
-  --watch : poll EVERY check on the PR until all pass; on failure dump logs and exit 1 for the model to fix
-  --merge : after a green watch, squash-merge (waits for mergeable_state clean; refuses otherwise)
-  --check : dry run — print the Co-authored-by trailers a merge would append, then exit (no PR created)
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
+  --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
+  --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
+  --check : preflight + draft phase — write <out-dir>/draft.json + <out-dir>/pr_body.md, print counts, both paths, one curation hint (no PR created; --out-dir DIR defaults to <repo-root>/.lsz/tmp, parents created)
   --draft : leave the PR a draft (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens (caller owns the changelog) — head unstamped, expect a red changelog gate
   --body/--body-file : required to open a PR; the caller drafts the description (pr-enhance workflow). An empty body or the unfilled repo template is refused.
   --squash-message/--squash-message-file : explicit squash commit message (mutually exclusive); a squash merge never omits commit_message (explicit or derived) — an empty/template body without an explicit message is refused (exit 1), never GitHub's commit-subject synthesis.
+  --verbose : full failure logs (gh run view bodies + gh pr checks tail); default is slim — failing run id(s) + one gh run view pointer
 Draft handshake: a NEWLY CREATED PR is created as a draft (draft=true), stamped (commit+push), then readied via gh pr ready so CI's ready_for_review fires; a failed flip prints the verbatim manual fix and exits 1. Existing open PRs are reused untouched — never readied, never re-drafted; a reused draft without --draft fails loudly with the same manual remediation and exits 1.
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
-Commit title length is strictly limited to 100 characters (TITLE (#NUM) <= 100).
-Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Fails loud, no secrets in logs.
-Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref"""
+Commit title is one Conventional Commit line `type(scope): subject (#NUM)` <= 100 chars; a fix body states Root, a body at most 5 bullets.
+Env: GH_TOKEN via gh auth. PR URL on stdout, progress on stderr. Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref"""
     print(usage)
 
 
@@ -169,6 +256,7 @@ def parse_args(args: list[str]) -> PrOptions:
     body: str | None = None
     body_supplied = False
     body_file: Path | None = None
+    out_dir: Path | None = None
     squash_message: str | None = None
     squash_message_file: Path | None = None
     squash_message_supplied = False
@@ -177,6 +265,7 @@ def parse_args(args: list[str]) -> PrOptions:
     check = False
     draft = False
     no_stamp = False
+    verbose = False
 
     i = 0
     while i < len(args):
@@ -208,6 +297,11 @@ def parse_args(args: list[str]) -> PrOptions:
                 raise UsageError("missing argument for --body-file")
             body_file = Path(args[i + 1])
             body_supplied = True
+            i += 2
+        elif arg == "--out-dir":
+            if i + 1 >= len(args):
+                raise UsageError("missing argument for --out-dir")
+            out_dir = Path(args[i + 1])
             i += 2
         elif arg == "--squash-message":
             if i + 1 >= len(args):
@@ -251,6 +345,9 @@ def parse_args(args: list[str]) -> PrOptions:
         elif arg == "--stamp":
             no_stamp = False
             i += 1
+        elif arg == "--verbose":
+            verbose = True
+            i += 1
         elif arg in ("-h", "--help"):
             print_usage()
             sys.exit(0)
@@ -266,11 +363,13 @@ def parse_args(args: list[str]) -> PrOptions:
         title=title,
         body=body,
         body_file=body_file,
+        out_dir=out_dir,
         watch=watch,
         merge=merge,
         check=check,
         draft=draft,
         no_stamp=no_stamp,
+        verbose=verbose,
         title_supplied=title_supplied,
         body_supplied=body_supplied,
         squash_message=squash_message,
@@ -475,11 +574,19 @@ def resolve_title_and_body(
     title = options.title
     title_supplied = options.title_supplied
     if not title:
-        res = run_command(
-            ["git", "log", "-1", "--pretty=%s"],
-            cwd=cwd,
-        )
-        title = res.stdout.strip() if res.returncode == 0 else ""
+        if options.head:
+            res = run_command(
+                ["git", "log", "-1", "--pretty=%s", options.head],
+                cwd=cwd,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                title = res.stdout.strip()
+        if not title:
+            res = run_command(
+                ["git", "log", "-1", "--pretty=%s"],
+                cwd=cwd,
+            )
+            title = res.stdout.strip() if res.returncode == 0 else ""
 
     body = options.body or ""
     body_supplied = options.body_supplied
@@ -719,6 +826,254 @@ def check_title_length(title: str, num: str | int) -> None:
         raise RefusalError(f"commit title exceeds {SQUASH_TITLE_MAX} chars: {header}")
 
 
+def _refuse_squash(message: str, remediation: str) -> NoReturn:
+    print(f"refusing squash merge: {message}", file=sys.stderr)
+    print(f"remediation: {remediation}", file=sys.stderr)
+    raise RefusalError(message)
+
+
+def check_squash_title(title: str, num: str | int) -> None:
+    """Title gate: `type(scope): subject (#N)` — a Conventional Commit line, <= 100 chars.
+
+    The length budget reports first, so an over-long title keeps its one message.
+    The scope and the breaking `!` stay optional, as in the Convention.
+    """
+    check_title_length(title, num)
+    match = SQUASH_TITLE_RE.match(title.strip())
+    if match is None or match.group("type") not in CONVENTIONAL_TYPES:
+        _refuse_squash(
+            f'commit title is not a Conventional Commit "type(scope): subject": {title} (#{num})',
+            "rename the PR title to `type(scope): subject` "
+            "(feat, fix, docs, refactor, test, ...), then re-run",
+        )
+
+
+def _section_key(name: str) -> str | None:
+    """Canonical key for a section heading or label; None when the name is prose."""
+    normalized = re.sub(r"\s+", " ", name.strip().strip("*_` ").strip().lower())
+    # `## Root Cause:` and `## Root Cause` open the same section: a trailing colon is shape.
+    normalized = normalized.removesuffix(":").strip()
+    for key, aliases in SQUASH_SECTIONS.items():
+        if normalized in aliases:
+            return key
+    return None
+
+
+def _section_open(line: str) -> tuple[str | None, str]:
+    """The heading or label name opening a line, with any inline label content.
+
+    A heading whose name is not a section is retried before its first colon, so
+    `## Root Cause: <why>` opens Root with `<why>` as its content.
+    """
+    heading = SQUASH_HEADING_RE.match(line)
+    if heading:
+        name = heading.group("name")
+        if _section_key(name) is not None:
+            return name, ""
+        prefix, sep, rest = name.partition(":")
+        if sep and _section_key(prefix) is not None:
+            return prefix, rest.strip()
+        return name, ""
+    label = SQUASH_LABEL_RE.match(line)
+    if label:
+        return label.group("name"), label.group("rest")
+    return None, ""
+
+
+def split_squash_sections(text: str) -> tuple[dict[str, list[str]], list[str]]:
+    """Bucket a cleaned squash body into declared sections plus the prose outside them.
+
+    A heading (`## Evidence`) or a label line (`- Blast Radius: …`) opens a section;
+    an unrecognized name stays prose. Prose before the first section is the Core
+    narrative, so a heading-free body still carries a Core.
+    """
+    sections: dict[str, list[str]] = {}
+    prose: list[str] = []
+    current: str | None = None
+    for line in text.split("\n"):
+        name, rest = _section_open(line)
+        key = _section_key(name) if name is not None else None
+        if key is not None:
+            current = key
+            section = sections.setdefault(key, [])
+            if rest.strip():
+                section.append(rest)
+            continue
+        if current is None:
+            prose.append(line)
+        else:
+            sections[current].append(line)
+    return sections, prose
+
+
+def _section_content(sections: dict[str, list[str]], key: str) -> str:
+    return "\n".join(sections.get(key, [])).strip()
+
+
+def check_closes_lines(msg: str) -> None:
+    """Every closing-keyword line names exactly one issue (`Closes #12`, GitHub syntax)."""
+    for line in msg.splitlines():
+        stripped = line.strip()
+        if CLOSES_REF_RE.match(stripped) and not CLOSES_LINE_RE.match(stripped):
+            _refuse_squash(
+                f'closing-keyword line is not one issue: "{stripped}"',
+                "write each issue as its own `Closes #NN` line (never comma-separated), then re-run",
+            )
+
+
+FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+
+
+def _count_squash_bullets(text: str) -> int:
+    """Bullet lines outside fenced code blocks; a quoted diff or log is not the list.
+
+    A fence opens a quoted span only when a matching closer appears later (backtick
+    and tilde fences, any info string, not mermaid): every line in the balanced span
+    is quoted material. An unclosed opener quotes nothing, so the bullets after it
+    still count (fail closed). Markers are `*`, `+`, `-`, and numbered `1.` / `1)`.
+    """
+    lines = text.splitlines()
+    quoted = [False] * len(lines)
+    i = 0
+    while i < len(lines):
+        opener = FENCE_RE.match(lines[i])
+        if opener is not None:
+            char = opener.group(1)[0]
+            closer = i + 1
+            while closer < len(lines):
+                end = FENCE_RE.match(lines[closer])
+                if end is not None and end.group(1)[0] == char:
+                    break
+                closer += 1
+            if closer < len(lines):
+                for k in range(i, closer + 1):
+                    quoted[k] = True
+                i = closer + 1
+                continue
+        i += 1
+    return sum(1 for k, line in enumerate(lines) if not quoted[k] and SQUASH_BULLET_RE.match(line))
+
+
+def _states_rollback(blast_radius: list[str]) -> bool:
+    """A rollback *statement*, never the label that merely names containment.
+
+    The shipped template's `**Rollback / containment:**` label counts only when
+    content follows its colon; a `Door:` line never counts on its own name. Any
+    other line (or the content after a label) that names a rollback counts too.
+    """
+    for line in blast_radius:
+        label = SQUASH_LABEL_RE.match(line)
+        if label is None:
+            if ROLLBACK_RE.search(line):
+                return True
+            continue
+        name = label.group("name")
+        rest = label.group("rest")
+        if ROLLBACK_RE.search(name) and rest.strip():
+            return True
+        if ROLLBACK_RE.search(rest):
+            return True
+    return False
+
+
+def _is_label_line(line: str) -> bool:
+    """True for a bare label: nothing after its colon but emphasis markers and space.
+
+    The shipped template's `**Before (command + output):**` is one; it names a slot, not output.
+    """
+    return bool(LABEL_ONLY_RE.search(line.strip()))
+
+
+def _evidence_marker_text(evidence: list[str]) -> str:
+    """The Evidence text the before -> after markers match against.
+
+    A bare label line states no output, so it counts only when the block under it — the
+    lines up to the next label — carries content. The shipped template's bare
+    `**Before (command + output):**` / `**After (command + output):**` pair therefore reads
+    as empty text and is refused; the same labels over pasted output still pair, and output
+    pasted on the label's own line counts directly.
+    """
+    kept: list[str] = []
+    for index, line in enumerate(evidence):
+        if not _is_label_line(line):
+            kept.append(line)
+            continue
+        block: list[str] = []
+        for candidate in evidence[index + 1 :]:
+            if _is_label_line(candidate):
+                break
+            block.append(candidate)
+        if any(candidate.strip() for candidate in block):
+            kept.append(line)
+    return "\n".join(kept).lower()
+
+
+def check_squash_body(msg: str, *, title: str = "", pr_link: str = "") -> None:
+    """Body gate over the cleaned squash message.
+
+    Core is required on every path. Root is required for every `fix` title, prose
+    bodies included, and never for any other type. Blast Radius, Evidence, and Links
+    are validated when declared: a `Door:` line (or the shipped template's
+    `Rollback / containment:` label) plus a rollback statement, a before -> after over
+    pasted output (a bare label is not proof), and the PR link. At most
+    SQUASH_BODY_MAX_BULLETS bullets outside any fenced block
+    keep the message one screen.
+    """
+    sections, prose = split_squash_sections(msg)
+    if not _section_content(sections, "summary") and not "\n".join(prose).strip():
+        _refuse_squash(
+            "squash body carries no Core section",
+            "write one `## Summary` line (or `- Core: <one line>`) saying what changed and why, then re-run",
+        )
+    match = SQUASH_TITLE_RE.match(title.strip())
+    is_fix = match is not None and match.group("type").lower() == FIX_TYPE
+    if is_fix and not _section_content(sections, "root_cause"):
+        _refuse_squash(
+            "a fix squash body carries no Root section",
+            "add a `## Root Cause` line naming why the bug happened, then re-run",
+        )
+    blast_radius = sections.get("blast_radius")
+    if blast_radius is not None:
+        if not any(DOOR_RE.match(line) for line in blast_radius):
+            _refuse_squash(
+                "the Blast Radius section carries neither a `Door:` line nor the "
+                "template's `Rollback / containment:` line",
+                "open Blast Radius with `Door: one-way` (or the template's "
+                "`**Rollback / containment:** revert the squash commit`), then re-run",
+            )
+        if not _states_rollback(blast_radius):
+            _refuse_squash(
+                "the Blast Radius section states no rollback",
+                "state the rollback (`**Rollback / containment:** revert the squash commit`), then re-run",
+            )
+    evidence = sections.get("evidence")
+    if evidence is not None:
+        text = _evidence_marker_text(evidence)
+        arrowed = any(arrow in text for arrow in BEFORE_AFTER_ARROW)
+        both = any(marker in text for marker in BEFORE_MARKERS) and any(
+            marker in text for marker in AFTER_MARKERS
+        )
+        if not (arrowed or both):
+            _refuse_squash(
+                "the Evidence section states no before -> after",
+                "show the before output and the after output "
+                "(`before: 3 failed -> after: 0 failed`), then re-run",
+            )
+    links = sections.get("links")
+    if links is not None and pr_link and pr_link not in "\n".join(links):
+        _refuse_squash(
+            "the Links section carries no PR link",
+            f"add `{pr_link}` to Links, then re-run",
+        )
+    check_closes_lines(msg)
+    bullets = _count_squash_bullets(msg)
+    if bullets > SQUASH_BODY_MAX_BULLETS:
+        _refuse_squash(
+            f"squash body carries {bullets} bullets (max {SQUASH_BODY_MAX_BULLETS})",
+            "condense the change into at most 5 bullets, then re-run",
+        )
+
+
 def _is_stop_line(line: str) -> bool:
     return bool(HEADING_RE.match(line) or is_closing_line(line) or is_trailer_line(line))
 
@@ -744,7 +1099,8 @@ def clean_squash_body(body: str) -> str:
     """Strip review-only ephemera from a squash body.
 
     Removal order is deterministic: HTML comments → mermaid fences → <details>
-    blocks → review-only sections → procedural sections → directives →
+    blocks → review-only sections → procedural sections → directives → task-list
+    checkboxes →
     empty-section pruning. <details> removal runs before pruning so a section
     holding only a details block becomes empty and is dropped. Unclosed
     mermaid/<details> strips stop before the next heading, Closes keyword, or
@@ -780,6 +1136,9 @@ def clean_squash_body(body: str) -> str:
                 continue
 
         if DIRECTIVE_RE.match(line):
+            continue
+
+        if CHECKBOX_RE.match(line):
             continue
 
         lines.append(line)
@@ -949,84 +1308,211 @@ def finalize_squash_message(repo: str, num: str, msg: str, cwd: Path | None = No
     return build_squash_message(msg, merger, tsv_res.stdout).rstrip("\n")
 
 
+@dataclass(frozen=True, slots=True)
+class MergeObservation:
+    """One mergeability reading of a PR: the verdict word plus the raw fields behind it.
+
+    ``verdict`` is ``pr_conflict_verdict``'s word (``conflicting``/``behind``/``clean``/
+    ``unknown``); ``dirty`` singles out GitHub's ``dirty`` state, the conflict candidate
+    that must be confirmed before it fails the gate.
+    """
+
+    verdict: str
+    mergeable: str = ""
+    state: str = ""
+    url: str = ""
+
+    @property
+    def dirty(self) -> bool:
+        """True for GitHub's `dirty` state — a conflict candidate needing a second strike."""
+        return self.verdict == "conflicting" and self.state.strip().lower() == "dirty"
+
+
+type MergeFetch = Callable[[str, str, Path | None], MergeObservation]
+
+
+def fetch_mergeability(repo: str, num: str, cwd: Path | None = None) -> MergeObservation:
+    """Read mergeable / mergeable_state / html_url in one `gh api` call."""
+    res = run_command(
+        [
+            "gh",
+            "api",
+            f"repos/{repo}/pulls/{num}",
+            "--jq",
+            '[(if .mergeable == null then "null" else (.mergeable|tostring) end), (.mergeable_state // "unknown"), (.html_url // "")] | @tsv',
+        ],
+        cwd=cwd,
+    )
+    if res.returncode != 0:
+        raise PrError(
+            f"failed to check PR #{num} mergeable state: {res.stderr.strip() or 'gh api failed'}"
+        )
+    line = res.stdout.strip()
+    if not line:
+        raise PrError(f"failed to check PR #{num} mergeable state: empty response from gh api")
+    parts = line.split("\t")
+    mergeable = parts[0] if len(parts) > 0 else ""
+    state = parts[1] if len(parts) > 1 else ""
+    url = parts[2] if len(parts) > 2 else ""
+    return MergeObservation(
+        verdict=pr_conflict_verdict(mergeable, state), mergeable=mergeable, state=state, url=url
+    )
+
+
+def merge_state_verdict(state: str) -> str:
+    """Verdict word for a bare `mergeable_state` reading: only `clean` may merge.
+
+    ``pr_conflict_verdict`` needs `mergeable` too; the pre-merge probe reads the state
+    alone, so every state that is not clean/behind/dirty reads as `unknown` and refuses.
+    `behind` is its own verdict: the `--watch` loop accepts it with a warning folded into
+    the poll line, while `--merge` refuses it (this function never returns `clean` for it).
+    """
+    normalized = state.strip().lower()
+    if normalized == "clean":
+        return "clean"
+    if normalized in ("dirty", "conflicting"):
+        return "conflicting"
+    if normalized == "behind":
+        return "behind"
+    return "unknown"
+
+
+def fetch_merge_state(repo: str, num: str, cwd: Path | None = None) -> MergeObservation:
+    """Read `mergeable_state` alone — the pre-merge probe, which needs no `mergeable`/url."""
+    res = run_command(
+        ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".mergeable_state"], cwd=cwd
+    )
+    state = res.stdout.strip() if res.returncode == 0 and res.stdout.strip() else "unknown"
+    return MergeObservation(verdict=merge_state_verdict(state), state=state)
+
+
+def resolve_merge_state(
+    repo: str,
+    num: str,
+    *,
+    fetch: MergeFetch = fetch_mergeability,
+    unknown_tries: int = UNKNOWN_TRIES,
+    unknown_interval: float = UNKNOWN_INTERVAL,
+    dirty_strikes: int = DIRTY_STRIKES,
+    dirty_interval: float = DIRTY_INTERVAL,
+    cwd: Path | None = None,
+) -> MergeObservation:
+    """Poll mergeability until a confident verdict, then return that observation.
+
+    An `unknown` reading (and a transient `gh api` failure) is retried up to
+    `unknown_tries` times, `unknown_interval` apart. The default budget is intentionally
+    short — about 8s (5 tries x 2s) — after which the caller refuses with the verdict word
+    `unknown`. That word is distinct from `conflicting`: `unknown` means GitHub never
+    computed mergeability, `conflicting` means a real conflict. A `dirty` reading is
+    confirmed `dirty_strikes` times, `dirty_interval` apart, before it counts as
+    conflicting; any non-dirty reading resets that streak. An unresolved `unknown` comes
+    back as-is: the caller refuses on it, so a PR whose mergeability GitHub never computes
+    fails fast instead of stalling the watch.
+    """
+    unknown_left = max(1, unknown_tries)
+    strikes = 0
+    while True:
+        try:
+            obs = fetch(repo, num, cwd)
+        except PrError:
+            unknown_left -= 1
+            if unknown_left <= 0:
+                raise
+            time.sleep(unknown_interval)
+            continue
+        if obs.dirty:
+            strikes += 1
+            if strikes >= max(1, dirty_strikes):
+                return obs
+            time.sleep(dirty_interval)
+            continue
+        strikes = 0
+        if obs.verdict == "unknown":
+            unknown_left -= 1
+            if unknown_left <= 0:
+                return obs
+            time.sleep(unknown_interval)
+            continue
+        return obs
+
+
+def conflicting_files(repo: str, num: str, cwd: Path | None = None) -> list[str]:
+    """Every path the PR touches, best-effort — NOT the conflicting subset.
+
+    ``gh pr view --json files`` lists all changed files and has no conflict filter, so the
+    report must not call them the conflicting set. Empty when the `gh pr view` read fails.
+    """
+    res = run_command(
+        [
+            "gh",
+            "pr",
+            "view",
+            num,
+            "--repo",
+            repo,
+            "--json",
+            "files",
+            "--jq",
+            '[.files[].path] | join(" ")',
+        ],
+        cwd=cwd,
+    )
+    if res.returncode != 0:
+        return []
+    return res.stdout.strip().strip('"').split()
+
+
+def report_merge_refusal(
+    obs: MergeObservation, repo: str, num: str, cwd: Path | None = None
+) -> None:
+    """Print the one refusal report shared by the watch fast-fail, the gate, and the merge.
+
+    Verdict word, PR url, up to ``CONFLICT_FILES_MAX`` touched files (every path the PR
+    changes — not a conflicting subset, which ``gh pr view --json files`` cannot supply;
+    ``(+N more)`` past the cap), and the pr-conflict helper pointer. An empty or failed
+    file read prints ``touched files: (none resolved)`` instead of dropping the line.
+    """
+    url = obs.url or pr_url(repo, num, cwd=cwd)
+    print(f"PR {url}", file=sys.stderr)
+    mergeable = f"mergeable={obs.mergeable} " if obs.mergeable else ""
+    print(f"{obs.verdict}: {mergeable}merge_state_status={obs.state}", file=sys.stderr)
+    files = conflicting_files(repo, num, cwd=cwd)
+    if files:
+        shown = files[:CONFLICT_FILES_MAX]
+        extra = len(files) - len(shown)
+        more = f" (+{extra} more)" if extra > 0 else ""
+        print(f"touched files: {' '.join(shown)}{more}", file=sys.stderr)
+    else:
+        print("touched files: (none resolved)", file=sys.stderr)
+    lead = "conflict detected" if obs.verdict == "conflicting" else "mergeability unresolved"
+    print(
+        f"{lead}: run '{CONFLICT_HELPER}' to inspect hunks and commit intent, "
+        "then delegate resolution to a worker subagent.",
+        file=sys.stderr,
+    )
+
+
 def check_conflicts(repo: str, num: str, base: str, cwd: Path | None = None) -> bool:
-    tries = 3
-    verdict = ""
-    mergeable = ""
-    state = ""
-    url = ""
-    last_error = ""
-    while tries > 0:
-        tries -= 1
-        res = run_command(
-            [
-                "gh",
-                "api",
-                f"repos/{repo}/pulls/{num}",
-                "--jq",
-                '[(if .mergeable == null then "null" else (.mergeable|tostring) end), (.mergeable_state // "unknown"), (.html_url // "")] | @tsv',
-            ],
-            cwd=cwd,
-        )
-        if res.returncode != 0:
-            last_error = res.stderr.strip() or "gh api failed"
-            if tries > 0:
-                time.sleep(1)
-                continue
-            raise PrError(f"failed to check PR #{num} mergeable state: {last_error}")
+    """Refuse when the PR cannot merge: conflicting, or mergeability that stays unresolved.
 
-        line = res.stdout.strip()
-        if not line:
-            if tries > 0:
-                time.sleep(1)
-                continue
-            raise PrError(f"failed to check PR #{num} mergeable state: empty response from gh api")
-
-        parts = line.split("\t")
-        mergeable = parts[0] if len(parts) > 0 else ""
-        state = parts[1] if len(parts) > 1 else ""
-        url = parts[2] if len(parts) > 2 else ""
-        verdict = pr_conflict_verdict(mergeable, state)
-        if verdict != "unknown":
-            break
-        if tries > 0:
-            time.sleep(1)
-
-    if verdict == "conflicting":
-        files_res = run_command(
-            [
-                "gh",
-                "pr",
-                "view",
-                num,
-                "--repo",
-                repo,
-                "--json",
-                "files",
-                "--jq",
-                '[.files[].path] | join(" ")',
-            ],
-            cwd=cwd,
-        )
-        files = files_res.stdout.strip() if files_res.returncode == 0 else ""
-        print(f"PR {url}", file=sys.stderr)
-        print(
-            f"conflicting: mergeable={mergeable} merge_state_status={state}",
-            file=sys.stderr,
-        )
-        if files:
-            print(f"files: {files}", file=sys.stderr)
-        print(
-            "conflict detected: run 'uv run skills/gh-router/subskills/pr-conflict/scripts/extract_conflict_context.py' to inspect hunks and commit intent, then delegate resolution to a worker subagent.",
-            file=sys.stderr,
-        )
+    Compatibility wrapper kept for the tests; the live paths (``--watch``, ``--merge``)
+    call ``resolve_merge_state`` + ``report_merge_refusal`` directly. Returns False on a
+    conflict and on an `unknown` state that survives UNKNOWN_TRIES retries, True
+    otherwise; raises PrError when the `gh api` read fails outright. A refusal names the
+    touched files and the pr-conflict resolution pointer on stderr. A `behind` head is
+    accepted here with a warning, the same as the watch loop (``--merge`` refuses it).
+    """
+    obs = resolve_merge_state(repo, num, cwd=cwd)
+    if obs.verdict in ("conflicting", "unknown"):
+        report_merge_refusal(obs, repo, num, cwd=cwd)
         return False
-    if verdict == "behind":
+    if obs.verdict == "behind":
         print(f"warning: head branch is behind {base}", file=sys.stderr)
     return True
 
 
-def dump_failure_logs(repo: str, num: str, cwd: Path | None = None) -> None:
+def failing_run_ids(repo: str, num: str, cwd: Path | None = None) -> list[str]:
+    """Run IDs behind the failing/cancelled checks on this PR, best-effort, deduped."""
     run_ids: list[str] = []
     checks_json_res = run_command(
         [
@@ -1098,6 +1584,26 @@ def dump_failure_logs(repo: str, num: str, cwd: Path | None = None) -> None:
                 if rid:
                     run_ids.append(rid)
 
+    return run_ids
+
+
+def dump_failure_logs(repo: str, num: str, cwd: Path | None = None, verbose: bool = True) -> None:
+    """Print the evidence behind a red watch.
+
+    ``verbose`` (the default) keeps the full dump: the `gh run view` log tails plus a
+    `gh pr checks` dump. ``verbose=False`` is the slim `--watch` default — the failing run
+    ID(s) and the one-line pointer, no log bodies.
+    """
+    run_ids = failing_run_ids(repo, num, cwd=cwd)
+    if not verbose:
+        ids = " ".join(run_ids) if run_ids else "(none resolved)"
+        print(f"checks failed: failing run id(s): {ids}", file=sys.stderr)
+        print(
+            "run 'gh run view --run-id <id> --log-failed' (or 'ci.sh why') for the failing step log",
+            file=sys.stderr,
+        )
+        return
+
     for run_id in run_ids[:2]:
         try:
             view_res = run_command(
@@ -1137,9 +1643,21 @@ def watch_checks(
     poll_tries: int = POLL_TRIES,
     poll_interval: float = POLL_INTERVAL,
     cwd: Path | None = None,
+    verbose: bool = False,
 ) -> bool:
+    """Poll mergeability and every check until a verdict, one stderr line per poll.
+
+    A conflict — or a mergeability GitHub never computes — fails fast through the shared
+    refusal report. A `behind` head is accepted here: the fact rides the poll line, so a
+    behind PR still prints exactly one line per poll. The `--merge` path refuses `behind`
+    instead (see ``merge_state_verdict``). Output is slim by default: a failing check
+    prints its run ID(s) and a `gh run view` pointer, and only `verbose` adds the log
+    bodies.
+    """
     for i in range(1, poll_tries + 1):
-        if not check_conflicts(repo, num, base, cwd=cwd):
+        obs = resolve_merge_state(repo, num, cwd=cwd)
+        if obs.verdict in ("conflicting", "unknown"):
+            report_merge_refusal(obs, repo, num, cwd=cwd)
             return False
         checks_res = run_command(
             [
@@ -1158,32 +1676,52 @@ def watch_checks(
         )
         payload = checks_res.stdout if checks_res.returncode == 0 else ""
         verdict = checks_verdict(payload)
+        behind = f", head behind {base}" if obs.verdict == "behind" else ""
+        print(
+            f"checks {verdict} (mergeable_state={obs.state}, {i}/{poll_tries}{behind})",
+            file=sys.stderr,
+        )
         if verdict == "success":
-            print("checks success", file=sys.stderr)
             return True
         if verdict == "failure":
-            print("checks failed — fetching logs", file=sys.stderr)
-            dump_failure_logs(repo, num, cwd=cwd)
+            dump_failure_logs(repo, num, cwd=cwd, verbose=verbose)
             return False
-        print(f"checks pending ({i}/{poll_tries})…", file=sys.stderr)
         time.sleep(poll_interval)
 
     print(
         f"checks timeout after {int(poll_tries * poll_interval)}s — no green verdict",
         file=sys.stderr,
     )
-    last_checks = run_command(
-        ["gh", "pr", "checks", num, "--repo", repo],
-        cwd=cwd,
-    )
-    combined = (last_checks.stdout + last_checks.stderr).splitlines()
-    tail_lines = combined[-30:]
-    if tail_lines:
-        print("\n".join(tail_lines), file=sys.stderr)
+    if verbose:
+        last_checks = run_command(
+            ["gh", "pr", "checks", num, "--repo", repo],
+            cwd=cwd,
+        )
+        tail_lines = (last_checks.stdout + last_checks.stderr).splitlines()[-30:]
+        if tail_lines:
+            print("\n".join(tail_lines), file=sys.stderr)
     return False
 
 
-def check_trailers(
+@dataclass(frozen=True, slots=True)
+class CheckReport:
+    """Outcome of the --check preflight: gate code, trailers, and the PR it evaluated.
+
+    ``body`` is the cleaned squash text a merge would commit; ``authored_body`` is
+    the description exactly as supplied or fetched, so the draft can write the
+    human-facing `pr_body.md` (Mermaid and `<details>` included) from it.
+    """
+
+    exit_code: int
+    trailers: str = ""
+    pr_number: str | None = None
+    pr_url: str | None = None
+    body: str = ""
+    authored_body: str = ""
+    note: str = ""
+
+
+def check_trailers_report(
     repo: str,
     head_ref: str,
     body: str,
@@ -1193,7 +1731,13 @@ def check_trailers(
     cwd: Path | None = None,
     squash_message_override: str | None = None,
     squash_message_supplied: bool = False,
-) -> int:
+) -> CheckReport:
+    """Run the --check merge gates and report the trailers a merge would append.
+
+    Data-only twin of check_trailers: refusals and remediation still go to stderr,
+    but the trailers and the resolved body come back in the report so the draft
+    phase can write them to disk instead of stdout. Exit codes are unchanged.
+    """
     owner = repo.split("/")[0]
     res = run_command(
         [
@@ -1213,13 +1757,13 @@ def check_trailers(
     if not found or found == "null":
         if not body_supplied:
             print(f"no open PR for head {head_ref}", file=sys.stderr)
-            return 2
+            return CheckReport(exit_code=2, note=f"no open PR for head {head_ref}")
 
         if title:
             try:
-                check_title_length(title, 9999)
+                check_squash_title(title, 9999)
             except RefusalError:
-                return 1
+                return CheckReport(exit_code=1, body=body, authored_body=body)
 
         try:
             resolved_msg = resolve_squash_message(
@@ -1229,14 +1773,19 @@ def check_trailers(
                 template_path=template_path,
             )
         except RefusalError:
-            return 1
+            return CheckReport(exit_code=1, body=body, authored_body=body)
+
+        try:
+            check_squash_body(resolved_msg, title=title)
+        except RefusalError:
+            return CheckReport(exit_code=1, body=resolved_msg, authored_body=body)
 
         try:
             base = resolve_base(None, repo, cwd=cwd)
             digest_range = _digest_range_spec(base, head_ref, cwd=cwd)
         except RefusalError as exc:
             print(f"{exc}", file=sys.stderr)
-            return 1
+            return CheckReport(exit_code=1, body=body, authored_body=body)
         except RangeRefusal:
             digest_range = None
         log_res: subprocess.CompletedProcess[str] | None = None
@@ -1262,18 +1811,25 @@ def check_trailers(
                 merger = cfg_res.stdout.strip()
 
         new_trailers = pr_co_author_trailers(tsv, merger=merger, body=resolved_msg)
-        if new_trailers.strip():
-            print(new_trailers, end="")
-        else:
-            print(f"no co-author trailers would be appended for {head_ref}", file=sys.stderr)
-        return 0
+        note = (
+            ""
+            if new_trailers.strip()
+            else f"no co-author trailers would be appended for {head_ref}"
+        )
+        return CheckReport(
+            exit_code=0, trailers=new_trailers, body=resolved_msg, authored_body=body, note=note
+        )
 
     num = found
+    url = f"https://github.com/{repo}/pull/{num}"
 
     try:
-        check_title_length(title, num)
+        if title.strip():
+            check_squash_title(title, num)
+        else:
+            check_title_length(title, num)
     except RefusalError:
-        return 1
+        return CheckReport(exit_code=1, pr_number=num, pr_url=url, authored_body=body)
 
     if not body_supplied:
         body_res = run_command(
@@ -1294,7 +1850,18 @@ def check_trailers(
             template_path=template_path,
         )
     except RefusalError:
-        return 1
+        return CheckReport(exit_code=1, pr_number=num, pr_url=url, body=body, authored_body=body)
+
+    try:
+        check_squash_body(
+            resolved_msg,
+            title=title,
+            pr_link=f"https://github.com/{repo}/pull/{num}",
+        )
+    except RefusalError:
+        return CheckReport(
+            exit_code=1, pr_number=num, pr_url=url, body=resolved_msg, authored_body=body
+        )
 
     merger_res = run_command(
         ["gh", "api", "user", "--jq", ".login"],
@@ -1321,20 +1888,313 @@ def check_trailers(
             f"refusing --check: could not enumerate PR #{num} commit authors (check network / GH_TOKEN scopes); re-run",
             file=sys.stderr,
         )
-        return 1
+        return CheckReport(
+            exit_code=1, pr_number=num, pr_url=url, body=resolved_msg, authored_body=body
+        )
     tsv = tsv_res.stdout
 
     try:
         _ = build_squash_message(resolved_msg, merger, tsv)
     except RefusalError:
-        return 1
+        return CheckReport(
+            exit_code=1, pr_number=num, pr_url=url, body=resolved_msg, authored_body=body
+        )
 
     new_trailers = pr_co_author_trailers(tsv, merger=merger, body=resolved_msg)
-    if new_trailers.strip():
-        print(new_trailers, end="")
+    note = "" if new_trailers.strip() else f"no co-author trailers would be appended for #{num}"
+    return CheckReport(
+        exit_code=0,
+        trailers=new_trailers,
+        pr_number=num,
+        pr_url=url,
+        body=resolved_msg,
+        authored_body=body,
+        note=note,
+    )
+
+
+def check_trailers(
+    repo: str,
+    head_ref: str,
+    body: str,
+    body_supplied: bool,
+    title: str = "",
+    template_path: Path | None = None,
+    cwd: Path | None = None,
+    squash_message_override: str | None = None,
+    squash_message_supplied: bool = False,
+) -> int:
+    """Backward-compatible --check gate: report the result, print trailers to stdout."""
+    report = check_trailers_report(
+        repo=repo,
+        head_ref=head_ref,
+        body=body,
+        body_supplied=body_supplied,
+        title=title,
+        template_path=template_path,
+        cwd=cwd,
+        squash_message_override=squash_message_override,
+        squash_message_supplied=squash_message_supplied,
+    )
+    if report.exit_code == 0:
+        if report.trailers.strip():
+            print(report.trailers, end="")
+        else:
+            print(report.note, file=sys.stderr)
+    return report.exit_code
+
+
+def resolve_out_dir(out_dir: Path | None, cwd: Path | None = None) -> Path:
+    """Resolve the draft output directory (default <repo-root>/.lsz/tmp).
+
+    An explicit --out-dir resolves against the working directory; the default
+    resolves against the repository root so every --check in a checkout lands in
+    the same place.
+    """
+    base = cwd or Path.cwd()
+    if out_dir is not None:
+        target = out_dir if out_dir.is_absolute() else base / out_dir
+        return target.resolve()
+    try:
+        root = find_repo_root(base)
+    except RuntimeError:
+        root = base.resolve()
+    return (root / DRAFT_OUT_DIR).resolve()
+
+
+def cap_draft_body(text: str, max_lines: int = DRAFT_BODY_MAX_LINES) -> tuple[str, int]:
+    """Cap a commit body at *max_lines*; return (capped text, omitted line count)."""
+    lines = text.strip("\n").splitlines()
+    if len(lines) <= max_lines:
+        return ("\n".join(lines), 0)
+    return ("\n".join(lines[:max_lines]), len(lines) - max_lines)
+
+
+def draft_commits(
+    range_resolution: RangeResolution | None, cwd: Path | None = None
+) -> list[dict[str, object]]:
+    """One row per range commit: full SHA pointer, subject, and a capped body."""
+    if range_resolution is None:
+        return []
+    base = cwd or Path.cwd()
+    try:
+        root = find_repo_root(base)
+    except RuntimeError:
+        root = base.resolve()
+    rows: list[dict[str, object]] = []
+    for sha in range_resolution.commits:
+        summary = get_commit_summary(root, sha) or {}
+        body_text, omitted = cap_draft_body(str(summary.get("body", "")))
+        rows.append(
+            {
+                "sha": sha,
+                "short_sha": str(summary.get("sha", sha[:7])),
+                "author": str(summary.get("author", "")),
+                "subject": str(summary.get("subject", "")),
+                "body": body_text,
+                "body_lines": len(body_text.splitlines()) if body_text else 0,
+                "body_omitted_lines": omitted,
+            }
+        )
+    return rows
+
+
+def _draft_range(
+    base: str | None, head_ref: str, cwd: Path | None = None
+) -> RangeResolution | None:
+    """Resolve the landing range through the shared authority; None when it cannot."""
+    specs = [f"{base}..{head_ref}"] if base else []
+    specs.append(head_ref)
+    for spec in specs:
+        try:
+            return _authority_resolve(spec, "..", cwd)
+        except RangeRefusal, MalformedSpec:
+            continue
+    return None
+
+
+def build_draft_payload(
+    *,
+    repo: str,
+    head_ref: str,
+    base: str | None,
+    title: str,
+    report: CheckReport,
+    range_resolution: RangeResolution | None,
+    commits: list[dict[str, object]],
+    counts: dict[str, int],
+    dirty: dict[str, list[str]],
+    squash_body: str,
+    draft_path: Path,
+    body_path: Path,
+    hint: str,
+) -> dict[str, object]:
+    """Assemble the JSON-only draft payload (no YAML view, no full stdout dump)."""
+    return {
+        "schema": DRAFT_SCHEMA,
+        "repo": repo,
+        "head": head_ref,
+        "base": base,
+        "title": title,
+        "pr_number": report.pr_number,
+        "pr_url": report.pr_url,
+        "status": "ok" if report.exit_code == 0 else "refused",
+        "exit_code": report.exit_code,
+        "note": report.note,
+        "range": range_resolution.to_dict() if range_resolution is not None else None,
+        "counts": counts,
+        "commits": commits,
+        "dirty": dirty,
+        "trailers": report.trailers,
+        "squash_body": squash_body,
+        "draft_path": str(draft_path),
+        "body_path": str(body_path),
+        "hint": hint,
+    }
+
+
+def _draft_dirty(cwd: Path | None = None) -> dict[str, list[str]]:
+    """Advisory working-tree reading for draft.json; empty lists when clean or unreadable."""
+    empty: dict[str, list[str]] = {"porcelain": [], "diff_stat": []}
+    try:
+        root = find_repo_root(cwd or Path.cwd())
+    except RuntimeError:
+        root = (cwd or Path.cwd()).resolve()
+    try:
+        porcelain = [
+            line
+            for line in run_command(
+                ["git", "--no-optional-locks", "status", "--porcelain"],
+                cwd=root,
+            ).stdout.splitlines()
+            if line.strip()
+        ]
+        if not porcelain:
+            return empty
+        diff_stat = [
+            line
+            for line in run_command(
+                ["git", "--no-optional-locks", "diff", "HEAD", "--stat", "--", "."],
+                cwd=root,
+            ).stdout.splitlines()
+            if line.strip()
+        ]
+    except PrError, OSError, RuntimeError:
+        return empty
+    return {"porcelain": porcelain[:20], "diff_stat": diff_stat[-8:]}
+
+
+def run_draft_phase(
+    *,
+    options: PrOptions,
+    repo: str,
+    head_ref: str,
+    title: str,
+    body: str,
+    body_supplied: bool,
+    squash_message_override: str | None,
+    squash_message_supplied: bool,
+    template_path: Path | None = None,
+    cwd: Path | None = None,
+) -> int:
+    """Emit draft.json + pr_body.md for --check, keep stdout small, return the gate code.
+
+    Every --check run writes both files, even a refused one: the gate verdict is
+    the exit code (and stderr), while the full text stays on disk. `pr_body.md`
+    carries the authored description (Mermaid and `<details>` kept) plus the
+    trailers a merge would append; `draft.json`'s `squash_body` is the cleaned
+    text a merge would commit. stdout carries only counts, the two paths, and one
+    curation hint.
+    """
+    out_dir = resolve_out_dir(options.out_dir, cwd=cwd)
+    draft_path = out_dir / "draft.json"
+    body_path = out_dir / "pr_body.md"
+
+    report = check_trailers_report(
+        repo=repo,
+        head_ref=head_ref,
+        body=body,
+        body_supplied=body_supplied,
+        title=title,
+        template_path=template_path,
+        cwd=cwd,
+        squash_message_override=squash_message_override,
+        squash_message_supplied=squash_message_supplied,
+    )
+
+    if report.exit_code == 0 and report.note:
+        print(report.note, file=sys.stderr)
+
+    squash_body = report.body.strip("\n")
+    authored_body = report.authored_body.strip("\n")
+    if report.exit_code == 0 and authored_body:
+        body_text = insert_trailers(authored_body, report.trailers)
+    elif authored_body:
+        body_text = authored_body + "\n"
     else:
-        print(f"no co-author trailers would be appended for #{num}", file=sys.stderr)
-    return 0
+        body_text = DRAFT_BODY_PLACEHOLDER
+    if not body_text.endswith("\n"):
+        body_text += "\n"
+
+    try:
+        base: str | None = resolve_base(options.base, repo, cwd=cwd)
+    except RefusalError as exc:
+        print(f"{exc}", file=sys.stderr)
+        base = None
+
+    range_resolution = _draft_range(base, head_ref, cwd)
+    commits = draft_commits(range_resolution, cwd)
+    if not commits and not options.title_supplied and title:
+        print(
+            f"warning: no unique commits in range; draft title {title!r} is a guess "
+            "-- pass --title explicitly",
+            file=sys.stderr,
+        )
+    dirty = _draft_dirty(cwd)
+    dirty_files = len(dirty["porcelain"])
+
+    counts = {
+        "commits": len(commits),
+        "only_in_base": range_resolution.counts.only_in_base if range_resolution else 0,
+        "trailers": sum(1 for line in report.trailers.splitlines() if line.strip()),
+        "body_lines": len(body_text.splitlines()),
+        "dirty_files": dirty_files,
+    }
+    hint = (
+        f"curate {body_path.name} to <=5 bullets "
+        "(Core + Root for fix + Risk:Door + Proof + Links), "
+        "drop wip/fixup trivia, strip Mermaid/details/checklist; "
+        f"then land with --body-file {body_path}"
+    )
+    payload = build_draft_payload(
+        repo=repo,
+        head_ref=head_ref,
+        base=base,
+        title=title,
+        report=report,
+        range_resolution=range_resolution,
+        commits=commits,
+        counts=counts,
+        squash_body=squash_body,
+        dirty=dirty,
+        draft_path=draft_path,
+        body_path=body_path,
+        hint=hint,
+    )
+
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _ = draft_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        _ = body_path.write_text(body_text, encoding="utf-8")
+    except OSError as exc:
+        raise PrError(f"cannot write draft files under {out_dir}: {exc}") from exc
+
+    print(f"commits: {counts['commits']}")
+    print(f"trailers: {counts['trailers']}")
+    print(f"draft: {draft_path}")
+    print(f"body: {body_path}")
+    print(f"hint: {hint}")
+    return report.exit_code
 
 
 def create_or_reuse_pr(
@@ -1520,25 +2380,23 @@ def merge_pr(
     squash_message_override: str | None = None,
     squash_message_supplied: bool = False,
 ) -> bool:
-    check_title_length(title, num)
-    state = "unknown"
-    for _ in range(MERGE_STATE_TRIES):
-        st_res = run_command(
-            ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".mergeable_state"],
-            cwd=cwd,
-        )
-        state = (
-            st_res.stdout.strip() if st_res.returncode == 0 and st_res.stdout.strip() else "unknown"
-        )
-        if state == "clean":
-            break
-        print(f"mergeable_state={state} waiting…", file=sys.stderr)
-        time.sleep(MERGE_STATE_INTERVAL)
-
-    if state != "clean":
-        print(f"refusing to merge: mergeable_state={state} (not clean)", file=sys.stderr)
+    if title.strip():
+        check_squash_title(title, num)
+    else:
+        check_title_length(title, num)
+    obs = resolve_merge_state(
+        repo,
+        num,
+        fetch=fetch_merge_state,
+        unknown_tries=MERGE_STATE_TRIES,
+        unknown_interval=MERGE_STATE_INTERVAL,
+        cwd=cwd,
+    )
+    if obs.verdict != "clean":
+        if obs.verdict in ("conflicting", "unknown"):
+            report_merge_refusal(obs, repo, num, cwd=cwd)
+        print(f"refusing to merge: mergeable_state={obs.state} (not clean)", file=sys.stderr)
         return False
-
     header = f"{title} (#{num})"
     merge_args: list[str] = [
         "-f",
@@ -1552,6 +2410,14 @@ def merge_pr(
             explicit=squash_message_override,
             supplied=squash_message_supplied,
             template_path=template_path,
+        )
+    except RefusalError:
+        return False
+    try:
+        check_squash_body(
+            msg,
+            title=title,
+            pr_link=f"https://github.com/{repo}/pull/{num}",
         )
     except RefusalError:
         return False
@@ -1775,12 +2641,13 @@ def main(argv: list[str] | None = None) -> int:
         repo = resolve_repo(head)
 
         if options.check:
-            return check_trailers(
+            return run_draft_phase(
+                options=options,
                 repo=repo,
                 head_ref=head,
+                title=title,
                 body=body,
                 body_supplied=body_supplied,
-                title=title,
                 squash_message_override=squash_override,
                 squash_message_supplied=squash_supplied,
             )
@@ -1860,12 +2727,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
 
         if options.watch:
-            if not watch_checks(repo, num, base):
+            if not watch_checks(repo, num, base, verbose=options.verbose):
                 return 1
 
         if options.merge:
             if not options.watch:
-                if not watch_checks(repo, num, base):
+                if not watch_checks(repo, num, base, verbose=options.verbose):
                     return 1
             if not merge_pr(
                 repo=repo,

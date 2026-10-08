@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **gh-router:** draft-phase `--check` writing `draft.json` + curated `pr_body.md`, and a tightened prompt spine across the router and its subskills
+* **gh-router:** pr-land `--watch` fast-fails on a conflict or an unresolved mergeability (dirty debounced twice, `unknown` budgeted ~8s) with one slim stderr line per poll, and `--verbose` opts into the full failure logs
+* **gh-router:** draft `--check` title follows `--head`, warns on empty-range guesses, carries an advisory dirty block, and hints the curation spec
 * **gh-router:** one range authority and the git-diff-digest range surface with brief payload, pr landing view, digest-first PR authoring, and verify readout (#214)
 * **ci:** draft PR handshake, staged fail-fast CI pipeline, and scaffold typecheck-budget retirement (#198)
 * **ci:** replace typecheck warning budget with native basedpyright gate and unify local checks in check.sh (#197)

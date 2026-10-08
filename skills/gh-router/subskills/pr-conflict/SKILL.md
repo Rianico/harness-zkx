@@ -11,46 +11,29 @@ metadata:
 
 # PR Conflict
 
-Extracts compact conflict hunks and dual commit intent (`ours` vs `theirs`) to preserve context tokens and reconcile conflicts without whole-file churn.
+Extracts compact conflict hunks and dual commit intent (`ours` vs `theirs`) so an agent reconciles a stopped Git operation without whole-file churn.
 
-## Workflow
+## CLI
 
-### 1. Inspect Conflict & Author Intent (Deterministic Tool)
-Triage unmerged paths across the repository:
-```bash
-uv run $SKILL_DIR/scripts/extract_conflict_context.py
-```
-Extract isolated conflict hunks with operation and author intent for a single file:
-```bash
-uv run $SKILL_DIR/scripts/extract_conflict_context.py --file path/to/file
-```
-*(Append `--json` for structured agent consumption).*
+| Flag | Effect |
+| --- | --- |
+| (none) | repo triage: unmerged paths, conflict type, hunk counts |
+| `--file PATH` | detail for one conflicted path: operation, author intent, compact hunks; repeatable |
+| `--all` | detail for every conflicted path; cannot combine with `--file` |
+| `--json` | JSON instead of text |
+| `--context N` | context lines around each hunk (default 2) |
+| `--max-lines N` | truncate each section (default 40) |
 
-### 2. Reconcile Dual Author Intent (Semantic Resolution)
-Inspect the dual commit intent displayed by the tool (`ours` on HEAD vs `theirs` on MERGE_HEAD / REBASE_HEAD / CHERRY_PICK_HEAD):
-- **Intent Invariant:** Preserve both authors' intents where compatible. When conflicting, select the change aligning with the landing/rebase target and document the trade-off. Never invent extraneous logic.
-- **Marker-based conflicts:** Surgically edit the file to merge logic, removing all `<<<<<<<`, `=======`, `>>>>>>>` markers.
-- **Whole-file conflicts:** When one side fully supersedes, use `git checkout --ours -- path/to/file` or `git checkout --theirs -- path/to/file`.
-- **Tree conflicts:** Resolve file existence (`git rm` or `git add`) based on verified intent.
+A path that is not conflicted, or `--all` combined with `--file`, exits `2`.
 
-### 3. Verify & Continue (Falsifiable Gate)
-1. Assert zero conflict markers and unmerged index entries:
-   ```bash
-   uv run $SKILL_DIR/scripts/extract_conflict_context.py
-   git diff --name-only --diff-filter=U
-   ```
-2. Run project tests and linters (e.g. `uv run pytest`, `uv run basedpyright`).
-3. Stage and continue the Git operation:
-   ```bash
-   git add path/to/file
-   # Rebase: git rebase --continue
-   # Merge:  git commit
-   ```
+## Flow
 
-## CLI Reference
-
-```bash
-uv run $SKILL_DIR/scripts/extract_conflict_context.py --file path/to/file --json
-uv run $SKILL_DIR/scripts/extract_conflict_context.py --all
-uv run $SKILL_DIR/scripts/extract_conflict_context.py --file path/to/file --context 3 --max-lines 60
-```
+1. **Triage** — `uv run $SKILL_DIR/scripts/extract_conflict_context.py`. *Done when* it prints `conflicted files: 0` or lists every unmerged path with its conflict type, stages, and hunk count (add `--file` or `--all` for the git operation and author intent).
+2. **Reconcile** — the tool labels `ours` from HEAD and `theirs` from MERGE_HEAD / REBASE_HEAD / CHERRY_PICK_HEAD / REVERT_HEAD; resolve each path by its type:
+   - **Marker conflict** — edit the file to merge both intents, then delete every `<<<<<<<`, `=======`, `|||||||`, and `>>>>>>>` line.
+   - **Whole-file conflict** — one side fully supersedes: `git checkout --ours -- PATH` or `git checkout --theirs -- PATH`.
+   - **Tree conflict** — the file exists on one side only: `git add PATH` or `git rm PATH`, by verified intent.
+   - **Intent rule** — preserve both authors where compatible; where they contradict, keep the change the landing or rebase target needs and record the trade-off. Never invent logic neither side wrote.
+   *Done when* no path holds a marker and no path still needs context.
+3. **Verify** — `uv run $SKILL_DIR/scripts/extract_conflict_context.py --file PATH` shows no hunks, `git diff --name-only --diff-filter=U` prints nothing, and the project tests and linters pass (`uv run pytest`, `uv run basedpyright`). *Done when* all three are clean.
+4. **Continue** — `git add PATH`, then resume: `git rebase --continue`, `git commit` (merge), `git cherry-pick --continue`, `git revert --continue`, or finish the stash pop. *Done when* the operation reports success and `git status` lists no unmerged paths.

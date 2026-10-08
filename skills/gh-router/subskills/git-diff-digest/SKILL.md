@@ -11,32 +11,53 @@ metadata:
 
 # Range Brief — Resolve → Brief → Drill Down
 
-Deterministic what-changed context for a commit interval via local git plumbing only (never `gh`, never the network). Base/range resolution belongs to the shared authority in `$SKILL_DIR/../../lib/range_authority.py` — the brief consumes it and never re-implements it.
+Deterministic what-changed context for a commit interval, from local git plumbing only — never `gh`, never the
+network. The payload is the change-fact source for a PR body (`pr-enhance`, `pr-land`). Base/range resolution
+belongs to the shared authority in `$SKILL_DIR/../../lib/range_authority.py`: the brief consumes it and never
+re-implements it.
 
 ## Script
 
-`$SKILL_DIR/scripts/brief.py` (755, PEP 723, Python >=3.14 via `uv run`, `dependencies=["pyyaml"]`).
+`$SKILL_DIR/scripts/brief.py` — PEP 723, run with `uv run`.
 
-```bash
-uv run $SKILL_DIR/scripts/brief.py 'main...HEAD'
-uv run $SKILL_DIR/scripts/brief.py 'main...HEAD' --yaml > tmp/range.yaml
-uv run $SKILL_DIR/scripts/brief.py 'a1b2c3 d4e5f6' --mode .. --commit a1b2c3 --hunks
-```
+| Trigger | Run | Output |
+| --- | --- | --- |
+| What changed in a range | `uv run $SKILL_DIR/scripts/brief.py '<base>...HEAD'` | text brief: commit count and kinds, file counts by change kind, area rollup, churn ranking, test-line share, author count, date span |
+| Facts for a PR body | `uv run $SKILL_DIR/scripts/brief.py '<base>...HEAD' --pr --yaml > tmp/pr.json` | the `schema: 1` payload plus its `landing` block |
+| One commit | `uv run $SKILL_DIR/scripts/brief.py '<spec>' --commit <sha>` | that commit's own rows, uncapped body |
+| One file | `uv run $SKILL_DIR/scripts/brief.py '<spec>' --file <path> --hunks` | the file row plus unified hunks (`--context N`) |
+| Re-check a stored range | `uv run $SKILL_DIR/scripts/brief.py '<spec>' --verify <fingerprint>` | hit exits `0` confirming; mismatch exits `3` naming what moved |
+| Uncommitted edits beside a range | `uv run $SKILL_DIR/scripts/brief.py '<spec>'` | a `dirty` block naming the worktree head (`git status --porcelain` plus `git diff HEAD --stat`, both capped at `--max-lines`) and one stderr warning naming `stale-when-dirty`; the fingerprint does not move; an unreadable `git status` skips the block, never the brief |
 
-Default output is the text brief (precomputed overview: commit count+kinds, file counts by change kind, per-area rollup, churn ranking, test-line share, author count, date span). `--yaml` is the structured default, `--json` the alternate; both decode to equal mappings. Drill down with `--commit`, `--file`, `--hunks` (`--context N`), `--max-lines N`, `--group-by area|category|status`, and an optional `PATH_FILTER`. `--pr [SPEC]` (default `HEAD`) adds the `landing` block for the same range; `--verify FINGERPRINT` recomputes the range fingerprint and reports hit or mismatch. Full flag and payload detail lives in [references/digest-schema.md](references/digest-schema.md).
+| Flag | Effect |
+| --- | --- |
+| `PATH_FILTER` | narrows file and area rows to a path or subtree prefix |
+| `--mode ..` / `--mode ...` | operator for a spec that carries none (default `...`) |
+| `--commit SHA` | narrows commit rows to one member of the interval |
+| `--file PATH` | repeatable file narrowing |
+| `--hunks` | adds unified hunks to the text brief |
+| `--context N` | hunk context lines (default `3`) |
+| `--max-lines N` | caps each capped block (default `40`) and prints the remainder with a rerun line |
+| `--group-by area` / `category` / `status` | area rollup key |
+| `--yaml` / `--json` | structured payload; both decode to equal mappings |
+| `--pr [SPEC]` | adds the `landing` block for the same range (default `HEAD`) |
+| `--verify FINGERPRINT` | recomputes the range fingerprint and compares it |
+| `--repo DIR` | path inside the repository (default `.`) |
+
+Payload keys per block: [references/digest-schema.md](references/digest-schema.md). `--help` answers from the
+header, outside a repo, in 14 lines.
 
 ## Invariants & Gates
 
-- **Authority First**: every run resolves through `resolve_range(spec, mode)`; the brief adds rows, never resolution.
-- **Honest Caps**: `truncated.*` counts omitted rows (0 when none); `range.counts` always carries true totals; every capped block prints its remainder plus a ready-to-paste rerun command quoting the same spec.
-- **Full Bodies**: commit bodies render untruncated with conventional kind/scope, `#N`/sha refs, and each commit's own file rows.
-- **No Directives**: the payload carries facts only — commits, files, areas, signals — and never guidance prose.
-- **Fail-Loud Exits**: `0` ok (range, pr, verify hit) · `2` malformed spec, fingerprint shape, or usage · `3` refusal (unknown ref, commit outside the interval, empty pr range, verify mismatch) · `1` unexpected failure.
+- **Authority First** — every run resolves through `resolve_range(spec, mode)`; the brief adds rows, never resolution.
+- **Commit-Only Fingerprint** — the authority and the fingerprint read commits only. A dirty tree adds the `dirty` block (worktree `head`/`branch`, `git status --porcelain` rows, and `git diff HEAD --stat` rows so staged and unstaged text changes both appear), prints one warning that the fingerprint reads `stale-when-dirty`, and changes no `range` field; a clean tree emits no `dirty` block. The dirty read is advisory and capped: `--max-lines` bounds both listings with the shared remainder row, and an unreadable `git status` (stale lock, bad index) skips the block instead of failing the brief. `--verify` still exits `0` on a matching fingerprint.
+- **Honest Caps** — `truncated.*` counts omitted rows (`0` when none) and `range.counts` always carries true totals; every capped block prints its remainder plus a ready-to-paste rerun quoting the same spec.
+- **Full Bodies** — commit bodies render untruncated, with conventional kind/scope and `#N`/sha refs.
+- **Facts Only** — the payload carries commits, files, areas, and signals, and never guidance prose.
+- **Fail-Loud Exits** — `0` ok (range, pr, verify hit) · `2` malformed spec, fingerprint shape, or usage · `3` refusal (unknown ref, commit outside the interval, empty pr range, verify mismatch) · `1` unexpected failure.
 
 ## Flow
 
-1. **Resolve** — caller passes a spec (`base...head`, `base..head`, or a sha pair with `--mode`); the authority returns the ordered interval, merge base, and base-side count.
-2. **Brief** — read the text overview or the structured payload; per-area rollups and change signals (`breaking`, `deps`, `changelog`, `renames`, `evidence_candidates`) stay range-wide while file rows narrow under filters.
-3. **Drill Down** — narrow to one `--commit` or `--file`, add `--hunks` for unified hunks, widen `--max-lines` from any remainder line, and regroup areas with `--group-by`.
-
-`--help` answers from the header alone (no repo access) and stays within 14 lines.
+1. **Resolve** — the authority turns your spec into the ordered interval, merge base, and base-side count. Done when the range line names the merge base you expect.
+2. **Brief** — read the text overview or the structured payload; per-area rollups and signals (`breaking`, `deps`, `changelog`, `renames`, `evidence_candidates`) stay range-wide while file rows narrow under filters. Done when `range.counts` and every `truncated.*` row are accounted for.
+3. **Drill Down** — narrow to a commit or file, add `--hunks`, widen `--max-lines` from a remainder line, regroup with `--group-by`. Done when no remainder line matters.

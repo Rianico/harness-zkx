@@ -1,5 +1,10 @@
 <!-- markdownlint-disable MD041 -->
 
+<!-- Canonical template: skills/gh-router/references/pull_request_template.md
+     In the gh-router source repo: sync the installed copy with
+     skills/gh-router/scripts/install-template.sh --target . --force
+     The installer compares the two files byte-for-byte; keep them identical (no checksum). -->
+
 ## Summary
 
 <!-- 2-3 sentences: why this change, user-visible effect. -->
@@ -12,20 +17,35 @@ outline. Flag migrations, contract, or payload changes. -->
 
 -
 
+## Root Cause
+
+<!-- FIX-ONLY: one line naming why the bug happened, not what changed. Delete this whole
+     section for feat, docs, chore, and refactor changes; the squash gate requires Root for
+     a `fix` title only. -->
+
 ## Blast Radius & Safety
 
+**Door:** one-way / two-way
 **Downstream consumers:**
 **Breaking changes:**
 **Data / state invariants:**
 **Rollback / containment:**
 
+<!-- Door: pick exactly one — `one-way` = irreversible, `two-way` = revertible with the
+     rollback stated above. Keep the Door line first in this section: the squash gate reads it. -->
+
 ## Evidence
 
-<!-- Exact commands run and what they assert; link the CI run. -->
+<!-- Paste BOTH outputs verbatim, not a summary: the commands and outputs BEFORE the change,
+     then the commands and outputs AFTER it. Link the CI run. -->
+**Before (command + output):**
+**After (command + output):**
 
 ## Architecture
 
-<!-- Mermaid before/after only when structural seams, layering, or data-flow changes; delete the section otherwise. -->
+<!-- OPTIONAL: Mermaid before/after only when structural seams, layering, or data-flow change.
+     Delete this whole section for docs, chore, and small-fix changes. Mermaid stays in the PR
+     body for humans; the squash gate strips this section from the squash message. -->
 
 ## Landing
 

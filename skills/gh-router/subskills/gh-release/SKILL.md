@@ -10,39 +10,32 @@ metadata:
 
 # GH Release
 
-Dispatch semantic-release from `main` — version from `feat`/`fix`/`!` since last tag.
+Dispatch semantic-release from `main` — the version comes from `feat`/`fix`/`!` commits since the last tag. Run
+these five steps in order; each one exits `0` before the next starts.
 
-## Phases
+## Flow
 
-| #   | Script                       | Banner                                          | Output contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| --- | ---------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2   | `verify.sh`                  | `━━━ Phase 2/3: Verify ━━━`                     | auto-detects `node`/`rust`/`python`; prints each `▸ lint/typecheck/test` substep with a one-line result (`✔ <step> passed`) — command output (warnings/test details) shown as a tail **only on failure**; ends `✔ Phase 2 ok`.                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 3   | `dispatch.sh [--dry-run]`    | `━━━ Phase 3/3: Preview → Dispatch → Watch ━━━` | single `semantic-release --dry-run` (token fetched once), prints only `✔ next version: vX` + condensed release-note body (full trace discarded) or `⚠ no new version`; prompt `a: dispatch (publish vX)  b: hold`; on dispatch polls `gh run list --workflow release.yml --event repository_dispatch` for new run (fallback `Verify and Release`), then **quiet-polls the run status** (no `gh run watch` frames) emitting nothing until completion; success → `✔ workflow completed: success` + tags/CHANGELOG head + run URL, failure → `✘ workflow <conclusion>` + `gh run view --log-failed`. No run in ~60s → `⚠ watch skipped` + manual check hint. |
-| 4   | `release-watch.sh [--watch]` | `━━━ Watch release.yml ━━━`                     | `POST dispatches` (fallback `workflow_dispatch`) → polls `actions/workflows/release.yml/runs` by `head_sha`, quiet-polls `status/conclusion` (10s), `success` → tags + `git describe`, `failure` → `gh run view --log` tail 300 + `exit 1` for model fix                                                                                                                                                                                                                                                                                                                                                                                                  |
+| #   | Step     | Run                                        | Done when                                                                                                                                                             |
+| --- | -------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Check    | `$SKILL_DIR/scripts/check.sh`              | `✔ working tree clean` · `✔ on branch main` · `✔ <N> commit(s) — conventional commits ok` · `✔ Phase 1 ok — all checks passed`                                          |
+| 2   | Verify   | `$SKILL_DIR/scripts/verify.sh`             | `✔ ruff check · basedpyright · pytest passed` then `✔ Phase 2 ok — verification passed`                                                                                |
+| 3   | Preview  | `$SKILL_DIR/scripts/dispatch.sh --dry-run` | `✔ next version: vX` plus the release-note body, or `⚠ no new version — nothing to release`                                                                            |
+| 4   | Dispatch | `$SKILL_DIR/scripts/dispatch.sh`           | `Publish vX ?` → answer `a` → `✔ dispatched <owner/repo>` → `✔ workflow completed: success` → `✔ release workflow succeeded — run <id>`                                  |
+| 5   | Confirm  | `$SKILL_DIR/scripts/confirm.sh`            | `release <tag> <kind> <date>  <url>` · `tag <tag> → <sha> (<type>) · reachable from main` · `main <sha> <subject>` · `changelog <sections>`                             |
 
-All scripts source the skill's shared modules: `$SKILL_DIR/../../lib/log.sh` for `phase`/`ok`/`warn`/`fail`/`step` helpers with ANSI (respects `NO_COLOR`), and `$SKILL_DIR/../../lib/repo.sh` for push-remote repo identity (`repo_slug`, `default_branch`). `release-watch.sh` sources only `$SKILL_DIR/../../lib/repo.sh` — it needs the fact, not the presentation. No duplicate dry-run; no `npm` prefix noise; no `--verbose` unless failed. Set `GH_RELEASE_QUIET=1` to suppress informational lines (`info`/`dim`/`step` + banner bar) — only `ok`/`warn`/`fail`/`phase` markers print, cutting each script to ~5 lines for context-limited harness runs.
+## Failures
 
-## Run
+- Step 1 exits `1` on a dirty tree, off `main`, or a commitlint rejection; with no commits ahead of `origin/main` it warns and passes.
+- Step 2 detects node/rust/python and prints one aggregated line per toolchain group. A failing step prints its 80-line tail and exits `1`; `pytest` warns instead (`⚠ pytest failed or not configured (rc=N)`) and the phase continues.
+- Steps 3 and 4 exit `1` when semantic-release itself fails (`⚠ semantic-release dry-run failed (exit N)` plus a 20-line tail).
+- Step 4 holds on `b` (`⚠ hold — not dispatched`, exit `0`). A failed release workflow exits `1` at `✘ workflow completed: <conclusion>`; no run visible within ~60s warns (`⚠ dispatched but no workflow run appeared within ~60s`) and exits `0`.
+- Step 5 exits `1` when the tag is not reachable from the base branch — a re-rooted history otherwise keeps planning the same next version every time.
 
-```bash
-$SKILL_DIR/scripts/check.sh
-$SKILL_DIR/scripts/verify.sh
-$SKILL_DIR/scripts/dispatch.sh --dry-run   # preview only
-$SKILL_DIR/scripts/dispatch.sh             # preview → prompt → dispatch → quiet watch
-$SKILL_DIR/scripts/release-watch.sh --watch  # dispatch + poll (no preview), dumps logs on fail
-$SKILL_DIR/scripts/confirm.sh            # post-release verification (read-only, one call)
-```
+## Without a preview
 
-## Confirm
+`$SKILL_DIR/scripts/release-watch.sh --watch` dispatches from `main` and polls `release.yml` with no preview and no
+prompt. Success prints `release success`, the run URL, and the new tag; failure prints
+`release <conclusion> — fetching logs` plus a 300-line log tail and exits `1`. Off `main`, or with an unresolvable
+push remote, it exits `2`.
 
-`$SKILL_DIR/scripts/confirm.sh` — one call, read-only:
-
-```
-release   v2.0.0 published 2026-09-12  <url>
-tag       v2.0.0 → 5ab33ddb (annotated) · reachable from main
-main      3175095f <subject>
-changelog ## [Unreleased] L7 · ## [2.0.0] L17
-```
-
-Exit 1 when the tag is not reachable from the base branch — the failure mode that hid a re-rooted
-history: 13 tags existed locally while `origin` had none, so every release planned `1.0.0`.
+Set `GH_RELEASE_QUIET=1` to drop the `→` / `·` lines and the banner bar, leaving the phase banner and the `✔` / `⚠` / `✘` markers.

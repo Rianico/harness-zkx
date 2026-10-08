@@ -33,6 +33,7 @@ from range_authority import (
     find_repo_root,
     resolve_range,
     run_git,
+    truncate_lines,
 )
 
 _BRIEF_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -57,6 +58,15 @@ _CONVENTIONAL_RE = re.compile(r"^([A-Za-z]+)(?:\(([^()]*)\))?(!)?\s*:\s*\S")
 _BRIEF_NUMBER_RE = re.compile(r"#(\d+)")
 _BRIEF_SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
 _BRIEF_BREAKING_RE = re.compile(r"^BREAKING[ -]CHANGE\s*:", re.IGNORECASE | re.MULTILINE)
+_BRIEF_FINGERPRINT_STALENESS = "stale-when-dirty"
+_BRIEF_DIRTY_WARNING = (
+    "brief: warning: dirty working tree; the range fingerprint reads "
+    f"{_BRIEF_FINGERPRINT_STALENESS} (uncommitted edits do not move it)"
+)
+_BRIEF_DIRTY_UNAVAILABLE_WARNING = (
+    "brief: warning: dirty state unavailable (git status failed); "
+    "omitting the dirty block (the range fingerprint reads commits only)"
+)
 
 _BRIEF_STATUS_WORDS = {
     "A": "added",
@@ -197,6 +207,14 @@ class _BriefRange(TypedDict):
     resolved_from: str
     counts: _BriefRangeCounts
     fingerprint: str
+    fingerprint_staleness: str
+
+
+class _BriefDirty(TypedDict):
+    head: str
+    branch: str | None
+    porcelain: list[str]
+    diff_stat: list[str]
 
 
 class _BriefSignals(TypedDict):
@@ -234,6 +252,7 @@ class _BriefPayload(TypedDict):
     truncated: _BriefTruncated
     landing: NotRequired[_BriefLanding]
     verification: NotRequired[_BriefVerification]
+    dirty: NotRequired[_BriefDirty]
 
 
 class _BriefNumstatRow(TypedDict):
@@ -360,6 +379,47 @@ def _parse_brief_name_status(output: str) -> list[_BriefStatusRow]:
         elif len(cells) >= 2:
             rows.append({"status": letter, "old": cells[1], "new": cells[1]})
     return rows
+
+
+def _read_brief_dirty(repo_root: Path, max_lines: int) -> _BriefDirty | None:
+    """Read the uncommitted working-tree state; None when the tree is clean.
+
+    The range authority stays commit-only, so this reading never enters the
+    fingerprint; it only states that the fingerprint reads stale-when-dirty.
+    The read is advisory: a stale index.lock or an unreadable index skips the
+    dirty block instead of failing an otherwise successful brief. Index writes
+    stay off (``--no-optional-locks``), both listings cap at ``max_lines`` rows
+    with the shared remainder marker, and the block names the worktree HEAD so
+    callers can tell which checkout carries the dirt.
+    """
+    try:
+        porcelain = [
+            line
+            for line in run_git(
+                repo_root, "--no-optional-locks", "status", "--porcelain"
+            ).splitlines()
+            if line.strip()
+        ]
+        if not porcelain:
+            return None
+        diff_stat = [
+            line
+            for line in run_git(
+                repo_root, "--no-optional-locks", "diff", "HEAD", "--stat"
+            ).splitlines()
+            if line.strip()
+        ]
+        head = run_git(repo_root, "rev-parse", "--short", "HEAD").strip()
+        branch = run_git(repo_root, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    except RuntimeError:
+        print(_BRIEF_DIRTY_UNAVAILABLE_WARNING, file=sys.stderr)
+        return None
+    return {
+        "head": head,
+        "branch": None if branch in ("", "HEAD") else branch,
+        "porcelain": truncate_lines(porcelain, max_lines),
+        "diff_stat": truncate_lines(diff_stat, max_lines),
+    }
 
 
 def _read_brief_diff(
@@ -551,6 +611,7 @@ def _build_brief(
             "fingerprint": _fingerprint_brief_payload(
                 spec_in, resolution.mode, resolution.merge_base, list(resolution.commits)
             ),
+            "fingerprint_staleness": _BRIEF_FINGERPRINT_STALENESS,
         },
         "commits": shown_commits,
         "areas": areas,
@@ -569,6 +630,9 @@ def _build_brief(
             "commits": len(commits) - len(shown_commits),
         },
     }
+    dirty = _read_brief_dirty(repo_root, max_lines)
+    if dirty is not None:
+        payload["dirty"] = dirty
     if want_landing:
         conventional = sum(1 for entry in full_commits if entry["type"] is not None)
         total = len(full_commits)
@@ -620,9 +684,24 @@ def render_brief_text(
         ),
         (
             f"base via {block['resolved_from']} merge-base {block['merge_base'][:12]} "
-            f"only-in-base {block['only_in_base']} fingerprint {block['fingerprint'][:12]}"
+            f"only-in-base {block['only_in_base']} fingerprint {block['fingerprint'][:12]} "
+            f"{_BRIEF_FINGERPRINT_STALENESS}"
         ),
     ]
+    dirty = payload.get("dirty")
+    if dirty is not None:
+        branch = dirty["branch"] or "detached"
+        lines.append(
+            f"dirty: working tree has uncommitted changes at {dirty['head']} ({branch}) "
+            f"(fingerprint reads {_BRIEF_FINGERPRINT_STALENESS})"
+        )
+        lines.append("  status:")
+        lines.extend(f"    {row}" for row in dirty["porcelain"])
+        lines.append("  diff stat:")
+        if dirty["diff_stat"]:
+            lines.extend(f"    {row}" for row in dirty["diff_stat"])
+        else:
+            lines.append("    (no text diff)")
     full_commits = payload["commits"]
     kinds = Counter(e["type"] or "other" for e in full_commits)
     authors = sorted({e["author"]["name"] for e in full_commits})
@@ -768,7 +847,8 @@ def render_verify_hit_text(payload: _BriefPayload) -> str:
     return (
         f"brief '{block['spec_in']}' ({block['mode']}): verified fingerprint "
         f"{block['fingerprint']} via {block['resolved_from']} "
-        f"merge-base {block['merge_base'][:12]} only-in-base {block['only_in_base']}"
+        f"merge-base {block['merge_base'][:12]} only-in-base {block['only_in_base']} "
+        f"({_BRIEF_FINGERPRINT_STALENESS})"
     )
 
 
@@ -786,6 +866,12 @@ def build_verify_mismatch_error(
         "the range moved since this fingerprint was taken \u2014 compare spec, "
         "mode, merge_base and commit count above against the recorded digest"
     )
+
+
+def _warn_brief_dirty(payload: _BriefPayload) -> None:
+    """Warn on stderr when uncommitted edits sit beside the commit-only fingerprint."""
+    if "dirty" in payload:
+        print(_BRIEF_DIRTY_WARNING, file=sys.stderr)
 
 
 def main() -> int:
@@ -894,6 +980,7 @@ def main() -> int:
             expected = args.verify.strip().lower()
             if actual.lower() != expected:
                 raise build_verify_mismatch_error(args.spec, expected, payload)
+            _warn_brief_dirty(payload)
             payload["verification"] = {
                 "expected": expected,
                 "actual": actual,
@@ -933,6 +1020,7 @@ def main() -> int:
     except Exception as error:
         print(f"brief: unexpected failure: {error}", file=sys.stderr)
         return 1
+    _warn_brief_dirty(payload)
     if args.brief_json:
         print(json.dumps(payload, indent=2))
         return 0
