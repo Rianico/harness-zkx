@@ -86,7 +86,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
-* **herdr:** emit `pi --session <path|id>` for every pi resume, because `--resume` is a value-less picker that opens the session list ([#211](https://github.com/Rianico/harness-zkx/issues/211)) (#223)
+* **herdr:** emit `pi --session` with the session path or id for every pi resume, because `--resume` is a value-less picker that opens the session list ([#211](https://github.com/Rianico/harness-zkx/issues/211)) (#223)
 * **herdr:** refuse a whitespace TARGET before reading the payload, and name `--file`/stdin in the empty-payload refusal ([#212](https://github.com/Rianico/harness-zkx/issues/212)) (#223)
 * **herdr:** observe `--no-wait` acceptance for the CLI's own 5s window and warn instead of exiting 1, ending duplicate re-sends and false "prompt dropped" reports ([#193](https://github.com/Rianico/harness-zkx/issues/193)) (#223)
 * **herdr:** release a ticket lease whose recorded pane is gone, so a resumed lane takes follow-up work without `--force` ([#210](https://github.com/Rianico/harness-zkx/issues/210)) (#223)
