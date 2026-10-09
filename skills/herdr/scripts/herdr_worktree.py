@@ -226,7 +226,8 @@ def git_repo_root(env: Mapping[str, str]) -> Path:
 
 def is_bare_repository(env: Mapping[str, str]) -> bool:
     """Whether this repository has no working tree of its own."""
-    return run_checked(["git", "rev-parse", "--is-bare-repository"], env).strip() == "true"
+    state = run_checked(["git", "rev-parse", "--is-bare-repository"], env).strip()
+    return state == "true"
 
 
 def path_is_within(path: Path, root: Path) -> bool:

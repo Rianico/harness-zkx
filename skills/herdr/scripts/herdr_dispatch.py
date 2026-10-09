@@ -184,7 +184,9 @@ def resolve_target_identity(
                 canonical = name if name is not None else target
                 return canonical, pane
     except Exception:
-        pass
+        # An unreadable inventory is no answer: fall back to the raw target, and let the CLI
+        # report `agent_not_found` for a genuinely unknown one.
+        return target, None
     return target, None
 
 
@@ -390,11 +392,10 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
 
     try:
         code = prompt_agents(options, env)
-    except WaitTimeout:
-        # Prompt accepted; wait timed out. Retain lease.
-        raise
-    except BaseException:
-        if not options.dry_run:
+    except BaseException as exc:
+        # A WaitTimeout means the prompt was accepted and only the wait expired, so the lease
+        # stays until the reply callback resolves it. Any other exit releases this call's claims.
+        if not options.dry_run and not isinstance(exc, WaitTimeout):
             for acq in acquired_targets:
                 _ = release_lease(acq, env=env)
         raise
