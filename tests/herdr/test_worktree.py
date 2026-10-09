@@ -119,6 +119,19 @@ def test_wt_binary_found_on_path(tmp_path: Path) -> None:
     assert hw.wt_binary(env_with_wt(tmp_path)) is not None
 
 
+def git_facts(
+    argv: Sequence[str], root: Path, *, bare: bool = False
+) -> subprocess.CompletedProcess[str] | None:
+    """Answer the `git rev-parse` probes one allocation makes, or None to pass."""
+    if argv[:2] != ["git", "rev-parse"]:
+        return None
+    if "--is-bare-repository" in argv:
+        return completed(argv, stdout="true\n" if bare else "false\n")
+    if "--git-common-dir" in argv:
+        return completed(argv, stdout=f"{root / '.git'}\n")
+    raise AssertionError(f"unexpected rev-parse probe: {argv}")
+
+
 def test_allocate_with_wt_reads_path_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -127,7 +140,12 @@ def test_allocate_with_wt_reads_path_back(
         [{"branch": "main", "path": "/repo"}, {"branch": "feat/184", "path": "/repo.feat-184"}]
     )
 
+    root = tmp_path / "work" / "repo"
+
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
         if argv[1:] == ["list", "--format=json"]:
             return completed(argv, stdout=list_json)
         return completed(argv)
@@ -135,8 +153,9 @@ def test_allocate_with_wt_reads_path_back(
     calls = patch_runner(monkeypatch, handler)
     assert hw.main(["allocate", "feat/184"], env) == herdr_cli.EXIT_OK
     assert capsys.readouterr().out == "/repo.feat-184\n"
-    assert calls[0][0][1:] == ["switch", "--create", "feat/184"]
-    assert calls[0][1]["CI"] == "1"
+    (switch_call,) = [call for call in calls if call[0][1] == "switch"]
+    assert switch_call[0][1:] == ["switch", "--create", "feat/184"]
+    assert switch_call[1]["CI"] == "1"
 
 
 def test_allocate_with_wt_passes_base_and_emits_json(
@@ -145,7 +164,12 @@ def test_allocate_with_wt_passes_base_and_emits_json(
     env = env_with_wt(tmp_path)
     list_json = json.dumps({"items": [{"branch": "feat/184", "path": "/wt"}]})
 
+    root = tmp_path / "work" / "repo"
+
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
         if argv[1] == "list":
             return completed(argv, stdout=list_json)
         return completed(argv)
@@ -158,7 +182,8 @@ def test_allocate_with_wt_passes_base_and_emits_json(
         "engine": "worktrunk",
         "status": "allocated",
     }
-    assert calls[0][0][1:] == ["switch", "--create", "feat/184", "--base", "main"]
+    (switch_call,) = [call for call in calls if call[0][1] == "switch"]
+    assert switch_call[0][1:] == ["switch", "--create", "feat/184", "--base", "main"]
 
 
 def test_allocate_with_wt_recovers_existing_branch(
@@ -201,8 +226,9 @@ def test_allocate_git_fallback_uses_sibling_path(
     worktree = resolved_root.parent / f"{resolved_root.name}.feat-184"
 
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-        if argv[:3] == ["git", "rev-parse", "--git-common-dir"]:
-            return completed(argv, stdout=f"{root / '.git'}\n")
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
         if argv[:3] == ["git", "worktree", "add"]:
             worktree.mkdir(parents=True, exist_ok=True)
             return completed(argv)
@@ -223,8 +249,9 @@ def test_allocate_git_fallback_retries_existing_branch(
     worktree = resolved_root.parent / f"{resolved_root.name}.feat-184"
 
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-        if argv[:3] == ["git", "rev-parse", "--git-common-dir"]:
-            return completed(argv, stdout=f"{root / '.git'}\n")
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
         if argv[:3] == ["git", "worktree", "add"] and "-b" in argv:
             return completed(argv, returncode=1, stderr="branch already exists")
         if argv[:3] == ["git", "worktree", "add"]:
@@ -252,8 +279,9 @@ def test_allocate_git_fallback_recovers_existing_worktree(
     )
 
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-        if argv[:3] == ["git", "rev-parse", "--git-common-dir"]:
-            return completed(argv, stdout=f"{root / '.git'}\n")
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
         if argv[:3] == ["git", "worktree", "add"]:
             return completed(argv, returncode=128, stderr="already exists")
         if argv[:3] == ["git", "worktree", "list"]:
@@ -272,13 +300,80 @@ def test_allocate_git_fallback_failure_exits_one(
     root = tmp_path / "work" / "repo"
 
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-        if argv[:3] == ["git", "rev-parse", "--git-common-dir"]:
-            return completed(argv, stdout=f"{root / '.git'}\n")
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
         return completed(argv, returncode=1, stderr="no space left")
 
     _ = patch_runner(monkeypatch, handler)
     assert hw.main(["allocate", "feat/184"], env) == herdr_cli.EXIT_HERDR
     assert "no space left" in capsys.readouterr().err
+
+
+def test_git_repo_root_unwraps_a_bare_dot_git_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #207: the git probes answer in a bare repo, where `--show-toplevel` refuses."""
+    root = tmp_path / "work" / "everything-claude-code"
+
+    def probe(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        facts = git_facts(argv, root, bare=True)
+        return facts if facts is not None else completed(argv)
+
+    calls = patch_runner(monkeypatch, probe)
+    assert hw.git_repo_root({}) == Path(os.path.realpath(root))
+    assert hw.is_bare_repository({}) is True
+    assert "--path-format=absolute" in calls[0][0]
+
+
+def test_allocate_bare_repository_derives_the_sibling_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Issue #207: a bare repo named `.git` must not yield `<repo>/.git.<branch>`."""
+    env = env_with_wt(tmp_path)
+    root = Path(os.path.realpath(tmp_path / "work" / "everything-claude-code"))
+    worktree = root.parent / f"{root.name}.fix-pr-land-changelog-warning"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        facts = git_facts(argv, root, bare=True)
+        if facts is not None:
+            return facts
+        if argv[:3] == ["git", "worktree", "add"]:
+            worktree.mkdir(parents=True, exist_ok=True)
+            return completed(argv)
+        raise AssertionError(f"unexpected command: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["allocate", "fix/pr-land-changelog-warning", "--base", "main"], env)
+    assert code == herdr_cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out.strip() == str(worktree)
+    assert "bare repository" in captured.err
+    assert [call for call in calls if call[0][1] == "switch"] == []
+
+
+def test_guard_refuses_a_worktree_path_inside_the_git_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #207: a path inside the git directory fails loudly instead of being emitted."""
+    root = tmp_path / "work" / "repo"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        facts = git_facts(argv, root)
+        return facts if facts is not None else completed(argv)
+
+    _ = patch_runner(monkeypatch, handler)
+    placements = (
+        # the git directory itself, a path inside it, and the incident's hidden sibling
+        root / ".git",
+        root / ".git" / "worktrees" / "feat-184",
+        root / ".git.feat-184",
+    )
+    for placement in placements:
+        with pytest.raises(hw.WorktreeError, match="git directory"):
+            hw.guard_not_in_git_dir(placement, {})
+    # A bare repo named `repo.git` keeps its documented `<git-dir>.<slug>` sibling.
+    assert hw.path_is_within(root / "repo.feat-184", root / ".git") is False
 
 
 def test_resolve_with_wt(

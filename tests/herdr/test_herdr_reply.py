@@ -369,7 +369,7 @@ def _shell_target_state() -> dict[str, object]:
 RECOVERY = {
     "pane_id": "wM:p1N",
     "kind": "pi",
-    "resume_cmd": "pi --resume sess.jsonl",
+    "resume_cmd": "pi --session sess.jsonl",
     "cwd": "/repo",
 }
 
@@ -452,7 +452,7 @@ def test_reply_emits_recovery_diagnostic_for_exited_target(
         "uv run ~/.agents/skills/herdr/scripts/herdr_reply.py lens-orchestrator "
         "--file <reply> --auto-start pi"
     ) in done.stderr
-    assert "Or resume manually in pane wM:p1N: pi --resume sess.jsonl" in done.stderr
+    assert "Or resume manually in pane wM:p1N: pi --session sess.jsonl" in done.stderr
     assert stub.prompts() == []
 
 
@@ -515,7 +515,7 @@ def test_format_reply_recovery_diagnostic_exact_shape() -> None:
     recovery = {
         "pane_id": "wM:p1N",
         "kind": "pi",
-        "resume_cmd": "pi --resume sess.jsonl",
+        "resume_cmd": "pi --session sess.jsonl",
         "cwd": "/repo",
     }
     assert herdr_reply.format_reply_recovery_diagnostic(
@@ -525,7 +525,7 @@ def test_format_reply_recovery_diagnostic_exact_shape() -> None:
         "Suggested recovery:\n"
         "  1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py "
         "lens-orchestrator --file <reply> --auto-start pi\n"
-        "  2. Or resume manually in pane wM:p1N: pi --resume sess.jsonl"
+        "  2. Or resume manually in pane wM:p1N: pi --session sess.jsonl"
     )
     # Line 2 is omitted when no resume command is known.
     assert herdr_reply.format_reply_recovery_diagnostic(

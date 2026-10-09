@@ -112,6 +112,16 @@ def test_read_payload_reports_missing_file(tmp_path: Path) -> None:
         _ = herdr_prompt.read_payload(str(tmp_path / "nope.md"))
 
 
+def test_message_positional_is_refused_as_a_target_not_a_payload(stub: StubHarness) -> None:
+    """Issue #212: a message passed as a positional must be reported as a bad TARGET."""
+    done = stub.run("reviewer", "What single word did I ask you to remember?", stdin="")
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert "cannot be an agent name or pane id" in done.stderr
+    assert "--file PATH or stdin" in done.stderr
+    assert "payload is empty" not in done.stderr
+
+
 def test_read_payload_refuses_interactive_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
     class Tty:
         def isatty(self) -> bool:
@@ -486,7 +496,7 @@ def test_build_resume_cmd_for_all_supported_kinds() -> None:
     # pi
     assert (
         herdr_prompt.build_resume_cmd("pi", "/path/to/session.jsonl")
-        == "pi --resume /path/to/session.jsonl"
+        == "pi --session /path/to/session.jsonl"
     )
     assert herdr_prompt.build_resume_cmd("pi", "sess-id-456") == "pi --session sess-id-456"
     assert herdr_prompt.build_resume_cmd("pi", None) is None
@@ -510,8 +520,8 @@ def test_scalar_quotes_only_when_yaml_would_mangle() -> None:
     assert herdr_prompt._scalar("w1:p1") == "w1:p1"
     assert herdr_prompt._scalar("/path/to/session.jsonl") == "/path/to/session.jsonl"
     assert (
-        herdr_prompt._scalar("pi --resume /path/to/session.jsonl")
-        == '"pi --resume /path/to/session.jsonl"'
+        herdr_prompt._scalar("pi --session /path/to/session.jsonl")
+        == '"pi --session /path/to/session.jsonl"'
     )
     assert herdr_prompt._scalar("review pane X") == '"review pane X"'
     assert herdr_prompt._scalar("a#b") == '"a#b"'
@@ -540,7 +550,7 @@ def test_envelope_renders_position_receiver_and_group() -> None:
         agent="orchestrator",
         kind="pi",
         session_id="/tmp/session.jsonl",
-        resume_cmd="pi --resume /tmp/session.jsonl",
+        resume_cmd="pi --session /tmp/session.jsonl",
     )
     rendered = herdr_prompt.render_envelope(
         sender,
@@ -569,7 +579,7 @@ def test_envelope_renders_runtime_block_only_when_recovery_included() -> None:
         kind="pi",
         cwd="/path/to/my project",
         session_id="/tmp/session.jsonl",
-        resume_cmd="pi --resume /tmp/session.jsonl",
+        resume_cmd="pi --session /tmp/session.jsonl",
     )
     rendered = herdr_prompt.render_envelope(sender, include_recovery=True)
     assert rendered == "\n".join(
@@ -578,7 +588,7 @@ def test_envelope_renders_runtime_block_only_when_recovery_included() -> None:
             "  Sender: orchestrator@w1:p1 - kind pi",
             "Runtime:",
             '  Cwd: "/path/to/my project"',
-            '  Resume: "pi --resume /tmp/session.jsonl"',
+            '  Resume: "pi --session /tmp/session.jsonl"',
             "Protocol:",
             f"  {herdr_prompt.SKILL_NOTICE}",
         ]
@@ -610,7 +620,7 @@ def test_envelope_omits_tab_cwd_and_resume_by_default() -> None:
         cwd="/path/to/my project",
         kind="pi",
         session_id="/tmp/session.jsonl",
-        resume_cmd="pi --resume /tmp/session.jsonl",
+        resume_cmd="pi --session /tmp/session.jsonl",
     )
     rendered = herdr_prompt.render_envelope(sender)
     assert rendered == "\n".join(
@@ -1024,7 +1034,7 @@ def test_verbose_flag_restores_runtime_cwd_and_resume(stub: StubHarness, tmp_pat
     lines = prompt_call[4].splitlines()
     assert "Runtime:" in lines
     assert "  Cwd: /tmp/harness" in lines
-    assert '  Resume: "pi --resume /tmp/session.jsonl"' in lines
+    assert '  Resume: "pi --session /tmp/session.jsonl"' in lines
 
 
 def test_resolve_caller_captures_session_and_resume() -> None:
@@ -1041,7 +1051,7 @@ def test_resolve_caller_captures_session_and_resume() -> None:
         "herdr", {"HERDR_PANE_ID": "w9:p1"}, inventory=(panes, agents)
     )
     assert caller.session_id == "/tmp/session.jsonl"
-    assert caller.resume_cmd == "pi --resume /tmp/session.jsonl"
+    assert caller.resume_cmd == "pi --session /tmp/session.jsonl"
 
 
 # ── integration: pre-flight readiness gate and --no-wait handshake ──────────────────
@@ -1108,12 +1118,13 @@ def test_no_wait_handshake_confirms_acceptance(
     assert slept == []
 
 
-def test_no_wait_handshake_reports_unconfirmed_acceptance(
+def test_no_wait_handshake_warns_without_resending(
     stub: StubHarness,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Issue #193: exit 0 means accepted, so an unconfirmed handshake warns and never re-sends."""
     slept, fake_sleep = _sleep_recorder()
     monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
     stub.write_state(
@@ -1127,11 +1138,12 @@ def test_no_wait_handshake_reports_unconfirmed_acceptance(
         ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
         env=stub.base_env(),
     )
-    assert code == herdr_cli.EXIT_HERDR
+    assert code == herdr_cli.EXIT_OK
     assert len(stub.prompts()) == 1
-    assert len(slept) == 14
+    assert len(slept) == 49
     err = capsys.readouterr().err
     assert "acceptance was not confirmed" in err
+    assert "the CLI accepted the payload" in err
 
 
 def test_preflight_respects_explicit_interactive_ready_false(

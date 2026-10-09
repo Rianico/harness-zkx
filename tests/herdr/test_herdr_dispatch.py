@@ -212,6 +212,49 @@ def test_dispatch_refuses_when_target_has_active_lease(stub: StubHarness, tmp_pa
     assert stub.prompts() == []
 
 
+def test_dispatch_releases_lease_whose_recorded_pane_is_gone(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #210: a lease naming a closed pane must not block follow-up work without --force."""
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "round-1.md", "orch-1", pane_id="wZ:pQ", base_dir=tmp_path
+    )
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "releasing the stale lease for reviewer" in done.stderr
+    assert "(pane wZ:pQ no longer exists)" in done.stderr
+    assert len(stub.prompts()) == 1
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None and lease["ticket"] == str(payload_file(tmp_path))
+
+
+def test_dispatch_refuses_lease_whose_recorded_pane_is_alive(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A live pane keeps the conflict real, so --force stays the only override."""
+    import herdr_lease
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "round-1.md", "orch-1", pane_id="w9:p1", base_dir=tmp_path
+    )
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "active ticket lease (round-1.md)" in done.stderr
+    assert stub.prompts() == []
+
+
 def test_dispatch_force_bypasses_active_lease(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 

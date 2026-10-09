@@ -32,6 +32,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -199,15 +200,62 @@ def wt_worktree_for(wt: str, branch: str, env: Mapping[str, str]) -> str | None:
     return None
 
 
-def git_repo_root(env: Mapping[str, str]) -> Path:
-    """Absolute path to the main worktree root, even when called from a linked worktree."""
+def git_common_dir(env: Mapping[str, str]) -> Path:
+    """Absolute path to the git directory every worktree of this repository shares.
+
+    `--path-format=absolute` answers inside a bare repository too, where `--show-toplevel`
+    fails with "this operation must be run in a work tree" and the plain flag returns `.`,
+    which used to collapse a bare repo's root onto the git directory itself (#207).
+    """
+    done = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], env)
+    if done.returncode == 0 and done.stdout.strip():
+        return Path(os.path.realpath(done.stdout.strip()))
     raw = run_checked(["git", "rev-parse", "--git-common-dir"], env).strip()
     common = Path(raw)
     if not common.is_absolute():
         top = run_checked(["git", "rev-parse", "--show-toplevel"], env).strip()
         common = Path(top).resolve() / common
-    common = Path(os.path.realpath(common))
+    return Path(os.path.realpath(common))
+
+
+def git_repo_root(env: Mapping[str, str]) -> Path:
+    """Absolute path to the main worktree root, even when called from a linked worktree."""
+    common = git_common_dir(env)
     return common.parent if common.name == ".git" else common
+
+
+def is_bare_repository(env: Mapping[str, str]) -> bool:
+    """Whether this repository has no working tree of its own."""
+    return run_checked(["git", "rev-parse", "--is-bare-repository"], env).strip() == "true"
+
+
+def path_is_within(path: Path, root: Path) -> bool:
+    """Whether path is root itself or sits under it, comparing resolved paths."""
+    resolved = Path(os.path.realpath(path))
+    return resolved == root or root in resolved.parents
+
+
+def guard_not_in_git_dir(path: Path, env: Mapping[str, str]) -> None:
+    """Refuse a path in the git directory, or in a hidden sibling named after it (#207).
+
+    A bare repository whose directory is named `.git` makes Worktrunk derive
+    `<git-dir>.<slug>`; that path holds no checkout, so no lane can start there. A bare repo
+    named `repo.git` stays unaffected: Worktrunk's `<git-dir>.<slug>` sibling is then the
+    documented convention.
+    """
+    common = git_common_dir(env)
+    resolved = Path(os.path.realpath(path))
+    hidden_sibling = (
+        common.name.startswith(".")
+        and resolved.parent == common.parent
+        and resolved.name.startswith(f"{common.name}.")
+    )
+    if path_is_within(resolved, common) or hidden_sibling:
+        raise WorktreeError(
+            f"refusing to place a lane worktree in the git directory {common} "
+            f"(computed {path}); remove that worktree, fix Worktrunk's worktree-path, or run "
+            "herdr-worktree from a normal checkout"
+        )
 
 
 def sanitize_branch(branch: str) -> str:
@@ -269,6 +317,7 @@ def recover_git_worktree(branch: str, env: Mapping[str, str]) -> Allocation | No
 def allocate_with_git(branch: str, base: str | None, env: Mapping[str, str]) -> Allocation:
     """Fallback allocation with `git worktree add` under a predictable sibling path."""
     path = fallback_path(branch, env)
+    guard_not_in_git_dir(path, env)
     argv = ["git", "worktree", "add", "-b", branch, str(path)]
     if base:
         argv.append(base)
@@ -280,6 +329,7 @@ def allocate_with_git(branch: str, base: str | None, env: Mapping[str, str]) -> 
         if done.returncode != 0:
             recovered = recover_git_worktree(branch, env)
             if recovered is not None:
+                guard_not_in_git_dir(Path(recovered.path), env)
                 return recovered
             raise WorktreeError(f"{shlex.join(retry)} failed: {failure_detail(done)}")
     if not path.is_dir():
@@ -288,11 +338,22 @@ def allocate_with_git(branch: str, base: str | None, env: Mapping[str, str]) -> 
 
 
 def allocate(branch: str, base: str | None, env: Mapping[str, str]) -> Allocation:
-    """Allocate the branch's worktree through Worktrunk when present, else `git worktree`."""
+    """Allocate the branch's worktree through Worktrunk when present, else `git worktree`.
+
+    A bare repository is always allocated by git: Worktrunk's `{{ repo_path }}` is then the
+    git directory itself, so its sibling convention collapses to `<git-dir>.<slug>` (#207).
+    """
     name = require_branch(branch)
     wt = wt_binary(env)
+    if wt is not None and not is_bare_repository(env):
+        allocation = allocate_with_wt(wt, name, base, env)
+        guard_not_in_git_dir(Path(allocation.path), env)
+        return allocation
     if wt is not None:
-        return allocate_with_wt(wt, name, base, env)
+        print(
+            "herdr-worktree: bare repository; allocating with git worktree instead of wt",
+            file=sys.stderr,
+        )
     return allocate_with_git(name, base, env)
 
 
