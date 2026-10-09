@@ -188,6 +188,34 @@ def resolve_target_identity(
     return target, None
 
 
+def live_pane_ids(herdr: str, env: Mapping[str, str]) -> set[str] | None:
+    """Pane ids Herdr reports right now, or None when that inventory cannot answer.
+
+    An unreadable or empty inventory is no evidence, so callers must keep the conservative
+    behaviour: a lease is only stale when a live inventory positively lacks its pane.
+    """
+    try:
+        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    except Exception:
+        return None
+    ids = {entry_optional_text(pane, "pane_id") for pane in panes}
+    live = {pane_id for pane_id in ids if pane_id}
+    return live or None
+
+
+def lease_pane_is_gone(lease: Mapping[str, object], herdr: str, env: Mapping[str, str]) -> bool:
+    """Whether the lease records a pane that no longer exists (#210).
+
+    A callee that replied and was then resumed runs on a new pane, so its old pane id cannot
+    answer for the ticket any more. A lease with no pane id is not judged here.
+    """
+    pane_id = lease.get("pane_id")
+    if not isinstance(pane_id, str) or not pane_id:
+        return False
+    live = live_pane_ids(herdr, env)
+    return live is not None and pane_id not in live
+
+
 PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
 DRAFT_MARKER = "herdr-draft: unfilled"
 DRAFT_SECTIONS = ("## Task", "## Context", "## Acceptance criteria")
@@ -314,6 +342,14 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
             canonical, pane = resolve_target_identity(herdr, target, env)
             lease = get_lease(canonical, env=env) or (get_lease(pane, env=env) if pane else None)
             if lease:
+                if lease_pane_is_gone(lease, herdr, env):
+                    print(
+                        f"herdr-dispatch: releasing the stale lease for {target} "
+                        f"(pane {lease.get('pane_id')} no longer exists)",
+                        file=sys.stderr,
+                    )
+                    _ = release_lease(canonical, env=env)
+                    continue
                 raise UsageError(
                     f"target {target} has an active ticket lease ({lease['ticket']}) issued by {lease['caller']}. Await reply or pass --force"
                 )

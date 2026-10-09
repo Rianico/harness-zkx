@@ -89,7 +89,10 @@ EXIT_WAIT_TIMEOUT = 4
 
 READY_TIMEOUT_SECONDS = 10.0
 READY_INTERVAL_SECONDS = 0.2
-HANDSHAKE_TIMEOUT_SECONDS = 1.5
+# Matches the window `herdr agent prompt` documents for a submission accepted from a
+# non-working state ("an observed state change within 5000ms"). A shorter window reports a
+# delivered prompt as unaccepted whenever the agent's state moves late (#193).
+HANDSHAKE_TIMEOUT_SECONDS = 5.0
 HANDSHAKE_INTERVAL_SECONDS = 0.1
 
 
@@ -209,7 +212,10 @@ def read_payload(source: str | None) -> str:
     except UnicodeDecodeError as exc:
         raise UsageError(f"payload is not valid UTF-8: {exc}") from exc
     if not payload.strip():
-        raise UsageError("payload is empty; refusing to submit an empty prompt")
+        raise UsageError(
+            "payload is empty; refusing to submit an empty prompt. The payload comes from "
+            "--file PATH or stdin — positional arguments are TARGETs"
+        )
     return payload
 
 
@@ -232,13 +238,10 @@ def build_resume_cmd(kind: str | None, session_id: str | None) -> str | None:
     if kind == "agy":
         return f"agy --conversation={session_id}" if session_id else None
     if kind == "pi":
-        if not session_id:
-            return None
-        return (
-            f"pi --resume {session_id}"
-            if session_id.endswith(".jsonl")
-            else f"pi --session {session_id}"
-        )
+        # `--resume` is a value-less picker: `pi --resume <path>` opens the picker instead of
+        # re-attaching (verified 2026-10-09 in a non-TTY `--print` run). `--session` takes the
+        # session file or the id, so one form covers both (#211).
+        return f"pi --session {session_id}" if session_id else None
     if kind == "claude":
         return f"claude --resume {session_id}" if session_id else None
     if kind in ("qodercli", "qoderclicn"):
@@ -637,6 +640,22 @@ def validate_targets_not_kinds(targets: Sequence[str], herdr: str, env: Mapping[
             )
 
 
+def reject_message_like_targets(targets: Sequence[str]) -> None:
+    """Refuse a TARGET containing whitespace, before the payload is read (#212).
+
+    No agent name or pane id carries a space, so such a target is provably a misread message.
+    Reporting it here keeps the first mistake (a positional payload) from being blamed on the
+    second (an empty payload), and it costs no `herdr` call on the happy path.
+    """
+    for target in targets:
+        if any(character.isspace() for character in target):
+            raise UsageError(
+                f"target {target!r} contains whitespace, so it cannot be an agent name or pane "
+                "id; it reads like a message, and the payload comes only from --file PATH or "
+                "stdin"
+            )
+
+
 def fetch_agent_revision(
     herdr: str, target: str, env: Mapping[str, str]
 ) -> tuple[str | None, str | None]:
@@ -762,6 +781,8 @@ def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> lis
         raise UsageError("pass TARGET (agent name or pane id) or --label")
     if len(set(options.targets)) != len(options.targets):
         raise UsageError("duplicate TARGETs; list each agent once")
+    if not options.dry_run:
+        reject_message_like_targets(options.targets)
     if not options.no_caller_context:
         validate_targets_not_kinds(options.targets, herdr, env)
         if not options.dry_run:
@@ -820,12 +841,16 @@ def prompt_one(
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
     if options.no_wait and not verify_prompt_accepted(herdr, target, env, pre_revision):
+        # Exit 0 from `herdr agent prompt` confirms acceptance; this observation only reports
+        # it. Failing here, or re-sending to "confirm", both re-created #193: a delivered
+        # prompt reported as dropped, and a duplicate injection.
         _, last_status, _ = agent_readiness(herdr, target, env)
-        raise HerdrError(
-            f"prompt acceptance was not confirmed within "
+        print(
+            f"herdr-prompt: warning: acceptance was not confirmed within "
             f"{_format_seconds(HANDSHAKE_TIMEOUT_SECONDS)}s for {target} "
-            f"(last status={last_status or 'unknown'}, revision unchanged); the agent may not "
-            "have consumed the payload — verify with herdr-wait or resubmit"
+            f"(last status={last_status or 'unknown'}, revision unchanged); the CLI accepted "
+            "the payload — check with herdr-wait before resubmitting",
+            file=sys.stderr,
         )
 
     post_rev, post_pane = (

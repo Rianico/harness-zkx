@@ -22,9 +22,9 @@ Reference for running Pi coding agent under Herdr.
 ## Session Path & Resume
 - Session file format: `~/.pi/agent/sessions/<workspace>/<timestamp>_<uuid>.jsonl`.
 - Session kind in Herdr record: `path`.
-- Resume command:
-  - If session path ends with `.jsonl`: `pi --resume <path>`
-  - If session is an ID: `pi --session <session_id>`
+- Resume command: `pi --session <path|id>` — it takes either the session file or the id, so one form covers both.
+  - `--resume`/`-r` is the *value-less picker* ("Select a session to resume"), so `pi --resume <path>` opens the picker and never re-attaches. Verified 2026-10-09 in a non-TTY `--print` run: the path argument was ignored and the session list rendered (#211).
+  - `--session-id <id>` creates the session when missing, which is the idempotent form for a bare id.
 
 ## Known Quirks & Failure Modes
 - Background completions settle to `done`, not `idle`. Waiting with `--until idle` alone hangs.
