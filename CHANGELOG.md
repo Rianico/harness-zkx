@@ -86,11 +86,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
-* **herdr:** emit `pi --session <path|id>` for every pi resume, because `--resume` is a value-less picker that opens the session list ([#211](https://github.com/Rianico/harness-zkx/issues/211))
-* **herdr:** refuse a whitespace TARGET before reading the payload, and name `--file`/stdin in the empty-payload refusal ([#212](https://github.com/Rianico/harness-zkx/issues/212))
-* **herdr:** observe `--no-wait` acceptance for the CLI's own 5s window and warn instead of exiting 1, ending duplicate re-sends and false "prompt dropped" reports ([#193](https://github.com/Rianico/harness-zkx/issues/193))
-* **herdr:** release a ticket lease whose recorded pane is gone, so a resumed lane takes follow-up work without `--force` ([#210](https://github.com/Rianico/harness-zkx/issues/210))
-* **herdr:** derive the lane worktree beside a bare repository, skip `wt` there, and refuse a path inside the git directory ([#207](https://github.com/Rianico/harness-zkx/issues/207))
+* **herdr:** emit `pi --session <path|id>` for every pi resume, because `--resume` is a value-less picker that opens the session list ([#211](https://github.com/Rianico/harness-zkx/issues/211)) (#223)
+* **herdr:** refuse a whitespace TARGET before reading the payload, and name `--file`/stdin in the empty-payload refusal ([#212](https://github.com/Rianico/harness-zkx/issues/212)) (#223)
+* **herdr:** observe `--no-wait` acceptance for the CLI's own 5s window and warn instead of exiting 1, ending duplicate re-sends and false "prompt dropped" reports ([#193](https://github.com/Rianico/harness-zkx/issues/193)) (#223)
+* **herdr:** release a ticket lease whose recorded pane is gone, so a resumed lane takes follow-up work without `--force` ([#210](https://github.com/Rianico/harness-zkx/issues/210)) (#223)
+* **herdr:** derive the lane worktree beside a bare repository, skip `wt` there, and refuse a path inside the git directory ([#207](https://github.com/Rianico/harness-zkx/issues/207)) (#223)
 * **check-gate:** scrub git repo-location overrides and refuse a bare-flagged repo, so a leaked GIT_DIR can no longer redirect the suite's git writes (#213)
 * **check-gate:** scrub git commit-identity overrides (`GIT_AUTHOR_*`/`GIT_COMMITTER_*`) in the session fixture, `git_env`, and `check.sh`, so a pre-commit hook's outer commit identity can no longer overwrite the suite's fixture commits (#216)
 * **ai-engineering:** bring skill bodies into STE-100 compliance and support --preserve in linter ([#190](https://github.com/Rianico/harness-zkx/issues/190)) (#191)
