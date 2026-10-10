@@ -78,6 +78,7 @@ class Options:
     no_focus: bool = False
     json: bool = False
     dry_run: bool = False
+    command: str | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -117,6 +118,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="KEY=VALUE",
         help="environment variable for the new pane (repeatable)",
+    )
+
+    _ = parser.add_argument(
+        "--command",
+        metavar="LINE",
+        help=(
+            "run this command line in the pane (herdr pane run) with a completion sentinel "
+            "appended, instead of splitting: the pane prints the sentinel when the command "
+            "exits, whatever its exit status"
+        ),
     )
     focus = parser.add_mutually_exclusive_group()
     _ = focus.add_argument("--focus", action="store_true", help="move focus to the new pane")
@@ -169,6 +180,9 @@ def auto_direction(pane_id: str, herdr: str, env: Mapping[str, str]) -> str:
     return "right" if width > height else "down"
 
 
+LAUNCH_SENTINEL = "[herdr-launch]"
+
+
 def lane_anchor_env_args(env: Mapping[str, str], extra_env: Sequence[str]) -> list[str]:
     """The `HERDR_LANE_DIR=...` pair every split carries, or `[]` for an explicit one here.
 
@@ -185,6 +199,29 @@ def lane_anchor_env_args(env: Mapping[str, str], extra_env: Sequence[str]) -> li
     if LANE_DIR_ENV in supplied:
         return []
     return [f"{LANE_DIR_ENV}={resolve_lane_base_dir(env)}"]
+
+
+def sentinel_wrapped(command: str) -> str:
+    """`command` plus a completion sentinel that fires on any exit status, success or failure.
+
+    The sentinel is the launch line's own end-of-line evidence (#230): the pane prints it when
+    the launched command exits, so a callee that crashes or never replies still leaves an
+    observable marker without cooperating. It reports process exit, never task success — a
+    zero here says the command finished, not that the work is done.
+    """
+    return (
+        f"{command}; __herdr_rc=$?; "
+        f"printf '\\n{LAUNCH_SENTINEL} finished exit=%s\\n' \"$__herdr_rc\""
+    )
+
+
+def build_run_argv(herdr: str, pane_id: str, command: str) -> list[str]:
+    """`herdr pane run <pane> <wrapped line>`: one argument, so herdr sends the raw text.
+
+    `pane run` sends command text and Enter to the pane's shell. Passing the whole wrapped
+    line as a single argument is what keeps the sentinel's own quoting intact on the way in.
+    """
+    return [herdr, "pane", "run", pane_id, sentinel_wrapped(command)]
 
 
 def build_split_argv(
@@ -286,10 +323,59 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
     return EXIT_OK
 
 
+def split_only_flags(options: Options) -> list[str]:
+    """Flags that only make sense for a split, named in flag order."""
+    flagged: list[tuple[str, object]] = [
+        ("--direction", options.direction),
+        ("--label", options.label),
+        ("--task-group", options.task_group),
+        ("--cwd", options.cwd),
+        ("--ratio", options.ratio),
+        ("--env", options.env),
+        ("--focus/--no-focus", options.focus or options.no_focus),
+    ]
+    return [flag for flag, value in flagged if value]
+
+
+def run_command(options: Options, env: Mapping[str, str]) -> int:
+    """Run a launch line in a pane with the completion sentinel appended (#230).
+
+    Panes the skill launches get their end-of-line evidence from here; a pane the skill did not
+    launch has no sentinel, which is why the staleness advisory in `herdr-wait` is
+    cooperative-only. This launches one command line and reports process exit; it never
+    claims the command succeeded.
+    """
+    conflicting = split_only_flags(options)
+    if conflicting:
+        raise UsageError(
+            f"--command runs a launch line instead of splitting; drop {', '.join(conflicting)}"
+        )
+
+    command = (options.command or "").strip()
+    if not command:
+        raise UsageError("--command must not be empty")
+    if "\n" in command or "\r" in command:
+        raise UsageError("--command must be one line: `herdr pane run` sends text plus Enter")
+    require_herdr_env(env)
+    herdr = find_herdr(env)
+    pane = options.pane or current_pane_id(herdr, env)
+    argv = build_run_argv(herdr, pane, command)
+    if options.dry_run:
+        print(shlex.join(argv))
+        return EXIT_OK
+    raw = run_herdr_checked(argv, env)
+    if options.json:
+        print(raw, end="" if raw.endswith("\n") else "\n")
+        return EXIT_OK
+    print(f"ran in pane {pane}  sentinel={LAUNCH_SENTINEL}  exit=<rc>")
+    return EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     env_map = dict(os.environ if env is None else env)
     options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-pane", lambda: split_pane(options, env_map))
+    handler = run_command if options.command is not None else split_pane
+    return guard("herdr-pane", lambda: handler(options, env_map))
 
 
 if __name__ == "__main__":

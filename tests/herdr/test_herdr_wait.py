@@ -305,6 +305,88 @@ def test_wait_times_out_if_subagents_never_clear(stub: StubHarness) -> None:
     assert "a (idle)" in done.stderr
 
 
+# ── opt-in staleness advisory (#230) ────────────────────────────────────────────────
+
+STALLED = {"a": {"agent_status": "working", "revision": "r5"}}
+
+
+def test_staleness_advisory_is_off_by_default(stub: StubHarness) -> None:
+    """The default wait path is unchanged: no advisory unless asked for."""
+    done = stub.run("a", "--interval", "0.005", "--timeout", "3000", state=settled_state(**STALLED))
+
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" not in done.stderr
+    assert "staleness advisory" not in done.stdout
+
+
+def test_staleness_advisory_fires_once_per_stall_episode(stub: StubHarness) -> None:
+    """One stall, many polls, one report — and it never terminates anything."""
+    done = stub.run(
+        "a",
+        "--interval",
+        "0.005",
+        "--timeout",
+        "3000",
+        "--stale-after",
+        "0.001",
+        state=settled_state(**STALLED),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert done.stderr.count("staleness advisory: a has held status") == 1
+    assert "never kills, retries, restarts, or interrupts" in done.stderr
+    assert "cooperative, not guaranteed" in done.stderr
+
+
+def test_staleness_advisory_opens_a_new_episode_after_progress(stub: StubHarness) -> None:
+    """A revision advance ends the episode, so the next stall reports again."""
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {"a": {"agent_status": "working"}},
+        "agent_get_seq": {"a": ["working", "working", "unknown"]},
+    }
+    done = stub.run(
+        "a",
+        "--interval",
+        "0.005",
+        "--timeout",
+        "8000",
+        "--stale-after",
+        "0.001",
+        state=state,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    reports = [line for line in done.stderr.splitlines() if "has held status" in line]
+    assert len(reports) == 2
+    assert "status working" in reports[0]
+    assert "status unknown" in reports[1]
+
+
+def test_staleness_advisory_issues_only_read_only_calls(stub: StubHarness) -> None:
+    """The advisory is warning-only: every herdr call it makes is a read."""
+    done = stub.run(
+        "a",
+        "--interval",
+        "0.005",
+        "--timeout",
+        "3000",
+        "--stale-after",
+        "0.001",
+        state=settled_state(**STALLED),
+    )
+
+    assert "staleness advisory" in done.stderr
+    assert {(call[1], call[2]) for call in stub.calls()} == {("agent", "list"), ("agent", "get")}
+
+
+def test_staleness_advisory_rejects_a_non_positive_window(stub: StubHarness) -> None:
+    done = stub.run("a", "--stale-after", "0", state=settled_state(**STALLED))
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not positive" in done.stderr
+
+
 def test_any_exits_on_first_settled_target(stub: StubHarness) -> None:
     state = settled_state(a={"agent_status": "working"}, b={"agent_status": "done"})
     done = stub.run("a", "b", "--any", "--interval", "0.01", state=state)

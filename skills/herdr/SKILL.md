@@ -381,6 +381,8 @@ herdr pane read <returned-pane-id> --source recent-unwrapped --lines 120
 
 `pane run` atomically sends command text and Enter. `pane wait-output` searches the selected snapshot immediately, so output that already exists can match. Use `--match <text>` for a literal substring or `--regex <pattern>` for a Rust regular expression. Omitting `--timeout` allows an indefinite wait.
 
+`uv run "$SKILL_DIR/scripts/herdr_pane.py" --pane <id> --command '<line>'` sends a launch line through the pane path with a completion sentinel appended (#230): the pane prints `[herdr-launch] finished exit=<rc>` when the line exits, so a launched callee that crashes or never replies still leaves end-of-line evidence without cooperating. It reports process exit, never task success, and the composed argv is visible with `--dry-run`. The split-only flags (`--direction`, `--label`, `--task-group`, `--cwd`, `--ratio`, `--env`, `--focus/--no-focus`) are refused with `--command`, and the pane's shell is deliberately left running so its scrollback (the evidence) survives.
+
 Prefer `--source recent-unwrapped` for logs and transcripts. The other read sources, `--format ansi`, and the alternate-screen limit on `--lines` live in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Safety and coordination rules
@@ -548,6 +550,8 @@ uv run "$SKILL_DIR/scripts/herdr_wait.py" action1 action2 --json
 ```
 
 Settled means `idle`, `done`, or `blocked`; `--until idle` without `done` auto-expands with a warning. A wanted state with revision 0 (agent unrecognized — seen on agy panes whose status bar still reads WORKING or while awaiting background subagents) is held, never settled: the wait is unsatisfiable, so it fails fast with exit 2 and an error steering callers to the event-driven Dispatch & Yield pattern (`herdr-reply`) instead of barrier-waiting. Dispatch-&-Yield is REQUIRED, not advisory, for `agy` and revision-0 agents: `herdr-wait` and `herdr-prompt --wait` cannot observe them to completion. Any `blocked` target exits 3 immediately. The watchdog `--timeout` always applies (default 300000); expiry exits 1 naming the unsettled targets. Prints an aligned `TARGET STATUS REVISION ELAPSED SESSION_PATH` table, or JSON with `--json`.
+
+`--stale-after SEC` is an opt-in staleness advisory (#230), off by default: once a target's status and revision have been unchanged for SEC seconds, the helper prints one advisory on stderr naming the target, the held status, and the elapsed window, then stays quiet until the target moves again (one report per stall episode). It is warning-only. It never kills, retries, restarts, or interrupts a target, never establishes a result, and never changes the wait's exit status: it asks you to collect evidence (read the pane, prompt the target, check its transcript). For a pane the skill did not launch there is no sentinel, so completion there is cooperative, not guaranteed.
 
 ### Managed Antigravity (agy) bridge
 
