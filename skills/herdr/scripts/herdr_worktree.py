@@ -224,6 +224,44 @@ def git_repo_root(env: Mapping[str, str]) -> Path:
     return common.parent if common.name == ".git" else common
 
 
+LANE_DIR_ENV = "HERDR_LANE_DIR"
+
+
+class LaneAnchorError(UsageError):
+    """No lane state anchor could be resolved (exit status 2).
+
+    A lane's state must resolve to one path for the two agents answering each other
+    inside it. Refusing loudly, naming the missing anchors, beats guessing a directory
+    that nothing else reads (#229); `PWD` is not an anchor for the same reason.
+    """
+
+
+def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
+    """The directory one lane's shared state lives in: `HERDR_LANE_DIR`, else the repo root.
+
+    The explicit anchor wins, so a pane provisioned by `herdr-pane` seats its callee's
+    store deliberately instead of letting the callee derive its own. Without it, the
+    repository root that the git common directory sits in is the one path every worktree
+    and every nested subdirectory of this repository agrees on — never the git directory
+    itself, so lane state stays out of `.git/`.
+
+    `PWD` and the process cwd are deliberately not anchors: a dispatcher and the callee
+    it dispatched to ran in different working directories, resolved different stores
+    through them, and left a lease nobody could release (#229). With no anchor this
+    raises `LaneAnchorError` instead of guessing.
+    """
+    env_dir = env.get(LANE_DIR_ENV)
+    if env_dir:
+        return Path(env_dir)
+    try:
+        return git_repo_root(env)
+    except WorktreeError as exc:
+        raise LaneAnchorError(
+            "no lane state anchor: HERDR_LANE_DIR is unset and no git common dir "
+            f"resolves for this working directory ({exc})"
+        ) from exc
+
+
 def is_bare_repository(env: Mapping[str, str]) -> bool:
     """Whether this repository has no working tree of its own."""
     state = run_checked(["git", "rev-parse", "--is-bare-repository"], env).strip()

@@ -41,6 +41,7 @@ from herdr_cli import (
     text_field,
     validate_agent_name,
 )
+from herdr_worktree import LANE_DIR_ENV, resolve_lane_base_dir
 
 DIRECTION_ALIASES = {
     "vertical": "down",
@@ -164,6 +165,22 @@ def auto_direction(pane_id: str, herdr: str, env: Mapping[str, str]) -> str:
     return "right" if width > height else "down"
 
 
+def lane_anchor_env_args(env: Mapping[str, str], extra_env: Sequence[str]) -> list[str]:
+    """The `HERDR_LANE_DIR=...` pair a new pane must inherit, or `[]` when already supplied.
+
+    A callee that resolves its own lease store writes into a different one than its caller
+    (#229), so the pane this helper creates is handed the caller's resolved lane base — in
+    the real argv and the `--dry-run` plan alike. A caller-supplied anchor (in the
+    environment or as an explicit `--env HERDR_LANE_DIR=...`) is authoritative and is never
+    overridden. `resolve_lane_base_dir` raises `LaneAnchorError` when no anchor exists, so
+    a pane that would otherwise be born into a guessed store is refused instead.
+    """
+    supplied = {item.split("=", 1)[0] for item in extra_env if "=" in item}
+    if env.get(LANE_DIR_ENV) or LANE_DIR_ENV in supplied:
+        return []
+    return [f"{LANE_DIR_ENV}={resolve_lane_base_dir(env)}"]
+
+
 def build_split_argv(
     herdr: str,
     pane_id: str,
@@ -233,7 +250,7 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
         direction,
         cwd=cwd,
         ratio=options.ratio,
-        extra_env=options.env,
+        extra_env=[*lane_anchor_env_args(env, options.env), *options.env],
         focus=options.focus,
     )
     if options.dry_run:

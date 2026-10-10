@@ -312,10 +312,18 @@ class StubHarness:
         return [call for call in self.calls() if call[1:3] == ["agent", "start"]]
 
     def base_env(self) -> dict[str, str]:
-        """Environment pointing a helper (subprocess or in-process) at this stub."""
+        """Environment pointing a helper (subprocess or in-process) at this stub.
+
+        `HERDR_LANE_DIR` is the store anchor: `PWD` stopped being one when the lease
+        store became one resolved path per lane (#229), so tests that used to seat the
+        store with `PWD` now seat it with the explicit anchor. `PWD` stays for helpers
+        that resolve a *working directory* (e.g. `herdr-pane --cwd`), which is a
+        different question from where lane state lives.
+        """
         return {
             "PATH": f"{self.bin_dir}:{os.environ.get('PATH', '')}",
             "HERDR_ENV": "1",
+            "HERDR_LANE_DIR": str(self.tmp_path),
             "PWD": str(self.tmp_path),
             "STUB_HERDR_LOG": str(self.log_path),
             "STUB_HERDR_STATE": str(self.state_path),
@@ -331,6 +339,7 @@ class StubHarness:
         state: Mapping[str, object] | None = None,
         env: Mapping[str, str | None] | None = None,
         stdin: str | None = None,
+        cwd: str | Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         """Run the helper script in-process; keeps each call's observable contract
         (argv/env/stdin in, stdout/stderr/exit code out) while dropping the
@@ -338,7 +347,9 @@ class StubHarness:
 
         The script sees exactly `base_env()` plus `env` overrides, like
         `subprocess.run(env=...)` did: the stub `herdr` on PATH, the log/state
-        pointers, `HERDR_ENV`, and nothing else ambient.
+        pointers, `HERDR_ENV`, and nothing else ambient. `cwd` is the process
+        working directory the helper resolves *git* layout against (the store
+        anchor falls back to the repository's common directory, #229).
         """
         self.write_state(dict(state if state is not None else DEFAULT_STATE))
         full_env = self.base_env()
@@ -348,7 +359,7 @@ class StubHarness:
             else:
                 full_env[key] = value
         argv = [sys.executable, str(self.script), *args]
-        return run_script_in_process(argv, env=full_env, stdin=stdin)
+        return run_script_in_process(argv, env=full_env, stdin=stdin, cwd=cwd)
 
 
 def flag_value(call: list[str], flag: str) -> str:

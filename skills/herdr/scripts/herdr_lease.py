@@ -10,6 +10,13 @@ State lives in `.lane/tasks.yaml`: an `active_leases` map of mutual-exclusion lo
 Reads fall back to legacy `.lane/lease.yaml`, `.lane/lease.json`, and `.herdr-lease.json`
 so older lanes never break during rollout.
 
+The store base is resolved once per lane: an explicit `base_dir`, else `HERDR_LANE_DIR`,
+else the repository root that the git common directory sits in. `PWD` and the process cwd
+are never anchors: they differ between a dispatcher and its own callee, which is how a
+lease came to be released against a store it was never written to (#229). A lease records
+the store it was written to, and a release that resolves a different store reports the
+mismatch on stderr instead of relocating the write.
+
     herdr-lease show [--yaml|--json] [--limit N]
     herdr-lease transition <target|task-id> <status> [--note TEXT] [--actor NAME]
 
@@ -21,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -30,6 +38,7 @@ from typing import Any
 
 import yaml
 from herdr_cli import UsageError, guard
+from herdr_worktree import resolve_lane_base_dir
 
 CANONICAL_STATUSES = ("dispatched", "in_progress", "blocked", "completed", "rework")
 STATE_FILE_LANE = ".lane/tasks.yaml"
@@ -46,13 +55,22 @@ def resolve_base_dir(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> Path:
+    """The one lease/task store base for this lane, resolved identically by every caller.
+
+    Layered, and never ambient: an explicit `base_dir` outranks every anchor, then
+    `HERDR_LANE_DIR`, then the repository root of this repository's git common directory
+    (see `herdr_worktree.resolve_lane_base_dir`). Every worktree and every nested
+    subdirectory of one repository therefore resolves to one absolute path.
+
+    `PWD` and the process cwd are never consulted: a dispatcher in one working directory
+    and a callee in another resolved different stores through them, so a lease written by
+    one was released — or not — by the other (#229). With neither anchor this raises
+    `herdr_worktree.LaneAnchorError` instead of guessing.
+    """
     if base_dir is not None:
         return Path(base_dir)
     env_map = os.environ if env is None else env
-    env_dir = env_map.get("HERDR_LANE_DIR") or env_map.get("PWD")
-    if env_dir:
-        return Path(env_dir)
-    return Path.cwd()
+    return resolve_lane_base_dir(env_map)
 
 
 def resolve_tasks_file(
@@ -67,8 +85,11 @@ def resolve_state_read_path(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> Path:
-    """The first existing state file, newest schema first, else the write target."""
-    base = resolve_base_dir(base_dir, env=env)
+    """The first existing state file in the resolved store, newest schema first, else the write target."""
+    return _state_read_path_in(resolve_base_dir(base_dir, env=env))
+
+
+def _state_read_path_in(base: Path) -> Path:
     for relative in (
         STATE_FILE_LANE,
         STATE_FILE_LEGACY_YAML,
@@ -78,7 +99,7 @@ def resolve_state_read_path(
         candidate = base / relative
         if candidate.is_file():
             return candidate
-    return resolve_tasks_file(base, env=env)
+    return base / STATE_FILE_LANE
 
 
 def resolve_lease_file(
@@ -211,7 +232,8 @@ def acquire_lease(
     A truthy `caller_recovery` mapping is stored on the task (empty fields omitted,
     never fabricated) and replaces any prior mapping for the same task.
     """
-    state = _load_state(resolve_state_read_path(base_dir, env=env))
+    store = resolve_base_dir(base_dir, env=env)
+    state = _load_state(_state_read_path_in(store))
     leases = state["active_leases"]
 
     keys_to_remove = [
@@ -231,6 +253,7 @@ def acquire_lease(
         "target": target,
         "ticket": ticket_path,
         "caller": caller,
+        "store": str(store),
         "timestamp": now,
         "acquired_at": now,
     }
@@ -277,7 +300,7 @@ def acquire_lease(
             }
         )
 
-    _write_state(state, base_dir=base_dir, env=env)
+    _write_state(state, base_dir=store)
     return lease
 
 
@@ -290,8 +313,14 @@ def release_lease(
 
     Soft completion: task records and trajectories are never touched. Returns True
     if a lease was released, False if none matched.
+
+    A matched lease recording a *different* store than this release resolved is reported
+    on stderr and left in place — in both stores. Relocating the write would fabricate a
+    release the owning store never saw, and a silent one would hide the divergence (#229).
+    A lease with no recorded store (legacy schema) is released as before.
     """
-    state = _load_state(resolve_state_read_path(base_dir, env=env))
+    store = resolve_base_dir(base_dir, env=env)
+    state = _load_state(_state_read_path_in(store))
     leases = state["active_leases"]
     keys_to_delete = [
         key
@@ -300,9 +329,21 @@ def release_lease(
     ]
     if not keys_to_delete:
         return False
+    foreign: set[str] = set()
+    for key in keys_to_delete:
+        recorded = leases[key].get("store")
+        if isinstance(recorded, str) and recorded != str(store):
+            foreign.add(recorded)
+    if foreign:
+        print(
+            f"herdr-lease: lease {target!r} was written to store {', '.join(sorted(foreign))} "
+            f"but this release resolved {store}; refusing to relocate the write, nothing released",
+            file=sys.stderr,
+        )
+        return False
     for key in keys_to_delete:
         del leases[key]
-    _write_state(state, base_dir=base_dir, env=env)
+    _write_state(state, base_dir=store)
     return True
 
 
