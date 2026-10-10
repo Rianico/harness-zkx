@@ -230,9 +230,12 @@ def stale_labels(
     """Panes carrying an agent-shaped label that no live agent owns: (pane id, label).
 
     `pairs`, `pair_mismatches` and `descriptive_labels` all iterate the *agent* inventory, so a
-    pane whose agent has exited is invisible to every one of them, and only an
-    operator-invoked `--verify`/`--sync` pass ever notices. This iterates the *pane* inventory
-    instead, so a normal dispatch can report the orphan from inventories it already reads.
+    pane whose agent has exited is invisible to every one of them. This iterates the *pane*
+    inventory instead, so a normal dispatch reports the orphan from inventories it reads anyway.
+
+    A pane counts as live when the agent inventory gives it a `pane_id`, or when its label is a
+    live agent's name (an `agent list` row may carry no `pane_id`), so a healthy pair is never
+    reported. Rows are deduped by pane id, since `pane list` can repeat one.
 
     Positivist evidence (#210): an unreadable or empty inventory answers nothing, so `None` or
     an empty sequence reports no stale label rather than declaring every label stale.
@@ -240,14 +243,18 @@ def stale_labels(
     if not panes or not agents:
         return []
     live_panes = {pane for entry in agents if (pane := entry_optional_text(entry, "pane_id"))}
+    live_names = {name for entry in agents if (name := entry_optional_text(entry, "name"))}
     stale: list[tuple[str, str]] = []
+    seen: set[str] = set()
     for entry in panes:
         pane = entry_optional_text(entry, "pane_id")
         label = entry_optional_text(entry, "label")
         if not pane or not label or not AGENT_NAME.match(label):
             continue
-        if pane not in live_panes:
-            stale.append((pane, label))
+        if pane in live_panes or label in live_names or pane in seen:
+            continue
+        seen.add(pane)
+        stale.append((pane, label))
     return stale
 
 

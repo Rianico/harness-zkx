@@ -257,12 +257,18 @@ def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
     """One advisory stderr line per pane whose agent-shaped label outlived its agent (#234).
 
     A label is never a target, so an orphaned one misleads a person reading the pane border
-    while a dispatch still keys on identifiers. This reads the `pane list` and `agent list`
-    inventories a dispatch already fetches, so the operator needs no `--verify`/`--sync` pass.
+    while a dispatch still keys on identifiers. This issues its own `pane list` and `agent list`
+    snapshots, so the operator needs no separate pass; the remedy it prints,
+    `herdr-label --clear --pane <id>` (or a re-label for the next occupant), acts on the orphan.
+
+    The report is server-wide by design: `pane list` is the whole Herdr server, so an orphan in
+    another workspace prints on every dispatch in this lane.
 
     Advisory only: it changes no target, acquires or releases no lease, and interrupts nothing.
     Positivist evidence (#210): an unreadable or empty inventory is no evidence, so it reports
-    nothing rather than declaring every label stale.
+    nothing rather than declaring every label stale. Its `except Exception` swallow is silent, so
+    `test_dispatch_reports_a_label_whose_agent_has_exited` is the only detector of a broken
+    inventory key path inside it (mutant M6 dies only there).
     """
     try:
         panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
@@ -273,7 +279,8 @@ def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
     for pane_id, label in stale_labels(panes, agents):
         print(
             f"herdr-dispatch: pane {pane_id} carries the label {label!r} but no live agent owns "
-            "it; the label outlived its agent (run herdr-label --sync to converge it)",
+            f"it; the label outlived its agent (clear it with `herdr-label --clear --pane "
+            f"{pane_id}`, or hand it on with `herdr-label <name> --pane {pane_id}`)",
             file=sys.stderr,
         )
 

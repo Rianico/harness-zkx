@@ -288,6 +288,10 @@ def test_dispatch_reports_a_label_whose_agent_has_exited(stub: StubHarness, tmp_
     assert "buildbot" in done.stderr
     # The operator ran no verification pass: the dispatch itself reported the staleness.
     assert "--verify" not in done.stderr
+    # The remedy must name a command that acts on the orphan (#234 rework). `--sync` cannot:
+    # it converges label/agent pairs from the agent inventory, where this orphan is absent.
+    assert "herdr-label --clear --pane w9:p2" in done.stderr
+    assert "--sync" not in done.stderr
     assert len(stub.prompts()) == 1
 
 

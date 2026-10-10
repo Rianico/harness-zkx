@@ -134,14 +134,14 @@ uv run "$SKILL_DIR/scripts/herdr_label.py" reviewer    # this pane's label and i
 
 `herdr-label` labels the calling pane and names its agent identically, so the name a person sees is the name you can address. It takes `--pane <id>` for another pane, `--label-only` when a multi-word label or an existing agent name must survive, and `--clear` to drop both.
 
-The pair is not stable on its own: the **agent name dies with the agent** while the **label outlives it**, so every exit leaves a labelled pane that nothing can address, and the next occupant inherits the stale label. `herdr-label` sets both in one command, and the two checks keep them together:
+The pair is not stable on its own: the **agent name dies with the agent** while the **label outlives it**, so every exit leaves a labelled pane that nothing can address, and the next occupant inherits the stale label. `herdr-label` sets both in one command, and `--verify`/`--sync` keep the pair together:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_label.py" --verify   # exit 3 when a live agent disagrees with its label
 uv run "$SKILL_DIR/scripts/herdr_label.py" --sync     # converge both directions, idempotent
 ```
 
-`--sync` sets a drifting label from the agent name, and names an agent that came back without one from the label that survived. A descriptive `--label-only` label and a pane with no agent are reported, never guessed at. Run `--verify` before a dispatch wave and `--sync` after any agent exits or restarts.
+`--sync` sets a drifting label from the agent name, and names an agent that came back without one from the label that survived. A descriptive `--label-only` label is never guessed at (it is listed as `descriptive` in `--json`). Neither `--verify` nor `--sync` reports a pane with no live agent — that label is waiting for an occupant — so the **dispatch advisory** prints it on stderr during a normal dispatch, and `herdr-label --clear --pane <pane_id>` drops it (or re-label it for the next occupant). Run `--verify` before a dispatch wave and `--sync` after any agent exits or restarts; the orphan case needs no pass, because every dispatch checks it.
 
 When a person says "hand off to <name>", pass that name straight to the prompt helper:
 

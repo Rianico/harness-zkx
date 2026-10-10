@@ -203,6 +203,30 @@ def test_stale_labels_never_flags_a_live_agent_that_owns_its_label() -> None:
     assert herdr_label.stale_labels(panes, agents) == []
 
 
+def test_stale_labels_dedupes_a_repeated_pane_row() -> None:
+    """`pane list` may repeat a pane id; the same orphan is reported once, not twice.
+
+    Pin -> mutant: drop the dedupe, so both rows append and this returns the pair twice.
+    """
+    panes = [
+        {"pane_id": "w9:p2", "label": "buildbot"},
+        {"pane_id": "w9:p2", "label": "buildbot"},
+    ]
+    agents = [{"pane_id": "w9:p1", "name": "reviewer"}]
+    assert herdr_label.stale_labels(panes, agents) == [("w9:p2", "buildbot")]
+
+
+def test_stale_labels_keeps_a_label_that_matches_a_live_agent_name() -> None:
+    """An `agent list` row without `pane_id` still names a live agent, so its label is not stale.
+
+    Pin -> mutant: drop the label-in-live-names check, so the pane whose label matches a live
+    agent is reported stale although that agent is alive (violates required behaviour 4).
+    """
+    panes = [{"pane_id": "w9:p2", "label": "reviewer"}]
+    agents = [{"name": "reviewer"}]
+    assert herdr_label.stale_labels(panes, agents) == []
+
+
 def test_stale_labels_ignores_a_descriptive_label_with_no_agent() -> None:
     """A multi-word `--label-only` label is decoration, never a dead agent name."""
     panes = [{"pane_id": "w9:p2", "label": "review pane"}]
