@@ -13,6 +13,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import herdr_bootstrap
 import herdr_cli
 import herdr_dispatch
 import herdr_prompt
@@ -529,7 +530,11 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     stub: StubHarness, tmp_path: Path
 ) -> None:
     """Issue #225: a ticket for a role with no live agent starts it via the
-    bootstrap contract (kind trust flags + ROLE INVARIANT), then dispatches."""
+    bootstrap contract (kind trust flags + ROLE INVARIANT), then dispatches.
+
+    The invariant reaches the agent as the absolute path of the lane-local snippet file,
+    because herdr refuses a multi-line agent arg; read that file to prove delivery.
+    """
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -540,7 +545,7 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee",
             }
         ],
@@ -568,7 +573,11 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert "--kind" in start and start[start.index("--kind") + 1] == "pi"
     assert "--append-system-prompt" in start
     invariant = start[start.index("--append-system-prompt") + 1]
-    assert "ROLE INVARIANT" in invariant
+    assert invariant == str(tmp_path / ".lane" / "role-invariant.md")
+    assert Path(invariant).is_absolute()
+    assert Path(invariant).read_text() == herdr_bootstrap.render_invariant("callee")
+    for arg in start[start.index("--") + 1 :]:
+        assert "\n" not in arg
     split = start.index("--")
     assert "--append-system-prompt" not in start[:split]
     assert "--model" not in start[:split]
@@ -672,7 +681,7 @@ def test_dispatch_auto_start_uses_claude_trust_flags(stub: StubHarness, tmp_path
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee",
             }
         ],
@@ -773,7 +782,7 @@ def test_dispatch_auto_start_triggers_on_typed_signal_despite_reworded_prose(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee",
             }
         ],
@@ -879,7 +888,7 @@ def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee-one",
             },
             {
@@ -888,7 +897,7 @@ def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee-two",
             },
         ],

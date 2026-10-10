@@ -36,6 +36,11 @@ def cwd_state(cwd: Path, pane: str = "w9:p1") -> dict[str, object]:
     return {**DEFAULT_STATE, "panes": panes}
 
 
+def invariant_file(tmp_path: Path) -> Path:
+    """The lane-local snippet file the inline kinds are pointed at."""
+    return (tmp_path / ".lane" / "role-invariant.md").resolve()
+
+
 # ── unit: the invariant snippet and the idempotent append ───────────────────────────
 
 
@@ -77,9 +82,10 @@ def test_append_invariant_preserves_content_and_is_idempotent(tmp_path: Path) ->
 # ── integration: naming, delivery mechanism, and dry-run ─────────────────────────────
 
 
-def test_cli_kind_passes_the_snippet_inline_and_writes_no_file(
+def test_cli_kind_delivers_the_snippet_through_a_lane_file(
     stub: StubHarness, tmp_path: Path
 ) -> None:
+    """The inline kind receives a file PATH; the file holds the rendered snippet."""
     done = stub.run(
         "--kind",
         "pi",
@@ -95,15 +101,27 @@ def test_cli_kind_passes_the_snippet_inline_and_writes_no_file(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     start = starts(stub)[0]
     after = start[start.index("--") + 1 :]
-    assert flag_value(after, "--append-system-prompt") == herdr_bootstrap.render_invariant("impl-1")
+    path = flag_value(after, "--append-system-prompt")
+    assert after == ["--append-system-prompt", path, "--approve"]
     assert not (tmp_path / "AGENTS.md").exists()
-    assert "agents-md=-" in done.stdout
-    assert after == [
-        "--append-system-prompt",
-        herdr_bootstrap.render_invariant("impl-1"),
-        "--approve",
-    ]
+    assert f"role-invariant={path}" in done.stdout
     assert pane_runs(stub) == []
+
+    assert Path(path).is_absolute()
+    assert Path(path) == invariant_file(tmp_path)
+    assert Path(path).read_text() == herdr_bootstrap.render_invariant("impl-1")
+
+
+def test_inline_snippet_file_rewrite_is_idempotent(stub: StubHarness, tmp_path: Path) -> None:
+    """Re-bootstrapping the same lane rewrites the file without duplicating the snippet."""
+    args = ("--kind", "pi", "--pane", "w9:p1", "--role", "impl-1", "--cwd", str(tmp_path))
+    for _ in range(2):
+        done = stub.run(*args, state=cwd_state(tmp_path))
+        assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    text = invariant_file(tmp_path).read_text()
+    assert text == herdr_bootstrap.render_invariant("impl-1")
+    assert text.count("ROLE INVARIANT") == 1
 
 
 def test_file_kind_appends_agents_md_without_the_inline_flag(
@@ -199,6 +217,7 @@ def test_dry_run_prints_the_plan_and_mutates_nothing(stub: StubHarness, tmp_path
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     plan = json.loads(done.stdout)
     assert plan["agents_md"] == str(tmp_path / "AGENTS.md")
+    assert plan["role_invariant"] is None
     assert plan["pane_rename"][1:3] == ["pane", "rename"]
     assert plan["agent_start"][1:5] == ["agent", "start", "msg-tm", "--kind"]
     assert "--append-system-prompt" not in plan["agent_start"]
@@ -207,18 +226,21 @@ def test_dry_run_prints_the_plan_and_mutates_nothing(stub: StubHarness, tmp_path
     assert not (tmp_path / "AGENTS.md").exists()
 
 
-def test_dry_run_cli_kind_prints_the_inline_snippet(stub: StubHarness) -> None:
-    done = stub.run("--kind", "pi", "--pane", "w9:p1", "--role", "tm", "--dry-run")
+def test_dry_run_cli_kind_prints_the_invariant_file_path(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "--kind", "pi", "--pane", "w9:p1", "--role", "tm", "--cwd", str(tmp_path), "--dry-run"
+    )
 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     plan = json.loads(done.stdout)
     assert plan["agents_md"] is None
+    assert plan["role_invariant"] == str(invariant_file(tmp_path))
     start = plan["agent_start"]
     after = start[start.index("--") + 1 :]
-    assert flag_value(after, "--append-system-prompt") == herdr_bootstrap.render_invariant("tm")
-    assert after == ["--append-system-prompt", herdr_bootstrap.render_invariant("tm"), "--approve"]
-    assert plan["cwd_ensure"] is None
+    assert after == ["--append-system-prompt", plan["role_invariant"], "--approve"]
+    assert plan["cwd_ensure"] == str(tmp_path)
     assert stub.calls() == []
+    assert not invariant_file(tmp_path).exists()
 
 
 def test_dry_run_issues_no_herdr_call_without_cwd(stub: StubHarness) -> None:
@@ -326,12 +348,14 @@ def test_claude_start_carries_its_own_trust_flag(stub: StubHarness, tmp_path: Pa
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     start = starts(stub)[0]
     after = start[start.index("--") + 1 :]
-    assert flag_value(after, "--append-system-prompt") == herdr_bootstrap.render_invariant("tm")
+    path = flag_value(after, "--append-system-prompt")
     assert after == [
         "--append-system-prompt",
-        herdr_bootstrap.render_invariant("tm"),
+        path,
         "--dangerously-skip-permissions",
     ]
+    assert Path(path) == invariant_file(tmp_path)
+    assert Path(path).read_text() == herdr_bootstrap.render_invariant("tm")
     assert not (tmp_path / "AGENTS.md").exists()
 
 
@@ -350,7 +374,7 @@ def test_unknown_kind_falls_back_to_file_without_trust_flags(
 # ── agent-level flags: model, snippet, and trust flags all ride after `--` ──────────
 
 
-def test_inline_kind_puts_the_snippet_and_model_after_the_separator(
+def test_inline_kind_puts_the_invariant_path_and_model_after_the_separator(
     stub: StubHarness, tmp_path: Path
 ) -> None:
     model = "clinepass/cline-pass/deepseek-v4.1-flash"
@@ -376,12 +400,65 @@ def test_inline_kind_puts_the_snippet_and_model_after_the_separator(
     assert "--append-system-prompt" not in before
     assert start[split + 1 :] == [
         "--append-system-prompt",
-        herdr_bootstrap.render_invariant("impl-1"),
+        str(invariant_file(tmp_path)),
         "--model",
         model,
         "--approve",
     ]
     assert stub.calls() == []
+
+
+def test_every_agent_arg_after_the_separator_is_single_line(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Regression for the live failure: herdr refuses any agent arg carrying a newline.
+
+    The rendered invariant is multi-line and full of backticks, so passing it as text can
+    never work. Fails on the previous inline-the-snippet fix, which looked correct here.
+    """
+    done = stub.run(
+        "--kind",
+        "pi",
+        "--pane",
+        "w9:p1",
+        "--role",
+        "tm",
+        "--model",
+        "clinepass/cline-pass/deepseek-v4.1-flash",
+        "--cwd",
+        str(tmp_path),
+        state=cwd_state(tmp_path),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = starts(stub)
+    after = start[start.index("--") + 1 :]
+    assert "--append-system-prompt" in after
+    for arg in after:
+        assert "\n" not in arg
+        assert "\r" not in arg
+
+
+def test_build_start_argv_rejects_a_multiline_agent_arg() -> None:
+    entry = herdr_bootstrap.KindEntry(trust_flags=(), inline_invariant=False)
+    with pytest.raises(ValueError, match="single-line"):
+        _ = herdr_bootstrap.build_start_argv(
+            "herdr",
+            herdr_bootstrap.Options(kind="codex", pane="w9:p1", model="a\nb"),
+            "msg-tm",
+            entry=entry,
+        )
+
+
+def test_inline_kind_without_an_invariant_path_is_refused() -> None:
+    entry = herdr_bootstrap.KindEntry(trust_flags=(), inline_invariant=True)
+    with pytest.raises(ValueError, match="role-invariant"):
+        _ = herdr_bootstrap.build_start_argv(
+            "herdr",
+            herdr_bootstrap.Options(kind="pi", pane="w9:p1"),
+            "msg-tm",
+            entry=entry,
+        )
 
 
 def test_file_kind_trust_flags_ride_after_a_single_separator() -> None:
@@ -390,7 +467,6 @@ def test_file_kind_trust_flags_ride_after_a_single_separator() -> None:
         "herdr",
         herdr_bootstrap.Options(kind="codex", pane="w9:p1"),
         "msg-tm",
-        "snippet",
         entry=entry,
     )
 

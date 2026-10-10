@@ -19,7 +19,10 @@ name.
 Two delivery mechanisms, chosen by `--kind` via skills/herdr/references/kinds.yaml:
 
 - Inline kinds (`pi`, `claude`) take the snippet through ``agent start
-  --append-system-prompt``; nothing is written to disk.
+  --append-system-prompt``, whose value is the absolute path of a lane-local file
+  (``<target_dir>/.lane/role-invariant.md``) holding the snippet. herdr refuses any agent
+  arg that cannot be encoded safely for the target shell — a newline is enough — and the
+  rendered snippet is multi-line, so the text itself can never ride inline.
 - File-reading kinds (`cline`, `codex`, `copilot`, `qodercli`, `agy`) and any unknown kind get
   the marker-wrapped block appended to ``AGENTS.md`` in the target directory. `cline` prefers
   an existing ``.clinerules`` over ``AGENTS.md``.
@@ -66,6 +69,10 @@ from herdr_cli import (
 
 AGENTS_MD = "AGENTS.md"
 CLINE_RULES = ".clinerules"
+# Lane-local delivery surface for the inline kinds: bootstrap writes the snippet here and
+# passes only the path, because herdr rejects an agent arg containing a newline.
+LANE_DIR = ".lane"
+ROLE_INVARIANT_FILE = "role-invariant.md"
 START_MARKER = "<!-- herdr-bootstrap:role-invariant -->"
 END_MARKER = "<!-- /herdr-bootstrap:role-invariant -->"
 
@@ -349,23 +356,57 @@ def target_path(target_dir: str, kind: str) -> Path:
     return directory / AGENTS_MD
 
 
+def lane_invariant_path(target_dir: str) -> Path:
+    """The lane-local file an inline kind reads its role invariant from.
+
+    Absolute, so the target binary resolves it from any cwd. Only this path is passed to
+    ``--append-system-prompt``; the snippet text never reaches herdr's argv.
+    """
+    return (Path(target_dir) / LANE_DIR / ROLE_INVARIANT_FILE).resolve()
+
+
+def write_role_invariant(path: Path, snippet: str) -> None:
+    """Write the rendered snippet for the target binary to read back at launch.
+
+    Idempotent: the file is replaced wholesale, so re-bootstrapping never duplicates the
+    snippet and never leaves a previous role's text behind. Contents equal the snippet.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(snippet)
+
+
 def build_start_argv(
-    herdr: str, options: Options, name: str, snippet: str, *, entry: KindEntry
+    herdr: str,
+    options: Options,
+    name: str,
+    *,
+    entry: KindEntry,
+    invariant_path: str | None = None,
 ) -> list[str]:
     """Assemble `agent start`; all agent-level flags ride after `--` as native agent args.
 
-    `herdr agent start` owns only `--kind`/`--pane`/`--timeout`; the model, the inline
-    role-invariant system prompt, and the per-kind trust flags are the agent binary's own
-    options, so they must sit past the `--` separator. The separator is emitted only when
-    there is at least one such arg.
+    `herdr agent start` owns only `--kind`/`--pane`/`--timeout`; the model, the
+    role-invariant system prompt reference, and the per-kind trust flags are the agent
+    binary's own options, so they must sit past the `--` separator. The separator is emitted
+    only when there is at least one such arg.
+
+    `invariant_path` is the absolute path of the already-written snippet file, required by
+    inline kinds and ignored otherwise: the snippet must never ride inline, since herdr
+    refuses any agent arg it cannot encode safely for the target shell — a newline is
+    enough. No I/O happens here.
     """
     argv = [herdr, "agent", "start", name, "--kind", options.kind, "--pane", options.pane]
     agent_args: list[str] = []
     if entry.inline_invariant:
-        agent_args += ["--append-system-prompt", snippet]
+        if not invariant_path:
+            raise ValueError("inline kinds need the role-invariant file path")
+        agent_args += ["--append-system-prompt", invariant_path]
     if options.model:
         agent_args += ["--model", options.model]
     agent_args += entry.trust_flags
+    for arg in agent_args:
+        if "\n" in arg or "\r" in arg:
+            raise ValueError(f"agent args must be single-line: {arg!r}")
     if agent_args:
         argv += ["--", *agent_args]
     return argv
@@ -379,18 +420,28 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
     snippet = render_invariant(role)
     entry = load_kind_entry(options.kind)
 
+    target_dir = resolve_target_dir(herdr, options, env, dry_run=options.dry_run)
     agents_file: Path | None = None
-    if not entry.inline_invariant:
-        target_dir = resolve_target_dir(herdr, options, env, dry_run=options.dry_run)
+    invariant_file: Path | None = None
+    if entry.inline_invariant:
+        invariant_file = lane_invariant_path(target_dir)
+    else:
         agents_file = target_path(target_dir, options.kind)
 
     rename_argv = [herdr, "pane", "rename", options.pane, name]
-    start_argv = build_start_argv(herdr, options, name, snippet, entry=entry)
+    start_argv = build_start_argv(
+        herdr,
+        options,
+        name,
+        entry=entry,
+        invariant_path=None if invariant_file is None else str(invariant_file),
+    )
     if options.dry_run:
         print(
             json.dumps(
                 {
                     "agents_md": str(agents_file) if agents_file else None,
+                    "role_invariant": str(invariant_file) if invariant_file else None,
                     "pane_rename": rename_argv,
                     "agent_start": start_argv,
                     "cwd_ensure": options.cwd,
@@ -407,13 +458,18 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
             _ = append_invariant(agents_file, snippet)
         except OSError as exc:
             raise UsageError(f"cannot write {agents_file}: {exc}") from exc
+    if invariant_file is not None:
+        try:
+            write_role_invariant(invariant_file, snippet)
+        except OSError as exc:
+            raise UsageError(f"cannot write {invariant_file}: {exc}") from exc
     raw = run_herdr_checked(start_argv, env)
 
     if options.json:
         print(raw, end="" if raw.endswith("\n") else "\n")
         return EXIT_OK
-    written = str(agents_file) if agents_file else "-"
-    print(f"bootstrapped {name} ({options.kind}) pane={options.pane} agents-md={written}")
+    surface = f"agents-md={agents_file}" if agents_file else f"role-invariant={invariant_file}"
+    print(f"bootstrapped {name} ({options.kind}) pane={options.pane} {surface}")
     return EXIT_OK
 
 
