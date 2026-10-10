@@ -28,10 +28,14 @@ honest no-op rather than a write into the store the lease names.
     herdr-lease replies [ID] [--limit N] [--json|--yaml]
 
 Replies are persisted next to the tasks store as metadata only: a body file under
-`.lane/replies/<id>.md` plus one ledger row in `.lane/replies.yaml` that carries the digest,
-the payload shape, and the cited artifacts — never the body text. `herdr-lease replies` is
-the reader that re-derives a reply's evidence, so the orchestrator trusts a store record
-instead of treating a prompt as provenance (#231).
+`.lane/replies/<id>.md` plus one index sidecar `.lane/replies/<id>.yaml` that carries the
+digest, the payload shape, and the cited artifact *count* — never the body text. The
+directory is the index: each record owns one file, written create-only, so concurrent replies
+cannot lose each other's row and no lock is needed. A pre-#231 `.lane/replies.yaml` is still
+read — merged on read, deduped by id, the sidecar winning — and is never rewritten, so an old
+ledger can never be clobbered. `herdr-lease replies` is the reader that re-derives a reply's
+evidence, so the orchestrator trusts a store record instead of treating a prompt as
+provenance (#231).
 
 Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr`.
 """
@@ -39,6 +43,7 @@ Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -60,6 +65,16 @@ STATE_FILE_LEGACY_JSON = ".lane/lease.json"
 STATE_FILE_CWD = ".herdr-lease.json"
 REPLIES_FILE_LANE = ".lane/replies.yaml"
 REPLIES_DIR_LANE = ".lane/replies"
+# Bound on regenerating a taken reply id before the record is declared unwritable (#231 F1).
+_ID_ATTEMPTS = 16
+
+
+class ReplyStoreError(UsageError):
+    """The reply store cannot serve this call: an unreadable index, or an exhausted id space.
+
+    A `UsageError` so the reader maps it onto the documented exit status 2 instead of
+    crashing; the reply path catches it and degrades to `NOT RECORDED` (#231 F2).
+    """
 
 
 def _now_iso() -> str:
@@ -442,39 +457,141 @@ def list_tasks(
     return list(_load_state(resolve_state_read_path(base_dir, env=env))["tasks"].values())
 
 
-def _load_replies(path: Path) -> list[dict[str, Any]]:
-    """Read the reply ledger; a missing or corrupt file yields an empty list, never a raise.
+def _unlink_quietly(path: Path) -> None:
+    """Remove a file this process created; a missing or unremovable file is not an error."""
+    try:
+        path.unlink()
+    except OSError:
+        pass
 
-    Mirrors `_load_state`'s defensive posture: a ledger this process cannot parse must not
-    decide whether a reply is delivered, only whether its record is readable.
+
+def _preserve_unreadable(path: Path, reason: object) -> str:
+    """Move an unreadable index file aside, returning the message for the raised error.
+
+    Byte-for-byte: the file is renamed, never rewritten and never deleted, and a name an
+    earlier quarantine already holds is not overwritten (#231 F2). A file that cannot be
+    moved is still never rewritten — the message says so instead of guessing.
     """
-    if not path.is_file():
-        return []
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    candidate = path.with_name(f"{path.name}.corrupt-{stamp}")
+    suffix = 1
+    while candidate.exists():
+        candidate = path.with_name(f"{path.name}.corrupt-{stamp}-{suffix}")
+        suffix += 1
+    try:
+        _ = path.replace(candidate)
+    except OSError as exc:
+        return f"reply index {path} is unreadable ({reason}) and could not be moved aside: {exc}"
+    return f"reply index {path} is unreadable ({reason}); preserved as {candidate}"
+
+
+def _parse_index_file(path: Path) -> Any:
+    """Parse one index file; a file that cannot be parsed is preserved and raises (#231 F2)."""
     try:
         raw = path.read_text(encoding="utf-8")
-        data: Any = json.loads(raw) if path.suffix == ".json" else yaml.safe_load(raw)
-    except Exception:
-        return []
-    records: Any
-    if isinstance(data, dict):
-        records = data.get("replies")
-    else:
-        records = data
-    if not isinstance(records, list):
-        return []
-    return [dict(record) for record in records if isinstance(record, dict)]
+    except OSError as exc:
+        raise ReplyStoreError(f"reply index {path} could not be read: {exc}") from exc
+    try:
+        return yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise ReplyStoreError(_preserve_unreadable(path, exc)) from exc
 
 
-def _write_replies(
-    records: list[dict[str, Any]],
+def _rows_from_document(document: Any) -> list[dict[str, Any]] | None:
+    """The rows a legacy reply ledger holds, or None when its shape is not a ledger."""
+    if document is None:
+        return []
+    if isinstance(document, dict):
+        document = document.get("replies")
+        if document is None:
+            return []
+    if not isinstance(document, list) or not all(isinstance(row, dict) for row in document):
+        return None
+    return [dict(row) for row in document]
+
+
+def _load_legacy_ledger(path: Path) -> list[dict[str, Any]]:
+    """Read-only rows of a pre-#231 ledger; a damaged file is preserved, never written over."""
+    if not path.is_file():
+        return []
+    rows = _rows_from_document(_parse_index_file(path))
+    if rows is None:
+        raise ReplyStoreError(_preserve_unreadable(path, "the reply list is not a list of records"))
+    return rows
+
+
+def _load_sidecar(path: Path) -> dict[str, Any]:
+    """One record's index file; a file that is not one record is damaged, not guessed at."""
+    document = _parse_index_file(path)
+    if not isinstance(document, dict) or not isinstance(document.get("id"), str):
+        raise ReplyStoreError(_preserve_unreadable(path, "not one reply record"))
+    return dict(document)
+
+
+def _reply_sort_key(record: Mapping[str, Any]) -> tuple[str, str]:
+    """Newest-last ordering without a lock: `recorded_at`, then `id` as the tiebreaker."""
+    return str(record.get("recorded_at") or ""), str(record.get("id") or "")
+
+
+def _load_replies(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
-) -> None:
-    """Persist the reply ledger, atomically."""
+) -> list[dict[str, Any]]:
+    """Every stored reply row: the sidecar directory merged with the read-only legacy ledger.
+
+    The directory is the index (#231 F1): each record owns `<replies>/<id>.yaml`, so a read is
+    a directory listing with no lock and no read-modify-write to lose. A legacy
+    `.lane/replies.yaml` is merged on read — deduped by id, the sidecar winning — and is
+    never rewritten, so it can never be clobbered by a reply written here. Rows come back
+    sorted by `recorded_at`, then `id`, so `list_replies`'s newest-last tail is stable.
+
+    An index file that cannot be parsed is preserved as `<name>.corrupt-<utc-stamp>` and
+    raises `ReplyStoreError`: a reply is either recorded or honestly unrecorded, never a
+    silent clobber (#231 F2).
+    """
+    directory = resolve_replies_dir(base_dir, env=env)
+    legacy = _load_legacy_ledger(resolve_replies_file(base_dir, env=env))
+    sidecars = (
+        [_load_sidecar(path) for path in sorted(directory.glob("*.yaml"))]
+        if directory.is_dir()
+        else []
+    )
+    keyed: dict[str, dict[str, Any]] = {}
+    unkeyed: list[dict[str, Any]] = []
+    for row in (*legacy, *sidecars):
+        record_id = row.get("id")
+        if isinstance(record_id, str) and record_id:
+            keyed[record_id] = row
+        else:
+            unkeyed.append(row)
+    return unkeyed + sorted(keyed.values(), key=_reply_sort_key)
+
+
+def _write_reply_index(path: Path, record: Mapping[str, Any]) -> None:
+    """Create-only index write for one reply record, complete before it is visible (#231 F1).
+
+    The record path funnels every sidecar through here, and the write is create-only: the
+    payload is written and `fsync`ed to a temporary file beside the target and then linked
+    into place, so `FileExistsError` means another writer already holds that id — the same
+    outcome `O_EXCL` gives — and a concurrent reader can only ever see a *complete* index
+    file, never the zero-length window an `os.open(O_CREAT|O_EXCL)` plus write exposes (a
+    reader that saw it would have to quarantine it as damaged, which is a self-inflicted
+    corruption, not a lost update). The payload is `yaml.safe_dump`ed, so the file is one
+    record; its mode is `mkstemp`'s `0600`.
+    """
     payload = yaml.safe_dump(
-        {"replies": records}, sort_keys=False, allow_unicode=True, default_flow_style=False
+        dict(record), sort_keys=False, allow_unicode=True, default_flow_style=False
     ).encode("utf-8")
-    _atomic_write(resolve_replies_file(base_dir, env=env), payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.tmp-")
+    try:
+        with open(descriptor, "wb") as handle:
+            _ = handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temp_path, path)
+    finally:
+        _unlink_quietly(Path(temp_path))
 
 
 def record_reply(
@@ -484,24 +601,68 @@ def record_reply(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Write the reply body to `<replies_dir>/<id>.md` and append `entry` to the ledger.
+    """Write one reply: the body to `<replies_dir>/<id>.md`, then its index sidecar.
 
-    The ledger row is metadata only — digest, shape, artifacts — so the body text never
-    reaches `.lane/replies.yaml` (a canary in the payload stays in the body file alone).
-    Each write is atomic via `_atomic_write`, whose `mkdir(parents=True, exist_ok=True)`
-    makes directory creation race-tolerant. The stored `payload` is the body path relative
-    to the store base, so a reader joins `<store base>/<payload>`.
+    The directory is the index (#231 F1): one create-only sidecar per record, so two
+    concurrent replies cannot lose each other's row — no lock, and no read-modify-write to
+    lose. The body is written first; a sidecar write that fails for any reason other than
+    losing an id race unlinks the body (F-C3), so a failed record leaves no orphan behind.
+    A taken id is regenerated with a numeric suffix (bounded by `_ID_ATTEMPTS`), and the body
+    of the record that holds that id is never replaced: an id collision implies the same
+    payload digest, so the two bodies are the same bytes.
+
+    The legacy `<store>/.lane/replies.yaml` is only ever read — its rows are merged by
+    `list_replies`/`get_reply` — so a reply written here can never clobber it.
     """
-    record_id = str(entry["id"])
-    body_path = resolve_replies_dir(base_dir, env=env) / f"{record_id}.md"
-    _atomic_write(body_path, body.encode("utf-8"))
+    directory = resolve_replies_dir(base_dir, env=env)
+    base_id = str(entry["id"])
+    for suffix in range(_ID_ATTEMPTS):
+        record_id = base_id if suffix == 0 else f"{base_id}-{suffix + 1}"
+        sidecar = directory / f"{record_id}.yaml"
+        if sidecar.exists():
+            continue
+        stored = dict(entry)
+        stored["id"] = record_id
+        stored["payload"] = f"{REPLIES_DIR_LANE}/{record_id}.md"
+        body_path = directory / f"{record_id}.md"
+        _atomic_write(body_path, body.encode("utf-8"))
+        try:
+            _write_reply_index(sidecar, stored)
+        except FileExistsError:
+            # Losing an id race is not a failure: that record's body is byte-identical (the
+            # id carries the payload digest), so it is left in place and the next suffix tried.
+            continue
+        except BaseException:
+            _unlink_quietly(body_path)
+            raise
+        return stored
+    raise ReplyStoreError(
+        f"reply id {base_id!r} is taken {_ID_ATTEMPTS} times over; no reply record written"
+    )
 
-    stored = dict(entry)
-    stored["payload"] = f"{REPLIES_DIR_LANE}/{record_id}.md"
-    records = _load_replies(resolve_replies_file(base_dir, env=env))
-    records.append(stored)
-    _write_replies(records, base_dir=base_dir, env=env)
-    return stored
+
+def _payload_path(
+    record: Mapping[str, Any],
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path | None:
+    """Where a row says its body is: relative to the store base, or as written if absolute."""
+    payload = record.get("payload")
+    if not isinstance(payload, str) or not payload:
+        return None
+    path = Path(payload)
+    return path if path.is_absolute() else resolve_base_dir(base_dir, env=env) / path
+
+
+def _payload_matches(path: Path, digest: object) -> bool:
+    """Whether the body on disk still hashes to the row's recorded digest."""
+    if not isinstance(digest, str) or not digest:
+        return False
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return False
+    return hashlib.sha256(raw).hexdigest() == digest
 
 
 def get_reply(
@@ -510,11 +671,55 @@ def get_reply(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, Any] | None:
-    """The reply ledger row for `record_id`, else None."""
-    for record in _load_replies(resolve_replies_file(base_dir, env=env)):
-        if record.get("id") == record_id:
-            return record
+    """The reply row for `record_id`, only while its payload still matches its digest (#231).
+
+    The digest is what binds the delivered body to the record, so a row whose payload file is
+    missing, unreadable, or no longer hashes to `digest` resolves to `None`: a hand-written
+    row and a tampered body are both unreachable. This is the lookup the reader
+    (`herdr-lease replies <ID>`) and the advance gate use, so neither can serve a record the
+    store does not actually hold.
+    """
+    for record in _load_replies(base_dir, env=env):
+        if record.get("id") != record_id:
+            continue
+        path = _payload_path(record, base_dir, env)
+        if path is None or not _payload_matches(path, record.get("digest")):
+            return None
+        return record
     return None
+
+
+def check_reply_store(
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> None:
+    """Fail unless every reply index file is readable; raises `ReplyStoreError` (#231 F2).
+
+    The reply path calls this before it writes. An index this process cannot parse must not
+    be written over, so the read is the pre-flight: the reply degrades to NOT RECORDED before
+    any body or sidecar exists, and the damaged file is preserved (moved aside) by the read
+    itself.
+    """
+    _ = _load_replies(base_dir, env=env)
+
+
+def discard_reply(
+    record_id: str,
+    *,
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> None:
+    """Remove one just-written record's body and sidecar; best-effort, never raises (#231).
+
+    Used when a record cannot be re-resolved through the reader: the delivered pointer then
+    says NOT RECORDED, so no index row may name a reply the sender was told is not recorded.
+    """
+    try:
+        directory = resolve_replies_dir(base_dir, env=env)
+    except Exception:
+        return
+    _unlink_quietly(directory / f"{record_id}.md")
+    _unlink_quietly(directory / f"{record_id}.yaml")
 
 
 def list_replies(
@@ -523,8 +728,8 @@ def list_replies(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """The most recent reply ledger rows in append order; `limit <= 0` lists none."""
-    records = _load_replies(resolve_replies_file(base_dir, env=env))
+    """The most recent reply rows in `recorded_at` order; `limit <= 0` lists none."""
+    records = _load_replies(base_dir, env=env)
     return records[-limit:] if limit > 0 else []
 
 

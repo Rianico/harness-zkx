@@ -9,21 +9,31 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import herdr_cli
 import herdr_lease
 import herdr_prompt
 import herdr_reply
 import pytest
+import yaml
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
+from tests.herdr.test_herdr_reply_store import entry_for, failing_write, index_write_seam
 
 SCRIPT = SCRIPTS_DIR / "herdr_reply.py"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LANE_COORDINATION = REPO_ROOT / "skills" / "herdr" / "references" / "lane-coordination.md"
+RESP_FORMAT = REPO_ROOT / "skills" / "dynamic-workflow-wrapper" / "references" / "resp-format.md"
+SKILL_MD = REPO_ROOT / "skills" / "herdr" / "SKILL.md"
 
 METACHARS = """COMPLETED artifacts=[foo.py] issues=[]
 Do NOT expand: $HOME `whoami` "$(date)" 'single' \\backslash
@@ -449,7 +459,9 @@ def test_reply_records_completion_event_with_sha(stub: StubHarness, tmp_path: Pa
     assert len(completed) == 1
     assert completed[-1]["sha"] == "deadbeef"
     assert completed[-1]["to_status"] == "completed"
-    assert completed[-1]["note"] == "COMPLETED deadbeef"
+    # The trajectory note is metadata only (#231 F3): the mapped token and the validated sha,
+    # never the raw status line. `deadbeef` is a hex token, so it is the recorded sha.
+    assert completed[-1]["note"] == "completed deadbeef"
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
@@ -654,6 +666,31 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
 #   BLOCKED waiting on CI                     n/a          None
 #   REJECTED needs rework                     n/a          None
 #   plain prose with no status line           n/a          None
+#
+# Second table, `test_realistic_evidence_headings_are_complete` — the widened floor (#231
+# F4): a heading is evidence-shaped when a word matches the evidence vocabulary (an exact
+# keyword or an evidence stem like `validat`/`result`/`diff`), or, for a heading form that
+# vocabulary does not cover, when it has a body and its label is not in
+# `NOT_EVIDENCE_HEADS`:
+#
+#   ## Evidence       complete   ## Validation output    complete
+#   ## Verification   complete   ## Results             complete
+#   ## Artifacts      complete   ## Benchmark results   complete
+#   ## Tests          complete   ## Reproduced          complete
+#   ## Gates          complete   ## Commands run        complete
+#   ## Gate output    complete   ## CI / ## Diff        complete
+#   ## Validation     complete   ## What I ran          complete
+#   ## Status         complete   ## Outcome             complete
+#   ## Acceptance     complete
+#
+# Third table, `test_shape_floor_stays_incomplete` — the floor is unchanged: a bare
+# `COMPLETED`, a `COMPLETED <non-hex>`, a heading with no body, and a denied heading
+# (`Notes`, `Next steps`, `Todo`, `Plan`, `Questions`, `Changelog`) are all `incomplete`.
+#
+# `evidence_section`'s precedence is the other half of F4/F5: a heading naming the canonical
+# section (`Evidence`, `Verification`) outranks any other evidence-vocabulary heading, which
+# outranks the deny-list floor, which outranks a fenced block. That is why the repo's own
+# reply template records `Evidence` even though `## Artifacts` precedes it.
 
 
 @pytest.mark.parametrize(
@@ -690,6 +727,147 @@ def test_evidence_section_skips_an_empty_keyword_heading() -> None:
     assert herdr_reply.evidence_section("## Evidence\n## Verification\nall good") == "Verification"
 
 
+REALISTIC_EVIDENCE_HEADINGS = (
+    "Evidence",
+    "Verification",
+    "Artifacts",
+    "Tests",
+    "Gates",
+    "Gate output",
+    "Validation",
+    "Validation output",
+    "Results",
+    "Benchmark results",
+    "Reproduced",
+    "Commands run",
+    "CI",
+    "Diff",
+    "What I ran",
+    "Status",
+    "Outcome",
+    "Acceptance",
+)
+
+
+@pytest.mark.parametrize("heading", REALISTIC_EVIDENCE_HEADINGS)
+def test_realistic_evidence_headings_are_complete(heading: str) -> None:
+    """F4: every realistic evidence heading with a body is `complete`, not a false negative."""
+    payload = f"COMPLETED deadbeef\n\n## {heading}\n- 660 passed\n"
+    assert herdr_reply.payload_shape(payload) == ("complete", heading)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "COMPLETED",
+        "COMPLETED abc1234",
+        "COMPLETED\n\n## Notes\nall good",
+        "COMPLETED\n\n## Note\nall good",
+        "COMPLETED\n\n## Next steps\nlater",
+        "COMPLETED\n\n## Next\nlater",
+        "COMPLETED\n\n## Todo\nlater",
+        "COMPLETED\n\n## TBD\nlater",
+        "COMPLETED\n\n## Plan\nlater",
+        "COMPLETED\n\n## Questions\nlater",
+        "COMPLETED\n\n## Changelog\nlater",
+        # A heading with no body is never a section, however it is named.
+        "COMPLETED\n\n## Status\n",
+        "COMPLETED\n\n## Status\n\n## Notes\nlater",
+    ],
+)
+def test_shape_floor_stays_incomplete(payload: str) -> None:
+    """F4: the widened floor still refuses a payload that cites nothing."""
+    assert herdr_reply.payload_shape(payload) == ("incomplete", None)
+
+
+def test_the_floor_has_no_path_citation_fallback() -> None:
+    """A cited path is not evidence: `## Notes` plus a path stays `incomplete` (#231 F4)."""
+    payload = "COMPLETED deadbeef\n\n## Notes\n- see /home/u/.aws/credentials\n"
+    assert herdr_reply.payload_shape(payload) == ("incomplete", None)
+
+
+# ── the repo's own documented reply formats satisfy the floor (#231 F4/F5/F6) ────────
+
+
+def fenced_blocks(text: str, info: str) -> list[str]:
+    """The bodies of every fenced block opened with exactly `info` (e.g. `markdown`)."""
+    blocks: list[str] = []
+    body: list[str] | None = None
+    for line in text.splitlines():
+        if body is None:
+            if line.strip() == f"```{info}":
+                body = []
+            continue
+        if line.startswith("```"):
+            blocks.append("\n".join(body))
+            body = None
+            continue
+        body.append(line)
+    if body is not None:
+        blocks.append("\n".join(body))
+    return blocks
+
+
+def test_response_format_section_headings_pass_the_floor() -> None:
+    """Every Mode A heading in the canonical response format is evidence-shaped.
+
+    Read from the repo's own fixture, so the check tracks the documented format: a reply
+    shaped by `resp-format.md` must never be recorded `incomplete` merely for its headings,
+    and the format's `## Evidence` section is the one the record names.
+    """
+    block = next(
+        block
+        for block in fenced_blocks(RESP_FORMAT.read_text(encoding="utf-8"), "markdown")
+        if "## Evidence" in block
+    )
+    assert [line for line in block.splitlines() if line.startswith("## ")] == [
+        "## Summary",
+        "## Artifacts",
+        "## Evidence",
+        "## Route",
+        "## Issues",
+        "## Suggestions (Optional)",
+    ]
+    headings = [line for line in block.splitlines() if line.startswith("## ")]
+    assert herdr_reply.payload_shape(f"COMPLETED deadbeef\n{block}") == ("complete", "Evidence")
+    for heading in headings:
+        one = f"COMPLETED deadbeef\n\n{heading}\n- 660 passed"
+        assert herdr_reply.payload_shape(one)[0] == "complete", heading
+
+
+def test_canonical_template_records_the_evidence_section() -> None:
+    """F5: the repo's own reply template records `evidence: evidence`, not `artifacts`."""
+    block = next(
+        block
+        for block in fenced_blocks(LANE_COORDINATION.read_text(encoding="utf-8"), "markdown")
+        if block.startswith("COMPLETED")
+    )
+    assert "## Artifacts" in block and "## Evidence" in block
+    assert block.index("## Artifacts") < block.index("## Evidence")
+    assert herdr_reply.evidence_section(block) == "Evidence"
+    assert herdr_reply.payload_shape(block) == ("complete", "Evidence")
+    assert herdr_reply.evidence_label("Evidence") == "evidence"
+
+
+def test_skill_reply_examples_show_an_evidence_section() -> None:
+    """The two `herdr-reply` examples in SKILL.md must show an evidence section (F6).
+
+    The paragraph right below those examples already requires an evidence section for a
+    `COMPLETED` reply, so the examples must carry one too. This is a live pin: the doc
+    rewrite landed, so a bare `COMPLETED` payload here now fails the gate.
+    """
+    payloads = [
+        match.group(1)
+        for line in SKILL_MD.read_text(encoding="utf-8").splitlines()
+        if "herdr_reply.py" in line
+        for match in [re.search(r'orchestrator "([^"]*)"', line)]
+        if match is not None
+    ]
+    assert len(payloads) == 2, payloads
+    for payload in payloads:
+        assert herdr_reply.payload_shape(payload)[0] == "complete", payload
+
+
 # ── persist first, then poke (#231) ──────────────────────────────────────────────────
 
 
@@ -721,12 +899,15 @@ def test_reply_persists_a_record_a_later_reader_resolves(
     assert len(records) == 1
     record = records[0]
     assert record["shape"] == "complete"
-    assert record["evidence"] == "Evidence"
+    # The ledger stores the label, not the heading text, and counts the cited artifacts
+    # instead of copying paths (#231 F3).
+    assert record["evidence"] == "evidence"
     assert record["status"] == "completed"
     assert record["sha"] == "abc1234"
+    assert "status_line" not in record
     assert record["digest"] == digest
     assert record["payload"] == f".lane/replies/{record['id']}.md"
-    assert record["artifacts"] == ["scripts/check.sh", "tests/herdr/test_herdr_reply.py"]
+    assert record["artifacts"] == 2
 
     # ...and the same record resolves through `get_reply`.
     resolved = herdr_lease.get_reply(record["id"], env={"HERDR_LANE_DIR": str(tmp_path)})
@@ -761,9 +942,10 @@ def test_reply_keeps_a_canary_out_of_the_ledger(stub: StubHarness, tmp_path: Pat
     done = stub.run("orchestrator", body)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
-    ledger = tmp_path / ".lane" / "replies.yaml"
-    assert ledger.is_file()
-    assert canary not in ledger.read_text(encoding="utf-8")
+    index_files = sorted((tmp_path / ".lane").rglob("*.yaml"))
+    assert index_files, "the store must hold an index for the recorded reply"
+    for path in index_files:
+        assert canary not in path.read_text(encoding="utf-8"), path
 
     bodies = list((tmp_path / ".lane" / "replies").glob("*.md"))
     assert len(bodies) == 1
@@ -881,9 +1063,7 @@ def test_record_sender_status_is_silent_without_a_store_record(
         assert task["trajectory"][-1]["event"] == "dispatched"
 
     # No record id: an unpersisted reply advances nothing.
-    herdr_reply.record_sender_status(
-        str(stub.herdr), env, "completed", "deadbeef", "COMPLETED deadbeef", record_id=None
-    )
+    herdr_reply.record_sender_status(str(stub.herdr), env, "completed", "deadbeef", record_id=None)
     still_dispatched()
 
     # A record id the store does not hold is equally silent.
@@ -892,7 +1072,6 @@ def test_record_sender_status_is_silent_without_a_store_record(
         env,
         "completed",
         "deadbeef",
-        "COMPLETED deadbeef",
         record_id="no-such-record",
         shape="complete",
     )
@@ -904,10 +1083,10 @@ def test_record_sender_status_is_silent_without_a_store_record(
         sender="reviewer",
         caller="orchestrator",
         ticket_id="#231",
+        task_id=task_id,
         in_reply_to=task_id,
         mapped="completed",
         sha="deadbeef",
-        status_line="COMPLETED deadbeef",
         shape="incomplete",
         evidence=None,
     )
@@ -917,8 +1096,347 @@ def test_record_sender_status_is_silent_without_a_store_record(
         env,
         "completed",
         "deadbeef",
-        "COMPLETED deadbeef",
         record_id=str(stored["id"]),
         shape="incomplete",
     )
     still_dispatched()
+
+
+# ── the store under concurrency and failure (#231 F1/F2/F-C1/F-C2) ───────────────────
+
+CANARY_LINE1 = "SECRETCANARYLINE1"
+CANARY_HEADING = "SECRETCANARYHEADING"
+CANARY_PATH = "/home/u/.aws/credentials"
+CANARIES = (CANARY_LINE1, CANARY_HEADING, CANARY_PATH)
+CANARY_PAYLOAD = (
+    f"COMPLETED {CANARY_LINE1}\n\n"
+    f"## Evidence {CANARY_HEADING}\n"
+    f"- scanned {CANARY_PATH} and tests/herdr/test_herdr_reply.py clean\n"
+)
+
+
+def test_no_payload_text_reaches_the_ledger(
+    stub: StubHarness, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """F3: a canary on line 1, in the evidence heading, or in a path token stays in the body.
+
+    The body file holds the payload verbatim; no index file under the store, and none of the
+    reader's three modes, may reprint any of the three canaries.
+    """
+    done = stub.run("orchestrator", CANARY_PAYLOAD)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    (call,) = stub.prompts()
+    pointer = call[4][: len(call[4]) - len(CANARY_PAYLOAD)]
+    for canary in CANARIES:
+        assert canary not in pointer, "the delivered pointer must stay metadata only"
+
+    bodies = list((tmp_path / ".lane" / "replies").glob("*.md"))
+    assert len(bodies) == 1
+    body_text = bodies[0].read_text(encoding="utf-8")
+    for canary in CANARIES:
+        assert canary in body_text
+
+    index_files = sorted((tmp_path / ".lane").rglob("*.yaml"))
+    assert index_files, "the store must hold an index for the recorded reply"
+    for path in index_files:
+        stored = path.read_text(encoding="utf-8")
+        for canary in CANARIES:
+            assert canary not in stored, path
+
+    record_id = bodies[0].stem
+    for argv in (
+        ["replies"],
+        ["replies", "--json"],
+        ["replies", "--yaml"],
+        ["replies", record_id],
+    ):
+        assert herdr_lease.main(argv, env={"HERDR_LANE_DIR": str(tmp_path)}) == 0
+        captured = capsys.readouterr()
+        for canary in CANARIES:
+            assert canary not in captured.out + captured.err, argv
+
+
+def test_lease_event_note_keeps_a_canary_out_of_the_store(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """F3 on the lease path: the appended trajectory event carries metadata only.
+
+    A canary in the first token of payload line 1 is the second token after `COMPLETED`, so
+    it rides `parse_status_line`'s sha slot. The event is still appended (the behaviour), but
+    its `note` and `sha` stay bounded: the mapped status token and a hex sha only. The canary
+    lives in `.lane/replies/<id>.md` and nowhere under `.lane/*.yaml`.
+    """
+    canary = f"SECRET-CANARY-{secrets.token_hex(6)}"
+    task_id = "#231#lease-canary"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "231.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#231",
+        task_id=task_id,
+    )
+    body = f"COMPLETED {canary}\n\n## Evidence\n- scanned {canary} clean\n"
+
+    done = stub.run("orchestrator", body)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    bodies = list((tmp_path / ".lane" / "replies").glob("*.md"))
+    assert len(bodies) == 1
+    assert canary in bodies[0].read_text(encoding="utf-8")
+
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    assert task["status"] == "completed"
+    event = task["trajectory"][-1]
+    assert event["event"] == "completed"
+    assert event["note"] == "completed"
+    assert "sha" not in event
+
+    assert canary not in (tmp_path / ".lane" / "tasks.yaml").read_text(encoding="utf-8")
+    for path in sorted((tmp_path / ".lane").rglob("*.yaml")):
+        assert canary not in path.read_text(encoding="utf-8"), path
+
+
+def test_parallel_reply_helpers_deliver_resolvable_pointers(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """F1: 16 concurrent `herdr-reply` runs in one lane leave 16 resolvable pointers."""
+    env = stub.base_env()
+    stub.write_state(DEFAULT_STATE)
+    released = threading.Barrier(16)
+
+    def deliver(index: int) -> int:
+        body = f"COMPLETED deadbeef\n\n## Evidence\n- shard {index}\n"
+        _ = released.wait()
+        return herdr_reply.main(["orchestrator", body], env=env)
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        codes = list(pool.map(deliver, range(16)))
+
+    assert codes == [herdr_cli.EXIT_OK] * 16
+    delivered = [
+        match.group(1)
+        for call in stub.prompts()
+        if (match := re.search(r"record=(\S+)", call[4])) is not None
+    ]
+    assert len(delivered) == 16
+    rows = herdr_lease.list_replies(limit=100, base_dir=tmp_path)
+    assert len(rows) == 16
+    for record_id in delivered:
+        assert herdr_lease.get_reply(record_id, base_dir=tmp_path) is not None, (
+            f"delivered pointer names an unresolvable record: {record_id}"
+        )
+    # No writer may quarantine another writer's index file: publication is create-only and
+    # complete-before-visible, so a concurrent reader never sees a half-written record.
+    assert list((tmp_path / ".lane" / "replies").glob("*.corrupt-*")) == []
+
+
+def test_failed_record_leaves_no_orphan_and_delivers_not_recorded(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F1/F-C3: a failed index write unlinks the body and degrades the pointer honestly."""
+    monkeypatch.setattr(
+        herdr_lease, index_write_seam(), failing_write(OSError("no space left on device"))
+    )
+
+    done = stub.run("orchestrator", CANARY_PAYLOAD)
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[1:4] == ["agent", "prompt", "orchestrator"]
+    assert call[4].endswith(CANARY_PAYLOAD)
+    assert "Payload: NOT RECORDED" in call[4]
+    assert "reply record skipped" in done.stderr
+    assert list((tmp_path / ".lane" / "replies").glob("*.md")) == []
+    assert herdr_lease.list_replies(base_dir=tmp_path) == []
+
+
+def test_a_record_that_does_not_resolve_is_discarded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pointer never names a record the reader cannot produce: it is dropped instead.
+
+    Driven at `persist_reply`, the helper's own module: the in-process script run executes the
+    file as `__main__`, so only a *module* attribute patched here is the global the stored
+    path resolves through. F1's re-resolution rule is what this pins.
+    """
+    base = tmp_path
+    body = "COMPLETED deadbeef\n\n## Evidence\n- 660 passed\n"
+    entry = entry_for(body, record_id="row-1")
+
+    def unresolved(*args: Any, **kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(herdr_reply, "get_reply", unresolved)
+
+    stored, reason = herdr_reply.persist_reply(entry, body, env={"HERDR_LANE_DIR": str(base)})
+
+    assert stored is None
+    assert reason
+    assert list((base / ".lane" / "replies").glob("*.md")) == []
+    assert list((base / ".lane" / "replies").glob("*.yaml")) == []
+    pointer = herdr_reply.pointer_block(
+        shape="complete", evidence="evidence", stored=None, reason=reason
+    )
+    assert pointer is not None and "Payload: NOT RECORDED" in pointer
+
+
+def test_unreadable_ledger_degrades_the_reply_and_preserves_the_file(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """F2: an unparsable ledger is preserved byte-for-byte; the reply says NOT RECORDED."""
+    base = tmp_path
+    prior_body = "COMPLETED deadbeef\n\n## Evidence\n- prior\n"
+    _ = (base / ".lane" / "replies").mkdir(parents=True)
+    _ = (base / ".lane" / "replies" / "prior.md").write_text(prior_body, encoding="utf-8")
+    prior_row = {
+        **entry_for(prior_body, record_id="prior"),
+        "payload": ".lane/replies/prior.md",
+        "evidence": "Evidence",
+        "status_line": "COMPLETED deadbeef",
+        "artifacts": ["tests/herdr/test_herdr_reply.py"],
+    }
+    ledger = base / ".lane" / "replies.yaml"
+    _ = ledger.write_text(
+        yaml.safe_dump({"replies": [prior_row]}, sort_keys=False) + "\n: broken [oops\n",
+        encoding="utf-8",
+    )
+    damaged = ledger.read_bytes()
+
+    done = stub.run("orchestrator", CANARY_PAYLOAD)
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[4].endswith(CANARY_PAYLOAD)
+    assert "Payload: NOT RECORDED" in call[4]
+    assert "reply record skipped" in done.stderr
+    assert not ledger.exists(), "an unreadable ledger is moved aside, never written over"
+    preserved = sorted((base / ".lane").glob("replies.yaml.corrupt-*"))
+    assert len(preserved) == 1
+    assert preserved[0].read_bytes() == damaged
+    assert "prior" in preserved[0].read_text(encoding="utf-8")
+    assert (base / ".lane" / "replies" / "prior.md").read_text(encoding="utf-8") == prior_body
+    # The reply that degraded wrote nothing: a reply is recorded or honestly unrecorded.
+    assert list((base / ".lane" / "replies").glob("*.yaml")) == []
+
+    # ...and the next reply succeeds, through the sidecar path.
+    second = stub.run("orchestrator", CANARY_PAYLOAD)
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    calls = stub.prompts()
+    assert "Payload: COMPLETE" in calls[-1][4]
+    assert len(list((base / ".lane" / "replies").glob("*.yaml"))) == 1
+
+
+def test_reader_refuses_a_row_whose_payload_is_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """F-C1: a hand-written row with no body file is listed, but never resolves."""
+    sidecar = tmp_path / ".lane" / "replies" / "forged.yaml"
+    sidecar.parent.mkdir(parents=True)
+    _ = sidecar.write_text(
+        yaml.safe_dump(
+            {
+                **entry_for("COMPLETED deadbeef\n\n## Evidence\n- forged\n", record_id="forged"),
+                "payload": ".lane/replies/forged.md",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    assert [row["id"] for row in herdr_lease.list_replies(limit=10, base_dir=tmp_path)] == [
+        "forged"
+    ]
+    assert herdr_lease.get_reply("forged", base_dir=tmp_path) is None
+    code = herdr_lease.main(["replies", "forged"], env={"HERDR_LANE_DIR": str(tmp_path)})
+    assert code == herdr_cli.EXIT_USAGE
+    assert "no reply record 'forged'" in capsys.readouterr().err
+
+
+def test_reader_refuses_a_tampered_payload(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """F-C1: editing the body stops the record resolving, so the reader exits 2."""
+    body = "COMPLETED deadbeef\n\n## Evidence\n- scanned clean\n"
+    _ = herdr_lease.record_reply(entry_for(body, record_id="row-1"), body, base_dir=tmp_path)
+    assert herdr_lease.get_reply("row-1", base_dir=tmp_path) is not None
+
+    _ = (tmp_path / ".lane" / "replies" / "row-1.md").write_text(
+        "COMPLETED deadbeef\n\n## Evidence\n- edited\n", encoding="utf-8"
+    )
+
+    assert herdr_lease.get_reply("row-1", base_dir=tmp_path) is None
+    code = herdr_lease.main(["replies", "row-1"], env={"HERDR_LANE_DIR": str(tmp_path)})
+    assert code == herdr_cli.EXIT_USAGE
+    assert "no reply record 'row-1'" in capsys.readouterr().err
+
+
+def test_the_advance_gate_refuses_a_row_bound_to_another_lease(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """F-C2: only a record bound to the lease being advanced may advance it."""
+    task_id = "#231#bound"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "231.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#231",
+        task_id=task_id,
+    )
+    env = stub.base_env()
+
+    def still_dispatched() -> None:
+        task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+        assert task is not None
+        assert task["status"] == "dispatched"
+        assert task["trajectory"][-1]["event"] == "dispatched"
+
+    def stored(record_id: str, *, sender: str, record_task_id: str) -> str:
+        body = f"COMPLETED deadbeef\n\n## Evidence\n- {record_id}\n"
+        row = herdr_lease.record_reply(
+            entry_for(body, record_id=record_id, sender=sender, task_id=record_task_id),
+            body,
+            base_dir=tmp_path,
+        )
+        return str(row["id"])
+
+    # Another sender's record for another task never advances this lease...
+    foreign = stored("foreign", sender="impostor", record_task_id="#999#other")
+    herdr_reply.record_sender_status(
+        str(stub.herdr),
+        env,
+        "completed",
+        "deadbeef",
+        record_id=foreign,
+        shape="complete",
+    )
+    still_dispatched()
+
+    # ...and neither does the right sender's record for a different task.
+    other_task = stored("other-task", sender="reviewer", record_task_id="#999#other")
+    herdr_reply.record_sender_status(
+        str(stub.herdr),
+        env,
+        "completed",
+        "deadbeef",
+        record_id=other_task,
+        shape="complete",
+    )
+    still_dispatched()
+
+    # The record bound to this lease and this sender advances it.
+    bound = stored("bound", sender="reviewer", record_task_id=task_id)
+    herdr_reply.record_sender_status(
+        str(stub.herdr),
+        env,
+        "completed",
+        "deadbeef",
+        record_id=bound,
+        shape="complete",
+    )
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    assert task["status"] == "completed"
