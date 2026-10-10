@@ -89,7 +89,7 @@ A compacted agent forgets its lane: it stops delegating to subagents and exits w
 
 | Kind | Mechanism | Written artifact |
 |---|---|---|
-| `pi`, `claude` | `agent start --append-system-prompt <snippet>` | none |
+| `pi`, `claude` | `agent start --append-system-prompt <path>` | `.lane/invariants/<agent-name>.md` |
 | `cline` | `AGENTS.md` append (prefers an existing `.clinerules`) | `.clinerules` \| `AGENTS.md` |
 | `codex`, `copilot`, `qodercli`, `agy`, unknown | `AGENTS.md` append | `AGENTS.md` |
 
@@ -104,10 +104,24 @@ uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2
 ### The ROLE INVARIANT snippet
 
 ```text
-ROLE INVARIANT: You are an {role} in a Herdr lane.
-1. Subagent-First: MUST delegate deep search, multi-file edits, and test triage to internal subagents.
-2. Reply Contract: MUST reply to caller via `uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>` upon completion or blocker. Never exit silently.
+ROLE INVARIANT: You are {a|an} {role} in a Herdr lane. Follow the lane coordination pattern.
+Subagent-First: MUST delegate deep search, multi-file edits, and test triage to subagents.
+Reply Contract: MUST reply via `uv run skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>` on completion or blocker; never exit silently.
 ```
+
+Implementer roles (the docs' `impl-<n>` vocabulary) append the cooperation contract:
+
+```text
+Implementer: single writer for your task; never edit outside your worktree.
+Evidence: red-then-green test results, artifacts reported by path.
+Blockers: report immediately, never idle; reply via the reply contract, never silently.
+```
+
+That block is role-conditional: it rides only for an implementer role, so a coordination-only role does not pay for it and stays inside the original 45-word budget, while the implementer variant is capped at 80. The article follows the role's first letter (`a tm`, `an impl-1`). The reply command is **repo-relative** on purpose: the agent runs in the lane worktree, so `skills/herdr/scripts/herdr_reply.py` is the lane's own helper, while the `~/.agents/skills/herdr` symlink resolves into another worktree whose `herdr_*` code may be older.
+
+### The per-agent invariant file
+
+The `inline` kinds read one file per **resolved agent name**: `<lane>/.lane/invariants/<agent-name>.md`. The name keeps `[A-Za-z0-9._-]` and replaces every other character with `_`; an empty result, `.`, and `..` are refused, so a garbled name can never name a file outside the directory. The directory is created as needed. Bootstrapping one agent therefore never overwrites another's text, and re-bootstrapping an agent replaces only its own file. The file is **launch-time input only**: bootstrap writes it and passes the path to `--append-system-prompt`; nothing reads it back at runtime. The `file` kinds keep their `AGENTS.md` append and its committed-block behaviour, unchanged.
 
 ### The idempotent marker
 
@@ -118,7 +132,7 @@ The file append is idempotent. The block is wrapped in `<!-- herdr-bootstrap:rol
 The target file *is* the delivery mechanism for the file kinds: they have no `--append-system-prompt`, and bootstrap has no message-prefix channel, so the invariant reaches the agent only because the agent reads `AGENTS.md` (or `.clinerules`) at launch. Moving it to a lane-local file the agent never reads would silently drop the invariant, which is worse than dirtying a tree. Bootstrap therefore guards the write instead:
 
 - **Tracked, block absent** → refuse. Bootstrap exits 2 naming the absolute target file, the reason (a launch must not modify a tracked file), and `--allow-tracked-invariant`. Nothing is launched, no pane is renamed, no file is written.
-- **Tracked, block already there** → skip the write and launch. The committed block is **not** role-checked: any block carrying the marker pair means no write, so the agent reads whatever block is committed — deliberately left unchanged even when it names a different role than the launch. Refreshing a role's contract belongs to the per-role invariant file (#236); this bootstrap only guarantees the marker pair is present.
+- **Tracked, block already there** → skip the write and launch. The committed block is **not** role-checked: any block carrying the marker pair means no write, so the agent reads whatever block is committed — deliberately left unchanged even when it names a different role than the launch. Refreshing a role's contract is the per-agent invariant file's job, and that file serves the `inline` kinds only; the `file` kinds still read the committed block, so this bootstrap only guarantees the marker pair is present.
 - **`--allow-tracked-invariant`** → append anyway and leave that tracked file modified, on the record (`git status` shows it). The same flag overrides the *undetermined* refusal below: a repository that exists on disk whose tracked state git could not read is a refusal, not a permanent dead end for the invariant, and the flag appends through it.
 - **Untracked in a repo, or outside any repo** → append as before. This is not "the tree is unchanged": a freshly created or edited lane-local file shows as `?? AGENTS.md` in `git status`, while outside a repo `git status` cannot answer at all.
 

@@ -19,10 +19,11 @@ name.
 Two delivery mechanisms, chosen by `--kind` via skills/herdr/references/kinds.yaml:
 
 - Inline kinds (`pi`, `claude`) take the snippet through ``agent start
-  --append-system-prompt``, whose value is the absolute path of a lane-local file
-  (``<target_dir>/.lane/role-invariant.md``) holding the snippet. herdr refuses any agent
-  arg that cannot be encoded safely for the target shell — a newline is enough — and the
-  rendered snippet is multi-line, so the text itself can never ride inline.
+  --append-system-prompt``, whose value is the absolute path of a per-agent lane-local file
+  (``<target_dir>/.lane/invariants/<agent-name>.md``) holding the snippet, keyed by the
+  resolved agent name so one lane's agents never overwrite each other. herdr refuses any
+  agent arg that cannot be encoded safely for the target shell — a newline is enough — and
+  the rendered snippet is multi-line, so the text itself can never ride inline.
 - File-reading kinds (`cline`, `codex`, `copilot`, `qodercli`, `agy`) and any unknown kind get
   the marker-wrapped block appended to ``AGENTS.md`` in the target directory. `cline` prefers
   an existing ``.clinerules`` over ``AGENTS.md``.
@@ -62,6 +63,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -88,10 +90,17 @@ from herdr_cli import (
 
 AGENTS_MD = "AGENTS.md"
 CLINE_RULES = ".clinerules"
-# Lane-local delivery surface for the inline kinds: bootstrap writes the snippet here and
-# passes only the path, because herdr rejects an agent arg containing a newline.
+# Lane-local delivery surface for the inline kinds: bootstrap writes one file per agent here
+# and passes only the path, because herdr rejects an agent arg containing a newline. One file
+# per resolved agent name, so bootstrapping a second agent never overwrites the first.
 LANE_DIR = ".lane"
-ROLE_INVARIANT_FILE = "role-invariant.md"
+INVARIANTS_DIR = "invariants"
+INVARIANT_SUFFIX = ".md"
+# Characters allowed inside the derived file name; everything else becomes `_`.
+INVARIANT_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+# Roles the docs spell `impl-<n>`; only they carry the implementer cooperation contract.
+IMPLEMENTER_PREFIX = "impl"
+VOWELS = frozenset("aeiou")
 START_MARKER = "<!-- herdr-bootstrap:role-invariant -->"
 END_MARKER = "<!-- /herdr-bootstrap:role-invariant -->"
 
@@ -201,19 +210,52 @@ def load_kind_entry(kind: str, config_path: Path | None = None) -> KindEntry:
     return table.get(kind, FALLBACK_ENTRY)
 
 
-INVARIANT_TEMPLATE = (
-    "ROLE INVARIANT: You are an {role} in a Herdr lane.\n"
-    "1. Subagent-First: MUST delegate deep search, multi-file edits, and test triage to "
-    "internal subagents.\n"
-    "2. Reply Contract: MUST reply to caller via `uv run "
-    "~/.agents/skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>` upon completion "
-    "or blocker. Never exit silently."
+# The snippet is the only coordination channel that survives compaction, so it states the lane
+# coordination pattern plainly, then the two standing obligations. The reply command is
+# repo-relative: the agent runs in the lane worktree, so it resolves the lane's own helper,
+# while the `~/.agents/skills/herdr` symlink resolves into another worktree whose `herdr_*`
+# code may be older.
+INVARIANT_HEADER = (
+    "ROLE INVARIANT: You are {article} {role} in a Herdr lane. "
+    "Follow the lane coordination pattern."
+)
+INVARIANT_RULES = (
+    "Subagent-First: MUST delegate deep search, multi-file edits, and test triage to "
+    "subagents.\n"
+    "Reply Contract: MUST reply via `uv run skills/herdr/scripts/herdr_reply.py <caller> "
+    "--file <reply.md>` on completion or blocker; never exit silently."
+)
+# Role-conditional: a coordination-only role does not pay for the implementer block.
+IMPLEMENTER_CONTRACT = (
+    "Implementer: single writer for your task; never edit outside your worktree.\n"
+    "Evidence: red-then-green test results, artifacts reported by path.\n"
+    "Blockers: report immediately, never idle; reply via the reply contract, never silently."
 )
 
 
+def role_article(role: str) -> str:
+    """`a`/`an` picked from the role's first letter, so the snippet reads as prose."""
+    return "an" if role[:1].lower() in VOWELS else "a"
+
+
+def is_implementer_role(role: str) -> bool:
+    """True for the docs' implementer vocabulary (`impl-<n>`); no separate mode concept."""
+    return role.lower().startswith(IMPLEMENTER_PREFIX)
+
+
 def render_invariant(role: str) -> str:
-    """Render the role invariant snippet for one role; stays within the 45-word budget."""
-    return INVARIANT_TEMPLATE.format(role=role)
+    """Render the role invariant snippet for one role.
+
+    Every role carries the coordination pattern and the two standing rules; `impl`-prefixed
+    roles additionally carry the cooperation contract that role needs after compaction.
+    """
+    lines = [
+        INVARIANT_HEADER.format(article=role_article(role), role=role),
+        INVARIANT_RULES,
+    ]
+    if is_implementer_role(role):
+        lines.append(IMPLEMENTER_CONTRACT)
+    return "\n".join(lines)
 
 
 def invariant_block(snippet: str) -> str:
@@ -606,20 +648,37 @@ def target_path(target_dir: str, kind: str) -> Path:
     return directory / AGENTS_MD
 
 
-def lane_invariant_path(target_dir: str) -> Path:
-    """The lane-local file an inline kind reads its role invariant from.
+def sanitise_agent_name(name: str) -> str:
+    """The file-name stem for one agent: `[A-Za-z0-9._-]` kept, every other character `_`.
 
-    Absolute, so the target binary resolves it from any cwd. Only this path is passed to
-    ``--append-system-prompt``; the snippet text never reaches herdr's argv.
+    Refuses an empty result and the `.`/`..` names that would escape the directory, so a
+    hostile or garbled agent name can never name a file outside the lane's invariant dir.
     """
-    return (Path(target_dir) / LANE_DIR / ROLE_INVARIANT_FILE).resolve()
+    cleaned = INVARIANT_NAME_UNSAFE.sub("_", name)
+    if not cleaned or cleaned in {".", ".."}:
+        raise UsageError(f"cannot derive an invariant file name from {name!r}")
+    return cleaned
+
+
+def lane_invariant_path(target_dir: str, agent_name: str) -> Path:
+    """The per-agent lane-local file an inline kind reads its role invariant from.
+
+    Absolute, so the target binary resolves it from any cwd. Keyed by the resolved agent
+    name, so two agents in one lane each keep their own text and the second bootstrap never
+    overwrites the first. Only this path is passed to ``--append-system-prompt``; the snippet
+    text never reaches herdr's argv.
+    """
+    stem = sanitise_agent_name(agent_name)
+    return (Path(target_dir) / LANE_DIR / INVARIANTS_DIR / f"{stem}{INVARIANT_SUFFIX}").resolve()
 
 
 def write_role_invariant(path: Path, snippet: str) -> None:
     """Write the rendered snippet for the target binary to read back at launch.
 
-    Idempotent: the file is replaced wholesale, so re-bootstrapping never duplicates the
-    snippet and never leaves a previous role's text behind. Contents equal the snippet.
+    Idempotent for the one agent that owns `path`: the file is replaced wholesale, so
+    re-bootstrapping that agent never duplicates the snippet and never leaves a previous
+    role's text behind, while every other agent's file is untouched. Contents equal the
+    snippet.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     _ = path.write_text(snippet)
@@ -674,7 +733,7 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
     agents_file: Path | None = None
     invariant_file: Path | None = None
     if entry.inline_invariant:
-        invariant_file = lane_invariant_path(target_dir)
+        invariant_file = lane_invariant_path(target_dir, name)
     else:
         agents_file = target_path(target_dir, options.kind)
 

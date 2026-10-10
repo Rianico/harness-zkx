@@ -41,22 +41,114 @@ def cwd_state(cwd: Path, pane: str = "w9:p1") -> dict[str, object]:
     return {**DEFAULT_STATE, "panes": panes}
 
 
-def invariant_file(tmp_path: Path) -> Path:
-    """The lane-local snippet file the inline kinds are pointed at."""
-    return (tmp_path / ".lane" / "role-invariant.md").resolve()
+def invariant_file(tmp_path: Path, agent: str) -> Path:
+    """The per-agent lane-local snippet file the inline kinds are pointed at."""
+    return (tmp_path / ".lane" / "invariants" / f"{agent}.md").resolve()
 
 
 # ── unit: the invariant snippet and the idempotent append ───────────────────────────
 
 
 def test_snippet_stays_within_the_word_budget() -> None:
-    assert len(herdr_bootstrap.render_invariant("Implementer").split()) <= 45
+    """The implementer ceiling is deliberate: the cooperation contract raised it from 45."""
+    assert len(herdr_bootstrap.render_invariant("Implementer").split()) <= 80
+
+
+def test_coordination_snippet_stays_within_the_45_word_budget() -> None:
+    """A coordination-only role pays nothing for the implementer block: the cap stays 45."""
+    assert len(herdr_bootstrap.render_invariant("tm").split()) <= 45
 
 
 def test_snippet_names_the_role() -> None:
     assert "You are an implementer in a Herdr lane." in herdr_bootstrap.render_invariant(
         "implementer"
     )
+
+
+def test_snippet_article_follows_the_roles_first_letter() -> None:
+    """`a`/`an` comes from the role's first letter, so the header reads as prose."""
+    assert "You are an implementer in a Herdr lane." in herdr_bootstrap.render_invariant(
+        "implementer"
+    )
+    assert "You are an impl-1 in a Herdr lane." in herdr_bootstrap.render_invariant("impl-1")
+    assert "You are a tm in a Herdr lane." in herdr_bootstrap.render_invariant("tm")
+    assert "You are an tm" not in herdr_bootstrap.render_invariant("tm")
+
+
+def test_snippet_states_the_lane_coordination_pattern() -> None:
+    for role in ("tm", "impl-1"):
+        assert "Follow the lane coordination pattern." in herdr_bootstrap.render_invariant(role)
+
+
+def test_snippet_replies_through_the_lanes_own_helper() -> None:
+    """Repo-relative: the agent runs the lane's own helper, not an older symlinked tree."""
+    text = herdr_bootstrap.render_invariant("impl-1")
+    assert "`uv run skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>`" in text
+    assert "~/.agents" not in text
+
+
+def test_invariant_file_name_is_sanitised_and_cannot_escape(tmp_path: Path) -> None:
+    path = herdr_bootstrap.lane_invariant_path(str(tmp_path), "Msg/Tm 1")
+    assert path == (tmp_path / ".lane" / "invariants" / "Msg_Tm_1.md").resolve()
+    with pytest.raises(herdr_cli.UsageError):
+        _ = herdr_bootstrap.lane_invariant_path(str(tmp_path), "..")
+    with pytest.raises(herdr_cli.UsageError):
+        _ = herdr_bootstrap.lane_invariant_path(str(tmp_path), "")
+
+
+def test_implementer_injected_text_carries_the_cooperation_contract(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        "--kind",
+        "pi",
+        "--pane",
+        "w9:p1",
+        "--role",
+        "impl-1",
+        "--cwd",
+        str(tmp_path),
+        state=cwd_state(tmp_path),
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    text = invariant_file(tmp_path, "impl-1").read_text()
+    for clause in (
+        "single writer for your task",
+        "never edit outside your worktree",
+        "red-then-green test results",
+        "artifacts reported by path",
+        "report immediately, never idle",
+        "reply via the reply contract, never silently",
+    ):
+        assert clause in text
+
+
+def test_coordination_role_injected_text_omits_the_implementer_block(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        "--kind",
+        "pi",
+        "--pane",
+        "w9:p1",
+        "--role",
+        "tm",
+        "--cwd",
+        str(tmp_path),
+        state=cwd_state(tmp_path),
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    text = invariant_file(tmp_path, "tm").read_text()
+    for clause in (
+        "single writer for your task",
+        "never edit outside your worktree",
+        "red-then-green",
+        "artifacts reported by path",
+        "reply via the reply contract",
+    ):
+        assert clause not in text
 
 
 def test_append_invariant_creates_a_missing_file(tmp_path: Path) -> None:
@@ -113,7 +205,7 @@ def test_cli_kind_delivers_the_snippet_through_a_lane_file(
     assert pane_runs(stub) == []
 
     assert Path(path).is_absolute()
-    assert Path(path) == invariant_file(tmp_path)
+    assert Path(path) == invariant_file(tmp_path, "impl-1")
     assert Path(path).read_text() == herdr_bootstrap.render_invariant("impl-1")
 
 
@@ -124,9 +216,51 @@ def test_inline_snippet_file_rewrite_is_idempotent(stub: StubHarness, tmp_path: 
         done = stub.run(*args, state=cwd_state(tmp_path))
         assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
-    text = invariant_file(tmp_path).read_text()
+    text = invariant_file(tmp_path, "impl-1").read_text()
     assert text == herdr_bootstrap.render_invariant("impl-1")
     assert text.count("ROLE INVARIANT") == 1
+
+
+def test_invariant_file_is_per_agent_and_isolated(stub: StubHarness, tmp_path: Path) -> None:
+    """Two agents in one lane each inject their own file; the second never touches the first.
+
+    RED on the single shared `.lane/role-invariant.md`: the second bootstrap overwrote the
+    first agent's text, so an inline agent read another role's invariant after compaction.
+    """
+    lane = tmp_path / "lane"
+    lane.mkdir()
+    state = cwd_state(lane)
+    args = ("--kind", "pi", "--pane", "w9:p1", "--cwd", str(lane))
+
+    first = stub.run("--role", "impl-1", *args, state=state)
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    impl_path = (lane / ".lane" / "invariants" / "impl-1.md").resolve()
+    impl_text = impl_path.read_text()
+    impl_stamp = impl_path.stat().st_mtime_ns
+
+    second = stub.run("--role", "tm", *args, state=state)
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    tm_path = (lane / ".lane" / "invariants" / "tm.md").resolve()
+    tm_text = tm_path.read_text()
+    tm_stamp = tm_path.stat().st_mtime_ns
+    # The second agent's launch wrote its own file and left the first agent's byte-identical.
+    assert impl_path.stat().st_mtime_ns == impl_stamp
+    assert impl_path.read_text() == impl_text
+
+    third = stub.run("--role", "impl-1", *args, state=state)
+    assert third.returncode == herdr_cli.EXIT_OK, third.stderr
+    # Re-bootstrapping the first agent rewrites only its own file.
+    assert tm_path.stat().st_mtime_ns == tm_stamp
+    assert tm_path.read_text() == tm_text
+
+    assert impl_path != tm_path
+    assert impl_text == herdr_bootstrap.render_invariant("impl-1")
+    assert tm_text == herdr_bootstrap.render_invariant("tm")
+    injected = [
+        flag_value(start[start.index("--") + 1 :], "--append-system-prompt")
+        for start in starts(stub)
+    ]
+    assert injected == [str(impl_path), str(tm_path), str(impl_path)]
 
 
 def test_file_kind_appends_agents_md_without_the_inline_flag(
@@ -239,13 +373,13 @@ def test_dry_run_cli_kind_prints_the_invariant_file_path(stub: StubHarness, tmp_
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     plan = json.loads(done.stdout)
     assert plan["agents_md"] is None
-    assert plan["role_invariant"] == str(invariant_file(tmp_path))
+    assert plan["role_invariant"] == str(invariant_file(tmp_path, "tm"))
     start = plan["agent_start"]
     after = start[start.index("--") + 1 :]
     assert after == ["--append-system-prompt", plan["role_invariant"], "--approve"]
     assert plan["cwd_ensure"] == str(tmp_path)
     assert stub.calls() == []
-    assert not invariant_file(tmp_path).exists()
+    assert not invariant_file(tmp_path, "tm").exists()
 
 
 def test_dry_run_issues_no_herdr_call_without_cwd(stub: StubHarness) -> None:
@@ -359,7 +493,7 @@ def test_claude_start_carries_its_own_trust_flag(stub: StubHarness, tmp_path: Pa
         path,
         "--dangerously-skip-permissions",
     ]
-    assert Path(path) == invariant_file(tmp_path)
+    assert Path(path) == invariant_file(tmp_path, "tm")
     assert Path(path).read_text() == herdr_bootstrap.render_invariant("tm")
     assert not (tmp_path / "AGENTS.md").exists()
 
@@ -405,7 +539,7 @@ def test_inline_kind_puts_the_invariant_path_and_model_after_the_separator(
     assert "--append-system-prompt" not in before
     assert start[split + 1 :] == [
         "--append-system-prompt",
-        str(invariant_file(tmp_path)),
+        str(invariant_file(tmp_path, "impl-1")),
         "--model",
         model,
         "--approve",
@@ -1304,7 +1438,7 @@ def test_tracked_block_for_another_role_is_delivered_unchanged(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert repo_status(repo) == before == ""
     assert agents.read_text() == tm_block
-    assert "You are an tm in a Herdr lane." in agents.read_text()
+    assert "You are a tm in a Herdr lane." in agents.read_text()
     assert herdr_bootstrap.render_invariant("impl-1") not in agents.read_text()
     assert agents.stat().st_mtime_ns == stamp
     assert len(starts(stub)) == 1

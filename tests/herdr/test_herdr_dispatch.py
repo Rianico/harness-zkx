@@ -769,7 +769,7 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert "--kind" in start and start[start.index("--kind") + 1] == "pi"
     assert "--append-system-prompt" in start
     invariant = start[start.index("--append-system-prompt") + 1]
-    assert invariant == str(tmp_path / ".lane" / "role-invariant.md")
+    assert invariant == str(tmp_path / ".lane" / "invariants" / "callee.md")
     assert Path(invariant).is_absolute()
     assert Path(invariant).read_text() == herdr_bootstrap.render_invariant("callee")
     for arg in start[start.index("--") + 1 :]:
