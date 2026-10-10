@@ -369,6 +369,32 @@ def test_staleness_advisory_opens_a_new_episode_after_progress(
     assert "status unknown" in reports[1]
 
 
+def test_staleness_advisory_rearms_after_a_blip(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A status blip ends the episode, so the re-armed clock restarts at the blip's own poll.
+
+    Fake-clock trace (polls at t=0.0/0.25/0.5/0.75/1.0): `working` at t=0 opens an
+    episode, `unknown` at t=0.25 opens a fresh one, and the two `working` polls that
+    follow hold for 0.25 s each -- never the full 0.6 s window. A clock that never
+    re-arms, or that stamps every episode from the wait start, would fabricate a
+    stall on those last two polls and emit a false advisory.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_seq": {"a": ["working", "unknown", "working", "working"]},
+    }
+    stub.write_state(state)
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.6)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" not in captured.err
+
+
 def test_staleness_advisory_issues_only_read_only_calls(
     stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -385,7 +411,9 @@ def test_staleness_advisory_issues_only_read_only_calls(
 
 
 def test_staleness_advisory_rejects_a_non_positive_window(stub: StubHarness) -> None:
-    done = stub.run("a", "--stale-after", "0", state=settled_state(**STALLED))
+    # `--timeout 500` keeps the pin cheap if a regression stops forwarding `--stale-after`
+    # to `Options`: the wait would then run to a 0.5 s watchdog instead of the 300 s default.
+    done = stub.run("a", "--stale-after", "0", "--timeout", "500", state=settled_state(**STALLED))
 
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "not positive" in done.stderr
@@ -410,6 +438,18 @@ def test_staleness_advisory_rejects_a_non_finite_window(
 
         assert rc == herdr_cli.EXIT_USAGE
         assert "finite" in err
+
+
+@pytest.mark.parametrize("window", ["nan", "inf"])
+def test_staleness_advisory_rejects_a_non_finite_window_from_argv(
+    stub: StubHarness, window: str
+) -> None:
+    """The finite-duration guard is reachable from argv, not only from a built `Options`."""
+    done = stub.run("a", "--stale-after", window, state=settled_state(**STALLED))
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "must be a finite number of seconds" in done.stderr
+    assert f"not {window}" in done.stderr
 
 
 def test_staleness_advisory_honours_the_window(

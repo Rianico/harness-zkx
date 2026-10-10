@@ -30,8 +30,9 @@ A watchdog ``--timeout`` (default 300s) always applies; expiry exits 1 naming th
 unsettled targets.
 
 An opt-in ``--stale-after SEC`` advisory (#230) reports a target once per stall episode —
-status and revision unchanged for that long (the clock starts at the first sighting, so a
-target already stalled still waits a further full window) — and never kills, retries, restarts, or
+status and revision unchanged for that long (the clock restarts each time the status/revision
+pair changes, and starts at the target's first sighting, so a target already stalled still waits
+a further full window) — and never kills, retries, restarts, or
 interrupts it. It collects evidence only: it never establishes a result, and completion for
 a pane this skill did not launch is cooperative, not guaranteed.
 
@@ -158,9 +159,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SEC",
         help=(
             "opt-in staleness advisory: report a target once per stall episode (status and "
-            "revision unchanged for SEC seconds; the window starts at the first sighting, so an "
-            "already-stalled target still waits a full window); warning only, never kills, "
-            "retries, or restarts"
+            "revision unchanged for SEC seconds; the window restarts each time the "
+            "status/revision pair changes and starts at the first sighting, so an already-stalled "
+            "target still waits a full window); warning only, never kills, retries, or restarts"
         ),
     )
     _ = parser.add_argument("--json", action="store_true", help="print a machine-readable summary")

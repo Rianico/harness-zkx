@@ -394,14 +394,41 @@ def test_launch_line_rejects_an_empty_or_multiline_command(stub: StubHarness) ->
     assert stub.calls() == []
 
 
+def seed_call_log(stub: StubHarness) -> list[list[str]]:
+    """Record one real herdr call and hand back the log.
+
+    A rejected launch line asserts "nothing launched"; without a seeded log an absent
+    call log reads exactly like an unchanged one, so the check would be vacuous.
+    """
+    seeded = stub.run("--pane", "w9:p1", "--command", "true")
+    assert seeded.returncode == herdr_cli.EXIT_OK, seeded.stderr
+    calls = stub.calls()
+    assert [call for call in calls if call[1:3] == ["pane", "run"]]
+    return calls
+
+
 def test_command_rejects_a_bare_ampersand_launch_line(stub: StubHarness) -> None:
     """The sentinel is appended with `;`, so `&` at the end composes `&;` — a shell syntax error."""
+    before = seed_call_log(stub)
+
     done = stub.run("--pane", "w9:p1", "--command", "sleep 0.05 &")
 
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "bare '&'" in done.stderr
     assert "( <line> & )" in done.stderr
-    assert [call for call in stub.calls() if call[1:3] == ["pane", "run"]] == []
+    assert stub.calls() == before
+
+
+def test_command_rejects_a_bare_trailing_semicolon_launch_line(stub: StubHarness) -> None:
+    """A complete line ending in `;` composes `;;`: syntax error, so the pane never runs it."""
+    before = seed_call_log(stub)
+
+    done = stub.run("--pane", "w9:p1", "--command", "echo hi;")
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "bare ';'" in done.stderr
+    assert "Drop the trailing ';'" in done.stderr
+    assert stub.calls() == before
 
 
 @pytest.mark.parametrize(
@@ -422,6 +449,39 @@ def test_command_accepts_ampersands_that_are_not_a_bare_trailing_operator(
     payload = launch_payload(done.stdout)
     assert payload.startswith(command)
     assert "[herdr-launch]" in payload
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "( sleep 0.05 & )",
+        "echo hi # note",
+        "exit 5",
+        "a && b",
+        'echo "a &"',
+        "echo a \\&",
+    ],
+)
+def test_command_accepts_trailing_forms_that_still_compose(stub: StubHarness, command: str) -> None:
+    """Only a bare trailing `&` or `;` is refused; every other trailing form still composes."""
+    done = stub.run("--pane", "w9:p1", "--command", command, "--dry-run")
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    payload = launch_payload(done.stdout)
+    assert payload.startswith(command)
+    assert "[herdr-launch]" in payload
+
+
+def test_command_escaped_ampersand_still_runs_and_prints_the_sentinel(stub: StubHarness) -> None:
+    """The `\\&` exemption is safe: it is a literal `&`, so the appended `;` still separates."""
+    planned = stub.run("--pane", "w9:p1", "--command", "echo a \\&", "--dry-run")
+    assert planned.returncode == herdr_cli.EXIT_OK, planned.stderr
+
+    ran = run_payload(launch_payload(planned.stdout))
+
+    assert ran.returncode == 0
+    assert "a &" in ran.stdout
+    assert "[herdr-launch] finished exit=0" in ran.stdout
 
 
 # ── integration: --task-group scoping ──────────────────────────────────────────────

@@ -356,11 +356,23 @@ def run_command(options: Options, env: Mapping[str, str]) -> int:
         raise UsageError("--command must not be empty")
     if "\n" in command or "\r" in command:
         raise UsageError("--command must be one line: `herdr pane run` sends text plus Enter")
+    # Trailing-operator classification, so the next reader need not re-derive it. The
+    # sentinel is appended with `;`: a bare trailing `&` composes `&;` and a bare
+    # trailing `;` composes `;;`, both shell syntax errors, so the line would never run
+    # and print no sentinel. Escaped `\&`/`\;` are literal characters, so the appended `;`
+    # still separates. `&&`, `|`, `||`, and a trailing `\` were already incomplete on
+    # their own; a trailing `# note`, `exit`, or `exec` swallows or ends the appended text.
     if command.endswith("&") and not command.endswith("&&") and not command.endswith("\\&"):
         raise UsageError(
             "--command must not end in a bare '&': the sentinel is appended with ';' and '&;' is a "
             "syntax error in the pane's shell, so the line would never run. Group the background "
             "work instead: ( <line> & )"
+        )
+    if command.endswith(";") and not command.endswith(";;") and not command.endswith("\\;"):
+        raise UsageError(
+            "--command must not end in a bare ';': the sentinel is appended with ';' and ';;' is a "
+            "syntax error in the pane's shell, so the line would never run. Drop the trailing ';' "
+            "instead."
         )
     require_herdr_env(env)
     herdr = find_herdr(env)
