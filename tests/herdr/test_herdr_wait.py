@@ -349,7 +349,7 @@ def test_staleness_advisory_fires_once_per_stall_episode(
 def test_staleness_advisory_opens_a_new_episode_after_progress(
     stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A revision advance ends the episode, so the next stall reports again."""
+    """A status change ends the episode, so the next stall reports again."""
     state = {
         **DEFAULT_STATE,
         "agent_get": {"a": {"agent_status": "working"}},
@@ -383,6 +383,33 @@ def test_staleness_advisory_rearms_after_a_blip(
     state = {
         **DEFAULT_STATE,
         "agent_get_seq": {"a": ["working", "unknown", "working", "working"]},
+    }
+    stub.write_state(state)
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.6)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" not in captured.err
+
+
+def test_staleness_advisory_revision_tick_ends_the_episode(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A revision advance is normal progress: it ends the episode, so no false advisory.
+
+    Fake-clock trace with a constant `working` status and revision sequence
+    r1,r1,r2,r2 (polls at t=0/0.25/0.5/0.75/1.0): the tick at t=0.5 opens a fresh
+    episode, leaving the last two polls holding `r2` for 0.25 s and 0.5 s -- both
+    below the 0.6 s window. A status-only comparison that ignores revision would
+    stamp the episode from t=0 and fabricate an advisory at t=0.75.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {"a": {"agent_status": "working"}},
+        "agent_get_rev_seq": {"a": ["r1", "r1", "r2", "r2"]},
     }
     stub.write_state(state)
     _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
@@ -445,7 +472,9 @@ def test_staleness_advisory_rejects_a_non_finite_window_from_argv(
     stub: StubHarness, window: str
 ) -> None:
     """The finite-duration guard is reachable from argv, not only from a built `Options`."""
-    done = stub.run("a", "--stale-after", window, state=settled_state(**STALLED))
+    done = stub.run(
+        "a", "--stale-after", window, "--timeout", "500", state=settled_state(**STALLED)
+    )
 
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "must be a finite number of seconds" in done.stderr
@@ -465,6 +494,39 @@ def test_staleness_advisory_honours_the_window(
 
     assert rc == herdr_cli.EXIT_HERDR
     assert "staleness advisory" not in captured.err
+
+
+def test_staleness_advisory_window_reaches_the_loop_from_argv(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--stale-after` reaches the loop as the seconds asked for, not 1000x them.
+
+    Seam: `herdr_wait.main` is the CLI entry point; it parses argv into `Options` and
+    calls the module-level `wait_agents`. Wrapping that global records the parsed
+    window, then delegates to the real loop on the fake clock. A 1000x converter
+    (`float(value) * 1000`) would hand the loop 600.0 for `--stale-after 0.6`, so the
+    0.6 s stall below would never fire the advisory and the recorded window would be
+    600.0 instead of 0.6.
+    """
+    stub.write_state(settled_state(**STALLED))
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    seen: dict[str, float | None] = {}
+    real_wait = herdr_wait.wait_agents
+
+    def spy(options: herdr_wait.Options, env: dict[str, str]) -> int:
+        seen["stale_after"] = options.stale_after
+        return real_wait(options, env)
+
+    _ = monkeypatch.setattr(herdr_wait, "wait_agents", spy)
+    rc = herdr_wait.main(
+        ["a", "--interval", "0.25", "--timeout", "1000", "--stale-after", "0.6"],
+        stub.base_env(),
+    )
+    err = capsys.readouterr().err
+
+    assert seen["stale_after"] == 0.6
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" in err
 
 
 def test_staleness_advisory_never_changes_the_settle_path(

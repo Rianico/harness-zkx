@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -215,6 +216,29 @@ def sentinel_wrapped(command: str) -> str:
     )
 
 
+PANE_SHELL = "/bin/sh"
+
+
+def composed_line_diagnostic(command: str) -> str | None:
+    """The shell's own complaint when the sentinel-composed line fails `sh -n`, else `None`.
+
+    `sh -n` parses without executing, so `--dry-run` stays side-effect free. The pane's own
+    shell is unknown, so POSIX `/bin/sh` is the conservative choice. A missing shell
+    (`OSError`) skips only this check; the suffix refusals still guard the common shapes.
+    """
+    composed = sentinel_wrapped(command)
+    try:
+        done = subprocess.run(
+            [PANE_SHELL, "-n", "-c", composed], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        # No usable /bin/sh: skip only this check; the suffix refusals are the fallback.
+        return None
+    if done.returncode == 0:
+        return None
+    return (done.stderr or done.stdout).strip() or f"{PANE_SHELL} -n exited {done.returncode}"
+
+
 def build_run_argv(herdr: str, pane_id: str, command: str) -> list[str]:
     """`herdr pane run <pane> <wrapped line>`: one argument, so herdr sends the raw text.
 
@@ -373,6 +397,19 @@ def run_command(options: Options, env: Mapping[str, str]) -> int:
             "--command must not end in a bare ';': the sentinel is appended with ';' and ';;' is a "
             "syntax error in the pane's shell, so the line would never run. Drop the trailing ';' "
             "instead."
+        )
+    # The two suffix refusals above are a fast pre-filter with precise fixes; this parse
+    # check is the general net (an odd-count escape such as `\;;` or `\\&` slips past a
+    # suffix test but breaks once the sentinel is appended). The `;;`, `\;`, and `\&`
+    # exemptions are deliberately left to the parser rather than re-derived here.
+    diagnostic = composed_line_diagnostic(command)
+    if diagnostic is not None:
+        raise UsageError(
+            f"--command does not compose with the appended sentinel: {diagnostic}\n"
+            "The sentinel is appended with ';', so the line must stay a complete command even "
+            "after it: group background work as ( <line> & ), drop a trailing ';', and escape an "
+            "operator an even number of times.\n"
+            f"composed line: {sentinel_wrapped(command)}"
         )
     require_herdr_env(env)
     herdr = find_herdr(env)

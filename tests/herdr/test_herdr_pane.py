@@ -484,6 +484,34 @@ def test_command_escaped_ampersand_still_runs_and_prints_the_sentinel(stub: Stub
     assert "[herdr-launch] finished exit=0" in ran.stdout
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo a \\;;",
+        "echo a \\\\&",
+        "echo hi;;",
+    ],
+)
+def test_command_refuses_lines_that_break_once_the_sentinel_is_appended(
+    stub: StubHarness, command: str
+) -> None:
+    """The parse check is the general net: an odd-count escape or `;;` composes a syntax error.
+
+    `echo a \\;;`, `echo a \\\\&`, and `echo hi;;` are each valid alone but break once the
+    sentinel is appended with `;`; the suffix fast-path cannot see them, so `/bin/sh -n`
+    refuses the line before any herdr call, naming the fix.
+    """
+    before = seed_call_log(stub)
+
+    done = stub.run("--pane", "w9:p1", "--command", command)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "does not compose with the appended sentinel" in done.stderr
+    assert "( <line> & )" in done.stderr
+    assert "composed line:" in done.stderr
+    assert stub.calls() == before
+
+
 # ── integration: --task-group scoping ──────────────────────────────────────────────
 
 
