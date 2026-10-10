@@ -31,7 +31,8 @@ on that mismatch and `--sync` converges it, which is what keeps `herdr-label NAM
 more than one moment. Convergence runs both ways: a drifting label is set from the agent name,
 and an agent that came back without a name takes the surviving label as its own. A label on a
 pane with no live agent is not a mismatch — that is the state an agent leaves behind, and the
-label is waiting for an occupant.
+label is waiting for an occupant; `stale_labels` is what reports that orphaned label, and a
+normal `herdr-dispatch` prints it on stderr without any operator-invoked pass.
 
 Exit status: 0 ok, 1 herdr failure, 2 usage or missing precondition, 3 label/agent mismatch.
 
@@ -220,6 +221,34 @@ def restorable_agents(
         for pane, label in unnamed_agents(panes, agents, pane_id)
         if label and AGENT_NAME.match(label) and label not in named
     ]
+
+
+def stale_labels(
+    panes: Sequence[Mapping[str, object]] | None,
+    agents: Sequence[Mapping[str, object]] | None,
+) -> list[tuple[str, str]]:
+    """Panes carrying an agent-shaped label that no live agent owns: (pane id, label).
+
+    `pairs`, `pair_mismatches` and `descriptive_labels` all iterate the *agent* inventory, so a
+    pane whose agent has exited is invisible to every one of them, and only an
+    operator-invoked `--verify`/`--sync` pass ever notices. This iterates the *pane* inventory
+    instead, so a normal dispatch can report the orphan from inventories it already reads.
+
+    Positivist evidence (#210): an unreadable or empty inventory answers nothing, so `None` or
+    an empty sequence reports no stale label rather than declaring every label stale.
+    """
+    if not panes or not agents:
+        return []
+    live_panes = {pane for entry in agents if (pane := entry_optional_text(entry, "pane_id"))}
+    stale: list[tuple[str, str]] = []
+    for entry in panes:
+        pane = entry_optional_text(entry, "pane_id")
+        label = entry_optional_text(entry, "label")
+        if not pane or not label or not AGENT_NAME.match(label):
+            continue
+        if pane not in live_panes:
+            stale.append((pane, label))
+    return stale
 
 
 def check_pairs(options: Options, env: Mapping[str, str]) -> int:

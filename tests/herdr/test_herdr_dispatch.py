@@ -256,6 +256,130 @@ def test_dispatch_refuses_lease_whose_recorded_pane_is_alive(
     assert stub.prompts() == []
 
 
+# ── #234: a label that outlived its agent is reported during a normal dispatch ─────
+
+
+def test_dispatch_reports_a_label_whose_agent_has_exited(stub: StubHarness, tmp_path: Path) -> None:
+    """A normal dispatch reports the orphaned label; no operator --verify/--sync pass is run.
+
+    Pin -> mutant: build the staleness rows from the *agent* inventory (the #234 defect),
+    so the exited pane is invisible and this advisory never prints.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "w9:p2" in done.stderr
+    assert "buildbot" in done.stderr
+    # The operator ran no verification pass: the dispatch itself reported the staleness.
+    assert "--verify" not in done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_reports_no_stale_label_when_every_label_has_its_agent(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A live label matching its live agent is never reported stale (no false positives).
+
+    Pin -> mutant: drop the `pane_id not in live_panes` filter, so the live `w9:p1` row is
+    also reported and the advisory prints for a healthy lane.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": "pi", "agent_status": "idle"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "buildbot", "agent": "pi", "agent_status": "idle"},
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "outlived" not in done.stderr
+
+
+def test_report_stale_labels_is_silent_when_the_pane_inventory_is_unreadable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Positivist (#210): an unreadable pane inventory answers nothing, so nothing is reported.
+
+    Pin -> mutant: remove the `try/except` around the inventory read, so a `pane list`
+    failure propagates instead of leaving the advisory silent.
+    """
+    bin_dir = tmp_path / "fake-bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "herdr"
+    _ = fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args[:2] == ['pane', 'list']:\n"
+        "    sys.exit(1)\n"
+        "if args[:2] == ['agent', 'list']:\n"
+        "    print(json.dumps({'result': {'agents': [{'pane_id': 'w9:p1', 'name': 'reviewer'}]}}))\n"
+        "    sys.exit(0)\n"
+        "sys.exit(0)\n"
+    )
+    os.chmod(fake, 0o755)
+    real_path = os.environ.get("PATH", "")
+    herdr_dispatch.report_stale_labels(str(fake), {"PATH": f"{bin_dir}:{real_path}"})
+    assert capsys.readouterr().err == ""
+
+
+def test_dispatch_identity_comes_from_the_agent_inventory_not_the_label(
+    stub: StubHarness,
+) -> None:
+    """Dispatch targeting resolves by identifier: a reused label does not move the identity.
+
+    Pin -> mutant: match `target` against the pane *label* in `resolve_target_identity`, so
+    ownership comes from decoration; the first assert then returns `(\"reviewer\", None)`.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "label": "reused-elsewhere",
+                "agent": "pi",
+                "agent_status": "working",
+            },
+            {"pane_id": "w9:p2", "label": "reviewer", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    stub.write_state(state)
+    env = stub.base_env()
+    herdr = str(stub.herdr)
+    assert herdr_dispatch.resolve_target_identity(herdr, "reviewer", env) == ("reviewer", "w9:p1")
+    assert herdr_dispatch.resolve_target_identity(herdr, "w9:p1", env) == ("reviewer", "w9:p1")
+
+
 def test_dispatch_force_bypasses_active_lease(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 

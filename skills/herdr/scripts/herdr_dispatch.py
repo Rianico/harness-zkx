@@ -51,6 +51,7 @@ from herdr_cli import (
     require_herdr_env,
     run_herdr_checked,
 )
+from herdr_label import stale_labels
 from herdr_lease import acquire_lease, get_lease, release_lease
 from herdr_prompt import (
     EXIT_WAIT_TIMEOUT,
@@ -250,6 +251,31 @@ def lease_pane_is_gone(lease: Mapping[str, object], herdr: str, env: Mapping[str
         return False
     live = live_pane_ids(herdr, env)
     return live is not None and pane_id not in live
+
+
+def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
+    """One advisory stderr line per pane whose agent-shaped label outlived its agent (#234).
+
+    A label is never a target, so an orphaned one misleads a person reading the pane border
+    while a dispatch still keys on identifiers. This reads the `pane list` and `agent list`
+    inventories a dispatch already fetches, so the operator needs no `--verify`/`--sync` pass.
+
+    Advisory only: it changes no target, acquires or releases no lease, and interrupts nothing.
+    Positivist evidence (#210): an unreadable or empty inventory is no evidence, so it reports
+    nothing rather than declaring every label stale.
+    """
+    try:
+        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except Exception:
+        # An unreadable inventory answers nothing; stay silent instead of guessing.
+        return
+    for pane_id, label in stale_labels(panes, agents):
+        print(
+            f"herdr-dispatch: pane {pane_id} carries the label {label!r} but no live agent owns "
+            "it; the label outlived its agent (run herdr-label --sync to converge it)",
+            file=sys.stderr,
+        )
 
 
 PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
@@ -559,6 +585,7 @@ def dry_run_bootstrap_plans(
 def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
+    report_stale_labels(herdr, env)
     kind = normalize_auto_start_kind(options.auto_start)
     try:
         targets = resolve_targets(options, herdr, env)

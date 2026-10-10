@@ -172,6 +172,64 @@ def test_a_descriptive_label_cannot_restore_a_name() -> None:
     assert herdr_label.restorable_agents(panes, agents) == []
 
 
+# ── unit: a label that outlived its agent (#234) ───────────────────────────────
+
+
+def test_stale_labels_reports_a_label_whose_agent_has_exited() -> None:
+    """An agent-shaped label on a pane with no live agent is stale.
+
+    Pin -> mutant: build the rows from the *agent* inventory (the #234 defect that
+    `pairs`/`pair_mismatches` share), so the exited pane is invisible and this returns [].
+    """
+    panes = [
+        {"pane_id": "w9:p1", "label": "reviewer"},
+        {"pane_id": "w9:p2", "label": "buildbot"},
+    ]
+    agents = [{"pane_id": "w9:p1", "name": "reviewer"}]
+    assert herdr_label.stale_labels(panes, agents) == [("w9:p2", "buildbot")]
+
+
+def test_stale_labels_never_flags_a_live_agent_that_owns_its_label() -> None:
+    """A live label matching its live agent is never stale (no false positives).
+
+    Pin -> mutant: drop the `pane_id not in live_panes` filter, so the live `w9:p1` row
+    is reported too and this returns a non-empty list.
+    """
+    panes = [
+        {"pane_id": "w9:p1", "label": "reviewer"},
+        {"pane_id": "w9:p2", "label": "scratch pad"},
+    ]
+    agents = [{"pane_id": "w9:p1", "name": "reviewer"}]
+    assert herdr_label.stale_labels(panes, agents) == []
+
+
+def test_stale_labels_ignores_a_descriptive_label_with_no_agent() -> None:
+    """A multi-word `--label-only` label is decoration, never a dead agent name."""
+    panes = [{"pane_id": "w9:p2", "label": "review pane"}]
+    agents = [{"pane_id": "w9:p1", "name": "reviewer"}]
+    assert herdr_label.stale_labels(panes, agents) == []
+
+
+@pytest.mark.parametrize(
+    ("panes", "agents"),
+    [
+        (None, [{"pane_id": "w9:p1", "name": "reviewer"}]),
+        ([{"pane_id": "w9:p2", "label": "buildbot"}], None),
+        ([], [{"pane_id": "w9:p1", "name": "reviewer"}]),
+        ([{"pane_id": "w9:p2", "label": "buildbot"}], []),
+    ],
+)
+def test_stale_labels_reports_nothing_without_evidence(
+    panes: list[dict[str, str]] | None, agents: list[dict[str, str]] | None
+) -> None:
+    """#210 precedent: an unreadable or empty inventory answers nothing, so nothing is stale.
+
+    Pin -> mutant: remove the `if not panes or not agents` guard, so an empty `agents`
+    inventory leaves `live_panes` empty and every agent-shaped label is declared stale.
+    """
+    assert herdr_label.stale_labels(panes, agents) == []
+
+
 # ── integration: convergence and unnamed agents ────────────────────────────────
 
 
