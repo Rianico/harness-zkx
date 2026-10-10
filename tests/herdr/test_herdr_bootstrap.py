@@ -1,7 +1,9 @@
 """Tests for skills/herdr/scripts/herdr_bootstrap.py (herdr-bootstrap helper)."""
 
 import json
+import os
 import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -655,6 +657,29 @@ def bootstrap_args(repo: Path, *extra: str) -> tuple[str, ...]:
     return ("--kind", "codex", "--pane", "w9:p1", "--role", "impl-1", "--cwd", str(repo), *extra)
 
 
+def no_git_env(stub: StubHarness, tmp_path: Path) -> dict[str, str]:
+    """A PATH with the stub `herdr` and an interpreter, but no git.
+
+    The stub `herdr` runs through `#!/usr/bin/env python3`, so the restricted PATH still needs a
+    `python3`; it must not carry git, so every tracked probe fails to exec and reads undetermined.
+    """
+    bin_dir = tmp_path / "no-git-bin"
+    bin_dir.mkdir()
+    (bin_dir / "python3").symlink_to(sys.executable)
+    return {"PATH": f"{stub.bin_dir}:{bin_dir}"}
+
+
+def volume_is_case_insensitive(directory: Path) -> bool:
+    """True when two case-variant spellings name one file on this volume (#229's pattern)."""
+    on_disk = directory / "CaseProbe"
+    _ = on_disk.write_text("")
+    variant = directory / "caseprobe"
+    try:
+        return variant.exists() and os.path.samefile(on_disk, variant)
+    finally:
+        on_disk.unlink()
+
+
 def test_tracked_agents_md_refuses_and_leaves_the_tree_untouched(
     stub: StubHarness, tmp_path: Path
 ) -> None:
@@ -816,10 +841,15 @@ def test_dry_run_needs_no_git_verdict_for_an_inline_kind(stub: StubHarness, tmp_
 def test_tracked_detection_falls_back_to_untracked_without_a_git_binary(
     tmp_path: Path,
 ) -> None:
-    """Detection that cannot run reads as not version-controlled, so the append still happens."""
+    """Detection that cannot run reads as undetermined, not as tracked; the append still happens.
+
+    Updated from `is False` to `is None`: the probe is now tri-state (H1), so a host with no
+    usable git is *undetermined* — the caller appends and warns — rather than silently "not
+    version-controlled".
+    """
     repo = tracked_repo(tmp_path)
 
-    assert herdr_bootstrap.target_is_tracked(repo / "AGENTS.md", {"PATH": str(tmp_path)}) is False
+    assert herdr_bootstrap.target_is_tracked(repo / "AGENTS.md", {"PATH": str(tmp_path)}) is None
 
 
 def test_invariant_block_matches_what_append_invariant_writes(tmp_path: Path) -> None:
@@ -842,3 +872,180 @@ def test_a_target_that_cannot_be_read_is_a_usage_error(stub: StubHarness, tmp_pa
         assert done.returncode == herdr_cli.EXIT_USAGE, f"{extra}: {done.stdout!r} {done.stderr!r}"
         assert "cannot read" in done.stderr
         assert stub.calls() == []
+
+
+# ── B1: the probe must ask git about the on-disk entry name ─────────────────────────
+
+
+def test_tracked_lowercase_name_on_a_case_insensitive_volume_is_refused(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """B1 RED on base: a repo tracking `agents.md`, targeted as `AGENTS.md`, was appended to.
+
+    On a case-insensitive volume the two spellings are one inode, but `git ls-files` matches its
+    pathspec against the stored name, so the base probe answered "untracked" and dirtied the tree.
+    """
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    if not volume_is_case_insensitive(repo):
+        pytest.skip("case-sensitive volume")
+    _ = (repo / "agents.md").write_text("# lowercase tracked\n")
+    commit_path(repo, "agents.md")
+    agents = repo / "AGENTS.md"
+    before = repo_status(repo)
+    body_before = (repo / "agents.md").read_text()
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+
+    assert repo_status(repo) == before == "", (
+        f"the case-variant target was appended to: {repo_status(repo)!r} exit={done.returncode}"
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(agents) in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert (repo / "agents.md").read_text() == body_before
+    assert starts(stub) == []
+
+
+# ── H1: the tracked probe is tri-state; the fail-open is never silent ───────────────
+
+
+def test_undetermined_without_git_appends_with_one_warning_line(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """H1(a) RED on base: no git on PATH appended silently; now one stderr line says so."""
+    repo = tracked_repo(tmp_path)
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo), env=no_git_env(stub, tmp_path))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lines = done.stderr.splitlines()
+    assert len(lines) == 1, done.stderr
+    assert "could not determine" in lines[0]
+    assert str(repo / "AGENTS.md") in lines[0]
+    assert repo_status_for(repo, "AGENTS.md") == " M AGENTS.md\n"
+    assert len(starts(stub)) == 1
+
+
+def test_dry_run_reports_an_undetermined_target_with_a_note(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """H1(a): without git the plan is `null` with a note and no stderr warning; nothing is written."""
+    repo = tracked_repo(tmp_path)
+
+    done = stub.run(*bootstrap_args(repo, "--dry-run"), env=no_git_env(stub, tmp_path))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout)
+    assert plan["agents_md_tracked"] is None
+    assert "could not determine" in plan["note"]
+    assert str(repo / "AGENTS.md") in plan["note"]
+    assert "would_refuse" not in plan
+    assert done.stderr == ""
+    assert repo_status(repo) == ""
+    assert stub.calls() == []
+
+
+def test_confirmed_repo_with_an_unreadable_index_is_refused(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """H1(b) RED on base: git confirmed the repo but the index was unreadable, and it appended."""
+    repo = tracked_repo(tmp_path)
+    bad_index = tmp_path / "corrupt-index"
+    _ = bad_index.write_bytes(b"not a git index")
+    before = repo_status(repo)
+
+    done = stub.run(
+        *bootstrap_args(repo), state=cwd_state(repo), env={"GIT_INDEX_FILE": str(bad_index)}
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(repo / "AGENTS.md") in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert repo_status(repo) == before == ""
+    assert starts(stub) == []
+
+
+def test_dry_run_reports_an_unreadable_index_as_undetermined_and_would_refuse(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """H1(b): the confirmed-but-unreadable index is `null` with a refusal and writes nothing."""
+    repo = tracked_repo(tmp_path)
+    bad_index = tmp_path / "corrupt-index"
+    _ = bad_index.write_bytes(b"not a git index")
+
+    done = stub.run(*bootstrap_args(repo, "--dry-run"), env={"GIT_INDEX_FILE": str(bad_index)})
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout)
+    assert plan["agents_md_tracked"] is None
+    assert "--allow-tracked-invariant" in plan["would_refuse"]
+    assert "could not determine" in plan["note"]
+    assert done.stderr == ""
+    assert repo_status(repo) == ""
+    assert stub.calls() == []
+
+
+def test_genuinely_untracked_appends_without_a_warning(stub: StubHarness, tmp_path: Path) -> None:
+    """H1(c): git answered "not tracked", so the append happens with no warning line."""
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    _ = (repo / "seed.txt").write_text("seed\n")
+    commit_path(repo, "seed.txt")
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stderr == ""
+    assert herdr_bootstrap.START_MARKER in (repo / "AGENTS.md").read_text()
+
+
+# ── L1: a worktree root with trailing whitespace ────────────────────────────────────
+
+
+def test_worktree_root_with_a_trailing_space_is_still_recognized(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """L1 RED on base: `.strip()` dropped the trailing space, so a tracked file was appended to."""
+    repo = tmp_path / "repo "
+    init_repo(repo)
+    _ = (repo / "AGENTS.md").write_text("# spaced root\n")
+    commit_path(repo, "AGENTS.md")
+    agents = repo / "AGENTS.md"
+    before = repo_status(repo)
+    body_before = agents.read_text()
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+
+    assert repo_status(repo) == before == "", (
+        f"a spaced root dirtied the tree: {repo_status(repo)!r} exit={done.returncode}"
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(agents) in done.stderr
+    assert agents.read_text() == body_before
+    assert starts(stub) == []
+
+
+# ── L2: the skip path is not role-checked, and the docs say so ──────────────────────
+
+
+def test_tracked_block_for_another_role_is_delivered_unchanged(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """L2: a committed `tm` block launched as `impl-1` is delivered unchanged, not rewritten."""
+    tm_block = herdr_bootstrap.invariant_block(herdr_bootstrap.render_invariant("tm"))
+    repo = tracked_repo(tmp_path, body=tm_block)
+    agents = repo / "AGENTS.md"
+    before = repo_status(repo)
+    stamp = agents.stat().st_mtime_ns
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert repo_status(repo) == before == ""
+    assert agents.read_text() == tm_block
+    assert "You are an tm in a Herdr lane." in agents.read_text()
+    assert herdr_bootstrap.render_invariant("impl-1") not in agents.read_text()
+    assert agents.stat().st_mtime_ns == stamp
+    assert len(starts(stub)) == 1
+    assert pane_renames(stub)[0][3:] == ["w9:p1", "impl-1"]

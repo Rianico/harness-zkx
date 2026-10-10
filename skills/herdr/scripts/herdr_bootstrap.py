@@ -38,8 +38,10 @@ tracked target that the append would change is refused (exit 2) naming
 ``--allow-tracked-invariant``, which appends anyway and leaves the file modified on the
 record. An untracked file, or a file outside any repository, is appended as before — that
 dirties nothing tracked, though a new lane-local file still shows as ``??`` in ``git status``.
-Targets whose version-control state cannot be determined (no git binary, odd repository) are
-treated as untracked, so a missing git never withholds the invariant.
+Targets whose version-control state cannot be determined are handled by kind: a confirmed
+repository whose index git cannot read is refused, while a host with no usable git still gets
+the append — the invariant must reach the agent — and one warning line saying the tracked state
+could not be determined, so a missing git never silently withholds the invariant.
 
 Deliberate quirks (implemented minimally, documented here): trust flags come only from
 ``kinds.yaml`` and ride after ``--`` as native agent args — bootstrap never invents flags, and an
@@ -58,6 +60,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -248,7 +251,8 @@ def _run_git(
     """Run git, or None when git cannot run at all (no binary, no exec permission).
 
     Same subprocess style as `run_herdr`: captured output, the caller's environment, no shell.
-    A git that cannot run is not an error here — the caller reads it as "not version-controlled".
+    A git that cannot run is not an error here — the caller reads the None as *undetermined*,
+    never as "not version-controlled".
     """
     try:
         return subprocess.run(
@@ -258,35 +262,83 @@ def _run_git(
         return None
 
 
-def target_is_tracked(path: Path, env: Mapping[str, str]) -> bool:
-    """True when git tracks `path` in the worktree enclosing it.
+def on_disk_entry_name(path: Path) -> str | None:
+    """The name `path` carries in its parent directory listing, or None when it is absent.
 
-    `rev-parse --is-inside-work-tree` answers "is this in a repository at all"; the follow-up
+    Exact spelling first, then a case-insensitive match. `git ls-files` matches a pathspec
+    case-sensitively against the index's stored name, so a target computed as ``AGENTS.md``
+    must be asked about as the ``agents.md`` the filesystem actually lists on a case-insensitive
+    volume — otherwise a tracked file looks untracked and the append dirties the tree.
+    """
+    try:
+        names = os.listdir(path.parent)
+    except OSError:
+        return None
+    if path.name in names:
+        return path.name
+    folded = path.name.casefold()
+    for name in names:
+        if name.casefold() == folded:
+            return name
+    return None
+
+
+def target_is_tracked(path: Path, env: Mapping[str, str]) -> bool | None:
+    """Whether git tracks `path` in the worktree enclosing it: True, False, or None.
+
+    `rev-parse --is-inside-work-tree` answers "is this in a worktree at all"; the follow-up
     `ls-files --error-unmatch` answers "does the index know this file", which is the question
-    the append must respect. Detection runs against the file's real location. Any git failure —
-    no binary, not a repository, an unreadable layout — reads as *not* version-controlled, so a
-    missing git never withholds the invariant; the caller appends and reports the fallback.
+    the append must respect. Detection runs against the file's real location and asks about the
+    on-disk entry name, not the computed one.
+
+    None means *undetermined*: git could not run, or the repository is confirmed but git could
+    not answer (an unreadable index, an unresolvable worktree root). The caller must not read
+    None as "not tracked": a confirmed repository with a broken index may well track the file.
     """
     real = Path(os.path.realpath(path))
     inside = _run_git(["git", "-C", str(real.parent), "rev-parse", "--is-inside-work-tree"], env)
-    if inside is None or inside.returncode != 0 or inside.stdout.strip() != "true":
+    if inside is None:
+        return None  # git could not run at all: the tracked state is unknown
+    if inside.returncode != 0:
+        return False  # git ran and answered: not inside a worktree, so not tracked
+    if inside.stdout.rstrip("\n") != "true":
         return False
     top = _run_git(["git", "-C", str(real.parent), "rev-parse", "--show-toplevel"], env)
     if top is None or top.returncode != 0:
-        return False
-    root = top.stdout.strip()
+        return None  # repository confirmed, but the worktree root is unknown
+    root = top.stdout.rstrip("\n")
     if not root:
-        return False
+        return None
     try:
         relative = real.relative_to(Path(os.path.realpath(root)))
     except ValueError:
-        return False
+        return None
     if str(relative) == ".":
         return False
+    entry = on_disk_entry_name(real)
+    if entry is not None:
+        relative = relative.with_name(entry)
     # Run from the worktree root, so the pathspec stays the repo-root-relative path: ls-files
     # resolves a pathspec against its own cwd, and only the root makes that the root path.
     listed = _run_git(["git", "-C", root, "ls-files", "--error-unmatch", "--", str(relative)], env)
-    return listed is not None and listed.returncode == 0
+    if listed is None:
+        return None
+    if listed.returncode == 0:
+        return True
+    if listed.returncode == 1:
+        return False  # git ran and answered: the index does not know this file
+    return None  # a fatal read of the index: git could not answer
+
+
+def repository_is_confirmed(path: Path, env: Mapping[str, str]) -> bool:
+    """True when git confirms `path` sits inside a worktree (the probe's first question).
+
+    Splits the undetermined state: a confirmed repository whose index git cannot read must
+    refuse, while a host with no usable git must still append and warn.
+    """
+    real = Path(os.path.realpath(path))
+    inside = _run_git(["git", "-C", str(real.parent), "rev-parse", "--is-inside-work-tree"], env)
+    return inside is not None and inside.returncode == 0 and inside.stdout.rstrip("\n") == "true"
 
 
 def tracked_refusal(path: Path) -> str:
@@ -295,6 +347,27 @@ def tracked_refusal(path: Path) -> str:
         f"{path} is version-controlled; refusing to append the role invariant "
         f"(a launch must not modify a tracked file). Pass {TRACKED_OVERRIDE_FLAG} to append "
         f"anyway and leave the file modified."
+    )
+
+
+def undetermined_refusal(path: Path) -> str:
+    """Refusal for a confirmed repository whose tracked state git could not read.
+
+    Same message family as `tracked_refusal`: names the file, the reason, and the override.
+    """
+    return (
+        f"{path} may be version-controlled; refusing to append the role invariant "
+        f"(the repository is confirmed but its index could not be read, so the file may be "
+        f"tracked). Pass {TRACKED_OVERRIDE_FLAG} to append anyway and leave the file modified."
+    )
+
+
+def undetermined_warning(path: Path) -> str:
+    """One stderr line: the tracked state could not be determined, so the append may dirty it."""
+    return (
+        f"herdr-bootstrap: could not determine whether {path} is version-controlled "
+        f"(git is unavailable or did not answer); it may be tracked, so this append may leave "
+        f"the tree modified."
     )
 
 
@@ -549,18 +622,26 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
     # The file kinds deliver the invariant through the target file itself: that file *is* the
     # surface the agent reads, so a launch must decide once, before any mutation, whether the
     # write is allowed. An append that would change nothing is skipped (no mtime churn, no
-    # dirt); a tracked target that would change is refused unless the caller overrides.
-    agents_tracked = False
+    # dirt); a tracked target that would change is refused unless the caller overrides. A
+    # confirmed repository whose index git cannot read is undetermined, so it is refused too;
+    # only a host with no usable git appends, and it says so on stderr.
+    agents_tracked: bool | None = False
     refusal: str | None = None
+    note: str | None = None
     if agents_file is not None:
         try:
             current = read_if_exists(agents_file)
         except OSError as exc:
             raise UsageError(f"cannot read {agents_file}: {exc}") from exc
         agents_tracked = target_is_tracked(agents_file, env)
-        would_change = planned_invariant_content(current, snippet) != current
-        if agents_tracked and would_change and not options.allow_tracked_invariant:
-            refusal = tracked_refusal(absolute_target(agents_file))
+        if agents_tracked is None:
+            note = undetermined_warning(absolute_target(agents_file))
+            if repository_is_confirmed(agents_file, env):
+                refusal = undetermined_refusal(absolute_target(agents_file))
+        else:
+            would_change = planned_invariant_content(current, snippet) != current
+            if agents_tracked and would_change and not options.allow_tracked_invariant:
+                refusal = tracked_refusal(absolute_target(agents_file))
 
     if options.dry_run:
         plan: dict[str, object] = {
@@ -574,11 +655,15 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
             plan["agents_md_tracked"] = agents_tracked
             if refusal is not None:
                 plan["would_refuse"] = refusal
+            if note is not None:
+                plan["note"] = note
         print(json.dumps(plan))
         return EXIT_OK
 
     if refusal is not None:
         raise UsageError(refusal)
+    if note is not None:
+        print(note, file=sys.stderr)
 
     if options.cwd:
         ensure_pane_cwd(herdr, options.pane, options.cwd, env, timeout_s=options.cwd_timeout)
