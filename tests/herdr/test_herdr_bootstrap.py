@@ -2,6 +2,7 @@
 
 import json
 import os
+import stat
 import subprocess
 import sys
 from collections.abc import Callable
@@ -838,7 +839,7 @@ def test_dry_run_needs_no_git_verdict_for_an_inline_kind(stub: StubHarness, tmp_
     assert "would_refuse" not in plan
 
 
-def test_tracked_detection_falls_back_to_untracked_without_a_git_binary(
+def test_tracked_detection_is_undetermined_without_a_git_binary(
     tmp_path: Path,
 ) -> None:
     """Detection that cannot run reads as undetermined, not as tracked; the append still happens.
@@ -875,6 +876,27 @@ def test_a_target_that_cannot_be_read_is_a_usage_error(stub: StubHarness, tmp_pa
 
 
 # ── B1: the probe must ask git about the on-disk entry name ─────────────────────────
+
+
+def test_casefold_entry_is_taken_only_for_the_same_file(tmp_path: Path) -> None:
+    """W4 RED on a case-sensitive host: the fold must name the same file, not a case-variant twin.
+
+    `agents.md` exists and `AGENTS.md` does not. On a case-insensitive volume the two spellings
+    are one inode, so the fold is right; on a case-sensitive volume they are different files, so
+    the fold would ask git about a path the launch never touches. Assert the iff, which holds on
+    both volume types without needing a case-sensitive filesystem.
+    """
+    directory = tmp_path / "lane"
+    directory.mkdir()
+    candidate = directory / "agents.md"
+    _ = candidate.write_text("# lowercase\n")
+    target = directory / "AGENTS.md"
+    try:
+        same_file = os.path.samefile(target, candidate)
+    except OSError:
+        same_file = False
+
+    assert herdr_bootstrap.on_disk_entry_name(target) == ("agents.md" if same_file else None)
 
 
 def test_tracked_lowercase_name_on_a_case_insensitive_volume_is_refused(
@@ -966,6 +988,143 @@ def test_confirmed_repo_with_an_unreadable_index_is_refused(
     assert starts(stub) == []
 
 
+def test_override_appends_through_an_unreadable_index(stub: StubHarness, tmp_path: Path) -> None:
+    """W1 RED on cd1f0eb7: the undetermined refusal ignored `--allow-tracked-invariant`.
+
+    The refusal's own sentence tells the operator to pass the flag; before this fix the flag did
+    nothing on the undetermined branch, so a confirmed repo whose index git could not read was a
+    permanent dead end for the invariant. The override must append and launch, like the tracked
+    branch.
+    """
+    repo = tracked_repo(tmp_path)
+    bad_index = tmp_path / "corrupt-index"
+    _ = bad_index.write_bytes(b"not a git index")
+    agents = repo / "AGENTS.md"
+    body_before = agents.read_text()
+
+    done = stub.run(
+        *bootstrap_args(repo, "--allow-tracked-invariant"),
+        state=cwd_state(repo),
+        env={"GIT_INDEX_FILE": str(bad_index)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, (done.stdout, done.stderr)
+    assert agents.read_text() != body_before
+    assert herdr_bootstrap.START_MARKER in agents.read_text()
+    assert repo_status_for(repo, "AGENTS.md") == " M AGENTS.md\n"
+    assert len(starts(stub)) == 1
+
+
+def test_dubious_ownership_is_undetermined_and_warns(stub: StubHarness, tmp_path: Path) -> None:
+    """W2 RED on cd1f0eb7: a failed `rev-parse --is-inside-work-tree` read as a definitive "not tracked".
+
+    git refusing to answer (a foreign-owned checkout) is not an answer that the file is untracked.
+    The state is undetermined, so the append warns instead of failing open with zero signal.
+    """
+    repo = tracked_repo(tmp_path)
+
+    done = stub.run(
+        *bootstrap_args(repo),
+        state=cwd_state(repo),
+        env={"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lines = done.stderr.splitlines()
+    assert len(lines) == 1, done.stderr
+    assert "could not determine" in lines[0]
+    assert str(repo / "AGENTS.md") in lines[0]
+    assert repo_status(repo) == " M AGENTS.md\n"
+    assert len(starts(stub)) == 1
+
+
+def test_a_git_dir_that_does_not_exist_is_undetermined_and_warns(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """W2 RED on cd1f0eb7: `GIT_DIR` at a missing path made git answer "not tracked" silently."""
+    repo = tracked_repo(tmp_path)
+
+    done = stub.run(
+        *bootstrap_args(repo),
+        state=cwd_state(repo),
+        env={"GIT_DIR": str(tmp_path / "no-such-repo" / ".git")},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lines = done.stderr.splitlines()
+    assert len(lines) == 1, done.stderr
+    assert "could not determine" in lines[0]
+    assert str(repo / "AGENTS.md") in lines[0]
+    assert repo_status(repo) == " M AGENTS.md\n"
+    assert len(starts(stub)) == 1
+
+
+def test_an_unreadable_git_dir_is_undetermined_and_warns(stub: StubHarness, tmp_path: Path) -> None:
+    """W2 RED on cd1f0eb7: an unreadable `.git` printed "not a git repository" and appended silently.
+
+    That message cannot tell an unreadable `.git` from a genuinely absent one; the presence of a
+    `.git` entry does, so the state is undetermined, not "not tracked".
+    """
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses directory permissions")
+    repo = tracked_repo(tmp_path)
+    dotgit = repo / ".git"
+    original = stat.S_IMODE(dotgit.stat().st_mode)
+    os.chmod(dotgit, 0o000)
+    try:
+        done = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+    finally:
+        os.chmod(dotgit, original)
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    lines = done.stderr.splitlines()
+    assert len(lines) == 1, done.stderr
+    assert "could not determine" in lines[0]
+    assert repo_status(repo) == " M AGENTS.md\n"
+    assert len(starts(stub)) == 1
+
+
+def test_a_missing_index_file_is_undetermined_not_untracked(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """W3 RED on cd1f0eb7: a missing `GIT_INDEX_FILE` made git answer from an empty index."""
+    repo = tracked_repo(tmp_path)
+    before = repo_status(repo)
+
+    done = stub.run(
+        *bootstrap_args(repo),
+        state=cwd_state(repo),
+        env={"GIT_INDEX_FILE": str(tmp_path / "no-such-index")},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(repo / "AGENTS.md") in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert repo_status(repo) == before == ""
+    assert starts(stub) == []
+
+
+def test_a_foreign_git_dir_is_undetermined_not_untracked(stub: StubHarness, tmp_path: Path) -> None:
+    """W3 RED on cd1f0eb7: a foreign `GIT_DIR` read that repo's index and answered "untracked"."""
+    repo = tracked_repo(tmp_path)
+    other = tmp_path / "other"
+    init_repo(other)
+    _ = (other / "seed.txt").write_text("seed\n")
+    commit_path(other, "seed.txt")
+    before = repo_status(repo)
+
+    done = stub.run(
+        *bootstrap_args(repo),
+        state=cwd_state(repo),
+        env={"GIT_DIR": str(other / ".git")},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(repo / "AGENTS.md") in done.stderr
+    assert repo_status(repo) == before == ""
+    assert starts(stub) == []
+
+
 def test_dry_run_reports_an_unreadable_index_as_undetermined_and_would_refuse(
     stub: StubHarness, tmp_path: Path
 ) -> None:
@@ -1024,6 +1183,27 @@ def test_worktree_root_with_a_trailing_space_is_still_recognized(
     assert str(agents) in done.stderr
     assert agents.read_text() == body_before
     assert starts(stub) == []
+
+
+@pytest.mark.parametrize("dirname", ["repo\n", "repo ", "repo\r", "repo\t", " repo"])
+def test_worktree_root_whitespace_does_not_break_tracked_detection(
+    stub: StubHarness, tmp_path: Path, dirname: str
+) -> None:
+    """W6 RED on base: a root whose name ends in a newline read as undetermined, not tracked.
+
+    `rev-parse --show-toplevel` prints the root plus its own newline, so a name that already ends
+    in one arrives as `name\\n\\n`; stripping every newline hid the real separator and broke
+    `relative_to`. Trailing space, trailing CR, tab and leading space must keep working.
+    """
+    repo = tmp_path / dirname
+    init_repo(repo)
+    _ = (repo / "AGENTS.md").write_text("# named root\n")
+    commit_path(repo, "AGENTS.md")
+
+    done = stub.run(*bootstrap_args(repo, "--dry-run"))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert json.loads(done.stdout)["agents_md_tracked"] is True
 
 
 # ── L2: the skip path is not role-checked, and the docs say so ──────────────────────

@@ -39,9 +39,11 @@ tracked target that the append would change is refused (exit 2) naming
 record. An untracked file, or a file outside any repository, is appended as before — that
 dirties nothing tracked, though a new lane-local file still shows as ``??`` in ``git status``.
 Targets whose version-control state cannot be determined are handled by kind: a confirmed
-repository whose index git cannot read is refused, while a host with no usable git still gets
-the append — the invariant must reach the agent — and one warning line saying the tracked state
-could not be determined, so a missing git never silently withholds the invariant.
+repository whose index git cannot read — or whose answer comes from a ``GIT_DIR``/``GIT_INDEX_FILE``
+override — is refused (and, like the tracked refusal, overridable), while a repository git cannot
+confirm still gets the append — the invariant must reach the agent — and one warning line saying
+the tracked state could not be determined, so a missing git never silently withholds the
+invariant.
 
 Deliberate quirks (implemented minimally, documented here): trust flags come only from
 ``kinds.yaml`` and ride after ``--`` as native agent args — bootstrap never invents flags, and an
@@ -98,6 +100,11 @@ KINDS_CONFIG = Path(__file__).resolve().parent.parent / "references" / "kinds.ya
 _CWD_POLL_S = 0.25
 # The flag the tracked-target refusal names: the caller opts in to a deliberately dirty tree.
 TRACKED_OVERRIDE_FLAG = "--allow-tracked-invariant"
+
+# Environment variables that point git at a worktree, index, or object store other than the one
+# the target file lives in. Each outranks `-C`, so a probe run with one set answers about that
+# override, not about the file's real repository; the tracked state is then undetermined.
+GIT_LOCATION_OVERRIDE_VARS: tuple[str, ...] = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
 
 
 @dataclass(frozen=True)
@@ -255,20 +262,55 @@ def _run_git(
     never as "not version-controlled".
     """
     try:
-        return subprocess.run(
-            list(argv), capture_output=True, text=True, check=False, env=dict(env)
-        )
+        done = subprocess.run(list(argv), capture_output=True, check=False, env=dict(env))
     except OSError:
         return None
+    # Decode here, not via `text=True`: universal-newline translation would turn a carriage
+    # return inside a worktree root's name into a newline, so the path git printed could no
+    # longer be matched against the real directory. `os.fsdecode` keeps git's bytes as written.
+    return subprocess.CompletedProcess(
+        done.args, done.returncode, os.fsdecode(done.stdout), os.fsdecode(done.stderr)
+    )
+
+
+def _git_location_is_redirected(env: Mapping[str, str]) -> bool:
+    """True when the environment points git at another worktree, index, or object store.
+
+    `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` outrank `-C`, so a probe run with any of them set
+    answers about that override, never about the repository the target file really lives in. The
+    answer cannot be trusted either way, so the tracked state reads as undetermined; the caller
+    warns, refuses a confirmed repository, and still appends when the override flag is passed.
+    """
+    return any(env.get(name) for name in GIT_LOCATION_OVERRIDE_VARS)
+
+
+def _repository_marker_present(path: Path) -> bool:
+    """True when `path` or an ancestor carries a `.git` entry, readable by git or not.
+
+    A genuinely absent repository and an unreadable one print the same "not a git repository"
+    line, so that message alone cannot tell them apart. A `.git` entry git could not use means
+    the tracked state is undetermined, not that the file is outside version control.
+    """
+    current = Path(os.path.realpath(path))
+    while True:
+        if os.path.lexists(current / ".git"):
+            return True
+        parent = current.parent
+        if parent == current:
+            return False
+        current = parent
 
 
 def on_disk_entry_name(path: Path) -> str | None:
     """The name `path` carries in its parent directory listing, or None when it is absent.
 
-    Exact spelling first, then a case-insensitive match. `git ls-files` matches a pathspec
-    case-sensitively against the index's stored name, so a target computed as ``AGENTS.md``
-    must be asked about as the ``agents.md`` the filesystem actually lists on a case-insensitive
-    volume — otherwise a tracked file looks untracked and the append dirties the tree.
+    Exact spelling first, then a case-insensitive match that is *the same file*. `git ls-files`
+    matches a pathspec case-sensitively against the index's stored name, so a target computed as
+    ``AGENTS.md`` must be asked about as the ``agents.md`` the filesystem actually lists on a
+    case-insensitive volume — otherwise a tracked file looks untracked and the append dirties the
+    tree. A case-variant name that is a *different* file (a case-sensitive volume where
+    ``agents.md`` exists and ``AGENTS.md`` does not) is not the target, so it is not accepted:
+    `samefile` is True only when both spellings resolve to one inode.
     """
     try:
         names = os.listdir(path.parent)
@@ -278,8 +320,13 @@ def on_disk_entry_name(path: Path) -> str | None:
         return path.name
     folded = path.name.casefold()
     for name in names:
-        if name.casefold() == folded:
-            return name
+        if name.casefold() != folded:
+            continue
+        try:
+            if os.path.samefile(path, path.parent / name):
+                return name
+        except OSError:
+            continue
     return None
 
 
@@ -289,24 +336,31 @@ def target_is_tracked(path: Path, env: Mapping[str, str]) -> bool | None:
     `rev-parse --is-inside-work-tree` answers "is this in a worktree at all"; the follow-up
     `ls-files --error-unmatch` answers "does the index know this file", which is the question
     the append must respect. Detection runs against the file's real location and asks about the
-    on-disk entry name, not the computed one.
+    on-disk entry name, not the computed one. Only an answer about the file's own repository and
+    index is trusted: a `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` override, or a git that
+    refuses to answer (dubious ownership, an unreadable `.git`), is *undetermined* — never a
+    definitive "not tracked".
 
-    None means *undetermined*: git could not run, or the repository is confirmed but git could
-    not answer (an unreadable index, an unresolvable worktree root). The caller must not read
-    None as "not tracked": a confirmed repository with a broken index may well track the file.
+    None means *undetermined*: git could not run, could not answer, or answered about another
+    repository or index. The caller must not read None as "not tracked": a confirmed repository
+    with a broken index may well track the file.
     """
     real = Path(os.path.realpath(path))
+    if _git_location_is_redirected(env):
+        return None  # git would answer about another worktree/index, not this file's repository
     inside = _run_git(["git", "-C", str(real.parent), "rev-parse", "--is-inside-work-tree"], env)
     if inside is None:
         return None  # git could not run at all: the tracked state is unknown
     if inside.returncode != 0:
-        return False  # git ran and answered: not inside a worktree, so not tracked
-    if inside.stdout.rstrip("\n") != "true":
+        if "not a git repository" in inside.stderr and not _repository_marker_present(real.parent):
+            return False  # git ran and found no `.git` anywhere: genuinely outside a worktree
+        return None  # git refused to answer (dubious ownership, an unreadable `.git`)
+    if inside.stdout.removesuffix("\n") != "true":
         return False
     top = _run_git(["git", "-C", str(real.parent), "rev-parse", "--show-toplevel"], env)
     if top is None or top.returncode != 0:
         return None  # repository confirmed, but the worktree root is unknown
-    root = top.stdout.rstrip("\n")
+    root = top.stdout.removesuffix("\n")
     if not root:
         return None
     try:
@@ -338,7 +392,9 @@ def repository_is_confirmed(path: Path, env: Mapping[str, str]) -> bool:
     """
     real = Path(os.path.realpath(path))
     inside = _run_git(["git", "-C", str(real.parent), "rev-parse", "--is-inside-work-tree"], env)
-    return inside is not None and inside.returncode == 0 and inside.stdout.rstrip("\n") == "true"
+    return (
+        inside is not None and inside.returncode == 0 and inside.stdout.removesuffix("\n") == "true"
+    )
 
 
 def tracked_refusal(path: Path) -> str:
@@ -454,8 +510,8 @@ def build_parser() -> argparse.ArgumentParser:
         TRACKED_OVERRIDE_FLAG,
         action="store_true",
         help=(
-            "append the role invariant even when the target file is version-controlled, "
-            "leaving that tracked file modified"
+            "append the role invariant even when the target file is version-controlled or "
+            "its version-control state could not be determined, leaving that file modified"
         ),
     )
     _ = parser.add_argument(
@@ -623,8 +679,9 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
     # surface the agent reads, so a launch must decide once, before any mutation, whether the
     # write is allowed. An append that would change nothing is skipped (no mtime churn, no
     # dirt); a tracked target that would change is refused unless the caller overrides. A
-    # confirmed repository whose index git cannot read is undetermined, so it is refused too;
-    # only a host with no usable git appends, and it says so on stderr.
+    # confirmed repository whose tracked state is undetermined is refused too, and, like the
+    # tracked refusal, overridable; only a host that cannot confirm a repository appends, and
+    # it warns on stderr.
     agents_tracked: bool | None = False
     refusal: str | None = None
     note: str | None = None
@@ -634,14 +691,13 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
         except OSError as exc:
             raise UsageError(f"cannot read {agents_file}: {exc}") from exc
         agents_tracked = target_is_tracked(agents_file, env)
+        would_change = planned_invariant_content(current, snippet) != current
         if agents_tracked is None:
             note = undetermined_warning(absolute_target(agents_file))
-            if repository_is_confirmed(agents_file, env):
+            if repository_is_confirmed(agents_file, env) and not options.allow_tracked_invariant:
                 refusal = undetermined_refusal(absolute_target(agents_file))
-        else:
-            would_change = planned_invariant_content(current, snippet) != current
-            if agents_tracked and would_change and not options.allow_tracked_invariant:
-                refusal = tracked_refusal(absolute_target(agents_file))
+        elif agents_tracked and would_change and not options.allow_tracked_invariant:
+            refusal = tracked_refusal(absolute_target(agents_file))
 
     if options.dry_run:
         plan: dict[str, object] = {
