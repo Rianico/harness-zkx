@@ -94,10 +94,15 @@ def test_cli_kind_passes_the_snippet_inline_and_writes_no_file(
 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     start = starts(stub)[0]
-    assert flag_value(start, "--append-system-prompt") == herdr_bootstrap.render_invariant("impl-1")
+    after = start[start.index("--") + 1 :]
+    assert flag_value(after, "--append-system-prompt") == herdr_bootstrap.render_invariant("impl-1")
     assert not (tmp_path / "AGENTS.md").exists()
     assert "agents-md=-" in done.stdout
-    assert start[start.index("--") + 1 :] == ["--approve"]
+    assert after == [
+        "--append-system-prompt",
+        herdr_bootstrap.render_invariant("impl-1"),
+        "--approve",
+    ]
     assert pane_runs(stub) == []
 
 
@@ -208,10 +213,10 @@ def test_dry_run_cli_kind_prints_the_inline_snippet(stub: StubHarness) -> None:
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     plan = json.loads(done.stdout)
     assert plan["agents_md"] is None
-    assert flag_value(plan["agent_start"], "--append-system-prompt") == (
-        herdr_bootstrap.render_invariant("tm")
-    )
-    assert plan["agent_start"][plan["agent_start"].index("--") + 1 :] == ["--approve"]
+    start = plan["agent_start"]
+    after = start[start.index("--") + 1 :]
+    assert flag_value(after, "--append-system-prompt") == herdr_bootstrap.render_invariant("tm")
+    assert after == ["--append-system-prompt", herdr_bootstrap.render_invariant("tm"), "--approve"]
     assert plan["cwd_ensure"] is None
     assert stub.calls() == []
 
@@ -320,8 +325,13 @@ def test_claude_start_carries_its_own_trust_flag(stub: StubHarness, tmp_path: Pa
 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     start = starts(stub)[0]
-    assert flag_value(start, "--append-system-prompt") == herdr_bootstrap.render_invariant("tm")
-    assert start[start.index("--") + 1 :] == ["--dangerously-skip-permissions"]
+    after = start[start.index("--") + 1 :]
+    assert flag_value(after, "--append-system-prompt") == herdr_bootstrap.render_invariant("tm")
+    assert after == [
+        "--append-system-prompt",
+        herdr_bootstrap.render_invariant("tm"),
+        "--dangerously-skip-permissions",
+    ]
     assert not (tmp_path / "AGENTS.md").exists()
 
 
@@ -335,6 +345,77 @@ def test_unknown_kind_falls_back_to_file_without_trust_flags(
     assert "--append-system-prompt" not in start
     assert "--" not in start
     assert herdr_bootstrap.render_invariant("tm") in (tmp_path / "AGENTS.md").read_text()
+
+
+# ── agent-level flags: model, snippet, and trust flags all ride after `--` ──────────
+
+
+def test_inline_kind_puts_the_snippet_and_model_after_the_separator(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    model = "clinepass/cline-pass/deepseek-v4.1-flash"
+    done = stub.run(
+        "--kind",
+        "pi",
+        "--pane",
+        "w9:p1",
+        "--role",
+        "impl-1",
+        "--model",
+        model,
+        "--cwd",
+        str(tmp_path),
+        "--dry-run",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    start = json.loads(done.stdout)["agent_start"]
+    split = start.index("--")
+    before = start[:split]
+    assert "--model" not in before
+    assert "--append-system-prompt" not in before
+    assert start[split + 1 :] == [
+        "--append-system-prompt",
+        herdr_bootstrap.render_invariant("impl-1"),
+        "--model",
+        model,
+        "--approve",
+    ]
+    assert stub.calls() == []
+
+
+def test_file_kind_trust_flags_ride_after_a_single_separator() -> None:
+    entry = herdr_bootstrap.KindEntry(trust_flags=("--auto-approve",), inline_invariant=False)
+    argv = herdr_bootstrap.build_start_argv(
+        "herdr",
+        herdr_bootstrap.Options(kind="codex", pane="w9:p1"),
+        "msg-tm",
+        "snippet",
+        entry=entry,
+    )
+
+    assert argv.count("--") == 1
+    assert argv[argv.index("--") + 1 :] == ["--auto-approve"]
+    assert "--append-system-prompt" not in argv
+    assert "--model" not in argv
+
+
+def test_kind_with_nothing_to_pass_plans_no_separator(stub: StubHarness, tmp_path: Path) -> None:
+    done = stub.run(
+        "--kind",
+        "codex",
+        "--pane",
+        "w9:p1",
+        "--role",
+        "tm",
+        "--cwd",
+        str(tmp_path),
+        "--dry-run",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "--" not in json.loads(done.stdout)["agent_start"]
+    assert stub.calls() == []
 
 
 # ── cwd guarantee: the pane must converge before start ─────────────────────────────

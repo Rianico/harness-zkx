@@ -569,7 +569,11 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert "--append-system-prompt" in start
     invariant = start[start.index("--append-system-prompt") + 1]
     assert "ROLE INVARIANT" in invariant
-    assert start[start.index("--") + 1 :] == ["--approve"]
+    split = start.index("--")
+    assert "--append-system-prompt" not in start[:split]
+    assert "--model" not in start[:split]
+    assert "--append-system-prompt" in start[split + 1 :]
+    assert start[-1] == "--approve"
     (prompt,) = stub.prompts()
     assert prompt[3] == "callee"
 
@@ -693,7 +697,11 @@ def test_dispatch_auto_start_uses_claude_trust_flags(stub: StubHarness, tmp_path
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (start,) = stub.starts()
     assert start[start.index("--kind") + 1] == "claude"
-    assert start[start.index("--") + 1 :] == ["--dangerously-skip-permissions"]
+    split = start.index("--")
+    assert "--append-system-prompt" not in start[:split]
+    assert "--model" not in start[:split]
+    assert "--append-system-prompt" in start[split + 1 :]
+    assert start[-1] == "--dangerously-skip-permissions"
     assert "--append-system-prompt" in start
 
 

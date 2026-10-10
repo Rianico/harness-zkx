@@ -352,14 +352,22 @@ def target_path(target_dir: str, kind: str) -> Path:
 def build_start_argv(
     herdr: str, options: Options, name: str, snippet: str, *, entry: KindEntry
 ) -> list[str]:
-    """Assemble `agent start`; config trust flags ride after `--` as native agent args."""
+    """Assemble `agent start`; all agent-level flags ride after `--` as native agent args.
+
+    `herdr agent start` owns only `--kind`/`--pane`/`--timeout`; the model, the inline
+    role-invariant system prompt, and the per-kind trust flags are the agent binary's own
+    options, so they must sit past the `--` separator. The separator is emitted only when
+    there is at least one such arg.
+    """
     argv = [herdr, "agent", "start", name, "--kind", options.kind, "--pane", options.pane]
-    if options.model:
-        argv += ["--model", options.model]
+    agent_args: list[str] = []
     if entry.inline_invariant:
-        argv += ["--append-system-prompt", snippet]
-    if entry.trust_flags:
-        argv += ["--", *entry.trust_flags]
+        agent_args += ["--append-system-prompt", snippet]
+    if options.model:
+        agent_args += ["--model", options.model]
+    agent_args += entry.trust_flags
+    if agent_args:
+        argv += ["--", *agent_args]
     return argv
 
 
