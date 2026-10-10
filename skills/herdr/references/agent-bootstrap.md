@@ -60,7 +60,7 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
 1. **User Confirmation**: Confirm role ↔ agent kind ↔ provider ↔ model mapping with user.
 2. **Pane Allocation**: Split pane with `--no-focus`, `--label <role>`, and `--cwd "$WORKTREE_PATH"` (the worktree pre-provisioned in Step 0).
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_pane.py" --direction right --label reviewer --cwd "$WORKTREE_PATH" --no-focus
+   uv run "$SKILL_DIR/scripts/herdr_pane.py" right --label reviewer --cwd "$WORKTREE_PATH" --no-focus
    ```
 3. **Agent Start**: Start through `herdr-bootstrap` — it stamps the ROLE INVARIANT, injects the kind's trust flags from `skills/herdr/references/kinds.yaml`, and cds the pane into `--cwd` before start. Raw `agent start` (native arguments strictly after `--`) is the fallback when bootstrap cannot express the launch.
    ```bash
@@ -70,9 +70,9 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
    - For `pi`: `--approve` is injected automatically from `kinds.yaml` — verify `-- --approve` is in the start argv instead of hand-adding flags.
    - For `qodercli`: `agent start` reports `interactive_ready: true` and a `Ready` title even while the trust selector is up, so read the pane. Either send one bare Enter (`herdr agent send-keys <name> enter`) and confirm the `YOLO` status line, or pre-seed `permissions.trustDirectories` in the config root the binary reads (`~/.qoder`, or `~/.qoder-cn` for the CN build) before starting. A prompt cannot dismiss the selector. See [Qoder CLI](agents/qodercli.md).
    - For other agents: Inspect pane output for any initial consent/login prompts.
-5. **State Settling**: Wait until the agent settles into `idle` or `done` before dispatching tickets or prompts.
+5. **State Settling**: Confirm the agent is ready before dispatching tickets or prompts. Read the pane text: a freshly started agent can be weakly recognized — its record reports `idle`/`done` with revision 0 — and a wanted state at revision 0 is unsatisfiable, so the wait helper exits 2 instead of settling, because `herdr-wait` cannot observe a weakly-recognized agent to completion. The `--source recent-unwrapped` pane read exits 0 and prints what the pane shows, so a trust selector or login prompt is visible before the first prompt; `herdr-prompt` and `herdr-dispatch` then re-check readiness themselves and abort with a `UsageError` when the pane never converges. Wait on the state barrier only for a strongly-recognized agent, and use Dispatch-&-Yield for `agy` and revision-0 agents ([Safety Rules](safety-rules.md)).
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_wait.py" <name> --timeout 30000
+   herdr agent read <name> --source recent-unwrapped --lines 120
    ```
 6. **Name the Pane**: The agent name dies with the agent while the pane label survives, so a restart or a new occupant can inherit a stale label. Set both in one step, then confirm the session is consistent:
    ```bash
