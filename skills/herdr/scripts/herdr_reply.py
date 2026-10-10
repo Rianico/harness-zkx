@@ -463,7 +463,9 @@ def _parse_heading(line: str) -> tuple[str, str, list[str]] | None:
 def evidence_section(payload: str) -> str | None:
     """The best evidence-shaped section's heading text, else None.
 
-    Precedence, highest first (#231 F4/F5):
+    Precedence, highest first (#231 F4/F5), is a rank, not a document position: the same
+    heading form ranks the same whether it is ATX (`## Status`) or bold (`**Status:**`), and a
+    bold heading's inline tail counts as its body.
 
     1. a heading naming the canonical section (`Evidence`, `Verification`);
     2. a heading whose words match evidence vocabulary — an exact keyword or an evidence stem
@@ -475,10 +477,12 @@ def evidence_section(payload: str) -> str | None:
     4. a fenced code block with at least one non-blank line (`FENCE_MARKER`).
 
     Ties go to document order, and only a section that has content counts: a heading with
-    neither an inline tail nor a body before the next heading (or before a fence) is skipped,
-    which is why a bare `## Evidence` is not evidence. The canonical reply template in
-    `references/lane-coordination.md` therefore records `Evidence` and not `Artifacts`: the
-    canonical name is class 1 and `Artifacts` is class 2, however early it appears.
+    neither an inline tail nor a body before the next heading is skipped, which is why a bare
+    `## Evidence` is not evidence. A fenced block immediately under a heading is that heading's
+    body, not a separate section — `## Evidence` opening onto a fence still ranks class 1, and
+    the fence never discards the pending heading — so the canonical reply template in
+    `references/lane-coordination.md` records `Evidence` and not `Artifacts`: the canonical name
+    is class 1 and `Artifacts` is class 2, however early it appears.
     """
     best: tuple[int, str] | None = None
     pending: tuple[int, str] | None = None
@@ -492,12 +496,19 @@ def evidence_section(payload: str) -> str | None:
             if in_fence:
                 if fence_has_content:
                     fence_seen = True
+                    # A fence directly under a heading is that heading's body: rank the
+                    # pending heading by its own class before the fence closes.
+                    if pending is not None:
+                        if best is None or pending[0] < best[0]:
+                            best = pending
+                        pending = None
                 in_fence = False
                 fence_has_content = False
             else:
+                # Opening a fence keeps `pending`: the block below may be that heading's body,
+                # so it must survive until the fence proves it empty or carries content.
                 in_fence = True
                 fence_has_content = False
-                pending = None
             continue
         if in_fence:
             if line:
@@ -520,12 +531,13 @@ def evidence_section(payload: str) -> str | None:
                     pending = (rank, title)
             continue
         if pending is not None:
-            rank, title = pending
-            if best is None or rank < best[0]:
-                best = (rank, title)
+            if best is None or pending[0] < best[0]:
+                best = pending
             pending = None
     if in_fence and fence_has_content:
         fence_seen = True
+        if pending is not None and (best is None or pending[0] < best[0]):
+            best = pending
     if best is not None:
         return best[1]
     return FENCE_MARKER if fence_seen else None

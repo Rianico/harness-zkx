@@ -849,6 +849,52 @@ def test_canonical_template_records_the_evidence_section() -> None:
     assert herdr_reply.evidence_label("Evidence") == "evidence"
 
 
+@pytest.mark.parametrize(
+    "bold_line",
+    ["**Status:** COMPLETED. Commit `abc1234`.", "**Status:**"],
+)
+def test_lane_reply_shape_records_the_evidence_section(tmp_path: Path, bold_line: str) -> None:
+    """F5: the lane's own reply shape records `evidence: evidence`, not `status`.
+
+    A bold `**Status:**` line sits between the status line and the canonical `## Evidence`
+    section, whose body is a fenced block. The bold status line matches evidence vocabulary
+    (stem `status`) and carries an inline tail, so it is recorded as class 2 before the
+    class-1 `## Evidence` heading is ever seen; the fence under that heading must not discard
+    the pending canonical heading, or document order alone would hand the label to `status`.
+
+    Driven through the store the way the helper does — `build_reply_entry`, then
+    `persist_reply` — and re-read with `get_reply`, so the pinned label is the one the reader
+    returns, not just what `evidence_section` reports in isolation.
+    """
+    payload = f"COMPLETED abc1234\n\n{bold_line}\n\n## Evidence\n\n```\n660 passed\n```\n"
+    assert herdr_reply.payload_shape(payload) == ("complete", "Evidence")
+
+    mapped, sha, _line = herdr_reply.parse_status_line(payload)
+    shape, heading = herdr_reply.payload_shape(payload)
+    entry = herdr_reply.build_reply_entry(
+        payload,
+        sender="reviewer",
+        caller="orchestrator",
+        ticket_id="#231",
+        task_id="#231#lane-reply",
+        in_reply_to="#231#lane-reply",
+        mapped=mapped,
+        sha=sha,
+        shape=shape,
+        evidence=heading,
+    )
+    env = {"HERDR_LANE_DIR": str(tmp_path)}
+    stored, reason = herdr_reply.persist_reply(entry, payload, env=env)
+    assert reason is None
+    assert stored is not None
+    assert stored["shape"] == "complete"
+    assert stored["evidence"] == "evidence"
+
+    resolved = herdr_lease.get_reply(str(stored["id"]), base_dir=tmp_path)
+    assert resolved is not None
+    assert resolved["evidence"] == "evidence"
+
+
 def test_skill_reply_examples_show_an_evidence_section() -> None:
     """The two `herdr-reply` examples in SKILL.md must show an evidence section (F6).
 
