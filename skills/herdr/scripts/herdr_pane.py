@@ -126,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "run this command line in the pane (herdr pane run) with a completion sentinel "
             "appended, instead of splitting: the pane prints the sentinel when the command "
-            "exits, whatever its exit status"
+            "exits, whatever its exit status; a trailing bare & must be grouped as ( <line> & )"
         ),
     )
     focus = parser.add_mutually_exclusive_group()
@@ -356,6 +356,12 @@ def run_command(options: Options, env: Mapping[str, str]) -> int:
         raise UsageError("--command must not be empty")
     if "\n" in command or "\r" in command:
         raise UsageError("--command must be one line: `herdr pane run` sends text plus Enter")
+    if command.endswith("&") and not command.endswith("&&") and not command.endswith("\\&"):
+        raise UsageError(
+            "--command must not end in a bare '&': the sentinel is appended with ';' and '&;' is a "
+            "syntax error in the pane's shell, so the line would never run. Group the background "
+            "work instead: ( <line> & )"
+        )
     require_herdr_env(env)
     herdr = find_herdr(env)
     pane = options.pane or current_pane_id(herdr, env)

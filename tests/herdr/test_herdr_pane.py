@@ -394,6 +394,36 @@ def test_launch_line_rejects_an_empty_or_multiline_command(stub: StubHarness) ->
     assert stub.calls() == []
 
 
+def test_command_rejects_a_bare_ampersand_launch_line(stub: StubHarness) -> None:
+    """The sentinel is appended with `;`, so `&` at the end composes `&;` — a shell syntax error."""
+    done = stub.run("--pane", "w9:p1", "--command", "sleep 0.05 &")
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "bare '&'" in done.stderr
+    assert "( <line> & )" in done.stderr
+    assert [call for call in stub.calls() if call[1:3] == ["pane", "run"]] == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo a && echo b",
+        "echo a \\&",
+        'echo "a &"',
+    ],
+)
+def test_command_accepts_ampersands_that_are_not_a_bare_trailing_operator(
+    stub: StubHarness, command: str
+) -> None:
+    """Only a bare trailing `&` is refused; `&&`, `\\&`, and a quoted `&` still compose a launch."""
+    done = stub.run("--pane", "w9:p1", "--command", command, "--dry-run")
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    payload = launch_payload(done.stdout)
+    assert payload.startswith(command)
+    assert "[herdr-launch]" in payload
+
+
 # ── integration: --task-group scoping ──────────────────────────────────────────────
 
 
