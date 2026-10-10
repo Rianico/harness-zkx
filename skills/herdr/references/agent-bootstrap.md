@@ -62,12 +62,12 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_pane.py" --direction right --label reviewer --cwd "$WORKTREE_PATH" --no-focus
    ```
-3. **Agent Start**: Launch agent with native arguments placed strictly after `--`.
+3. **Agent Start**: Start through `herdr-bootstrap` — it stamps the ROLE INVARIANT, injects the kind's trust flags from `skills/herdr/references/kinds.yaml`, and cds the pane into `--cwd` before start. Raw `agent start` (native arguments strictly after `--`) is the fallback when bootstrap cannot express the launch.
    ```bash
    herdr agent start <name> --kind <kind> --pane <pane-id> -- <native-flags>
    ```
 4. **Folder Trust Handling**:
-   - For `pi`: Ensure `--approve` was passed after `--`.
+   - For `pi`: `--approve` is injected automatically from `kinds.yaml` — verify `-- --approve` is in the start argv instead of hand-adding flags.
    - For `qodercli`: `agent start` reports `interactive_ready: true` and a `Ready` title even while the trust selector is up, so read the pane. Either send one bare Enter (`herdr agent send-keys <name> enter`) and confirm the `YOLO` status line, or pre-seed `permissions.trustDirectories` in the config root the binary reads (`~/.qoder`, or `~/.qoder-cn` for the CN build) before starting. A prompt cannot dismiss the selector. See [Qoder CLI](agents/qodercli.md).
    - For other agents: Inspect pane output for any initial consent/login prompts.
 5. **State Settling**: Wait until the agent settles into `idle` or `done` before dispatching tickets or prompts.
@@ -93,7 +93,7 @@ A compacted agent forgets its lane: it stops delegating to subagents and exits w
 | `cline` | `AGENTS.md` append (prefers an existing `.clinerules`) | `.clinerules` \| `AGENTS.md` |
 | `codex`, `copilot`, `qodercli`, `agy`, unknown | `AGENTS.md` append | `AGENTS.md` |
 
-Only `pi` and `claude` receive `--append-system-prompt`; no permission or approval flags are injected (the operator's herdr config owns those); an unknown kind falls back to the universal `AGENTS.md` append. The target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
+Delivery follows `skills/herdr/references/kinds.yaml`: `inline` kinds (`pi`, `claude`) receive `--append-system-prompt`; `file` kinds and unknown kinds get the universal `AGENTS.md` append. Trust flags ride after `--` as native agent args, configured per kind (verified: `pi` → `--approve`, `claude` → `--dangerously-skip-permissions`); unverified kinds carry none. When `--cwd` names a worktree, bootstrap cds the pane there first (`--cwd-timeout`, default 10s) and refuses to start when the pane does not converge. The file target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-impl-1 --kind codex --pane w1:p3 --role impl-1 --task-group msg

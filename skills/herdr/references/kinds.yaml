@@ -1,0 +1,36 @@
+# Kind startup contract for herdr-bootstrap.
+# See skills/herdr/scripts/herdr_bootstrap.py.
+#
+# trust_flags: native agent args appended after `--`
+#   in `herdr agent start ... -- <flags>`.
+#   The operator opts in per kind here; bootstrap never
+#   invents flags. Verified against the real CLIs
+#   (`<agent> --help`); unverified kinds MUST stay empty.
+# invariant: how the ROLE INVARIANT reaches the agent.
+#   inline — the agent binary accepts --append-system-prompt
+#     (verified: pi, claude).
+#   file — marker-wrapped append to AGENTS.md in the target
+#     dir (cline prefers .clinerules).
+# Kinds absent here fall back to `file` with no trust flags
+# (forward-compatible, never blocked).
+pi:
+  trust_flags: ["--approve"]
+  invariant: inline
+claude:
+  trust_flags: ["--dangerously-skip-permissions"]
+  invariant: inline
+cline:
+  trust_flags: []
+  invariant: file
+codex:
+  trust_flags: []
+  invariant: file
+copilot:
+  trust_flags: []
+  invariant: file
+qodercli:
+  trust_flags: []
+  invariant: file
+agy:
+  trust_flags: []
+  invariant: file

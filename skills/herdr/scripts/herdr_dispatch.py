@@ -40,12 +40,14 @@ from pathlib import Path
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_OK,
+    KNOWN_AGENT_KINDS,
     METHOD_CONSTRAINT_EPILOG,
     UsageError,
     entries,
     entry_optional_text,
     find_herdr,
     guard,
+    inspect_target_shell_pane,
     require_herdr_env,
     run_herdr_checked,
 )
@@ -67,6 +69,10 @@ class Options(PromptOptions):
 
     force: bool = False
     draft: bool = False
+    auto_start: str | None = None
+    role: str | None = None
+    cwd: str | None = None
+    model: str | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -136,6 +142,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="bypass active ticket lease checks and dispatch anyway",
+    )
+    _ = parser.add_argument(
+        "--auto-start",
+        metavar="KIND",
+        default=None,
+        help=(
+            "bootstrap a missing callee through the herdr-bootstrap contract "
+            "(ROLE INVARIANT, kind trust flags, pane cwd) before dispatching; "
+            "live agents dispatch with no extra calls"
+        ),
+    )
+    _ = parser.add_argument(
+        "--role",
+        metavar="ROLE",
+        default=None,
+        help="role named in the ROLE INVARIANT when --auto-start boots a missing callee",
+    )
+    _ = parser.add_argument(
+        "--cwd",
+        metavar="DIR",
+        default=None,
+        help="worktree dir the auto-started callee must start in (pane converges first)",
+    )
+    _ = parser.add_argument(
+        "--model",
+        metavar="MODEL",
+        default=None,
+        help="model for the auto-started callee's agent start",
     )
     _ = parser.add_argument(
         "--ticket-id",
@@ -309,10 +343,238 @@ def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, 
     return "\n".join(lines)
 
 
+def normalize_auto_start_kind(raw: str | None) -> str | None:
+    """Lowercase and validate an --auto-start KIND against the known agent kinds."""
+    if raw is None:
+        return None
+    kind = raw.strip().lower()
+    if not kind or kind not in KNOWN_AGENT_KINDS:
+        raise UsageError(
+            f"--auto-start kind {raw!r} is not a recognized agent kind "
+            f"(known: {', '.join(sorted(KNOWN_AGENT_KINDS))})"
+        )
+    return kind
+
+
+def derive_bootstrap_role(target: str, options: Options) -> str:
+    """Pick the ROLE INVARIANT role: explicit --role, else the unscoped target."""
+    if options.role:
+        return options.role
+    role = target
+    if options.task_group:
+        prefix = f"{options.task_group}-"
+        if role.startswith(prefix):
+            role = role[len(prefix) :]
+    return role
+
+
+def validate_agent_name_or_raise(name: str) -> None:
+    """Reject a bootstrap name Herdr would refuse, before any rename happens."""
+    from herdr_cli import validate_agent_name
+
+    validate_agent_name(name)
+
+
+def run_bootstrap_contract(
+    pane_id: str,
+    name: str,
+    *,
+    kind: str,
+    role: str,
+    task_group: str | None,
+    cwd: str | None,
+    model: str | None,
+    dry_run: bool,
+    env: Mapping[str, str],
+) -> str | None:
+    """Start one missing callee through the herdr_bootstrap contract in-process.
+
+    Returns the dry-run plan text when `dry_run` is set, else None. Runs the
+    shared `bootstrap()` entrypoint (not a raw `agent start`) so trust flags,
+    the ROLE INVARIANT surface, and the pane-cwd guarantee all apply.
+    """
+    import herdr_bootstrap
+
+    validate_agent_name_or_raise(name)
+    bootstrap_options = herdr_bootstrap.Options(
+        name=name,
+        kind=kind,
+        pane=pane_id,
+        role=role,
+        task_group=task_group,
+        model=model,
+        cwd=cwd,
+        dry_run=dry_run,
+    )
+    if dry_run:
+        import contextlib
+        import io
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            code = herdr_bootstrap.bootstrap(bootstrap_options, env)
+        if code != 0:
+            raise UsageError(f"herdr-dispatch: bootstrap plan for {name!r} failed")
+        return buffer.getvalue()
+    code = herdr_bootstrap.bootstrap(bootstrap_options, env)
+    if code != 0:
+        raise UsageError(f"herdr-dispatch: bootstrap for {name!r} failed")
+    return None
+
+
+def bootstrap_one_shell_target(
+    options: Options, info: object, *, kind: str, env: Mapping[str, str]
+) -> tuple[str, str | None]:
+    """Bootstrap one inspected shell pane; returns (start_name, dry_run_plan)."""
+    from herdr_cli import ShellPaneInfo
+
+    assert isinstance(info, ShellPaneInfo)
+    start_name = (
+        info.suggested_name
+        if info.suggested_name != "<name>"
+        else f"agent-{info.pane_id.replace(':', '-')}"
+    )
+    role = derive_bootstrap_role(start_name, options)
+    plan = run_bootstrap_contract(
+        info.pane_id,
+        start_name,
+        kind=kind,
+        role=role,
+        task_group=options.task_group,
+        cwd=options.cwd,
+        model=options.model,
+        dry_run=options.dry_run,
+        env=env,
+    )
+    return start_name, plan
+
+
+def candidate_targets(options: Options) -> list[str]:
+    """Raw dispatch candidates before resolution: the --label or the TARGETs."""
+    if options.label:
+        return [options.label]
+    return list(options.targets)
+
+
+def is_bare_shell_failure(exc: UsageError) -> bool:
+    """True when resolve_targets refused a bare shell pane (the bootstrap hook).
+
+    The exception TYPE is the contract (herdr_cli.BareShellRefusal). The
+    substring test is a documented migration fallback only: it covers
+    BareShellRefusal subclasses or older call sites that still raise a plain
+    UsageError with the diagnostic prose. Do not add another string-match.
+    """
+    from herdr_cli import BareShellRefusal
+
+    if isinstance(exc, BareShellRefusal):
+        return True
+    message = str(exc)
+    return "no live agent is running" in message or "has no live agent" in message
+
+
+def rewrite_targets_for_bootstrap(options: Options, names: list[str]) -> None:
+    """Point dispatch at the bootstrapped names; a label becomes its agent name."""
+    if options.label:
+        options.label = None
+    options.targets = names
+
+
+def try_bootstrap_on_resolve_failure(
+    options: Options, herdr: str, env: Mapping[str, str], kind: str, exc: UsageError
+) -> tuple[list[str], list[str]] | None:
+    """Bootstrap the bare-shell callees behind a resolve_targets UsageError.
+
+    Returns (targets, plans) after one retry, or None when the failure is not
+    a bare shell (caller keeps the original error). Bootstraps each candidate
+    the inventory still reports as a shell pane, rewrites the targets to the
+    started names, and resolves once more.
+    """
+    from herdr_prompt import resolve_targets
+
+    if not is_bare_shell_failure(exc):
+        return None
+    # Two-phase inspect (zero mutation): every candidate must still read as a
+    # bare shell before any pane is touched. A non-shell candidate returns None
+    # here, before a single rename or start.
+    infos = [
+        inspect_target_shell_pane(herdr, candidate, env) for candidate in candidate_targets(options)
+    ]
+    if any(info is None for info in infos):
+        return None
+    # Mutate phase with compensation: a later bootstrap (or the re-resolve)
+    # can still fail (cwd convergence, agent start, bad derived name). Track
+    # every started name; on any failure re-raise an error that NAMES the
+    # started-but-undispatched agents so the caller can clean up. A silent
+    # orphan is the defect; a loud one is the fallback.
+    names: list[str] = []
+    plans: list[str] = []
+    try:
+        for info in infos:
+            assert info is not None
+            start_name, plan = bootstrap_one_shell_target(options, info, kind=kind, env=env)
+            names.append(start_name)
+            if plan is not None:
+                plans.append(plan)
+        rewrite_targets_for_bootstrap(options, names)
+        targets = resolve_targets(options, herdr, env)
+    except Exception as failed:
+        if names and not isinstance(failed, _NamedOrphansError):
+            raise _NamedOrphansError(names, failed) from failed
+        raise
+    return targets, plans
+
+
+class _NamedOrphansError(UsageError):
+    """A mid-bootstrap failure that names the started-but-undispatched agents."""
+
+    started: list[str]
+
+    def __init__(self, started: list[str], cause: Exception) -> None:
+        self.started = list(started)
+        super().__init__(
+            "herdr-dispatch: auto-start bootstrapped "
+            f"{', '.join(self.started)} but dispatch did not complete ({cause}); "
+            f"these agents hold no ticket — release or reuse them explicitly: "
+            + ", ".join(f"herdr agent prompt {name}" for name in self.started)
+        )
+
+
+def dry_run_bootstrap_plans(
+    options: Options, herdr: str, targets: list[str], kind: str | None, env: Mapping[str, str]
+) -> list[str]:
+    """Collect would-bootstrap plans under --dry-run without mutating anything."""
+    if kind is None or not options.dry_run or options.draft:
+        return []
+    plans: list[str] = []
+    for target in targets:
+        info = inspect_target_shell_pane(herdr, target, env)
+        if info is None:
+            continue
+        _, plan = bootstrap_one_shell_target(options, info, kind=kind, env=env)
+        if plan is not None:
+            plans.append(plan)
+    return plans
+
+
 def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
-    targets = resolve_targets(options, herdr, env)
+    kind = normalize_auto_start_kind(options.auto_start)
+    try:
+        targets = resolve_targets(options, herdr, env)
+    except UsageError as exc:
+        if kind is None or options.draft:
+            raise
+        bootstrapped = try_bootstrap_on_resolve_failure(options, herdr, env, kind, exc)
+        if bootstrapped is None:
+            raise
+        targets, bootstrap_plans = bootstrapped
+    else:
+        bootstrap_plans = dry_run_bootstrap_plans(options, herdr, targets, kind, env)
+
+    if options.dry_run and bootstrap_plans:
+        for plan in bootstrap_plans:
+            print(plan)
 
     if options.draft:
         skeleton = render_draft_skeleton(herdr, targets, env)

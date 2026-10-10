@@ -523,3 +523,473 @@ def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: P
     )
     done = stub.run("callee", "--file", str(ticket), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+
+def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #225: a ticket for a role with no live agent starts it via the
+    bootstrap contract (kind trust flags + ROLE INVARIANT), then dispatches."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    assert start[3] == "callee"
+    assert "--kind" in start and start[start.index("--kind") + 1] == "pi"
+    assert "--append-system-prompt" in start
+    invariant = start[start.index("--append-system-prompt") + 1]
+    assert "ROLE INVARIANT" in invariant
+    assert start[start.index("--") + 1 :] == ["--approve"]
+    (prompt,) = stub.prompts()
+    assert prompt[3] == "callee"
+
+
+def test_dispatch_auto_start_skips_bootstrap_for_live_agent(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #225: a live bootstrapped agent gets the ticket with no extra start."""
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == []
+    (prompt,) = stub.prompts()
+    assert prompt[3] == "reviewer"
+
+
+def test_dispatch_auto_start_dry_run_shows_plan_without_mutating(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #225: dry-run shows the would-bootstrap plan without starting."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        "--dry-run",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == []
+    assert stub.prompts() == []
+    assert "callee" in done.stdout
+    assert "pi" in done.stdout
+
+
+def test_dispatch_auto_start_rejects_unknown_kind(stub: StubHarness, tmp_path: Path) -> None:
+    """Issue #225: an unrecognized --auto-start kind fails before any mutation."""
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "notakind",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not a recognized agent kind" in done.stderr
+    assert stub.starts() == []
+    assert stub.prompts() == []
+
+
+def test_dispatch_auto_start_uses_claude_trust_flags(stub: StubHarness, tmp_path: Path) -> None:
+    """Issue #225: the bootstrap contract owns trust flags (claude path)."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "claude",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    assert start[start.index("--kind") + 1] == "claude"
+    assert start[start.index("--") + 1 :] == ["--dangerously-skip-permissions"]
+    assert "--append-system-prompt" in start
+
+
+def test_dispatch_auto_start_without_flag_keeps_bare_shell_refusal(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #225: without --auto-start a missing agent still refuses safely."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "no live agent" in done.stderr
+    assert stub.starts() == []
+    assert stub.prompts() == []
+
+
+def test_dispatch_auto_start_triggers_on_typed_signal_despite_reworded_prose(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HIGH 1: the hook keys on BareShellRefusal, not herdr_cli prose.
+
+    Rewords both bare-shell diagnostic messages; auto-start must still fire.
+    Fails if is_bare_shell_failure is re-coupled to message text.
+    """
+    import herdr_cli
+
+    orig_format = herdr_cli.format_shell_pane_diagnostic
+
+    def reworded(**kwargs: object) -> str:
+        return "REWORDED DIAGNOSTIC — no trigger phrases here"
+
+    monkeypatch.setattr(herdr_cli, "format_shell_pane_diagnostic", reworded)
+    probe = orig_format(target="x", pane_id="wM:p1N", label=None, foreground_proc="zsh")
+    assert "no live agent" in probe or "has no live agent" in probe
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    assert start[3] == "callee"
+    assert "--append-system-prompt" in start
+    (prompt,) = stub.prompts()
+    assert prompt[3] == "callee"
+
+
+def test_dispatch_auto_start_mixed_targets_bootstraps_none_and_reraises(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """HIGH 2: two-phase inspect — a non-shell second target orphans nothing.
+
+    First candidate is a bare shell, second is a live agent: assert zero
+    starts, zero renames, and the original UsageError still propagates.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee",
+            },
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+            },
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "no live agent" in done.stderr
+    assert stub.starts() == []
+    assert [c for c in stub.calls() if c[1:3] == ["pane", "rename"]] == []
+    assert stub.prompts() == []
+
+
+def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Round 2: two bare-shell targets, the SECOND fails mid-bootstrap.
+
+    The first agent is already started; the raised error must NAME it (loud,
+    never a silent orphan), and no ticket may be dispatched to anyone.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee-one",
+            },
+            {
+                "pane_id": "wM:p2N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee-two",
+            },
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            },
+            "wM:p2N": {
+                "shell_pid": 5678,
+                "foreground_processes": [{"name": "zsh", "pid": 5678}],
+            },
+        },
+        "agent_start_error_for": ["callee-two"],
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee-one",
+        "callee-two",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    # Exactly one start SUCCEEDED (the first); the refused second start is
+    # still logged but registered nothing. The error names the orphan loudly.
+    assert "start refused for callee-two" in done.stderr
+    assert "callee-one" in done.stderr
+    assert "hold no ticket" in done.stderr
+    # Nothing was dispatched to anyone.
+    assert stub.prompts() == []
+
+
+def test_dispatch_auto_start_converges_pane_cwd_then_starts(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #225: the lane worktree cwd rides through bootstrap, pane converges."""
+    lane = tmp_path / "lane"
+    lane.mkdir()
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "callee",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "codex",
+        "--role",
+        "impl-1",
+        "--cwd",
+        str(lane),
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    runs = [call for call in stub.calls() if call[1:3] == ["pane", "run"]]
+    assert len(runs) == 1
+    assert runs[0][3:] == ["wM:p1N", f"cd {lane}"]
+    (start,) = stub.starts()
+    assert start[start.index("--kind") + 1] == "codex"
+    assert (lane / "AGENTS.md").read_text().count("ROLE INVARIANT") == 1
+    assert "impl-1" in (lane / "AGENTS.md").read_text()
+
+
+def test_dispatch_auto_start_live_agent_makes_no_extra_herdr_calls(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Issue #225: the live path keeps its call count with --auto-start set."""
+    import herdr_lease
+
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    plain = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert plain.returncode == herdr_cli.EXIT_OK, plain.stderr
+    plain_calls = len(stub.calls())
+    _ = herdr_lease.release_lease("reviewer", base_dir=tmp_path)
+    auto = stub.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        env={"PWD": str(tmp_path)},
+    )
+    assert auto.returncode == herdr_cli.EXIT_OK, auto.stderr
+    assert stub.starts() == []
+    assert len(stub.calls()) == 2 * plain_calls

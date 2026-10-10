@@ -62,6 +62,15 @@ class UsageError(Exception):
     """Caller misuse or a missing precondition (exit status 2)."""
 
 
+class BareShellRefusal(UsageError):
+    """A target resolved to a bare shell pane with no live agent (exit status 2).
+
+    Typed so callers with a structural remedy (dispatch --auto-start) can hook
+    the condition without substring-matching prose owned by this module. The
+    message stays human-readable; the TYPE is the contract.
+    """
+
+
 class HerdrError(Exception):
     """`herdr` could not be run or answered with an unusable response (exit status 1)."""
 
@@ -449,7 +458,7 @@ def diagnose_agent_not_found(herdr: str, target: str, env: Mapping[str, str]) ->
 def verify_target_not_bare_shell(herdr: str, target: str, env: Mapping[str, str]) -> None:
     diag = diagnose_target_pane(herdr, target, env)
     if diag is not None:
-        raise UsageError(diag)
+        raise BareShellRefusal(diag)
 
 
 def guard(prog: str, action: Callable[[], int]) -> int:

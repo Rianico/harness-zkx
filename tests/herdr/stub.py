@@ -99,7 +99,20 @@ if args[:2] == ["pane", "rename"]:
         print(json.dumps({"error": state["pane_rename_error"], "id": "cli:pane:rename"}), file=sys.stderr)
         raise SystemExit(1)
     pane_id = args[2]
+    if pane_id in state.get("pane_rename_error_for", []):
+        print(
+            json.dumps(
+                {"error": f"rename refused for {pane_id}", "id": "cli:pane:rename"}
+            ),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     label = None if "--clear" in args else " ".join(args[3:])
+    state["panes"] = [
+        dict(p, label=label) if p.get("pane_id") == pane_id else p
+        for p in state.get("panes", [])
+    ]
+    Path(os.environ["STUB_HERDR_STATE"]).write_text(json.dumps(state))
     payload = {"id": "cli:pane:rename", "result": {"pane": {"pane_id": pane_id, "label": label}}}
     print(json.dumps(payload))
     raise SystemExit(0)
@@ -119,9 +132,23 @@ if args[:2] == ["agent", "start"]:
         print(json.dumps({"error": state["agent_start_error"], "id": "cli:agent:start"}), file=sys.stderr)
         raise SystemExit(1)
     name = args[2]
+    if name in state.get("agent_start_error_for", []):
+        print(
+            json.dumps({"error": f"start refused for {name}", "id": "cli:agent:start"}),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     kind = args[args.index("--kind") + 1] if "--kind" in args else "pi"
     pane_id = args[args.index("--pane") + 1] if "--pane" in args else state.get("current", "w9:p1")
     agent = {"name": name, "agent": kind, "pane_id": pane_id, "agent_status": "idle", "revision": "r0"}
+    agents = [a for a in state.get("agents", []) if a.get("pane_id") != pane_id]
+    agents.append(agent)
+    state["agents"] = agents
+    state["panes"] = [
+        dict(p, agent=kind, agent_status="idle") if p.get("pane_id") == pane_id else p
+        for p in state.get("panes", [])
+    ]
+    Path(os.environ["STUB_HERDR_STATE"]).write_text(json.dumps(state))
     print(json.dumps({"id": "cli:agent:start", "result": {"agent": agent, "type": "agent_started"}}))
     raise SystemExit(0)
 
@@ -201,6 +228,24 @@ if args[:2] == ["agent", "read"]:
         print(json.dumps({"error": state["agent_read_error"], "id": "cli:agent:read"}), file=sys.stderr)
         raise SystemExit(1)
     print(state.get("agent_read_text", ""))
+    raise SystemExit(0)
+
+if args[:2] == ["pane", "run"]:
+    if state.get("pane_run_error"):
+        print(json.dumps({"error": state["pane_run_error"], "id": "cli:pane:run"}), file=sys.stderr)
+        raise SystemExit(1)
+    pane_id = args[2]
+    text = " ".join(args[3:])
+    if text.startswith("cd "):
+        target = text[3:].strip()
+        if len(target) >= 2 and target[0] == target[-1] and target[0] in ("'", '"'):
+            target = target[1:-1]
+        state["panes"] = [
+            dict(p, cwd=target) if p.get("pane_id") == pane_id else p
+            for p in state["panes"]
+        ]
+        Path(os.environ["STUB_HERDR_STATE"]).write_text(json.dumps(state))
+    print(json.dumps({"id": "cli:pane:run", "result": {"pane_id": pane_id}}))
     raise SystemExit(0)
 
 print(json.dumps({"error": "unexpected argv: " + " ".join(args)}), file=sys.stderr)
