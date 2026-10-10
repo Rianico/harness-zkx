@@ -11,8 +11,11 @@ Reads fall back to legacy `.lane/lease.yaml`, `.lane/lease.json`, and `.herdr-le
 so older lanes never break during rollout.
 
 The store base is resolved once per lane: an explicit `base_dir`, else `HERDR_LANE_DIR`,
-else the repository root that the git common directory sits in — canonicalised, so one
-physical store has one spelling. `PWD` and the process cwd are never anchors: they differ
+else the repository root that the git common directory sits in — resolved, so reads, writes,
+and records agree on one spelling. Store *identity* is still decided physically
+(`os.path.samefile`), because resolving collapses symlinks but not case: on a case-insensitive
+volume two spellings are one file and two strings (#229). `PWD` and the process cwd are never
+anchors: they differ
 between a dispatcher and its own callee, which is how a lease came to be released against a
 store it was never written to (#229). A lease records the physical store it was written to,
 and a release that resolves a different one reports the mismatch on stderr instead of
@@ -63,8 +66,9 @@ def resolve_base_dir(
     Layered, and never ambient: an explicit `base_dir` outranks every anchor, then
     `HERDR_LANE_DIR`, then the repository root of this repository's git common directory
     (see `herdr_worktree.resolve_lane_base_dir`). Every worktree and every nested
-    subdirectory of one repository therefore resolves to one absolute path, canonicalised
-    so that one physical store has one spelling.
+    subdirectory of one repository therefore resolves to one absolute path. Identity between
+    two such paths is decided physically at the comparison site (`os.path.samefile`), since
+    resolution alone cannot collapse a case-variant spelling (#229).
 
     `PWD` and the process cwd are never consulted: a dispatcher in one working directory
     and a callee in another resolved different stores through them, so a lease written by
@@ -308,15 +312,31 @@ def acquire_lease(
     return lease
 
 
-def _canonical_store(store: Path | str) -> str:
-    """`Path(store).resolve()` — the one spelling under which a physical store is recorded.
+def _same_store(recorded: str, store: Path) -> bool:
+    """Whether a recorded spelling names the same physical directory as `store`.
 
-    `HERDR_LANE_DIR` arrives verbatim from the environment while the git fallback is always
-    a `realpath`, so one directory can be named two ways (`/tmp/x` vs `/private/tmp/x`).
-    Comparing spellings refused a legitimate release, leaked the lease, and made the next
-    dispatch demand `--force` (#229); comparing physical paths does not.
+    `os.path.samefile` when both paths exist: on a case-insensitive volume (APFS, the macOS
+    default) `MyLaneRepo` and `mylanerepo` are one file and two different strings, so no
+    textual comparison — `Path.resolve()` included — can decide this. The resolved-path
+    fallback covers a record whose directory has since disappeared, where there is nothing
+    left to `stat`.
     """
-    return str(Path(store).resolve())
+    try:
+        return os.path.samefile(recorded, store)
+    except OSError:
+        return Path(recorded).resolve() == store.resolve()
+
+
+def _conflicting_store(recorded: object, store: Path) -> str | None:
+    """The recorded spelling when it names another physical store, else `None`.
+
+    An absent, empty, or relative record counts as absent rather than as a mismatch:
+    `Path("").resolve()` is the process cwd, so treating a hand-edited or foreign record as
+    a spelling would manufacture a refusal out of whichever directory released (#229).
+    """
+    if not isinstance(recorded, str) or not Path(recorded).is_absolute():
+        return None
+    return None if _same_store(recorded, store) else recorded
 
 
 def release_lease(
@@ -332,9 +352,11 @@ def release_lease(
     A matched lease recording a *different physical store* than this release resolved is
     reported on stderr and left in place — in both stores. Relocating the write would
     fabricate a release the owning store never saw, and a silent one would hide the
-    divergence (#229). A spelling difference is not a difference: both stores are compared
-    canonicalised, so a lease written through a symlinked anchor still releases normally.
-    A lease with no recorded store (legacy schema) is released as before.
+    divergence (#229). A spelling difference is not a difference: identity is decided by
+    `os.path.samefile` on the two paths, so a symlinked, firmlinked, `/private`-prefixed, or
+    case-variant spelling of one directory still releases normally. An absent, empty, or
+    relative record is treated as absent, never as a mismatch. A lease with no recorded store
+    (legacy schema) is released as before.
 
     Reach and limits: the diagnostic needs a lease *in the resolved store* to compare
     against. A lease that lives in a store this process never resolves is invisible here,
@@ -351,12 +373,11 @@ def release_lease(
     ]
     if not keys_to_delete:
         return False
-    store_label = _canonical_store(store)
     foreign: set[str] = set()
     for key in keys_to_delete:
-        recorded = leases[key].get("store")
-        if isinstance(recorded, str) and _canonical_store(recorded) != store_label:
-            foreign.add(recorded)
+        conflicting = _conflicting_store(leases[key].get("store"), store)
+        if conflicting is not None:
+            foreign.add(conflicting)
     if foreign:
         print(
             f"herdr-lease: lease {target!r} was written to store {', '.join(sorted(foreign))} "

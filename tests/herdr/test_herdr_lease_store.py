@@ -357,6 +357,110 @@ def test_recorded_store_is_matched_by_physical_identity(
     assert herdr_lease.get_lease("reviewer", base_dir=real) is None
 
 
+@pytest.mark.parametrize("acquire_on_disk", [True, False])
+def test_release_across_case_variants_of_one_physical_store(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, acquire_on_disk: bool
+) -> None:
+    """F1: on a case-insensitive volume two spellings are one file and two strings.
+
+    `Path.resolve()` follows symlinks but preserves case, so resolution alone cannot decide
+    this — identity has to come from `os.path.samefile`.
+    """
+    on_disk = tmp_path / "MyLaneRepo"
+    on_disk.mkdir()
+    variant = tmp_path / "mylanerepo"
+    if not os.path.exists(variant):
+        pytest.skip("case-sensitive volume: a case-variant spelling is a different file")
+    assert os.path.samefile(variant, on_disk)
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "t.md", "orch", base_dir=on_disk if acquire_on_disk else variant
+    )
+
+    released = herdr_lease.release_lease(
+        "reviewer", base_dir=variant if acquire_on_disk else on_disk
+    )
+
+    assert released is True
+    assert "refusing" not in capsys.readouterr().err
+    assert herdr_lease.get_lease("reviewer", base_dir=on_disk) is None
+
+
+# ── F4: a malformed recorded store counts as absent, never as a mismatch ─────────────
+
+
+@pytest.mark.parametrize("recorded", ["", "relative-store"])
+def test_malformed_recorded_store_is_treated_as_absent(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, recorded: str
+) -> None:
+    """`Path("").resolve()` is the cwd, so an empty or relative record must not refuse."""
+    store = tmp_path / "store"
+    (store / ".lane").mkdir(parents=True)
+    _ = (store / STORE).write_text(
+        yaml.safe_dump(
+            {
+                "active_leases": {
+                    "reviewer": {
+                        "target": "reviewer",
+                        "ticket": "t.md",
+                        "caller": "orch",
+                        "store": recorded,
+                    }
+                },
+                "tasks": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert herdr_lease.release_lease("reviewer", base_dir=store) is True
+
+    assert capsys.readouterr().err == ""
+    assert herdr_lease.get_lease("reviewer", base_dir=store) is None
+
+
+# ── F5: mixed local and foreign keys refuse together, never half ─────────────────────
+
+
+def test_mixed_local_and_foreign_keys_refuse_together(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """One local key and one foreign key for the same target: all-or-nothing, on purpose."""
+    local = tmp_path / "local-store"
+    foreign = tmp_path / "foreign-store"
+    (local / ".lane").mkdir(parents=True)
+    _ = (local / STORE).write_text(
+        yaml.safe_dump(
+            {
+                "active_leases": {
+                    "reviewer": {
+                        "target": "reviewer",
+                        "ticket": "t1.md",
+                        "caller": "orch",
+                        "store": str(local),
+                    },
+                    "reviewer@w1:p1": {
+                        "target": "reviewer",
+                        "ticket": "t2.md",
+                        "caller": "orch",
+                        "store": str(foreign),
+                    },
+                },
+                "tasks": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert herdr_lease.release_lease("reviewer", base_dir=local) is False
+
+    captured = capsys.readouterr()
+    assert "refusing to relocate" in captured.err
+    assert str(foreign) in captured.err
+    held = yaml.safe_load((local / STORE).read_text(encoding="utf-8"))["active_leases"]
+    assert set(held) == {"reviewer", "reviewer@w1:p1"}
+
+
 # ── N1: the mismatch diagnostic's exact reach ────────────────────────────────────────
 
 

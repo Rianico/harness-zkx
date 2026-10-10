@@ -318,6 +318,28 @@ def test_reply_is_delivered_when_no_lease_store_resolves(stub: StubHarness, tmp_
     assert done.stderr.count("no lane state anchor") == 3
 
 
+def test_reply_without_a_resolvable_store_drops_envelope_metadata_only(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """F2: a skipped correlation loses `Ticket-ID`/`In-Reply-To`, never the reply.
+
+    Correlation is by pane/target (`agent prompt <target> <payload>`), so the caller still
+    matches the reply to its outstanding request; only the envelope enrichment degrades.
+    """
+    scratch = tmp_path / "no-repo"
+    scratch.mkdir()
+
+    done = stub.run(
+        "orchestrator", "COMPLETED", env={"HERDR_LANE_DIR": None, "PWD": str(scratch)}, cwd=scratch
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert "Ticket-ID:" not in call[4]
+    assert "In-Reply-To:" not in call[4]
+    assert "COMPLETED" in call[4]
+
+
 def test_reply_does_not_release_lease_for_target_caller(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 

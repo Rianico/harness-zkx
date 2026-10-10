@@ -254,11 +254,11 @@ def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
     through them, and left a lease nobody could release (#229). With no anchor this
     raises `LaneAnchorError` instead of guessing.
 
-    The result is canonicalised: `HERDR_LANE_DIR` is taken verbatim from the environment,
-    so an anchor written as a symlink or as `/tmp/...` on macOS would otherwise name the
-    same physical directory as its `realpath` under a second spelling. One store, one
-    spelling — otherwise a lease written through the alias reads as a different store
-    than the one released through it (#229).
+    The result is resolved, so a caller and its callee usually agree on one spelling: an
+    anchor written as a symlink or as `/tmp/...` would otherwise name the same directory as
+    its `realpath` under a second string. Resolution alone is not identity — a case-insensitive
+    volume keeps `MyLaneRepo` and `mylanerepo` as one file and two strings — so the lease
+    comparison decides identity physically, with `os.path.samefile` (#229).
     """
     env_dir = env.get(LANE_DIR_ENV)
     if env_dir:

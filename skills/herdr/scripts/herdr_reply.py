@@ -64,7 +64,6 @@ from herdr_prompt import (
     resolve_receiver,
     utc_stamp,
 )
-from herdr_worktree import LaneAnchorError
 
 STDIN = "-"
 BLOCKED = "blocked"
@@ -99,9 +98,10 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
             "3 target needs human input, 4 reply delivered but wait timed out\n\n"
-            "lease bookkeeping (correlation, release, trajectory note) is best-effort: an\n"
-            "unresolvable lease store is reported on stderr and never blocks delivery\n\n"
-            + METHOD_CONSTRAINT_EPILOG
+            "lease bookkeeping is best-effort and never blocks delivery: an unresolvable lease\n"
+            "store is reported on stderr, skipping the correlation lookup, trajectory note, or\n"
+            "release. A skipped correlation drops Ticket-ID/In-Reply-To from the envelope; the\n"
+            "reply still correlates by pane/target\n\n" + METHOD_CONSTRAINT_EPILOG
         ),
     )
     _ = parser.add_argument("target", metavar="TARGET", help="caller agent name or pane id")
@@ -483,7 +483,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     if sender:
         try:
             stored = get_lease(sender, env=env)
-        except LaneAnchorError as exc:
+        except Exception as exc:
             report_lease_trouble("lease correlation", exc)
         else:
             lease = stored if isinstance(stored, dict) else None
