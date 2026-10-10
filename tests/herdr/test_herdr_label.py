@@ -227,6 +227,34 @@ def test_stale_labels_keeps_a_label_that_matches_a_live_agent_name() -> None:
     assert herdr_label.stale_labels(panes, agents) == []
 
 
+def test_stale_labels_reports_an_orphan_whose_name_is_live_on_another_pane() -> None:
+    """A pane whose occupant has exited is stale even when its label names a live sibling.
+
+    The agent inventory positively places `reviewer` on `w9:p1`, so the name-match must not
+    excuse `w9:p2`, which no live agent occupies (required behaviour 1).
+
+    Pin -> mutant: build the name-match from every agent row (`label in live_names`), so the
+    live name on another pane suppresses this orphan and this returns [].
+    """
+    panes = [{"pane_id": "w9:p2", "label": "reviewer"}]
+    agents = [{"pane_id": "w9:p1", "name": "reviewer"}]
+    assert herdr_label.stale_labels(panes, agents) == [("w9:p2", "reviewer")]
+
+
+def test_stale_labels_keeps_a_label_on_a_pane_that_hosts_a_live_agent() -> None:
+    """An agent-shaped label on a pane that hosts a live agent is drift, never an orphan.
+
+    `w9:p1` hosts the live `reviewer` but carries the label `buildbot`: a live agent owns the
+    pane, so the label is a label/agent mismatch for `--verify`/`--sync`, not a stale label.
+
+    Pin -> mutant: drop the `pane in live_panes` filter, so this occupied pane is reported
+    stale and this returns a non-empty list.
+    """
+    panes = [{"pane_id": "w9:p1", "label": "buildbot"}]
+    agents = [{"pane_id": "w9:p1", "name": "reviewer"}]
+    assert herdr_label.stale_labels(panes, agents) == []
+
+
 def test_stale_labels_ignores_a_descriptive_label_with_no_agent() -> None:
     """A multi-word `--label-only` label is decoration, never a dead agent name."""
     panes = [{"pane_id": "w9:p2", "label": "review pane"}]

@@ -295,6 +295,74 @@ def test_dispatch_reports_a_label_whose_agent_has_exited(stub: StubHarness, tmp_
     assert len(stub.prompts()) == 1
 
 
+def test_dispatch_reports_an_orphan_whose_name_is_live_on_another_pane(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The orphaned pane is reported end to end although its label names a live sibling.
+
+    `reviewer` is live on `w9:p1`; `w9:p2` keeps the label `reviewer` with no live agent in
+    it, so a normal dispatch must still report it.
+
+    Pin -> mutant: build the name-match from every agent row (`label in live_names`), so the
+    live name on another pane suppresses the advisory and stderr is empty here.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "reviewer", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "w9:p2" in done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_advisory_tells_the_operator_to_replace_the_name_placeholder(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The re-label template cannot be copied verbatim into a literal `<name>` label.
+
+    `herdr-label '<name>' --pane w9:p2` on an orphan exits 0 and writes the literal `<name>`,
+    because `validate_agent_name` does not fire without a live agent, so the advisory must tell
+    the operator to substitute.
+
+    Pin -> mutant: print the bare copy-pasteable template (`herdr-label <name> --pane w9:p2`)
+    with no substitution instruction, so stderr lacks the hint and this fails.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "replace `<name>`" in done.stderr
+
+
 def test_dispatch_reports_no_stale_label_when_every_label_has_its_agent(
     stub: StubHarness, tmp_path: Path
 ) -> None:

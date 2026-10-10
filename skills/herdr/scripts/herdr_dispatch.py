@@ -259,7 +259,9 @@ def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
     A label is never a target, so an orphaned one misleads a person reading the pane border
     while a dispatch still keys on identifiers. This issues its own `pane list` and `agent list`
     snapshots, so the operator needs no separate pass; the remedy it prints,
-    `herdr-label --clear --pane <id>` (or a re-label for the next occupant), acts on the orphan.
+    `herdr-label --clear --pane <id>` (or a re-label for the next occupant), acts on the orphan;
+    the re-label template tells the operator to replace its `<name>` placeholder, so a verbatim
+    copy cannot write that literal text as the pane label.
 
     The report is server-wide by design: `pane list` is the whole Herdr server, so an orphan in
     another workspace prints on every dispatch in this lane.
@@ -280,7 +282,8 @@ def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
         print(
             f"herdr-dispatch: pane {pane_id} carries the label {label!r} but no live agent owns "
             f"it; the label outlived its agent (clear it with `herdr-label --clear --pane "
-            f"{pane_id}`, or hand it on with `herdr-label <name> --pane {pane_id}`)",
+            f"{pane_id}`; to hand the pane on, replace `<name>` in `herdr-label <name> --pane "
+            f"{pane_id}` with the new agent's name)",
             file=sys.stderr,
         )
 
