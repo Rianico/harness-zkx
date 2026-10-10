@@ -100,6 +100,9 @@ INVARIANT_SUFFIX = ".md"
 INVARIANT_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 # Roles the docs spell `impl-<n>`; only they carry the implementer cooperation contract.
 IMPLEMENTER_PREFIX = "impl"
+# The scoped naming convention `<task-group-slug>-<role>[-<subrole|index>]` puts the role in a
+# segment of its own, so the discriminator splits before it matches a prefix.
+IMPLEMENTER_SEGMENT_SPLIT = re.compile(r"[-_]")
 VOWELS = frozenset("aeiou")
 START_MARKER = "<!-- herdr-bootstrap:role-invariant -->"
 END_MARKER = "<!-- /herdr-bootstrap:role-invariant -->"
@@ -211,10 +214,12 @@ def load_kind_entry(kind: str, config_path: Path | None = None) -> KindEntry:
 
 
 # The snippet is the only coordination channel that survives compaction, so it states the lane
-# coordination pattern plainly, then the two standing obligations. The reply command is
-# repo-relative: the agent runs in the lane worktree, so it resolves the lane's own helper,
-# while the `~/.agents/skills/herdr` symlink resolves into another worktree whose `herdr_*`
-# code may be older.
+# coordination pattern plainly, then the two standing obligations. The reply helper is this
+# lane's own `herdr_reply.py` and is rendered as an absolute path resolved from this module's
+# location: the contract is exactly what an agent with no context left runs, so the command
+# must spawn from any cwd. The `~/.agents/skills/herdr` symlink is deliberately not used — it
+# resolves into another worktree whose `herdr_*` code may be older.
+REPLY_HELPER = Path(__file__).resolve().parent / "herdr_reply.py"
 INVARIANT_HEADER = (
     "ROLE INVARIANT: You are {article} {role} in a Herdr lane. "
     "Follow the lane coordination pattern."
@@ -222,14 +227,15 @@ INVARIANT_HEADER = (
 INVARIANT_RULES = (
     "Subagent-First: MUST delegate deep search, multi-file edits, and test triage to "
     "subagents.\n"
-    "Reply Contract: MUST reply via `uv run skills/herdr/scripts/herdr_reply.py <caller> "
-    "--file <reply.md>` on completion or blocker; never exit silently."
+    "Reply Contract: MUST reply via `uv run {helper} <caller> --file <reply.md>` on completion "
+    "or blocker; never exit silently."
 )
-# Role-conditional: a coordination-only role does not pay for the implementer block.
+# Role-conditional: a coordination-only role does not pay for the implementer block. The shared
+# Reply Contract above already owes the reply, so this block adds only what is implementer-only.
 IMPLEMENTER_CONTRACT = (
     "Implementer: single writer for your task; never edit outside your worktree.\n"
     "Evidence: red-then-green test results, artifacts reported by path.\n"
-    "Blockers: report immediately, never idle; reply via the reply contract, never silently."
+    "Blockers: report immediately, never idle."
 )
 
 
@@ -239,19 +245,28 @@ def role_article(role: str) -> str:
 
 
 def is_implementer_role(role: str) -> bool:
-    """True for the docs' implementer vocabulary (`impl-<n>`); no separate mode concept."""
-    return role.lower().startswith(IMPLEMENTER_PREFIX)
+    """True for the docs' implementer vocabulary, bare or scoped (`impl-<n>`, `msg-impl-1`).
+
+    Segment-aware, because the lane convention is `<task-group-slug>-<role>[-<subrole|index>]`
+    and the role falls back to the scoped agent name; matching the whole string would miss
+    every real implementer. Accepted over-match: a lane *slug* segment that itself begins with
+    `impl` (an `impl-hardening` lane, say) drags its coordination roles into the block too.
+    """
+    return any(
+        segment.startswith(IMPLEMENTER_PREFIX)
+        for segment in IMPLEMENTER_SEGMENT_SPLIT.split(role.lower())
+    )
 
 
 def render_invariant(role: str) -> str:
     """Render the role invariant snippet for one role.
 
-    Every role carries the coordination pattern and the two standing rules; `impl`-prefixed
+    Every role carries the coordination pattern and the two standing rules; `impl`-named
     roles additionally carry the cooperation contract that role needs after compaction.
     """
     lines = [
         INVARIANT_HEADER.format(article=role_article(role), role=role),
-        INVARIANT_RULES,
+        INVARIANT_RULES.format(helper=REPLY_HELPER),
     ]
     if is_implementer_role(role):
         lines.append(IMPLEMENTER_CONTRACT)

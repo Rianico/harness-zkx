@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -56,7 +57,41 @@ def test_snippet_stays_within_the_word_budget() -> None:
 
 def test_coordination_snippet_stays_within_the_45_word_budget() -> None:
     """A coordination-only role pays nothing for the implementer block: the cap stays 45."""
-    assert len(herdr_bootstrap.render_invariant("tm").split()) <= 45
+    assert len(herdr_bootstrap.render_invariant("tm").split()) == 45
+    for role in ("msg-tm", "herdr228-task-manager"):
+        assert len(herdr_bootstrap.render_invariant(role).split()) <= 45
+
+
+def test_scoped_implementer_names_carry_the_cooperation_contract() -> None:
+    """The lane convention is `<slug>-<role>[-<n>]`; `herdr228-impl-1` is an implementer."""
+    for role in ("impl-1", "herdr228-impl-1", "msg-impl-1", "herdr228_impl_1"):
+        assert herdr_bootstrap.is_implementer_role(role) is True, role
+        assert "single writer for your task" in herdr_bootstrap.render_invariant(role), role
+
+
+def test_coordination_names_omit_the_implementer_block() -> None:
+    """`tm`/`task-manager` stay coordination-only whether scoped or not."""
+    for role in ("tm", "msg-tm", "task-manager", "herdr228-task-manager"):
+        assert herdr_bootstrap.is_implementer_role(role) is False, role
+        assert "single writer for your task" not in herdr_bootstrap.render_invariant(role), role
+    # Accepted over-match, stated in `is_implementer_role`'s docstring: a lane slug segment
+    # that itself begins with `impl` drags its coordination role into the block.
+    assert herdr_bootstrap.is_implementer_role("impl-hardening-tm") is True
+
+
+def test_a_scoped_implementer_reviewer_still_fits_the_80_word_cap() -> None:
+    """The widest newly matching role must stay inside the implementer ceiling."""
+    text = herdr_bootstrap.render_invariant("msg-impl-reviewer")
+    assert "single writer for your task" in text
+    assert len(text.split()) <= 80
+
+
+def test_implementer_contract_does_not_restate_the_reply_contract() -> None:
+    """The shared Reply Contract already owes the reply; the block must not repeat it."""
+    text = herdr_bootstrap.render_invariant("impl-1")
+    assert "Blockers: report immediately, never idle." in text
+    assert "reply via the reply contract" not in text
+    assert len(text.split()) <= 80
 
 
 def test_snippet_names_the_role() -> None:
@@ -81,10 +116,24 @@ def test_snippet_states_the_lane_coordination_pattern() -> None:
 
 
 def test_snippet_replies_through_the_lanes_own_helper() -> None:
-    """Repo-relative: the agent runs the lane's own helper, not an older symlinked tree."""
+    """Absolute and lane-local: the reply runs from any cwd, never an older symlinked tree."""
+    helper = herdr_bootstrap.REPLY_HELPER
+    assert helper.is_absolute()
+    assert helper.name == "herdr_reply.py"
+    assert helper.exists()
+
     text = herdr_bootstrap.render_invariant("impl-1")
-    assert "`uv run skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>`" in text
+    assert f"`uv run {helper} <caller> --file <reply.md>`" in text
     assert "~/.agents" not in text
+
+
+def test_snippet_reply_command_path_is_absolute() -> None:
+    """A shell outside the lane spawns the rendered command only when its path is absolute."""
+    for role in ("tm", "impl-1"):
+        command = re.search(r"`uv run (\S+) <caller>", herdr_bootstrap.render_invariant(role))
+        assert command is not None, role
+        assert command.group(1).startswith("/"), role
+        assert Path(command.group(1)).name == "herdr_reply.py", role
 
 
 def test_invariant_file_name_is_sanitised_and_cannot_escape(tmp_path: Path) -> None:
@@ -119,9 +168,9 @@ def test_implementer_injected_text_carries_the_cooperation_contract(
         "red-then-green test results",
         "artifacts reported by path",
         "report immediately, never idle",
-        "reply via the reply contract, never silently",
     ):
         assert clause in text
+    assert "reply via the reply contract" not in text
 
 
 def test_coordination_role_injected_text_omits_the_implementer_block(

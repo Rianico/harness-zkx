@@ -106,18 +106,18 @@ uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2
 ```text
 ROLE INVARIANT: You are {a|an} {role} in a Herdr lane. Follow the lane coordination pattern.
 Subagent-First: MUST delegate deep search, multi-file edits, and test triage to subagents.
-Reply Contract: MUST reply via `uv run skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>` on completion or blocker; never exit silently.
+Reply Contract: MUST reply via `uv run $SKILL_DIR/scripts/herdr_reply.py <caller> --file <reply.md>` on completion or blocker; never exit silently.
 ```
 
-Implementer roles (the docs' `impl-<n>` vocabulary) append the cooperation contract:
+Implementer roles — the docs' `impl-<n>` vocabulary, scoped or bare (`impl-1`, `msg-impl-1`) — append the cooperation contract:
 
 ```text
 Implementer: single writer for your task; never edit outside your worktree.
 Evidence: red-then-green test results, artifacts reported by path.
-Blockers: report immediately, never idle; reply via the reply contract, never silently.
+Blockers: report immediately, never idle.
 ```
 
-That block is role-conditional: it rides only for an implementer role, so a coordination-only role does not pay for it and stays inside the original 45-word budget, while the implementer variant is capped at 80. The article follows the role's first letter (`a tm`, `an impl-1`). The reply command is **repo-relative** on purpose: the agent runs in the lane worktree, so `skills/herdr/scripts/herdr_reply.py` is the lane's own helper, while the `~/.agents/skills/herdr` symlink resolves into another worktree whose `herdr_*` code may be older.
+That block is role-conditional: it rides only for an implementer role, so a coordination-only role does not pay for it and stays inside the original 45-word budget, while the implementer variant is capped at 80. The discriminator is segment-aware because the lane convention is `<task-group-slug>-<role>[-<subrole|index>]`: `herdr228-impl-1` and `msg-impl-1` carry the block, `herdr228-task-manager` and `msg-tm` stay coordination-only. Accepted over-match: a lane *slug* segment that itself begins with `impl` (an `impl-hardening` lane) drags its coordination roles into the block too. The shared Reply Contract already owes the reply, so the block adds only implementer-only content and stays at 69 words. The article follows the role's first letter (`a tm`, `an impl-1`). The reply command is **absolute** on purpose: the rendered text embeds the lane's own helper, resolved from the running `herdr_bootstrap.py`'s own directory, and `uv run` stays in front, so an agent whose shell sits anywhere — `/tmp`, `$HOME` — still spawns it. The `~/.agents/skills/herdr` symlink is deliberately not used: it resolves into another worktree whose `herdr_*` code may be older.
 
 ### The per-agent invariant file
 

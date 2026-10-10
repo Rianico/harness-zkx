@@ -783,6 +783,52 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert prompt[3] == "callee"
 
 
+def test_dispatch_auto_start_contract_rides_for_a_scoped_implementer_label(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """BLOCKING-1: without `--task-group` the role falls back to the scoped agent name, so
+    `herdr228-impl-1` must still receive the implementer cooperation contract."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": str(tmp_path),
+                "label": "herdr228-impl-1",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "herdr228-impl-1",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    invariant = start[start.index("--append-system-prompt") + 1]
+    assert invariant == str(tmp_path / ".lane" / "invariants" / "herdr228-impl-1.md")
+    text = Path(invariant).read_text()
+    assert "single writer for your task" in text
+    assert text == herdr_bootstrap.render_invariant("herdr228-impl-1")
+
+
 def test_dispatch_auto_start_skips_bootstrap_for_live_agent(
     stub: StubHarness, tmp_path: Path
 ) -> None:
