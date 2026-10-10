@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **herdr:** reply authority lives in the lane store, not in prompt text — `herdr-reply` classifies each payload's evidence shape, persists the body plus a metadata-only ledger row before poking the caller, records a `COMPLETED` reply with no evidence section as incomplete without advancing task state, and degrades a store failure to a body-only `NOT RECORDED` pointer ([#231](https://github.com/Rianico/harness-zkx/issues/231)) (#231)
 * **herdr:** add a launch-line completion sentinel to `herdr-pane --command` and an opt-in `herdr-wait --stale-after` advisory that reports a stall without ever killing, retrying, or restarting a target ([#230](https://github.com/Rianico/harness-zkx/issues/230)) (#230)
 * **herdr:** per-kind startup contract in `references/kinds.yaml` — trust flags ride after `--` (`pi` → `--approve`, `claude` → `--dangerously-skip-permissions`) and the `--cwd` guarantee cds the pane into the worktree, refusing to start until it converges (#226)
 * **herdr:** `herdr-dispatch --auto-start KIND` bootstraps a missing agent in a bare-shell pane through the bootstrap contract (ROLE INVARIANT, kinds.yaml trust flags, pane-cwd guarantee) and dispatches in one call; unknown kinds fail fast, `--dry-run` prints the plan, and a failed bootstrap names the started-but-undispatched agents instead of orphaning them silently (#226)

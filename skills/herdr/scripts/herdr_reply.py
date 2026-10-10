@@ -12,6 +12,21 @@ whom. When the sender holds an active lease, its `Ticket-ID`/`Task-ID` ride alon
 `Ticket-ID:` and `In-Reply-To:` correlation lines. The envelope is script-rendered,
 never model-authored, so it cannot be forgotten.
 
+Prompt text is never provenance (#231). Before the prompt is sent the payload is persisted
+as a store record — a body file plus a metadata ledger row carrying its digest, shape, and
+cited artifacts — and a short pointer rides between the envelope and the body:
+
+  * `COMPLETE` cites an evidence-shaped section; the caller trusts the stored record and
+    re-derives evidence from the artifacts.
+  * `INCOMPLETE` is a COMPLETED payload with no evidence section; it is recorded as
+    incomplete and the task state is not advanced.
+  * `NOT RECORDED` means the store could not resolve or the write failed: delivery continues
+    body-only, but the prompt is the only copy.
+
+Persist first, poke second: every store touch degrades to the NOT RECORDED pointer rather
+than blocking delivery, so a reply is still delivered (exit 0, one `agent prompt`, body last)
+when the store cannot resolve.
+
     herdr-reply orchestrator "COMPLETED artifacts=[...] issues=[]"
     herdr-reply orchestrator --file result.md
     echo "COMPLETED" | herdr-reply orchestrator
@@ -26,12 +41,16 @@ Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
@@ -57,7 +76,16 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
-from herdr_lease import get_lease, get_task, record_event, release_lease
+from herdr_lease import (
+    REPLIES_FILE_LANE,
+    get_lease,
+    get_reply,
+    get_task,
+    record_event,
+    record_reply,
+    release_lease,
+    resolve_base_dir,
+)
 from herdr_prompt import (
     render_envelope,
     resolve_caller,
@@ -166,6 +194,310 @@ def parse_status_line(payload: str) -> tuple[str | None, str | None, str | None]
         sha = tokens[1] if mapped == "completed" and len(tokens) > 1 else None
         return mapped, sha, line
     return None, None, None
+
+
+# ── payload shape (#231): a COMPLETED reply must cite evidence ───────────────────────
+
+EVIDENCE_KEYWORDS = frozenset(
+    {
+        "evidence",
+        "verification",
+        "verified",
+        "verify",
+        "gate",
+        "gates",
+        "proof",
+        "witness",
+        "reproduction",
+        "repro",
+        "artifact",
+        "artifacts",
+        "test",
+        "tests",
+        "pytest",
+        "check",
+        "checks",
+        "log",
+        "logs",
+    }
+)
+
+FENCE_MARKER = "```"
+ARTIFACT_LIMIT = 24
+_LABEL_MAX_LENGTH = 60
+_TRAILING_PUNCTUATION = ".,;:!?)]}'\">`"
+_MARKDOWN_DECORATION = "*_`~#>[]()"
+_FENCE_RE = re.compile(r"^```")
+_ATX_RE = re.compile(r"^(#{1,6})[ \t]+(\S.*)$")
+_BOLD_RE = re.compile(r"^\*\*[ \t]*(.*?)[ \t]*\*\*:?[ \t]*(.*)$")
+_LABEL_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*(?:[ \t]+[A-Za-z0-9_-]+)*)[ \t]*:[ \t]*(.*)$")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+_WORD_RE = re.compile(r"\w")
+# The shape table tests pin exactly these outcomes:
+#
+#   payload                                shape        evidence heading
+#   COMPLETED + "## Evidence" + body       complete     Evidence
+#   COMPLETED + "**Evidence:** 660 passed" complete     Evidence
+#   COMPLETED + "Gates:" + a command line  complete     Gates
+#   COMPLETED + "### Test output" + body   complete     Test output
+#   COMPLETED + a fence with a non-blank   complete     ```
+#   COMPLETED + "## Verification" + body   complete     Verification
+#   COMPLETED                              incomplete   None
+#   COMPLETED abc1234                      incomplete   None
+#   COMPLETED + "## Notes" + body          incomplete   None
+#   COMPLETED + "## Evidence" then heading incomplete   None   (empty body)
+#   COMPLETED + "## Next steps" + body     incomplete   None
+#   BLOCKED / REJECTED / no status line    n/a          None
+#
+# This is a *shape* check, not a quality gate: it asks whether a COMPLETED payload cites
+# evidence, never whether that evidence is good. It runs only when the first line maps to
+# `completed`; a BLOCKED/REJECTED reply (or one with no status line) is `n/a` and its
+# behaviour is unchanged. A heading ATX form carries no inline text of its own, so `## Notes`
+# never counts by itself — only a following non-blank body line, a bold/label inline tail, or
+# a fence does.
+
+
+def _strip_title(text: str) -> str:
+    """The heading's identifying text: markdown decoration and a trailing colon removed."""
+    return text.strip().strip(_MARKDOWN_DECORATION).rstrip(":").strip()
+
+
+def _normalize(text: str) -> list[str]:
+    """Lowercase, drop markdown decoration, split on non-alphanumerics."""
+    cleaned = text.casefold()
+    for character in _MARKDOWN_DECORATION:
+        cleaned = cleaned.replace(character, " ")
+    return [word for word in _NON_ALNUM_RE.split(cleaned) if word]
+
+
+def _has_keyword(words: Sequence[str]) -> bool:
+    return any(word in EVIDENCE_KEYWORDS for word in words)
+
+
+def _parse_heading(line: str) -> tuple[str, str, list[str]] | None:
+    """Return (title, inline text after the marker, normalized words) for a heading line.
+
+    A line is a heading when it is ATX (`## Title`), bold (`**Title**`, optional `:`), or a
+    `Word[Word …]:` label no longer than 60 characters. ATX headings carry no inline text:
+    the remainder of the line *is* the title, which is why `## Evidence` alone is not complete.
+    """
+    match = _ATX_RE.match(line)
+    if match:
+        title = _strip_title(match.group(2))
+        return title, "", _normalize(title)
+    match = _BOLD_RE.match(line)
+    if match:
+        title = _strip_title(match.group(1))
+        return title, match.group(2).strip(), _normalize(title)
+    match = _LABEL_RE.match(line)
+    if match:
+        label = match.group(1)
+        if len(label) <= _LABEL_MAX_LENGTH:
+            title = label.strip()
+            return title, match.group(2).strip(), _normalize(title)
+    return None
+
+
+def evidence_section(payload: str) -> str | None:
+    """The first evidence-shaped section's heading text, else None.
+
+    Scans the payload in document order and returns the first section that makes it
+    evidence-shaped: a heading whose normalized words contain an `EVIDENCE_KEYWORDS` entry
+    with an inline tail (`**Evidence:** 660 passed`) or a body line before the next heading,
+    or a fenced code block with at least one non-blank line. A fenced block returns the fence
+    marker (`"```"`) — it has no heading text of its own. A fence closes the current heading
+    scope, and an empty keyword heading (immediately followed by another heading) is skipped.
+    """
+    current_title: str | None = None
+    current_is_evidence = False
+    in_fence = False
+    fence_has_content = False
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if _FENCE_RE.match(line):
+            if in_fence:
+                if fence_has_content:
+                    return FENCE_MARKER
+                in_fence = False
+                fence_has_content = False
+            else:
+                in_fence = True
+                fence_has_content = False
+                current_title = None
+                current_is_evidence = False
+            continue
+        if in_fence:
+            if line:
+                fence_has_content = True
+            continue
+        heading = _parse_heading(line)
+        if heading is not None:
+            title, inline, words = heading
+            if _has_keyword(words):
+                if inline:
+                    return title
+                current_title = title
+                current_is_evidence = True
+            else:
+                current_title = None
+                current_is_evidence = False
+            continue
+        if not line:
+            continue
+        if current_is_evidence and current_title is not None:
+            return current_title
+    if in_fence and fence_has_content:
+        return FENCE_MARKER
+    return None
+
+
+def payload_shape(payload: str) -> tuple[str, str | None]:
+    """(shape, evidence_heading) where shape is "complete", "incomplete" or "n/a".
+
+    The evidence requirement applies only when `parse_status_line` maps the first line to
+    `completed`; every other payload is `"n/a"` with no behaviour change. A shape check, not
+    a quality gate: it never inspects whether the cited evidence is any good.
+    """
+    mapped, _sha, _line = parse_status_line(payload)
+    if mapped != "completed":
+        return "n/a", None
+    heading = evidence_section(payload)
+    if heading is None:
+        return "incomplete", None
+    return "complete", heading
+
+
+# ── persist first, then poke (#231) ─────────────────────────────────────────────────
+
+COMPLETE_POINTER_TAIL = (
+    "Provenance: the stored record, not this prompt; re-derive evidence from the cited artifacts."
+)
+INCOMPLETE_POINTER = (
+    "Payload: INCOMPLETE — COMPLETED carries no evidence section, so it is recorded as "
+    "incomplete (shape=incomplete) and the task state is NOT advanced to completed."
+)
+NOT_RECORDED_POINTER = (
+    "Payload: NOT RECORDED — delivery continues body-only ({reason}); no store record, "
+    "task state unchanged, and this prompt is the only copy."
+)
+
+
+def _one_line(text: str, limit: int = 160) -> str:
+    """Collapse an exception message onto one line so it can ride inside a pointer."""
+    return " ".join(text.split())[:limit]
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _slug(value: str | None) -> str:
+    """A filesystem-safe fragment for a record id; `unknown` when there is nothing to slug."""
+    if not value:
+        return "unknown"
+    cleaned = _NON_ALNUM_RE.sub("-", value.casefold()).strip("-")
+    return cleaned or "unknown"
+
+
+def extract_artifacts(payload: str) -> list[str]:
+    """Path-like tokens cited in the payload: deduped, sorted, capped at 24, no URLs."""
+    found: set[str] = set()
+    for token in payload.split():
+        if "://" in token:
+            continue
+        cleaned = token.rstrip(_TRAILING_PUNCTUATION)
+        if "/" not in cleaned or not _WORD_RE.search(cleaned):
+            continue
+        found.add(cleaned)
+    return sorted(found)[:ARTIFACT_LIMIT]
+
+
+def build_reply_entry(
+    payload: str,
+    *,
+    sender: str | None,
+    caller: str | None,
+    ticket_id: str | None,
+    in_reply_to: str | None,
+    mapped: str | None,
+    sha: str | None,
+    status_line: str | None,
+    shape: str,
+    evidence: str | None,
+) -> dict[str, Any]:
+    """The ledger row for one reply: metadata only, never the body text."""
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    return {
+        "id": f"{stamp}-{_slug(sender)}-{digest[:8]}",
+        "recorded_at": _now_iso(),
+        "sender": sender,
+        "caller": caller,
+        "ticket_id": ticket_id,
+        "in_reply_to": in_reply_to,
+        "status_line": status_line,
+        "status": mapped,
+        "shape": shape,
+        "evidence": evidence,
+        "sha": sha,
+        "digest": digest,
+        "bytes": len(payload.encode("utf-8")),
+        "artifacts": extract_artifacts(payload),
+    }
+
+
+def persist_reply(
+    entry: Mapping[str, Any],
+    body: str,
+    *,
+    env: Mapping[str, str],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Persist the record, best-effort; `(stored entry, None)` or `(None, one-line reason)`.
+
+    Never fatal by contract (#229): a store this process cannot resolve degrades to the
+    NOT RECORDED pointer silently, because the lease steps already report that same
+    unresolvable anchor; a resolvable store whose write fails is reported once via
+    `report_lease_trouble` and degrades the same way. The reply is delivered either way.
+    """
+    try:
+        _ = resolve_base_dir(env=env)
+    except Exception as exc:
+        return None, _one_line(str(exc))
+    try:
+        return record_reply(entry, body, env=env), None
+    except Exception as exc:
+        report_lease_trouble("reply record", exc)
+        return None, _one_line(str(exc))
+
+
+def pointer_block(
+    *,
+    shape: str,
+    evidence: str | None,
+    stored: Mapping[str, Any] | None,
+    reason: str | None,
+) -> str | None:
+    """The provenance pointer inserted between the envelope and the body, or None.
+
+    Complete and incomplete replies carry a pointer; a store failure carries the NOT
+    RECORDED pointer; a `n/a` reply (BLOCKED/REJECTED) that was recorded carries none, so
+    its delivered payload is unchanged (#231).
+    """
+    if stored is None:
+        return NOT_RECORDED_POINTER.format(reason=reason or "store unavailable")
+    if shape == "complete":
+        return (
+            f'Payload: COMPLETE — evidence "{evidence}"; record={stored["id"]} '
+            f"store={stored['payload']} sha256={stored['digest']}\n"
+            f"{COMPLETE_POINTER_TAIL}"
+        )
+    if shape == "incomplete":
+        return (
+            f"{INCOMPLETE_POINTER}\n"
+            f"Record: {stored['payload']} sha256={stored['digest']} store={REPLIES_FILE_LANE} — "
+            "re-derive from the cited artifacts; this prompt is not provenance."
+        )
+    return None
 
 
 def recovery_file_arg(options: Options) -> str:
@@ -386,18 +718,44 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
         report_lease_trouble("lease release", exc)
 
 
+def _recorded_and_advanceable(
+    record_id: str | None, shape: str | None, env: Mapping[str, str]
+) -> bool:
+    """Whether a persisted record permits advancing the sender's task (#231).
+
+    Prompt text is never provenance: without a record id, or with an id the store does not
+    hold, nothing advances. A record whose shape is `incomplete` carries the verdict itself —
+    no `completed` event, no state advance, and no invented canonical status. A shape-less
+    caller (legacy) and a `n/a` or `complete` record advance as before.
+    """
+    if not record_id:
+        return False
+    if shape == "incomplete":
+        return False
+    try:
+        return get_reply(record_id, env=env) is not None
+    except Exception as exc:
+        report_lease_trouble("reply record lookup", exc)
+        return False
+
+
 def record_sender_status(
     herdr: str,
     env: Mapping[str, str],
     mapped: str | None,
     sha: str | None,
     status_line: str | None,
+    *,
+    record_id: str | None = None,
+    shape: str | None = None,
 ) -> None:
     """Append the sender's completion event to its task trajectory, when one is leased.
 
-    Resolves the sender's own lease; only a str `task_id` and a mapped status record an
-    event. A missing lease or an unmapped status is a no-op, and so is a lease store this
-    process cannot resolve — the reply is still sent (#229).
+    Resolves the sender's own lease first, then gates the advance on the persisted record
+    (#231): a missing `record_id`, an id the store does not hold, or an `incomplete` shape
+    appends no event and changes no state. The lease lookup still runs ahead of the gate, so
+    an unresolvable store reports the same `trajectory note` skip it always did. Non-fatal by
+    contract: a missing lease or a store this process cannot resolve is still a reply.
     """
     if not mapped:
         return
@@ -408,6 +766,14 @@ def record_sender_status(
         lease = get_lease(sender, env=env)
         if not isinstance(lease, dict):
             return
+    except Exception as exc:
+        report_lease_trouble("trajectory note", exc)
+        return
+
+    if not _recorded_and_advanceable(record_id, shape, env):
+        return
+
+    try:
         task_id = lease.get("task_id")
         if isinstance(task_id, str):
             _ = record_event(
@@ -506,7 +872,38 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         in_reply_to=in_reply_to,
         tab_id=caller_ctx.tab_id,
     )
-    payload = f"{utc_stamp()}\n{reply_envelope}\n\n{payload}"
+    shape, evidence = payload_shape(payload)
+    prelude = f"{utc_stamp()}\n{reply_envelope}\n\n"
+    record_id: str | None = None
+    if options.dry_run:
+        # A dry run submits nothing, so it records nothing: the payload stays pointer-free.
+        delivered = f"{prelude}{payload}"
+    else:
+        stored: dict[str, Any] | None
+        reason: str | None
+        try:
+            entry = build_reply_entry(
+                payload,
+                sender=sender,
+                caller=target,
+                ticket_id=ticket_id,
+                in_reply_to=in_reply_to,
+                mapped=mapped,
+                sha=sha,
+                status_line=status_line,
+                shape=shape,
+                evidence=evidence,
+            )
+            stored, reason = persist_reply(entry, payload, env=env)
+        except Exception as exc:
+            report_lease_trouble("reply record", exc)
+            stored, reason = None, _one_line(str(exc))
+        if stored is not None:
+            record_id = str(stored["id"])
+        pointer = pointer_block(shape=shape, evidence=evidence, stored=stored, reason=reason)
+        # The pointer rides between the envelope and the body; the body stays last.
+        delivered = f"{prelude}{pointer}\n\n{payload}" if pointer else f"{prelude}{payload}"
+    payload = delivered
 
     argv = [herdr, "agent", "prompt", target, payload]
     if options.wait:
@@ -528,7 +925,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             print(f"herdr-reply: {target}: {detail}", file=sys.stderr)
             return EXIT_BLOCKED
         if code == TIMEOUT_CODE:
-            record_sender_status(herdr, env, mapped, sha, status_line)
+            record_sender_status(
+                herdr, env, mapped, sha, status_line, record_id=record_id, shape=shape
+            )
             release_active_lease(herdr, env)
             raise WaitTimeout(
                 f"reply delivered to {target} but wait timed out; caller is processing asynchronously"
@@ -541,7 +940,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 raise UsageError(diag)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
-    record_sender_status(herdr, env, mapped, sha, status_line)
+    record_sender_status(herdr, env, mapped, sha, status_line, record_id=record_id, shape=shape)
     release_active_lease(herdr, env)
     _ = decode_response(done.stdout)
     state = settled_state(done.stdout)

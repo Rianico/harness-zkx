@@ -6,14 +6,17 @@ recorded argv, proving byte-for-byte delivery without caller context injection.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import secrets
 import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import herdr_cli
+import herdr_lease
 import herdr_prompt
 import herdr_reply
 import pytest
@@ -430,7 +433,14 @@ def test_reply_records_completion_event_with_sha(stub: StubHarness, tmp_path: Pa
         ticket_id="#183-tasks-yaml-and-preflight",
         task_id=task_id,
     )
-    done = stub.run("orchestrator", "COMPLETED deadbeef", env={"PWD": str(tmp_path)})
+    # A bare `COMPLETED` carries no evidence and is recorded incomplete, so it no longer
+    # advances the task (#231). Keep the same payload first line and add an evidence section,
+    # so this case still pins the completed-event path with its sha.
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 660 passed",
+        env={"PWD": str(tmp_path)},
+    )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
@@ -621,3 +631,294 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert "usage: herdr-reply" in done.stdout
+
+
+# ── payload shape (#231): a COMPLETED reply must cite evidence ───────────────────────
+#
+# `payload_shape` is a shape check, not a quality gate: it classifies whether a COMPLETED
+# payload *cites* evidence, never whether that evidence is any good. Every row starts with
+# the status line, because the check applies only when the first line maps to completed.
+#
+#   payload                                   shape        evidence heading
+#   COMPLETED + "## Evidence" + body          complete     Evidence
+#   COMPLETED + "**Evidence:** 660 passed"    complete     Evidence
+#   COMPLETED + "Gates:" + a command line     complete     Gates
+#   COMPLETED + "### Test output" + body      complete     Test output
+#   COMPLETED + a fence with a non-blank line complete     ```
+#   COMPLETED + "## Verification" + body      complete     Verification
+#   COMPLETED                                 incomplete   None
+#   COMPLETED abc1234                         incomplete   None
+#   COMPLETED + "## Notes" + body             incomplete   None
+#   COMPLETED + "## Evidence" then a heading  incomplete   None   (empty body)
+#   COMPLETED + "## Next steps" + body        incomplete   None
+#   BLOCKED waiting on CI                     n/a          None
+#   REJECTED needs rework                     n/a          None
+#   plain prose with no status line           n/a          None
+
+
+@pytest.mark.parametrize(
+    ("payload", "shape", "heading"),
+    [
+        ("COMPLETED\n## Evidence\n- 660 passed", "complete", "Evidence"),
+        ("COMPLETED\n**Evidence:** 660 passed", "complete", "Evidence"),
+        ("COMPLETED\nGates:\n$ bash scripts/check.sh", "complete", "Gates"),
+        ("COMPLETED\n### Test output\n66 passed", "complete", "Test output"),
+        ("COMPLETED\n```\n660 passed\n```", "complete", "```"),
+        ("COMPLETED\n## Verification\nall good", "complete", "Verification"),
+        ("COMPLETED", "incomplete", None),
+        ("COMPLETED abc1234", "incomplete", None),
+        ("COMPLETED\n## Notes\nall good", "incomplete", None),
+        ("COMPLETED\n## Evidence\n## Next steps\nlater", "incomplete", None),
+        ("COMPLETED\n## Next steps\nlater", "incomplete", None),
+        ("BLOCKED waiting on CI", "n/a", None),
+        ("REJECTED needs rework", "n/a", None),
+        ("plain prose with no status line", "n/a", None),
+    ],
+)
+def test_payload_shape_table(payload: str, shape: str, heading: str | None) -> None:
+    assert herdr_reply.payload_shape(payload) == (shape, heading)
+
+
+def test_payload_shape_leaves_blocked_payloads_alone() -> None:
+    # No evidence requirement for BLOCKED: even a keyword heading does not make it complete.
+    assert herdr_reply.payload_shape("BLOCKED waiting on CI\n## Evidence\n- logs") == ("n/a", None)
+
+
+def test_evidence_section_skips_an_empty_keyword_heading() -> None:
+    # The first evidence-shaped section wins: an empty `## Evidence` is not one, so the next
+    # keyword heading with a body is.
+    assert herdr_reply.evidence_section("## Evidence\n## Verification\nall good") == "Verification"
+
+
+# ── persist first, then poke (#231) ──────────────────────────────────────────────────
+
+
+def test_reply_persists_a_record_a_later_reader_resolves(
+    stub: StubHarness, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A valid reply lands in the store and is re-derivable through the reader."""
+    body = (
+        "COMPLETED abc1234\n\n"
+        "## Evidence\n"
+        "- 660 passed\n"
+        "- see scripts/check.sh and tests/herdr/test_herdr_reply.py for details\n"
+    )
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+    done = stub.run("orchestrator", body)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    (call,) = stub.prompts()
+    assert call[4].endswith(body)
+    assert "Payload: COMPLETE" in call[4]
+    assert f"sha256={digest}" in call[4]
+
+    # `herdr-lease replies` is the reader the orchestrator uses to re-derive evidence.
+    code = herdr_lease.main(["replies", "--json"], env={"HERDR_LANE_DIR": str(tmp_path)})
+    assert code == 0
+    captured = capsys.readouterr()
+    records = json.loads(captured.out)
+    assert len(records) == 1
+    record = records[0]
+    assert record["shape"] == "complete"
+    assert record["evidence"] == "Evidence"
+    assert record["status"] == "completed"
+    assert record["sha"] == "abc1234"
+    assert record["digest"] == digest
+    assert record["payload"] == f".lane/replies/{record['id']}.md"
+    assert record["artifacts"] == ["scripts/check.sh", "tests/herdr/test_herdr_reply.py"]
+
+    # ...and the same record resolves through `get_reply`.
+    resolved = herdr_lease.get_reply(record["id"], env={"HERDR_LANE_DIR": str(tmp_path)})
+    assert resolved == record
+
+    # The payload file holds exactly the body bytes.
+    payload_path = tmp_path / record["payload"]
+    assert payload_path.read_bytes() == body.encode("utf-8")
+
+    # The human reader names the record, both sides of the correlation, and the store path.
+    assert herdr_lease.main(["replies", record["id"]], env={"HERDR_LANE_DIR": str(tmp_path)}) == 0
+    captured = capsys.readouterr()
+    assert record["id"] in captured.out
+    assert "reviewer -> orchestrator" in captured.out
+    assert record["payload"] in captured.out
+
+
+def test_reply_reader_exits_two_on_an_unknown_record_id(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = herdr_lease.main(["replies", "no-such-record"], env={"HERDR_LANE_DIR": str(tmp_path)})
+    assert code == herdr_cli.EXIT_USAGE
+    captured = capsys.readouterr()
+    assert "no reply record 'no-such-record'" in captured.err
+
+
+def test_reply_keeps_a_canary_out_of_the_ledger(stub: StubHarness, tmp_path: Path) -> None:
+    """Prompt text is never provenance: the body stays a file, the ledger stays metadata."""
+    canary = f"SECRET-CANARY-{secrets.token_hex(6)}"
+    body = f"COMPLETED deadbeef\n\n## Evidence\n- scanned {canary} clean\n"
+
+    done = stub.run("orchestrator", body)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    ledger = tmp_path / ".lane" / "replies.yaml"
+    assert ledger.is_file()
+    assert canary not in ledger.read_text(encoding="utf-8")
+
+    bodies = list((tmp_path / ".lane" / "replies").glob("*.md"))
+    assert len(bodies) == 1
+    assert canary in bodies[0].read_text(encoding="utf-8")
+
+
+def test_reply_delivers_body_only_when_the_store_write_fails(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Requirement 5: a deterministic unresolvable store — `HERDR_LANE_DIR` names a FILE,
+    so `.lane/replies` cannot be created under it. Delivery still succeeds body-only."""
+    blocker = tmp_path / "not-a-directory"
+    _ = blocker.write_text("a file, so nothing can be created underneath it", encoding="utf-8")
+    body = "COMPLETED deadbeef\n\n## Evidence\n- 660 passed"
+
+    done = stub.run("orchestrator", body, env={"HERDR_LANE_DIR": str(blocker)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[1:4] == ["agent", "prompt", "orchestrator"]
+    assert call[4].endswith(body)
+    assert "Payload: NOT RECORDED" in call[4]
+    assert "reply record skipped" in done.stderr
+
+
+def test_reply_delivers_body_only_when_no_anchor_resolves(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Requirement 5, second setup: no `HERDR_LANE_DIR` and no git dir under the cwd."""
+    scratch = tmp_path / "no-repo"
+    scratch.mkdir()
+    body = "COMPLETED\n\n## Evidence\n- ran the gate"
+
+    done = stub.run(
+        "orchestrator", body, env={"HERDR_LANE_DIR": None, "PWD": str(scratch)}, cwd=scratch
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[4].endswith(body)
+    assert "Payload: NOT RECORDED" in call[4]
+
+
+# ── prompt text is never provenance (#231) ───────────────────────────────────────────
+
+
+def test_incomplete_completed_reply_does_not_advance_the_leased_task(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    task_id = "#231#incomplete"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "231.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#231",
+        task_id=task_id,
+    )
+
+    done = stub.run("orchestrator", "COMPLETED deadbeef", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    assert task["status"] == "dispatched"
+    assert [event for event in task["trajectory"] if event["event"] == "completed"] == []
+
+    # The verdict rides on the ledger record, not on a fabricated canonical status.
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["shape"] == "incomplete"
+    # The lease still releases: bookkeeping is unchanged, only the state advance is gated.
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_complete_completed_reply_records_the_completed_event(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    task_id = "#231#complete"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "231.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#231",
+        task_id=task_id,
+    )
+    body = "COMPLETED deadbeef\n\n## Evidence\n- 660 passed"
+
+    done = stub.run("orchestrator", body, env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    assert task["status"] == "completed"
+    completed = [event for event in task["trajectory"] if event["event"] == "completed"]
+    assert len(completed) == 1
+    assert completed[-1]["sha"] == "deadbeef"
+
+
+def test_record_sender_status_is_silent_without_a_store_record(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    task_id = "#231#norecord"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "231.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#231",
+        task_id=task_id,
+    )
+    env = stub.base_env()
+
+    def still_dispatched() -> None:
+        task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+        assert task is not None
+        assert task["status"] == "dispatched"
+        assert task["trajectory"][-1]["event"] == "dispatched"
+
+    # No record id: an unpersisted reply advances nothing.
+    herdr_reply.record_sender_status(
+        str(stub.herdr), env, "completed", "deadbeef", "COMPLETED deadbeef", record_id=None
+    )
+    still_dispatched()
+
+    # A record id the store does not hold is equally silent.
+    herdr_reply.record_sender_status(
+        str(stub.herdr),
+        env,
+        "completed",
+        "deadbeef",
+        "COMPLETED deadbeef",
+        record_id="no-such-record",
+        shape="complete",
+    )
+    still_dispatched()
+
+    # A persisted record whose shape is incomplete carries the verdict: no state advance.
+    entry = herdr_reply.build_reply_entry(
+        "COMPLETED deadbeef",
+        sender="reviewer",
+        caller="orchestrator",
+        ticket_id="#231",
+        in_reply_to=task_id,
+        mapped="completed",
+        sha="deadbeef",
+        status_line="COMPLETED deadbeef",
+        shape="incomplete",
+        evidence=None,
+    )
+    stored = herdr_lease.record_reply(entry, "COMPLETED deadbeef", base_dir=tmp_path)
+    herdr_reply.record_sender_status(
+        str(stub.herdr),
+        env,
+        "completed",
+        "deadbeef",
+        "COMPLETED deadbeef",
+        record_id=str(stored["id"]),
+        shape="incomplete",
+    )
+    still_dispatched()

@@ -25,6 +25,13 @@ honest no-op rather than a write into the store the lease names.
 
     herdr-lease show [--yaml|--json] [--limit N]
     herdr-lease transition <target|task-id> <status> [--note TEXT] [--actor NAME]
+    herdr-lease replies [ID] [--limit N] [--json|--yaml]
+
+Replies are persisted next to the tasks store as metadata only: a body file under
+`.lane/replies/<id>.md` plus one ledger row in `.lane/replies.yaml` that carries the digest,
+the payload shape, and the cited artifacts — never the body text. `herdr-lease replies` is
+the reader that re-derives a reply's evidence, so the orchestrator trusts a store record
+instead of treating a prompt as provenance (#231).
 
 Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr`.
 """
@@ -51,6 +58,8 @@ STATE_FILE_LANE = ".lane/tasks.yaml"
 STATE_FILE_LEGACY_YAML = ".lane/lease.yaml"
 STATE_FILE_LEGACY_JSON = ".lane/lease.json"
 STATE_FILE_CWD = ".herdr-lease.json"
+REPLIES_FILE_LANE = ".lane/replies.yaml"
+REPLIES_DIR_LANE = ".lane/replies"
 
 
 def _now_iso() -> str:
@@ -116,6 +125,22 @@ def resolve_lease_file(
 ) -> Path:
     """Back-compat alias: the path a lease add/remove should read from."""
     return resolve_state_read_path(base_dir, env=env)
+
+
+def resolve_replies_file(
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """The reply ledger: `<store base>/.lane/replies.yaml`."""
+    return resolve_base_dir(base_dir, env=env) / REPLIES_FILE_LANE
+
+
+def resolve_replies_dir(
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """The reply body directory: `<store base>/.lane/replies`."""
+    return resolve_base_dir(base_dir, env=env) / REPLIES_DIR_LANE
 
 
 def _empty_state() -> dict[str, Any]:
@@ -417,6 +442,92 @@ def list_tasks(
     return list(_load_state(resolve_state_read_path(base_dir, env=env))["tasks"].values())
 
 
+def _load_replies(path: Path) -> list[dict[str, Any]]:
+    """Read the reply ledger; a missing or corrupt file yields an empty list, never a raise.
+
+    Mirrors `_load_state`'s defensive posture: a ledger this process cannot parse must not
+    decide whether a reply is delivered, only whether its record is readable.
+    """
+    if not path.is_file():
+        return []
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data: Any = json.loads(raw) if path.suffix == ".json" else yaml.safe_load(raw)
+    except Exception:
+        return []
+    records: Any
+    if isinstance(data, dict):
+        records = data.get("replies")
+    else:
+        records = data
+    if not isinstance(records, list):
+        return []
+    return [dict(record) for record in records if isinstance(record, dict)]
+
+
+def _write_replies(
+    records: list[dict[str, Any]],
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> None:
+    """Persist the reply ledger, atomically."""
+    payload = yaml.safe_dump(
+        {"replies": records}, sort_keys=False, allow_unicode=True, default_flow_style=False
+    ).encode("utf-8")
+    _atomic_write(resolve_replies_file(base_dir, env=env), payload)
+
+
+def record_reply(
+    entry: Mapping[str, Any],
+    body: str,
+    *,
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Write the reply body to `<replies_dir>/<id>.md` and append `entry` to the ledger.
+
+    The ledger row is metadata only — digest, shape, artifacts — so the body text never
+    reaches `.lane/replies.yaml` (a canary in the payload stays in the body file alone).
+    Each write is atomic via `_atomic_write`, whose `mkdir(parents=True, exist_ok=True)`
+    makes directory creation race-tolerant. The stored `payload` is the body path relative
+    to the store base, so a reader joins `<store base>/<payload>`.
+    """
+    record_id = str(entry["id"])
+    body_path = resolve_replies_dir(base_dir, env=env) / f"{record_id}.md"
+    _atomic_write(body_path, body.encode("utf-8"))
+
+    stored = dict(entry)
+    stored["payload"] = f"{REPLIES_DIR_LANE}/{record_id}.md"
+    records = _load_replies(resolve_replies_file(base_dir, env=env))
+    records.append(stored)
+    _write_replies(records, base_dir=base_dir, env=env)
+    return stored
+
+
+def get_reply(
+    record_id: str,
+    *,
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any] | None:
+    """The reply ledger row for `record_id`, else None."""
+    for record in _load_replies(resolve_replies_file(base_dir, env=env)):
+        if record.get("id") == record_id:
+            return record
+    return None
+
+
+def list_replies(
+    *,
+    limit: int = 20,
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """The most recent reply ledger rows in append order; `limit <= 0` lists none."""
+    records = _load_replies(resolve_replies_file(base_dir, env=env))
+    return records[-limit:] if limit > 0 else []
+
+
 def record_event(
     task_id: str,
     to_status: str,
@@ -531,6 +642,7 @@ class Options:
     note: str | None = None
     actor: str | None = None
     role: str | None = None
+    record_id: str = ""
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -555,6 +667,24 @@ def build_parser() -> argparse.ArgumentParser:
     _ = change.add_argument("--note", default=None, metavar="TEXT", help="a note on the event")
     _ = change.add_argument("--actor", default=None, metavar="NAME", help="who moved the task")
     _ = change.add_argument("--role", default=None, metavar="NAME", help="the actor's role")
+    replies = subparsers.add_parser("replies", help="print recorded replies from the store")
+    _ = replies.add_argument(
+        "record_id",
+        nargs="?",
+        default="",
+        metavar="ID",
+        help="one reply record id; omit to list the most recent replies",
+    )
+    reply_output = replies.add_mutually_exclusive_group()
+    _ = reply_output.add_argument(
+        "--yaml", action="store_true", help="print the reply records as YAML"
+    )
+    _ = reply_output.add_argument(
+        "--json", action="store_true", help="print the reply records as JSON"
+    )
+    _ = replies.add_argument(
+        "--limit", type=int, default=20, metavar="N", help="cap the replies listed (default 20)"
+    )
     return parser
 
 
@@ -635,12 +765,54 @@ def _transition(options: Options, env: Mapping[str, str]) -> int:
     return 0
 
 
+def _print_replies(records: Sequence[Mapping[str, Any]]) -> None:
+    """One compact block per record; `-` stands in for an absent field."""
+    if not records:
+        print("no reply records")
+        return
+    for record in records:
+        sender = record.get("sender") or "-"
+        caller = record.get("caller") or "-"
+        print(f"{record.get('id') or '-'}  {record.get('recorded_at') or '-'}")
+        print(f"  sender -> caller: {sender} -> {caller}")
+        print(
+            f"  status: {record.get('status') or '-'}  "
+            f"shape: {record.get('shape') or '-'}  "
+            f"evidence: {record.get('evidence') or '-'}"
+        )
+        print(f"  sha: {record.get('sha') or '-'}")
+        print(f"  digest: {record.get('digest') or '-'}")
+        print(f"  payload: {record.get('payload') or '-'}")
+
+
+def _replies(options: Options, env: Mapping[str, str]) -> int:
+    """Print one recorded reply by id, or the most recent replies."""
+    if options.record_id:
+        record = get_reply(options.record_id, env=env)
+        if record is None:
+            raise UsageError(f"no reply record {options.record_id!r} in the store")
+        records = [record]
+    else:
+        records = list_replies(limit=options.limit, env=env)
+
+    if options.yaml:
+        print(yaml.safe_dump({"replies": records}, sort_keys=False), end="")
+        return 0
+    if options.json:
+        print(json.dumps(records, indent=2, sort_keys=False))
+        return 0
+    _print_replies(records)
+    return 0
+
+
 def run(options: Options, env: Mapping[str, str]) -> int:
     if options.command == "show":
         return _show(options, env)
     if options.command == "transition":
         return _transition(options, env)
-    raise UsageError("missing subcommand: expected 'show' or 'transition'")
+    if options.command == "replies":
+        return _replies(options, env)
+    raise UsageError("missing subcommand: expected 'show', 'transition', or 'replies'")
 
 
 def main(
