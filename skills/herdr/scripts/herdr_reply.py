@@ -64,6 +64,7 @@ from herdr_prompt import (
     resolve_receiver,
     utc_stamp,
 )
+from herdr_worktree import LaneAnchorError
 
 STDIN = "-"
 BLOCKED = "blocked"
@@ -98,6 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "exit status: 0 accepted, 1 herdr failure, 2 usage or precondition, "
             "3 target needs human input, 4 reply delivered but wait timed out\n\n"
+            "lease bookkeeping (correlation, release, trajectory note) is best-effort: an\n"
+            "unresolvable lease store is reported on stderr and never blocks delivery\n\n"
             + METHOD_CONSTRAINT_EPILOG
         ),
     )
@@ -353,11 +356,25 @@ def resolve_current_agent(herdr: str, env: Mapping[str, str]) -> str | None:
     return pane_id
 
 
+def report_lease_trouble(action: str, exc: BaseException) -> None:
+    """One stderr line for a best-effort lease step that could not run (#229).
+
+    Lease bookkeeping is bookkeeping: an unresolvable store, an unreadable state file, or
+    a herdr failure must never decide whether a reply is delivered. Every caller keeps
+    going after this line, and the line names what was skipped and why.
+    """
+    print(f"herdr-reply: {action} skipped: {exc}", file=sys.stderr)
+
+
 def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
     """Release active task lease for the replying sender (current agent or current pane).
 
     NEVER release target's lease: target is the caller (e.g. task-manager).
     Only the sender's lease is released upon sending a reply.
+
+    Best-effort by contract: the reply has already been delivered, so an unresolvable
+    store is reported on stderr and never raised (#229) — a lease that cannot be found is
+    a lease to be reconciled by hand, not a reason to hide the failure.
     """
     try:
         sender = resolve_current_agent(herdr, env)
@@ -365,8 +382,8 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
             sender = env.get("HERDR_PANE_ID")
         if sender:
             _ = release_lease(sender, env=env)
-    except Exception:
-        pass
+    except Exception as exc:
+        report_lease_trouble("lease release", exc)
 
 
 def record_sender_status(
@@ -379,7 +396,8 @@ def record_sender_status(
     """Append the sender's completion event to its task trajectory, when one is leased.
 
     Resolves the sender's own lease; only a str `task_id` and a mapped status record an
-    event. A missing lease or an unmapped status is a no-op (the reply is still sent).
+    event. A missing lease or an unmapped status is a no-op, and so is a lease store this
+    process cannot resolve — the reply is still sent (#229).
     """
     if not mapped:
         return
@@ -401,8 +419,8 @@ def record_sender_status(
                 event=mapped,
                 env=env,
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        report_lease_trouble("trajectory note", exc)
 
 
 def reply_caller(options: Options, env: Mapping[str, str]) -> int:
@@ -461,7 +479,14 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     payload = read_payload(options.file, options.message)
     mapped, sha, status_line = parse_status_line(payload)
     sender = resolve_current_agent(herdr, env)
-    lease = get_lease(sender, env=env) if sender else None
+    lease: dict[str, object] | None = None
+    if sender:
+        try:
+            stored = get_lease(sender, env=env)
+        except LaneAnchorError as exc:
+            report_lease_trouble("lease correlation", exc)
+        else:
+            lease = stored if isinstance(stored, dict) else None
     ticket_id: str | None = None
     in_reply_to: str | None = None
     if isinstance(lease, dict):

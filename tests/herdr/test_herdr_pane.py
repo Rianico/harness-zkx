@@ -193,7 +193,11 @@ def test_cwd_ratio_and_env_are_forwarded(stub: StubHarness, tmp_path: Path) -> N
     call = stub.splits()[0]
     assert flag_value(call, "--cwd") == str(tmp_path)
     assert flag_value(call, "--ratio") == "0.3"
-    assert call.count("--env") == 2
+    # N3 (#229): the resolved lane anchor is always carried too, so the callee cannot
+    # derive a store of its own.
+    anchors = [item for item in call if item.startswith("HERDR_LANE_DIR=")]
+    assert anchors == [f"HERDR_LANE_DIR={stub.tmp_path}"]
+    assert call.count("--env") == 3
     assert "FOO=bar" in call and "BAZ=1" in call
 
 

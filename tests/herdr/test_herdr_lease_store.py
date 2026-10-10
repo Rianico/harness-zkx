@@ -19,6 +19,7 @@ import herdr_cli
 import herdr_lease
 import herdr_worktree
 import pytest
+import yaml
 
 from tests.herdr.stub import SCRIPTS_DIR, STUB_SOURCE, StubHarness, flag_value
 
@@ -52,11 +53,16 @@ def lane(tmp_path: Path) -> Callable[[Path], StubHarness]:
     return make
 
 
+def git(*args: str) -> None:
+    """Run git in the test's own environment; a failure is a test failure."""
+    _ = subprocess.run(["git", *args], check=True, capture_output=True, text=True)
+
+
 def make_git_repo(base: Path, name: str = "repo") -> Path:
     """A real, empty repository; its root is what the git-common-dir fallback resolves to."""
     repo = base / name
     repo.mkdir()
-    _ = subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True, text=True)
+    git("init", "-q", str(repo))
     return Path(os.path.realpath(repo))
 
 
@@ -159,9 +165,14 @@ def test_split_pane_exports_the_resolved_anchor_in_plan_and_argv(
     assert flag_value(call, "--env") == expected
 
 
-def test_split_pane_never_overrides_a_caller_supplied_anchor(
+def test_split_pane_reexports_the_anchor_the_caller_already_holds(
     lane: Callable[[Path], StubHarness], tmp_path: Path
 ) -> None:
+    """N3: a pane is launched by the herdr server, so the caller's env is not inherited.
+
+    The anchor is therefore always written into the argv; only an explicit
+    `--env HERDR_LANE_DIR=...` on this invocation (which would emit the key twice) skips it.
+    """
     pane = lane(PANE)
     pinned = tmp_path / "pinned-lane"
 
@@ -172,7 +183,8 @@ def test_split_pane_never_overrides_a_caller_supplied_anchor(
     assert from_flag.returncode == herdr_cli.EXIT_OK, from_flag.stderr
 
     env_call, flag_call = pane.splits()
-    assert "--env" not in env_call
+    assert env_call.count("--env") == 1
+    assert flag_value(env_call, "--env") == f"{LANE_DIR_ENV}={pinned}"
     assert flag_call.count("--env") == 1
     assert flag_value(flag_call, "--env") == f"{LANE_DIR_ENV}=/pinned"
 
@@ -278,3 +290,153 @@ def test_repo_root_and_a_nested_subdirectory_resolve_to_one_store(
     below = herdr_lease.resolve_base_dir(env=env)
 
     assert at_root == below == repo
+
+
+# ── B2: store identity is physical, not textual ──────────────────────────────────────
+
+
+@pytest.mark.parametrize("acquire_via_alias", [True, False])
+def test_release_across_two_spellings_of_one_physical_store(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, acquire_via_alias: bool
+) -> None:
+    """B2: a symlinked anchor and its realpath are one store, so the release must land.
+
+    Comparing spellings refused it, leaked the lease, and made the next dispatch demand
+    `--force` — the exact outage #229 exists to remove.
+    """
+    real = tmp_path / "real-store"
+    real.mkdir()
+    alias = tmp_path / "alias-store"
+    alias.symlink_to(real, target_is_directory=True)
+    assert os.path.samefile(alias, real)
+
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "t.md", "orch", base_dir=alias if acquire_via_alias else real
+    )
+
+    released = herdr_lease.release_lease("reviewer", base_dir=real if acquire_via_alias else alias)
+
+    assert released is True
+    assert "refusing" not in capsys.readouterr().err
+    assert herdr_lease.get_lease("reviewer", base_dir=real) is None
+
+
+def test_recorded_store_is_matched_by_physical_identity(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """A record written under another spelling of the same directory still releases.
+
+    Records are canonical when written now; this pins that the *comparison* is physical too,
+    so a store written by an older helper or another tool is not falsely refused.
+    """
+    real = tmp_path / "real-store"
+    real.mkdir()
+    alias = tmp_path / "alias-store"
+    alias.symlink_to(real, target_is_directory=True)
+    (real / ".lane").mkdir()
+    _ = (real / STORE).write_text(
+        yaml.safe_dump(
+            {
+                "active_leases": {
+                    "reviewer": {
+                        "target": "reviewer",
+                        "ticket": "t.md",
+                        "caller": "orch",
+                        "store": str(alias),
+                    }
+                },
+                "tasks": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert herdr_lease.release_lease("reviewer", base_dir=real) is True
+
+    assert "refusing" not in capsys.readouterr().err
+    assert herdr_lease.get_lease("reviewer", base_dir=real) is None
+
+
+# ── N1: the mismatch diagnostic's exact reach ────────────────────────────────────────
+
+
+def test_release_from_a_store_that_never_saw_the_lease_is_a_silent_no_op(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """The documented limit: a lease in a store this process never resolves is invisible.
+
+    Nothing is comparable, so the release is an honest no-op — `False`, no diagnostic, no
+    write into the store the lease names.
+    """
+    caller_store = tmp_path / "caller-store"
+    callee_store = tmp_path / "callee-store"
+    _ = herdr_lease.acquire_lease("reviewer", "t.md", "orch", base_dir=caller_store)
+    assert herdr_lease.get_lease("reviewer", base_dir=callee_store) is None
+
+    assert herdr_lease.release_lease("reviewer", base_dir=callee_store) is False
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+    assert herdr_lease.get_lease("reviewer", base_dir=caller_store) is not None
+
+
+# ── N2: the repo root is not always outside a git directory ──────────────────────────
+
+
+def test_separate_git_dir_store_is_the_git_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`resolve_lane_base_dir` returns the common dir itself when it is not named `.git`."""
+    repo = tmp_path / "separate"
+    repo.mkdir()
+    git_dir = tmp_path / "separate-gitdir"
+    git("init", "-q", f"--separate-git-dir={git_dir}", str(repo))
+    monkeypatch.chdir(repo)
+
+    resolved = herdr_worktree.resolve_lane_base_dir({"PATH": os.environ["PATH"]})
+
+    assert resolved == Path(os.path.realpath(git_dir))
+    assert resolved != repo
+
+
+def test_submodule_store_is_its_common_dir_under_the_superproject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A submodule's base is `<super>/.git/modules/<name>` — inside a git directory.
+
+    Documented, not preferred: it is still one path for every worktree of that submodule.
+    """
+    origin = make_git_repo(tmp_path, "origin")
+    _ = (origin / "f.txt").write_text("x", encoding="utf-8")
+    git("-C", str(origin), "add", "-A")
+    git(
+        "-C",
+        str(origin),
+        "-c",
+        "user.email=t@example.com",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-qm",
+        "init",
+    )
+    superproject = tmp_path / "super"
+    superproject.mkdir()
+    git("init", "-q", str(superproject))
+    git(
+        "-c",
+        "protocol.file.allow=always",
+        "-C",
+        str(superproject),
+        "submodule",
+        "add",
+        "-q",
+        str(origin),
+        "mods",
+    )
+    monkeypatch.chdir(superproject / "mods")
+
+    resolved = herdr_worktree.resolve_lane_base_dir({"PATH": os.environ["PATH"]})
+
+    assert resolved == Path(os.path.realpath(superproject / ".git" / "modules" / "mods"))

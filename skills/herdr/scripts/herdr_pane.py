@@ -84,7 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="herdr-pane",
         description="Split the caller's Herdr pane in the requested direction.",
-        epilog=METHOD_CONSTRAINT_EPILOG,
+        epilog=(
+            "a split needs a lane state anchor: HERDR_LANE_DIR, or a working directory inside a\n"
+            "git repository; without one this exits 2 before creating a pane, and --dry-run\n"
+            "prints no plan\n\n" + METHOD_CONSTRAINT_EPILOG
+        ),
     )
     _ = parser.add_argument(
         "direction",
@@ -166,17 +170,19 @@ def auto_direction(pane_id: str, herdr: str, env: Mapping[str, str]) -> str:
 
 
 def lane_anchor_env_args(env: Mapping[str, str], extra_env: Sequence[str]) -> list[str]:
-    """The `HERDR_LANE_DIR=...` pair a new pane must inherit, or `[]` when already supplied.
+    """The `HERDR_LANE_DIR=...` pair every split carries, or `[]` for an explicit one here.
 
     A callee that resolves its own lease store writes into a different one than its caller
-    (#229), so the pane this helper creates is handed the caller's resolved lane base — in
-    the real argv and the `--dry-run` plan alike. A caller-supplied anchor (in the
-    environment or as an explicit `--env HERDR_LANE_DIR=...`) is authoritative and is never
-    overridden. `resolve_lane_base_dir` raises `LaneAnchorError` when no anchor exists, so
-    a pane that would otherwise be born into a guessed store is refused instead.
+    (#229), so the pane is handed the *resolved* anchor explicitly — in the real argv and the
+    `--dry-run` plan alike. Panes are launched by the long-lived herdr server, whose
+    environment is not the caller pane's, so a caller's own `HERDR_LANE_DIR` is re-exported
+    rather than assumed to be inherited. The only skip is an explicit
+    `--env HERDR_LANE_DIR=...` on this invocation, which would otherwise emit the key twice.
+    `resolve_lane_base_dir` raises `LaneAnchorError` when no anchor exists at all, so a pane
+    is never born into a guessed store.
     """
     supplied = {item.split("=", 1)[0] for item in extra_env if "=" in item}
-    if env.get(LANE_DIR_ENV) or LANE_DIR_ENV in supplied:
+    if LANE_DIR_ENV in supplied:
         return []
     return [f"{LANE_DIR_ENV}={resolve_lane_base_dir(env)}"]
 

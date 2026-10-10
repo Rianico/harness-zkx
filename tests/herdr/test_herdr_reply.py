@@ -296,6 +296,28 @@ def test_reply_releases_lease_for_current_agent(stub: StubHarness, tmp_path: Pat
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
+def test_reply_is_delivered_when_no_lease_store_resolves(stub: StubHarness, tmp_path: Path) -> None:
+    """B1: delivery is not a function of store resolution (#229).
+
+    A callee in a scratch directory no anchor covers still gets its completion through —
+    exit 0 and one prompt — and every lease step it could not run says so on stderr
+    (correlation, trajectory note, release) instead of aborting the reply or vanishing.
+    """
+    scratch = tmp_path / "no-repo"
+    scratch.mkdir()
+
+    done = stub.run(
+        "orchestrator", "COMPLETED", env={"HERDR_LANE_DIR": None, "PWD": str(scratch)}, cwd=scratch
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    assert "replied to orchestrator" in done.stdout
+    for step in ("lease correlation", "trajectory note", "lease release"):
+        assert f"{step} skipped" in done.stderr
+    assert done.stderr.count("no lane state anchor") == 3
+
+
 def test_reply_does_not_release_lease_for_target_caller(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 

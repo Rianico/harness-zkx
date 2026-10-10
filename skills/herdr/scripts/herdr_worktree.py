@@ -242,19 +242,29 @@ def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
     The explicit anchor wins, so a pane provisioned by `herdr-pane` seats its callee's
     store deliberately instead of letting the callee derive its own. Without it, the
     repository root that the git common directory sits in is the one path every worktree
-    and every nested subdirectory of this repository agrees on — never the git directory
-    itself, so lane state stays out of `.git/`.
+    and every nested subdirectory of this repository agrees on. That root is what
+    `git_repo_root` derives, and it is the repository root only when the common directory
+    is named `.git`. For a bare repository, a submodule (common directory under the
+    superproject's `.git/modules/…`), or `git init --separate-git-dir`, the common
+    directory itself is the base. It can live inside a git directory, and it is still one
+    path per repository.
 
     `PWD` and the process cwd are deliberately not anchors: a dispatcher and the callee
     it dispatched to ran in different working directories, resolved different stores
     through them, and left a lease nobody could release (#229). With no anchor this
     raises `LaneAnchorError` instead of guessing.
+
+    The result is canonicalised: `HERDR_LANE_DIR` is taken verbatim from the environment,
+    so an anchor written as a symlink or as `/tmp/...` on macOS would otherwise name the
+    same physical directory as its `realpath` under a second spelling. One store, one
+    spelling — otherwise a lease written through the alias reads as a different store
+    than the one released through it (#229).
     """
     env_dir = env.get(LANE_DIR_ENV)
     if env_dir:
-        return Path(env_dir)
+        return Path(env_dir).resolve()
     try:
-        return git_repo_root(env)
+        return git_repo_root(env).resolve()
     except WorktreeError as exc:
         raise LaneAnchorError(
             "no lane state anchor: HERDR_LANE_DIR is unset and no git common dir "

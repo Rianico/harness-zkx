@@ -11,11 +11,14 @@ Reads fall back to legacy `.lane/lease.yaml`, `.lane/lease.json`, and `.herdr-le
 so older lanes never break during rollout.
 
 The store base is resolved once per lane: an explicit `base_dir`, else `HERDR_LANE_DIR`,
-else the repository root that the git common directory sits in. `PWD` and the process cwd
-are never anchors: they differ between a dispatcher and its own callee, which is how a
-lease came to be released against a store it was never written to (#229). A lease records
-the store it was written to, and a release that resolves a different store reports the
-mismatch on stderr instead of relocating the write.
+else the repository root that the git common directory sits in — canonicalised, so one
+physical store has one spelling. `PWD` and the process cwd are never anchors: they differ
+between a dispatcher and its own callee, which is how a lease came to be released against a
+store it was never written to (#229). A lease records the physical store it was written to,
+and a release that resolves a different one reports the mismatch on stderr instead of
+relocating the write. That diagnostic needs a lease in the resolved store to compare
+against; a lease in a store this process never resolves is invisible, and the release is an
+honest no-op rather than a write into the store the lease names.
 
     herdr-lease show [--yaml|--json] [--limit N]
     herdr-lease transition <target|task-id> <status> [--note TEXT] [--actor NAME]
@@ -60,7 +63,8 @@ def resolve_base_dir(
     Layered, and never ambient: an explicit `base_dir` outranks every anchor, then
     `HERDR_LANE_DIR`, then the repository root of this repository's git common directory
     (see `herdr_worktree.resolve_lane_base_dir`). Every worktree and every nested
-    subdirectory of one repository therefore resolves to one absolute path.
+    subdirectory of one repository therefore resolves to one absolute path, canonicalised
+    so that one physical store has one spelling.
 
     `PWD` and the process cwd are never consulted: a dispatcher in one working directory
     and a callee in another resolved different stores through them, so a lease written by
@@ -68,7 +72,7 @@ def resolve_base_dir(
     `herdr_worktree.LaneAnchorError` instead of guessing.
     """
     if base_dir is not None:
-        return Path(base_dir)
+        return Path(base_dir).resolve()
     env_map = os.environ if env is None else env
     return resolve_lane_base_dir(env_map)
 
@@ -304,6 +308,17 @@ def acquire_lease(
     return lease
 
 
+def _canonical_store(store: Path | str) -> str:
+    """`Path(store).resolve()` — the one spelling under which a physical store is recorded.
+
+    `HERDR_LANE_DIR` arrives verbatim from the environment while the git fallback is always
+    a `realpath`, so one directory can be named two ways (`/tmp/x` vs `/private/tmp/x`).
+    Comparing spellings refused a legitimate release, leaked the lease, and made the next
+    dispatch demand `--force` (#229); comparing physical paths does not.
+    """
+    return str(Path(store).resolve())
+
+
 def release_lease(
     target: str,
     base_dir: Path | str | None = None,
@@ -314,10 +329,17 @@ def release_lease(
     Soft completion: task records and trajectories are never touched. Returns True
     if a lease was released, False if none matched.
 
-    A matched lease recording a *different* store than this release resolved is reported
-    on stderr and left in place — in both stores. Relocating the write would fabricate a
-    release the owning store never saw, and a silent one would hide the divergence (#229).
+    A matched lease recording a *different physical store* than this release resolved is
+    reported on stderr and left in place — in both stores. Relocating the write would
+    fabricate a release the owning store never saw, and a silent one would hide the
+    divergence (#229). A spelling difference is not a difference: both stores are compared
+    canonicalised, so a lease written through a symlinked anchor still releases normally.
     A lease with no recorded store (legacy schema) is released as before.
+
+    Reach and limits: the diagnostic needs a lease *in the resolved store* to compare
+    against. A lease that lives in a store this process never resolves is invisible here,
+    and the release is an honest no-op — `False` with empty stderr, never a guessed write
+    into the store the lease names.
     """
     store = resolve_base_dir(base_dir, env=env)
     state = _load_state(_state_read_path_in(store))
@@ -329,10 +351,11 @@ def release_lease(
     ]
     if not keys_to_delete:
         return False
+    store_label = _canonical_store(store)
     foreign: set[str] = set()
     for key in keys_to_delete:
         recorded = leases[key].get("store")
-        if isinstance(recorded, str) and recorded != str(store):
+        if isinstance(recorded, str) and _canonical_store(recorded) != store_label:
             foreign.add(recorded)
     if foreign:
         print(
