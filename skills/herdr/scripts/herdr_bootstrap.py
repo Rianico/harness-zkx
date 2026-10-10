@@ -38,10 +38,12 @@ tracked target that the append would change is refused (exit 2) naming
 ``--allow-tracked-invariant``, which appends anyway and leaves the file modified on the
 record. An untracked file, or a file outside any repository, is appended as before — that
 dirties nothing tracked, though a new lane-local file still shows as ``??`` in ``git status``.
-Targets whose version-control state cannot be determined are handled by kind: a confirmed
-repository whose index git cannot read — or whose answer comes from a ``GIT_DIR``/``GIT_INDEX_FILE``
-override — is refused (and, like the tracked refusal, overridable), while a repository git cannot
-confirm still gets the append — the invariant must reach the agent — and one warning line saying
+Targets whose version-control state cannot be determined are handled by kind: a repository
+that exists on disk — git confirms it, or a `.git` entry stands at or above the target while
+git refused to read it — whose tracked state git cannot read (an unreadable index, dubious
+ownership, an unreadable ``.git``, or a ``GIT_DIR``/``GIT_INDEX_FILE``/``GIT_WORK_TREE``
+override) is refused, and, like the tracked refusal, overridable; only a git that cannot run at
+all still gets the append — the invariant must reach the agent — with one warning line saying
 the tracked state could not be determined, so a missing git never silently withholds the
 invariant.
 
@@ -384,17 +386,22 @@ def target_is_tracked(path: Path, env: Mapping[str, str]) -> bool | None:
     return None  # a fatal read of the index: git could not answer
 
 
-def repository_is_confirmed(path: Path, env: Mapping[str, str]) -> bool:
-    """True when git confirms `path` sits inside a worktree (the probe's first question).
+def repository_is_confirmed(path: Path, env: Mapping[str, str]) -> bool | None:
+    """Why the tracked-state probe came back undetermined: git confirmed, git refused, or no git.
 
-    Splits the undetermined state: a confirmed repository whose index git cannot read must
-    refuse, while a host with no usable git must still append and warn.
+    Splits the undetermined state by *reason*, because the two reasons call for different
+    answers. A git that ran and refused to answer about this directory (dubious ownership, an
+    unreadable `.git`, a redirecting `GIT_DIR`) still leaves a repository on disk that may track
+    the file, so the caller refuses; a git that could not run at all testifies to nothing, so the
+    launch must keep delivering the invariant. `None` means git never ran.
     """
     real = Path(os.path.realpath(path))
     inside = _run_git(["git", "-C", str(real.parent), "rev-parse", "--is-inside-work-tree"], env)
-    return (
-        inside is not None and inside.returncode == 0 and inside.stdout.removesuffix("\n") == "true"
-    )
+    if inside is None:
+        return None  # git could not run at all: it cannot testify about the file either way
+    if inside.returncode != 0:
+        return False  # git ran and refused to answer about this directory
+    return inside.stdout.removesuffix("\n") == "true"
 
 
 def tracked_refusal(path: Path) -> str:
@@ -407,14 +414,18 @@ def tracked_refusal(path: Path) -> str:
 
 
 def undetermined_refusal(path: Path) -> str:
-    """Refusal for a confirmed repository whose tracked state git could not read.
+    """Refusal for a repository on disk whose tracked state git could not read.
 
-    Same message family as `tracked_refusal`: names the file, the reason, and the override.
+    Same message family as `tracked_refusal`: names the file, the reason, and the override. The
+    reason covers both halves of the evidence — a repository git confirmed, and a `.git` entry
+    git refused to use — so it must not claim the index was read, only that git could not
+    answer about it.
     """
     return (
         f"{path} may be version-controlled; refusing to append the role invariant "
-        f"(the repository is confirmed but its index could not be read, so the file may be "
-        f"tracked). Pass {TRACKED_OVERRIDE_FLAG} to append anyway and leave the file modified."
+        f"(a repository is present but git could not answer about this file's index, so the "
+        f"file may be tracked). Pass {TRACKED_OVERRIDE_FLAG} to append anyway and leave the "
+        f"file modified."
     )
 
 
@@ -679,9 +690,9 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
     # surface the agent reads, so a launch must decide once, before any mutation, whether the
     # write is allowed. An append that would change nothing is skipped (no mtime churn, no
     # dirt); a tracked target that would change is refused unless the caller overrides. A
-    # confirmed repository whose tracked state is undetermined is refused too, and, like the
-    # tracked refusal, overridable; only a host that cannot confirm a repository appends, and
-    # it warns on stderr.
+    # repository on disk whose tracked state is undetermined is refused too, and, like the
+    # tracked refusal, overridable; only a git that cannot run at all appends, and it warns on
+    # stderr.
     agents_tracked: bool | None = False
     refusal: str | None = None
     note: str | None = None
@@ -694,7 +705,13 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
         would_change = planned_invariant_content(current, snippet) != current
         if agents_tracked is None:
             note = undetermined_warning(absolute_target(agents_file))
-            if repository_is_confirmed(agents_file, env) and not options.allow_tracked_invariant:
+            confirmed = repository_is_confirmed(agents_file, env)
+            marker = _repository_marker_present(absolute_target(agents_file).parent)
+            # Two independent signs say the file may be tracked: git's own worktree answer, and
+            # a `.git` entry at or above the target that a refusing git could not use. Either
+            # one refuses, unless the caller overrides; only a git that never ran appends.
+            refusable = confirmed is True or (confirmed is False and marker)
+            if refusable and not options.allow_tracked_invariant:
                 refusal = undetermined_refusal(absolute_target(agents_file))
         elif agents_tracked and would_change and not options.allow_tracked_invariant:
             refusal = tracked_refusal(absolute_target(agents_file))

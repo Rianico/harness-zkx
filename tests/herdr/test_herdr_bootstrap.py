@@ -878,7 +878,9 @@ def test_a_target_that_cannot_be_read_is_a_usage_error(stub: StubHarness, tmp_pa
 # ── B1: the probe must ask git about the on-disk entry name ─────────────────────────
 
 
-def test_casefold_entry_is_taken_only_for_the_same_file(tmp_path: Path) -> None:
+def test_casefold_entry_is_taken_only_for_the_same_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """W4 RED on a case-sensitive host: the fold must name the same file, not a case-variant twin.
 
     `agents.md` exists and `AGENTS.md` does not. On a case-insensitive volume the two spellings
@@ -897,6 +899,16 @@ def test_casefold_entry_is_taken_only_for_the_same_file(tmp_path: Path) -> None:
         same_file = False
 
     assert herdr_bootstrap.on_disk_entry_name(target) == ("agents.md" if same_file else None)
+
+    # Pinning the guard on the volume this test runs on: on a case-insensitive volume the fold
+    # above is satisfied by the unfixed implementation too, so the `samefile` guard is only
+    # observable when the OS boundary cannot prove the two spellings are one file.
+    def unprovable(*_args: object, **_kwargs: object) -> bool:
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(os.path, "samefile", unprovable)
+
+    assert herdr_bootstrap.on_disk_entry_name(target) is None
 
 
 def test_tracked_lowercase_name_on_a_case_insensitive_volume_is_refused(
@@ -1015,55 +1027,77 @@ def test_override_appends_through_an_unreadable_index(stub: StubHarness, tmp_pat
     assert len(starts(stub)) == 1
 
 
-def test_dubious_ownership_is_undetermined_and_warns(stub: StubHarness, tmp_path: Path) -> None:
+def test_dubious_ownership_is_undetermined_and_refused(stub: StubHarness, tmp_path: Path) -> None:
     """W2 RED on cd1f0eb7: a failed `rev-parse --is-inside-work-tree` read as a definitive "not tracked".
 
-    git refusing to answer (a foreign-owned checkout) is not an answer that the file is untracked.
-    The state is undetermined, so the append warns instead of failing open with zero signal.
+    git refusing to answer (a foreign-owned checkout) is not an answer that the file is untracked,
+    and the `.git` entry git refused over says the target may well be tracked, so the launch
+    refuses with a clean tree instead of appending and dirtying a version-controlled file.
     """
     repo = tracked_repo(tmp_path)
+    before = repo_status(repo)
+    owned_by_stranger = {"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
 
-    done = stub.run(
-        *bootstrap_args(repo),
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo), env=owned_by_stranger)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(repo / "AGENTS.md") in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert repo_status(repo) == before == ""
+    assert starts(stub) == []
+
+    override = stub.run(
+        *bootstrap_args(repo, "--allow-tracked-invariant"),
         state=cwd_state(repo),
-        env={"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"},
+        env=owned_by_stranger,
     )
 
-    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
-    lines = done.stderr.splitlines()
-    assert len(lines) == 1, done.stderr
-    assert "could not determine" in lines[0]
-    assert str(repo / "AGENTS.md") in lines[0]
+    assert override.returncode == herdr_cli.EXIT_OK, override.stderr
+    assert herdr_bootstrap.START_MARKER in (repo / "AGENTS.md").read_text()
     assert repo_status(repo) == " M AGENTS.md\n"
     assert len(starts(stub)) == 1
 
 
-def test_a_git_dir_that_does_not_exist_is_undetermined_and_warns(
+def test_a_git_dir_that_does_not_exist_is_undetermined_and_refused(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """W2 RED on cd1f0eb7: `GIT_DIR` at a missing path made git answer "not tracked" silently."""
-    repo = tracked_repo(tmp_path)
+    """W2 RED on cd1f0eb7: `GIT_DIR` at a missing path made git answer "not tracked" silently.
 
-    done = stub.run(
-        *bootstrap_args(repo),
+    The stale override cannot be trusted either way, and the repo's own `.git` still sits above
+    the target, so the launch refuses with a clean tree instead of appending to a tracked file.
+    """
+    repo = tracked_repo(tmp_path)
+    before = repo_status(repo)
+    stale_override = {"GIT_DIR": str(tmp_path / "no-such-repo" / ".git")}
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo), env=stale_override)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(repo / "AGENTS.md") in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert repo_status(repo) == before == ""
+    assert starts(stub) == []
+
+    override = stub.run(
+        *bootstrap_args(repo, "--allow-tracked-invariant"),
         state=cwd_state(repo),
-        env={"GIT_DIR": str(tmp_path / "no-such-repo" / ".git")},
+        env=stale_override,
     )
 
-    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
-    lines = done.stderr.splitlines()
-    assert len(lines) == 1, done.stderr
-    assert "could not determine" in lines[0]
-    assert str(repo / "AGENTS.md") in lines[0]
+    assert override.returncode == herdr_cli.EXIT_OK, override.stderr
+    assert herdr_bootstrap.START_MARKER in (repo / "AGENTS.md").read_text()
     assert repo_status(repo) == " M AGENTS.md\n"
     assert len(starts(stub)) == 1
 
 
-def test_an_unreadable_git_dir_is_undetermined_and_warns(stub: StubHarness, tmp_path: Path) -> None:
+def test_an_unreadable_git_dir_is_undetermined_and_refused(
+    stub: StubHarness, tmp_path: Path
+) -> None:
     """W2 RED on cd1f0eb7: an unreadable `.git` printed "not a git repository" and appended silently.
 
     That message cannot tell an unreadable `.git` from a genuinely absent one; the presence of a
-    `.git` entry does, so the state is undetermined, not "not tracked".
+    `.git` entry does, so the state is undetermined — and the target may be tracked, so it is
+    refused with a clean tree.
     """
     if os.geteuid() == 0:
         pytest.skip("root bypasses directory permissions")
@@ -1076,10 +1110,22 @@ def test_an_unreadable_git_dir_is_undetermined_and_warns(stub: StubHarness, tmp_
     finally:
         os.chmod(dotgit, original)
 
-    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
-    lines = done.stderr.splitlines()
-    assert len(lines) == 1, done.stderr
-    assert "could not determine" in lines[0]
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(repo / "AGENTS.md") in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert repo_status(repo) == ""
+    assert starts(stub) == []
+
+    os.chmod(dotgit, 0o000)
+    try:
+        override = stub.run(
+            *bootstrap_args(repo, "--allow-tracked-invariant"), state=cwd_state(repo)
+        )
+    finally:
+        os.chmod(dotgit, original)
+
+    assert override.returncode == herdr_cli.EXIT_OK, override.stderr
+    assert herdr_bootstrap.START_MARKER in (repo / "AGENTS.md").read_text()
     assert repo_status(repo) == " M AGENTS.md\n"
     assert len(starts(stub)) == 1
 
@@ -1102,6 +1148,40 @@ def test_a_missing_index_file_is_undetermined_not_untracked(
     assert "--allow-tracked-invariant" in done.stderr
     assert repo_status(repo) == before == ""
     assert starts(stub) == []
+
+
+def test_a_git_dir_pointing_at_the_targets_own_repo_is_refused(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """W3: a deliberate same-repo `GIT_DIR` is refused by default — fail closed, and overridable.
+
+    A wrapper or hook exporting `GIT_DIR` for the target's own repository could be answered
+    correctly, but the variable outranks `-C`, so the probe answers about the override rather than
+    about the file's own repository and the tracked state is undetermined. Bootstrap refuses
+    rather than trust it; `--allow-tracked-invariant` appends and launches anyway.
+    """
+    repo = tracked_repo(tmp_path)
+    before = repo_status(repo)
+    deliberate_override = {"GIT_DIR": str(repo / ".git")}
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo), env=deliberate_override)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert str(repo / "AGENTS.md") in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert repo_status(repo) == before == ""
+    assert starts(stub) == []
+
+    override = stub.run(
+        *bootstrap_args(repo, "--allow-tracked-invariant"),
+        state=cwd_state(repo),
+        env=deliberate_override,
+    )
+
+    assert override.returncode == herdr_cli.EXIT_OK, override.stderr
+    assert herdr_bootstrap.START_MARKER in (repo / "AGENTS.md").read_text()
+    assert repo_status(repo) == " M AGENTS.md\n"
+    assert len(starts(stub)) == 1
 
 
 def test_a_foreign_git_dir_is_undetermined_not_untracked(stub: StubHarness, tmp_path: Path) -> None:
