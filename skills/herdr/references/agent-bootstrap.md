@@ -113,6 +113,23 @@ ROLE INVARIANT: You are an {role} in a Herdr lane.
 
 The file append is idempotent. The block is wrapped in `<!-- herdr-bootstrap:role-invariant -->` … `<!-- /herdr-bootstrap:role-invariant -->` and written only when the start marker is absent, so re-bootstrapping the same directory never duplicates the snippet and never rewrites an untouched file; existing content and its trailing newline are preserved.
 
+### Version-controlled targets are refused
+
+The target file *is* the delivery mechanism for the file kinds: they have no `--append-system-prompt`, and bootstrap has no message-prefix channel, so the invariant reaches the agent only because the agent reads `AGENTS.md` (or `.clinerules`) at launch. Moving it to a lane-local file the agent never reads would silently drop the invariant, which is worse than dirtying a tree. Bootstrap therefore guards the write instead:
+
+- **Tracked, block absent** → refuse. Bootstrap exits 2 naming the absolute target file, the reason (a launch must not modify a tracked file), and `--allow-tracked-invariant`. Nothing is launched, no pane is renamed, no file is written.
+- **Tracked, block already there** → skip the write and launch. A repository that committed the exact marker block for the role needs nothing: the invariant already reaches the agent, and the file keeps its mtime and its clean status.
+- **`--allow-tracked-invariant`** → append anyway and leave that tracked file modified, on the record (`git status` shows it).
+- **Untracked in a repo, or outside any repo** → append as before. This is not "the tree is unchanged": a freshly created or edited lane-local file shows as `?? AGENTS.md` in `git status`, while outside a repo `git status` cannot answer at all.
+
+Version-control state comes from git against the file's real location: `git rev-parse --is-inside-work-tree`, then `git ls-files --error-unmatch -- <path>`. When that detection cannot run (no git binary, odd repository), the file is treated as not version-controlled and the append proceeds, so a missing git never withholds the invariant.
+
+`--dry-run` reports the verdict before anything launches: `agents_md_tracked` is `true`/`false` for a file kind, and `would_refuse` carries the refusal string when the append would be refused. Both keys appear only for the file kinds, whose run has a target file; the inline kinds report neither.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-impl-1 --kind codex --pane w1:p3 --role impl-1 --task-group msg --allow-tracked-invariant
+```
+
 ### Scoped-prefix rule
 
 Every lane name follows `<task-group-slug>-<role>[-<subrole|index>]`. For the `msg-enhance` lane: `msg-orch`, `msg-tm`, `msg-impl-1`, `msg-reviewer`. `--task-group <slug>` prefixes a bare role (`tm` → `msg-tm`, `impl-1` → `msg-impl-1`) and leaves an already-scoped value unchanged; the same string is the pane label and the agent name, and it must satisfy `[a-z][a-z0-9_-]{0,31}` (max 32 chars).

@@ -1,6 +1,7 @@
 """Tests for skills/herdr/scripts/herdr_bootstrap.py (herdr-bootstrap helper)."""
 
 import json
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import herdr_bootstrap
 import herdr_cli
 import pytest
 
+from tests.git_env import git_env
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness, flag_value
 
 SCRIPT = SCRIPTS_DIR / "herdr_bootstrap.py"
@@ -587,3 +589,256 @@ def test_load_kind_entry_bad_file_is_a_usage_error(tmp_path: Path) -> None:
     _ = bad.write_text("pi:\n  trust_flags: []\n  invariant: everywhere\n")
     with pytest.raises(herdr_cli.UsageError):
         herdr_bootstrap.load_kind_entry("pi", config_path=bad)
+
+
+# ── tracked targets: refuse by default, override explicitly ─────────────────────────
+#
+# The file-reading kinds reach the agent through AGENTS.md, so the append cannot simply move
+# elsewhere. Instead bootstrap refuses to dirty a version-controlled target unless the caller
+# opts in. These cases build a real repository so "tracked" is git's own answer, not a fake.
+
+GIT_TIMEOUT_S = 60
+
+
+def git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run git for the fixture's own plumbing, with the ambient git overrides scrubbed."""
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        env=git_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=GIT_TIMEOUT_S,
+    )
+
+
+def init_repo(path: Path) -> None:
+    """Create a real worktree with a fixture identity, so the tracked case is genuine."""
+    path.mkdir(parents=True, exist_ok=True)
+    done = git(path, "init", "-q", "-b", "main")
+    assert done.returncode == 0, done.stderr
+    for key, value in (("user.email", "fixture@example.invalid"), ("user.name", "Fixture")):
+        configured = git(path, "config", key, value)
+        assert configured.returncode == 0, configured.stderr
+
+
+def commit_path(repo: Path, *paths: str) -> None:
+    _ = git(repo, "add", "--", *paths)
+    done = git(repo, "commit", "-q", "-m", "fixture seed")
+    assert done.returncode == 0, done.stderr
+
+
+def repo_status(repo: Path) -> str:
+    """The whole worktree's `git status --porcelain` text, as git prints it."""
+    done = git(repo, "status", "--porcelain")
+    assert done.returncode == 0, done.stderr
+    return done.stdout
+
+
+def repo_status_for(repo: Path, path: str) -> str:
+    """The one `git status --porcelain` entry for `path`, or "" when git lists none."""
+    done = git(repo, "status", "--porcelain", "--", path)
+    assert done.returncode == 0, done.stderr
+    return done.stdout
+
+
+def tracked_repo(tmp_path: Path, body: str = "# Lane rules\n") -> Path:
+    """A repo whose `AGENTS.md` is committed with `body`."""
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    _ = (repo / "AGENTS.md").write_text(body)
+    commit_path(repo, "AGENTS.md")
+    return repo
+
+
+def bootstrap_args(repo: Path, *extra: str) -> tuple[str, ...]:
+    return ("--kind", "codex", "--pane", "w9:p1", "--role", "impl-1", "--cwd", str(repo), *extra)
+
+
+def test_tracked_agents_md_refuses_and_leaves_the_tree_untouched(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """RED on base: the launch appended to a committed AGENTS.md and dirtied the tree."""
+    repo = tracked_repo(tmp_path)
+    agents = repo / "AGENTS.md"
+    before = repo_status(repo)
+    body_before = agents.read_text()
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+
+    assert repo_status(repo) == before, (
+        f"a launch dirtied the tree: before={before!r} after={repo_status(repo)!r} "
+        f"exit={done.returncode} stderr={done.stderr!r}"
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, (
+        f"exit={done.returncode} stdout={done.stdout!r} stderr={done.stderr!r}"
+    )
+    assert str(agents) in done.stderr
+    assert "--allow-tracked-invariant" in done.stderr
+    assert before == ""
+    assert agents.read_text() == body_before
+    assert starts(stub) == []
+    assert pane_renames(stub) == []
+
+
+def test_override_appends_to_the_tracked_file_and_dirties_only_that_file(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    repo = tracked_repo(tmp_path)
+    agents = repo / "AGENTS.md"
+
+    done = stub.run(*bootstrap_args(repo, "--allow-tracked-invariant"), state=cwd_state(repo))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert repo_status_for(repo, "AGENTS.md") == " M AGENTS.md\n"
+    assert agents.read_text().startswith("# Lane rules\n")
+    block = herdr_bootstrap.invariant_block(herdr_bootstrap.render_invariant("impl-1"))
+    assert agents.read_text() == f"# Lane rules\n{block}"
+    (start,) = starts(stub)
+    assert start[1:] == ["agent", "start", "impl-1", "--kind", "codex", "--pane", "w9:p1"]
+
+
+def test_already_correct_tracked_block_skips_the_write_and_still_launches(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    block = herdr_bootstrap.invariant_block(herdr_bootstrap.render_invariant("impl-1"))
+    repo = tracked_repo(tmp_path, body=block)
+    agents = repo / "AGENTS.md"
+    before = repo_status(repo)
+    stamp = agents.stat().st_mtime_ns
+
+    done = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert repo_status(repo) == before == ""
+    assert agents.read_text() == block
+    assert agents.stat().st_mtime_ns == stamp
+    assert len(starts(stub)) == 1
+    assert pane_renames(stub)[0][3:] == ["w9:p1", "impl-1"]
+
+
+def test_untracked_agents_md_in_a_repo_is_appended_and_idempotent(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    _ = (repo / "seed.txt").write_text("seed\n")
+    commit_path(repo, "seed.txt")
+    agents = repo / "AGENTS.md"
+
+    first = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    body = agents.read_text()
+    assert herdr_bootstrap.invariant_block(herdr_bootstrap.render_invariant("impl-1")) in body
+    assert repo_status_for(repo, "AGENTS.md") == "?? AGENTS.md\n"
+
+    second = stub.run(*bootstrap_args(repo), state=cwd_state(repo))
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    assert agents.read_text() == body
+    assert body.count(herdr_bootstrap.START_MARKER) == 1
+    assert repo_status_for(repo, "AGENTS.md") == "?? AGENTS.md\n"
+
+
+def test_agents_md_outside_any_repo_is_appended(stub: StubHarness, tmp_path: Path) -> None:
+    """Nothing in a non-repo reports the lane-local file: `git status` cannot answer there."""
+    lane = tmp_path / "lane"
+    lane.mkdir()
+    assert git(lane, "rev-parse", "--is-inside-work-tree").returncode != 0
+
+    done = stub.run(*bootstrap_args(lane), state=cwd_state(lane))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert herdr_bootstrap.START_MARKER in (lane / "AGENTS.md").read_text()
+    assert git(lane, "status", "--porcelain").returncode != 0
+
+
+def test_dry_run_reports_the_tracked_verdict_without_writing(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    repo = tracked_repo(tmp_path)
+    agents = repo / "AGENTS.md"
+
+    done = stub.run(*bootstrap_args(repo, "--dry-run"))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout)
+    assert plan["agents_md"] == str(agents)
+    assert plan["agents_md_tracked"] is True
+    assert str(agents) in plan["would_refuse"]
+    assert "--allow-tracked-invariant" in plan["would_refuse"]
+    assert stub.calls() == []
+    assert agents.read_text() == "# Lane rules\n"
+    assert repo_status(repo) == ""
+
+
+def test_dry_run_reports_the_tracked_verdict_with_the_override(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    repo = tracked_repo(tmp_path)
+
+    done = stub.run(*bootstrap_args(repo, "--allow-tracked-invariant", "--dry-run"))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout)
+    assert plan["agents_md_tracked"] is True
+    assert "would_refuse" not in plan
+    assert stub.calls() == []
+
+
+def test_dry_run_reports_an_untracked_target_without_a_refusal(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    lane = tmp_path / "lane"
+    lane.mkdir()
+
+    done = stub.run(*bootstrap_args(lane, "--dry-run"))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout)
+    assert plan["agents_md_tracked"] is False
+    assert "would_refuse" not in plan
+    assert stub.calls() == []
+
+
+def test_dry_run_needs_no_git_verdict_for_an_inline_kind(stub: StubHarness, tmp_path: Path) -> None:
+    """The inline kinds write no target file, so the tracked question does not arise."""
+    done = stub.run(
+        "--kind", "pi", "--pane", "w9:p1", "--role", "tm", "--cwd", str(tmp_path), "--dry-run"
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout)
+    assert plan["agents_md"] is None
+    assert "agents_md_tracked" not in plan
+    assert "would_refuse" not in plan
+
+
+def test_tracked_detection_falls_back_to_untracked_without_a_git_binary(
+    tmp_path: Path,
+) -> None:
+    """Detection that cannot run reads as not version-controlled, so the append still happens."""
+    repo = tracked_repo(tmp_path)
+
+    assert herdr_bootstrap.target_is_tracked(repo / "AGENTS.md", {"PATH": str(tmp_path)}) is False
+
+
+def test_invariant_block_matches_what_append_invariant_writes(tmp_path: Path) -> None:
+    path = tmp_path / "AGENTS.md"
+    snippet = herdr_bootstrap.render_invariant("tm")
+
+    assert herdr_bootstrap.append_invariant(path, snippet) is True
+
+    assert path.read_text() == herdr_bootstrap.invariant_block(snippet)
+
+
+def test_a_target_that_cannot_be_read_is_a_usage_error(stub: StubHarness, tmp_path: Path) -> None:
+    """The new read must not escape as a traceback: a directory named AGENTS.md exits 2."""
+    lane = tmp_path / "lane"
+    (lane / "AGENTS.md").mkdir(parents=True)
+
+    for extra in (("--dry-run",), ()):
+        done = stub.run(*bootstrap_args(lane, *extra))
+
+        assert done.returncode == herdr_cli.EXIT_USAGE, f"{extra}: {done.stdout!r} {done.stderr!r}"
+        assert "cannot read" in done.stderr
+        assert stub.calls() == []

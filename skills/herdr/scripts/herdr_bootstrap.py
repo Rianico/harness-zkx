@@ -30,6 +30,17 @@ The append is idempotent: the marker pair (``<!-- herdr-bootstrap:role-invariant
 written once, so re-bootstrapping the same directory never duplicates the snippet and never
 rewrites an untouched file.
 
+The append also refuses to modify a version-controlled target. The target file *is* the
+delivery mechanism for the file kinds — they have no ``--append-system-prompt`` and bootstrap
+has no message channel — so the invariant cannot move to a lane-local file the agent never
+reads. Instead: an already-present marker block is left alone and the launch proceeds, and a
+tracked target that the append would change is refused (exit 2) naming
+``--allow-tracked-invariant``, which appends anyway and leaves the file modified on the
+record. An untracked file, or a file outside any repository, is appended as before — that
+dirties nothing tracked, though a new lane-local file still shows as ``??`` in ``git status``.
+Targets whose version-control state cannot be determined (no git binary, odd repository) are
+treated as untracked, so a missing git never withholds the invariant.
+
 Deliberate quirks (implemented minimally, documented here): trust flags come only from
 ``kinds.yaml`` and ride after ``--`` as native agent args — bootstrap never invents flags, and an
 unverified kind carries none; an unknown kind falls back to the universal ``AGENTS.md`` append
@@ -46,6 +57,7 @@ import argparse
 import json
 import os
 import shlex
+import subprocess
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -81,6 +93,8 @@ END_MARKER = "<!-- /herdr-bootstrap:role-invariant -->"
 KINDS_CONFIG = Path(__file__).resolve().parent.parent / "references" / "kinds.yaml"
 
 _CWD_POLL_S = 0.25
+# The flag the tracked-target refusal names: the caller opts in to a deliberately dirty tree.
+TRACKED_OVERRIDE_FLAG = "--allow-tracked-invariant"
 
 
 @dataclass(frozen=True)
@@ -190,21 +204,108 @@ def render_invariant(role: str) -> str:
     return INVARIANT_TEMPLATE.format(role=role)
 
 
+def invariant_block(snippet: str) -> str:
+    """The exact marker-wrapped block `append_invariant` writes."""
+    return f"{START_MARKER}\n{snippet}\n{END_MARKER}\n"
+
+
+def read_if_exists(path: Path) -> str:
+    """The file's current text; a missing file reads as empty."""
+    return path.read_text() if path.exists() else ""
+
+
+def planned_invariant_content(existing: str, snippet: str) -> str:
+    """The content `append_invariant` would leave behind, computed without writing.
+
+    Equal to `existing` exactly when the append is a no-op: the marker block is already
+    present — whatever role it names — and the file is left untouched.
+    """
+    if START_MARKER in existing:
+        return existing
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    return existing + invariant_block(snippet)
+
+
 def append_invariant(path: Path, snippet: str) -> bool:
     """Append the marker-wrapped snippet unless the start marker is already present.
 
     Returns True when the block was written, False when the file already carried it. Existing
     content and its trailing newline are preserved; an already-marked file is never rewritten.
     """
-    existing = path.read_text() if path.exists() else ""
-    if START_MARKER in existing:
+    existing = read_if_exists(path)
+    planned = planned_invariant_content(existing, snippet)
+    if planned == existing:
         return False
-    if existing and not existing.endswith("\n"):
-        existing += "\n"
-    block = f"{START_MARKER}\n{snippet}\n{END_MARKER}\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    _ = path.write_text(existing + block)
+    _ = path.write_text(planned)
     return True
+
+
+def _run_git(
+    argv: Sequence[str], env: Mapping[str, str]
+) -> subprocess.CompletedProcess[str] | None:
+    """Run git, or None when git cannot run at all (no binary, no exec permission).
+
+    Same subprocess style as `run_herdr`: captured output, the caller's environment, no shell.
+    A git that cannot run is not an error here — the caller reads it as "not version-controlled".
+    """
+    try:
+        return subprocess.run(
+            list(argv), capture_output=True, text=True, check=False, env=dict(env)
+        )
+    except OSError:
+        return None
+
+
+def target_is_tracked(path: Path, env: Mapping[str, str]) -> bool:
+    """True when git tracks `path` in the worktree enclosing it.
+
+    `rev-parse --is-inside-work-tree` answers "is this in a repository at all"; the follow-up
+    `ls-files --error-unmatch` answers "does the index know this file", which is the question
+    the append must respect. Detection runs against the file's real location. Any git failure —
+    no binary, not a repository, an unreadable layout — reads as *not* version-controlled, so a
+    missing git never withholds the invariant; the caller appends and reports the fallback.
+    """
+    real = Path(os.path.realpath(path))
+    inside = _run_git(["git", "-C", str(real.parent), "rev-parse", "--is-inside-work-tree"], env)
+    if inside is None or inside.returncode != 0 or inside.stdout.strip() != "true":
+        return False
+    top = _run_git(["git", "-C", str(real.parent), "rev-parse", "--show-toplevel"], env)
+    if top is None or top.returncode != 0:
+        return False
+    root = top.stdout.strip()
+    if not root:
+        return False
+    try:
+        relative = real.relative_to(Path(os.path.realpath(root)))
+    except ValueError:
+        return False
+    if str(relative) == ".":
+        return False
+    # Run from the worktree root, so the pathspec stays the repo-root-relative path: ls-files
+    # resolves a pathspec against its own cwd, and only the root makes that the root path.
+    listed = _run_git(["git", "-C", root, "ls-files", "--error-unmatch", "--", str(relative)], env)
+    return listed is not None and listed.returncode == 0
+
+
+def tracked_refusal(path: Path) -> str:
+    """The refusal for a version-controlled target: the file, the reason, and the override."""
+    return (
+        f"{path} is version-controlled; refusing to append the role invariant "
+        f"(a launch must not modify a tracked file). Pass {TRACKED_OVERRIDE_FLAG} to append "
+        f"anyway and leave the file modified."
+    )
+
+
+def absolute_target(path: Path) -> Path:
+    """The target as an absolute path for messages; an already-absolute path passes through.
+
+    `abspath`, not `realpath`: the message must name the file the operator passed (its `--cwd`
+    plus `AGENTS.md`), the same string as the `agents_md` plan value, not a symlink-resolved
+    twin of it.
+    """
+    return Path(os.path.abspath(path))
 
 
 @dataclass
@@ -219,6 +320,7 @@ class Options:
     model: str | None = None
     cwd: str | None = None
     cwd_timeout: float = 10.0
+    allow_tracked_invariant: bool = False
     dry_run: bool = False
     json: bool = False
 
@@ -274,6 +376,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=10.0,
         metavar="SEC",
         help="seconds to wait for the pane to reach --cwd (default: 10)",
+    )
+    _ = parser.add_argument(
+        TRACKED_OVERRIDE_FLAG,
+        action="store_true",
+        help=(
+            "append the role invariant even when the target file is version-controlled, "
+            "leaving that tracked file modified"
+        ),
     )
     _ = parser.add_argument(
         "--dry-run",
@@ -436,19 +546,39 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
         entry=entry,
         invariant_path=None if invariant_file is None else str(invariant_file),
     )
+    # The file kinds deliver the invariant through the target file itself: that file *is* the
+    # surface the agent reads, so a launch must decide once, before any mutation, whether the
+    # write is allowed. An append that would change nothing is skipped (no mtime churn, no
+    # dirt); a tracked target that would change is refused unless the caller overrides.
+    agents_tracked = False
+    refusal: str | None = None
+    if agents_file is not None:
+        try:
+            current = read_if_exists(agents_file)
+        except OSError as exc:
+            raise UsageError(f"cannot read {agents_file}: {exc}") from exc
+        agents_tracked = target_is_tracked(agents_file, env)
+        would_change = planned_invariant_content(current, snippet) != current
+        if agents_tracked and would_change and not options.allow_tracked_invariant:
+            refusal = tracked_refusal(absolute_target(agents_file))
+
     if options.dry_run:
-        print(
-            json.dumps(
-                {
-                    "agents_md": str(agents_file) if agents_file else None,
-                    "role_invariant": str(invariant_file) if invariant_file else None,
-                    "pane_rename": rename_argv,
-                    "agent_start": start_argv,
-                    "cwd_ensure": options.cwd,
-                }
-            )
-        )
+        plan: dict[str, object] = {
+            "agents_md": str(agents_file) if agents_file else None,
+            "role_invariant": str(invariant_file) if invariant_file else None,
+            "pane_rename": rename_argv,
+            "agent_start": start_argv,
+            "cwd_ensure": options.cwd,
+        }
+        if agents_file is not None:
+            plan["agents_md_tracked"] = agents_tracked
+            if refusal is not None:
+                plan["would_refuse"] = refusal
+        print(json.dumps(plan))
         return EXIT_OK
+
+    if refusal is not None:
+        raise UsageError(refusal)
 
     if options.cwd:
         ensure_pane_cwd(herdr, options.pane, options.cwd, env, timeout_s=options.cwd_timeout)
