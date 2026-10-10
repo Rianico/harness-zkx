@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **herdr:** per-kind startup contract in `references/kinds.yaml` — trust flags ride after `--` (`pi` → `--approve`, `claude` → `--dangerously-skip-permissions`) and the `--cwd` guarantee cds the pane into the worktree, refusing to start until it converges
-* **herdr:** `herdr-dispatch --auto-start KIND` bootstraps a missing agent in a bare-shell pane through the bootstrap contract (ROLE INVARIANT, kinds.yaml trust flags, pane-cwd guarantee) and dispatches in one call; unknown kinds fail fast, `--dry-run` prints the plan, and a failed bootstrap names the started-but-undispatched agents instead of orphaning them silently
+* **herdr:** per-kind startup contract in `references/kinds.yaml` — trust flags ride after `--` (`pi` → `--approve`, `claude` → `--dangerously-skip-permissions`) and the `--cwd` guarantee cds the pane into the worktree, refusing to start until it converges (#226)
+* **herdr:** `herdr-dispatch --auto-start KIND` bootstraps a missing agent in a bare-shell pane through the bootstrap contract (ROLE INVARIANT, kinds.yaml trust flags, pane-cwd guarantee) and dispatches in one call; unknown kinds fail fast, `--dry-run` prints the plan, and a failed bootstrap names the started-but-undispatched agents instead of orphaning them silently (#226)
 * **herdr:** task trajectory in tasks.yaml and pre-flight prompt readiness (#222)
 * **herdr:** task-group hierarchy, ticket/task correlation, and role bootstrap (#222)
 * **gh-router:** pr-land copy detector and strict squash shape gate on the explicit message (contract sections only, max 5 bullets and 15 lines, title type case-insensitive), refusing mechanic copies above 0.80 similarity (#221)
