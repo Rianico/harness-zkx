@@ -358,6 +358,54 @@ def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
     assert mine_state is not None and mine_state["status"] == "dispatched"
 
 
+def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
+    stub_factory: Callable[[Path], StubHarness], tmp_path: Path
+) -> None:
+    """#246 E1.1 pin 2: the RENDERED contract binds with no lease.
+
+    This pin is what makes E1.2's deletion of the sole-open-task inference safe — do NOT
+    "simplify" it back to a lease-only or inference path. The dispatch renders the reply
+    contract; the callee's first reply consumes the lease; the callee then resends using the
+    exact `--ticket` value the rendered contract carried. Nothing else can bind the second
+    reply, and it must advance THAT task. A dropped `--ticket` (mutant a) and a foreign id
+    (mutant b, e.g. the sender's name) both fail here.
+    """
+    dispatch = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
+    reply = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
+    ticket = tmp_path / "182-herdr-msg-enhance.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+
+    dispatched = dispatch.run(
+        "reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)}
+    )
+    assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
+    (prompt,) = dispatch.prompts()
+    rendered = re.search(r"--ticket (\S+)", prompt[4])
+    assert rendered, prompt[4]
+    rendered_ticket = rendered.group(1)
+
+    first = reply.run(
+        "orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)}
+    )
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None, (
+        "the first reply consumed the lease; only the rendered --ticket can bind the next"
+    )
+
+    second = reply.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        rendered_ticket,
+        env={"PWD": str(tmp_path)},
+    )
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] == rendered_ticket, "the rendered --ticket names the task to advance"
+    task = herdr_lease.get_task(rendered_ticket, base_dir=tmp_path)
+    assert task is not None and task["status"] == "completed"
+
+
 def test_in_reply_to_record_rebinds_a_followup_without_restating_the_ticket(
     stub: StubHarness, tmp_path: Path
 ) -> None:

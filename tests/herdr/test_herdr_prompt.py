@@ -752,6 +752,20 @@ def test_reply_contract_without_agent_is_unaddressable() -> None:
     assert "herdr agent prompt w9:p2" not in contract
 
 
+def test_reply_contract_binds_a_derived_ticket_with_the_ticket_flag() -> None:
+    """#246 E1.1: a known ticket id is rendered as `--ticket <id>` in the executable contract."""
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    bound = herdr_prompt.render_reply_contract(sender, "#182-herdr-msg-enhance")
+    assert '"<STATUS> <artifacts> <issues>" --ticket #182-herdr-msg-enhance' in bound
+
+
+def test_reply_contract_without_a_ticket_omits_the_flag() -> None:
+    """#246 E1.1 pin 3 (unit): an absent ticket id renders the pre-change contract, no crash."""
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    assert "--ticket" not in herdr_prompt.render_reply_contract(sender)
+    assert "--ticket" not in herdr_prompt.render_reply_contract(sender, None)
+
+
 def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr

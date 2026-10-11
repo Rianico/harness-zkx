@@ -154,6 +154,47 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     assert "~/.agents" not in text
 
 
+def test_dispatch_renders_the_reply_contract_with_the_ticket_bound(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 E1.1 pin 1: the envelope a callee receives binds the derived ticket id.
+
+    Asserted on the RENDERED ENVELOPE (the text `herdr agent prompt` delivers), never on an
+    intermediate option: the reply contract must carry `--ticket <derived id>` so the reply
+    side can bind an explicit name instead of inferring the sender's sole open task. E1.2
+    deletes that inference only once this lands.
+    """
+    ticket = tmp_path / "182-herdr-msg-enhance.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    envelope = call[4]
+    reply = re.search(
+        r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>" --ticket (\S+)', envelope
+    )
+    assert reply, envelope
+    assert reply.group(2) == "#182-herdr-msg-enhance"
+
+
+def test_dispatch_without_a_derivable_ticket_renders_the_unbound_contract(
+    stub: StubHarness,
+) -> None:
+    """#246 E1.1 pin 3: no derivable ticket renders today's contract, without `--ticket`.
+
+    `--file -` reads the ticket from stdin, and a stdin ticket has no filename to derive an id
+    from, so the derivation returns None. The contract must still render (no crash) in its
+    pre-change form; the reply then lands unlinked with D1.3's warning.
+    """
+    done = stub.run("reviewer", "--file", "-", "--no-wait", stdin="TICKET BODY\n")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    envelope = call[4]
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', envelope)
+    assert reply, envelope
+    assert "--ticket" not in envelope
+
+
 def test_dispatch_refuses_agent_kind(stub: StubHarness, tmp_path: Path) -> None:
     state = {
         **DEFAULT_STATE,

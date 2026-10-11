@@ -423,10 +423,19 @@ SKILL_NOTICE = (
 REPLY_HELPER = reply_helper()
 
 
-def render_reply_contract(sender: CallerContext) -> str:
-    """Render the completion-reply contract; without an agent name no target is addressable."""
+def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -> str:
+    """Render the completion-reply contract; without an agent name no target is addressable.
+
+    A known ticket id is bound with `--ticket`, so the callee's reply names its task and the
+    reply side binds explicitly instead of inferring the sender's sole open task (#246 E1.1).
+    The dispatcher reuses the same `derive_ticket_id` it stores on the lease, so the rendered
+    id and the task it names cannot drift. Without a derived id (`--file -`, stdin) the
+    contract renders in its pre-change form and the reply lands unlinked with D1.3's warning.
+    """
     if sender.agent:
         contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
+        if ticket_id:
+            contract += f" --ticket {ticket_id}"
         return (
             "On completion, reply to the sender in one message using the herdr helper script:\n"
             f"{contract}"
@@ -520,7 +529,7 @@ def wrap_with_envelope(
         tab_id=tab_id,
     )
     header = f"{utc_stamp()}\n{envelope}"
-    return f"{header}\n\n{payload}\n\n{render_reply_contract(sender)}"
+    return f"{header}\n\n{payload}\n\n{render_reply_contract(sender, ticket_id)}"
 
 
 def build_prompt_argv(

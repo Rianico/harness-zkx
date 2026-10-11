@@ -231,7 +231,7 @@ Multi-agent coordination is event-driven via completion callbacks:
 <the payload (Synthesized IDD/GDD Ticket)>
 
 On completion, reply to the sender in one message using the herdr helper script:
-  uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file <reply-payload.md>
+  uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file <reply-payload.md> --ticket <ticket-id>
 ```
 
 `STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked callee names what it needs instead of waiting silently. The **agent name** is the load-bearing part of a `Sender:` line — the pane id and label tell a person where to look, and only the name is addressable.
