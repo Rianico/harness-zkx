@@ -76,6 +76,7 @@ from herdr_cli import (
     fetch_inventory,
     find_herdr,
     guard,
+    reply_helper,
     require_herdr_env,
     run_herdr,
     run_herdr_checked,
@@ -431,10 +432,11 @@ SKILL_NOTICE = (
 )
 
 # The reply contract is an executable command, so it names this lane's own `herdr_reply.py` as an
-# absolute path resolved from this module's location: the receiving agent runs it from any cwd, and
-# a placeholder would render a command that cannot run. The `~/.agents/skills/herdr` symlink is
-# deliberately not used — it can resolve into another worktree whose `herdr_*` code may be older.
-REPLY_HELPER = Path(__file__).resolve().parent / "herdr_reply.py"
+# absolute path resolved from this tree: the receiving agent runs it from any cwd, and a
+# placeholder would render a command that cannot run. The derivation is single-sourced in
+# `herdr_cli.reply_helper()` — the `~/.agents/skills/herdr` symlink is deliberately not used,
+# since it can resolve into another worktree whose `herdr_*` code may be older.
+REPLY_HELPER = reply_helper()
 
 
 def render_reply_contract(sender: CallerContext) -> str:

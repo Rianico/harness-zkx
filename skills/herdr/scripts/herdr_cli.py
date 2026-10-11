@@ -19,6 +19,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 EXIT_OK = 0
@@ -87,6 +88,18 @@ def find_herdr(env: Mapping[str, str]) -> str:
     if found is None:
         raise UsageError("herdr not found on PATH (HERDR_BIN_PATH unset)")
     return found
+
+
+def reply_helper() -> Path:
+    """Absolute path to this tree's `herdr_reply.py`, a sibling of this module.
+
+    The three modules that render a reply command (`herdr_bootstrap`, `herdr_prompt`,
+    `herdr_reply`) each need the same value: an absolute path resolved from the tree the
+    module itself lives in, never the `~/.agents/skills/herdr` symlink, which can point into
+    another worktree whose `herdr_*` code may be older. Deriving it here means one definition
+    they cannot drift apart from. Pure: resolves this file's own location, no I/O, no state.
+    """
+    return Path(__file__).resolve().parent / "herdr_reply.py"
 
 
 AGENT_NAME_PATTERN = r"[a-z][a-z0-9_-]{0,31}"  # Herdr agent name: 1..32 chars

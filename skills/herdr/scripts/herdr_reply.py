@@ -75,6 +75,7 @@ from herdr_cli import (
     format_shell_pane_diagnostic,
     guard,
     inspect_target_shell_pane,
+    reply_helper,
     require_herdr_env,
     run_herdr,
     run_herdr_checked,
@@ -767,10 +768,11 @@ def caller_recovery_for_reply(herdr: str, env: Mapping[str, str]) -> dict[str, o
 
 
 # The recovery command is executable, so it names this lane's own `herdr_reply.py` as an absolute
-# path resolved from this module's location: an operator can run it from any cwd, and a
-# placeholder would render a command that cannot run. The `~/.agents/skills/herdr` symlink is
-# deliberately not used — it can resolve into another worktree whose `herdr_*` code may be older.
-REPLY_HELPER = Path(__file__).resolve().parent / "herdr_reply.py"
+# path resolved from this tree: an operator can run it from any cwd, and a placeholder would
+# render a command that cannot run. The derivation is single-sourced in `herdr_cli.reply_helper()`
+# — the `~/.agents/skills/herdr` symlink is deliberately not used, since it can resolve into
+# another worktree whose `herdr_*` code may be older.
+REPLY_HELPER = reply_helper()
 
 
 def format_reply_recovery_diagnostic(

@@ -82,6 +82,7 @@ from herdr_cli import (
     entry_optional_text,
     find_herdr,
     guard,
+    reply_helper,
     require_herdr_env,
     run_herdr_checked,
     scoped_agent_name,
@@ -248,11 +249,12 @@ def load_kind_entry(kind: str, config_path: Path | None = None) -> KindEntry:
 
 # The snippet is the only coordination channel that survives compaction, so it states the lane
 # coordination pattern plainly, then the two standing obligations. The reply helper is this
-# lane's own `herdr_reply.py` and is rendered as an absolute path resolved from this module's
-# location: the contract is exactly what an agent with no context left runs, so the command
-# must spawn from any cwd. The `~/.agents/skills/herdr` symlink is deliberately not used — it
-# resolves into another worktree whose `herdr_*` code may be older.
-REPLY_HELPER = Path(__file__).resolve().parent / "herdr_reply.py"
+# lane's own `herdr_reply.py` and is rendered as an absolute path resolved from this tree: the
+# contract is exactly what an agent with no context left runs, so the command must spawn from
+# any cwd. The derivation is single-sourced in `herdr_cli.reply_helper()` — the
+# `~/.agents/skills/herdr` symlink is deliberately not used, since it resolves into another
+# worktree whose `herdr_*` code may be older.
+REPLY_HELPER = reply_helper()
 INVARIANT_HEADER = (
     "ROLE INVARIANT: You are {article} {role} in a Herdr lane. "
     "Follow the lane coordination pattern."
