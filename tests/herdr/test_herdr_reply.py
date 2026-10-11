@@ -27,6 +27,7 @@ import herdr_reply
 import pytest
 import yaml
 
+from tests.git_env import GIT_LOCATION_VARS
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
 from tests.herdr.test_herdr_reply_store import entry_for, failing_write, index_write_seam
 
@@ -2446,7 +2447,10 @@ def sha_guard_repo(root: Path, name: str = "sha-guard-repo") -> tuple[Path, str]
 
     The scratch repo is the lane anchor the guard resolves against, so the pins exercise the
     real `git rev-parse --verify <token>^{commit}` probe instead of a stub of it. `name` seats a
-    second, unrelated repository under the same root for the cwd-versus-anchor pins.
+    second, unrelated repository under the same root for the cwd-versus-anchor pins, and the
+    commit message carries `name`, so the two repos have different commit SHAs: an empty commit
+    with one message gives both repos the same SHA, which would make "a token that resolves only
+    in the other repository" untestable.
     """
     repo = root / name
     repo.mkdir()
@@ -2466,7 +2470,7 @@ def sha_guard_repo(root: Path, name: str = "sha-guard-repo") -> tuple[Path, str]
         "-q",
         "--allow-empty",
         "-m",
-        "one",
+        f"one for {name}",
     )
     assert committed.returncode == 0, committed.stderr
     short = git("rev-parse", "--short=8", "HEAD")
@@ -2689,39 +2693,6 @@ def test_the_sha_guard_resolves_against_the_lane_anchor_not_the_working_director
     assert len(stub.prompts()) == 1
 
 
-@pytest.mark.parametrize(
-    "redirect_var", ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"]
-)
-def test_the_sha_guard_skips_loudly_when_git_location_is_redirected(
-    stub: StubHarness, tmp_path: Path, redirect_var: str
-) -> None:
-    """F3: a redirected git location is unverifiable, and unverifiable is never a silent pass.
-
-    `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR`/`GIT_INDEX_FILE` outrank `cwd`, so the probe would
-    answer about another location: a token that resolves only in that other repository must not
-    pass without a word, and a dead token must not be refused on the strength of a location the
-    guard cannot trust. Both deliver, and the existing skip line names every unchecked token.
-    """
-    repo, _short = sha_guard_repo(tmp_path)
-    other, other_short = sha_guard_repo(tmp_path, name="other-repo")
-    pinned = str(other / (".git/index" if redirect_var == "GIT_INDEX_FILE" else ".git"))
-    redirect = {"HERDR_LANE_DIR": str(repo), redirect_var: pinned}
-
-    silently_resolved = stub.run(
-        "orchestrator", reply_payload(f"- base `{other_short}`"), env=redirect, cwd=repo
-    )
-    assert silently_resolved.returncode == herdr_cli.EXIT_OK, silently_resolved.stderr
-    assert "SHA guard skipped" in silently_resolved.stderr
-    assert other_short in silently_resolved.stderr
-
-    dead = stub.run(
-        "orchestrator", reply_payload(f"- base `{DRIFTED_ABBREV}`"), env=redirect, cwd=repo
-    )
-    assert dead.returncode == herdr_cli.EXIT_OK, dead.stderr
-    assert "SHA guard skipped" in dead.stderr
-    assert DRIFTED_ABBREV in dead.stderr
-
-
 def test_the_sha_guard_still_refuses_when_git_location_is_not_redirected(
     stub: StubHarness, tmp_path: Path
 ) -> None:
@@ -2739,3 +2710,163 @@ def test_the_sha_guard_still_refuses_when_git_location_is_not_redirected(
     assert DRIFTED_ABBREV in done.stderr
     assert "SHA guard skipped" not in done.stderr
     assert stub.prompts() == []
+
+
+# ── #245 D2-rework-2: which git overrides actually move the object store ───────────────
+
+# The four names whose presence relocates the objects `git rev-parse` reads, so the guard's verdict
+# would be about another repository. A literal, never read from the module under test: a name
+# dropped from the tuple must fail a pin, not vanish from the parametrisation.
+OBJECT_STORE_REDIRECT_VARS: tuple[str, ...] = (
+    "GIT_DIR",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+# git's location overrides that leave the probe's verdict unchanged: they move the index or the
+# work tree, which decide `git status`, never which commit a SHA names.
+VERDICT_NEUTRAL_REDIRECT_VARS: tuple[str, ...] = ("GIT_INDEX_FILE", "GIT_WORK_TREE")
+
+
+def redirect_value(var: str, other: Path) -> str:
+    """The path `var` gets set to so git reads `other` instead of the lane repository."""
+    return {
+        "GIT_DIR": str(other / ".git"),
+        "GIT_COMMON_DIR": str(other / ".git"),
+        "GIT_OBJECT_DIRECTORY": str(other / ".git" / "objects"),
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(other / ".git" / "objects"),
+        "GIT_INDEX_FILE": str(other / ".git" / "index"),
+        "GIT_WORK_TREE": str(other),
+    }[var]
+
+
+@pytest.mark.parametrize("redirect_var", OBJECT_STORE_REDIRECT_VARS)
+def test_the_sha_guard_skips_loudly_when_the_object_store_is_relocated(
+    stub: StubHarness, tmp_path: Path, redirect_var: str
+) -> None:
+    """#245 D2-rework-2 (a) and (b): the object-store overrides skip loudly, in both directions.
+
+    (a) `GIT_OBJECT_DIRECTORY` and `GIT_ALTERNATE_OBJECT_DIRECTORIES` were the unguarded pair: an
+    override plus a token that resolves only in the foreign store used to be delivered with no
+    skip line at all — the exact silent false pass the guard exists to prevent — and the lane's
+    own commit could be refused (exit 2) because the probe asked the foreign store about it. (b)
+    With the override in the tuple every direction delivers: the foreign-only token is not trusted
+    silently, a dead token is not refused on the strength of a location the guard cannot trust,
+    the lane's own token is not refused either, and the skip line names every token left
+    unchecked. The assertions the F3 pin made on the falsified name list live here, retargeted at
+    the measured set.
+    """
+    repo, short = sha_guard_repo(tmp_path)
+    other, other_short = sha_guard_repo(tmp_path, name="other-repo")
+    redirect = {"HERDR_LANE_DIR": str(repo), redirect_var: redirect_value(redirect_var, other)}
+
+    unchecked = stub.run(
+        "orchestrator",
+        reply_payload(f"- lane `{short}`, foreign `{other_short}`"),
+        env=redirect,
+        cwd=repo,
+    )
+    assert unchecked.returncode == herdr_cli.EXIT_OK, unchecked.stderr
+    assert "SHA guard skipped" in unchecked.stderr
+    assert redirect_var in unchecked.stderr
+    assert short in unchecked.stderr, "the skip line must name every unchecked token"
+    assert other_short in unchecked.stderr, "the skip line must name every unchecked token"
+    assert len(stub.prompts()) == 1
+
+    dead = stub.run(
+        "orchestrator", reply_payload(f"- base `{DRIFTED_ABBREV}`"), env=redirect, cwd=repo
+    )
+    assert dead.returncode == herdr_cli.EXIT_OK, dead.stderr
+    assert "SHA guard skipped" in dead.stderr
+    assert DRIFTED_ABBREV in dead.stderr
+
+    own = stub.run("orchestrator", reply_payload(f"- base `{short}`"), env=redirect, cwd=repo)
+    assert own.returncode == herdr_cli.EXIT_OK, own.stderr
+    assert len(stub.prompts()) == 3
+
+
+@pytest.mark.parametrize("redirect_var", VERDICT_NEUTRAL_REDIRECT_VARS)
+def test_a_verdict_neutral_override_still_refuses_a_dead_token(
+    stub: StubHarness, tmp_path: Path, redirect_var: str
+) -> None:
+    """#245 D2-rework-2 (c): the index and work-tree overrides must not skip.
+
+    Measured: with only `GIT_INDEX_FILE` or `GIT_WORK_TREE` set, the probe's verdict is identical
+    to a clean environment — the lane's commit still resolves, a foreign or dead token still does
+    not. Skipping there would turn a correct refusal into a warning-bearing delivery, so the
+    guard answers the question it can answer and no skip line appears.
+    """
+    repo, short = sha_guard_repo(tmp_path)
+    other, other_short = sha_guard_repo(tmp_path, name="other-repo")
+    redirect = {"HERDR_LANE_DIR": str(repo), redirect_var: redirect_value(redirect_var, other)}
+
+    dead = stub.run(
+        "orchestrator", reply_payload(f"- base `{DRIFTED_ABBREV}`"), env=redirect, cwd=repo
+    )
+    assert dead.returncode == herdr_cli.EXIT_USAGE, (dead.stdout, dead.stderr)
+    assert DRIFTED_ABBREV in dead.stderr
+    assert "SHA guard skipped" not in dead.stderr
+
+    foreign = stub.run(
+        "orchestrator", reply_payload(f"- base `{other_short}`"), env=redirect, cwd=repo
+    )
+    assert foreign.returncode == herdr_cli.EXIT_USAGE, (foreign.stdout, foreign.stderr)
+    assert "SHA guard skipped" not in foreign.stderr
+    assert stub.prompts() == []
+
+    own = stub.run("orchestrator", reply_payload(f"- base `{short}`"), env=redirect, cwd=repo)
+    assert own.returncode == herdr_cli.EXIT_OK, own.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_the_object_store_set_is_measured_not_asserted(tmp_path: Path) -> None:
+    """The tuple's membership, re-derived by probing git itself, not by trusting the tuple.
+
+    Raw `git rev-parse --verify` from the lane directory: an object-store override flips the
+    verdict for a token (the lane's own commit stops resolving, or a foreign-only one starts),
+    while a verdict-neutral override leaves both answers exactly as clean. This is the
+    measurement the tuple follows, so a name moved in or out of it without re-measuring fails.
+    """
+    lane, lane_short = sha_guard_repo(tmp_path, name="lane")
+    other, other_short = sha_guard_repo(tmp_path, name="other-repo")
+
+    def resolves(sha: str, extra: dict[str, str]) -> bool:
+        done = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{sha}^{{commit}}"],
+            cwd=lane,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": os.environ["PATH"], **extra},
+        )
+        return done.returncode == 0
+
+    clean = (resolves(lane_short, {}), resolves(other_short, {}))
+
+    def flips(var: str) -> bool:
+        pinned = {var: redirect_value(var, other)}
+        return (resolves(lane_short, pinned), resolves(other_short, pinned)) != clean
+
+    assert clean == (True, False), "the scratch lane must resolve its own commit and not another's"
+    assert [var for var in OBJECT_STORE_REDIRECT_VARS if flips(var)] == list(
+        OBJECT_STORE_REDIRECT_VARS
+    )
+    assert [var for var in VERDICT_NEUTRAL_REDIRECT_VARS if flips(var)] == []
+
+
+def test_the_guard_skip_set_agrees_with_the_canonical_git_location_list() -> None:
+    """Single-sourcing: the tuple plus the neutral pair are git's whole location family.
+
+    A prod module cannot import tests, so the guard's set stays a literal here and
+    `tests/git_env.GIT_LOCATION_VARS` — the list the shell scrub and the session scrub both
+    derive from — stays canonical there; this pin holds the two together. Union and disjointness
+    make the agreement exhaustive in both directions, so a name added to either list, or moved
+    between the two classes, fails until the measurement above is redone. The pair is read from
+    prod, and each set is compared to the literal above, so a name dropped from prod fails too.
+    """
+    assert set(herdr_reply.GIT_LOCATION_REDIRECT_VARS) == set(OBJECT_STORE_REDIRECT_VARS)
+    assert set(herdr_reply.GIT_VERDICT_NEUTRAL_LOCATION_VARS) == set(VERDICT_NEUTRAL_REDIRECT_VARS)
+    assert set(OBJECT_STORE_REDIRECT_VARS) & set(VERDICT_NEUTRAL_REDIRECT_VARS) == set()
+    assert set(OBJECT_STORE_REDIRECT_VARS) | set(VERDICT_NEUTRAL_REDIRECT_VARS) == set(
+        GIT_LOCATION_VARS
+    )

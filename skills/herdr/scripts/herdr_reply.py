@@ -93,7 +93,6 @@ from typing import Any
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_bootstrap import (
     DEFAULT_SETTLE_SECONDS,
-    GIT_LOCATION_OVERRIDE_VARS,
     settle_fresh_pane,
 )
 from herdr_cli import (
@@ -665,11 +664,26 @@ def payload_shape(payload: str) -> tuple[str, str | None]:
 SHA_SHAPED_BACKTICKED_RE = re.compile(r"`([0-9a-f]{7,40})`")
 ALLOW_UNRESOLVABLE_SHA = "--allow-unresolvable-sha"
 
-# Git location overrides the guard inherits through `subprocess.run`: each one outranks `cwd`, so a
-# probe run with one set answers about that location instead of the lane repository. The tuple is
-# `herdr_bootstrap`'s own (#238), mirrored rather than reinvented, plus `GIT_COMMON_DIR`, which
-# redirects the refs and objects `rev-parse` reads.
-GIT_LOCATION_REDIRECT_VARS: tuple[str, ...] = (*GIT_LOCATION_OVERRIDE_VARS, "GIT_COMMON_DIR")
+# Git location overrides the guard inherits through `subprocess.run` that actually move the objects
+# `git rev-parse` reads, so a probe run with one set answers about another repository. `GIT_DIR` and
+# `GIT_COMMON_DIR` relocate the whole repository, `GIT_OBJECT_DIRECTORY` replaces its object store,
+# and `GIT_ALTERNATE_OBJECT_DIRECTORIES` adds foreign ones. Each outranks `cwd`, so the verdict is
+# unverifiable rather than a false negative. Measured, not assumed: with only `GIT_INDEX_FILE` or
+# `GIT_WORK_TREE` set the probe's verdict is byte-identical to a clean environment (#245
+# D2-rework-2), so those two are deliberately absent here — skipping on them would excuse a refusal
+# the probe can answer, a silent false pass the other way. `herdr_bootstrap` refuses on them because
+# its question is tracked state, which the index and the work tree do decide (#238).
+GIT_LOCATION_REDIRECT_VARS: tuple[str, ...] = (
+    "GIT_DIR",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+# Git's remaining location overrides: they move the index or the work tree, which decide `git
+# status`, never which commit a SHA names. Together with the tuple above they are git's whole
+# location family, held to `tests/git_env.GIT_LOCATION_VARS` by a pin so neither list can drift
+# alone.
+GIT_VERDICT_NEUTRAL_LOCATION_VARS: tuple[str, ...] = ("GIT_INDEX_FILE", "GIT_WORK_TREE")
 
 
 def backticked_sha_tokens(payload: str) -> list[str]:
@@ -678,12 +692,17 @@ def backticked_sha_tokens(payload: str) -> list[str]:
 
 
 def git_location_redirect(env: Mapping[str, str]) -> str | None:
-    """The git location override in `env`, or None when git would answer about `cwd`.
+    """The object-store override in `env`, or None when git would answer about `cwd`.
 
-    The same question `herdr_bootstrap._git_location_is_redirected` asks (#238), answered with the
-    offending variable's name so the skip line can say why. Any of these names makes
-    `git_can_resolve_commits` and `names_a_commit` answer about another repository, work tree, or
-    object store, so their verdict is unverifiable rather than a false negative.
+    Same question as `herdr_bootstrap._git_location_is_redirected` asks (#238) — does the caller's
+    environment point git away from this lane? — but a deliberately different policy: bootstrap
+    refuses, because it guards an irreversible append to a possibly-tracked tree, while this guard
+    skips and delivers, because a dead-SHA advisory must not block a coordination message and the
+    override is caller-environment-only (no harness script exports it, `scripts/check.sh` unsets it,
+    `tests/` scrubs it, and no payload can force it). Answered with the offending variable's name so
+    the skip line can say why. Each name here makes `git_can_resolve_commits` and `names_a_commit`
+    answer about another repository's objects, so their verdict is unverifiable rather than a false
+    negative; the overrides that leave that verdict unchanged are not read here.
     """
     return next((name for name in GIT_LOCATION_REDIRECT_VARS if env.get(name)), None)
 
@@ -727,10 +746,11 @@ def unresolvable_sha_tokens(
 ) -> list[str] | None:
     """Backticked SHA-shaped tokens in `payload` that name no commit; None when unverifiable.
 
-    `None` means git could not answer in `cwd` — no repository, no binary, or a `GIT_DIR`-family
-    override in `env` (the process environment when `env` is omitted) that points the probe at
-    another location — so the caller can report the check as skipped instead of claiming every
-    token in a payload is dead, or letting a token resolve in a repository that is not this lane's.
+    `None` means git could not answer in `cwd` — no repository, no binary, or one of
+    `GIT_LOCATION_REDIRECT_VARS` in `env` (the process environment when `env` is omitted) pointing
+    the probe at another repository's objects — so the caller can report the check as skipped
+    instead of claiming every token in a payload is dead, or letting a token resolve in a repository
+    that is not this lane's.
     `[]` means nothing to verify or every cited token resolves, which is why a payload with no such
     token passes.
     """
@@ -780,8 +800,8 @@ def require_resolvable_shas(
     written, so a refused payload leaves no record and consumes no lease — the persist-first
     ordering (#231) is untouched. Loud by construction: the refusal names every dead token and the
     payload path; a token waived by `--allow-unresolvable-sha` is named on stderr; and a git that
-    cannot answer — no work tree, no binary, or a `GIT_DIR`-family override pointing it at another
-    repository — is reported as a skipped check, never as a pass.
+    cannot answer — no work tree, no binary, or one of `GIT_LOCATION_REDIRECT_VARS` pointing it at
+    another repository's objects — is reported as a skipped check, never as a pass.
     """
     tokens = backticked_sha_tokens(payload)
     if not tokens:
