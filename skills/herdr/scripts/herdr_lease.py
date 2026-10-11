@@ -203,6 +203,29 @@ def _load_state(path: Path) -> dict[str, Any]:
     return {"active_leases": active_leases, "tasks": {}}
 
 
+def state_is_readable(
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> bool:
+    """Whether the resolved state file is absent, or present and parseable into a mapping.
+
+    `_load_state` deliberately converts a missing or corrupt file into empty state so every
+    reader degrades instead of raising, which leaves a CORRUPT store looking exactly like an
+    empty one. A caller that has to say which it is (the reply-linkage warning, #246 D1.4/F3)
+    asks here: an absent file is readable-as-empty — there is genuinely nothing to link — while
+    a file that exists but does not parse is not readable at all.
+    """
+    path = resolve_state_read_path(base_dir, env=env)
+    if not path.is_file():
+        return True
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data: Any = json.loads(raw) if path.suffix == ".json" else yaml.safe_load(raw)
+    except Exception:
+        return False
+    return isinstance(data, dict)
+
+
 def _atomic_write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.tmp-")

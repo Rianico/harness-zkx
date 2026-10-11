@@ -17,7 +17,10 @@ an explicit `--ticket <id>` (or `--in-reply-to <record-id>`) wins, else the send
 lease, else the sender's sole open task. Zero or several open tasks — or an explicit name the
 sender does not hold open — records the reply unlinked with one warning line, never a guess,
 so a second reply for the same ticket still advances the task instead of losing the linkage
-when the first reply consumes the lease.
+when the first reply consumes the lease. The sole-open-task step is the one INFERRED binding,
+so it warns even when it succeeds (#246 D1.4): it counts candidates and cannot read which
+ticket the payload is about, so the line names the task it chose and the `--ticket` flag that
+overrides it. The explicit steps stay silent — they are the caller's instruction.
 
 Prompt text is never provenance (#231). Before the prompt is sent the payload is persisted
 as a store record — a body file plus one metadata-only index sidecar carrying its digest,
@@ -103,6 +106,7 @@ from herdr_lease import (
     record_reply,
     release_lease,
     resolve_base_dir,
+    state_is_readable,
 )
 from herdr_prompt import (
     render_envelope,
@@ -979,14 +983,18 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
 
 # ── reply task linkage (#246 D1.2) ──────────────────────────────────────────────────
 
-# A finished task: its round with the sender is over, so a later reply must not re-attach to
-# it by guesswork. `completed` is the only status this store writes that ends the round.
+# The open/terminal partition that decides which tasks the INFERRED linkage may bind (#246
+# D1.4/F2). Both sets are enumerated and a test pins that they partition the store's
+# `CANONICAL_STATUSES`, so a status added there cannot silently default to open and become an
+# inference target. `completed` is the only status this store writes that ends the round;
+# `dispatched`/`in_progress`/`blocked`/`rework` all still await their assignee.
+OPEN_TASK_STATUSES = frozenset({"dispatched", "in_progress", "blocked", "rework"})
 TERMINAL_TASK_STATUSES = frozenset({"completed"})
 
 
 def _is_open_task(task: Mapping[str, Any]) -> bool:
-    """Whether a task still awaits its assignee: any status but a terminal one."""
-    return task.get("status") not in TERMINAL_TASK_STATUSES
+    """Whether a task still awaits its assignee: its status is one of the open ones."""
+    return task.get("status") in OPEN_TASK_STATUSES
 
 
 def _unlinked(reason: str, exc: BaseException | None = None) -> str:
@@ -995,14 +1003,33 @@ def _unlinked(reason: str, exc: BaseException | None = None) -> str:
     return f"task linkage unresolved — {reason}{detail}; recording the reply unlinked"
 
 
+def _inferred(task_id: str) -> str:
+    """The one warning line for a linkage this step INFERRED rather than was told (#246 D1.4).
+
+    The sole-open-task step counts the sender's open tasks; it cannot see which ticket the
+    payload is about, so "exactly one candidate" is not evidence of a correct attribution. The
+    default stays (it is what advances a corrected or addendum reply with no lease), and its
+    silence becomes this line: the caller can tell an inferred binding from the one it asked
+    for, and knows the flag that overrides it. PROBE1 measured the cost of that silence.
+    """
+    return (
+        f"task linkage inferred — bound to your sole open task {task_id!r}; "
+        "pass --ticket if this reply is about another ticket"
+    )
+
+
 def _sender_open_tasks(sender: str, env: Mapping[str, str]) -> list[dict[str, Any]] | None:
     """Every non-terminal task assigned to `sender`; None when the store cannot be read.
 
     `None` and `[]` are different answers: an unreadable store has already been reported by
     the lease steps, so it must not also warn about a missing linkage, while an empty list is
-    a real "this sender holds no open task".
+    a real "this sender holds no open task". `_load_state` turns corruption into empty state,
+    so the readability probe runs first — without it a damaged store read as `[]` and the
+    warning claimed the sender held no open task (#246 D1.4/F3).
     """
     try:
+        if not state_is_readable(env=env):
+            return None
         tasks = list_tasks(env=env)
     except Exception:
         return None
@@ -1097,6 +1124,11 @@ def resolve_task_linkage(
     linkage was made; when there was nothing to link, the line says the sender holds no open
     task. An unresolved sender and an unreadable store are named too, instead of a reasonless
     `(None, None)` answer.
+
+    The inferred step also warns when it SUCCEEDS (#246 D1.4): it counts candidates, it cannot
+    read which ticket the payload is about, so its binding is reported with the task id it
+    chose and the flag that overrides it. The explicit steps stay silent — they are the
+    caller's instruction, so a warning there would carry no information.
     """
     if in_reply_to_record is not None:
         return _linkage_from_record(in_reply_to_record, sender=sender, env=env)
@@ -1114,7 +1146,7 @@ def resolve_task_linkage(
     if len(open_tasks) == 1:
         task_id = open_tasks[0].get("task_id")
         if isinstance(task_id, str):
-            return task_id, None
+            return task_id, _inferred(task_id)
         return None, _unlinked(
             f"sender {sender!r} holds open work, but the task id is not a string"
         )
@@ -1320,8 +1352,10 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             in_reply_to = lease_task
     # #246 D1.2: the lease is consumed by the first reply, so the task this reply advances is
     # resolved from the whole store — the explicit flag, else the lease, else the sender's sole
-    # open task — and an unresolvable answer is recorded unlinked with one warning line. A dry
-    # run records nothing, so it resolves nothing.
+    # open task — and an unresolvable answer is recorded unlinked with one warning line. The
+    # inferred step warns even on success (#246 D1.4): it counts candidates, so the line names
+    # the task it bound and the flag that overrides it. A dry run records nothing, so it resolves
+    # nothing.
     linked_task_id: str | None = None
     if not options.dry_run:
         linked_task_id, linkage_warning = resolve_task_linkage(

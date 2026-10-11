@@ -509,6 +509,201 @@ def test_resolve_task_linkage_never_returns_a_silent_answer(
     assert warning is not None and "could not be read" in warning
 
 
+def test_the_inferred_sole_open_task_linkage_warns_and_names_the_bound_task(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.4 pin 1: an INFERRED linkage is never silent, and the line names the task.
+
+    The sender holds exactly one open task and no lease, so the linkage can only come from the
+    count of its open tasks — the one step that cannot see which ticket the payload is about.
+    The reply still binds and still advances the task (D1.2 pin 1 depends on that), but the
+    caller now sees one warning line naming the task it was bound to and the flag that would
+    override it.
+
+    Mutant killed: drop the warning from the `len(open_tasks) == 1` branch and the count, the
+    loud marker, and the named id all vanish.
+    """
+    task_id = "#246#d14-inferred"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=task_id
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True, (
+        "no lease: inference only"
+    )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] == task_id, "the inference still binds; this pin is about visibility"
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert task_id in warnings[0], warnings[0]
+    assert "sole open task" in warnings[0], warnings[0]
+    assert "--ticket" in warnings[0], warnings[0]
+    advanced = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert advanced is not None and advanced["status"] == "completed"
+
+
+def test_a_reply_about_another_ticket_bound_to_the_sole_open_task_warns(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.4 pin 2: the PROBE1 scenario, pinned for visibility (the linkage still happens).
+
+    The sender holds exactly one open task, for `#246`, while its payload is about `#247`, and it
+    carries no lease and no flag — so the payload holds no ticket signal and the linkage can only
+    be the sole-open-task inference. PROBE1 recorded `task_id: '#246#probe-a'` with EMPTY stderr.
+    This pin asserts the linkage is now VISIBLE: exactly one line naming the bound task, so the
+    mis-attribution is the caller's to notice. A silent inference passes every other D1.2 pin.
+
+    Mutant killed: silence the `== 1` branch and the warning count drops to zero.
+    """
+    task_id = "#246#d14-probe-a"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=task_id
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True
+    open_before = [
+        task["task_id"]
+        for task in herdr_lease.list_tasks(base_dir=tmp_path)
+        if task.get("assignee") == "reviewer" and task.get("status") != "completed"
+    ]
+    assert open_before == [task_id], "the sender must hold exactly one open task"
+
+    done = stub.run(
+        "orchestrator",
+        "BLOCKED this reply is about ticket #247, not #246\n",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] == task_id, "PROBE1: the inference still binds the foreign reply"
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert task_id in warnings[0], warnings[0]
+    bound = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert bound is not None and bound["status"] == "blocked"
+
+
+def test_explicit_linkage_bindings_never_warn_about_inference(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.4 pin 3 (negative): a flag is the caller's instruction, so it is never "inferred".
+
+    Both runs give the sender exactly one open task and no lease — the state that makes the
+    inference warn — so the quiet stderr can only come from the explicit binding winning first.
+    The `--in-reply-to` run names a stored record whose task is still open (a BLOCKED first
+    reply leaves the round running).
+
+    Mutant killed: make the explicit paths warn and both runs report a linkage line.
+    """
+    flag_task = "#246#d14-explicit-flag"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=flag_task
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True
+
+    flagged = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        flag_task,
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+    )
+    assert flagged.returncode == herdr_cli.EXIT_OK, flagged.stderr
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] == flag_task
+    assert flagged.stderr == "", flagged.stderr
+
+    record_store = tmp_path / "reply-to"
+    record_store.mkdir()
+    record_task = "#246#d14-explicit-record"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "246.md",
+        "orchestrator",
+        base_dir=record_store,
+        ticket_id="#246",
+        task_id=record_task,
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=record_store) is True
+    first = stub.run(
+        "orchestrator",
+        "BLOCKED waiting on the explicit reference\n",
+        "--ticket",
+        record_task,
+        env={"HERDR_LANE_DIR": str(record_store)},
+    )
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    record_id = herdr_lease.list_replies(base_dir=record_store)[-1]["id"]
+
+    rebound = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--in-reply-to",
+        str(record_id),
+        env={"HERDR_LANE_DIR": str(record_store)},
+    )
+    assert rebound.returncode == herdr_cli.EXIT_OK, rebound.stderr
+    assert herdr_lease.list_replies(base_dir=record_store)[-1]["task_id"] == record_task
+    assert rebound.stderr == "", rebound.stderr
+
+
+def test_the_open_and_terminal_status_partition_covers_every_canonical_status() -> None:
+    """#246 D1.4 F2: the partition is explicit, so no canonical status defaults to open.
+
+    `_is_open_task` decides which tasks the `== 1` inference may bind. While it hardcoded the
+    singleton {"completed"}, any status added later would silently count as open and become an
+    inference target. The partition is now enumerated and pinned total and disjoint against the
+    store's `CANONICAL_STATUSES`, so a new status forces a decision instead of defaulting.
+    """
+    open_statuses = herdr_reply.OPEN_TASK_STATUSES
+    terminal_statuses = herdr_reply.TERMINAL_TASK_STATUSES
+    assert open_statuses | terminal_statuses == frozenset(herdr_lease.CANONICAL_STATUSES)
+    assert open_statuses.isdisjoint(terminal_statuses)
+    assert terminal_statuses == frozenset({"completed"})
+    for status in herdr_lease.CANONICAL_STATUSES:
+        assert herdr_reply._is_open_task({"status": status}) is (status in open_statuses), status
+    assert [status for status in herdr_lease.CANONICAL_STATUSES if status not in open_statuses] == [
+        "completed"
+    ]
+
+
+def test_a_corrupt_store_reads_as_unreadable_not_as_a_missing_open_task(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.4 F3: a corrupt store must not be reported as "the sender holds no open task".
+
+    `herdr_lease._load_state` swallows corruption and returns empty state, so the unreadable
+    branch never fired and a damaged store produced the quiet "holds no open task" line — the
+    wrong claim, since the store may hold open work nobody could read. The file below is
+    unparseable, so the reply is still recorded unlinked (fail-closed) but says so accurately.
+    """
+    task_id = "#246#d14-corrupt"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=task_id
+    )
+    tasks_file = herdr_lease.resolve_tasks_file(base_dir=tmp_path)
+    _ = tasks_file.write_text("{ corrupt: [unterminated\n", encoding="utf-8")
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] is None
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert "could not be read" in warnings[0], warnings[0]
+    assert "no open task" not in warnings[0], warnings[0]
+
+
 def test_refuses_without_herdr_env(stub: StubHarness) -> None:
     done = stub.run("orchestrator", "done", env={"HERDR_ENV": None})
     assert done.returncode == herdr_cli.EXIT_USAGE
