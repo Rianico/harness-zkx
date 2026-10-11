@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **gh-router:** visual-first PR template with shaped summary, delimiter separation, closed-issue state advisory, and deterministic changelog shape gate
+* **changelog-gate:** enforce 100-word/4-line entry budget, reject machine telemetry, activate ticket phase, and exempt hidden-type PRs from ledger requirement
 * **herdr:** per-kind startup contract in `references/kinds.yaml` — trust flags ride after `--` (`pi` → `--approve`, `claude` → `--dangerously-skip-permissions`) and the `--cwd` guarantee cds the pane into the worktree, refusing to start until it converges (#226)
 * **herdr:** `herdr-dispatch --auto-start KIND` bootstraps a missing agent in a bare-shell pane through the bootstrap contract (ROLE INVARIANT, kinds.yaml trust flags, pane-cwd guarantee) and dispatches in one call; unknown kinds fail fast, `--dry-run` prints the plan, and a failed bootstrap names the started-but-undispatched agents instead of orphaning them silently (#226)
 * **herdr:** task trajectory in tasks.yaml and pre-flight prompt readiness (#222)
@@ -88,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
+* **changelog-gate:** strip inline code spans before placeholder evaluation to prevent false-positive refusals on angle brackets inside backticks
 * **herdr:** emit `pi --session` with the session path or id for every pi resume, because `--resume` is a value-less picker that opens the session list ([#211](https://github.com/Rianico/harness-zkx/issues/211)) (#223)
 * **herdr:** refuse a whitespace TARGET before reading the payload, and name `--file`/stdin in the empty-payload refusal ([#212](https://github.com/Rianico/harness-zkx/issues/212)) (#223)
 * **herdr:** observe `--no-wait` acceptance for the CLI's own 5s window and warn instead of exiting 1, ending duplicate re-sends and false "prompt dropped" reports ([#193](https://github.com/Rianico/harness-zkx/issues/193)) (#223)

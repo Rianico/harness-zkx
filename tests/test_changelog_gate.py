@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "changelog-gate.py"
 
@@ -192,6 +194,47 @@ def test_ledger_blocks_an_angle_bracket_placeholder(tmp_path: Path) -> None:
     assert "placeholders" in result.stderr
 
 
+def test_ledger_allows_angle_brackets_inside_a_code_span(tmp_path: Path) -> None:
+    """Inline code is verbatim content; `<file>` is a filename, not a placeholder."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** retarget `<file>` paths (#1)"),
+        ["feat(thing): a (#1)"],
+    )
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_allows_multiple_code_spans_in_one_entry(tmp_path: Path) -> None:
+    """Stripping removes every span, so several in one bullet stay clean."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** map `<file>` onto `<branch>` (#1)"),
+        ["feat(thing): a (#1)"],
+    )
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_blocks_a_bare_angle_placeholder_next_to_a_code_span(tmp_path: Path) -> None:
+    """Stripping is scoped to spans; a bare `<target>` outside backticks still blocks."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** use `<file>` for <target> (#1)"),
+        ["feat(thing): a (#1)"],
+    )
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "placeholders" in result.stderr
+
+
 # --- accounting ---------------------------------------------------------------------------
 
 
@@ -351,6 +394,56 @@ def test_ledger_blocks_when_current_pr_has_no_entries(tmp_path: Path) -> None:
 
     assert result.returncode == 1, result.stderr
     assert "#96 carries no entries" in result.stderr
+
+
+# --- the hidden-type exemption at the PR boundary ------------------------------------------
+
+
+def test_ledger_exempts_a_docs_pr_from_the_entry_requirement(tmp_path: Path) -> None:
+    """A docs squash owes no ledger entry: the audience change is release-relevant."""
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["docs: update readme (#106)"])
+
+    result = _run(repo, "ledger", "--pr", "106", "--squash-title", "docs: update readme")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_exempts_a_scoped_chore_pr(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger(), ["chore(deps): update foo (#106)"])
+
+    result = _run(repo, "ledger", "--pr", "106", "--squash-title", "chore(deps): update foo")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_requires_entries_for_releasable_titles(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["feat: add bar (#106)"])
+
+    result = _run(repo, "ledger", "--pr", "106", "--squash-title", "feat: add bar")
+
+    assert result.returncode == 1, result.stderr
+    assert "#106 carries no entries" in result.stderr
+
+
+def test_ledger_a_breaking_docs_pr_is_not_exempt(tmp_path: Path) -> None:
+    """`docs!:` announces a breaking change to the audience: the ledger owes an entry."""
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["docs!: restructure the ledger (#106)"])
+
+    result = _run(repo, "ledger", "--pr", "106", "--squash-title", "docs!: restructure the ledger")
+
+    assert result.returncode == 1, result.stderr
+    assert "#106 carries no entries" in result.stderr
+
+
+def test_ledger_without_a_title_still_requires_entries(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["docs: update readme (#106)"])
+
+    result = _run(repo, "ledger", "--pr", "106")
+
+    assert result.returncode == 1, result.stderr
+    assert "#106 carries no entries" in result.stderr
 
 
 def test_ledger_accepts_pr_without_landing_declaration(tmp_path: Path) -> None:
@@ -560,3 +653,211 @@ def test_ticket_subcommand_is_backward_compatible(tmp_path: Path) -> None:
     result = _run(repo, "ticket", "--base", "main")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "ticket: pass"
+
+
+def test_ticket_subcommand_passes_a_missing_ledger(tmp_path: Path) -> None:
+    """The pre-merge hook runs in repos that never curated a ledger yet: shape gates what exists."""
+    repo = _repo(tmp_path, None, ["feat(thing): a"])
+    result = _run(repo, "ticket", "--base", "main")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ticket: pass"
+
+
+def test_ticket_subcommand_runs_the_shape_phase(tmp_path: Path) -> None:
+    """The pre-merge audit (wt.toml `[pre-merge] changelog`) gates the shape floor."""
+    repo = _repo(tmp_path, _ledger(f"* **thing:** {_words(110)} (#1)"), ["feat(thing): a (#1)"])
+
+    result = _run(repo, "ticket", "--base", "main")
+
+    assert result.returncode == 1, result.stderr
+    assert "entry-shape" in result.stderr
+    assert "  →" in result.stderr
+
+
+# --- the entry shape floor -----------------------------------------------------------------
+
+
+def _words(n: int) -> str:
+    return " ".join(f"w{i}" for i in range(n))
+
+
+def test_ledger_blocks_a_run_on_prose_bullet(tmp_path: Path) -> None:
+    """A 500-word thesis is refused with the structure hint, not waved through."""
+    repo = _repo(tmp_path, _ledger(f"* **thing:** {_words(110)} (#1)"), ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "entry-shape" in result.stderr
+    assert "words (max 100)" in result.stderr
+    assert "Evidence section" in result.stderr, "the refusal carries an actionable hint"
+
+
+def test_ledger_accepts_a_concise_well_formed_entry(tmp_path: Path) -> None:
+    entry = (
+        "* **thing:** cap the retry budget at three attempts and fail fast; "
+        "downstream pollers now converge inside one screen (#1)"
+    )
+    repo = _repo(tmp_path, _ledger(entry), ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_blocks_an_entry_over_the_line_budget(tmp_path: Path) -> None:
+    block = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** a thing (#1)\n"
+        "  wrapped line two\n"
+        "  wrapped line three\n"
+        "  wrapped line four\n"
+        "  wrapped line five\n"
+    )
+    repo = _repo(tmp_path, block, ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "entry-shape" in result.stderr
+    assert "spans 5 lines (max 4)" in result.stderr
+
+
+def test_ledger_accepts_an_entry_inside_the_line_budget(tmp_path: Path) -> None:
+    block = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** a thing (#1)\n  wrapped line two\n  wrapped line three\n  wrapped four\n"
+    )
+    repo = _repo(tmp_path, block, ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("entry", "needle"),
+    [
+        ("* **thing:** pool tuning when loadavg 12.4 sat above cores (#1)", "load"),
+        ("* **thing:** dashboard shows p95 latency for the fleet (#1)", "p95"),
+        ("* **thing:** stream sustains 1200 tokens/s on warm cache (#1)", "tokens/s"),
+        ("* **thing:** surface exit=128 from the runner (#1)", "exit=128"),
+        ("* **thing:** edit latency probe 3 us then 12 µs then 2us (#1)", "us"),
+    ],
+)
+def test_ledger_blocks_raw_machine_telemetry_in_an_entry(
+    tmp_path: Path, entry: str, needle: str
+) -> None:
+    repo = _repo(tmp_path, _ledger(entry), ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 1, result.stderr
+    assert "raw machine telemetry" in result.stderr
+    assert needle in result.stderr
+
+
+def test_ledger_allows_a_single_round_measurement(tmp_path: Path) -> None:
+    """One honest number in prose is not a telemetry dump: 120 ms stays, repetition does not."""
+    entry = "* **thing:** cut cold start by 120 ms after the warm cache lands (#1)"
+    repo = _repo(tmp_path, _ledger(entry), ["feat(thing): a (#1)"])
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_shape_findings_are_fixable_and_waivable(tmp_path: Path) -> None:
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** dashboard shows p95 latency for the fleet (#1)"),
+        ["feat(thing): a (#1)"],
+    )
+    assert _ledger_check(repo).returncode == 1
+
+    waived = _run(repo, "ledger", "--waiver", "the percentile names the shipped metric")
+
+    assert waived.returncode == 0, waived.stderr
+    assert "[waived] [entry-shape]" in waived.stderr
+
+
+def test_ledger_blocks_a_current_pr_entry_without_a_scope_label(tmp_path: Path) -> None:
+    """The shape structure is `<scope>: <imperative summary> (#N)` for this PR's entries."""
+    repo = _repo(tmp_path, _ledger("* add a plain thing (#96)"), ["feat(thing): a"])
+
+    result = _run(repo, "ledger", "--pr", "96")
+
+    assert result.returncode == 1, result.stderr
+    assert "entry-shape" in result.stderr
+    assert "carries no `**scope:**` label" in result.stderr
+
+
+def test_ledger_tolerates_scopeless_legacy_entries(tmp_path: Path) -> None:
+    """Legacy unscoped bullets are baseline debt, not fresh violations: only PR-bound
+    entries must carry the scope label."""
+    repo = _repo(
+        tmp_path, _ledger("* stop background re-push after auto-amend"), ["feat(a): x (#1)"]
+    )
+    _ = _baseline(repo, "stop background re-push after auto-amend")
+
+    result = _ledger_check(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert "carries no `**scope:**` label" not in result.stderr
+
+
+# --- the squash-title alignment audit -------------------------------------------------------
+
+
+def test_ledger_accepts_an_aligned_squash_title(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a thing (#96)"), ["feat(thing): a"])
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(thing): a thing (#96)")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_blocks_a_squash_title_out_of_scope_with_the_entries(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a thing (#96)"), ["feat(thing): a"])
+
+    result = _run(
+        repo,
+        "ledger",
+        "--pr",
+        "96",
+        "--landing",
+        "squash",
+        "--squash-title",
+        "feat(ci): a thing (#96)",
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert "squash-alignment" in result.stderr
+    assert "matches no entry scope" in result.stderr
+    assert "retarget the ledger entries" in result.stderr
+
+
+def test_alignment_matches_nested_entry_scopes(tmp_path: Path) -> None:
+    """`feat(gh-router): …` aligns with an entry scoped `gh-router/pr-land`."""
+    repo = _repo(tmp_path, _ledger("* **gh-router/pr-land:** a thing (#96)"), ["feat(a): b"])
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(gh-router): a thing (#96)")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_alignment_skips_a_scopeless_title(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a thing (#96)"), ["feat(a): b"])
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat: a thing (#96)")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_squash_title_flag_needs_pr(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, _ledger("* **thing:** a thing (#1)"), ["feat(thing): a (#1)"])
+
+    result = _run(repo, "ledger", "--squash-title", "feat(thing): a thing")
+
+    assert result.returncode == 2, result.stderr
+    assert "--squash-title needs --pr" in result.stderr
