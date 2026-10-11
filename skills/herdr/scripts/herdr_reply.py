@@ -753,6 +753,13 @@ def caller_recovery_for_reply(herdr: str, env: Mapping[str, str]) -> dict[str, o
         return None
 
 
+# The recovery command is executable, so it names this lane's own `herdr_reply.py` as an absolute
+# path resolved from this module's location: an operator can run it from any cwd, and a
+# placeholder would render a command that cannot run. The `~/.agents/skills/herdr` symlink is
+# deliberately not used — it can resolve into another worktree whose `herdr_*` code may be older.
+REPLY_HELPER = Path(__file__).resolve().parent / "herdr_reply.py"
+
+
 def format_reply_recovery_diagnostic(
     target: str, recovery: Mapping[str, object], file_arg: str
 ) -> str:
@@ -763,7 +770,7 @@ def format_reply_recovery_diagnostic(
     lines = [
         f"herdr-reply: target agent {target!r} in pane {pane_id} has exited.",
         "Suggested recovery:",
-        "  1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py "
+        f'  1. Auto-revive & deliver: uv run "{REPLY_HELPER}" '
         f"{target} --file {file_arg} --auto-start {kind}",
     ]
     if resume_cmd:

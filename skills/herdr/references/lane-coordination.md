@@ -217,7 +217,7 @@ Role Assignment: TM=`<kind>` (`<provider>/<model>`), Callees=`<kind>` (`<provide
 You are the **Task Manager** for this lane. You hold **coordination, design judgment, and review authority ONLY**.
 - **HARD CONSTRAINT**: Do NOT edit source code, test files, or configuration files directly.
 - **DELEGATION**: Decompose requirements into atomic tickets and dispatch them to callee(s) (`<callee-names>`) using:
-  `uv run ~/.agents/skills/herdr/scripts/herdr_dispatch.py <callee-name> --file <ticket-path>`
+  `uv run ${herdr_skill}/scripts/herdr_dispatch.py <callee-name> --file <ticket-path>`
   *(Pass only the callee agent name before `@`, e.g., `impl-1`).*
 - Await completion via `herdr_reply.py` callbacks.
 - **CODE REVIEW MANDATE**: On receiving callee completion, run verification gates AND spawn an internal subagent to conduct an adversarial crux code review under `keel`, `coding-protocol`, and `programming-expert`.
@@ -242,7 +242,7 @@ You are the **Task Manager** for this lane. You hold **coordination, design judg
 
 ## Reporting
 On gate pass and review approval, reply to the sender using the Final Reply Template:
-  `uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <sender-name> "<STATUS> <summary>"`
+  `uv run ${herdr_skill}/scripts/herdr_reply.py <sender-name> "<STATUS> <summary>"`
 ```
 
 ---
@@ -271,8 +271,8 @@ Target files / Seams: <paths or boundary definitions>
 - **The Iron Curtain**: Never let subagents call Herdr CLI commands or scripts (`herdr_reply.py`, `herdr_dispatch.py`). Aggregate all results in this host pane.
 
 On completion, reply to the caller in one message using the herdr helper script:
-  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <sender-name> --file <reply-payload.md>
-  # (Or inline: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller-name> "<PAYLOAD>")
+  uv run ${herdr_skill}/scripts/herdr_reply.py <sender-name> --file <reply-payload.md>
+  # (Or inline: uv run ${herdr_skill}/scripts/herdr_reply.py <caller-name> "<PAYLOAD>")
 ```
 
 ---
@@ -364,7 +364,7 @@ Hierarchy:
   Ticket-ID: #182-herdr-msg-enhance
   Task-ID: #182-herdr-msg-enhance#impl-bootstrap
 Protocol:
-  Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+  Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all coordination, never the bare herdr CLI
 ```
 
 Reply — reports a result: `Routing:` and `Hierarchy:` only, with `Task-Group:` (the tab) and `In-Reply-To:` naming the Task-ID it answers (no forward-only `Runtime:`; the reply reuses the sender's session):
@@ -379,7 +379,7 @@ Hierarchy:
   Ticket-ID: #182-herdr-msg-enhance
   In-Reply-To: #182-herdr-msg-enhance#impl-bootstrap
 Protocol:
-  Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+  Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all coordination, never the bare herdr CLI
 ```
 
 #### Ticket-ID / Task-ID contract
@@ -532,7 +532,7 @@ Multi-agent coordination across Herdr lanes is governed by four core pillars tha
 ### 1. Dispatch-and-Yield (Async Event-Driven Turn Model)
 - **Asynchronous Handoff**: Multi-agent coordination in Herdr is strictly event-driven. Tasks are dispatched asynchronously using:
   ```bash
-  uv run ~/.agents/skills/herdr/scripts/herdr_dispatch.py <target> --file <ticket.md> --no-wait
+  uv run ${herdr_skill}/scripts/herdr_dispatch.py <target> --file <ticket.md> --no-wait
   ```
 - **Immediate Yield**: After dispatching, the caller **immediately yields its turn** (stops calling tools, enters idle). It does NOT enter busy-polling loops or launch external wait barriers.
 - **Caller Recovery (`kind + session_path + cwd`)**: The dispatch helper persists the caller's execution environment coordinates (`pane_id`, `kind`, `session_path`, `resume_cmd`, `cwd`) as `caller_recovery` on the task record in `.lane/tasks.yaml`; the envelope itself stays trimmed to Routing/Hierarchy/Protocol. When the callee wakes the caller via a reply, the caller's turn resumes with full session continuity and zero context amnesia.
@@ -559,7 +559,7 @@ Multi-agent coordination across Herdr lanes is governed by four core pillars tha
   ```text
   herdr-reply: target agent '<caller>' in pane <pane_id> has exited.
   Suggested recovery:
-    1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller> --file <reply> --auto-start <kind>
+    1. Auto-revive & deliver: uv run "${herdr_skill}/scripts/herdr_reply.py" <caller> --file <reply> --auto-start <kind>
     2. Or resume manually in pane <pane_id>: <resume_cmd>
   ```
   `--auto-start <kind>` revives the agent, then delivers. With no stored recovery metadata it falls back to the older shell-pane diagnostic.

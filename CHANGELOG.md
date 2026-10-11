@@ -94,6 +94,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
+* **herdr:** the reply-recovery instruction runs this lane's own `herdr_reply.py` instead of the `~/.agents/skills/herdr` symlink — which can resolve into another worktree whose code is older — the quoted Protocol notice and the command samples in `SKILL.md` and `references/lane-coordination.md` carry the code's path-neutral text, and a doc-contract test now pins every quoted notice against `herdr_prompt.SKILL_NOTICE` ([#232](https://github.com/Rianico/harness-zkx/issues/232)) ([#236](https://github.com/Rianico/harness-zkx/issues/236)) (#236)
 * **herdr:** resolve one lease store per lane (`HERDR_LANE_DIR` → git common dir) and compare its identity physically, keep replies deliverable when no store resolves, report a cross-store release instead of dropping it, and hand `HERDR_LANE_DIR` to every pane `herdr-pane split` creates ([#229](https://github.com/Rianico/harness-zkx/issues/229)) (#229)
 * **herdr:** emit `pi --session` with the session path or id for every pi resume, because `--resume` is a value-less picker that opens the session list ([#211](https://github.com/Rianico/harness-zkx/issues/211)) (#223)
 * **herdr:** refuse a whitespace TARGET before reading the payload, and name `--file`/stdin in the empty-payload refusal ([#212](https://github.com/Rianico/harness-zkx/issues/212)) (#223)

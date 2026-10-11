@@ -49,7 +49,7 @@ Hierarchy:
   Ticket-ID: #182-herdr-msg-enhance
   Task-ID: #182-herdr-msg-enhance#overview-rich
 Protocol:
-  Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI
+  Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all coordination, never the bare herdr CLI
 ```
 
 Pass `--verbose` to `herdr-prompt`, `herdr-dispatch`, or `herdr-reply` to opt the `Runtime:` (Cwd/Resume) block back in for debugging. Recovery metadata otherwise lives in `.lane/tasks.yaml`, never in the envelope.
@@ -231,7 +231,7 @@ Multi-agent coordination is event-driven via completion callbacks:
 <the payload (Synthesized IDD/GDD Ticket)>
 
 On completion, reply to the sender in one message using the herdr helper script:
-  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py orchestrator --file <reply-payload.md>
+  uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file <reply-payload.md>
 ```
 
 `STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked callee names what it needs instead of waiting silently. The **agent name** is the load-bearing part of a `Sender:` line — the pane id and label tell a person where to look, and only the name is addressable.

@@ -2,9 +2,10 @@
 
 Two contracts live here, and both read the *documentation* as the input under test:
 
-1. **Documented values.** Every window and exit code asserted in these docs is parsed *out of the
-   doc text* and compared against the code constant (imported, never re-stated as a literal), so
-   the code stays the single implementation and the prose cannot drift from behaviour.
+1. **Documented values.** Every window, exit code, and rendered notice asserted in these docs is
+   parsed *out of the doc text* and compared against the code constant (imported, never re-stated
+   as a literal), so the code stays the single implementation and the prose cannot drift from
+   behaviour.
 2. **Documented pointers.** Every inline-code token in `skills/herdr/**/*.md` that looks like a
    file pointer must resolve to a file that exists. `EXCLUDED_TOKENS` is an **exact** allow-list
    (no globs) naming the prose illustrations that are deliberately not pointers here, so a new
@@ -88,6 +89,10 @@ def _exclusion_rule(token: str) -> str | None:
         return "store"
     # `agents/<agent>.md` and `<reply.md` name a shape filled in at run time, not a file.
     if "<" in token or ">" in token:
+        return "placeholder"
+    # `${herdr_skill}/scripts/...` is the Protocol notice's placeholder for the reader's own
+    # skill directory; the reader substitutes it at run time, so it names no file here.
+    if token.startswith("${herdr_skill}/"):
         return "placeholder"
     # `~/.gemini/config/hooks.json` lives in the user's home, not in this repository.
     if token.startswith("~"):
@@ -205,6 +210,7 @@ def test_allow_list_holds_only_exact_file_tokens() -> None:
         ("http://example.com/doc.md", "url"),
         ("agents/<agent>.md", "placeholder"),
         ("<reply.md", "placeholder"),
+        ("${herdr_skill}/scripts/herdr_reply.py", "placeholder"),
         ("~/.qoder/hooks/herdr-agent-state.sh", "home"),
         (".lane/replies/<id>.yaml", "store"),
         (".lane/lease.yaml", "store"),
@@ -233,6 +239,33 @@ def test_skill_overview_qualifies_the_reply_template_pointer() -> None:
             assert "/" in pointer, f"the template pointer is unqualified: {pointer}"
             assert pointer.endswith("dynamic-workflow-wrapper/references/" + template), pointer
             assert _resolve(OVERVIEW_DOC, pointer) is not None, f"{pointer} does not exist"
+
+
+# ── divergence 4: the Protocol notice quoted in every envelope sample ─────────────────────────
+
+
+def _quoted_protocol_notices(doc: Path) -> list[str]:
+    """Lines the doc quotes as the envelope's Protocol notice, located by its leading token.
+
+    The notice rides every rendered envelope, so the docs quote it verbatim; the leading
+    `Herdr:` token finds each quote without depending on line numbers. Lines are returned
+    stripped, the indentation being the sample's, not the notice's.
+    """
+    return [
+        line.strip()
+        for line in doc.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("Herdr:")
+    ]
+
+
+@pytest.mark.parametrize("doc", (OVERVIEW_DOC, COORDINATION_DOC))
+def test_documented_protocol_notice_matches_the_code(doc: Path) -> None:
+    """Every quoted Protocol notice equals `herdr_prompt.SKILL_NOTICE`, so prose cannot lag it."""
+    quoted = _quoted_protocol_notices(doc)
+    where = doc.relative_to(REPO_ROOT)
+    assert quoted, f"{where} quotes no Protocol notice"
+    for line in quoted:
+        assert line == herdr_prompt.SKILL_NOTICE, f"{where}: {line}"
 
 
 # ── divergence 1: the handshake window and the unconfirmed-acceptance exit code ───────────────

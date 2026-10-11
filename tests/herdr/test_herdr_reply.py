@@ -515,9 +515,9 @@ def test_reply_emits_recovery_diagnostic_for_exited_target(
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "target agent 'lens-orchestrator' in pane wM:p1N has exited." in done.stderr
     assert (
-        "uv run ~/.agents/skills/herdr/scripts/herdr_reply.py lens-orchestrator "
-        "--file <reply> --auto-start pi"
+        f'uv run "{herdr_reply.REPLY_HELPER}" lens-orchestrator --file <reply> --auto-start pi'
     ) in done.stderr
+    assert "~/.agents" not in done.stderr
     assert "Or resume manually in pane wM:p1N: pi --session sess.jsonl" in done.stderr
     assert stub.prompts() == []
 
@@ -578,30 +578,40 @@ def test_reply_without_recovery_keeps_existing_shell_diagnostic(
 
 
 def test_format_reply_recovery_diagnostic_exact_shape() -> None:
+    # A recovery command is executable and lane-local: it resolves this module's own helper, never
+    # the `~/.agents` symlink, which can point into another worktree whose code is older.
+    assert herdr_reply.REPLY_HELPER.is_absolute()
+    assert herdr_reply.REPLY_HELPER.name == "herdr_reply.py"
+    assert herdr_reply.REPLY_HELPER == SCRIPT
+
     recovery = {
         "pane_id": "wM:p1N",
         "kind": "pi",
         "resume_cmd": "pi --session sess.jsonl",
         "cwd": "/repo",
     }
-    assert herdr_reply.format_reply_recovery_diagnostic(
+    rendered = herdr_reply.format_reply_recovery_diagnostic(
         "lens-orchestrator", recovery, "<reply>"
-    ) == (
+    )
+    assert rendered == (
         "herdr-reply: target agent 'lens-orchestrator' in pane wM:p1N has exited.\n"
         "Suggested recovery:\n"
-        "  1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py "
+        f'  1. Auto-revive & deliver: uv run "{herdr_reply.REPLY_HELPER}" '
         "lens-orchestrator --file <reply> --auto-start pi\n"
         "  2. Or resume manually in pane wM:p1N: pi --session sess.jsonl"
     )
+    assert "~/.agents" not in rendered
     # Line 2 is omitted when no resume command is known.
-    assert herdr_reply.format_reply_recovery_diagnostic(
+    without_resume = herdr_reply.format_reply_recovery_diagnostic(
         "callee", {"pane_id": "w1:p1", "kind": "claude"}, "reply.md"
-    ) == (
+    )
+    assert without_resume == (
         "herdr-reply: target agent 'callee' in pane w1:p1 has exited.\n"
         "Suggested recovery:\n"
-        "  1. Auto-revive & deliver: uv run ~/.agents/skills/herdr/scripts/herdr_reply.py "
+        f'  1. Auto-revive & deliver: uv run "{herdr_reply.REPLY_HELPER}" '
         "callee --file reply.md --auto-start claude"
     )
+    assert "~/.agents" not in without_resume
 
 
 @pytest.mark.parametrize(
