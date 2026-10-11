@@ -49,13 +49,17 @@ the store is read before it is written (an unreadable index is preserved, never 
 and the row that was written is re-resolved through the same `get_reply` the reader uses.
 
 Before any of that, the outbound payload itself is checked (#245 D2): every *backticked* 7-40
-lowercase-hex token in the body must name a commit (`git rev-parse --verify <token>^{commit}`
-against the lane's repository), because a backticked hex token is an instruction — "do not
-rewrite `8d9fa742`" — and an instruction that names no commit points at nothing. A bare hex word
+lowercase-hex token in the *body* must name a commit (`git rev-parse --verify <token>^{commit}`
+against the lane's repository anchor, never the ambient working directory, so one payload gets one
+verdict from any directory), because a backticked hex token is an instruction — "do not
+rewrite `8d9fa742`" — and an instruction that names no commit points at nothing. Only the body is
+checked: the envelope is composed later and is never inspected. A bare hex word
 in prose stays prose, so mutant labels, review-record ids and UUID fragments inside cited paths
 are not read as citations. An unresolvable token is refused loudly (exit 2, naming the token and
 the payload path) before any record exists, so a refused payload consumes no lease; `--dry-run`
-reports it the same way instead of accepting the payload silently. A genuinely intentional
+reports it the same way instead of accepting the payload silently. A git location override
+(`GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`) skips the check loudly, naming
+every unchecked token, rather than let one resolve in another repository. A genuinely intentional
 non-resolving token is waived by name with `--allow-unresolvable-sha <TOKEN>`, and every waiver
 is reported on stderr — never a silent bypass.
 
@@ -87,7 +91,11 @@ from pathlib import Path
 from typing import Any
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
-from herdr_bootstrap import DEFAULT_SETTLE_SECONDS, settle_fresh_pane
+from herdr_bootstrap import (
+    DEFAULT_SETTLE_SECONDS,
+    GIT_LOCATION_OVERRIDE_VARS,
+    settle_fresh_pane,
+)
 from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
@@ -657,10 +665,27 @@ def payload_shape(payload: str) -> tuple[str, str | None]:
 SHA_SHAPED_BACKTICKED_RE = re.compile(r"`([0-9a-f]{7,40})`")
 ALLOW_UNRESOLVABLE_SHA = "--allow-unresolvable-sha"
 
+# Git location overrides the guard inherits through `subprocess.run`: each one outranks `cwd`, so a
+# probe run with one set answers about that location instead of the lane repository. The tuple is
+# `herdr_bootstrap`'s own (#238), mirrored rather than reinvented, plus `GIT_COMMON_DIR`, which
+# redirects the refs and objects `rev-parse` reads.
+GIT_LOCATION_REDIRECT_VARS: tuple[str, ...] = (*GIT_LOCATION_OVERRIDE_VARS, "GIT_COMMON_DIR")
+
 
 def backticked_sha_tokens(payload: str) -> list[str]:
     """Distinct backticked 7-40 lowercase-hex tokens, in first-appearance order."""
     return list(dict.fromkeys(SHA_SHAPED_BACKTICKED_RE.findall(payload)))
+
+
+def git_location_redirect(env: Mapping[str, str]) -> str | None:
+    """The git location override in `env`, or None when git would answer about `cwd`.
+
+    The same question `herdr_bootstrap._git_location_is_redirected` asks (#238), answered with the
+    offending variable's name so the skip line can say why. Any of these names makes
+    `git_can_resolve_commits` and `names_a_commit` answer about another repository, work tree, or
+    object store, so their verdict is unverifiable rather than a false negative.
+    """
+    return next((name for name in GIT_LOCATION_REDIRECT_VARS if env.get(name)), None)
 
 
 def git_can_resolve_commits(cwd: Path) -> bool:
@@ -697,17 +722,23 @@ def names_a_commit(token: str, cwd: Path) -> bool:
     return done.returncode == 0
 
 
-def unresolvable_sha_tokens(payload: str, *, cwd: Path) -> list[str] | None:
+def unresolvable_sha_tokens(
+    payload: str, *, cwd: Path, env: Mapping[str, str] | None = None
+) -> list[str] | None:
     """Backticked SHA-shaped tokens in `payload` that name no commit; None when unverifiable.
 
-    `None` means git could not answer in `cwd` — no repository, or no binary — so the caller can
-    report the check as skipped instead of claiming every token in a payload is dead. `[]` means
-    nothing to verify or every cited token resolves, which is why a payload with no such token
-    passes.
+    `None` means git could not answer in `cwd` — no repository, no binary, or a `GIT_DIR`-family
+    override in `env` (the process environment when `env` is omitted) that points the probe at
+    another location — so the caller can report the check as skipped instead of claiming every
+    token in a payload is dead, or letting a token resolve in a repository that is not this lane's.
+    `[]` means nothing to verify or every cited token resolves, which is why a payload with no such
+    token passes.
     """
     tokens = backticked_sha_tokens(payload)
     if not tokens:
         return []
+    if git_location_redirect(os.environ if env is None else env) is not None:
+        return None
     if not git_can_resolve_commits(cwd):
         return None
     return [token for token in tokens if not names_a_commit(token, cwd)]
@@ -739,26 +770,36 @@ def require_resolvable_shas(
     payload_path: str,
     waived: Sequence[str] = (),
     cwd: Path | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> None:
     """Refuse a payload whose backticked SHA-shaped token names no commit (#245 D2).
 
-    Runs on the outbound payload before anything is written, so a refused payload leaves no record
-    and consumes no lease — the persist-first ordering (#231) is untouched. Loud by construction:
-    the refusal names every dead token and the payload path; a token waived by
-    `--allow-unresolvable-sha` is named on stderr; and a directory where git cannot answer is
-    reported as a skipped check, never as a pass. Source-agnostic by design: it catches a drifted
-    copy in the ticket, in the envelope, or in the reply body alike.
+    Runs on the payload BODY `read_payload` returned, which is the only text it is ever handed:
+    the envelope and the pointer are composed later, and envelope fields are never backticked, so
+    a drifted copy in the ticket or in the envelope is not caught here. Runs before anything is
+    written, so a refused payload leaves no record and consumes no lease — the persist-first
+    ordering (#231) is untouched. Loud by construction: the refusal names every dead token and the
+    payload path; a token waived by `--allow-unresolvable-sha` is named on stderr; and a git that
+    cannot answer — no work tree, no binary, or a `GIT_DIR`-family override pointing it at another
+    repository — is reported as a skipped check, never as a pass.
     """
     tokens = backticked_sha_tokens(payload)
     if not tokens:
         return
     directory = cwd if cwd is not None else Path.cwd()
-    verdict = unresolvable_sha_tokens(payload, cwd=directory)
+    environment = os.environ if env is None else env
+    verdict = unresolvable_sha_tokens(payload, cwd=directory, env=environment)
     if verdict is None:
         listed = ", ".join(f"`{token}`" for token in tokens)
+        redirect = git_location_redirect(environment)
+        reason = (
+            f"git's location is redirected by {redirect}, so a token could resolve in another "
+            "repository"
+            if redirect is not None
+            else f"git cannot resolve commits in {directory} (no work tree, or no git binary)"
+        )
         print(
-            f"herdr-reply: SHA guard skipped for {payload_path}: git cannot resolve commits in "
-            f"{directory} (no work tree, or no git binary); unchecked: {listed}",
+            f"herdr-reply: SHA guard skipped for {payload_path}: {reason}; unchecked: {listed}",
             file=sys.stderr,
         )
         return
@@ -1573,6 +1614,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         payload_path=payload_origin(options),
         waived=options.allow_unresolvable_sha or (),
         cwd=lane_git_dir(env),
+        env=env,
     )
     sender = resolve_current_agent(herdr, env)
     lease: dict[str, object] | None = None

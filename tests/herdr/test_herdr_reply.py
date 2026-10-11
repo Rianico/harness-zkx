@@ -2441,13 +2441,14 @@ def reply_payload(evidence_line: str = "- 660 passed") -> str:
     return f"COMPLETED\n\n## Evidence\n\n```\n{evidence_line}\n```\n"
 
 
-def sha_guard_repo(root: Path) -> tuple[Path, str]:
+def sha_guard_repo(root: Path, name: str = "sha-guard-repo") -> tuple[Path, str]:
     """A scratch git repository with one commit; returns (repo, abbreviated commit SHA).
 
     The scratch repo is the lane anchor the guard resolves against, so the pins exercise the
-    real `git rev-parse --verify <token>^{commit}` probe instead of a stub of it.
+    real `git rev-parse --verify <token>^{commit}` probe instead of a stub of it. `name` seats a
+    second, unrelated repository under the same root for the cwd-versus-anchor pins.
     """
-    repo = root / "sha-guard-repo"
+    repo = root / name
     repo.mkdir()
 
     def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -2648,3 +2649,93 @@ def test_the_sha_guard_says_so_when_git_cannot_answer(stub: StubHarness, tmp_pat
     assert "SHA guard skipped" in done.stderr
     assert DRIFTED_ABBREV in done.stderr
     assert len(stub.prompts()) == 1
+
+
+def test_the_sha_guard_resolves_against_the_lane_anchor_not_the_working_directory(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """F2: the guard answers about the lane anchor, so the ambient cwd cannot change the verdict.
+
+    `lane_git_dir` is the store anchor (#229), never `Path.cwd()`: run from a directory where git
+    answers differently and the drifted token is still refused, while the anchor's own commit
+    still resolves. Resolving against the cwd instead would skip the check here — the cwd is
+    outside every repository, so `git_can_resolve_commits` answers False and the mutant delivers
+    the dead token with a skip line.
+    """
+    repo, short = sha_guard_repo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    assert herdr_reply.git_can_resolve_commits(repo) is True
+    assert herdr_reply.git_can_resolve_commits(elsewhere) is False
+
+    drifted = stub.run(
+        "orchestrator",
+        reply_payload(f"- base `{DRIFTED_ABBREV}`"),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=elsewhere,
+    )
+    assert drifted.returncode == herdr_cli.EXIT_USAGE, (drifted.stdout, drifted.stderr)
+    assert DRIFTED_ABBREV in drifted.stderr
+    assert "SHA guard skipped" not in drifted.stderr
+    assert stub.prompts() == []
+
+    delivered = stub.run(
+        "orchestrator",
+        reply_payload(f"- base `{short}`"),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=elsewhere,
+    )
+    assert delivered.returncode == herdr_cli.EXIT_OK, delivered.stderr
+    assert len(stub.prompts()) == 1
+
+
+@pytest.mark.parametrize(
+    "redirect_var", ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"]
+)
+def test_the_sha_guard_skips_loudly_when_git_location_is_redirected(
+    stub: StubHarness, tmp_path: Path, redirect_var: str
+) -> None:
+    """F3: a redirected git location is unverifiable, and unverifiable is never a silent pass.
+
+    `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR`/`GIT_INDEX_FILE` outrank `cwd`, so the probe would
+    answer about another location: a token that resolves only in that other repository must not
+    pass without a word, and a dead token must not be refused on the strength of a location the
+    guard cannot trust. Both deliver, and the existing skip line names every unchecked token.
+    """
+    repo, _short = sha_guard_repo(tmp_path)
+    other, other_short = sha_guard_repo(tmp_path, name="other-repo")
+    pinned = str(other / (".git/index" if redirect_var == "GIT_INDEX_FILE" else ".git"))
+    redirect = {"HERDR_LANE_DIR": str(repo), redirect_var: pinned}
+
+    silently_resolved = stub.run(
+        "orchestrator", reply_payload(f"- base `{other_short}`"), env=redirect, cwd=repo
+    )
+    assert silently_resolved.returncode == herdr_cli.EXIT_OK, silently_resolved.stderr
+    assert "SHA guard skipped" in silently_resolved.stderr
+    assert other_short in silently_resolved.stderr
+
+    dead = stub.run(
+        "orchestrator", reply_payload(f"- base `{DRIFTED_ABBREV}`"), env=redirect, cwd=repo
+    )
+    assert dead.returncode == herdr_cli.EXIT_OK, dead.stderr
+    assert "SHA guard skipped" in dead.stderr
+    assert DRIFTED_ABBREV in dead.stderr
+
+
+def test_the_sha_guard_still_refuses_when_git_location_is_not_redirected(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """F3, the other direction: with no location override the refusal still fires."""
+    repo, _short = sha_guard_repo(tmp_path)
+
+    done = stub.run(
+        "orchestrator",
+        reply_payload(f"- base `{DRIFTED_ABBREV}`"),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert DRIFTED_ABBREV in done.stderr
+    assert "SHA guard skipped" not in done.stderr
+    assert stub.prompts() == []
