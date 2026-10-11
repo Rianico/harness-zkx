@@ -778,7 +778,8 @@ def test_kinds_config_rejects_bad_shapes(text: str) -> None:
 # The value is echoed to the operator inside the revision-0 advice, so a malformed one is
 # rendered as though it were a real script name. One row per refusal class: quote characters,
 # path separators, shell metacharacters, whitespace, empty, and the two path segments (`.`,
-# `..`) that are not names.
+# `..`) that are not names. The `+@~%=` and non-ASCII rows pin the charset BREADTH, not just one
+# row per class: a widened `BARE_SCRIPT_NAME_PATTERN` that accepts any of them fails here.
 NON_BARE_BRIDGES = (
     '"herdr-x"',
     "'herdr-x'",
@@ -792,6 +793,12 @@ NON_BARE_BRIDGES = (
     "herdr-x>out",
     "herdr-x&id",
     "herdr-x y",
+    "herdr-x@2",
+    "herdr-x~1",
+    "herdr-x%2",
+    "herdr-x+1",
+    "herdr-x:2",
+    "h\u00e9rder-x",
     "",
     ".",
     "..",
@@ -829,6 +836,21 @@ def test_kinds_config_real_file_bridge_names_are_bare_script_names() -> None:
 
     assert table["agy"].lifecycle_bridge == "herdr-agy-bridge"
     assert herdr_bootstrap.load_kind_entry("agy").lifecycle_bridge == "herdr-agy-bridge"
+
+
+def test_bare_script_name_pattern_refuses_every_excluded_character() -> None:
+    """The bare-name pattern is pinned by breadth: every character outside `[A-Za-z0-9._-]`.
+
+    One refusal row per metacharacter class does not pin the charset's breadth, so a mutant that
+    widens `BARE_SCRIPT_NAME_PATTERN` to `[A-Za-z0-9._+@~%=-]+` left every row green (measured at
+    3b5e078b: PIN-BROKEN count 0). Asserting the pattern directly against one member of each
+    excluded class kills that mutant without widening the production charset, whose strictness is a
+    usability choice (the value only reaches operator advice text, never a path or command).
+    """
+    for value in ("x@y", "x~y", "x%y", "x+y", "x=y", "x:y", "x\u00e9"):
+        assert re.fullmatch(herdr_bootstrap.BARE_SCRIPT_NAME_PATTERN, value) is None, (
+            f"{value!r} must not match the bare script name charset"
+        )
 
 
 def test_load_kind_entry_missing_file_is_a_usage_error(tmp_path: Path) -> None:

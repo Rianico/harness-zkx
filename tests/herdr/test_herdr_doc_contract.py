@@ -249,6 +249,20 @@ def test_allow_list_matches_the_frozen_golden_set() -> None:
         )
 
 
+def test_every_allow_listed_token_is_still_cited(report: PointerReport) -> None:
+    """Every allow-listed token must still appear in the scan, so a stale entry cannot linger.
+
+    `scan_pointers` counts one `illustration` exclusion per cited allow-listed token, so the count
+    equals the allow-list length while every entry is cited. A doc edit that deletes an entry's only
+    citation drops a token from the scan and the count falls below the length, which this pin
+    catches. Mutant killed: remove one allow-listed token's citation and the pin fails. Measured:
+    `excluded["illustration"] == 10 == len(EXCLUDED_TOKENS)`.
+    """
+    assert report.excluded.get("illustration", 0) >= len(EXCLUDED_TOKENS), (
+        "fewer allow-listed citations than allow-list entries: a stale entry may now be uncited"
+    )
+
+
 @pytest.mark.parametrize("token", sorted(EXCLUDED_TOKENS))
 def test_every_allow_list_entry_states_a_reason(token: str) -> None:
     """An entry must say why it is not a pointer here; a bare token is an unexplained skip.

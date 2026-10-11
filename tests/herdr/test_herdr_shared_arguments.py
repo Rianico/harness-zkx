@@ -141,6 +141,25 @@ FROZEN_FIELDS = (
     "const",
 )
 
+# The fields the per-declaration golden comparison checks. It must cover every `FROZEN_FIELDS`
+# entry: the consensus table below drops a field two siblings disagree on, and that is safe only
+# because this comparison still catches a drift in that field against `GOLDEN`.
+# `test_every_frozen_field_is_compared_against_the_fixture` pins that the coverage holds.
+COMPARED_FIELDS = (
+    "family",
+    "dest",
+    "action",
+    "type",
+    "default",
+    "metavar",
+    "nargs",
+    "required",
+    "choices",
+    "const",
+    "option_strings",
+    "help",
+)
+
 
 def _frozen_by_family() -> dict[str, dict[str, object]]:
     """Per family: the field values its golden declarations agree on, and only those.
@@ -176,23 +195,50 @@ def test_every_shared_declaration_matches_the_frozen_table(script: str, label: s
         f"the parser now declares {[d['family'] for d in live]}"
     )
     actual = live[index]
-    for field in (
-        "family",
-        "dest",
-        "action",
-        "type",
-        "default",
-        "metavar",
-        "nargs",
-        "required",
-        "choices",
-        "const",
-        "option_strings",
-        "help",
-    ):
+    for field in COMPARED_FIELDS:
         assert actual[field] == expected[field], (
             f"{script}: {expected['family']} {field}: {actual[field]!r} != {expected[field]!r}"
         )
+
+
+def test_every_frozen_field_is_compared_against_the_fixture() -> None:
+    """Every `FROZEN_FIELDS` entry survives into the per-declaration golden comparison.
+
+    `_frozen_by_family` DELETES a field two golden siblings disagree on, and the consensus test
+    at :210 then skips it. That is only safe because `test_every_shared_declaration_matches_the_
+    frozen_table` still compares the field against `GOLDEN`, so a drift in it always fails. Measured
+    at the base: the fixture comparison iterates all nine `FROZEN_FIELDS` (plus `family`,
+    `option_strings`, `help`), so no field can drift invisibly. This pin holds that relation: drop a
+    `FROZEN_FIELDS` entry from `COMPARED_FIELDS` and a field a family does not agree on becomes
+    unchecked here, so the assertion fails naming it.
+    """
+    missing = sorted(set(FROZEN_FIELDS) - set(COMPARED_FIELDS))
+    assert missing == [], (
+        f"FROZEN_FIELDS that no per-declaration comparison checks: {missing}; a field the "
+        f"consensus table drops would then be free to drift invisibly"
+    )
+
+
+@pytest.mark.parametrize("family", sorted(SHARED_LONG_OPTIONS))
+def test_the_fixture_declares_every_parameterised_field(family: str) -> None:
+    """Every `FROZEN_FIELDS` entry the fixture's siblings disagree on is declared `varying`.
+
+    `_frozen_by_family` infers a parameterised field from fixture disagreement alone. This pin
+    makes that designation explicit data: a field the fixture varies but the table does not declare
+    `varying` fails, naming the family and the field. `test_a_shared_family_declares_the_frozen_
+    fields_in_every_parser` asserts the other direction only for `dest` and the `spec.kwargs` keys,
+    so this covers `nargs`, `required`, `choices`, and `const` too. The relation is a subset, not
+    an equality: `--settle` names `default` as varying while its siblings agree (measured), which
+    is legal.
+    """
+    key = family.removeprefix("--").replace("-", "_")
+    varying = set(herdr_cli.SHARED_ARGUMENTS[key].varying)
+    agreed = set(FROZEN_BY_FAMILY[family])
+    disagreed = set(FROZEN_FIELDS) - agreed
+    undeclared = sorted(disagreed - varying)
+    assert undeclared == [], (
+        f"{family}: the fixture varies {undeclared}, but the table does not declare them `varying`"
+    )
 
 
 @pytest.mark.parametrize("family", sorted(SHARED_LONG_OPTIONS))
