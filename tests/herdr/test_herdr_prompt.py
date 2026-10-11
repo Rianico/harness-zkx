@@ -1363,3 +1363,149 @@ def test_wait_timeout_remedy_names_the_kinds_own_bridge(
     assert own_bridge in done.stderr, f"the {kind} bridge must be named for its own kind"
     assert other_bridge not in done.stderr, "a kind must never be sent to another kind's bridge"
     assert "herdr-wait" not in done.stderr
+
+
+# ── #241: both branches of the revision-static advice, against the real kind contract ──
+
+AGY_BRIDGE = "herdr-agy-bridge"
+NEUTRAL_SURFACE = "the kind's own status surface"
+
+# A second revision-static kind that declares NO bridge. The real config has no such kind
+# (every real kind either moves its revision or declares a bridge), so the neutral branch
+# is pinned here on a fixture and on the real config's bridge-less kinds below.
+_BRIDGELESS_STATIC_KIND_CONFIG = """\
+agy:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+  lifecycle_bridge: herdr-agy-bridge
+maki:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+"""
+
+
+def _real_kind_names() -> list[str]:
+    """Every kind key declared in the real `skills/herdr/references/kinds.yaml`, in file order."""
+    return [
+        line[:-1]
+        for line in herdr_bootstrap.KINDS_CONFIG.read_text(encoding="utf-8").splitlines()
+        if re.fullmatch(r"[A-Za-z0-9_-]+:", line)
+    ]
+
+
+def test_kind_lifecycle_bridge_reads_only_the_real_configs_bridge() -> None:
+    """Pin 7 (#241): the bridge is a per-kind fact read from the REAL kinds.yaml.
+
+    Measured at 4df1fd4a: `agy` is the only real kind declaring `lifecycle_bridge`, so it is
+    the only kind whose advice may name a bridge, and it names its own.
+    """
+    bridged = [kind for kind in _real_kind_names() if herdr_prompt.kind_lifecycle_bridge(kind)]
+    assert bridged == ["agy"], "the real config declares exactly one bridge kind"
+    assert herdr_prompt.kind_lifecycle_bridge("agy") == AGY_BRIDGE
+    assert herdr_prompt.revision_static_surface("agy") == (
+        f"the agy bridge's status title ({AGY_BRIDGE})"
+    )
+
+
+def test_revision_static_surface_is_bridge_neutral_for_every_bridgeless_real_kind() -> None:
+    """Pin 8 (#241): the neutral branch of the real config: phrasing that names no bridge.
+
+    `pi`, `claude`, `cline`, `codex`, `copilot`, and `qodercli` all declare no bridge, and
+    none of them may be sent to `agy`'s.
+
+    Mutant killed: drop the `if bridge:` guard in `revision_static_surface` — every kind here
+    then renders `the <kind> bridge's status title` and this test fails.
+    """
+    neutral_kinds = [kind for kind in _real_kind_names() if kind != "agy"]
+    assert neutral_kinds, "the real config must still carry bridge-less kinds to pin here"
+    for kind in neutral_kinds:
+        advice = herdr_prompt.revision_static_surface(kind)
+        assert advice == NEUTRAL_SURFACE, kind
+        assert "bridge" not in advice, kind
+        assert AGY_BRIDGE not in advice, kind
+
+
+def test_revision_static_surface_stays_neutral_when_the_kind_is_unresolved(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Pin 9 (#241): `None`, a blank name, an unknown kind, an unreadable and a malformed
+    config all read as no bridge, so none of them borrows a real kind's bridge.
+
+    Mutant killed: fall back to another kind's bridge when the kind declares none or cannot
+    be resolved — the `AGY_BRIDGE not in advice` assertions here fail.
+    """
+    for probe in (None, "", "no-such-kind"):
+        advice = herdr_prompt.revision_static_surface(probe)
+        assert advice == NEUTRAL_SURFACE, probe
+        assert "bridge" not in advice, probe
+        assert AGY_BRIDGE not in advice, probe
+
+    unreadable = tmp_path / "missing-kinds.yaml"
+    malformed = tmp_path / "malformed-kinds.yaml"
+    _ = malformed.write_text("agy:\n  invariant: nope\n", encoding="utf-8")
+    for path in (unreadable, malformed):
+        monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", path)
+        advice = herdr_prompt.revision_static_surface("agy")
+        assert advice == NEUTRAL_SURFACE, path
+        assert "bridge" not in advice, path
+        assert AGY_BRIDGE not in advice, path
+
+
+def _bridgeless_static_kind_config(tmp_path: Path) -> Path:
+    """Write the one-bridged/one-bridgeless fixture and return its path."""
+    path = tmp_path / "kinds.yaml"
+    _ = path.write_text(_BRIDGELESS_STATIC_KIND_CONFIG, encoding="utf-8")
+    return path
+
+
+def test_a_bridgeless_static_kind_is_never_sent_to_another_kinds_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 10 (#241): the cross-kind promise, on a kind that declares none.
+
+    The existing pair (`_STATIC_KIND_CASES`) covers two kinds that each declare a bridge; this
+    covers the kind that declares none, which must read as neutral while its neighbour keeps
+    naming its own bridge.
+
+    Mutant killed: return the first declared bridge when the kind declares none — `maki` then
+    renders `herdr-agy-bridge` and the `AGY_BRIDGE not in` assertion fails.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _bridgeless_static_kind_config(tmp_path))
+    maki = herdr_prompt.revision_static_surface("maki")
+    assert maki == NEUTRAL_SURFACE
+    assert AGY_BRIDGE not in maki
+    assert herdr_prompt.revision_static_surface("agy") == (
+        f"the agy bridge's status title ({AGY_BRIDGE})"
+    )
+
+
+def test_unconfirmed_warning_renders_the_neutral_advice_for_a_bridgeless_static_kind(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 11 (#241): the RENDERED warning for a revision-static kind with no bridge.
+
+    Mutant killed: drop the `if bridge:` guard, so this warning claims a `maki bridge's status
+    title` that does not exist and `"bridge" not in err` fails.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _bridgeless_static_kind_config(tmp_path))
+
+    def no_sleep(seconds: float) -> None:
+        """Swallow the handshake tick; this test only inspects the warning text."""
+
+    monkeypatch.setattr(herdr_prompt, "_sleep", no_sleep)
+
+    stub.write_state(_static_kind_state("maki"))
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    err = capsys.readouterr().err
+    assert "acceptance was not confirmed" in err
+    assert NEUTRAL_SURFACE in err
+    assert "bridge" not in err, "a bridge-less kind must not be told to read a bridge"

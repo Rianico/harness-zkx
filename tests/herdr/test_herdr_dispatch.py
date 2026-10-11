@@ -16,6 +16,7 @@ from pathlib import Path
 import herdr_bootstrap
 import herdr_cli
 import herdr_dispatch
+import herdr_lease
 import herdr_prompt
 import herdr_reply
 import pytest
@@ -807,7 +808,12 @@ def test_dispatch_refuses_what_the_shared_payload_reader_refuses(
     # The refusal now lands BEFORE `acquire_lease`, not after the lease via the prompt
     # reader's second read of the same file. Without this the pin passes on the old
     # ordering too: the NUL sentence and exit code are identical, only the lease differs.
-    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
+    # Asserted on the RESOLVED store, never on `tmp_path / ".lane"`: dropping the stub's
+    # `HERDR_LANE_DIR` anchor would otherwise let a lease land in this repository's own
+    # store while the `tmp_path` copy stayed absent, and the pin would still pass.
+    store = herdr_lease.resolve_tasks_file(env=stub.base_env())
+    assert store == Path(stub.tmp_path).resolve() / herdr_lease.STATE_FILE_LANE
+    assert not store.exists()
 
 
 def test_dispatch_missing_file_refusal_names_the_seam_sentence(
