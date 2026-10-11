@@ -1576,3 +1576,23 @@ def test_settle_zero_is_exact_and_the_default_settles_once(
     default = herdr_bootstrap.Options(kind="codex", pane="w9:p1", role="tm", cwd=str(tmp_path))
     assert herdr_bootstrap.bootstrap(default, stub.base_env()) == herdr_cli.EXIT_OK
     assert slept == [herdr_bootstrap.DEFAULT_SETTLE_SECONDS]
+
+
+def test_bootstrap_refuses_a_negative_settle(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F3 (#238): a negative `--settle` is refused; `0` stays valid and exact.
+
+    RED on base: `--settle -5` exits 0 and spawns the agent — the `seconds <= 0` guard silently
+    reads a deliberately invalid wait as "no wait".
+    Mutant killed: drop the `settle < 0` refusal — the run spawns and exits 0.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+
+    done = stub.run(*bootstrap_args(tmp_path, "--settle", "-5"), state=cwd_state(tmp_path))
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert "must not be negative" in done.stderr
+    assert starts(stub) == []
+    assert slept == []

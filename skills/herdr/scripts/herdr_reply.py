@@ -1061,6 +1061,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         raise UsageError("pass TARGET (caller agent name or pane id)")
     validate_target_not_kind(target, herdr, env)
 
+    if options.settle < 0:
+        raise UsageError(f"--settle {options.settle} must not be negative")
+
     if options.auto_start:
         auto_kind = options.auto_start.strip().lower()
         if not auto_kind or auto_kind not in KNOWN_AGENT_KINDS:

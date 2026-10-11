@@ -35,6 +35,10 @@ def payload_file(tmp_path: Path, text: str = "TICKET BODY") -> Path:
     return path
 
 
+def _no_settle(_seconds: float) -> None:
+    """Stand in for the fresh-spawn settle in tests that assert delivery, not timing."""
+
+
 def test_dispatch_requires_file(stub: StubHarness) -> None:
     done = stub.run("callee")
     assert done.returncode == herdr_cli.EXIT_USAGE
@@ -725,14 +729,18 @@ def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: P
 
 
 def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
-    stub: StubHarness, tmp_path: Path
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Issue #225: a ticket for a role with no live agent starts it via the
     bootstrap contract (kind trust flags + ROLE INVARIANT), then dispatches.
 
     The invariant reaches the agent as the absolute path of the lane-local snippet file,
     because herdr refuses a multi-line agent arg; read that file to prove delivery.
+
+    The spawn's 5s settle is faked here (this test asserts delivery, not timing); pin 4
+    (`test_dispatch_auto_start_settles_the_fresh_pane_once`) owns the settle assertion.
     """
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -786,10 +794,11 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
 
 
 def test_dispatch_auto_start_contract_rides_for_a_scoped_implementer_label(
-    stub: StubHarness, tmp_path: Path
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """BLOCKING-1: without `--task-group` the role falls back to the scoped agent name, so
     `herdr228-impl-1` must still receive the implementer cooperation contract."""
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -913,8 +922,11 @@ def test_dispatch_auto_start_rejects_unknown_kind(stub: StubHarness, tmp_path: P
     assert stub.prompts() == []
 
 
-def test_dispatch_auto_start_uses_claude_trust_flags(stub: StubHarness, tmp_path: Path) -> None:
+def test_dispatch_auto_start_uses_claude_trust_flags(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Issue #225: the bootstrap contract owns trust flags (claude path)."""
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -1006,6 +1018,7 @@ def test_dispatch_auto_start_triggers_on_typed_signal_despite_reworded_prose(
     Rewords both bare-shell diagnostic messages; auto-start must still fire.
     Fails if is_bare_shell_failure is re-coupled to message text.
     """
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     import herdr_cli
 
     orig_format = herdr_cli.format_shell_pane_diagnostic
@@ -1115,13 +1128,14 @@ def test_dispatch_auto_start_mixed_targets_bootstraps_none_and_reraises(
 
 
 def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
-    stub: StubHarness, tmp_path: Path
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Round 2: two bare-shell targets, the SECOND fails mid-bootstrap.
 
     The first agent is already started; the raised error must NAME it (loud,
     never a silent orphan), and no ticket may be dispatched to anyone.
     """
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -1180,9 +1194,10 @@ def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
 
 
 def test_dispatch_auto_start_converges_pane_cwd_then_starts(
-    stub: StubHarness, tmp_path: Path
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Issue #225: the lane worktree cwd rides through bootstrap, pane converges."""
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     lane = tmp_path / "lane"
     lane.mkdir()
     state = {
@@ -1287,3 +1302,132 @@ def test_warm_agent_dispatch_settles_nothing(
     (prompt,) = stub.prompts()
     assert prompt[3] == "reviewer"
     assert slept == [], "a warm dispatch must add no settle delay"
+
+
+# ── #238: the dispatch auto-start flow settles a fresh pane, and --settle overrides ──
+
+
+def _bare_shell_state(tmp_path: Path, label: str = "callee") -> dict[str, object]:
+    """DEFAULT_STATE with no agents and one bare shell pane carrying `label`."""
+    return {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": str(tmp_path),
+                "label": label,
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+
+
+def test_dispatch_auto_start_settles_the_fresh_pane_once(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 4 (#238, dispatch auto-start): the bootstrap the dispatch runs settles once, 5s.
+
+    A pin, not a behaviour change: `run_bootstrap_contract` builds `herdr_bootstrap.Options(...)`
+    with no `settle`, so the auto-started callee inherits `DEFAULT_SETTLE_SECONDS` today.
+    Mutant killed: add `settle=0.0` to that `Options(...)` call — `slept == []` and this fails.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    ticket = payload_file(tmp_path, "TICKET BODY")
+
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=_bare_shell_state(tmp_path),
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    assert start[3] == "callee"
+    assert slept == [herdr_bootstrap.DEFAULT_SETTLE_SECONDS], (
+        "the dispatch auto-start path must pay the 5s handshake exactly once"
+    )
+
+
+def test_dispatch_auto_start_settle_zero_is_exact(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--settle 0` on herdr-dispatch spawns without sleeping; the default stays 5.
+
+    RED on base: `herdr-dispatch` declares no `--settle`, so argparse refuses the flag (exit 2).
+    Mutant killed: forward a hard-coded default instead of `options.settle` — the 0 run sleeps.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    ticket = payload_file(tmp_path, "TICKET BODY")
+
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        "--settle",
+        "0",
+        state=_bare_shell_state(tmp_path),
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.starts()) == 1
+    assert slept == [], "--settle 0 must not sleep at all on the dispatch path"
+
+
+def test_dispatch_parser_declares_settle_with_the_bootstrap_default() -> None:
+    """`--settle` rides on herdr-dispatch like `--role`/`--cwd`/`--model`; default 5.
+
+    RED on base: the parser has no `--settle`.
+    """
+    parser = herdr_dispatch.build_parser()
+    assert (
+        parser.parse_args(["callee", "--file", "t"]).settle
+        == herdr_bootstrap.DEFAULT_SETTLE_SECONDS
+    )
+    assert parser.parse_args(["callee", "--file", "t", "--settle", "2.5"]).settle == 2.5
+
+
+def test_dispatch_auto_start_dry_run_forwards_the_settle(stub: StubHarness, tmp_path: Path) -> None:
+    """A dry-run auto-start plan carries the forwarded `--settle` value, never sleeps.
+
+    RED on base: the parser has no `--settle`.
+    """
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        "--settle",
+        "2.5",
+        "--dry-run",
+        state=_bare_shell_state(tmp_path),
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout.splitlines()[0])
+    assert plan["settle"] == 2.5
+    assert stub.starts() == []

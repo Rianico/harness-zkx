@@ -1530,13 +1530,20 @@ def _shell_pane_state() -> dict[str, object]:
 def test_auto_start_settles_the_revived_caller_and_zero_is_exact(
     stub: StubHarness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pin 2 (#238, revive path): the caller settles after its spawn; `--settle 0` is exact.
+    """Pin 2 (#238, revive path): the caller settles after its spawn, before delivery.
 
-    Mutant killed: drop the `seconds <= 0` guard in `settle_fresh_pane` — the `--settle 0` run
-    records a `0.0` sleep and the `slept == []` assertion fails.
+    Mutant killed (order): move `settle_fresh_pane(options.settle)` after the delivery — the
+    `fake_sleep` probe then sees the prompt already logged and its assertion fails (#237).
+    Mutant killed (exactness): drop the `seconds <= 0` guard in `settle_fresh_pane` — the
+    `--settle 0` run records a `0.0` sleep and the `slept == []` assertion fails.
     """
     slept: list[float] = []
-    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+
+    def fake_sleep(seconds: float) -> None:
+        assert stub.prompts() == [], "the revive must settle before the reply is delivered"
+        slept.append(seconds)
+
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", fake_sleep)
     state = _shell_pane_state()
 
     done = stub.run("lens-orchestrator", "COMPLETED", "--auto-start", "pi", state=state)
@@ -1550,6 +1557,33 @@ def test_auto_start_settles_the_revived_caller_and_zero_is_exact(
     )
     assert zero.returncode == herdr_cli.EXIT_OK, zero.stderr
     assert slept == [], "--settle 0 must not sleep at all on the revive path"
+
+
+def test_revive_refuses_a_negative_settle(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F3 (#238): a negative `--settle` is refused on the revive path; no spawn, no sleep.
+
+    RED on base: `--settle -3` exits 0, spawns the caller, and never sleeps.
+    Mutant killed: drop the `settle < 0` refusal — the run spawns and exits 0.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        "--auto-start",
+        "pi",
+        "--settle",
+        "-3",
+        state=_shell_pane_state(),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert "must not be negative" in done.stderr
+    assert stub.starts() == []
+    assert slept == []
 
 
 def test_auto_start_dry_run_shows_the_planned_settle_and_never_sleeps(

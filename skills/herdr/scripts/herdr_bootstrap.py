@@ -782,6 +782,8 @@ def build_start_argv(
 
 
 def bootstrap(options: Options, env: Mapping[str, str]) -> int:
+    if options.settle < 0:
+        raise UsageError(f"--settle {options.settle} must not be negative")
     require_herdr_env(env)
     herdr = find_herdr(env)
     name = resolve_name(options)

@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
+from herdr_bootstrap import DEFAULT_SETTLE_SECONDS
 from herdr_cli import (
     EXIT_OK,
     KNOWN_AGENT_KINDS,
@@ -74,6 +75,7 @@ class Options(PromptOptions):
     role: str | None = None
     cwd: str | None = None
     model: str | None = None
+    settle: float = DEFAULT_SETTLE_SECONDS
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -171,6 +173,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="MODEL",
         default=None,
         help="model for the auto-started callee's agent start",
+    )
+    _ = parser.add_argument(
+        "--settle",
+        type=float,
+        default=DEFAULT_SETTLE_SECONDS,
+        metavar="SEC",
+        help=(
+            "seconds to wait after the auto-started callee's fresh `agent start`, before "
+            "dispatching, so a still-initialising pane is not treated as acceptant; "
+            f"0 waits not at all (default: {DEFAULT_SETTLE_SECONDS:g})"
+        ),
     )
     _ = parser.add_argument(
         "--ticket-id",
@@ -420,6 +433,7 @@ def run_bootstrap_contract(
     task_group: str | None,
     cwd: str | None,
     model: str | None,
+    settle: float,
     dry_run: bool,
     env: Mapping[str, str],
 ) -> str | None:
@@ -440,6 +454,7 @@ def run_bootstrap_contract(
         task_group=task_group,
         model=model,
         cwd=cwd,
+        settle=settle,
         dry_run=dry_run,
     )
     if dry_run:
@@ -479,6 +494,7 @@ def bootstrap_one_shell_target(
         task_group=options.task_group,
         cwd=options.cwd,
         model=options.model,
+        settle=options.settle,
         dry_run=options.dry_run,
         env=env,
     )
