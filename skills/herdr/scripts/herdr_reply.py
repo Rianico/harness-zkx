@@ -46,10 +46,22 @@ when the store cannot resolve. The pointer only ever names a record the reader c
 the store is read before it is written (an unreadable index is preserved, never clobbered),
 and the row that was written is re-resolved through the same `get_reply` the reader uses.
 
+Before any of that, the outbound payload itself is checked (#245 D2): every *backticked* 7-40
+lowercase-hex token in the body must name a commit (`git rev-parse --verify <token>^{commit}`
+against the lane's repository), because a backticked hex token is an instruction — "do not
+rewrite `8d9fa742`" — and an instruction that names no commit points at nothing. A bare hex word
+in prose stays prose, so mutant labels, review-record ids and UUID fragments inside cited paths
+are not read as citations. An unresolvable token is refused loudly (exit 2, naming the token and
+the payload path) before any record exists, so a refused payload consumes no lease; `--dry-run`
+reports it the same way instead of accepting the payload silently. A genuinely intentional
+non-resolving token is waived by name with `--allow-unresolvable-sha <TOKEN>`, and every waiver
+is reported on stderr — never a silent bypass.
+
     herdr-reply orchestrator "COMPLETED artifacts=[...] issues=[]"
     herdr-reply orchestrator --file result.md
     echo "COMPLETED" | herdr-reply orchestrator
     herdr-reply orchestrator "COMPLETED" --wait --timeout 15000
+    herdr-reply orchestrator --file reply.md --allow-unresolvable-sha 8d9a742
 
 Exit status: 0 accepted, 1 herdr failure, 2 usage or missing precondition,
 3 target needs human input (blocked), 4 prompt delivered but wait timed out.
@@ -64,10 +76,12 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
@@ -147,6 +161,7 @@ class Options:
     verbose: bool = False
     ticket: str | None = None
     in_reply_to_record: str | None = None
+    allow_unresolvable_sha: list[str] | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -222,6 +237,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="RECORD",
         default=None,
         help="bind this reply to the task of the named stored reply record",
+    )
+    _ = parser.add_argument(
+        ALLOW_UNRESOLVABLE_SHA,
+        dest="allow_unresolvable_sha",
+        action="append",
+        metavar="TOKEN",
+        default=None,
+        help=(
+            "waive the outbound-SHA guard for one backticked 7-40 hex token that deliberately "
+            "names no commit in this lane (repeatable); every waiver is reported on stderr, so "
+            "it is never a silent bypass"
+        ),
     )
     return parser
 
@@ -611,6 +638,145 @@ def payload_shape(payload: str) -> tuple[str, str | None]:
     if heading is None:
         return "incomplete", None
     return "complete", heading
+
+
+# ── an outbound payload may not cite a SHA that resolves to nothing (#245 D2) ─────────────
+
+# A backticked 7-40 lowercase-hex token is an *instruction* — "do not rewrite `8d9fa742`" — and an
+# instruction that names no commit points at nothing. The rule is deliberately narrow: the pattern
+# matches a whole code span, so a bare hex word in prose stays prose. The measurement that chose it
+# (#245 D2) scanned 668 `.md` files (`.lane/tickets`, `skills/**`, `docs/**`, `.lane/reports`): 37
+# distinct non-resolving tokens appear bare, and reading those as instructions would have refused 6
+# innocent files whose backticked hex is a decimal (`1234567`), a binary literal (`0b00000011`) or an
+# 8-hex review-record id. The narrow rule still refuses 10 files — 4 tickets, 4 docs, and 2 stored
+# reply payloads — whose backticked tokens are review ids and mutant labels that no shape rule can
+# tell apart from an abbreviation, so a genuinely intentional non-resolving token is waived BY NAME
+# with `--allow-unresolvable-sha <TOKEN>`, reported on stderr, never a silent bypass.
+SHA_SHAPED_BACKTICKED_RE = re.compile(r"`([0-9a-f]{7,40})`")
+ALLOW_UNRESOLVABLE_SHA = "--allow-unresolvable-sha"
+
+
+def backticked_sha_tokens(payload: str) -> list[str]:
+    """Distinct backticked 7-40 lowercase-hex tokens, in first-appearance order."""
+    return list(dict.fromkeys(SHA_SHAPED_BACKTICKED_RE.findall(payload)))
+
+
+def git_can_resolve_commits(cwd: Path) -> bool:
+    """Whether `git rev-parse` can answer about commits in `cwd` at all.
+
+    A missing git binary, or a directory outside every work tree, answers False. That answer is
+    "unverifiable", and it must never be read as "unresolvable".
+    """
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return done.returncode == 0
+
+
+def names_a_commit(token: str, cwd: Path) -> bool:
+    """`git rev-parse --verify <token>^{commit}`: whether the token names a commit in `cwd`."""
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{token}^{{commit}}"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return done.returncode == 0
+
+
+def unresolvable_sha_tokens(payload: str, *, cwd: Path) -> list[str] | None:
+    """Backticked SHA-shaped tokens in `payload` that name no commit; None when unverifiable.
+
+    `None` means git could not answer in `cwd` — no repository, or no binary — so the caller can
+    report the check as skipped instead of claiming every token in a payload is dead. `[]` means
+    nothing to verify or every cited token resolves, which is why a payload with no such token
+    passes.
+    """
+    tokens = backticked_sha_tokens(payload)
+    if not tokens:
+        return []
+    if not git_can_resolve_commits(cwd):
+        return None
+    return [token for token in tokens if not names_a_commit(token, cwd)]
+
+
+def lane_git_dir(env: Mapping[str, str]) -> Path | None:
+    """The lane repository the guard resolves against, or None when no anchor resolves.
+
+    Deliberately the store anchor `herdr-lease` already resolves (#229) rather than the ambient
+    cwd: the same payload must get the same verdict from any working directory. Only a broken
+    anchor leaves this None, and the guard then falls back to where the helper itself was invoked.
+    """
+    try:
+        return resolve_base_dir(env=env)
+    except Exception:
+        return None
+
+
+def payload_origin(options: Options) -> str:
+    """The origin named in a guard message: the payload file, or the stream it arrived on."""
+    if options.file and options.file != STDIN:
+        return options.file
+    return "<message>" if options.message is not None else "<stdin>"
+
+
+def require_resolvable_shas(
+    payload: str,
+    *,
+    payload_path: str,
+    waived: Sequence[str] = (),
+    cwd: Path | None = None,
+) -> None:
+    """Refuse a payload whose backticked SHA-shaped token names no commit (#245 D2).
+
+    Runs on the outbound payload before anything is written, so a refused payload leaves no record
+    and consumes no lease — the persist-first ordering (#231) is untouched. Loud by construction:
+    the refusal names every dead token and the payload path; a token waived by
+    `--allow-unresolvable-sha` is named on stderr; and a directory where git cannot answer is
+    reported as a skipped check, never as a pass. Source-agnostic by design: it catches a drifted
+    copy in the ticket, in the envelope, or in the reply body alike.
+    """
+    tokens = backticked_sha_tokens(payload)
+    if not tokens:
+        return
+    directory = cwd if cwd is not None else Path.cwd()
+    verdict = unresolvable_sha_tokens(payload, cwd=directory)
+    if verdict is None:
+        listed = ", ".join(f"`{token}`" for token in tokens)
+        print(
+            f"herdr-reply: SHA guard skipped for {payload_path}: git cannot resolve commits in "
+            f"{directory} (no work tree, or no git binary); unchecked: {listed}",
+            file=sys.stderr,
+        )
+        return
+    vouched = set(waived)
+    for token in verdict:
+        if token in vouched:
+            print(
+                f"herdr-reply: SHA guard waived `{token}` ({ALLOW_UNRESOLVABLE_SHA}): it names "
+                "no commit in this lane",
+                file=sys.stderr,
+            )
+    dead = [token for token in verdict if token not in vouched]
+    if dead:
+        listed = ", ".join(f"`{token}`" for token in dead)
+        raise UsageError(
+            f"payload {payload_path} names a SHA-shaped token that resolves to no commit: "
+            f"{listed}. A backticked 7-40 hex token is an instruction, so correct it — or waive "
+            f"an intentional one with {ALLOW_UNRESOLVABLE_SHA} <TOKEN>. Refusing to record or "
+            "submit the reply"
+        )
 
 
 # ── persist first, then poke (#231) ─────────────────────────────────────────────────
@@ -1388,6 +1554,15 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             "COMPLETED, BLOCKED, or REJECTED (see the Final Reply Template in "
             "skills/herdr/references/lane-coordination.md); refusing to record or submit the reply"
         )
+    # #245 D2: a backticked SHA-shaped token is an instruction, and an instruction that names no
+    # commit points at nothing. This runs before any record exists — and before `--dry-run`
+    # returns — so a refused payload consumes no lease and submits nothing.
+    require_resolvable_shas(
+        payload,
+        payload_path=payload_origin(options),
+        waived=options.allow_unresolvable_sha or (),
+        cwd=lane_git_dir(env),
+    )
     sender = resolve_current_agent(herdr, env)
     lease: dict[str, object] | None = None
     if sender:

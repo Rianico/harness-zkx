@@ -2284,3 +2284,225 @@ def test_auto_start_dry_run_shows_the_planned_settle_and_never_sleeps(
     assert slept == []
     assert stub.starts() == []
     assert stub.prompts() == []
+
+
+# ── an outbound payload may not cite a SHA that resolves to nothing (#245 D2) ─────────
+
+# The measured pair from the defect: `8d9fa742` is a real abbreviated commit in this lane,
+# `8d9a742` is its one-hex-digit drift — seven characters, and no git object at all.
+RESOLVING_ABBREV = "8d9fa742"
+DRIFTED_ABBREV = "8d9a742"
+
+
+def reply_payload(evidence_line: str = "- 660 passed") -> str:
+    """A COMPLETED payload that cites evidence, so the shape check never decides these cases."""
+    return f"COMPLETED\n\n## Evidence\n\n```\n{evidence_line}\n```\n"
+
+
+def sha_guard_repo(root: Path) -> tuple[Path, str]:
+    """A scratch git repository with one commit; returns (repo, abbreviated commit SHA).
+
+    The scratch repo is the lane anchor the guard resolves against, so the pins exercise the
+    real `git rev-parse --verify <token>^{commit}` probe instead of a stub of it.
+    """
+    repo = root / "sha-guard-repo"
+    repo.mkdir()
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+        )
+
+    assert git("init", "-q", "-b", "main").returncode == 0
+    committed = git(
+        "-c",
+        "user.name=herdr",
+        "-c",
+        "user.email=herdr@example.invalid",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "one",
+    )
+    assert committed.returncode == 0, committed.stderr
+    short = git("rev-parse", "--short=8", "HEAD")
+    assert short.returncode == 0, short.stderr
+    return repo, short.stdout.strip()
+
+
+def test_the_sha_guard_reads_only_a_whole_backticked_hex_code_span() -> None:
+    """The chosen rule, pinned by shape: a backticked code span of 7-40 lowercase hex.
+
+    A bare hex word is prose — the measurement found 37 distinct non-resolving bare tokens in
+    today's tree (mutant labels, review ids, UUID fragments inside cited paths), so reading those
+    as instructions would refuse innocent payloads. `?`-prefixed, uppercase, too short, and
+    too long spans are not SHA-shaped at all.
+    """
+    assert herdr_reply.backticked_sha_tokens("COMPLETED deadbeef") == []
+    assert herdr_reply.backticked_sha_tokens("COMPLETED `deadbeef`") == ["deadbeef"]
+    assert herdr_reply.backticked_sha_tokens("`deadbeef` then `deadbeef`") == ["deadbeef"]
+    assert herdr_reply.backticked_sha_tokens("`8d9a74`") == []
+    assert herdr_reply.backticked_sha_tokens("`DEADBEEF`") == []
+    assert herdr_reply.backticked_sha_tokens("`?8d9a742`") == []
+    assert herdr_reply.backticked_sha_tokens("`" + "a" * 41 + "`") == []
+    assert herdr_reply.backticked_sha_tokens("`" + "a" * 40 + "`") == ["a" * 40]
+
+
+def test_the_drifted_abbreviation_names_no_commit_and_the_real_one_does() -> None:
+    """Pins 1 and 2 at the rule: the guard's verdict on the measured pair, in this lane."""
+    assert herdr_reply.unresolvable_sha_tokens(f"`{RESOLVING_ABBREV}`", cwd=REPO_ROOT) == []
+    assert herdr_reply.unresolvable_sha_tokens(f"`{DRIFTED_ABBREV}`", cwd=REPO_ROOT) == [
+        DRIFTED_ABBREV
+    ]
+    assert herdr_reply.unresolvable_sha_tokens("COMPLETED 8d9a742", cwd=REPO_ROOT) == []
+    assert herdr_reply.unresolvable_sha_tokens("COMPLETED", cwd=REPO_ROOT) == []
+
+
+def test_an_unresolvable_sha_is_refused_before_any_record_or_lease_change(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 1: a payload naming the drifted token is refused, naming token and payload path.
+
+    Refused before the store is touched, so a refused payload consumes nothing: no reply record,
+    no prompt, and the sender's lease is still held for the corrected reply.
+    """
+    repo, _short = sha_guard_repo(tmp_path)
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "238-R4-bridge-neutral-pin.md",
+        "orchestrator",
+        base_dir=repo,
+        ticket_id="#238-R4",
+        task_id="#238-R4#pin",
+    )
+    body = reply_payload(f"- base `{DRIFTED_ABBREV}`")
+    path = tmp_path / "reply.md"
+    _ = path.write_text(body, encoding="utf-8")
+
+    done = stub.run(
+        "orchestrator", "--file", str(path), env={"HERDR_LANE_DIR": str(repo)}, cwd=repo
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert DRIFTED_ABBREV in done.stderr
+    assert str(path) in done.stderr
+    assert stub.prompts() == []
+    assert herdr_lease.list_replies(base_dir=repo) == []
+    assert herdr_lease.get_lease("reviewer", base_dir=repo) is not None
+
+    message_origin = stub.run("orchestrator", body, env={"HERDR_LANE_DIR": str(repo)}, cwd=repo)
+    assert message_origin.returncode == herdr_cli.EXIT_USAGE
+    assert "<message>" in message_origin.stderr
+
+
+def test_a_payload_naming_a_resolving_abbreviated_sha_is_delivered(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 2: a real abbreviated commit passes and the body is delivered verbatim."""
+    repo, short = sha_guard_repo(tmp_path)
+    body = reply_payload(f"- base `{short}`")
+    path = tmp_path / "reply.md"
+    _ = path.write_text(body, encoding="utf-8")
+
+    done = stub.run(
+        "orchestrator", "--file", str(path), env={"HERDR_LANE_DIR": str(repo)}, cwd=repo
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[4].endswith(body)
+
+
+def test_a_payload_with_no_sha_shaped_token_passes_even_in_a_repository(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 2, second half: nothing to verify, and a bare hex word is not an instruction."""
+    repo, _short = sha_guard_repo(tmp_path)
+    bodies = (reply_payload(), reply_payload("- the mutant died; bare deadbeef in prose"))
+    for body in bodies:
+        done = stub.run("orchestrator", body, env={"HERDR_LANE_DIR": str(repo)}, cwd=repo)
+        assert done.returncode == herdr_cli.EXIT_OK, (body, done.stderr)
+
+
+def test_a_dry_run_reports_an_unresolvable_sha_instead_of_accepting_it_silently(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A draft that names an unresolvable SHA is reported by the same guard, not skipped.
+
+    `--dry-run` submits nothing, but it is not a bypass: the refusal happens before the plan is
+    printed, and a resolving token still prints the planned argv.
+    """
+    repo, short = sha_guard_repo(tmp_path)
+    refused = stub.run(
+        "orchestrator",
+        reply_payload(f"- base `{DRIFTED_ABBREV}`"),
+        "--dry-run",
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+    assert refused.returncode == herdr_cli.EXIT_USAGE, refused.stdout
+    assert DRIFTED_ABBREV in refused.stderr
+    assert refused.stdout == ""
+    assert stub.prompts() == []
+
+    planned = stub.run(
+        "orchestrator",
+        reply_payload(f"- base `{short}`"),
+        "--dry-run",
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+    assert planned.returncode == herdr_cli.EXIT_OK, planned.stderr
+    assert json.loads(planned.stdout)[1:3] == ["agent", "prompt"]
+
+
+@pytest.mark.parametrize("waived_token", [DRIFTED_ABBREV, "bb8e69bf1bef"])
+def test_the_documented_waiver_admits_an_intentional_nonresolving_token(
+    stub: StubHarness, tmp_path: Path, waived_token: str
+) -> None:
+    """The escape hatch, on the two measured false-positive classes.
+
+    The drifted commit abbreviation is one; the other is the payload shape the scan found in
+    today's tree — a backticked mutant or review-record id, which no shape rule can tell apart
+    from a commit abbreviation. Both are delivered once the token is named, and the waiver is
+    reported on stderr rather than silently.
+    """
+    repo, _short = sha_guard_repo(tmp_path)
+    body = reply_payload(f"- the wrapper's drifted `{waived_token}`, quoted deliberately")
+    path = tmp_path / "reply.md"
+    _ = path.write_text(body, encoding="utf-8")
+
+    done = stub.run(
+        "orchestrator",
+        "--file",
+        str(path),
+        herdr_reply.ALLOW_UNRESOLVABLE_SHA,
+        waived_token,
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "waived" in done.stderr
+    assert waived_token in done.stderr
+    (call,) = stub.prompts()
+    assert call[4].endswith(body)
+
+
+def test_the_sha_guard_says_so_when_git_cannot_answer(stub: StubHarness, tmp_path: Path) -> None:
+    """Unverifiable is never unresolvable: outside a work tree the guard skips loudly."""
+    nongit = tmp_path / "nongit"
+    nongit.mkdir()
+
+    done = stub.run(
+        "orchestrator",
+        reply_payload(f"- base `{DRIFTED_ABBREV}`"),
+        env={"HERDR_LANE_DIR": str(nongit), "PWD": str(nongit)},
+        cwd=nongit,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "SHA guard skipped" in done.stderr
+    assert DRIFTED_ABBREV in done.stderr
+    assert len(stub.prompts()) == 1
