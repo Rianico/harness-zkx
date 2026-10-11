@@ -55,7 +55,6 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
 
 from herdr_bootstrap import load_kind_entry
 
@@ -67,6 +66,7 @@ from herdr_cli import (
     HerdrError,
     UsageError,
     current_pane_id,
+    decode_payload,
     decode_response,
     diagnose_agent_not_found,
     diagnose_target_pane,
@@ -76,6 +76,7 @@ from herdr_cli import (
     fetch_inventory,
     find_herdr,
     guard,
+    read_payload_stream,
     reply_helper,
     require_herdr_env,
     run_herdr,
@@ -83,7 +84,6 @@ from herdr_cli import (
     verify_target_not_bare_shell,
 )
 
-STDIN = "-"
 BLOCKED = "blocked"
 BLOCKED_CODE = "agent_blocked"
 PROMPT_STATES = "idle, working, blocked, done, or unknown"
@@ -193,27 +193,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def read_payload(source: str | None) -> str:
     """Read the payload verbatim; only the choice of stream is validated, not its content."""
-    if source is None or source == STDIN:
-        if sys.stdin.isatty():
-            raise UsageError(
-                "no --file given and stdin is a terminal; pass --file PATH or pipe the payload"
-            )
-        try:
-            raw = sys.stdin.buffer.read()
-        except OSError as exc:
-            raise UsageError(f"cannot read payload from stdin: {exc}") from exc
-    else:
-        try:
-            raw = Path(source).read_bytes()
-        except OSError as exc:
-            raise UsageError(f"cannot read payload from {source!r}: {exc}") from exc
-
-    if b"\x00" in raw:
-        raise UsageError("payload contains a NUL byte, which cannot appear in an argv element")
-    try:
-        payload = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise UsageError(f"payload is not valid UTF-8: {exc}") from exc
+    payload = decode_payload(
+        read_payload_stream(
+            source,
+            tty_refusal="no --file given and stdin is a terminal; pass --file PATH or pipe the payload",
+        )
+    )
     if not payload.strip():
         raise UsageError(
             "payload is empty; refusing to submit an empty prompt. The payload comes from "

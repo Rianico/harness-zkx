@@ -52,7 +52,6 @@ import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
@@ -63,8 +62,10 @@ from herdr_cli import (
     EXIT_USAGE,
     KNOWN_AGENT_KINDS,
     METHOD_CONSTRAINT_EPILOG,
+    STDIN,
     HerdrError,
     UsageError,
+    decode_payload,
     decode_response,
     diagnose_agent_not_found,
     entries,
@@ -75,6 +76,7 @@ from herdr_cli import (
     format_shell_pane_diagnostic,
     guard,
     inspect_target_shell_pane,
+    read_payload_stream,
     reply_helper,
     require_herdr_env,
     run_herdr,
@@ -100,7 +102,6 @@ from herdr_prompt import (
     utc_stamp,
 )
 
-STDIN = "-"
 BLOCKED = "blocked"
 BLOCKED_CODE = "agent_blocked"
 TIMEOUT_CODE = "timeout"
@@ -811,32 +812,17 @@ def read_payload(source: str | None, message: str | None) -> str:
     if message is not None:
         if source is not None:
             raise UsageError("pass either a MESSAGE argument or --file, not both")
-        payload = message
-    elif source is None or source == STDIN:
-        if sys.stdin.isatty():
-            raise UsageError(
-                "no MESSAGE or --file given and stdin is a terminal; pass MESSAGE, --file PATH, or pipe the payload"
-            )
-        try:
-            raw = sys.stdin.buffer.read()
-        except OSError as exc:
-            raise UsageError(f"cannot read payload from stdin: {exc}") from exc
-        try:
-            payload = raw.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise UsageError(f"payload is not valid UTF-8: {exc}") from exc
+        payload = decode_payload(message)
     else:
-        try:
-            raw = Path(source).read_bytes()
-        except OSError as exc:
-            raise UsageError(f"cannot read payload from {source!r}: {exc}") from exc
-        try:
-            payload = raw.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise UsageError(f"payload is not valid UTF-8: {exc}") from exc
-
-    if "\x00" in payload:
-        raise UsageError("payload contains a NUL byte, which cannot appear in an argv element")
+        payload = decode_payload(
+            read_payload_stream(
+                source,
+                tty_refusal=(
+                    "no MESSAGE or --file given and stdin is a terminal; "
+                    "pass MESSAGE, --file PATH, or pipe the payload"
+                ),
+            )
+        )
     if not payload.strip():
         raise UsageError("payload is empty; refusing to submit an empty reply")
     return payload

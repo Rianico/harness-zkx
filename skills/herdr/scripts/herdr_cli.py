@@ -102,6 +102,51 @@ def reply_helper() -> Path:
     return Path(__file__).resolve().parent / "herdr_reply.py"
 
 
+STDIN = "-"
+NUL_BYTE_MESSAGE = "payload contains a NUL byte, which cannot appear in an argv element"
+
+
+def read_payload_stream(source: str | None, *, tty_refusal: str) -> bytes:
+    """Read raw payload bytes from stdin (`-` or None) or a `--file` path.
+
+    Only the choice of stream is validated here; the bytes go back to
+    `decode_payload` for the shared NUL and UTF-8 checks. `tty_refusal` is the
+    caller's own sentence, because each caller names a different fallback
+    (`--file PATH` for prompt, `MESSAGE, --file PATH` for reply).
+    """
+    if source is None or source == STDIN:
+        if sys.stdin.isatty():
+            raise UsageError(tty_refusal)
+        try:
+            return sys.stdin.buffer.read()
+        except OSError as exc:
+            raise UsageError(f"cannot read payload from stdin: {exc}") from exc
+    try:
+        return Path(source).read_bytes()
+    except OSError as exc:
+        raise UsageError(f"cannot read payload from {source!r}: {exc}") from exc
+
+
+def decode_payload(raw: bytes | str) -> str:
+    """Refuse a NUL byte, then decode UTF-8. NUL is checked before decoding.
+
+    A NUL can never appear in an argv element, and reporting it first means a
+    payload that is both NUL-bearing and invalid UTF-8 names the argv-safety
+    blocker rather than the codec. A `str` (a MESSAGE argument argv already
+    decoded) is checked as-is; `bytes` are then decoded as UTF-8.
+    """
+    if isinstance(raw, bytes):
+        if b"\x00" in raw:
+            raise UsageError(NUL_BYTE_MESSAGE)
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise UsageError(f"payload is not valid UTF-8: {exc}") from exc
+    if "\x00" in raw:
+        raise UsageError(NUL_BYTE_MESSAGE)
+    return raw
+
+
 AGENT_NAME_PATTERN = r"[a-z][a-z0-9_-]{0,31}"  # Herdr agent name: 1..32 chars
 
 
