@@ -1102,6 +1102,17 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
 
     payload = read_payload(options.file, options.message)
     mapped, sha, _line = parse_status_line(payload)
+    if mapped is None:
+        # #246 D1.1: the Final Reply Template requires the body to start at its status line.
+        # A status-less payload used to be recorded as a `status: null`, `shape: n/a` row and
+        # consumed the sender's lease, so its corrected reply could never advance the task;
+        # refuse before any record exists rather than record something that only looks like a
+        # reply.
+        raise UsageError(
+            "payload does not start at its status line; the first non-empty line must be "
+            "COMPLETED, BLOCKED, or REJECTED (see the Final Reply Template in "
+            "skills/herdr/references/lane-coordination.md); refusing to record or submit the reply"
+        )
     sender = resolve_current_agent(herdr, env)
     lease: dict[str, object] | None = None
     if sender:

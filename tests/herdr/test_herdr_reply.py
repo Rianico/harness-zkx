@@ -111,6 +111,76 @@ def test_empty_payload_is_rejected(stub: StubHarness) -> None:
     assert stub.prompts() == []
 
 
+def test_reply_refuses_a_payload_without_a_leading_status_line(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.1: the body must start at its status line; anything else is refused.
+
+    A first non-empty line that is not a status line used to be recorded anyway, as a row
+    with `status: null` and `shape: n/a` that looks like a real reply. The precondition is
+    enforced before any record exists, so the store stays untouched and nothing is delivered.
+    """
+    body = "## Summary\nthis body never starts at a status line\n"
+    before = herdr_lease.list_replies(base_dir=tmp_path)
+
+    done = stub.run("orchestrator", body)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "status line" in done.stderr
+    assert "COMPLETED" in done.stderr and "BLOCKED" in done.stderr and "REJECTED" in done.stderr
+    assert stub.prompts() == []
+    # The store's record count is unchanged: this is not merely a non-zero exit.
+    assert herdr_lease.list_replies(base_dir=tmp_path) == before == []
+
+
+def test_a_refused_reply_keeps_the_lease_so_the_corrected_reply_advances(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.1 combined pin: a refused first reply must not consume the lease.
+
+    A status-less payload used to be RECORDED with `status: null`, `shape: n/a`; the send
+    then released the sender's lease, so the corrected reply recorded its payload but had no
+    lease to resolve `task_id` from and could never advance the task (the advance is guarded
+    on `task_id` resolved from the lease). This exercises BOTH sends in one flow: a single
+    well-formed reply passes today and proves nothing, so do not simplify this back to one
+    send.
+    """
+    task_id = "#246#d11-advance"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "246.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#246",
+        task_id=task_id,
+    )
+    before = herdr_lease.list_replies(base_dir=tmp_path)
+
+    malformed = "## Summary\nmalformed first reply that never starts at a status line\n"
+    refused = stub.run("orchestrator", malformed, env={"PWD": str(tmp_path)})
+
+    assert refused.returncode == herdr_cli.EXIT_USAGE
+    assert "status line" in refused.stderr
+    assert herdr_lease.list_replies(base_dir=tmp_path) == before
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is not None, (
+        "the refusal must not consume the sender's lease"
+    )
+
+    corrected = "COMPLETED deadbeef\n\n## Evidence\n- 1078 passed\n"
+    done = stub.run("orchestrator", corrected, env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    records = herdr_lease.list_replies(base_dir=tmp_path)
+    assert len(records) == 1
+    assert records[0]["task_id"] == task_id, "the corrected reply carries the lease's task linkage"
+    assert records[0]["shape"] == "complete"
+
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    assert task["status"] == "completed"
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
 def test_refuses_without_herdr_env(stub: StubHarness) -> None:
     done = stub.run("orchestrator", "done", env={"HERDR_ENV": None})
     assert done.returncode == herdr_cli.EXIT_USAGE
