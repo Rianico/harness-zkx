@@ -254,12 +254,22 @@ def test_every_allow_listed_token_is_still_cited(report: PointerReport) -> None:
 
     `scan_pointers` counts one `illustration` exclusion per cited allow-listed token, so the count
     equals the allow-list length while every entry is cited. A doc edit that deletes an entry's only
-    citation drops a token from the scan and the count falls below the length, which this pin
-    catches. Mutant killed: remove one allow-listed token's citation and the pin fails. Measured:
-    `excluded["illustration"] == 10 == len(EXCLUDED_TOKENS)`.
+    citation drops a token from the scan and the count falls below the length, which the count
+    assertion catches. The count alone is a floor: an edit that deletes one entry's only citation
+    and duplicates another entry's citation in the same change keeps the total at the length while a
+    token is now uncited, so the per-token `cited` set below binds each allow-listed token to its
+    own citation. Mutants killed: (a) remove one allow-listed token's citation and the count pin
+    fails; (b) remove one token's citation and duplicate another's and the per-token pin still
+    fails. Measured: `excluded["illustration"] == 10 == len(EXCLUDED_TOKENS)`.
     """
     assert report.excluded.get("illustration", 0) >= len(EXCLUDED_TOKENS), (
         "fewer allow-listed citations than allow-list entries: a stale entry may now be uncited"
+    )
+    cited = {
+        token for doc in sorted(SKILL_DIR.glob("**/*.md")) for token, _ in _pointer_tokens(doc)
+    }
+    assert set(EXCLUDED_TOKENS) <= cited, (
+        f"allow-listed tokens no longer cited anywhere: {sorted(set(EXCLUDED_TOKENS) - cited)}"
     )
 
 

@@ -210,13 +210,22 @@ def test_every_frozen_field_is_compared_against_the_fixture() -> None:
     at the base: the fixture comparison iterates all nine `FROZEN_FIELDS` (plus `family`,
     `option_strings`, `help`), so no field can drift invisibly. This pin holds that relation: drop a
     `FROZEN_FIELDS` entry from `COMPARED_FIELDS` and a field a family does not agree on becomes
-    unchecked here, so the assertion fails naming it.
+    unchecked here, so the assertion fails naming it. Dropping the same entry from both literals
+    leaves their relation intact, so `COMPARED_FIELDS` is also anchored on the fixture itself: its
+    key set must equal the golden declaration's key set, which a two-literal edit cannot move.
     """
     missing = sorted(set(FROZEN_FIELDS) - set(COMPARED_FIELDS))
     assert missing == [], (
         f"FROZEN_FIELDS that no per-declaration comparison checks: {missing}; a field the "
         f"consensus table drops would then be free to drift invisibly"
     )
+    for script, entries in GOLDEN.items():
+        assert entries, f"{script}: the fixture lists no declarations"
+        for index, entry in enumerate(entries):
+            assert set(COMPARED_FIELDS) == set(entry), (
+                f"{script}[{index}]: COMPARED_FIELDS {sorted(COMPARED_FIELDS)} != fixture keys "
+                f"{sorted(entry)}; the comparison must cover exactly the frozen fields"
+            )
 
 
 @pytest.mark.parametrize("family", sorted(SHARED_LONG_OPTIONS))
