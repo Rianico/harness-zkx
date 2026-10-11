@@ -1090,8 +1090,13 @@ def resolve_task_linkage(
     resolve to one of the sender's open tasks, records the reply unlinked with one warning
     line — a wrong linkage is worse than none.
 
-    A store this process cannot read yields no linkage and no warning: the lease steps have
-    already reported it, and there is no ticket to name.
+    Every unlinked answer now carries a reason (#246 D1.3), so a recorded reply with
+    `task_id: null` is never silent. The reason states the severity: when the sender had open
+    work this step refused to guess at — several open tasks, a flag naming another task, or a
+    task record whose id cannot be named — the line says the sender holds open work and that no
+    linkage was made; when there was nothing to link, the line says the sender holds no open
+    task. An unresolved sender and an unreadable store are named too, instead of a reasonless
+    `(None, None)` answer.
     """
     if in_reply_to_record is not None:
         return _linkage_from_record(in_reply_to_record, sender=sender, env=env)
@@ -1102,13 +1107,17 @@ def resolve_task_linkage(
         if isinstance(lease_task, str):
             return lease_task, None
     if sender is None:
-        return None, None
+        return None, _unlinked("no sender resolved, so no task could be attributed")
     open_tasks = _sender_open_tasks(sender, env=env)
     if open_tasks is None:
-        return None, None
+        return None, _unlinked("the sender's open tasks could not be read")
     if len(open_tasks) == 1:
         task_id = open_tasks[0].get("task_id")
-        return (task_id, None) if isinstance(task_id, str) else (None, None)
+        if isinstance(task_id, str):
+            return task_id, None
+        return None, _unlinked(
+            f"sender {sender!r} holds open work, but the task id is not a string"
+        )
     if not open_tasks:
         return None, _unlinked(f"sender {sender!r} holds no open task")
     return None, _unlinked(

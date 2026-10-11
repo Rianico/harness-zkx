@@ -14,7 +14,7 @@ import secrets
 import shutil
 import subprocess
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -397,6 +397,116 @@ def test_in_reply_to_record_rebinds_a_followup_without_restating_the_ticket(
     first_state = herdr_lease.get_task(first_task, base_dir=tmp_path)
     assert second_state is not None and second_state["status"] == "completed"
     assert first_state is not None and first_state["status"] == "dispatched"
+
+
+def test_a_reply_whose_open_task_cannot_be_named_is_recorded_unlinked_with_a_loud_warning(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.3 pin 1: the last silent recorded-unlinked path now warns, loudly.
+
+    The sender's sole open task record has lost its string `task_id` (a damaged store), so the
+    resolver cannot name it. The resolver used to answer `(None, None)`: the reply was recorded
+    with `task_id: null` and stderr stayed empty. Now the reply is recorded unlinked exactly as
+    before, but one warning line says the sender holds open work and no linkage was made. The
+    sender holds open work, so the line is the loud form, never the quiet "holds no open task".
+
+    Mutant killed: restore `return (None, None)` for the unnameable id and the warning vanishes.
+    """
+    task_id = "#246#d13-nameless"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "246.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#246",
+        task_id=task_id,
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True
+    tasks_file = herdr_lease.resolve_tasks_file(base_dir=tmp_path)
+    tasks = yaml.safe_load(tasks_file.read_text(encoding="utf-8"))
+    del tasks["tasks"][task_id]["task_id"]
+    _ = tasks_file.write_text(yaml.safe_dump(tasks, sort_keys=False), encoding="utf-8")
+
+    done = stub.run("orchestrator", "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] is None, "an unnameable task is never attributed by guesswork"
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert "open work" in warnings[0], warnings[0]
+    assert "no open task" not in warnings[0], warnings[0]
+
+
+def test_unlinked_warnings_distinguish_open_work_from_nothing_to_link(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.3 pin 2 (severity): 'several open tasks' must not warn like 'no open task'.
+
+    The sender resolves the same way in both runs (the stub's current pane), so only the
+    open-work state differs. A sender holding several open tasks has work this step refuses to
+    guess at, so its line must differ from — and be the louder of — a sender holding none.
+
+    Mutant killed: make the ambiguous path emit the "holds no open task" text and this pin fails
+    on the two lines being identical, on the loud marker, and on the quiet marker.
+    """
+    several = tmp_path / "several"
+    none = tmp_path / "none"
+    several.mkdir()
+    none.mkdir()
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=several, ticket_id="#246", task_id="#246#a"
+    )
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "247.md", "orchestrator", base_dir=several, ticket_id="#247", task_id="#247#b"
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=several) is True
+
+    body = "COMPLETED deadbeef\n\n## Evidence\n- 2 passed\n"
+    loud = stub.run("orchestrator", body, env={"HERDR_LANE_DIR": str(several)})
+    quiet = stub.run("orchestrator", body, env={"HERDR_LANE_DIR": str(none)})
+    assert loud.returncode == herdr_cli.EXIT_OK, loud.stderr
+    assert quiet.returncode == herdr_cli.EXIT_OK, quiet.stderr
+
+    loud_lines = [line for line in loud.stderr.splitlines() if "task linkage" in line]
+    quiet_lines = [line for line in quiet.stderr.splitlines() if "task linkage" in line]
+    assert len(loud_lines) == 1, loud.stderr
+    assert len(quiet_lines) == 1, quiet.stderr
+    assert loud_lines[0] != quiet_lines[0], "the two severities must not warn identically"
+    assert "ambiguous" in loud_lines[0], loud_lines[0]
+    assert "ambiguous" not in quiet_lines[0], quiet_lines[0]
+    assert "no open task" in quiet_lines[0], quiet_lines[0]
+    assert "no open task" not in loud_lines[0], loud_lines[0]
+    assert herdr_lease.list_replies(base_dir=several)[-1]["task_id"] is None
+    assert herdr_lease.list_replies(base_dir=none)[-1]["task_id"] is None
+
+
+def test_resolve_task_linkage_never_returns_a_silent_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#246 D1.3 invariant: every unlinked answer carries a reason, so no silent path returns.
+
+    The sender-unresolved and unreadable-store branches cannot be reached with a *recorded*
+    reply: a missing sender aborts in `resolve_caller` before any record exists, and `_load_state`
+    turns a damaged store into an empty one. So the invariant is pinned at the resolver: both
+    branches answer `(None, <reason>)`, never the reasonless `(None, None)` they used to.
+    """
+    task_id, warning = herdr_reply.resolve_task_linkage(
+        sender=None, lease=None, explicit_ticket=None, in_reply_to_record=None, env={}
+    )
+    assert task_id is None
+    assert warning is not None and "no sender resolved" in warning
+
+    def _no_open_tasks(sender: str, env: Mapping[str, str]) -> None:
+        """Stand in for a store this process cannot read: `_sender_open_tasks` returns None."""
+        _ = sender, env
+
+    monkeypatch.setattr(herdr_reply, "_sender_open_tasks", _no_open_tasks)
+    task_id, warning = herdr_reply.resolve_task_linkage(
+        sender="reviewer", lease=None, explicit_ticket=None, in_reply_to_record=None, env={}
+    )
+    assert task_id is None
+    assert warning is not None and "could not be read" in warning
 
 
 def test_refuses_without_herdr_env(stub: StubHarness) -> None:
