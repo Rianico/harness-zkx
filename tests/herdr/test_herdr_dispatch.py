@@ -1254,3 +1254,36 @@ def test_dispatch_auto_start_live_agent_makes_no_extra_herdr_calls(
     assert auto.returncode == herdr_cli.EXIT_OK, auto.stderr
     assert stub.starts() == []
     assert len(stub.calls()) == 2 * plain_calls
+
+
+# ── #238: a warm pane is never settled ──────────────────────────────────────────────
+
+
+def test_warm_agent_dispatch_settles_nothing(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 3 (#238): a live idle agent is warm — an ordinary dispatch adds no settle delay.
+
+    Mutant killed: call `settle_fresh_pane(DEFAULT_SETTLE_SECONDS)` on the warm dispatch path
+    (`herdr_prompt.prompt_one`) — `herdr_bootstrap._sleep` then records a wait and this fails.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    monkeypatch.setattr(herdr_prompt, "_sleep", slept.append)
+    ticket = payload_file(tmp_path, "TICKET BODY")
+
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == [], "a live agent is warm: nothing is spawned"
+    (prompt,) = stub.prompts()
+    assert prompt[3] == "reviewer"
+    assert slept == [], "a warm dispatch must add no settle delay"

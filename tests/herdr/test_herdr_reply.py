@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+import herdr_bootstrap
 import herdr_cli
 import herdr_lease
 import herdr_prompt
@@ -1496,3 +1497,82 @@ def test_the_advance_gate_refuses_a_row_bound_to_another_lease(
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
     assert task["status"] == "completed"
+
+
+# ── #238: settle the revived caller before delivering the reply ─────────────────────
+
+
+def _shell_pane_state() -> dict[str, object]:
+    """A bare shell pane carrying the label the reply target resolves by."""
+    return {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp",
+                "label": "lens-orchestrator",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+
+
+def test_auto_start_settles_the_revived_caller_and_zero_is_exact(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 2 (#238, revive path): the caller settles after its spawn; `--settle 0` is exact.
+
+    Mutant killed: drop the `seconds <= 0` guard in `settle_fresh_pane` — the `--settle 0` run
+    records a `0.0` sleep and the `slept == []` assertion fails.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    state = _shell_pane_state()
+
+    done = stub.run("lens-orchestrator", "COMPLETED", "--auto-start", "pi", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.starts()) == 1
+    assert slept == [herdr_bootstrap.DEFAULT_SETTLE_SECONDS]
+
+    slept.clear()
+    zero = stub.run(
+        "lens-orchestrator", "COMPLETED", "--auto-start", "pi", "--settle", "0", state=state
+    )
+    assert zero.returncode == herdr_cli.EXIT_OK, zero.stderr
+    assert slept == [], "--settle 0 must not sleep at all on the revive path"
+
+
+def test_auto_start_dry_run_shows_the_planned_settle_and_never_sleeps(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A revive dry run plans the settle in its JSON and sleeps not at all."""
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        "--auto-start",
+        "pi",
+        "--dry-run",
+        state=_shell_pane_state(),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout)
+    assert plan["settle"] == herdr_bootstrap.DEFAULT_SETTLE_SECONDS
+    assert plan["agent_start"][1:3] == ["agent", "start"]
+    assert plan["agent_prompt"][1:3] == ["agent", "prompt"]
+    assert slept == []
+    assert stub.starts() == []
+    assert stub.prompts() == []

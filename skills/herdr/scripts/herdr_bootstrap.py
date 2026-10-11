@@ -123,13 +123,37 @@ GIT_LOCATION_OVERRIDE_VARS: tuple[str, ...] = ("GIT_DIR", "GIT_WORK_TREE", "GIT_
 
 @dataclass(frozen=True)
 class KindEntry:
-    """One kind's startup contract: native trust flags plus the invariant surface."""
+    """One kind's startup contract: trust flags, the invariant surface, revision behaviour."""
 
     trust_flags: tuple[str, ...]
     inline_invariant: bool
+    revision_moves: bool = True
 
 
 FALLBACK_ENTRY = KindEntry(trust_flags=(), inline_invariant=False)
+
+
+# Bounded wait after a fresh `agent start`, before the pane is treated as acceptant (#238).
+# A freshly spawned pane can report `interactive_ready: true` and `agent_status: idle` while
+# still initialising, so the first prompt is swallowed. One fixed sleep, never a poll until
+# steady state, and only ever on a just-spawned pane: an existing idle pane pays nothing.
+DEFAULT_SETTLE_SECONDS = 5.0
+
+
+def _sleep(seconds: float) -> None:
+    """Sleep seam: tests monkeypatch this module attribute to skip real delays."""
+    time.sleep(seconds)
+
+
+def settle_fresh_pane(seconds: float) -> None:
+    """Wait `seconds` after a fresh `agent start`, so a starting pane is not treated as acceptant.
+
+    Shared by both spawn paths (`bootstrap` and the reply helper's `--auto-start` revive).
+    `--settle 0` is exact: no sleep at all, not a token sleep.
+    """
+    if seconds <= 0:
+        return
+    _sleep(seconds)
 
 
 def _parse_flow_flags(value: str, lineno: int) -> tuple[str, ...]:
@@ -158,7 +182,7 @@ def parse_kinds_config(text: str) -> dict[str, KindEntry]:
     Values may not contain `#`; block sequences are rejected — use the flow list.
     Raises ValueError with a line number on anything outside the subset.
     """
-    raw: dict[str, dict[str, str | tuple[str, ...]]] = {}
+    raw: dict[str, dict[str, str | tuple[str, ...] | bool]] = {}
     current: str | None = None
     for lineno, raw_line in enumerate(text.splitlines(), 1):
         line = raw_line.split("#", 1)[0].rstrip()
@@ -187,15 +211,24 @@ def parse_kinds_config(text: str) -> dict[str, KindEntry]:
                 if cleaned not in ("inline", "file"):
                     raise ValueError(f"line {lineno}: invariant must be inline or file")
                 raw[current][key] = cleaned
+            elif key == "revision_moves":
+                if cleaned not in ("true", "false"):
+                    raise ValueError(f"line {lineno}: revision_moves must be true or false")
+                raw[current][key] = cleaned == "true"
             else:
                 raise ValueError(f"line {lineno}: unknown key {key!r}")
     entries: dict[str, KindEntry] = {}
     for kind, item in raw.items():
         flags = item.get("trust_flags")
         invariant = item.get("invariant")
+        moves = item.get("revision_moves", True)
         if not isinstance(flags, tuple) or invariant not in ("inline", "file"):
             raise ValueError(f"kind {kind!r}: needs trust_flags [...] and invariant inline|file")
-        entries[kind] = KindEntry(trust_flags=flags, inline_invariant=invariant == "inline")
+        entries[kind] = KindEntry(
+            trust_flags=flags,
+            inline_invariant=invariant == "inline",
+            revision_moves=bool(moves),
+        )
     return entries
 
 
@@ -518,6 +551,7 @@ class Options:
     cwd: str | None = None
     cwd_timeout: float = 10.0
     allow_tracked_invariant: bool = False
+    settle: float = DEFAULT_SETTLE_SECONDS
     dry_run: bool = False
     json: bool = False
 
@@ -580,6 +614,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "append the role invariant even when the target file is version-controlled or "
             "its version-control state could not be determined, leaving that file modified"
+        ),
+    )
+    _ = parser.add_argument(
+        "--settle",
+        type=float,
+        default=DEFAULT_SETTLE_SECONDS,
+        metavar="SEC",
+        help=(
+            "seconds to wait after a fresh `agent start` before reporting the pane "
+            "bootstrapped, so a still-initialising pane is not treated as acceptant; "
+            f"0 waits not at all (default: {DEFAULT_SETTLE_SECONDS:g})"
         ),
     )
     _ = parser.add_argument(
@@ -797,6 +842,7 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
             "pane_rename": rename_argv,
             "agent_start": start_argv,
             "cwd_ensure": options.cwd,
+            "settle": options.settle,
         }
         if agents_file is not None:
             plan["agents_md_tracked"] = agents_tracked
@@ -826,6 +872,9 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
         except OSError as exc:
             raise UsageError(f"cannot write {invariant_file}: {exc}") from exc
     raw = run_herdr_checked(start_argv, env)
+    # The pane is only now reported bootstrapped, and only now is it acceptant: the fresh
+    # spawn may still be initialising behind a truthful `interactive_ready: true` (#238).
+    settle_fresh_pane(options.settle)
 
     if options.json:
         print(raw, end="" if raw.endswith("\n") else "\n")

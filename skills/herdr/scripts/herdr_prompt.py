@@ -57,6 +57,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from herdr_bootstrap import load_kind_entry
+
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_BLOCKED,
@@ -693,6 +695,49 @@ def _format_seconds(seconds: float) -> str:
     return f"{seconds:g}"
 
 
+def resolve_agent_kinds(
+    herdr: str, targets: Sequence[str], env: Mapping[str, str]
+) -> dict[str, str | None]:
+    """Map each target to its agent kind from one `herdr agent list`; None when unresolved.
+
+    Read only on a failure path — the unconfirmed handshake and the wait timeout — to decide
+    whether a revision-based re-check can ever succeed. A read that fails, or a target the
+    list does not hold, leaves that target unresolved; the caller then keeps the previous
+    advice rather than guessing about the kind.
+    """
+    kinds: dict[str, str | None] = dict.fromkeys(targets)
+    try:
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except HerdrError:
+        return kinds
+    for target in targets:
+        for agent in agents:
+            if target in (
+                entry_optional_text(agent, "name"),
+                entry_optional_text(agent, "pane_id"),
+            ):
+                kinds[target] = entry_optional_text(agent, "agent")
+                break
+    return kinds
+
+
+def revision_can_move(kind: str | None) -> bool:
+    """Whether a revision increment is a usable acceptance signal for this kind.
+
+    `false` for a kind `references/kinds.yaml` declares `revision_moves: false` (agy, #238): its
+    revision never moves, so the handshake's revision half can never fire and a revision-based
+    re-check (`herdr-wait`) is unsatisfiable there (exit 2) — only the status half remains. An
+    unresolved kind, or a config this process cannot read, defaults to true, keeping the
+    previous advice whenever the kind is unknown.
+    """
+    if not kind:
+        return True
+    try:
+        return load_kind_entry(kind).revision_moves
+    except UsageError:
+        return True
+
+
 def agent_readiness(
     herdr: str, target: str, env: Mapping[str, str]
 ) -> tuple[bool, str | None, str | None]:
@@ -854,11 +899,23 @@ def prompt_one(
         # it. Failing here, or re-sending to "confirm", both re-created #193: a delivered
         # prompt reported as dropped, and a duplicate injection.
         _, last_status, _ = agent_readiness(herdr, target, env)
+        kind = resolve_agent_kinds(herdr, [target], env)[target]
+        if revision_can_move(kind):
+            remedy = "check with herdr-wait before resubmitting"
+        else:
+            # A revision-0 kind (#238): its revision never moves, so a wanted state is
+            # unsatisfiable and re-reading the state feed can confirm nothing. Name the
+            # signal that is trustworthy there instead of the one that structurally cannot be.
+            remedy = (
+                "confirm through the agy bridge's status title (herdr-agy-bridge), which is "
+                "trustworthy where the raw state feed is not, and await the reply callback; "
+                "a state re-check cannot confirm delivery for this kind"
+            )
         print(
             f"herdr-prompt: warning: acceptance was not confirmed within "
             f"{_format_seconds(HANDSHAKE_TIMEOUT_SECONDS)}s for {target} "
             f"(last status={last_status or 'unknown'}, revision unchanged); the CLI accepted "
-            "the payload — check with herdr-wait before resubmitting",
+            f"the payload — {remedy}",
             file=sys.stderr,
         )
 
@@ -947,10 +1004,25 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
             hint = f"still working after {options.timeout}ms (wait timed out)"
         else:
             hint = "still working when the wait timed out"
-        raise WaitTimeout(
-            f"prompt delivered to {names} but {hint}; "
-            f"working asynchronously. Yield turn and await reply callback, or resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
-        )
+        # A revision-0 kind (#238) cannot be re-checked by state: its revision never moves, so a
+        # wanted state is unsatisfiable and `herdr-wait` exits 2. Advice goes per target, and
+        # only the targets whose kind can move are told to resume with `herdr-wait`.
+        kinds = resolve_agent_kinds(herdr, timed_out, env)
+        movable = [target for target in timed_out if revision_can_move(kinds[target])]
+        static = [target for target in timed_out if not revision_can_move(kinds[target])]
+        advice = "working asynchronously. Yield turn and await reply callback"
+        if movable:
+            advice += (
+                f", or resume with herdr-wait {', '.join(movable)} --timeout <ms> "
+                "instead of resubmitting"
+            )
+        if static:
+            advice += (
+                f"; {', '.join(static)} cannot be re-checked that way — the kind's revision "
+                "never moves, so confirm through the agy bridge's status title "
+                "(herdr-agy-bridge) and await the reply callback instead"
+            )
+        raise WaitTimeout(f"prompt delivered to {names} but {hint}; {advice}")
     return EXIT_OK
 
 

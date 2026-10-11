@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
+from herdr_bootstrap import DEFAULT_SETTLE_SECONDS, settle_fresh_pane
 from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
@@ -121,6 +122,7 @@ class Options:
     json: bool = False
     dry_run: bool = False
     auto_start: str | None = None
+    settle: float = DEFAULT_SETTLE_SECONDS
     verbose: bool = False
 
 
@@ -166,6 +168,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--auto-start",
         metavar="KIND",
         help="automatically start the agent on an open shell pane before delivering the reply",
+    )
+    _ = parser.add_argument(
+        "--settle",
+        type=float,
+        default=DEFAULT_SETTLE_SECONDS,
+        metavar="SEC",
+        help=(
+            "seconds to wait after `--auto-start` spawns the caller, before the reply is "
+            "delivered, so a still-initialising pane is not treated as acceptant; "
+            f"0 waits not at all (default: {DEFAULT_SETTLE_SECONDS:g})"
+        ),
     )
     _ = parser.add_argument(
         "--verbose",
@@ -1056,6 +1069,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             )
 
     shell_info = inspect_target_shell_pane(herdr, target, env)
+    revive_argv: list[str] | None = None
     if shell_info is not None:
         if options.auto_start:
             kind = options.auto_start.strip().lower()
@@ -1064,7 +1078,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 if shell_info.suggested_name != "<name>"
                 else f"agent-{shell_info.pane_id.replace(':', '-')}"
             )
-            start_argv = [
+            revive_argv = [
                 herdr,
                 "agent",
                 "start",
@@ -1075,7 +1089,10 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 shell_info.pane_id,
             ]
             if not options.dry_run:
-                _ = run_herdr_checked(start_argv, env)
+                _ = run_herdr_checked(revive_argv, env)
+                # A revived caller is a fresh spawn too: settle before the reply is delivered
+                # (#237), so its first prompt is not swallowed by a pane still initialising.
+                settle_fresh_pane(options.settle)
             target = start_name
         else:
             if emit_recovery_diagnostic(herdr, env, target, recovery_file_arg(options)):
@@ -1167,7 +1184,17 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         argv += ["--timeout", str(options.timeout)]
 
     if options.dry_run:
-        print(json.dumps(argv))
+        # A revive plan shows the spawn, its settle, and the delivery argv; a plain plan stays
+        # the delivery argv alone.
+        if revive_argv is None:
+            print(json.dumps(argv))
+        else:
+            plan: dict[str, object] = {
+                "agent_start": revive_argv,
+                "settle": options.settle,
+                "agent_prompt": argv,
+            }
+            print(json.dumps(plan))
         return EXIT_OK
 
     done = run_herdr(argv, env)

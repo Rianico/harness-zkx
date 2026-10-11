@@ -1169,3 +1169,86 @@ def test_preflight_respects_explicit_interactive_ready_false(
     assert code == herdr_cli.EXIT_OK
     assert len(stub.prompts()) == 1
     assert len(slept) == 1
+
+
+# ── #238: a revision-0 kind is not told to re-check a state that cannot move ────────
+
+
+def _agy_idle_state(**extra: object) -> dict[str, object]:
+    """DEFAULT_STATE with the reviewer running as agy: a revision that never moves."""
+    return {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "agy", "agent_status": "idle"}
+        ],
+        "agent_get_seq": {"reviewer": ["idle"]},
+        "agent_get_rev_seq": {"reviewer": ["r0"] * 40},
+        **extra,
+    }
+
+
+def test_unconfirmed_warning_drops_herdr_wait_for_a_revision_static_kind(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 4 (#238): the unconfirmed-acceptance warning stops naming `herdr-wait` where the
+    target's kind can never move its revision, and still names it for an ordinary target.
+
+    Mutant killed: drop the `revision_can_move` branch, so the warning always reads "check with
+    herdr-wait before resubmitting" — the agy half then names `herdr-wait` and fails.
+    """
+
+    def no_sleep(seconds: float) -> None:
+        """Swallow the handshake tick; this test only inspects the warning text."""
+
+    monkeypatch.setattr(herdr_prompt, "_sleep", no_sleep)
+
+    stub.write_state(_agy_idle_state())
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    agy_err = capsys.readouterr().err
+    assert "acceptance was not confirmed" in agy_err
+    assert "herdr-agy-bridge" in agy_err, "the honest remedy must be named"
+    assert "herdr-wait" not in agy_err, (
+        "a revision-0 kind must not be sent to an unsatisfiable wait"
+    )
+
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["idle"]},
+            "agent_get_rev_seq": {"reviewer": ["r1"] * 40},
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert "herdr-wait" in capsys.readouterr().err
+
+
+def test_wait_timeout_advice_drops_herdr_wait_for_a_revision_static_kind(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The wait-timeout advice names `herdr-wait` only where the revision can move (#238)."""
+    error = {"code": "timeout", "message": "wait timed out after 120000ms"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--wait",
+        "--timeout",
+        "120000",
+        state=_agy_idle_state(prompt_error=error),
+    )
+
+    assert done.returncode == herdr_prompt.EXIT_WAIT_TIMEOUT
+    assert "Yield turn and await reply callback" in done.stderr
+    assert "herdr-agy-bridge" in done.stderr
+    assert "herdr-wait" not in done.stderr

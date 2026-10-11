@@ -1,5 +1,7 @@
 """Tests for skills/herdr/scripts/herdr_bootstrap.py (herdr-bootstrap helper)."""
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -8,6 +10,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import override
 
 import herdr_bootstrap
 import herdr_cli
@@ -1492,3 +1495,84 @@ def test_tracked_block_for_another_role_is_delivered_unchanged(
     assert agents.stat().st_mtime_ns == stamp
     assert len(starts(stub)) == 1
     assert pane_renames(stub)[0][3:] == ["w9:p1", "impl-1"]
+
+
+# ── #238: settle a freshly spawned pane before treating it as acceptant ─────────────
+
+
+class _ReportStream(io.StringIO):
+    """stdout that records the moment bootstrap reports success, for ordering assertions."""
+
+    def __init__(self, events: list[object]) -> None:
+        super().__init__()
+        self._events = events
+
+    @override
+    def write(self, text: str) -> int:
+        if "bootstrapped" in text:
+            self._events.append("report")
+        return super().write(text)
+
+
+def _record_start_and_settle(monkeypatch: pytest.MonkeyPatch, events: list[object]) -> None:
+    """Record `agent start` and the settle into one ordered event list (in-process bootstrap)."""
+
+    def fake_sleep(seconds: float) -> None:
+        events.append(("settle", seconds))
+
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", fake_sleep)
+    real = herdr_bootstrap.run_herdr_checked
+
+    def recording(argv: list[str], env: object) -> str:
+        if list(argv)[1:3] == ["agent", "start"]:
+            events.append("start")
+        return real(argv, env)
+
+    monkeypatch.setattr(herdr_bootstrap, "run_herdr_checked", recording)
+
+
+def test_settle_runs_after_agent_start_and_before_the_success_report(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 1 (#238): a fresh pane settles after `agent start`, before it is reported ready.
+
+    Mutant killed: move `settle_fresh_pane(...)` above `run_herdr_checked(start_argv, env)` —
+    the recorded order becomes settle, start, report and this test fails.
+    """
+    events: list[object] = []
+    _record_start_and_settle(monkeypatch, events)
+    options = herdr_bootstrap.Options(kind="codex", pane="w9:p1", role="tm", cwd=str(tmp_path))
+    stream = _ReportStream(events)
+
+    with contextlib.redirect_stdout(stream):
+        code = herdr_bootstrap.bootstrap(options, stub.base_env())
+
+    assert code == herdr_cli.EXIT_OK
+    assert events == ["start", ("settle", herdr_bootstrap.DEFAULT_SETTLE_SECONDS), "report"], (
+        "the settle must sit between the spawn and the success report"
+    )
+
+
+def test_settle_zero_is_exact_and_the_default_settles_once(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 2 (#238): `--settle 0` sleeps not at all; the default is one 5s wait.
+
+    Mutant killed: drop the `seconds <= 0` guard in `settle_fresh_pane` — `--settle 0` then
+    records a `0.0` sleep and the `slept == []` assertion fails.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    zero = herdr_bootstrap.Options(
+        kind="codex", pane="w9:p1", role="tm", cwd=str(tmp_path), settle=0.0
+    )
+    assert herdr_bootstrap.bootstrap(zero, stub.base_env()) == herdr_cli.EXIT_OK
+    assert slept == [], "--settle 0 must not sleep at all, not even a token sleep"
+
+    parser = herdr_bootstrap.build_parser()
+    assert parser.parse_args(["--kind", "codex", "--pane", "w9:p1"]).settle == 5.0
+    assert parser.parse_args(["--kind", "codex", "--pane", "w9:p1", "--settle", "0"]).settle == 0.0
+
+    default = herdr_bootstrap.Options(kind="codex", pane="w9:p1", role="tm", cwd=str(tmp_path))
+    assert herdr_bootstrap.bootstrap(default, stub.base_env()) == herdr_cli.EXIT_OK
+    assert slept == [herdr_bootstrap.DEFAULT_SETTLE_SECONDS]
