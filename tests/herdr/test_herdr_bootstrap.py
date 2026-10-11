@@ -773,6 +773,64 @@ def test_kinds_config_rejects_bad_shapes(text: str) -> None:
         herdr_bootstrap.parse_kinds_config(text)
 
 
+# ── unit: `lifecycle_bridge` is a bare script name, not free text (#241) ────────────
+#
+# The value is echoed to the operator inside the revision-0 advice, so a malformed one is
+# rendered as though it were a real script name. One row per refusal class: quote characters,
+# path separators, shell metacharacters, whitespace, empty, and the two path segments (`.`,
+# `..`) that are not names.
+NON_BARE_BRIDGES = (
+    '"herdr-x"',
+    "'herdr-x'",
+    "../x",
+    "/bin/sh",
+    "x/y",
+    "herdr-x;id",
+    "$(id)",
+    "`id`",
+    "herdr-x|id",
+    "herdr-x>out",
+    "herdr-x&id",
+    "herdr-x y",
+    "",
+    ".",
+    "..",
+)
+
+# The accepted side of the same rule: one path segment of `[A-Za-z0-9._-]`. A dotted name stays
+# legal — a bridge script may carry a `.sh` suffix (`herdr_agy_bridge.BRIDGE_SCRIPT_NAME`).
+BARE_BRIDGES = ("herdr-x", "herdr-agy-bridge.sh", "x_1", "x-", "x.", ".hidden", "-x")
+
+
+def _bridge_config(value: str) -> str:
+    """One kind table whose only interesting field is `lifecycle_bridge: <value>`."""
+    return f"pi:\n  trust_flags: []\n  invariant: file\n  lifecycle_bridge: {value}\n"
+
+
+@pytest.mark.parametrize("value", NON_BARE_BRIDGES)
+def test_kinds_config_refuses_a_non_bare_lifecycle_bridge(value: str) -> None:
+    """A quote, separator, metacharacter, whitespace, empty value, `.` or `..` is refused."""
+    with pytest.raises(ValueError, match="bare script name"):
+        herdr_bootstrap.parse_kinds_config(_bridge_config(value))
+
+
+@pytest.mark.parametrize("value", BARE_BRIDGES)
+def test_kinds_config_stores_a_bare_lifecycle_bridge(value: str) -> None:
+    """A bare script name is stored verbatim, so the tightened rule stays minimal."""
+    table = herdr_bootstrap.parse_kinds_config(_bridge_config(value))
+
+    assert table["pi"].lifecycle_bridge == value
+
+
+def test_kinds_config_real_file_bridge_names_are_bare_script_names() -> None:
+    """The shipped kinds.yaml must keep loading: the rule accepts the real `agy` bridge."""
+    config = SCRIPTS_DIR.parent / "references" / "kinds.yaml"
+    table = herdr_bootstrap.parse_kinds_config(config.read_text())
+
+    assert table["agy"].lifecycle_bridge == "herdr-agy-bridge"
+    assert herdr_bootstrap.load_kind_entry("agy").lifecycle_bridge == "herdr-agy-bridge"
+
+
 def test_load_kind_entry_missing_file_is_a_usage_error(tmp_path: Path) -> None:
     with pytest.raises(herdr_cli.UsageError):
         herdr_bootstrap.load_kind_entry("pi", config_path=tmp_path / "nope.yaml")

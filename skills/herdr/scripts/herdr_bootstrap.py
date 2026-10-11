@@ -100,6 +100,13 @@ INVARIANTS_DIR = "invariants"
 INVARIANT_SUFFIX = ".md"
 # Characters allowed inside the derived file name; everything else becomes `_`.
 INVARIANT_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+# A bare script name is one path segment, so it takes the same `[A-Za-z0-9._-]` charset this
+# module already uses for the derived invariant file name (and `herdr_worktree.BRANCH_UNSAFE_RE`
+# for branch slugs). No path separator, quote character, shell metacharacter, or whitespace can
+# match it. A dot stays legal, because a bridge script may carry a `.sh` suffix; `.` and `..` are
+# path segments rather than names, so they are refused next to the charset.
+BARE_SCRIPT_NAME_PATTERN = r"[A-Za-z0-9._-]+"
+NON_NAME_SEGMENTS = (".", "..")
 # Roles the docs spell `impl-<n>`; only they carry the implementer cooperation contract.
 IMPLEMENTER_PREFIX = "impl"
 # The scoped naming convention `<task-group-slug>-<role>[-<subrole|index>]` puts the role in a
@@ -129,7 +136,8 @@ class KindEntry:
 
     `lifecycle_bridge` names the bridge script that carries this kind's lifecycle signals,
     used by advice that must point at a trustworthy status surface; a kind that declares
-    none is advised in bridge-neutral terms rather than another kind's bridge (#238).
+    none is advised in bridge-neutral terms rather than another kind's bridge (#238). It is
+    a bare script name, so the advice names one path segment, never a path or a command.
     """
 
     trust_flags: tuple[str, ...]
@@ -224,8 +232,12 @@ def parse_kinds_config(text: str) -> dict[str, KindEntry]:
                     raise ValueError(f"line {lineno}: revision_moves must be true or false")
                 raw[current][key] = cleaned == "true"
             elif key == "lifecycle_bridge":
-                if not cleaned or any(character.isspace() for character in cleaned):
-                    raise ValueError(f"line {lineno}: lifecycle_bridge must be a bare script name")
+                is_bare = re.fullmatch(BARE_SCRIPT_NAME_PATTERN, cleaned) is not None
+                if not is_bare or cleaned in NON_NAME_SEGMENTS:
+                    raise ValueError(
+                        f"line {lineno}: lifecycle_bridge must be a bare script name (one path "
+                        f"segment, want {BARE_SCRIPT_NAME_PATTERN}; `.` and `..` are not names)"
+                    )
                 raw[current][key] = cleaned
             else:
                 raise ValueError(f"line {lineno}: unknown key {key!r}")
