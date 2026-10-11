@@ -66,6 +66,7 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
    ```bash
    herdr agent start <name> --kind <kind> --pane <pane-id> -- <native-flags>
    ```
+   Bootstrap then waits a bounded settle (`--settle SEC`, default 5) before it reports the pane bootstrapped: a pane spawned a moment ago can report `interactive_ready: true` while it is still initialising (#238), so the first prompt would be swallowed. Only a fresh spawn settles — a dispatch to an already-running pane pays nothing — and `--settle 0` waits not at all.
 4. **Folder Trust Handling**:
    - For `pi`: `--approve` is injected automatically from `kinds.yaml` — verify `-- --approve` is in the start argv instead of hand-adding flags.
    - For `qodercli`: `agent start` reports `interactive_ready: true` and a `Ready` title even while the trust selector is up, so read the pane. Either send one bare Enter (`herdr agent send-keys <name> enter`) and confirm the `YOLO` status line, or pre-seed `permissions.trustDirectories` in the config root the binary reads (`~/.qoder`, or `~/.qoder-cn` for the CN build) before starting. A prompt cannot dismiss the selector. See [Qoder CLI](agents/qodercli.md).
@@ -93,12 +94,17 @@ A compacted agent forgets its lane: it stops delegating to subagents and exits w
 | `cline` | `AGENTS.md` append (prefers an existing `.clinerules`) | `.clinerules` \| `AGENTS.md` |
 | `codex`, `copilot`, `qodercli`, `agy`, unknown | `AGENTS.md` append | `AGENTS.md` |
 
-Delivery follows `skills/herdr/references/kinds.yaml`: `inline` kinds (`pi`, `claude`) receive `--append-system-prompt`; `file` kinds and unknown kinds get the universal `AGENTS.md` append. Trust flags ride after `--` as native agent args, configured per kind (verified: `pi` → `--approve`, `claude` → `--dangerously-skip-permissions`); unverified kinds carry none. When `--cwd` names a worktree, bootstrap cds the pane there first (`--cwd-timeout`, default 10s) and refuses to start when the pane does not converge. The file target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
+Delivery follows `skills/herdr/references/kinds.yaml`: `inline` kinds (`pi`, `claude`) receive `--append-system-prompt`; `file` kinds and unknown kinds get the universal `AGENTS.md` append. Trust flags ride after `--` as native agent args, configured per kind (verified: `pi` → `--approve`, `claude` → `--dangerously-skip-permissions`); unverified kinds carry none. The same file declares `revision_moves` per kind. `agy` sets it false because its revision never moves, so the unconfirmed-acceptance warning does not send that kind to a revision-based re-check — a wanted state at revision 0 is unsatisfiable and the wait helper exits 2 — and names the agy bridge's status title instead. When `--cwd` names a worktree, bootstrap cds the pane there first (`--cwd-timeout`, default 10s) and refuses to start when the pane does not converge. The file target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
+
+### The spawn settle
+
+A pane spawned moments ago can honestly report `interactive_ready: true` and `agent_status: idle` while it is still initialising, so the first prompt can be swallowed (#238). After `agent start` returns, bootstrap therefore waits `--settle SEC` — default 5, `0` waits not at all, and a `0` wait is exactly zero rather than a token sleep — and only then reports the pane bootstrapped. The wait is one fixed sleep, never a poll until a steady state, and it is paid only by a spawn: a dispatch or a prompt to an already-running pane adds no settle delay. `--dry-run` never sleeps and reports the planned wait as `settle` in its JSON plan. The prompt helper's own 5s acceptance handshake is untouched and corroborates the settle rather than replacing it. The reply helper's `--auto-start` revive carries the same `--settle` for the caller it spawns.
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-impl-1 --kind codex --pane w1:p3 --role impl-1 --task-group msg
 uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" --kind pi --pane w1:p3 --role tm --task-group msg --model claude-3-7-sonnet
 uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2 --role tm --dry-run
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2 --role tm --settle 0
 ```
 
 ### The ROLE INVARIANT snippet
