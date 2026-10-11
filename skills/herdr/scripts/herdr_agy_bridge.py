@@ -51,6 +51,7 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     guard,
 )
 
@@ -151,7 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="explicit hooks.json path; the bridge script deploys into hooks/ beside it",
     )
-    _ = parser.add_argument("--json", action="store_true", help="machine-readable status report")
+    add_shared_argument(parser, "json", help="machine-readable status report")
     return parser
 
 

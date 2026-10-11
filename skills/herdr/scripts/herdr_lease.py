@@ -55,7 +55,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from herdr_cli import UsageError, guard
+from herdr_cli import UsageError, add_shared_argument, guard
 from herdr_worktree import resolve_lane_base_dir
 
 CANONICAL_STATUSES = ("dispatched", "in_progress", "blocked", "completed", "rework")
@@ -859,11 +859,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
     show = subparsers.add_parser("show", help="print active leases and recent tasks")
     output = show.add_mutually_exclusive_group()
-    _ = output.add_argument("--yaml", action="store_true", help="print the canonical state as YAML")
-    _ = output.add_argument("--json", action="store_true", help="print the canonical state as JSON")
-    _ = show.add_argument(
-        "--limit", type=int, default=20, metavar="N", help="cap the tasks listed (default 20)"
-    )
+    add_shared_argument(output, "yaml", help="print the canonical state as YAML")
+    add_shared_argument(output, "json", help="print the canonical state as JSON")
+    add_shared_argument(show, "limit", help="cap the tasks listed (default 20)")
     change = subparsers.add_parser("transition", help="append a task status transition")
     _ = change.add_argument("target", metavar="TARGET", help="a task id or an active-lease target")
     _ = change.add_argument(
@@ -871,7 +869,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = change.add_argument("--note", default=None, metavar="TEXT", help="a note on the event")
     _ = change.add_argument("--actor", default=None, metavar="NAME", help="who moved the task")
-    _ = change.add_argument("--role", default=None, metavar="NAME", help="the actor's role")
+    add_shared_argument(change, "role", metavar="NAME", help="the actor's role")
     replies = subparsers.add_parser("replies", help="print recorded replies from the store")
     _ = replies.add_argument(
         "record_id",
@@ -881,15 +879,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="one reply record id; omit to list the most recent replies",
     )
     reply_output = replies.add_mutually_exclusive_group()
-    _ = reply_output.add_argument(
-        "--yaml", action="store_true", help="print the reply records as YAML"
-    )
-    _ = reply_output.add_argument(
-        "--json", action="store_true", help="print the reply records as JSON"
-    )
-    _ = replies.add_argument(
-        "--limit", type=int, default=20, metavar="N", help="cap the replies listed (default 20)"
-    )
+    add_shared_argument(reply_output, "yaml", help="print the reply records as YAML")
+    add_shared_argument(reply_output, "json", help="print the reply records as JSON")
+    add_shared_argument(replies, "limit", help="cap the replies listed (default 20)")
     return parser
 
 

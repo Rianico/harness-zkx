@@ -64,6 +64,7 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     decode_response,
     entries,
     entry_optional_text,
@@ -123,18 +124,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="exit 0 when ANY target settles instead of ALL (default is barrier mode)",
     )
-    _ = parser.add_argument(
-        "--until",
-        action="append",
+    add_shared_argument(
+        parser,
+        "until",
         default=[],
-        metavar="STATUS",
         help=f"exact state to match, repeatable (default: {', '.join(DEFAULT_SETTLED)})",
     )
-    _ = parser.add_argument(
-        "--timeout",
-        type=int,
+    add_shared_argument(
+        parser,
+        "timeout",
         default=DEFAULT_TIMEOUT_MS,
-        metavar="MS",
         help=f"watchdog: fail after this many milliseconds (default {DEFAULT_TIMEOUT_MS})",
     )
     _ = parser.add_argument(
@@ -164,7 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
             "target still waits a full window); warning only, never kills, retries, or restarts"
         ),
     )
-    _ = parser.add_argument("--json", action="store_true", help="print a machine-readable summary")
+    add_shared_argument(parser, "json", help="print a machine-readable summary")
     return parser
 
 

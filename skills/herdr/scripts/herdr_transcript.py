@@ -40,6 +40,7 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     decode_response,
     entry_optional_text,
     find_herdr,
@@ -83,13 +84,13 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--last", action="store_true", help="print only the final matching message"
     )
-    _ = parser.add_argument(
-        "--role",
+    add_shared_argument(
+        parser,
+        "role",
         default="assistant",
-        metavar="ROLE",
         help="keep only this role ('all' keeps every role; default assistant)",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print messages as a JSON array")
+    add_shared_argument(parser, "json", help="print messages as a JSON array")
     _ = parser.add_argument(
         "--lines",
         type=int,

@@ -43,6 +43,7 @@ from herdr_cli import (
     EXIT_OK,
     METHOD_CONSTRAINT_EPILOG,
     UsageError,
+    add_shared_argument,
     entries,
     entry_optional_text,
     entry_text,
@@ -168,18 +169,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scope = parser.add_mutually_exclusive_group()
     _ = scope.add_argument("--current", action="store_true", help="only the calling pane")
-    _ = scope.add_argument(
-        "--tab",
+    add_shared_argument(
+        scope,
+        "tab",
         nargs="?",
         const="",
-        default=None,
         metavar="NAME|ID",
         help="bare: only the calling tab; with a value: only that tab",
     )
     _ = scope.add_argument("--workspace", action="store_true", help="only the calling workspace")
-    _ = parser.add_argument(
-        "--task-group",
-        default=None,
+    add_shared_argument(
+        parser,
+        "task_group",
         metavar="NAME",
         help="only the task group (tab) with this label or id; cannot combine with --tab VALUE",
     )
@@ -189,9 +190,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=FORMAT_AUTO,
         help="auto: rich on a terminal, Markdown otherwise; table aliases rich (default: auto)",
     )
-    _ = parser.add_argument(
-        "--json",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "json",
         help="output clean, valid JSON (equivalent to --format json)",
     )
     return parser

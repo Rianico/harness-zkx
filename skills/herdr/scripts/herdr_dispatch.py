@@ -44,6 +44,7 @@ from herdr_cli import (
     KNOWN_AGENT_KINDS,
     METHOD_CONSTRAINT_EPILOG,
     UsageError,
+    add_shared_argument,
     entries,
     entry_optional_text,
     find_herdr,
@@ -97,9 +98,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TARGET",
         help="callee agent names or pane ids (one or more)",
     )
-    _ = parser.add_argument(
-        "--file",
-        metavar="PATH",
+    add_shared_argument(
+        parser,
+        "file",
         help="ticket payload file (required unless --draft); '-' reads stdin verbatim",
     )
     _ = parser.add_argument(
@@ -107,78 +108,74 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print a ticket skeleton with routing prefilled (or write it to --file); send nothing",
     )
-    _ = parser.add_argument(
-        "--label",
-        metavar="LABEL",
+    add_shared_argument(
+        parser,
+        "label",
         help="exact pane label to resolve to a pane id, instead of TARGET",
     )
-    _ = parser.add_argument(
-        "--wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "wait",
         help="wait for callee to settle after receiving ticket",
     )
-    _ = parser.add_argument(
-        "--no-wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "no_wait",
         help="dispatch without waiting; fails when combined with --wait",
     )
-    _ = parser.add_argument(
-        "--until",
-        action="append",
-        metavar="STATUS",
+    add_shared_argument(
+        parser,
+        "until",
         help=f"exact state to match after --wait, repeatable ({PROMPT_STATES})",
     )
-    _ = parser.add_argument(
-        "--timeout",
-        type=int,
-        metavar="MS",
+    add_shared_argument(
+        parser,
+        "timeout",
         help="fail after this many milliseconds",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
-    _ = parser.add_argument("--dry-run", action="store_true", help="print the argv, submit nothing")
-    _ = parser.add_argument(
-        "--no-caller-context",
-        action="store_true",
-        help="send payload verbatim without the Sender/Receiver envelope and reply contract (warns loudly)",
+    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
+    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser,
+        "no_caller_context",
+        help=(
+            "send payload verbatim without the Sender/Receiver envelope and reply contract "
+            "(warns loudly)"
+        ),
     )
     _ = parser.add_argument(
         "--force",
         action="store_true",
         help="bypass active ticket lease checks and dispatch anyway",
     )
-    _ = parser.add_argument(
-        "--auto-start",
-        metavar="KIND",
-        default=None,
+    add_shared_argument(
+        parser,
+        "auto_start",
         help=(
             "bootstrap a missing callee through the herdr-bootstrap contract "
             "(ROLE INVARIANT, kind trust flags, pane cwd) before dispatching; "
             "live agents dispatch with no extra calls"
         ),
     )
-    _ = parser.add_argument(
-        "--role",
-        metavar="ROLE",
-        default=None,
+    add_shared_argument(
+        parser,
+        "role",
         help="role named in the ROLE INVARIANT when --auto-start boots a missing callee",
     )
-    _ = parser.add_argument(
-        "--cwd",
-        metavar="DIR",
-        default=None,
+    add_shared_argument(
+        parser,
+        "cwd",
         help="worktree dir the auto-started callee must start in (pane converges first)",
     )
-    _ = parser.add_argument(
-        "--model",
-        metavar="MODEL",
-        default=None,
+    add_shared_argument(
+        parser,
+        "model",
         help="model for the auto-started callee's agent start",
     )
-    _ = parser.add_argument(
-        "--settle",
-        type=float,
+    add_shared_argument(
+        parser,
+        "settle",
         default=DEFAULT_SETTLE_SECONDS,
-        metavar="SEC",
         help=(
             "seconds to wait after the auto-started callee's fresh `agent start`, before "
             "dispatching, so a still-initialising pane is not treated as acceptant; "
@@ -203,15 +200,15 @@ def build_parser() -> argparse.ArgumentParser:
             "Ticket-ID when omitted"
         ),
     )
-    _ = parser.add_argument(
-        "--task-group",
+    add_shared_argument(
+        parser,
+        "task_group",
         metavar="NAME",
-        default=None,
         help="Task Group (Herdr Tab) label for the Hierarchy block; omitted when not given",
     )
-    _ = parser.add_argument(
-        "--verbose",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "verbose",
         help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
     )
     return parser

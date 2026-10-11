@@ -78,6 +78,7 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     entries,
     entry_optional_text,
     find_herdr,
@@ -590,26 +591,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="agent name; defaults to --role, then is scoped with --task-group",
     )
     _ = parser.add_argument("--kind", required=True, metavar="KIND", help="agent kind for start")
-    _ = parser.add_argument(
-        "--pane", required=True, metavar="ID", help="pane to start the agent in"
-    )
-    _ = parser.add_argument(
-        "--role",
+    add_shared_argument(parser, "pane", required=True, help="pane to start the agent in")
+    add_shared_argument(
+        parser,
+        "role",
         default="",
-        metavar="ROLE",
         help="role named in the invariant (e.g. tm, impl-1); defaults to NAME",
     )
-    _ = parser.add_argument(
-        "--task-group",
-        default=None,
-        metavar="SLUG",
+    add_shared_argument(
+        parser,
+        "task_group",
         help="scope NAME with this task-group slug before naming the pane and agent",
     )
-    _ = parser.add_argument("--model", default=None, metavar="MODEL", help="model for agent start")
-    _ = parser.add_argument(
-        "--cwd",
-        default=None,
-        metavar="DIR",
+    add_shared_argument(parser, "model", help="model for agent start")
+    add_shared_argument(
+        parser,
+        "cwd",
         help=(
             "worktree dir the agent must start in; bootstrap cds the pane there "
             "and refuses on mismatch"
@@ -630,23 +627,22 @@ def build_parser() -> argparse.ArgumentParser:
             "its version-control state could not be determined, leaving that file modified"
         ),
     )
-    _ = parser.add_argument(
-        "--settle",
-        type=float,
+    add_shared_argument(
+        parser,
+        "settle",
         default=DEFAULT_SETTLE_SECONDS,
-        metavar="SEC",
         help=(
             "seconds to wait after a fresh `agent start` before reporting the pane "
             "bootstrapped, so a still-initialising pane is not treated as acceptant; "
             f"0 waits not at all (default: {DEFAULT_SETTLE_SECONDS:g})"
         ),
     )
-    _ = parser.add_argument(
-        "--dry-run",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "dry_run",
         help="print the planned file path and start argv, mutate nothing",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print herdr's raw start response")
+    add_shared_argument(parser, "json", help="print herdr's raw start response")
     return parser
 
 

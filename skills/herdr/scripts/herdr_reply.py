@@ -65,6 +65,7 @@ from herdr_cli import (
     STDIN,
     HerdrError,
     UsageError,
+    add_shared_argument,
     decode_payload,
     decode_response,
     diagnose_agent_not_found,
@@ -148,43 +149,41 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="MESSAGE",
         help="reply text (e.g. '<STATUS> <artifacts> <issues>'); omitted reads --file or stdin",
     )
-    _ = parser.add_argument(
-        "--file",
-        metavar="PATH",
+    add_shared_argument(
+        parser,
+        "file",
         help="payload file; '-' reads stdin verbatim",
     )
-    _ = parser.add_argument(
-        "--wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "wait",
         help="wait for caller to settle after receiving reply",
     )
-    _ = parser.add_argument(
-        "--timeout",
-        type=int,
-        metavar="MS",
+    add_shared_argument(
+        parser,
+        "timeout",
         help="fail after this many milliseconds",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
-    _ = parser.add_argument("--dry-run", action="store_true", help="print the argv, submit nothing")
-    _ = parser.add_argument(
-        "--auto-start",
-        metavar="KIND",
+    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
+    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser,
+        "auto_start",
         help="automatically start the agent on an open shell pane before delivering the reply",
     )
-    _ = parser.add_argument(
-        "--settle",
-        type=float,
+    add_shared_argument(
+        parser,
+        "settle",
         default=DEFAULT_SETTLE_SECONDS,
-        metavar="SEC",
         help=(
             "seconds to wait after `--auto-start` spawns the caller, before the reply is "
             "delivered, so a still-initialising pane is not treated as acceptant; "
             f"0 waits not at all (default: {DEFAULT_SETTLE_SECONDS:g})"
         ),
     )
-    _ = parser.add_argument(
-        "--verbose",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "verbose",
         help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
     )
     return parser

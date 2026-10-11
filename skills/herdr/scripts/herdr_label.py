@@ -55,6 +55,7 @@ from herdr_cli import (
     EXIT_OK,
     METHOD_CONSTRAINT_EPILOG,
     UsageError,
+    add_shared_argument,
     current_pane_id,
     entries,
     entry_optional_text,
@@ -99,19 +100,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _ = parser.add_argument("name", nargs="?", metavar="NAME", help="the name to set")
-    _ = parser.add_argument(
-        "--pane", metavar="ID", help="label this pane instead of the calling pane"
-    )
-    _ = parser.add_argument(
-        "--tab",
-        metavar="NAME",
-        default=None,
+    add_shared_argument(parser, "pane", help="label this pane instead of the calling pane")
+    add_shared_argument(
+        parser,
+        "tab",
         help="rename the calling tab (Task Group) instead of labelling a pane",
     )
-    _ = parser.add_argument(
-        "--task-group",
-        metavar="SLUG",
-        default=None,
+    add_shared_argument(
+        parser,
+        "task_group",
         help="scope NAME with this task-group slug before naming the pane and agent",
     )
     _ = parser.add_argument(
@@ -120,10 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="set the pane label but leave the agent name alone",
     )
     _ = parser.add_argument("--clear", action="store_true", help="drop both names")
-    _ = parser.add_argument("--json", action="store_true", help="print the result as JSON")
-    _ = parser.add_argument(
-        "--dry-run", action="store_true", help="print the herdr calls, rename nothing"
-    )
+    add_shared_argument(parser, "json", help="print the result as JSON")
+    add_shared_argument(parser, "dry_run", help="print the herdr calls, rename nothing")
     _ = parser.add_argument(
         "--verify",
         action="store_true",

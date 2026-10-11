@@ -32,6 +32,7 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     current_pane_id,
     find_herdr,
     guard,
@@ -98,19 +99,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DIRECTION",
         help="vertical (down) / horizontal (right); omit to pick by pane aspect ratio",
     )
-    _ = parser.add_argument(
-        "--pane", metavar="ID", help="split this pane instead of the calling pane"
-    )
-    _ = parser.add_argument("-l", "--label", metavar="LABEL", help="visible label for the new pane")
-    _ = parser.add_argument(
-        "--task-group",
-        metavar="SLUG",
-        default=None,
+    add_shared_argument(parser, "pane", help="split this pane instead of the calling pane")
+    add_shared_argument(parser, "label", short="-l", help="visible label for the new pane")
+    add_shared_argument(
+        parser,
+        "task_group",
         help="scope the --label with this task-group slug (needs --label; validated first)",
     )
-    _ = parser.add_argument(
-        "--cwd", metavar="DIR", help="working directory for the new pane (default: $PWD)"
-    )
+    add_shared_argument(parser, "cwd", help="working directory for the new pane (default: $PWD)")
     _ = parser.add_argument(
         "--ratio", type=float, metavar="FLOAT", help="new-pane size ratio, e.g. 0.3"
     )
@@ -137,8 +133,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="keep focus in the calling pane (default)",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
-    _ = parser.add_argument("--dry-run", action="store_true", help="print the command, run nothing")
+    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
+    add_shared_argument(parser, "dry_run", help="print the command, run nothing")
     return parser
 
 

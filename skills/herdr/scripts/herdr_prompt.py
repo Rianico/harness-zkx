@@ -65,6 +65,7 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     current_pane_id,
     decode_payload,
     decode_response,
@@ -141,48 +142,46 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "targets", nargs="*", metavar="TARGET", help="agent names or pane ids (one or more)"
     )
-    _ = parser.add_argument(
-        "--label",
-        metavar="LABEL",
+    add_shared_argument(
+        parser,
+        "label",
         help="exact pane label to resolve to a pane id, instead of TARGET",
     )
-    _ = parser.add_argument(
-        "--file",
-        metavar="PATH",
+    add_shared_argument(
+        parser,
+        "file",
         help="payload file; '-' or omitted reads stdin verbatim",
     )
-    _ = parser.add_argument(
-        "--wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "wait",
         help="wait for the first settled state after submission",
     )
-    _ = parser.add_argument(
-        "--no-wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "no_wait",
         help="dispatch without waiting; fails when combined with --wait",
     )
-    _ = parser.add_argument(
-        "--until",
-        action="append",
-        metavar="STATUS",
+    add_shared_argument(
+        parser,
+        "until",
         help=f"exact state to match after --wait, repeatable ({PROMPT_STATES})",
     )
-    _ = parser.add_argument(
-        "--timeout",
-        type=int,
-        metavar="MS",
+    add_shared_argument(
+        parser,
+        "timeout",
         help="fail after this many milliseconds",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
-    _ = parser.add_argument("--dry-run", action="store_true", help="print the argv, submit nothing")
-    _ = parser.add_argument(
-        "--no-caller-context",
-        action="store_true",
+    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
+    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser,
+        "no_caller_context",
         help="send the payload verbatim without the Sender/Receiver envelope and reply contract",
     )
-    _ = parser.add_argument(
-        "--verbose",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "verbose",
         help=(
             "include Runtime: Cwd/Resume recovery metadata; "
             "default envelope is Routing/Hierarchy/Protocol only"

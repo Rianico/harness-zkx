@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from herdr_cli import EXIT_OK, HerdrError, UsageError, guard
+from herdr_cli import EXIT_OK, HerdrError, UsageError, add_shared_argument, guard
 
 ENGINE_WORKTRUNK = "worktrunk"
 ENGINE_GIT = "git"
@@ -497,16 +497,16 @@ def build_parser() -> argparse.ArgumentParser:
     _ = allocate_parser.add_argument(
         "--base", help="base revision to branch from (defaults to wt/git)"
     )
-    _ = allocate_parser.add_argument("--json", action="store_true", help="emit a JSON object")
+    add_shared_argument(allocate_parser, "json", help="emit a JSON object")
 
     resolve_parser = subparsers.add_parser(
         "resolve", help="print the existing worktree path for a branch"
     )
     _ = resolve_parser.add_argument("branch", help="branch to look up")
-    _ = resolve_parser.add_argument("--json", action="store_true", help="emit a JSON object")
+    add_shared_argument(resolve_parser, "json", help="emit a JSON object")
 
     list_parser = subparsers.add_parser("list", help="list every active worktree")
-    _ = list_parser.add_argument("--json", action="store_true", help="emit a JSON object")
+    add_shared_argument(list_parser, "json", help="emit a JSON object")
     return parser
 
 
