@@ -17,10 +17,16 @@ an explicit `--ticket <id>` (or `--in-reply-to <record-id>`) wins, else the send
 lease, else the sender's sole open task. Zero or several open tasks — or an explicit name the
 sender does not hold open — records the reply unlinked with one warning line, never a guess,
 so a second reply for the same ticket still advances the task instead of losing the linkage
-when the first reply consumes the lease. The sole-open-task step is the one INFERRED binding,
-so it warns even when it succeeds (#246 D1.4): it counts candidates and cannot read which
-ticket the payload is about, so the line names the task it chose and the `--ticket` flag that
-overrides it. The explicit steps stay silent — they are the caller's instruction.
+when the first reply consumes the lease. Every unlinked line leads with a stable severity
+marker (#246 D1.5): "open work refused" when there was open work the step would not guess at,
+"nothing to link" when there was nothing to link, and "sender or store unreadable" when there
+was no answer at all (no sender resolved, or the anchor/store could not be read). The warning
+claims a record only when one was written — that clause is appended after the store answers,
+so it can never contradict the `NOT RECORDED` pointer delivered in the same run. The
+sole-open-task step is the one INFERRED binding, so it warns even when it succeeds (#246
+D1.4): it counts candidates and cannot read which ticket the payload is about, so the line
+names the task it chose and the `--ticket` flag that overrides it. The explicit steps stay
+silent — they are the caller's instruction.
 
 Prompt text is never provenance (#231). Before the prompt is sent the payload is persisted
 as a store record — a body file plus one metadata-only index sidecar carrying its digest,
@@ -997,10 +1003,36 @@ def _is_open_task(task: Mapping[str, Any]) -> bool:
     return task.get("status") in OPEN_TASK_STATUSES
 
 
-def _unlinked(reason: str, exc: BaseException | None = None) -> str:
-    """The one warning line for a reply that could not be bound to a task, and why."""
+# ── unlinked-warning severity markers (#246 D1.5 R2) ─────────────────────────────────
+
+# One STABLE leading marker per severity, so a caller or a pin keys on the class instead of on
+# the incident prose. The first two are the D1.3 severities — the resolver had open work it
+# refused to guess at, or there was genuinely nothing to link. The third is the wording for an
+# answer the resolver could not obtain at all (no sender resolved, or the anchor/store could not
+# be read), which is neither a refusal nor an empty answer. Each of the two store-dependent
+# branches below may or may not record, so the record claim is NOT part of a marker.
+UNLINKED_REFUSED_MARKER = "unlinked reply (open work refused)"
+UNLINKED_NOTHING_MARKER = "unlinked reply (nothing to link)"
+UNLINKED_UNREADABLE_MARKER = "unlinked reply (sender or store unreadable)"
+
+# The caller-side tail of an unlinked warning (#246 D1.5 F1): the resolver cannot know whether
+# the store will take the record, so the claim is emitted only after `persist_reply` answers,
+# and the opposite outcome is stated just as plainly when no record was written. A warning must
+# never contradict the `NOT RECORDED` pointer the caller is about to read.
+RECORDED_CLAUSE = "; recording the reply unlinked"
+NOT_RECORDED_CLAUSE = "; no store record was written"
+
+
+def _unlinked(marker: str, reason: str, exc: BaseException | None = None) -> str:
+    """The one warning line for a reply that could not be bound to a task: marker, then why.
+
+    The line leads with a stable severity marker (#246 D1.5), so a caller — or a pin — keys on
+    the severity class instead of on the incident prose, and never claims a record: whether one
+    was written is appended by the caller once the store has answered, because the
+    store-dependent branches record or not depending on whether the store resolves at all.
+    """
     detail = f" ({_one_line(str(exc))})" if exc is not None else ""
-    return f"task linkage unresolved — {reason}{detail}; recording the reply unlinked"
+    return f"{marker}: task linkage unresolved — {reason}{detail}"
 
 
 def _inferred(task_id: str) -> str:
@@ -1046,16 +1078,23 @@ def _linkage_from_ticket(
     yields no linkage rather than falling back to the lease: the flag was the instruction.
     """
     if sender is None:
-        return None, _unlinked(f"--ticket {value!r} given but no sender resolved")
+        return None, _unlinked(
+            UNLINKED_UNREADABLE_MARKER, f"--ticket {value!r} given but no sender resolved"
+        )
     try:
         tasks = list_tasks(env=env)
     except Exception as exc:
-        return None, _unlinked(f"--ticket {value!r} could not be resolved", exc)
+        return None, _unlinked(
+            UNLINKED_UNREADABLE_MARKER, f"--ticket {value!r} could not be resolved", exc
+        )
     named = [task for task in tasks if task.get("task_id") == value]
     if named:
         if named[0].get("assignee") == sender and _is_open_task(named[0]):
             return value, None
-        return None, _unlinked(f"--ticket {value!r} is not an open task of sender {sender!r}")
+        return None, _unlinked(
+            UNLINKED_REFUSED_MARKER,
+            f"--ticket {value!r} is not an open task of sender {sender!r}",
+        )
     matching = [
         task
         for task in tasks
@@ -1064,7 +1103,8 @@ def _linkage_from_ticket(
     if len(matching) == 1 and isinstance(matching[0].get("task_id"), str):
         return str(matching[0]["task_id"]), None
     return None, _unlinked(
-        f"--ticket {value!r} does not name exactly one open task of sender {sender!r}"
+        UNLINKED_REFUSED_MARKER,
+        f"--ticket {value!r} does not name exactly one open task of sender {sender!r}",
     )
 
 
@@ -1077,23 +1117,31 @@ def _linkage_from_record(
     linked to, so a corrected or additive reply resolves without restating the ticket.
     """
     if sender is None:
-        return None, _unlinked(f"--in-reply-to {record_id!r} given but no sender resolved")
+        return None, _unlinked(
+            UNLINKED_UNREADABLE_MARKER, f"--in-reply-to {record_id!r} given but no sender resolved"
+        )
     try:
         record = get_reply(record_id, env=env)
         linked = record.get("task_id") if isinstance(record, Mapping) else None
         task = get_task(linked, env=env) if isinstance(linked, str) else None
     except Exception as exc:
-        return None, _unlinked(f"--in-reply-to {record_id!r} could not be resolved", exc)
+        return None, _unlinked(
+            UNLINKED_UNREADABLE_MARKER, f"--in-reply-to {record_id!r} could not be resolved", exc
+        )
     if not isinstance(record, Mapping) or record.get("sender") != sender:
         return None, _unlinked(
-            f"--in-reply-to {record_id!r} names no reply record of sender {sender!r}"
+            UNLINKED_REFUSED_MARKER,
+            f"--in-reply-to {record_id!r} names no reply record of sender {sender!r}",
         )
     if not isinstance(linked, str):
-        return None, _unlinked(f"--in-reply-to {record_id!r} carries no task linkage")
+        return None, _unlinked(
+            UNLINKED_REFUSED_MARKER, f"--in-reply-to {record_id!r} carries no task linkage"
+        )
     if not isinstance(task, dict) or task.get("assignee") != sender or not _is_open_task(task):
         return None, _unlinked(
+            UNLINKED_REFUSED_MARKER,
             f"--in-reply-to {record_id!r} names task {linked!r}, not an open task of "
-            f"sender {sender!r}"
+            f"sender {sender!r}",
         )
     return linked, None
 
@@ -1118,12 +1166,14 @@ def resolve_task_linkage(
     line — a wrong linkage is worse than none.
 
     Every unlinked answer now carries a reason (#246 D1.3), so a recorded reply with
-    `task_id: null` is never silent. The reason states the severity: when the sender had open
-    work this step refused to guess at — several open tasks, a flag naming another task, or a
-    task record whose id cannot be named — the line says the sender holds open work and that no
-    linkage was made; when there was nothing to link, the line says the sender holds no open
-    task. An unresolved sender and an unreadable store are named too, instead of a reasonless
-    `(None, None)` answer.
+    `task_id: null` is never silent. The reason states the severity, and the line leads with a
+    stable marker for that severity (#246 D1.5): "open work refused" when the sender had open
+    work this step would not guess at — several open tasks, a flag naming another task, or a
+    task record whose id cannot be named — "nothing to link" when there was nothing to link,
+    and "sender or store unreadable" when there was no answer at all (no sender resolved, or
+    the anchor/store could not be read). The last of those is the third wording, distinct from
+    both a refusal and an empty answer. The warning never claims a record here: whether one was
+    written depends on the store, so the caller appends that clause after the store answers.
 
     The inferred step also warns when it SUCCEEDS (#246 D1.4): it counts candidates, it cannot
     read which ticket the payload is about, so its binding is reported with the task id it
@@ -1139,21 +1189,27 @@ def resolve_task_linkage(
         if isinstance(lease_task, str):
             return lease_task, None
     if sender is None:
-        return None, _unlinked("no sender resolved, so no task could be attributed")
+        return None, _unlinked(
+            UNLINKED_UNREADABLE_MARKER, "no sender resolved, so no task could be attributed"
+        )
     open_tasks = _sender_open_tasks(sender, env=env)
     if open_tasks is None:
-        return None, _unlinked("the sender's open tasks could not be read")
+        return None, _unlinked(
+            UNLINKED_UNREADABLE_MARKER, "the sender's open tasks could not be read"
+        )
     if len(open_tasks) == 1:
         task_id = open_tasks[0].get("task_id")
         if isinstance(task_id, str):
             return task_id, _inferred(task_id)
         return None, _unlinked(
-            f"sender {sender!r} holds open work, but the task id is not a string"
+            UNLINKED_REFUSED_MARKER,
+            f"sender {sender!r} holds open work, but the task id is not a string",
         )
     if not open_tasks:
-        return None, _unlinked(f"sender {sender!r} holds no open task")
+        return None, _unlinked(UNLINKED_NOTHING_MARKER, f"sender {sender!r} holds no open task")
     return None, _unlinked(
-        f"sender {sender!r} holds {len(open_tasks)} open tasks, so the ticket is ambiguous"
+        UNLINKED_REFUSED_MARKER,
+        f"sender {sender!r} holds {len(open_tasks)} open tasks, so the ticket is ambiguous",
     )
 
 
@@ -1357,6 +1413,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     # the task it bound and the flag that overrides it. A dry run records nothing, so it resolves
     # nothing.
     linked_task_id: str | None = None
+    linkage_warning: str | None = None
     if not options.dry_run:
         linked_task_id, linkage_warning = resolve_task_linkage(
             sender=sender,
@@ -1365,8 +1422,6 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             in_reply_to_record=options.in_reply_to_record,
             env=env,
         )
-        if linkage_warning:
-            print(f"herdr-reply: {linkage_warning}", file=sys.stderr)
     panes, agents = fetch_inventory(herdr, env)
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     reply_envelope = render_envelope(
@@ -1407,6 +1462,14 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             stored, reason = None, _one_line(str(exc))
         if stored is not None:
             record_id = str(stored["id"])
+        if linkage_warning:
+            # (#246 D1.5 F1) The record claim is caller-side, and emitted only after the store
+            # has answered: the resolver cannot know whether the record will be written, and the
+            # same branch records or not depending on whether the store resolves at all. Claim a
+            # record only when one was written, and say plainly when none was, so the warning
+            # never contradicts the NOT RECORDED pointer in the prompt delivered in this run.
+            clause = RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE
+            print(f"herdr-reply: {linkage_warning}{clause}", file=sys.stderr)
         pointer = pointer_block(shape=shape, evidence=evidence, stored=stored, reason=reason)
         # The pointer rides between the envelope and the body; the body stays last.
         delivered = f"{prelude}{pointer}\n\n{payload}" if pointer else f"{prelude}{payload}"

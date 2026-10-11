@@ -473,6 +473,12 @@ def test_unlinked_warnings_distinguish_open_work_from_nothing_to_link(
     assert len(loud_lines) == 1, loud.stderr
     assert len(quiet_lines) == 1, quiet.stderr
     assert loud_lines[0] != quiet_lines[0], "the two severities must not warn identically"
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in loud_lines[0], loud_lines[0]
+    assert herdr_reply.UNLINKED_NOTHING_MARKER in quiet_lines[0], quiet_lines[0]
+    assert herdr_reply.UNLINKED_NOTHING_MARKER not in loud_lines[0], loud_lines[0]
+    assert herdr_reply.UNLINKED_REFUSED_MARKER not in quiet_lines[0], quiet_lines[0]
+    assert loud_lines[0].endswith(herdr_reply.RECORDED_CLAUSE), loud_lines[0]
+    assert quiet_lines[0].endswith(herdr_reply.RECORDED_CLAUSE), quiet_lines[0]
     assert "ambiguous" in loud_lines[0], loud_lines[0]
     assert "ambiguous" not in quiet_lines[0], quiet_lines[0]
     assert "no open task" in quiet_lines[0], quiet_lines[0]
@@ -486,10 +492,11 @@ def test_resolve_task_linkage_never_returns_a_silent_answer(
 ) -> None:
     """#246 D1.3 invariant: every unlinked answer carries a reason, so no silent path returns.
 
-    The sender-unresolved and unreadable-store branches cannot be reached with a *recorded*
-    reply: a missing sender aborts in `resolve_caller` before any record exists, and `_load_state`
-    turns a damaged store into an empty one. So the invariant is pinned at the resolver: both
-    branches answer `(None, <reason>)`, never the reasonless `(None, None)` they used to.
+    These two branches fire when the lane anchor cannot be resolved, or when any `list_tasks`
+    raise — a store this process cannot read — and never because store damage is swallowed:
+    `_load_state` turns a damaged store into empty state, which produces the PLAIN "holds no
+    open task" line instead. So the invariant is pinned at the resolver: both branches answer
+    `(None, <reason>)`, never the reasonless `(None, None)` they used to.
     """
     task_id, warning = herdr_reply.resolve_task_linkage(
         sender=None, lease=None, explicit_ticket=None, in_reply_to_record=None, env={}
@@ -507,6 +514,78 @@ def test_resolve_task_linkage_never_returns_a_silent_answer(
     )
     assert task_id is None
     assert warning is not None and "could not be read" in warning
+
+
+def test_unlinked_lines_never_claim_a_record_at_the_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#246 D1.5 F1: the two store-dependent branches never claim a record in the resolver's text.
+
+    The same branch records when the store resolves and records nothing when it does not, so the
+    resolver cannot vouch for a record: the claim is appended by the caller only after a store
+    answered. Both lines therefore carry the third severity marker and no record clause.
+
+    Mutant killed: put "; recording the reply unlinked" back into `_unlinked` and both lines
+    claim a record the resolver never saw written.
+    """
+    task_id, warning = herdr_reply.resolve_task_linkage(
+        sender=None, lease=None, explicit_ticket=None, in_reply_to_record=None, env={}
+    )
+    assert task_id is None and warning is not None
+    assert "no sender resolved" in warning, warning
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warning, warning
+    assert herdr_reply.RECORDED_CLAUSE not in warning, warning
+    assert herdr_reply.NOT_RECORDED_CLAUSE not in warning, warning
+
+    def _no_open_tasks(sender: str, env: Mapping[str, str]) -> None:
+        """Stand in for a store this process cannot read: `_sender_open_tasks` returns None."""
+        _ = sender, env
+
+    monkeypatch.setattr(herdr_reply, "_sender_open_tasks", _no_open_tasks)
+    task_id, warning = herdr_reply.resolve_task_linkage(
+        sender="reviewer", lease=None, explicit_ticket=None, in_reply_to_record=None, env={}
+    )
+    assert task_id is None and warning is not None
+    assert "could not be read" in warning, warning
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warning, warning
+    assert herdr_reply.RECORDED_CLAUSE not in warning, warning
+    assert herdr_reply.NOT_RECORDED_CLAUSE not in warning, warning
+
+
+def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.5 F1/F2: with no lane anchor the warning names the real outcome, and no record.
+
+    `resolve_base_dir` raises `LaneAnchorError` before the store is read or written, so the
+    run records nothing and the delivered prompt carries the `NOT RECORDED` pointer. The
+    warning used to end with "; recording the reply unlinked" anyway — one run, two
+    contradictory statements about what happened. The record claim is caller-side now.
+
+    Mutant killed: append the recording clause inside `_unlinked` again and this pin fails on
+    the warning claiming a record the pointer delivered in the same run says was not written.
+    """
+    nongit = tmp_path / "nongit"
+    nongit.mkdir()
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        env={"HERDR_LANE_DIR": None},
+        cwd=nongit,
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert "could not be read" in warnings[0], warnings[0]
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warnings[0], warnings[0]
+    assert herdr_reply.RECORDED_CLAUSE not in warnings[0], warnings[0]
+    assert warnings[0].endswith(herdr_reply.NOT_RECORDED_CLAUSE), warnings[0]
+    assert len([line for line in done.stderr.splitlines() if "could not be read" in line]) == 1
+
+    (call,) = stub.prompts()
+    assert "Payload: NOT RECORDED" in call[4], call[4]
+    assert not (nongit / ".lane").exists(), "no store was written: the anchor never resolved"
 
 
 def test_the_inferred_sole_open_task_linkage_warns_and_names_the_bound_task(
@@ -702,6 +781,8 @@ def test_a_corrupt_store_reads_as_unreadable_not_as_a_missing_open_task(
     assert len(warnings) == 1, done.stderr
     assert "could not be read" in warnings[0], warnings[0]
     assert "no open task" not in warnings[0], warnings[0]
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warnings[0], warnings[0]
+    assert warnings[0].endswith(herdr_reply.RECORDED_CLAUSE), warnings[0]
 
 
 def test_refuses_without_herdr_env(stub: StubHarness) -> None:
