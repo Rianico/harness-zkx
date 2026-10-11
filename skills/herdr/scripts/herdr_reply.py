@@ -12,6 +12,13 @@ whom. When the sender holds an active lease, its `Ticket-ID`/`Task-ID` ride alon
 `Ticket-ID:` and `In-Reply-To:` correlation lines. The envelope is script-rendered,
 never model-authored, so it cannot be forgotten.
 
+The record's task linkage is resolved from the whole store, not just the lease (#246 D1.2):
+an explicit `--ticket <id>` (or `--in-reply-to <record-id>`) wins, else the sender's active
+lease, else the sender's sole open task. Zero or several open tasks — or an explicit name the
+sender does not hold open — records the reply unlinked with one warning line, never a guess,
+so a second reply for the same ticket still advances the task instead of losing the linkage
+when the first reply consumes the lease.
+
 Prompt text is never provenance (#231). Before the prompt is sent the payload is persisted
 as a store record — a body file plus one metadata-only index sidecar carrying its digest,
 shape, and cited-artifact count — and a short pointer rides between the envelope and the body:
@@ -91,6 +98,7 @@ from herdr_lease import (
     get_lease,
     get_reply,
     get_task,
+    list_tasks,
     record_event,
     record_reply,
     release_lease,
@@ -127,6 +135,8 @@ class Options:
     auto_start: str | None = None
     settle: float = DEFAULT_SETTLE_SECONDS
     verbose: bool = False
+    ticket: str | None = None
+    in_reply_to_record: str | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -185,6 +195,23 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         "verbose",
         help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
+    )
+    _ = parser.add_argument(
+        "--ticket",
+        metavar="ID",
+        default=None,
+        help=(
+            "bind this reply's task linkage to the named task (its task id, or a ticket id "
+            "whose open task this sender owns is unique); without it the linkage comes from "
+            "the sender's lease, else its sole open task, else the reply is unlinked"
+        ),
+    )
+    _ = parser.add_argument(
+        "--in-reply-to",
+        dest="in_reply_to_record",
+        metavar="RECORD",
+        default=None,
+        help="bind this reply to the task of the named stored reply record",
     )
     return parser
 
@@ -950,6 +977,145 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
         report_lease_trouble("lease release", exc)
 
 
+# ── reply task linkage (#246 D1.2) ──────────────────────────────────────────────────
+
+# A finished task: its round with the sender is over, so a later reply must not re-attach to
+# it by guesswork. `completed` is the only status this store writes that ends the round.
+TERMINAL_TASK_STATUSES = frozenset({"completed"})
+
+
+def _is_open_task(task: Mapping[str, Any]) -> bool:
+    """Whether a task still awaits its assignee: any status but a terminal one."""
+    return task.get("status") not in TERMINAL_TASK_STATUSES
+
+
+def _unlinked(reason: str, exc: BaseException | None = None) -> str:
+    """The one warning line for a reply that could not be bound to a task, and why."""
+    detail = f" ({_one_line(str(exc))})" if exc is not None else ""
+    return f"task linkage unresolved — {reason}{detail}; recording the reply unlinked"
+
+
+def _sender_open_tasks(sender: str, env: Mapping[str, str]) -> list[dict[str, Any]] | None:
+    """Every non-terminal task assigned to `sender`; None when the store cannot be read.
+
+    `None` and `[]` are different answers: an unreadable store has already been reported by
+    the lease steps, so it must not also warn about a missing linkage, while an empty list is
+    a real "this sender holds no open task".
+    """
+    try:
+        tasks = list_tasks(env=env)
+    except Exception:
+        return None
+    return [task for task in tasks if task.get("assignee") == sender and _is_open_task(task)]
+
+
+def _linkage_from_ticket(
+    value: str, *, sender: str | None, env: Mapping[str, str]
+) -> tuple[str | None, str | None]:
+    """The sender's open task named by `--ticket`, or an unlinked warning.
+
+    `value` names a task id, or a ticket id whose sender-owned open task is unique. An
+    explicit flag that names a task which is another sender's, already finished, or unknown
+    yields no linkage rather than falling back to the lease: the flag was the instruction.
+    """
+    if sender is None:
+        return None, _unlinked(f"--ticket {value!r} given but no sender resolved")
+    try:
+        tasks = list_tasks(env=env)
+    except Exception as exc:
+        return None, _unlinked(f"--ticket {value!r} could not be resolved", exc)
+    named = [task for task in tasks if task.get("task_id") == value]
+    if named:
+        if named[0].get("assignee") == sender and _is_open_task(named[0]):
+            return value, None
+        return None, _unlinked(f"--ticket {value!r} is not an open task of sender {sender!r}")
+    matching = [
+        task
+        for task in tasks
+        if task.get("ticket_id") == value and task.get("assignee") == sender and _is_open_task(task)
+    ]
+    if len(matching) == 1 and isinstance(matching[0].get("task_id"), str):
+        return str(matching[0]["task_id"]), None
+    return None, _unlinked(
+        f"--ticket {value!r} does not name exactly one open task of sender {sender!r}"
+    )
+
+
+def _linkage_from_record(
+    record_id: str, *, sender: str | None, env: Mapping[str, str]
+) -> tuple[str | None, str | None]:
+    """The open task a named stored reply points at, or an unlinked warning.
+
+    `--in-reply-to <record-id>` re-binds a follow-up to whichever task the named record was
+    linked to, so a corrected or additive reply resolves without restating the ticket.
+    """
+    if sender is None:
+        return None, _unlinked(f"--in-reply-to {record_id!r} given but no sender resolved")
+    try:
+        record = get_reply(record_id, env=env)
+        linked = record.get("task_id") if isinstance(record, Mapping) else None
+        task = get_task(linked, env=env) if isinstance(linked, str) else None
+    except Exception as exc:
+        return None, _unlinked(f"--in-reply-to {record_id!r} could not be resolved", exc)
+    if not isinstance(record, Mapping) or record.get("sender") != sender:
+        return None, _unlinked(
+            f"--in-reply-to {record_id!r} names no reply record of sender {sender!r}"
+        )
+    if not isinstance(linked, str):
+        return None, _unlinked(f"--in-reply-to {record_id!r} carries no task linkage")
+    if not isinstance(task, dict) or task.get("assignee") != sender or not _is_open_task(task):
+        return None, _unlinked(
+            f"--in-reply-to {record_id!r} names task {linked!r}, not an open task of "
+            f"sender {sender!r}"
+        )
+    return linked, None
+
+
+def resolve_task_linkage(
+    *,
+    sender: str | None,
+    lease: Mapping[str, Any] | None,
+    explicit_ticket: str | None,
+    in_reply_to_record: str | None,
+    env: Mapping[str, str],
+) -> tuple[str | None, str | None]:
+    """(task_id, warning) for the task this reply advances, or (None, reason) when unlinked.
+
+    The linkage used to come only from the sender's lease, which the first reply releases, so
+    a legitimate second reply for the same ticket was recorded with `task_id: null` and could
+    never advance anything (#246 D1.2). Precedence, most explicit first: the `--in-reply-to`
+    record, then the `--ticket` name, then the sender's active lease (the legacy path for the
+    first reply), then the sender's SOLE open task. Only that last step infers, and only when
+    the answer is unique: zero or several open tasks, or an explicit name that does not
+    resolve to one of the sender's open tasks, records the reply unlinked with one warning
+    line — a wrong linkage is worse than none.
+
+    A store this process cannot read yields no linkage and no warning: the lease steps have
+    already reported it, and there is no ticket to name.
+    """
+    if in_reply_to_record is not None:
+        return _linkage_from_record(in_reply_to_record, sender=sender, env=env)
+    if explicit_ticket is not None:
+        return _linkage_from_ticket(explicit_ticket, sender=sender, env=env)
+    if isinstance(lease, Mapping):
+        lease_task = lease.get("task_id")
+        if isinstance(lease_task, str):
+            return lease_task, None
+    if sender is None:
+        return None, None
+    open_tasks = _sender_open_tasks(sender, env=env)
+    if open_tasks is None:
+        return None, None
+    if len(open_tasks) == 1:
+        task_id = open_tasks[0].get("task_id")
+        return (task_id, None) if isinstance(task_id, str) else (None, None)
+    if not open_tasks:
+        return None, _unlinked(f"sender {sender!r} holds no open task")
+    return None, _unlinked(
+        f"sender {sender!r} holds {len(open_tasks)} open tasks, so the ticket is ambiguous"
+    )
+
+
 def _recorded_and_advanceable(
     record_id: str | None,
     shape: str | None,
@@ -991,8 +1157,9 @@ def record_sender_status(
     *,
     record_id: str | None = None,
     shape: str | None = None,
+    task_id: str | None = None,
 ) -> None:
-    """Append the sender's completion event to its task trajectory, when one is leased.
+    """Append the sender's completion event to its task trajectory, when one is linked.
 
     Resolves the sender's own lease first, then gates the advance on the persisted record
     (#231): a missing `record_id`, an id the store does not hold, an `incomplete` shape, or a
@@ -1000,6 +1167,10 @@ def record_sender_status(
     lookup still runs ahead of the gate, so an unresolvable store reports the same
     `trajectory note` skip it always did. Non-fatal by contract: a missing lease or a store
     this process cannot resolve is still a reply.
+
+    `task_id` is the linkage the caller already resolved (#246 D1.2): the sender's lease for a
+    first reply, or the task a later reply re-bound to. When it is None the sender's lease is
+    read here, which keeps a direct caller's behaviour unchanged.
 
     The trajectory `note` is metadata only -- the mapped status token plus the hex `sha` when
     the payload carries one (`completed 8c715091`, or just the status). A non-hex second token
@@ -1011,24 +1182,31 @@ def record_sender_status(
         sender = resolve_current_agent(herdr, env)
         if not sender:
             return
-        lease = get_lease(sender, env=env)
-        if not isinstance(lease, dict):
-            return
     except Exception as exc:
         report_lease_trouble("trajectory note", exc)
         return
 
-    lease_task = lease.get("task_id")
-    task_id = lease_task if isinstance(lease_task, str) else None
-    if not _recorded_and_advanceable(record_id, shape, sender=sender, task_id=task_id, env=env):
+    linked = task_id
+    if linked is None:
+        try:
+            lease = get_lease(sender, env=env)
+        except Exception as exc:
+            report_lease_trouble("trajectory note", exc)
+            return
+        if not isinstance(lease, dict):
+            return
+        lease_task = lease.get("task_id")
+        linked = lease_task if isinstance(lease_task, str) else None
+
+    if not _recorded_and_advanceable(record_id, shape, sender=sender, task_id=linked, env=env):
         return
 
     validated_sha = sha if isinstance(sha, str) and _SHA_RE.fullmatch(sha) else None
     note = f"{mapped} {validated_sha}" if validated_sha else mapped
     try:
-        if task_id is not None:
+        if linked is not None:
             _ = record_event(
-                task_id,
+                linked,
                 mapped,
                 note=note,
                 sha=validated_sha,
@@ -1131,6 +1309,21 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         lease_task = lease.get("task_id")
         if isinstance(lease_task, str):
             in_reply_to = lease_task
+    # #246 D1.2: the lease is consumed by the first reply, so the task this reply advances is
+    # resolved from the whole store — the explicit flag, else the lease, else the sender's sole
+    # open task — and an unresolvable answer is recorded unlinked with one warning line. A dry
+    # run records nothing, so it resolves nothing.
+    linked_task_id: str | None = None
+    if not options.dry_run:
+        linked_task_id, linkage_warning = resolve_task_linkage(
+            sender=sender,
+            lease=lease,
+            explicit_ticket=options.ticket,
+            in_reply_to_record=options.in_reply_to_record,
+            env=env,
+        )
+        if linkage_warning:
+            print(f"herdr-reply: {linkage_warning}", file=sys.stderr)
     panes, agents = fetch_inventory(herdr, env)
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     reply_envelope = render_envelope(
@@ -1158,8 +1351,8 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 sender=sender,
                 caller=target,
                 ticket_id=ticket_id,
-                task_id=in_reply_to,
-                in_reply_to=in_reply_to,
+                task_id=linked_task_id,
+                in_reply_to=linked_task_id,
                 mapped=mapped,
                 sha=sha,
                 shape=shape,
@@ -1206,7 +1399,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             print(f"herdr-reply: {target}: {detail}", file=sys.stderr)
             return EXIT_BLOCKED
         if code == TIMEOUT_CODE:
-            record_sender_status(herdr, env, mapped, sha, record_id=record_id, shape=shape)
+            record_sender_status(
+                herdr, env, mapped, sha, record_id=record_id, shape=shape, task_id=linked_task_id
+            )
             release_active_lease(herdr, env)
             raise WaitTimeout(
                 f"reply delivered to {target} but wait timed out; caller is processing asynchronously"
@@ -1219,7 +1414,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 raise UsageError(diag)
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
-    record_sender_status(herdr, env, mapped, sha, record_id=record_id, shape=shape)
+    record_sender_status(
+        herdr, env, mapped, sha, record_id=record_id, shape=shape, task_id=linked_task_id
+    )
     release_active_lease(herdr, env)
     _ = decode_response(done.stdout)
     state = settled_state(done.stdout)

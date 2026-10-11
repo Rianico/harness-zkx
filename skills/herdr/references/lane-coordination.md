@@ -386,7 +386,7 @@ Protocol:
 
 - **Ticket-ID** identifies the dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). `herdr-dispatch --ticket-id` sets it explicitly; when omitted, the dispatcher derives it deterministically from the ticket filename.
 - **Task-ID** identifies one task inside that ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). `herdr-dispatch --task-id` binds it explicitly; when omitted it mirrors the derived Ticket-ID. It keys the task record in `.lane/tasks.yaml` and rides the `Hierarchy:` block.
-- `herdr-reply` reads the replying sender's active lease and emits `Ticket-ID:` plus `In-Reply-To: <Task-ID>`, appends the mapped status event to that task's `trajectory`, then soft-releases that lease (never the target's) while keeping the task record. A missing lease omits both lines and the reply still sends.
+- `herdr-reply` reads the replying sender's active lease and emits `Ticket-ID:` plus `In-Reply-To: <Task-ID>`, appends the mapped status event to that task's `trajectory`, then soft-releases that lease (never the target's) while keeping the task record. A missing lease omits both lines and the reply still sends. The record's `task_id` linkage is resolved apart from those envelope lines: `--ticket <ID>` (or `--in-reply-to <RECORD>`) wins, else the lease, else the sender's sole open task; zero or several open tasks, or a flag that names no open task of the sender, records the reply unlinked with one warning line instead of guessing.
 
 #### Scoped-prefix rule
 

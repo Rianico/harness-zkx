@@ -181,6 +181,224 @@ def test_a_refused_reply_keeps_the_lease_so_the_corrected_reply_advances(
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
+def test_a_second_reply_for_the_same_ticket_keeps_the_task_linkage(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.2 pin 1: the first reply consumes the lease, not the ticket's task linkage.
+
+    The linkage used to be resolved from the sender's lease alone, which the first reply
+    releases, so a legitimate second reply for the same ticket was recorded with
+    `task_id: null` and could never advance the task. The second send here binds to the
+    sender's sole open task and advances it to `completed`; the lease-only resolution (the
+    pre-change behaviour) cannot, so reverting the mechanism fails this case.
+    """
+    task_id = "#246#d12-second"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "246.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#246",
+        task_id=task_id,
+    )
+
+    first = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    first_task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert first_task is not None and first_task["status"] == "blocked"
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None, (
+        "the first reply consumed the sender's lease"
+    )
+
+    second = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        env={"PWD": str(tmp_path)},
+    )
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] == task_id, "the second reply keeps the ticket's task linkage"
+    advanced = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert advanced is not None and advanced["status"] == "completed"
+    assert [event for event in advanced["trajectory"] if event["event"] == "completed"], (
+        "the second reply must be able to advance the task"
+    )
+
+
+def test_a_second_reply_with_an_ambiguous_ticket_is_recorded_unlinked_and_warns(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.2 pin 2 (negative): an ambiguous ticket is never guessed at.
+
+    The sender holds two open tasks for two tickets; the lease binds the first reply to the
+    second ticket's task and is then released. The second reply could belong to either task or
+    to a third ticket, so it must be recorded unlinked — never attributed to the first
+    record's task — and exactly one warning line must say so. A blind "reuse the most recent
+    record's task" passes pin 1 but fails here.
+    """
+    first_task = "#246#d12-amb-1"
+    second_task = "#247#d12-amb-2"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "246.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#246",
+        task_id=first_task,
+    )
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "247.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#247",
+        task_id=second_task,
+    )
+
+    bound = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    assert bound.returncode == herdr_cli.EXIT_OK, bound.stderr
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] == second_task
+
+    ambiguous = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 2 passed\n",
+        env={"PWD": str(tmp_path)},
+    )
+    assert ambiguous.returncode == herdr_cli.EXIT_OK, ambiguous.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] is None, "an ambiguous ticket is never attributed to a task"
+    assert record["task_id"] != second_task, "not the first record's task either"
+    assert "task linkage" in ambiguous.stderr, "one warning line says the linkage was not guessed"
+    assert len([line for line in ambiguous.stderr.splitlines() if "task linkage" in line]) == 1
+    first_state = herdr_lease.get_task(first_task, base_dir=tmp_path)
+    second_state = herdr_lease.get_task(second_task, base_dir=tmp_path)
+    assert first_state is not None and first_state["status"] == "dispatched"
+    assert second_state is not None and second_state["status"] == "blocked"
+
+
+def test_explicit_ticket_flag_binds_a_reply_the_lease_cannot(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.2 primary mechanism: `--ticket` names the task when inference cannot.
+
+    With two open tasks and no lease the ticket is ambiguous, so the reply binds to the named
+    task only because the flag names it, and the other task is left untouched.
+    """
+    named = "#246#d12-flag"
+    other = "#247#d12-flag"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=named
+    )
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "247.md", "orchestrator", base_dir=tmp_path, ticket_id="#247", task_id=other
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 3 passed\n",
+        "--ticket",
+        named,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] == named
+    named_state = herdr_lease.get_task(named, base_dir=tmp_path)
+    other_state = herdr_lease.get_task(other, base_dir=tmp_path)
+    assert named_state is not None and named_state["status"] == "completed"
+    assert other_state is not None and other_state["status"] == "dispatched"
+
+
+def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.2 negative: an explicit name that is not the sender's open task never binds.
+
+    The flag names another sender's task while this sender holds its own live lease; the
+    reply is recorded unlinked with one warning, and neither task is advanced.
+    """
+    foreign = "#999#d12-foreign"
+    mine = "#246#d12-mine"
+    _ = herdr_lease.acquire_lease(
+        "someone-else",
+        "999.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#999",
+        task_id=foreign,
+    )
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=mine
+    )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 4 passed\n",
+        "--ticket",
+        foreign,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] is None
+    assert "task linkage" in done.stderr
+    foreign_state = herdr_lease.get_task(foreign, base_dir=tmp_path)
+    mine_state = herdr_lease.get_task(mine, base_dir=tmp_path)
+    assert foreign_state is not None and foreign_state["status"] == "dispatched"
+    assert mine_state is not None and mine_state["status"] == "dispatched"
+
+
+def test_in_reply_to_record_rebinds_a_followup_without_restating_the_ticket(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.2: `--in-reply-to <record-id>` resolves the named record's task linkage.
+
+    Two open tasks make the ticket ambiguous, so only the explicit record reference can bind
+    the follow-up; it re-binds to the very task the named record rode.
+    """
+    first_task = "#246#d12-alias-1"
+    second_task = "#247#d12-alias-2"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "246.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#246",
+        task_id=first_task,
+    )
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "247.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#247",
+        task_id=second_task,
+    )
+
+    first = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] == second_task
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 5 passed\n",
+        "--in-reply-to",
+        str(record["id"]),
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] == second_task
+    second_state = herdr_lease.get_task(second_task, base_dir=tmp_path)
+    first_state = herdr_lease.get_task(first_task, base_dir=tmp_path)
+    assert second_state is not None and second_state["status"] == "completed"
+    assert first_state is not None and first_state["status"] == "dispatched"
+
+
 def test_refuses_without_herdr_env(stub: StubHarness) -> None:
     done = stub.run("orchestrator", "done", env={"HERDR_ENV": None})
     assert done.returncode == herdr_cli.EXIT_USAGE
