@@ -720,6 +720,44 @@ def test_dispatch_refuses_untouched_skeleton(stub: StubHarness, tmp_path: Path) 
     assert stub.prompts() == []
 
 
+def test_dispatch_refuses_untouched_skeleton_with_cr_line_endings(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The boundary search is newline-agnostic: a CR-separated unfilled skeleton is refused.
+
+    The payload is validated as the raw delivered bytes, and `read_bytes().decode` keeps a
+    lone `\r` as-is (unlike `read_text`, which translated it to `\n`). An LF-only boundary
+    search then finds no section end, so the guard fails open and the unfilled ticket is
+    dispatched (exit 0, a prompt, a lease).
+    """
+    ticket = tmp_path / "ticket.md"
+    _ = ticket.write_bytes(
+        b"## Routing\r\r- Sender: reviewer@w9:p1\r\r"
+        b"## Task\r\r## Context\r\r## Acceptance criteria\r"
+    )
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "empty Task/Context/Acceptance sections" in done.stderr
+    assert stub.prompts() == []
+    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
+
+
+def test_dispatch_refuses_untouched_skeleton_with_mixed_crlf_sections(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A `\n\r## ` boundary (LF then a lone CR before the heading) is still a section end."""
+    ticket = tmp_path / "ticket.md"
+    _ = ticket.write_bytes(
+        b"## Routing\n\r- Sender: reviewer@w9:p1\n\r"
+        b"## Task\n\r## Context\n\r## Acceptance criteria\n"
+    )
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "empty Task/Context/Acceptance sections" in done.stderr
+    assert stub.prompts() == []
+    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
+
+
 def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: Path) -> None:
     ticket = payload_file(
         tmp_path,
@@ -766,6 +804,34 @@ def test_dispatch_refuses_what_the_shared_payload_reader_refuses(
     assert "Traceback" not in done.stderr
     assert done.stderr.strip() == f"herdr-dispatch: {prompt_sentence}"
     assert stub.prompts() == []
+    # The refusal now lands BEFORE `acquire_lease`, not after the lease via the prompt
+    # reader's second read of the same file. Without this the pin passes on the old
+    # ordering too: the NUL sentence and exit code are identical, only the lease differs.
+    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
+
+
+def test_dispatch_missing_file_refusal_names_the_seam_sentence(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin the unreadable-ticket sentence: it is now the shared seam's, a caller contract.
+
+    `herdr-dispatch` used to raise its own `cannot read ticket file ...`; the shared payload
+    seam (`herdr_cli.read_payload_stream`) now covers the missing file too, in the sentence
+    `herdr-prompt` and `herdr-reply` also print. The sentence carries the path twice and the
+    Python errno repr; that shape is pinned here, so a paraphrase or a seam tidy-up is a
+    deliberate, visible change rather than silent drift.
+    """
+    missing = tmp_path / "nope.md"
+    with pytest.raises(OSError) as missing_exc:
+        _ = missing.read_bytes()
+    detail = str(missing_exc.value)
+    done = stub.run("callee", "--file", str(missing), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert done.stderr.strip() == (
+        f"herdr-dispatch: cannot read payload from {str(missing)!r}: {detail}"
+    )
+    assert stub.prompts() == []
+    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
 
 
 def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(

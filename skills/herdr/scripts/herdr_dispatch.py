@@ -303,6 +303,11 @@ def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
 PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
 DRAFT_MARKER = "herdr-draft: unfilled"
 DRAFT_SECTIONS = ("## Task", "## Context", "## Acceptance criteria")
+# A section ends at the next heading of the same or higher level, matched newline-agnostically:
+# the ticket is validated as the raw delivered bytes, so a lone `\r`, a `\r\n`, and a mixed
+# `\n\r## ` all end a section. An LF-only literal search finds no section end in CR text, so
+# the guard fails open and dispatches an unfilled ticket.
+SECTION_END_RE = re.compile(r"(?:\r\n|\r|\n)#{1,2} ")
 DERIVE_TICKET_ID_RE = re.compile(r"^\d+([-_].+)?$")
 
 
@@ -324,19 +329,20 @@ def find_unfilled_placeholders(ticket: str) -> list[str]:
 
 
 def ticket_is_untouched_skeleton(ticket: str) -> bool:
-    """Check whether every `--draft` semantic section is present and empty."""
+    """Check whether every `--draft` semantic section is present and empty.
+
+    The section boundary is newline-agnostic, so a CR-separated or mixed `\n\r## ` skeleton is
+    refused exactly like an LF one. The validation stays on the raw delivered text: the caller
+    decodes the bytes verbatim, with no universal-newline translation.
+    """
     bodies: list[str] = []
     for section in DRAFT_SECTIONS:
         start = ticket.find(section)
         if start < 0:
             return False
         rest = ticket[start + len(section) :]
-        end = len(rest)
-        for marker in ("\n## ", "\n# "):
-            at = rest.find(marker)
-            if at >= 0:
-                end = min(end, at)
-        bodies.append(rest[:end].strip())
+        match = SECTION_END_RE.search(rest)
+        bodies.append(rest[: match.start() if match else len(rest)].strip())
     return all(body == "" for body in bodies)
 
 
