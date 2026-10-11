@@ -1,0 +1,12 @@
+{
+  ".agents/hooks.json": "target-project hook config the agy bridge installs, not a repo file",
+  ".aider.chat.history.md": "aider's session-history file in the user's working directory",
+  "182-foo.md": "illustration: a ticket basename, used to show Ticket-ID derivation",
+  "brief.md": "illustration: a payload filename passed to --file",
+  "hooks/herdr-agy-bridge.sh": "file the agy bridge deploys into a target project's hooks dir",
+  "rework.md": "illustration: the filename a rework ticket is written to",
+  "settings.json": "a qodercli config-root file outside this repository",
+  "src/cli/args.py": "illustration: a specimen ticket's CLI path",
+  "src/config/loader.py": "illustration: a specimen ticket's config-loader path",
+  "tests/test_loader.py": "illustration: a specimen ticket's test path"
+}

@@ -9,13 +9,18 @@ Two contracts live here, and both read the *documentation* as the input under te
 2. **Documented pointers.** Every inline-code token in `skills/herdr/**/*.md` that looks like a
    file pointer must resolve to a file that exists. `EXCLUDED_TOKENS` is an **exact** allow-list
    (no globs) naming the prose illustrations that are deliberately not pointers here, so a new
-   dead pointer fails loudly instead of hiding behind a pattern. The two spellings of "the
+   dead pointer fails loudly instead of hiding behind a pattern. That allow-list is frozen as a
+   literal in `doc_contract_allow_list_golden.json` and pinned from three sides: each entry states
+   a non-empty reason, each token is one exact token (never a pattern), and no entry resolves to a
+   file that exists in this repository, so growing the allow-list is a deliberate two-file edit.
+   The two spellings of "the
    reader's own skill directory" — `$SKILL_DIR/…` and `${herdr_skill}/…` — both resolve against
    this tree's skill directory, so a dead pointer in either spelling is caught.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import shutil
@@ -49,7 +54,9 @@ FRESH_PANE_STATE: Mapping[str, object] = {
 }
 
 # Exact allow-list: tokens that name something other than a file in *this* repository. Each entry
-# is a single token (never a pattern) so any new unresolved token fails the test below.
+# is a single token (never a pattern) so any new unresolved token fails the test below. The mapping
+# is frozen in `doc_contract_allow_list_golden.json`; the pins below hold it to that literal, to a
+# stated reason per entry, to the single-token shape, and to resolving nowhere in this repository.
 EXCLUDED_TOKENS: Mapping[str, str] = {
     # Prose illustrations: a specimen ticket's cited file tree, not this repository's.
     "src/cli/args.py": "illustration: a specimen ticket's CLI path",
@@ -65,6 +72,19 @@ EXCLUDED_TOKENS: Mapping[str, str] = {
     ".aider.chat.history.md": "aider's session-history file in the user's working directory",
     "hooks/herdr-agy-bridge.sh": "file the agy bridge deploys into a target project's hooks dir",
 }
+
+# The frozen copy of `EXCLUDED_TOKENS`, harvested from this module at commit 3b5e078b and pinned as
+# a literal, so an exclusion is a deliberate two-file edit instead of a one-line silence. Never
+# derive it from `EXCLUDED_TOKENS`: an expectation read out of the live mapping moves with it and
+# passes whatever it holds.
+GOLDEN_ALLOW_LIST_PATH = Path(__file__).with_name("doc_contract_allow_list_golden.json")
+GOLDEN_ALLOW_LIST: Mapping[str, str] = json.loads(
+    GOLDEN_ALLOW_LIST_PATH.read_text(encoding="utf-8")
+)
+
+# fnmatch's metacharacters plus bash brace expansion: any of these makes one token stand for many
+# files, which is exactly what the allow-list must never hold.
+GLOB_CHARACTERS = frozenset("*?[]{}")
 
 # ── pointer policy ────────────────────────────────────────────────────────────────────────────
 
@@ -206,6 +226,76 @@ def test_allow_list_holds_only_exact_file_tokens() -> None:
         assert token.endswith(POINTER_EXTENSIONS), token
         assert not set(token) & set("*?[]"), token
         assert Path(token).suffix, token
+
+
+def test_allow_list_matches_the_frozen_golden_set() -> None:
+    """The allow-list equals `doc_contract_allow_list_golden.json`, entry for entry.
+
+    The expectation is the fixture's literal copy, harvested from this module at commit 3b5e078b,
+    never `EXCLUDED_TOKENS` itself: a derived expectation is a tautology that proves nothing.
+
+    Mutant killed: add one token to `EXCLUDED_TOKENS` — a dead pointer a reader wants silenced —
+    and this pin fails on the added entry, naming it, so the silence must become a deliberate edit
+    to the fixture too. Re-wording one reason fails the same way.
+    """
+    golden = dict(GOLDEN_ALLOW_LIST)
+    added = sorted(set(EXCLUDED_TOKENS) - set(golden))
+    dropped = sorted(set(golden) - set(EXCLUDED_TOKENS))
+    assert not added, f"allow-list entries added without freezing them in the fixture: {added}"
+    assert not dropped, f"allow-list entries dropped from the fixture: {dropped}"
+    for token in sorted(golden):
+        assert EXCLUDED_TOKENS[token] == golden[token], (
+            f"{token}: reason {EXCLUDED_TOKENS[token]!r} != frozen {golden[token]!r}"
+        )
+
+
+@pytest.mark.parametrize("token", sorted(EXCLUDED_TOKENS))
+def test_every_allow_list_entry_states_a_reason(token: str) -> None:
+    """An entry must say why it is not a pointer here; a bare token is an unexplained skip.
+
+    Mutant killed: blank one entry's reason in `EXCLUDED_TOKENS` and this case fails for that
+    token, naming it. The allow-list comment's guarantee that each entry names what it is then
+    holds as a check instead of a convention.
+    """
+    reason = EXCLUDED_TOKENS[token]
+    assert reason.strip(), f"{token}: an allow-list entry must state why it is not a pointer"
+
+
+@pytest.mark.parametrize("token", sorted(EXCLUDED_TOKENS))
+def test_every_allow_list_token_is_one_exact_token(token: str) -> None:
+    """One exact token, never a pattern or a list: a glob or whitespace would match many files.
+
+    `test_allow_list_holds_only_exact_file_tokens` already refuses `*?[]`; this pin adds brace
+    expansion and whitespace, so no entry can stand for more than the one token it names.
+
+    Mutant killed: add `src/*.py` to `EXCLUDED_TOKENS` and this case fails, naming the token.
+    """
+    assert not set(token) & GLOB_CHARACTERS, f"{token}: an allow-list token may not be a pattern"
+    assert token.split() == [token], f"{token}: an allow-list entry is one token, never a list"
+
+
+def test_no_allow_listed_token_resolves_to_a_file_in_this_repository() -> None:
+    """Every allow-listed token resolves nowhere, against any doc: that is why the list is safe.
+
+    An entry that resolves is the dangerous case: `scan_pointers` skips an allow-listed token
+    before `_resolve` runs, so a token that *does* name a file in this repository would be excused
+    from resolution, and a genuinely broken pointer could later hide behind that same token.
+    Measured at 3b5e078b: none of the ten entries resolves against any scanned doc.
+
+    Mutant killed: add `README.md` — or any other existing repository path — to `EXCLUDED_TOKENS`
+    and this pin fails, naming the token, the doc, and the file it resolved to.
+    """
+    docs = sorted(SKILL_DIR.glob("**/*.md"))
+    assert docs, "no docs scanned, so this pin would pass vacuously"
+    offenders = {
+        token: f"{doc.relative_to(REPO_ROOT)} -> {found.relative_to(REPO_ROOT)}"
+        for token in EXCLUDED_TOKENS
+        for doc in docs
+        if (found := _resolve(doc, token)) is not None
+    }
+    assert offenders == {}, "allow-listed tokens that resolve to a file here: " + "; ".join(
+        f"{token} ({where})" for token, where in offenders.items()
+    )
 
 
 @pytest.mark.parametrize(
