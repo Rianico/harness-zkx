@@ -9,7 +9,9 @@ Two contracts live here, and both read the *documentation* as the input under te
 2. **Documented pointers.** Every inline-code token in `skills/herdr/**/*.md` that looks like a
    file pointer must resolve to a file that exists. `EXCLUDED_TOKENS` is an **exact** allow-list
    (no globs) naming the prose illustrations that are deliberately not pointers here, so a new
-   dead pointer fails loudly instead of hiding behind a pattern.
+   dead pointer fails loudly instead of hiding behind a pattern. The two spellings of "the
+   reader's own skill directory" — `$SKILL_DIR/…` and `${herdr_skill}/…` — both resolve against
+   this tree's skill directory, so a dead pointer in either spelling is caught.
 """
 
 from __future__ import annotations
@@ -67,6 +69,13 @@ EXCLUDED_TOKENS: Mapping[str, str] = {
 # ── pointer policy ────────────────────────────────────────────────────────────────────────────
 
 
+# The two spellings the docs use for "the reader's own skill directory": the bootstrap reference's
+# `$SKILL_DIR/` shell variable and the Protocol notice's `${herdr_skill}/` placeholder. Both name
+# this tree's skill directory here, so both resolve (or fail) against it — a dead token in either
+# spelling is a dead pointer, never a skip.
+SKILL_DIR_PREFIXES = ("$SKILL_DIR/", "${herdr_skill}/")
+
+
 def _pointer_tokens(doc: Path) -> list[tuple[str, int]]:
     """Return (token, line_number) for every inline-code token in `doc` that names a file."""
     found: list[tuple[str, int]] = []
@@ -90,10 +99,6 @@ def _exclusion_rule(token: str) -> str | None:
     # `agents/<agent>.md` and `<reply.md` name a shape filled in at run time, not a file.
     if "<" in token or ">" in token:
         return "placeholder"
-    # `${herdr_skill}/scripts/...` is the Protocol notice's placeholder for the reader's own
-    # skill directory; the reader substitutes it at run time, so it names no file here.
-    if token.startswith("${herdr_skill}/"):
-        return "placeholder"
     # `~/.gemini/config/hooks.json` lives in the user's home, not in this repository.
     if token.startswith("~"):
         return "home"
@@ -113,10 +118,10 @@ def _resolution_roots(doc: Path) -> tuple[Path, ...]:
 
 def _resolve(doc: Path, token: str) -> Path | None:
     """Resolve one pointer token against the policy; None when nothing exists at any candidate."""
-    env_prefix = "$SKILL_DIR/"
-    if token.startswith(env_prefix):
-        candidate = SKILL_DIR / token[len(env_prefix) :]
-        return candidate if candidate.exists() else None
+    for prefix in SKILL_DIR_PREFIXES:
+        if token.startswith(prefix):
+            candidate = SKILL_DIR / token[len(prefix) :]
+            return candidate if candidate.exists() else None
     if "/" in token:
         for root in _resolution_roots(doc):
             candidate = root / token
@@ -210,7 +215,6 @@ def test_allow_list_holds_only_exact_file_tokens() -> None:
         ("http://example.com/doc.md", "url"),
         ("agents/<agent>.md", "placeholder"),
         ("<reply.md", "placeholder"),
-        ("${herdr_skill}/scripts/herdr_reply.py", "placeholder"),
         ("~/.qoder/hooks/herdr-agent-state.sh", "home"),
         (".lane/replies/<id>.yaml", "store"),
         (".lane/lease.yaml", "store"),
@@ -368,8 +372,9 @@ def _step_command(title: str) -> list[str]:
         if token in substitutions:
             resolved.append(substitutions[token])
             continue
-        if token.startswith("$SKILL_DIR/"):
-            token = str(SKILL_DIR / token[len("$SKILL_DIR/") :])
+        prefix = next((p for p in SKILL_DIR_PREFIXES if token.startswith(p)), None)
+        if prefix is not None:
+            token = str(SKILL_DIR / token[len(prefix) :])
         resolved.append(token)
     return resolved
 
