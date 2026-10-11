@@ -33,12 +33,9 @@ def test_canonical_template_section_order() -> None:
     headings = [line for line in text.splitlines() if line.startswith("## ")]
     assert headings == [
         "## Summary",
-        "## What Changed",
         "## Root Cause",
         "## Blast Radius & Safety",
         "## Evidence",
-        "## Architecture",
-        "## Landing",
         "## Checklist",
     ], f"unexpected section order: {headings}"
     assert text.startswith("<!-- markdownlint-disable MD041 -->")
@@ -52,15 +49,22 @@ def test_canonical_template_section_order() -> None:
     ):
         assert label in text
     assert "CODE_AUTHORS" in text
+    # Visual-first layout: What Changed and Architecture fold into Summary, and the
+    # Landing boilerplate is gone (CI defaults to squash when the line is omitted).
+    assert "## What Changed" not in text
+    assert "## Architecture" not in text
+    assert "Landing" not in text
+    assert "Mermaid" in text, "Summary guidance names the visual aids"
+    assert text.count("\n---\n") == 1, "one page delimiter before the closing refs and trailers"
 
 
 def test_canonical_template_ships_the_fix_only_root_cause_section() -> None:
     """A `fix` PR follows a taught shape: the template carries the heading the gate wants."""
     text = CANONICAL.read_text()
     root_cause = text.index("## Root Cause")
-    assert text.index("## What Changed") < root_cause < text.index("## Blast Radius & Safety")
+    assert text.index("## Summary") < root_cause < text.index("## Blast Radius & Safety")
     assert "FIX-ONLY" in text, "the section states that it is fix-only"
-    assert "Delete this whole" in text, "and that a non-fix change deletes it, as Architecture does"
+    assert "Delete this whole" in text, "and that a non-fix change deletes it"
 
 
 def test_canonical_template_sync_comment_names_the_source_repo() -> None:
