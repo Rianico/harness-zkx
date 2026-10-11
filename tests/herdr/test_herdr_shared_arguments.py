@@ -1,12 +1,15 @@
 """Pin for the shared argument declarations (ticket #238-W3).
 
 Every parser that declares one of the families in `herdr_cli.SHARED_ARGUMENTS` must declare
-it with the same dest, action, type, metavar, nargs, required, and default. The help sentence
-stays per script, so it is pinned against `shared_arguments_golden.json`, harvested from the
-pre-refactor tree (commit 630eab12) before any call was replaced. Regenerate that file only
-alongside a deliberate behaviour change.
+it with the same dest, action, type, metavar, nargs, required, default, and const. The help
+sentence stays per script, so it is pinned against `shared_arguments_golden.json`, harvested
+with `declarations()` below from the pre-refactor tree (commit 630eab12) before any call was
+replaced, subparsers included. Regenerate that file only alongside a deliberate behaviour
+change, and only with this same walker: `declarations()` is the single collector, so a
+subparser-bearing script cannot drop out of the fixture again.
 
-Refutability: change one dest or one help in `herdr_cli.add_shared_argument` and the
+Refutability: change a dest, an action, a type, a metavar, an nargs, a required, a default, or
+a const in `herdr_cli.SHARED_ARGUMENTS`, or change one caller's help sentence, and the
 per-(script, family) case fails, naming the script and the flag. Remove one declaration from a
 `build_parser` and the same case fails on the missing flag. Rename one inherited dest and
 `test_inheritance_boundary_pins_the_dests_prompt_reads` fails, because the dest names that
@@ -20,6 +23,7 @@ import ast
 import json
 from collections.abc import Iterator, Mapping
 from pathlib import Path
+from typing import cast
 
 import herdr_agy_bridge
 import herdr_bootstrap
@@ -108,6 +112,7 @@ def declarations(parser: argparse.ArgumentParser) -> list[dict[str, object]]:
                     "nargs": _scalar(action.nargs),
                     "required": bool(action.required),
                     "choices": _scalar(None if action.choices is None else list(action.choices)),
+                    "const": _scalar(getattr(action, "const", None)),
                     "help": action.help,
                 }
             )
@@ -123,9 +128,46 @@ def _cases() -> Iterator[tuple[str, str]]:
             yield script, f"{index:02d}-{declaration['family']}"
 
 
+# The fields a family's declarations must agree on unless the table marks them `varying`.
+FROZEN_FIELDS = (
+    "dest",
+    "action",
+    "type",
+    "default",
+    "metavar",
+    "nargs",
+    "required",
+    "choices",
+    "const",
+)
+
+
+def _frozen_by_family() -> dict[str, dict[str, object]]:
+    """Per family: the field values its golden declarations agree on, and only those.
+
+    A field two golden declarations of the same family disagree on is a parameterised one,
+    so it drops out: `--role` defaults to `""`, `None`, and `"assistant"` depending on the
+    script, and `--tab` carries its own metavar, nargs, and const.
+    """
+    frozen: dict[str, dict[str, object]] = {}
+    for entries in GOLDEN.values():
+        for declaration in entries:
+            family = str(declaration["family"])
+            agreed = frozen.setdefault(
+                family, {field: declaration[field] for field in FROZEN_FIELDS}
+            )
+            for field in FROZEN_FIELDS:
+                if field in agreed and declaration[field] != agreed[field]:
+                    del agreed[field]
+    return frozen
+
+
+FROZEN_BY_FAMILY = _frozen_by_family()
+
+
 @pytest.mark.parametrize(("script", "label"), list(_cases()))
 def test_every_shared_declaration_matches_the_frozen_table(script: str, label: str) -> None:
-    """One (script, family) case: dest, action, type, default, metavar, nargs, help, required."""
+    """One (script, family) case: every frozen field, `help` and `option_strings` included."""
     index = int(label.split("-", 1)[0])
     expected = GOLDEN[script][index]
     live = declarations(MODULES[script].build_parser())
@@ -144,6 +186,7 @@ def test_every_shared_declaration_matches_the_frozen_table(script: str, label: s
         "nargs",
         "required",
         "choices",
+        "const",
         "option_strings",
         "help",
     ):
@@ -153,8 +196,23 @@ def test_every_shared_declaration_matches_the_frozen_table(script: str, label: s
 
 
 @pytest.mark.parametrize("family", sorted(SHARED_LONG_OPTIONS))
-def test_a_shared_family_has_one_dest_and_one_default_across_parsers(family: str) -> None:
-    """A shared family may vary its help; its dest and non-parameterised fields may not."""
+def test_a_shared_family_declares_the_frozen_fields_in_every_parser(family: str) -> None:
+    """Every parser declaring `family` reproduces the frozen field set for that family.
+
+    The expectation comes from `shared_arguments_golden.json`, never from the live table:
+    `add_shared_argument` always passes `dest=spec.dest`, so comparing a parser against the
+    table moves both sides together and cannot fail. Comparing against the fixture is what
+    makes a table-side change to a dest, a default, or an action fail here, naming the script
+    and the flag. Only a field the table marks `varying` (or one the fixture itself shows
+    differing between scripts) may differ per script.
+    """
+    spec = herdr_cli.SHARED_ARGUMENTS[family.removeprefix("--").replace("-", "_")]
+    frozen = FROZEN_BY_FAMILY[family]
+    for field in ("dest", *spec.kwargs):
+        if field not in spec.varying:
+            assert field in frozen, (
+                f"{family}: {field} is not parameterised, so the fixture must freeze it"
+            )
     declaring = {
         script: [d for d in declarations(module.build_parser()) if d["family"] == family]
         for script, module in MODULES.items()
@@ -163,10 +221,33 @@ def test_a_shared_family_has_one_dest_and_one_default_across_parsers(family: str
     assert declaring, f"{family} is declared nowhere"
     for script, found in declaring.items():
         for declaration in found:
-            assert (
-                declaration["dest"]
-                == herdr_cli.SHARED_ARGUMENTS[family.removeprefix("--").replace("-", "_")].dest
-            ), f"{script}: {family} dest drifted"
+            for field, expected in frozen.items():
+                assert declaration[field] == expected, (
+                    f"{script}: {family} {field}: {declaration[field]!r} != {expected!r}"
+                )
+
+
+def test_the_fixture_covers_every_script_that_declares_a_shared_family() -> None:
+    """The fixture lists every declaring script, subparser-bearing ones included.
+
+    This is what stops a harvest walker that skips subparsers from leaving a script unpinned:
+    a live declaration with no fixture entry fails here, instead of silently going unchecked.
+    """
+    live = {script: declarations(module.build_parser()) for script, module in MODULES.items()}
+    live = {script: found for script, found in live.items() if found}
+    assert set(live) == set(GOLDEN), (
+        f"fixture covers {sorted(GOLDEN)} but the parsers declare in {sorted(live)}"
+    )
+    for script, found in live.items():
+        assert [d["family"] for d in found] == [d["family"] for d in GOLDEN[script]], (
+            f"{script}: fixture declares {[d['family'] for d in GOLDEN[script]]} "
+            f"but the parser declares {[d['family'] for d in found]}"
+        )
+    golden_families = {str(d["family"]) for entries in GOLDEN.values() for d in entries}
+    assert golden_families == set(SHARED_LONG_OPTIONS), (
+        f"fixture families {sorted(golden_families)} != table families "
+        f"{sorted(SHARED_LONG_OPTIONS)}"
+    )
 
 
 def test_inheritance_boundary_pins_the_dests_prompt_reads() -> None:
@@ -202,6 +283,21 @@ def test_builder_refuses_a_dest_override_and_an_unknown_family() -> None:
         herdr_cli.add_shared_argument(parser, "no-such-family", help="x")
 
 
+def test_the_shared_argument_table_is_read_only() -> None:
+    """The table and each family's kwargs are frozen: an in-place edit must raise.
+
+    A frozen dataclass blocks rebinding `kwargs`, not an in-place edit of the mapping, so
+    without the proxy `SHARED_ARGUMENTS["json"].kwargs["action"] = "store_false"` would
+    invert `--json` for every parser built afterwards in the same process.
+    """
+    table = cast("dict[str, object]", herdr_cli.SHARED_ARGUMENTS)
+    with pytest.raises(TypeError):
+        table["json"] = table["json"]
+    kwargs = cast("dict[str, object]", herdr_cli.SHARED_ARGUMENTS["json"].kwargs)
+    with pytest.raises(TypeError):
+        kwargs["action"] = "store_false"
+
+
 def test_every_shared_declaration_in_the_scripts_goes_through_the_builder() -> None:
     """No `build_parser` may hand-write a shared family; that is the drift surface."""
     offenders: list[str] = []
@@ -217,9 +313,12 @@ def test_every_shared_declaration_in_the_scripts_goes_through_the_builder() -> N
                 continue
             if func.attr != "add_argument":
                 continue
-            first = node.args[0] if node.args else None
-            if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
-                continue
-            if first.value in SHARED_LONG_OPTIONS:
-                offenders.append(f"{path.name}:{node.lineno} {first.value}")
+            literals = {
+                argument.value
+                for argument in node.args
+                if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+            }
+            hits = sorted(literals & SHARED_LONG_OPTIONS)
+            if hits:
+                offenders.append(f"{path.name}:{node.lineno} {', '.join(hits)}")
     assert offenders == [], f"hand-written shared declarations: {offenders}"

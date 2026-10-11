@@ -25,6 +25,7 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Protocol, cast
 
 EXIT_OK = 0
@@ -548,8 +549,9 @@ class SharedArgument:
 
     `dest` is fixed here and handed to `add_argument` explicitly, so a caller reusing a
     family can never pick a different namespace attribute by accident. `kwargs` is the rest
-    of the canonical declaration. `varying` names the keys a caller may override, because
-    the measured declarations differ there (for example `--role` defaults to `""` in
+    of the canonical declaration, and it is frozen on construction, so neither the table nor
+    a caller can edit a family in place. `varying` names the keys a caller may override,
+    because the measured declarations differ there (for example `--role` defaults to `""` in
     bootstrap and `"assistant"` in transcript); `help` is always the caller's, since every
     script has its own sentence.
     """
@@ -559,66 +561,75 @@ class SharedArgument:
     kwargs: Mapping[str, object]
     varying: frozenset[str] = frozenset()
 
+    def __post_init__(self) -> None:
+        """Freeze `kwargs`: a frozen dataclass blocks rebinding, not an in-place edit."""
+        object.__setattr__(self, "kwargs", MappingProxyType(dict(self.kwargs)))
 
-# Keyed by family. Every entry preserves the dest, action, type, metavar, nargs, required,
-# and default that the declaring parsers already had at commit 630eab12; the pin in
-# tests/herdr/test_herdr_cli.py freezes that per script and flag.
-SHARED_ARGUMENTS: Mapping[str, SharedArgument] = {
-    "json": SharedArgument(("--json",), "json", {"action": "store_true"}),
-    "dry_run": SharedArgument(("--dry-run",), "dry_run", {"action": "store_true"}),
-    "verbose": SharedArgument(("--verbose",), "verbose", {"action": "store_true"}),
-    "wait": SharedArgument(("--wait",), "wait", {"action": "store_true"}),
-    "no_wait": SharedArgument(("--no-wait",), "no_wait", {"action": "store_true"}),
-    "no_caller_context": SharedArgument(
-        ("--no-caller-context",), "no_caller_context", {"action": "store_true"}
-    ),
-    "yaml": SharedArgument(("--yaml",), "yaml", {"action": "store_true"}),
-    "file": SharedArgument(("--file",), "file", {"metavar": "PATH"}),
-    "label": SharedArgument(("--label",), "label", {"metavar": "LABEL"}),
-    "model": SharedArgument(("--model",), "model", {"metavar": "MODEL", "default": None}),
-    "cwd": SharedArgument(("--cwd",), "cwd", {"metavar": "DIR", "default": None}),
-    "pane": SharedArgument(("--pane",), "pane", {"metavar": "ID"}, frozenset({"required"})),
-    "task_group": SharedArgument(
-        ("--task-group",),
-        "task_group",
-        {"metavar": "SLUG", "default": None},
-        frozenset({"metavar"}),
-    ),
-    "role": SharedArgument(
-        ("--role",),
-        "role",
-        {"metavar": "ROLE", "default": None},
-        frozenset({"metavar", "default"}),
-    ),
-    "auto_start": SharedArgument(
-        ("--auto-start",), "auto_start", {"metavar": "KIND", "default": None}
-    ),
-    "tab": SharedArgument(
-        ("--tab",),
-        "tab",
-        {"metavar": "NAME", "default": None},
-        frozenset({"metavar", "nargs", "const"}),
-    ),
-    "until": SharedArgument(
-        ("--until",),
-        "until",
-        {"action": "append", "metavar": "STATUS", "default": None},
-        frozenset({"default"}),
-    ),
-    "timeout": SharedArgument(
-        ("--timeout",),
-        "timeout",
-        {"type": int, "metavar": "MS", "default": None},
-        frozenset({"default"}),
-    ),
-    "settle": SharedArgument(
-        ("--settle",),
-        "settle",
-        {"type": float, "metavar": "SEC", "default": None},
-        frozenset({"default"}),
-    ),
-    "limit": SharedArgument(("--limit",), "limit", {"type": int, "metavar": "N", "default": 20}),
-}
+
+# Keyed by family, and itself read-only. Every entry preserves the dest, action, type,
+# metavar, nargs, required, and default that the declaring parsers already had at commit
+# 630eab12; the pin in tests/herdr/test_herdr_shared_arguments.py freezes that per script and
+# flag, subparsers included.
+SHARED_ARGUMENTS: Mapping[str, SharedArgument] = MappingProxyType(
+    {
+        "json": SharedArgument(("--json",), "json", {"action": "store_true"}),
+        "dry_run": SharedArgument(("--dry-run",), "dry_run", {"action": "store_true"}),
+        "verbose": SharedArgument(("--verbose",), "verbose", {"action": "store_true"}),
+        "wait": SharedArgument(("--wait",), "wait", {"action": "store_true"}),
+        "no_wait": SharedArgument(("--no-wait",), "no_wait", {"action": "store_true"}),
+        "no_caller_context": SharedArgument(
+            ("--no-caller-context",), "no_caller_context", {"action": "store_true"}
+        ),
+        "yaml": SharedArgument(("--yaml",), "yaml", {"action": "store_true"}),
+        "file": SharedArgument(("--file",), "file", {"metavar": "PATH"}),
+        "label": SharedArgument(("--label",), "label", {"metavar": "LABEL"}),
+        "model": SharedArgument(("--model",), "model", {"metavar": "MODEL", "default": None}),
+        "cwd": SharedArgument(("--cwd",), "cwd", {"metavar": "DIR", "default": None}),
+        "pane": SharedArgument(("--pane",), "pane", {"metavar": "ID"}, frozenset({"required"})),
+        "task_group": SharedArgument(
+            ("--task-group",),
+            "task_group",
+            {"metavar": "SLUG", "default": None},
+            frozenset({"metavar"}),
+        ),
+        "role": SharedArgument(
+            ("--role",),
+            "role",
+            {"metavar": "ROLE", "default": None},
+            frozenset({"metavar", "default"}),
+        ),
+        "auto_start": SharedArgument(
+            ("--auto-start",), "auto_start", {"metavar": "KIND", "default": None}
+        ),
+        "tab": SharedArgument(
+            ("--tab",),
+            "tab",
+            {"metavar": "NAME", "default": None},
+            frozenset({"metavar", "nargs", "const"}),
+        ),
+        "until": SharedArgument(
+            ("--until",),
+            "until",
+            {"action": "append", "metavar": "STATUS", "default": None},
+            frozenset({"default"}),
+        ),
+        "timeout": SharedArgument(
+            ("--timeout",),
+            "timeout",
+            {"type": int, "metavar": "MS", "default": None},
+            frozenset({"default"}),
+        ),
+        "settle": SharedArgument(
+            ("--settle",),
+            "settle",
+            {"type": float, "metavar": "SEC", "default": None},
+            frozenset({"default"}),
+        ),
+        "limit": SharedArgument(
+            ("--limit",), "limit", {"type": int, "metavar": "N", "default": 20}
+        ),
+    }
+)
 
 
 def add_shared_argument(
