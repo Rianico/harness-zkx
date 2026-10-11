@@ -45,11 +45,13 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     UsageError,
     add_shared_argument,
+    decode_payload,
     entries,
     entry_optional_text,
     find_herdr,
     guard,
     inspect_target_shell_pane,
+    read_payload_stream,
     require_herdr_env,
     run_herdr_checked,
 )
@@ -638,12 +640,19 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     if ticket_path is None:
         raise UsageError("pass --file PATH to dispatch a ticket")
     if ticket_path != "-":
-        try:
-            ticket = Path(ticket_path).read_text(encoding="utf-8")
-        except OSError as exc:
-            raise UsageError(
-                f"cannot read ticket file {ticket_path}: {exc.strerror or exc}"
-            ) from exc
+        # The shared payload seam, so the ticket refuses a NUL byte and invalid UTF-8 in the
+        # same sentence `herdr-prompt` and `herdr-reply` use. `tty_refusal` cannot fire from
+        # here: `-` skips this read entirely, because stdin is the payload stream that
+        # `herdr_prompt.read_payload` reads once and verbatim when it prompts the callee, and
+        # reading it here as well would consume it and starve that read.
+        ticket = decode_payload(
+            read_payload_stream(
+                ticket_path,
+                tty_refusal=(
+                    "no --file given and stdin is a terminal; pass --file PATH with the ticket"
+                ),
+            )
+        )
         validate_ticket(ticket)
 
     ticket_id = options.ticket_id or derive_ticket_id(ticket_path)

@@ -17,6 +17,7 @@ import herdr_bootstrap
 import herdr_cli
 import herdr_dispatch
 import herdr_prompt
+import herdr_reply
 import pytest
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
@@ -726,6 +727,45 @@ def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: P
     )
     done = stub.run("callee", "--file", str(ticket), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+
+# ── pin: the dispatch ticket payload goes through the shared reader ────────────────
+#
+# `herdr-dispatch` used to read its own ticket with `Path(...).read_text(encoding="utf-8")`.
+# A NUL byte passed that read (NUL is valid UTF-8) and was only refused later, by the
+# prompt reader's second read of the same file; invalid UTF-8 was not refused at all, it
+# died as a bare `UnicodeDecodeError` traceback (exit 1), never a usage refusal. The read
+# now goes through `herdr_cli.read_payload_stream` + `decode_payload`, so dispatch refuses
+# both payloads in the same sentence `herdr-prompt` and `herdr-reply` use. The pin compares
+# all three paths, so a dispatch-specific paraphrase fails here too, and so does dropping
+# the refusal from the shared reader.
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b"TICKET BODY\x00tail\n", b"TICKET BODY \xff\xfe bad\n"],
+    ids=["nul", "invalid-utf8"],
+)
+def test_dispatch_refuses_what_the_shared_payload_reader_refuses(
+    stub: StubHarness, tmp_path: Path, body: bytes
+) -> None:
+    ticket = tmp_path / "ticket.md"
+    _ = ticket.write_bytes(body)
+
+    with pytest.raises(herdr_cli.UsageError) as prompt_raised:
+        _ = herdr_prompt.read_payload(str(ticket))
+    with pytest.raises(herdr_cli.UsageError) as reply_raised:
+        _ = herdr_reply.read_payload(str(ticket), None)
+    prompt_sentence = str(prompt_raised.value)
+    reply_sentence = str(reply_raised.value)
+
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+
+    assert prompt_sentence == reply_sentence, "prompt and reply must keep one shared sentence"
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "Traceback" not in done.stderr
+    assert done.stderr.strip() == f"herdr-dispatch: {prompt_sentence}"
+    assert stub.prompts() == []
 
 
 def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
