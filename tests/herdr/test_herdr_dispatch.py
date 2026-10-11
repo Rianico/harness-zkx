@@ -138,12 +138,14 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     assert "Cwd:" not in text
     assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
-    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
+    assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
+    assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
+    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
     assert "\n\ndo this\n\n" in text
-    assert (
-        'uv run ~/.agents/skills/herdr/scripts/herdr_reply.py reviewer "<STATUS> <artifacts> <issues>"'
-        in text
-    )
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
+    assert reply, text
+    assert Path(reply.group(1)).is_file(), reply.group(1)
+    assert "~/.agents" not in text
 
 
 def test_dispatch_refuses_agent_kind(stub: StubHarness, tmp_path: Path) -> None:

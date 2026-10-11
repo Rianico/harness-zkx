@@ -768,14 +768,16 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
         "Protocol:",
         f"  {herdr_prompt.SKILL_NOTICE}",
     ]
-    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
+    assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
+    assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
+    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
     assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "\n\nhi\n\n" in text
-    assert (
-        'uv run ~/.agents/skills/herdr/scripts/herdr_reply.py reviewer "<STATUS> <artifacts> <issues>"'
-        in text
-    )
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
+    assert reply, text
+    assert Path(reply.group(1)).is_file(), reply.group(1)
+    assert "~/.agents" not in text
 
 
 def test_resolve_caller_extracts_kind_without_a_runtime_block(
@@ -898,8 +900,11 @@ def test_dry_run_renders_caller_payload_without_prompting(
         f"  {herdr_prompt.SKILL_NOTICE}",
     ]
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in argv[4]
-    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in argv[4]
-    assert "~/.agents/skills/herdr/scripts/herdr_reply.py reviewer" in argv[4]
+    assert "${herdr_skill}" in argv[4]
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', argv[4])
+    assert reply, argv[4]
+    assert Path(reply.group(1)).is_file(), reply.group(1)
+    assert "~/.agents" not in argv[4]
 
 
 def test_dry_run_opt_out_renders_verbatim(stub: StubHarness, tmp_path: Path) -> None:

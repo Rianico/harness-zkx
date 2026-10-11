@@ -423,13 +423,22 @@ def utc_stamp() -> str:
     return f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
 
 
-SKILL_NOTICE = "Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI"
+SKILL_NOTICE = (
+    "Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all "
+    "coordination, never the bare herdr CLI"
+)
+
+# The reply contract is an executable command, so it names this lane's own `herdr_reply.py` as an
+# absolute path resolved from this module's location: the receiving agent runs it from any cwd, and
+# a placeholder would render a command that cannot run. The `~/.agents/skills/herdr` symlink is
+# deliberately not used — it can resolve into another worktree whose `herdr_*` code may be older.
+REPLY_HELPER = Path(__file__).resolve().parent / "herdr_reply.py"
 
 
 def render_reply_contract(sender: CallerContext) -> str:
     """Render the completion-reply contract; without an agent name no target is addressable."""
     if sender.agent:
-        contract = f'  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py {sender.agent} "<STATUS> <artifacts> <issues>"'
+        contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
         return (
             "On completion, reply to the sender in one message using the herdr helper script:\n"
             f"{contract}"
