@@ -195,7 +195,7 @@ def test_every_documented_pointer_resolves(report: PointerReport) -> None:
 
 
 def test_resolved_pointer_count_stays_above_the_floor(report: PointerReport) -> None:
-    """Guard against a vacuous pass: the docs cite 136 pointers over 34 distinct targets."""
+    """Guard against a vacuous pass: the docs cite 146 pointers over 37 distinct targets."""
     assert len(report.resolved) >= 130, "resolved pointers dropped below the observed floor"
     assert len(report.resolved_tokens) >= 30, "distinct resolved pointers dropped below the floor"
 
@@ -220,10 +220,17 @@ def test_allow_list_holds_only_exact_file_tokens() -> None:
         (".lane/lease.yaml", "store"),
         (".lane/tasks.yaml", "store"),
         ("herdr_reply.py", None),
+        ("${herdr_skill}/scripts/herdr_reply.py", None),
     ],
 )
 def test_pointer_policy_classifies_tokens(token: str, expected: str | None) -> None:
-    """The exclusion rules stay narrow: each shape is classified, everything else must resolve."""
+    """The exclusion rules stay narrow: each shape is classified, everything else must resolve.
+
+    Mutant killed: re-add `if token.startswith("${herdr_skill}/"): return "placeholder"` to
+    `_exclusion_rule` — the `${herdr_skill}/`-prefixed helper then classifies as a placeholder
+    instead of None, so the two documented pointers at `lane-coordination.md:220` and `:245`
+    could go back to being silently unchecked.
+    """
     assert _exclusion_rule(token) == expected
 
 

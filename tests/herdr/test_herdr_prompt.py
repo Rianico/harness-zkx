@@ -12,6 +12,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import herdr_bootstrap
 import herdr_cli
 import herdr_prompt
 import pytest
@@ -1251,4 +1252,114 @@ def test_wait_timeout_advice_drops_herdr_wait_for_a_revision_static_kind(
     assert done.returncode == herdr_prompt.EXIT_WAIT_TIMEOUT
     assert "Yield turn and await reply callback" in done.stderr
     assert "herdr-agy-bridge" in done.stderr
+    assert "herdr-wait" not in done.stderr
+
+
+# ── #238: the revision-static remedy is derived from the kind, not a constant ──────
+
+# Two revision-static kinds, each with its OWN bridge. The remedy must read the target kind's
+# contract, so a second revision-static kind is never sent to the agy bridge.
+_TWO_STATIC_KIND_CONFIG = """\
+agy:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+  lifecycle_bridge: herdr-agy-bridge
+maki:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+  lifecycle_bridge: herdr-maki-bridge
+"""
+
+_STATIC_KIND_CASES = (
+    ("agy", "herdr-agy-bridge", "herdr-maki-bridge"),
+    ("maki", "herdr-maki-bridge", "herdr-agy-bridge"),
+)
+
+
+def _two_static_kind_config(tmp_path: Path) -> Path:
+    """Write the fixture kinds.yaml and return its path for `herdr_bootstrap.KINDS_CONFIG`."""
+    path = tmp_path / "kinds.yaml"
+    _ = path.write_text(_TWO_STATIC_KIND_CONFIG, encoding="utf-8")
+    return path
+
+
+def _static_kind_state(kind: str, **extra: object) -> dict[str, object]:
+    """DEFAULT_STATE with the reviewer running as `kind`: a revision that never moves."""
+    return {
+        **DEFAULT_STATE,
+        "agents": [{"pane_id": "w9:p1", "name": "reviewer", "agent": kind, "agent_status": "idle"}],
+        "agent_get_seq": {"reviewer": ["idle"]},
+        "agent_get_rev_seq": {"reviewer": ["r0"] * 40},
+        **extra,
+    }
+
+
+@pytest.mark.parametrize(("kind", "own_bridge", "other_bridge"), _STATIC_KIND_CASES)
+def test_unconfirmed_warning_remedy_names_the_kinds_own_bridge(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    kind: str,
+    own_bridge: str,
+    other_bridge: str,
+) -> None:
+    """Pin 5 (#238): the unconfirmed-acceptance remedy is derived from the target kind, so a
+    second revision-static kind is pointed at its own bridge, never at the agy bridge.
+
+    Mutant killed: hardcode `herdr-agy-bridge` in the remedy again — the `maki` case then names
+    the agy bridge and fails on `other_bridge not in err`.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _two_static_kind_config(tmp_path))
+
+    def no_sleep(seconds: float) -> None:
+        """Swallow the handshake tick; this test only inspects the warning text."""
+
+    monkeypatch.setattr(herdr_prompt, "_sleep", no_sleep)
+
+    stub.write_state(_static_kind_state(kind))
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    err = capsys.readouterr().err
+    assert "acceptance was not confirmed" in err
+    assert own_bridge in err, f"the {kind} bridge must be named for its own kind"
+    assert other_bridge not in err, "a kind must never be sent to another kind's bridge"
+    assert "herdr-wait" not in err
+
+
+@pytest.mark.parametrize(("kind", "own_bridge", "other_bridge"), _STATIC_KIND_CASES)
+def test_wait_timeout_remedy_names_the_kinds_own_bridge(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    own_bridge: str,
+    other_bridge: str,
+) -> None:
+    """Pin 6 (#238): the wait-timeout advice derives the bridge from the target kind too, so
+    the second call site cannot keep naming one kind's bridge while the first is generalised.
+
+    Mutant killed: hardcode `herdr-agy-bridge` at the timeout site — the `maki` case then names
+    the agy bridge and fails on `other_bridge not in done.stderr`.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _two_static_kind_config(tmp_path))
+    error = {"code": "timeout", "message": "wait timed out after 120000ms"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--wait",
+        "--timeout",
+        "120000",
+        state=_static_kind_state(kind, prompt_error=error),
+    )
+
+    assert done.returncode == herdr_prompt.EXIT_WAIT_TIMEOUT
+    assert own_bridge in done.stderr, f"the {kind} bridge must be named for its own kind"
+    assert other_bridge not in done.stderr, "a kind must never be sent to another kind's bridge"
     assert "herdr-wait" not in done.stderr

@@ -246,7 +246,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **oxfmt:** add metadata headers and align with ASD-STE100 (#181)
 * **oxlint:** add metadata headers and align with ASD-STE100 (#181)
 * **jinja:** tighten prose to ASD-STE100 guidelines (#181)
-* **herdr:** derive the reply-helper path once in `herdr_cli.reply_helper()` — `herdr-bootstrap`, `herdr-prompt`, and `herdr-reply` each hand-rolled the same expression, so a copy could silently name another worktree's helper; every rendered string stays byte-identical — and the doc-contract test now resolves `${herdr_skill}`-prefixed pointers against the skill directory like `$SKILL_DIR` ones instead of excluding them (#241)
+* **herdr:** derive the reply-helper path once in `herdr_cli.reply_helper()` — `herdr-bootstrap`, `herdr-prompt`, and `herdr-reply` each hand-rolled the same expression, so a copy could silently name another worktree's helper; every rendered string stays byte-identical — and the doc-contract test now resolves `${herdr_skill}`-prefixed pointers against the skill directory like `$SKILL_DIR` ones instead of excluding them — the dispatch row of the Key Options table now documents its `--settle`, and the revision-static remedy is derived from the kind's own `lifecycle_bridge` in `references/kinds.yaml` instead of naming one kind's bridge (#241)
 
 ### Miscellaneous Chores
 

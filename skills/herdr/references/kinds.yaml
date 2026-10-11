@@ -20,6 +20,13 @@
 #   re-check must not be advised there. Optional; a kind
 #   absent or leaving it out defaults to true (never blocked).
 #   Verified false: agy (weak recognition, #238).
+# lifecycle_bridge: the bridge script that carries this kind's
+#   lifecycle signals, named when advice must point at the
+#   status surface that is trustworthy where the raw state feed
+#   is not. Optional; a kind that declares none is advised in
+#   bridge-neutral terms, so no kind is told to look at another
+#   kind's bridge.
+#   Set: agy (herdr-agy-bridge).
 # Kinds absent here fall back to `file`, no trust flags, and
 # revision_moves true (forward-compatible, never blocked).
 pi:
@@ -44,3 +51,4 @@ agy:
   trust_flags: []
   invariant: file
   revision_moves: false
+  lifecycle_bridge: herdr-agy-bridge

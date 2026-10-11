@@ -8,8 +8,12 @@ An `is_file()` check cannot catch the cross-worktree hazard: the foreign helper 
 (the `~/.agents/skills/herdr` symlink resolves into the `main` worktree, whose code is older).
 These tests assert the *relationship* instead — the helper is a sibling of the module under
 test — and they assert the relationship against the text each module actually renders. A
-`tokenize`-based scan closes the seam's last gap: no module outside `herdr_cli` may name the
-helper at all, so re-hand-rolling the derivation cannot pass unnoticed.
+`tokenize`-based scan closes part of the seam's last gap: no module outside `herdr_cli` may
+hold the helper's basename as one string literal, so a re-hand-rolled derivation that spells
+the path in a single literal cannot pass unnoticed. The scan is literal-shaped, not
+derivation-shaped: a literal split across tokens (an f-string part, or concatenated fragments)
+is outside its reach, and correctness there is held by the seam-equality and rendered-text
+tests above.
 """
 
 from __future__ import annotations

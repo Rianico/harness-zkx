@@ -740,6 +740,34 @@ def revision_can_move(kind: str | None) -> bool:
         return True
 
 
+def kind_lifecycle_bridge(kind: str | None) -> str | None:
+    """The bridge script `references/kinds.yaml` declares for this kind, if any (#238).
+
+    The bridge is a per-kind fact, not a constant here, so a second revision-static kind is
+    pointed at its own bridge and a kind that declares none is not sent to another kind's. An
+    unresolved kind, or a config this process cannot read, reads as no bridge, keeping the
+    advice bridge-neutral rather than guessing.
+    """
+    if not kind:
+        return None
+    try:
+        return load_kind_entry(kind).lifecycle_bridge
+    except UsageError:
+        return None
+
+
+def revision_static_surface(kind: str | None) -> str:
+    """The status surface advice may trust for a kind whose revision cannot move (#238).
+
+    Derived from the kind's own contract: a kind that declares a `lifecycle_bridge` is named
+    with that bridge, and a kind that declares none gets phrasing that names no bridge at all.
+    """
+    bridge = kind_lifecycle_bridge(kind)
+    if bridge:
+        return f"the {kind} bridge's status title ({bridge})"
+    return "the kind's own status surface"
+
+
 def agent_readiness(
     herdr: str, target: str, env: Mapping[str, str]
 ) -> tuple[bool, str | None, str | None]:
@@ -908,10 +936,11 @@ def prompt_one(
             # A revision-0 kind (#238): its revision never moves, so a wanted state is
             # unsatisfiable and re-reading the state feed can confirm nothing. Name the
             # signal that is trustworthy there instead of the one that structurally cannot be.
+            # Which signal that is comes from the kind's own contract, never from a constant.
             remedy = (
-                "confirm through the agy bridge's status title (herdr-agy-bridge), which is "
-                "trustworthy where the raw state feed is not, and await the reply callback; "
-                "a state re-check cannot confirm delivery for this kind"
+                f"confirm through {revision_static_surface(kind)}, which is trustworthy "
+                "where the raw state feed is not, and await the reply callback; a state "
+                "re-check cannot confirm delivery for this kind"
             )
         print(
             f"herdr-prompt: warning: acceptance was not confirmed within "
@@ -1021,8 +1050,12 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
         if static:
             advice += (
                 f"; {', '.join(static)} cannot be re-checked that way — the kind's revision "
-                "never moves, so confirm through the agy bridge's status title "
-                "(herdr-agy-bridge) and await the reply callback instead"
+                "never moves, so "
+                + "; ".join(
+                    f"confirm through {revision_static_surface(kinds[target])} and await the "
+                    "reply callback instead"
+                    for target in static
+                )
             )
         raise WaitTimeout(f"prompt delivered to {names} but {hint}; {advice}")
     return EXIT_OK

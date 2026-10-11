@@ -747,6 +747,9 @@ def test_kinds_config_loads_the_verified_kinds() -> None:
     assert table["pi"] == herdr_bootstrap.KindEntry(("--approve",), True)
     assert table["claude"] == herdr_bootstrap.KindEntry(("--dangerously-skip-permissions",), True)
     assert table["codex"] == herdr_bootstrap.KindEntry((), False)
+    # `lifecycle_bridge` is the kind's own bridge, named by the revision-static remedy (#238).
+    assert table["agy"] == herdr_bootstrap.KindEntry((), False, False, "herdr-agy-bridge")
+    assert table["pi"].lifecycle_bridge is None
 
 
 def test_load_kind_entry_falls_back_for_unknown_kinds() -> None:
@@ -761,6 +764,8 @@ def test_load_kind_entry_falls_back_for_unknown_kinds() -> None:
         "pi:\n  trust_flags: []\n  invariant: everywhere\n",
         "pi:\n  trust_flags: []\n  model: x\n  invariant: file\n",
         "pi:\n trust_flags: []\n  invariant: file\n",
+        "pi:\n  trust_flags: []\n  invariant: file\n  lifecycle_bridge: two words\n",
+        "pi:\n  trust_flags: []\n  invariant: file\n  lifecycle_bridge:\n",
     ],
 )
 def test_kinds_config_rejects_bad_shapes(text: str) -> None:

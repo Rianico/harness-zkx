@@ -124,11 +124,17 @@ GIT_LOCATION_OVERRIDE_VARS: tuple[str, ...] = ("GIT_DIR", "GIT_WORK_TREE", "GIT_
 
 @dataclass(frozen=True)
 class KindEntry:
-    """One kind's startup contract: trust flags, the invariant surface, revision behaviour."""
+    """One kind's startup contract: trust flags, the invariant surface, revision behaviour.
+
+    `lifecycle_bridge` names the bridge script that carries this kind's lifecycle signals,
+    used by advice that must point at a trustworthy status surface; a kind that declares
+    none is advised in bridge-neutral terms rather than another kind's bridge (#238).
+    """
 
     trust_flags: tuple[str, ...]
     inline_invariant: bool
     revision_moves: bool = True
+    lifecycle_bridge: str | None = None
 
 
 FALLBACK_ENTRY = KindEntry(trust_flags=(), inline_invariant=False)
@@ -216,6 +222,10 @@ def parse_kinds_config(text: str) -> dict[str, KindEntry]:
                 if cleaned not in ("true", "false"):
                     raise ValueError(f"line {lineno}: revision_moves must be true or false")
                 raw[current][key] = cleaned == "true"
+            elif key == "lifecycle_bridge":
+                if not cleaned or any(character.isspace() for character in cleaned):
+                    raise ValueError(f"line {lineno}: lifecycle_bridge must be a bare script name")
+                raw[current][key] = cleaned
             else:
                 raise ValueError(f"line {lineno}: unknown key {key!r}")
     entries: dict[str, KindEntry] = {}
@@ -223,12 +233,14 @@ def parse_kinds_config(text: str) -> dict[str, KindEntry]:
         flags = item.get("trust_flags")
         invariant = item.get("invariant")
         moves = item.get("revision_moves", True)
+        bridge = item.get("lifecycle_bridge")
         if not isinstance(flags, tuple) or invariant not in ("inline", "file"):
             raise ValueError(f"kind {kind!r}: needs trust_flags [...] and invariant inline|file")
         entries[kind] = KindEntry(
             trust_flags=flags,
             inline_invariant=invariant == "inline",
             revision_moves=bool(moves),
+            lifecycle_bridge=bridge if isinstance(bridge, str) else None,
         )
     return entries
 
