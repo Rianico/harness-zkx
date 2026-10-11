@@ -315,10 +315,12 @@ def test_explicit_ticket_flag_binds_a_reply_the_lease_cannot(
 def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """#246 D1.2 negative: an explicit name that is not the sender's open task never binds.
+    """#246 D1.2 negative / D1.5 F2: an explicit name that is not the sender's open task never binds.
 
     The flag names another sender's task while this sender holds its own live lease; the
-    reply is recorded unlinked with one warning, and neither task is advanced.
+    reply is recorded unlinked with one warning, and neither task is advanced. The warning is
+    the REFUSED severity — the flag named something the sender does not hold open — not the
+    quiet "nothing to link" and not the "unreadable" wording.
     """
     foreign = "#999#d12-foreign"
     mine = "#246#d12-mine"
@@ -344,7 +346,11 @@ def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
     assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] is None
-    assert "task linkage" in done.stderr
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
+    assert herdr_reply.UNLINKED_NOTHING_MARKER not in warnings[0], warnings[0]
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER not in warnings[0], warnings[0]
     foreign_state = herdr_lease.get_task(foreign, base_dir=tmp_path)
     mine_state = herdr_lease.get_task(mine, base_dir=tmp_path)
     assert foreign_state is not None and foreign_state["status"] == "dispatched"
@@ -552,6 +558,86 @@ def test_unlinked_lines_never_claim_a_record_at_the_resolver(
     assert herdr_reply.NOT_RECORDED_CLAUSE not in warning, warning
 
 
+def test_the_flag_path_markers_are_pinned_at_the_resolver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#246 D1.5 F2: every `_linkage_from_ticket`/`_linkage_from_record` outcome names its marker.
+
+    The five refusal sites in those two functions and the "no sender resolved"/"could not be
+    resolved" sites carried no marker assertion, so mutating `UNLINKED_REFUSED_MARKER` to
+    `UNLINKED_NOTHING_MARKER` at all five left every pin green. The flag paths are exercised
+    here at the resolver, where the end-to-end unreachable no-sender branch can still be named.
+    """
+    store = tmp_path / "store"
+    store.mkdir()
+    env = {"HERDR_LANE_DIR": str(store)}
+
+    # No sender resolved: the flag paths answer with the unreadable severity, never a refusal.
+    _, ticket_warning = herdr_reply._linkage_from_ticket("#246#any", sender=None, env=env)
+    assert ticket_warning is not None
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in ticket_warning, ticket_warning
+    _, record_warning = herdr_reply._linkage_from_record("some-record", sender=None, env=env)
+    assert record_warning is not None
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in record_warning, record_warning
+
+    # A `--ticket` name that matches no open task of the sender: refused.
+    _, warning = herdr_reply._linkage_from_ticket("#246#no-such-task", sender="reviewer", env=env)
+    assert warning is not None
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warning, warning
+    assert herdr_reply.UNLINKED_NOTHING_MARKER not in warning, warning
+
+    # An `--in-reply-to` id the store does not hold: refused.
+    _, warning = herdr_reply._linkage_from_record("no-such-record", sender="reviewer", env=env)
+    assert warning is not None
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warning, warning
+
+    # An `--in-reply-to` record that carries no task linkage: refused.
+    def _reply_no_linkage(
+        record_id: str, *, env: Mapping[str, str] | None = None
+    ) -> dict[str, Any]:
+        _ = record_id, env
+        return {"sender": "reviewer", "task_id": None}
+
+    def _no_task(task_id: str, *, env: Mapping[str, str] | None = None) -> None:
+        _ = task_id, env
+
+    monkeypatch.setattr(herdr_reply, "get_reply", _reply_no_linkage)
+    monkeypatch.setattr(herdr_reply, "get_task", _no_task)
+    _, warning = herdr_reply._linkage_from_record("rec-a", sender="reviewer", env=env)
+    assert warning is not None
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warning, warning
+
+    # An `--in-reply-to` record whose task is no longer open: refused.
+    def _reply_closed(record_id: str, *, env: Mapping[str, str] | None = None) -> dict[str, Any]:
+        _ = record_id, env
+        return {"sender": "reviewer", "task_id": "#246#closed"}
+
+    def _closed_task(task_id: str, *, env: Mapping[str, str] | None = None) -> dict[str, Any]:
+        _ = task_id, env
+        return {"assignee": "reviewer", "status": "completed"}
+
+    monkeypatch.setattr(herdr_reply, "get_reply", _reply_closed)
+    monkeypatch.setattr(herdr_reply, "get_task", _closed_task)
+    _, warning = herdr_reply._linkage_from_record("rec-b", sender="reviewer", env=env)
+    assert warning is not None
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warning, warning
+
+    # A store the flag path cannot read: the unreadable severity.
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("store boom")
+
+    monkeypatch.setattr(herdr_reply, "get_reply", _boom)
+    _, warning = herdr_reply._linkage_from_record("rec-c", sender="reviewer", env=env)
+    assert warning is not None
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warning, warning
+
+    monkeypatch.undo()
+    monkeypatch.setattr(herdr_reply, "list_tasks", _boom)
+    _, warning = herdr_reply._linkage_from_ticket("#246#any", sender="reviewer", env=env)
+    assert warning is not None
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warning, warning
+
+
 def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
     stub: StubHarness, tmp_path: Path
 ) -> None:
@@ -591,16 +677,22 @@ def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
 def test_the_inferred_sole_open_task_linkage_warns_and_names_the_bound_task(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """#246 D1.4 pin 1: an INFERRED linkage is never silent, and the line names the task.
+    """#246 D1.4 pin 1 / D1.5 F1: an INFERRED linkage is never silent, names the task, and
+    carries NO record tail — it is a bound reply, not an unlinked one.
 
     The sender holds exactly one open task and no lease, so the linkage can only come from the
     count of its open tasks — the one step that cannot see which ticket the payload is about.
     The reply still binds and still advances the task (D1.2 pin 1 depends on that), but the
     caller now sees one warning line naming the task it was bound to and the flag that would
-    override it.
+    override it. That line is a WHOLE-LINE claim: it must end with neither record clause,
+    because the reply WAS bound — the `stored is not None` predicate the caller uses for an
+    unlinked reply does not apply to a linked one.
 
-    Mutant killed: drop the warning from the `len(open_tasks) == 1` branch and the count, the
-    loud marker, and the named id all vanish.
+    Mutants killed: drop the warning from the `len(open_tasks) == 1` branch and the count, the
+    loud marker, and the named id all vanish; restore the unconditional record clause and the
+    line ends `...recording the reply unlinked`, labelling a bound reply unlinked; drop the
+    clause on UNLINKED replies too and the sibling unlinked pins lose their tails (pinned in
+    both directions).
     """
     task_id = "#246#d14-inferred"
     _ = herdr_lease.acquire_lease(
@@ -624,6 +716,8 @@ def test_the_inferred_sole_open_task_linkage_warns_and_names_the_bound_task(
     assert task_id in warnings[0], warnings[0]
     assert "sole open task" in warnings[0], warnings[0]
     assert "--ticket" in warnings[0], warnings[0]
+    assert not warnings[0].endswith(herdr_reply.RECORDED_CLAUSE), warnings[0]
+    assert not warnings[0].endswith(herdr_reply.NOT_RECORDED_CLAUSE), warnings[0]
     advanced = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert advanced is not None and advanced["status"] == "completed"
 
@@ -665,6 +759,8 @@ def test_a_reply_about_another_ticket_bound_to_the_sole_open_task_warns(
     warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
     assert len(warnings) == 1, done.stderr
     assert task_id in warnings[0], warnings[0]
+    assert not warnings[0].endswith(herdr_reply.RECORDED_CLAUSE), warnings[0]
+    assert not warnings[0].endswith(herdr_reply.NOT_RECORDED_CLAUSE), warnings[0]
     bound = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert bound is not None and bound["status"] == "blocked"
 
@@ -680,6 +776,10 @@ def test_explicit_linkage_bindings_never_warn_about_inference(
     reply leaves the round running).
 
     Mutant killed: make the explicit paths warn and both runs report a linkage line.
+
+    F7: the negative is scoped to linkage lines rather than a bare empty stderr, because other
+    legitimate writers exist on that stream (`--verbose`'s recovery diagnostic, the lease-trouble
+    line); a future benign line must not force the honest silence assertion to be deleted.
     """
     flag_task = "#246#d14-explicit-flag"
     _ = herdr_lease.acquire_lease(
@@ -696,7 +796,9 @@ def test_explicit_linkage_bindings_never_warn_about_inference(
     )
     assert flagged.returncode == herdr_cli.EXIT_OK, flagged.stderr
     assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] == flag_task
-    assert flagged.stderr == "", flagged.stderr
+    assert [line for line in flagged.stderr.splitlines() if "task linkage" in line] == [], (
+        flagged.stderr
+    )
 
     record_store = tmp_path / "reply-to"
     record_store.mkdir()
@@ -729,7 +831,9 @@ def test_explicit_linkage_bindings_never_warn_about_inference(
     )
     assert rebound.returncode == herdr_cli.EXIT_OK, rebound.stderr
     assert herdr_lease.list_replies(base_dir=record_store)[-1]["task_id"] == record_task
-    assert rebound.stderr == "", rebound.stderr
+    assert [line for line in rebound.stderr.splitlines() if "task linkage" in line] == [], (
+        rebound.stderr
+    )
 
 
 def test_the_open_and_terminal_status_partition_covers_every_canonical_status() -> None:
@@ -783,6 +887,44 @@ def test_a_corrupt_store_reads_as_unreadable_not_as_a_missing_open_task(
     assert "no open task" not in warnings[0], warnings[0]
     assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warnings[0], warnings[0]
     assert warnings[0].endswith(herdr_reply.RECORDED_CLAUSE), warnings[0]
+
+
+@pytest.mark.parametrize(
+    "tasks_yaml",
+    [
+        "tasks:\n  - task_id: '#246#d15r-broken'\n    assignee: reviewer\n    status: dispatched\n",
+        "tasks:\n  t1: not-a-mapping\n",
+    ],
+)
+def test_a_broken_inner_store_shape_reads_as_unreadable_not_as_no_open_task(
+    stub: StubHarness, tmp_path: Path, tasks_yaml: str
+) -> None:
+    """#246 D1.5 F5: a store whose top level parses but whose rows do not reads as unreadable.
+
+    `state_is_readable` used to check only the top level, so `tasks:` written as a sequence (or
+    a task value that is not a mapping) parsed as a dict and read as readable-as-empty while
+    `_load_state` silently dropped every row. The reply then claimed the sender held no open
+    task while the file named one. The probe now requires the shape `_load_state` consumes, so
+    the warning says the store could not be read instead — one level deeper than D1.4/F3.
+    """
+    task_id = "#246#d15r-broken"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=task_id
+    )
+    tasks_file = herdr_lease.resolve_tasks_file(base_dir=tmp_path)
+    _ = tasks_file.write_text("active_leases: {}\n" + tasks_yaml, encoding="utf-8")
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] is None
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warnings[0], warnings[0]
+    assert "holds no open task" not in warnings[0], warnings[0]
 
 
 def test_refuses_without_herdr_env(stub: StubHarness) -> None:

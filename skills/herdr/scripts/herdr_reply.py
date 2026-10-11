@@ -18,11 +18,13 @@ lease, else the sender's sole open task. Zero or several open tasks — or an ex
 sender does not hold open — records the reply unlinked with one warning line, never a guess,
 so a second reply for the same ticket still advances the task instead of losing the linkage
 when the first reply consumes the lease. Every unlinked line leads with a stable severity
-marker (#246 D1.5): "open work refused" when there was open work the step would not guess at,
-"nothing to link" when there was nothing to link, and "sender or store unreadable" when there
-was no answer at all (no sender resolved, or the anchor/store could not be read). The warning
+marker (#246 D1.5): "open work refused" when the step refused to bind what it was told (open
+work it would not guess at, or a flag that names no open task of the sender), "nothing to
+link" when there was nothing to link, and "sender or store unreadable" when there was no
+answer at all (no sender resolved, or the anchor/store could not be read). An UNLINKED warning
 claims a record only when one was written — that clause is appended after the store answers,
-so it can never contradict the `NOT RECORDED` pointer delivered in the same run. The
+so it can never contradict the `NOT RECORDED` pointer delivered in the same run; the linked
+line names a binding that was made, so it carries no record clause at all. The
 sole-open-task step is the one INFERRED binding, so it warns even when it succeeds (#246
 D1.4): it counts candidates and cannot read which ticket the payload is about, so the line
 names the task it chose and the `--ticket` flag that overrides it. The explicit steps stay
@@ -1172,19 +1174,21 @@ def _is_open_task(task: Mapping[str, Any]) -> bool:
 # ── unlinked-warning severity markers (#246 D1.5 R2) ─────────────────────────────────
 
 # One STABLE leading marker per severity, so a caller or a pin keys on the class instead of on
-# the incident prose. The first two are the D1.3 severities — the resolver had open work it
-# refused to guess at, or there was genuinely nothing to link. The third is the wording for an
-# answer the resolver could not obtain at all (no sender resolved, or the anchor/store could not
-# be read), which is neither a refusal nor an empty answer. Each of the two store-dependent
-# branches below may or may not record, so the record claim is NOT part of a marker.
+# the incident prose. The first two are the D1.3 severities — the step refused to bind what it
+# was told (open work it would not guess at, or a flag naming no open task of the sender), or
+# there was genuinely nothing to link. The third is the wording for an answer the resolver could
+# not obtain at all (no sender resolved, or the anchor/store could not be read), which is
+# neither a refusal nor an empty answer. Each of the two store-dependent branches below may or
+# may not record, so the record claim is NOT part of a marker.
 UNLINKED_REFUSED_MARKER = "unlinked reply (open work refused)"
 UNLINKED_NOTHING_MARKER = "unlinked reply (nothing to link)"
 UNLINKED_UNREADABLE_MARKER = "unlinked reply (sender or store unreadable)"
 
-# The caller-side tail of an unlinked warning (#246 D1.5 F1): the resolver cannot know whether
+# The caller-side tail of an UNLINKED warning (#246 D1.5 F1): the resolver cannot know whether
 # the store will take the record, so the claim is emitted only after `persist_reply` answers,
 # and the opposite outcome is stated just as plainly when no record was written. A warning must
-# never contradict the `NOT RECORDED` pointer the caller is about to read.
+# never contradict the `NOT RECORDED` pointer the caller is about to read. A LINKED warning
+# carries no tail: its reply was bound to a task, which is not an unlinked outcome at all.
 RECORDED_CLAUSE = "; recording the reply unlinked"
 NOT_RECORDED_CLAUSE = "; no store record was written"
 
@@ -1333,13 +1337,15 @@ def resolve_task_linkage(
 
     Every unlinked answer now carries a reason (#246 D1.3), so a recorded reply with
     `task_id: null` is never silent. The reason states the severity, and the line leads with a
-    stable marker for that severity (#246 D1.5): "open work refused" when the sender had open
-    work this step would not guess at — several open tasks, a flag naming another task, or a
-    task record whose id cannot be named — "nothing to link" when there was nothing to link,
-    and "sender or store unreadable" when there was no answer at all (no sender resolved, or
-    the anchor/store could not be read). The last of those is the third wording, distinct from
-    both a refusal and an empty answer. The warning never claims a record here: whether one was
-    written depends on the store, so the caller appends that clause after the store answers.
+    stable marker for that severity (#246 D1.5): "open work refused" when the step refused to
+    bind what it was told — open work it would not guess at (several open tasks, or a task
+    record whose id cannot be named), or a flag that names no open task of the sender —
+    "nothing to link" when there was nothing to link, and "sender or store unreadable" when
+    there was no answer at all (no sender resolved, or the anchor/store could not be read).
+    The last of those is the third wording, distinct from both a refusal and an empty answer.
+    The warning never claims a record here: whether one was written depends on the store, so
+    the caller appends that clause after the store answers — and only for an UNLINKED warning,
+    since the inferred (linked) line carries no record clause at all.
 
     The inferred step also warns when it SUCCEEDS (#246 D1.4): it counts candidates, it cannot
     read which ticket the payload is about, so its binding is reported with the task id it
@@ -1355,6 +1361,11 @@ def resolve_task_linkage(
         if isinstance(lease_task, str):
             return lease_task, None
     if sender is None:
+        # Unreachable end to end, and named here only: `resolve_current_agent` finds no sender
+        # when `pane current` yields no pane id, and the CHECKED `pane current --current` that
+        # `herdr_prompt.resolve_caller` runs later aborts at RC 1 before this warning can print.
+        # The shared stub CAN fail `pane current` (omit `state["current"]`, or set it to `""`),
+        # so that is not the reason this branch is unreachable — the checked read above it is.
         return None, _unlinked(
             UNLINKED_UNREADABLE_MARKER, "no sender resolved, so no task could be attributed"
         )
@@ -1643,7 +1654,14 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             # same branch records or not depending on whether the store resolves at all. Claim a
             # record only when one was written, and say plainly when none was, so the warning
             # never contradicts the NOT RECORDED pointer in the prompt delivered in this run.
-            clause = RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE
+            # Only an UNLINKED warning states a recording outcome: a LINKED one (the inferred
+            # sole-open-task binding) names a task the reply was bound and advanced to, so a
+            # record clause there would label a bound reply "unlinked".
+            clause = (
+                (RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE)
+                if linked_task_id is None
+                else ""
+            )
             print(f"herdr-reply: {linkage_warning}{clause}", file=sys.stderr)
         pointer = pointer_block(shape=shape, evidence=evidence, stored=stored, reason=reason)
         # The pointer rides between the envelope and the body; the body stays last.

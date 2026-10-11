@@ -207,13 +207,18 @@ def state_is_readable(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> bool:
-    """Whether the resolved state file is absent, or present and parseable into a mapping.
+    """Whether the resolved state file is absent, or shaped as `_load_state` actually reads.
 
     `_load_state` deliberately converts a missing or corrupt file into empty state so every
     reader degrades instead of raising, which leaves a CORRUPT store looking exactly like an
     empty one. A caller that has to say which it is (the reply-linkage warning, #246 D1.4/F3)
     asks here: an absent file is readable-as-empty — there is genuinely nothing to link — while
-    a file that exists but does not parse is not readable at all.
+    a file that exists but does not parse is not readable at all. The probe also requires the
+    INNER shape `_load_state` consumes: a top-level mapping whose `tasks`/`active_leases`
+    containers, when present, are mappings of mapping rows. A store whose top level parses but
+    whose rows are not mappings is dropped to empty by `_load_state`, so without this it read
+    as readable-as-empty and a caller claimed the sender held no open task while the file
+    named one (#246 D1.5 F5).
     """
     path = resolve_state_read_path(base_dir, env=env)
     if not path.is_file():
@@ -223,7 +228,17 @@ def state_is_readable(
         data: Any = json.loads(raw) if path.suffix == ".json" else yaml.safe_load(raw)
     except Exception:
         return False
-    return isinstance(data, dict)
+    if not isinstance(data, dict):
+        return False
+    for key in ("tasks", "active_leases"):
+        container = data.get(key)
+        if container is None:
+            continue
+        if not isinstance(container, dict):
+            return False
+        if not all(isinstance(row, dict) for row in container.values()):
+            return False
+    return True
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
