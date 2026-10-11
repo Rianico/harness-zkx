@@ -3,7 +3,8 @@
 Covers file presence, mode bits, the gate command ordering contract, the
 graded-root fix (check.sh grades its own repo, not the caller's git root),
 stubbed-toolchain proofs that every gate runs and a failed gate stops the run,
-and the hook's `HARNESS_CHECK_SKIP_TESTS=1` escape.
+the hook's `HARNESS_CHECK_SKIP_TESTS=1` escape, and the `.config/wt.toml`
+pre-merge gate's delegation to check.sh (#247).
 
 Every test either passes `--skip-tests` (directly or via the env escape) or runs
 the script against a stubbed toolchain, so no test can launch a nested
@@ -21,9 +22,11 @@ from __future__ import annotations
 
 import functools
 import os
+import shlex
 import shutil
 import stat
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -36,6 +39,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 HARNESS_ROOT = os.path.realpath(REPO_ROOT)
 CHECK_SCRIPT = REPO_ROOT / "scripts" / "check.sh"
 HOOK = REPO_ROOT / ".githooks" / "pre-commit"
+# Project Worktrunk config: the `wt` pre-merge hook `gate` is the merge path's gate.
+WT_CONFIG = REPO_ROOT / ".config" / "wt.toml"
 
 GATE_COMMANDS = [
     "uv run ruff check .",
@@ -333,6 +338,42 @@ def test_unknown_flag_exits_two_with_usage() -> None:
     result = _run("bash", "scripts/check.sh", "--bogus")
     assert result.returncode == 2
     assert "usage" in result.stderr
+
+
+def _pre_merge_gate() -> str:
+    """The `[pre-merge] gate` value from `.config/wt.toml`."""
+    config = tomllib.loads(WT_CONFIG.read_text(encoding="utf-8"))
+    return str(config["pre-merge"]["gate"])
+
+
+def test_wt_pre_merge_gate_delegates_to_check_script() -> None:
+    """The wt gate must bootstrap check.sh, never restate a weaker gate list.
+
+    Measured gap (#247): the gate ran two of check.sh's four steps, so a tree with
+    formatting or type drift merged through `wt merge` while `bash scripts/check.sh`
+    refused it. Naming a tool at this site re-opens that drift; the gate must invoke
+    the script that owns the definition.
+    """
+    gate = _pre_merge_gate()
+    parts = shlex.split(gate)
+    assert parts[:1] in (["bash"], ["sh"]), f"gate is not a shell script invocation: {gate!r}"
+    assert len(parts) == 2 and (REPO_ROOT / parts[1]).resolve() == CHECK_SCRIPT.resolve(), (
+        f"gate does not invoke {CHECK_SCRIPT}: {gate!r}"
+    )
+    for tool in ("ruff", "basedpyright", "pytest"):
+        assert tool not in gate, f"wt pre-merge gate restates the {tool!r} gate: {gate!r}"
+
+
+def test_check_script_performs_all_four_authoritative_steps() -> None:
+    """Delegation is only safe while check.sh still performs all four gates.
+
+    Pins the delegation target's own contents: `gate = "bash scripts/check.sh"`
+    must not silently degrade into a weaker script that drops the formatter or the
+    type checker.
+    """
+    text = CHECK_SCRIPT.read_text(encoding="utf-8")
+    missing = [command for command in GATE_COMMANDS if command not in text]
+    assert not missing, f"check.sh no longer performs: {missing}"
 
 
 def _init_flagged_repo(path: Path, *, bare: bool = False) -> Path:
