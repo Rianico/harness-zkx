@@ -258,6 +258,202 @@ def test_dispatch_refuses_lease_whose_recorded_pane_is_alive(
     assert stub.prompts() == []
 
 
+# ── #234: a label that outlived its agent is reported during a normal dispatch ─────
+
+
+def test_dispatch_reports_a_label_whose_agent_has_exited(stub: StubHarness, tmp_path: Path) -> None:
+    """A normal dispatch reports the orphaned label; no operator --verify/--sync pass is run.
+
+    Pin -> mutant: build the staleness rows from the *agent* inventory (the #234 defect),
+    so the exited pane is invisible and this advisory never prints.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "w9:p2" in done.stderr
+    assert "buildbot" in done.stderr
+    # The operator ran no verification pass: the dispatch itself reported the staleness.
+    assert "--verify" not in done.stderr
+    # The remedy must name a command that acts on the orphan (#234 rework). `--sync` cannot:
+    # it converges label/agent pairs from the agent inventory, where this orphan is absent.
+    assert "herdr-label --clear --pane w9:p2" in done.stderr
+    assert "--sync" not in done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_reports_an_orphan_whose_name_is_live_on_another_pane(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The orphaned pane is reported end to end although its label names a live sibling.
+
+    `reviewer` is live on `w9:p1`; `w9:p2` keeps the label `reviewer` with no live agent in
+    it, so a normal dispatch must still report it.
+
+    Pin -> mutant: build the name-match from every agent row (`label in live_names`), so the
+    live name on another pane suppresses the advisory and stderr is empty here.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "reviewer", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "w9:p2" in done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_advisory_tells_the_operator_to_replace_the_name_placeholder(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The re-label template cannot be copied verbatim into a literal `<name>` label.
+
+    `herdr-label '<name>' --pane w9:p2` on an orphan exits 0 and writes the literal `<name>`,
+    because `validate_agent_name` does not fire without a live agent, so the advisory must tell
+    the operator to substitute.
+
+    Pin -> mutant: print the bare copy-pasteable template (`herdr-label <name> --pane w9:p2`)
+    with no substitution instruction, so stderr lacks the hint and this fails.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "replace `<name>`" in done.stderr
+
+
+def test_dispatch_reports_no_stale_label_when_every_label_has_its_agent(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A live label matching its live agent is never reported stale (no false positives).
+
+    Pin -> mutant: drop the `pane_id not in live_panes` filter, so the live `w9:p1` row is
+    also reported and the advisory prints for a healthy lane.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": "pi", "agent_status": "idle"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "buildbot", "agent": "pi", "agent_status": "idle"},
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "outlived" not in done.stderr
+
+
+def test_report_stale_labels_is_silent_when_the_pane_inventory_is_unreadable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Positivist (#210): an unreadable pane inventory answers nothing, so nothing is reported.
+
+    Pin -> mutant: remove the `try/except` around the inventory read, so a `pane list`
+    failure propagates instead of leaving the advisory silent.
+    """
+    bin_dir = tmp_path / "fake-bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "herdr"
+    _ = fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args[:2] == ['pane', 'list']:\n"
+        "    sys.exit(1)\n"
+        "if args[:2] == ['agent', 'list']:\n"
+        "    print(json.dumps({'result': {'agents': [{'pane_id': 'w9:p1', 'name': 'reviewer'}]}}))\n"
+        "    sys.exit(0)\n"
+        "sys.exit(0)\n"
+    )
+    os.chmod(fake, 0o755)
+    real_path = os.environ.get("PATH", "")
+    herdr_dispatch.report_stale_labels(str(fake), {"PATH": f"{bin_dir}:{real_path}"})
+    assert capsys.readouterr().err == ""
+
+
+def test_dispatch_identity_comes_from_the_agent_inventory_not_the_label(
+    stub: StubHarness,
+) -> None:
+    """Dispatch targeting resolves by identifier: a reused label does not move the identity.
+
+    Pin -> mutant: match `target` against the pane *label* in `resolve_target_identity`, so
+    ownership comes from decoration; the first assert then returns `(\"reviewer\", None)`.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "label": "reused-elsewhere",
+                "agent": "pi",
+                "agent_status": "working",
+            },
+            {"pane_id": "w9:p2", "label": "reviewer", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    stub.write_state(state)
+    env = stub.base_env()
+    herdr = str(stub.herdr)
+    assert herdr_dispatch.resolve_target_identity(herdr, "reviewer", env) == ("reviewer", "w9:p1")
+    assert herdr_dispatch.resolve_target_identity(herdr, "w9:p1", env) == ("reviewer", "w9:p1")
+
+
 def test_dispatch_force_bypasses_active_lease(stub: StubHarness, tmp_path: Path) -> None:
     import herdr_lease
 
@@ -575,7 +771,7 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert "--kind" in start and start[start.index("--kind") + 1] == "pi"
     assert "--append-system-prompt" in start
     invariant = start[start.index("--append-system-prompt") + 1]
-    assert invariant == str(tmp_path / ".lane" / "role-invariant.md")
+    assert invariant == str(tmp_path / ".lane" / "invariants" / "callee.md")
     assert Path(invariant).is_absolute()
     assert Path(invariant).read_text() == herdr_bootstrap.render_invariant("callee")
     for arg in start[start.index("--") + 1 :]:
@@ -587,6 +783,52 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert start[-1] == "--approve"
     (prompt,) = stub.prompts()
     assert prompt[3] == "callee"
+
+
+def test_dispatch_auto_start_contract_rides_for_a_scoped_implementer_label(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """BLOCKING-1: without `--task-group` the role falls back to the scoped agent name, so
+    `herdr228-impl-1` must still receive the implementer cooperation contract."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": str(tmp_path),
+                "label": "herdr228-impl-1",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "herdr228-impl-1",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    invariant = start[start.index("--append-system-prompt") + 1]
+    assert invariant == str(tmp_path / ".lane" / "invariants" / "herdr228-impl-1.md")
+    text = Path(invariant).read_text()
+    assert "single writer for your task" in text
+    assert text == herdr_bootstrap.render_invariant("herdr228-impl-1")
 
 
 def test_dispatch_auto_start_skips_bootstrap_for_live_agent(

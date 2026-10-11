@@ -51,6 +51,7 @@ from herdr_cli import (
     require_herdr_env,
     run_herdr_checked,
 )
+from herdr_label import stale_labels
 from herdr_lease import acquire_lease, get_lease, release_lease
 from herdr_prompt import (
     EXIT_WAIT_TIMEOUT,
@@ -250,6 +251,41 @@ def lease_pane_is_gone(lease: Mapping[str, object], herdr: str, env: Mapping[str
         return False
     live = live_pane_ids(herdr, env)
     return live is not None and pane_id not in live
+
+
+def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
+    """One advisory stderr line per pane whose agent-shaped label outlived its agent (#234).
+
+    A label is never a target, so an orphaned one misleads a person reading the pane border
+    while a dispatch still keys on identifiers. This issues its own `pane list` and `agent list`
+    snapshots, so the operator needs no separate pass; the remedy it prints,
+    `herdr-label --clear --pane <id>` (or a re-label for the next occupant), acts on the orphan;
+    the re-label template tells the operator to replace its `<name>` placeholder, so a verbatim
+    copy cannot write that literal text as the pane label.
+
+    The report is server-wide by design: `pane list` is the whole Herdr server, so an orphan in
+    another workspace prints on every dispatch in this lane.
+
+    Advisory only: it changes no target, acquires or releases no lease, and interrupts nothing.
+    Positivist evidence (#210): an unreadable or empty inventory is no evidence, so it reports
+    nothing rather than declaring every label stale. Its `except Exception` swallow is silent, so
+    `test_dispatch_reports_a_label_whose_agent_has_exited` is the only detector of a broken
+    inventory key path inside it (mutant M6 dies only there).
+    """
+    try:
+        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except Exception:
+        # An unreadable inventory answers nothing; stay silent instead of guessing.
+        return
+    for pane_id, label in stale_labels(panes, agents):
+        print(
+            f"herdr-dispatch: pane {pane_id} carries the label {label!r} but no live agent owns "
+            f"it; the label outlived its agent (clear it with `herdr-label --clear --pane "
+            f"{pane_id}`; to hand the pane on, replace `<name>` in `herdr-label <name> --pane "
+            f"{pane_id}` with the new agent's name)",
+            file=sys.stderr,
+        )
 
 
 PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
@@ -559,6 +595,7 @@ def dry_run_bootstrap_plans(
 def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
+    report_stale_labels(herdr, env)
     kind = normalize_auto_start_kind(options.auto_start)
     try:
         targets = resolve_targets(options, herdr, env)

@@ -60,7 +60,7 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
 1. **User Confirmation**: Confirm role ↔ agent kind ↔ provider ↔ model mapping with user.
 2. **Pane Allocation**: Split pane with `--no-focus`, `--label <role>`, and `--cwd "$WORKTREE_PATH"` (the worktree pre-provisioned in Step 0).
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_pane.py" --direction right --label reviewer --cwd "$WORKTREE_PATH" --no-focus
+   uv run "$SKILL_DIR/scripts/herdr_pane.py" right --label reviewer --cwd "$WORKTREE_PATH" --no-focus
    ```
 3. **Agent Start**: Start through `herdr-bootstrap` — it stamps the ROLE INVARIANT, injects the kind's trust flags from `skills/herdr/references/kinds.yaml`, and cds the pane into `--cwd` before start. Raw `agent start` (native arguments strictly after `--`) is the fallback when bootstrap cannot express the launch.
    ```bash
@@ -70,9 +70,9 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
    - For `pi`: `--approve` is injected automatically from `kinds.yaml` — verify `-- --approve` is in the start argv instead of hand-adding flags.
    - For `qodercli`: `agent start` reports `interactive_ready: true` and a `Ready` title even while the trust selector is up, so read the pane. Either send one bare Enter (`herdr agent send-keys <name> enter`) and confirm the `YOLO` status line, or pre-seed `permissions.trustDirectories` in the config root the binary reads (`~/.qoder`, or `~/.qoder-cn` for the CN build) before starting. A prompt cannot dismiss the selector. See [Qoder CLI](agents/qodercli.md).
    - For other agents: Inspect pane output for any initial consent/login prompts.
-5. **State Settling**: Wait until the agent settles into `idle` or `done` before dispatching tickets or prompts.
+5. **State Settling**: Confirm the agent is ready before dispatching tickets or prompts. Read the pane text: a freshly started agent can be weakly recognized — its record reports `idle`/`done` with revision 0 — and a wanted state at revision 0 is unsatisfiable, so the wait helper exits 2 instead of settling, because `herdr-wait` cannot observe a weakly-recognized agent to completion. The `--source recent-unwrapped` pane read exits 0 and prints what the pane shows, so a trust selector or login prompt is visible before the first prompt; `herdr-prompt` and `herdr-dispatch` then re-check readiness themselves and abort with a `UsageError` when the pane never converges. Wait on the state barrier only for a strongly-recognized agent, and use Dispatch-&-Yield for `agy` and revision-0 agents ([Safety Rules](safety-rules.md)).
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_wait.py" <name> --timeout 30000
+   herdr agent read <name> --source recent-unwrapped --lines 120
    ```
 6. **Name the Pane**: The agent name dies with the agent while the pane label survives, so a restart or a new occupant can inherit a stale label. Set both in one step, then confirm the session is consistent:
    ```bash
@@ -89,7 +89,7 @@ A compacted agent forgets its lane: it stops delegating to subagents and exits w
 
 | Kind | Mechanism | Written artifact |
 |---|---|---|
-| `pi`, `claude` | `agent start --append-system-prompt <snippet>` | none |
+| `pi`, `claude` | `agent start --append-system-prompt <path>` | `.lane/invariants/<agent-name>.md` |
 | `cline` | `AGENTS.md` append (prefers an existing `.clinerules`) | `.clinerules` \| `AGENTS.md` |
 | `codex`, `copilot`, `qodercli`, `agy`, unknown | `AGENTS.md` append | `AGENTS.md` |
 
@@ -104,14 +104,45 @@ uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2
 ### The ROLE INVARIANT snippet
 
 ```text
-ROLE INVARIANT: You are an {role} in a Herdr lane.
-1. Subagent-First: MUST delegate deep search, multi-file edits, and test triage to internal subagents.
-2. Reply Contract: MUST reply to caller via `uv run ~/.agents/skills/herdr/scripts/herdr_reply.py <caller> --file <reply.md>` upon completion or blocker. Never exit silently.
+ROLE INVARIANT: You are {a|an} {role} in a Herdr lane. Follow the lane coordination pattern.
+Subagent-First: MUST delegate deep search, multi-file edits, and test triage to subagents.
+Reply Contract: MUST reply via `uv run $SKILL_DIR/scripts/herdr_reply.py <caller> --file <reply.md>` on completion or blocker; never exit silently.
 ```
+
+Implementer roles — the docs' `impl-<n>` vocabulary, scoped or bare (`impl-1`, `msg-impl-1`) — append the cooperation contract:
+
+```text
+Implementer: single writer for your task; never edit outside your worktree.
+Evidence: red-then-green test results, artifacts reported by path.
+Blockers: report immediately, never idle.
+```
+
+That block is role-conditional: it rides only for an implementer role, so a coordination-only role does not pay for it and stays inside the original 45-word budget, while the implementer variant is capped at 80. The discriminator is segment-aware because the lane convention is `<task-group-slug>-<role>[-<subrole|index>]`: `herdr228-impl-1` and `msg-impl-1` carry the block, `herdr228-task-manager` and `msg-tm` stay coordination-only. Accepted over-match: a lane *slug* segment that itself begins with `impl` (an `impl-hardening` lane) drags its coordination roles into the block too. The shared Reply Contract already owes the reply, so the block adds only implementer-only content and stays at 69 words. The article follows the role's first letter (`a tm`, `an impl-1`). The reply command is **absolute** on purpose: the rendered text embeds the lane's own helper, resolved from the running `herdr_bootstrap.py`'s own directory, and `uv run` stays in front, so an agent whose shell sits anywhere — `/tmp`, `$HOME` — still spawns it. The `~/.agents/skills/herdr` symlink is deliberately not used: it resolves into another worktree whose `herdr_*` code may be older.
+
+### The per-agent invariant file
+
+The `inline` kinds read one file per **resolved agent name**: `<lane>/.lane/invariants/<agent-name>.md`. The name keeps `[A-Za-z0-9._-]` and replaces every other character with `_`; an empty result, `.`, and `..` are refused, so a garbled name can never name a file outside the directory. The directory is created as needed. Bootstrapping one agent therefore never overwrites another's text, and re-bootstrapping an agent replaces only its own file. The file is **launch-time input only**: bootstrap writes it and passes the path to `--append-system-prompt`; nothing reads it back at runtime. The `file` kinds keep their `AGENTS.md` append and its committed-block behaviour, unchanged.
 
 ### The idempotent marker
 
 The file append is idempotent. The block is wrapped in `<!-- herdr-bootstrap:role-invariant -->` … `<!-- /herdr-bootstrap:role-invariant -->` and written only when the start marker is absent, so re-bootstrapping the same directory never duplicates the snippet and never rewrites an untouched file; existing content and its trailing newline are preserved.
+
+### Version-controlled targets are refused
+
+The target file *is* the delivery mechanism for the file kinds: they have no `--append-system-prompt`, and bootstrap has no message-prefix channel, so the invariant reaches the agent only because the agent reads `AGENTS.md` (or `.clinerules`) at launch. Moving it to a lane-local file the agent never reads would silently drop the invariant, which is worse than dirtying a tree. Bootstrap therefore guards the write instead:
+
+- **Tracked, block absent** → refuse. Bootstrap exits 2 naming the absolute target file, the reason (a launch must not modify a tracked file), and `--allow-tracked-invariant`. Nothing is launched, no pane is renamed, no file is written.
+- **Tracked, block already there** → skip the write and launch. The committed block is **not** role-checked: any block carrying the marker pair means no write, so the agent reads whatever block is committed — deliberately left unchanged even when it names a different role than the launch. Refreshing a role's contract is the per-agent invariant file's job, and that file serves the `inline` kinds only; the `file` kinds still read the committed block, so this bootstrap only guarantees the marker pair is present.
+- **`--allow-tracked-invariant`** → append anyway and leave that tracked file modified, on the record (`git status` shows it). The same flag overrides the *undetermined* refusal below: a repository that exists on disk whose tracked state git could not read is a refusal, not a permanent dead end for the invariant, and the flag appends through it.
+- **Untracked in a repo, or outside any repo** → append as before. This is not "the tree is unchanged": a freshly created or edited lane-local file shows as `?? AGENTS.md` in `git status`, while outside a repo `git status` cannot answer at all.
+
+Version-control state comes from git against the file's real location: `git rev-parse --is-inside-work-tree`, then `git ls-files --error-unmatch -- <path>`, asked about the file's on-disk entry name (a case-insensitive volume lists `agents.md` where bootstrap computed `AGENTS.md`, and a case-variant name counts only when it is the *same file*). Only an answer about the file's own repository and index is trusted. When the answer cannot be had, the fallback splits on whether a repository is there at all: **a repository that exists on disk whose tracked state git could not read is refused** (exit 2, same message family), because the file may be tracked. That covers a repository git confirmed whose index or `ls-files` read failed, and every case where git itself refused to answer while a `.git` entry stands at or above the target — dubious ownership, an unreadable `.git`, or a `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` override pointing the probe away from the file's own repository. `--allow-tracked-invariant` overrides that refusal too. **A host where git could not run at all is not refused**: it still gets the append, so a missing git never withholds the invariant, and prints one warning line saying the tracked state could not be determined — though a tracked tree may still be dirtied and the operator sees just that one line. A target git could answer about — untracked inside a repository (an unborn HEAD included), or outside any repository, where no `.git` entry stands above it either — is appended with no warning at all.
+
+`--dry-run` reports the verdict before anything launches: `agents_md_tracked` is `true`/`false`, or `null` when the tracked state could not be determined. `would_refuse` carries the refusal string when the append would be refused, and `note` carries the warning when an undetermined target would still be appended. Both keys appear only for the file kinds, whose run has a target file; the inline kinds report neither.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-impl-1 --kind codex --pane w1:p3 --role impl-1 --task-group msg --allow-tracked-invariant
+```
 
 ### Scoped-prefix rule
 
