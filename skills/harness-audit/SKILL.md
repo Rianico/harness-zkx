@@ -25,6 +25,8 @@ Accepts either form:
 - **File path** — direct `*.jsonl` (absolute or cwd-relative).
 - **Session id** — uuid `01a03e51-b378-786f-819d-f570bc26497c` or filename. Resolved via `~/.pi/agent/sessions/` and `$PI_SESSIONS_DIR`; newest match wins.
 
+> **Session formats (roadmap).** [session-format](references/session-format.md) now documents three agent formats: Pi, qodercli (`~/.qoder-cn/projects/<cwd-slug>/<uuid>.jsonl`), and agy (`~/.gemini/antigravity-cli/brain/<uuid>/.system_generated/logs/transcript*.jsonl`). Scripts currently resolve and parse only the Pi root. Roadmap: teach `resolve_session` the two extra roots (use `transcript_full.jsonl` — the trimmed log silently truncates), then adapt pairing (qodercli: exact `tool_use_id`, name lives on the call; agy: positional, no ids). Remaining gap: other Herdr agent kinds have no documented format yet — sample one before extending.
+
 ```bash
 uv run $SKILL_DIR/scripts/audit.py <session-id-or-path> [--threshold 20] [--json] [--emit-filtered] [--keep-head-tail 10]
 ```

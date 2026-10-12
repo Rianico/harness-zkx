@@ -50,11 +50,14 @@ Hierarchy:
   Task-ID: #182-herdr-msg-enhance#overview-rich
 Protocol:
   Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all coordination, never the bare herdr CLI
+---
+
+<payload>
 ```
 
 Pass `--verbose` to `herdr-prompt`, `herdr-dispatch`, or `herdr-reply` to opt the `Runtime:` (Cwd/Resume) block back in for debugging. Recovery metadata otherwise lives in `.lane/tasks.yaml`, never in the envelope.
 
-`herdr-prompt`, `herdr-dispatch`, and `herdr-reply` render those blocks from live Herdr state and prepend them to every payload, in both directions. Role, position, roster, and the agent kind therefore arrive with the message whether or not the sender remembered them; an absent field renders no line at all. `Receiver(You)` closes the `Routing:` block and names *you* with *your* position — read it first when several panes were addressed at once. Relay a message with its envelope intact; a message that arrives without a `Sender:` line did not come from these scripts. The dispatch/reply Style 2 samples and the Ticket-ID/Task-ID contract live in [lane-coordination.md](references/lane-coordination.md).
+`herdr-prompt`, `herdr-dispatch`, and `herdr-reply` render those blocks from live Herdr state and prepend them to every payload, in both directions. A `---` paging line separates the envelope from the payload, so transport headers never blur into message content. Role, position, roster, and the agent kind therefore arrive with the message whether or not the sender remembered them; an absent field renders no line at all. `Receiver(You)` closes the `Routing:` block and names *you* with *your* position — read it first when several panes were addressed at once. Relay a message with its envelope intact; a message that arrives without a `Sender:` line did not come from these scripts. The dispatch/reply Style 2 samples and the Ticket-ID/Task-ID contract live in [lane-coordination.md](references/lane-coordination.md).
 
 The token before `@` is the **live agent name**, the only human-readable target `herdr agent prompt` accepts besides the pane id. A pane **label** is border decoration and is never a target, so it always rides its own `label` field — a pane that carries only a label renders as its pane id:
 

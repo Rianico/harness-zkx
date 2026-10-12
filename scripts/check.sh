@@ -76,9 +76,9 @@ run_gate 2 uv run ruff format --check .
 run_gate 3 uv run basedpyright --warnings
 
 if [ "$SKIP_TESTS" -eq 1 ]; then
-  echo "==> [gate 4/4] SKIPPED: uv run pytest was skipped (--skip-tests)"
+  echo "==> [gate 4/4] SKIPPED: uv run --group dev pytest was skipped (--skip-tests)"
 else
-  run_gate 4 uv run pytest
+  run_gate 4 uv run --group dev pytest
 fi
 
 if [ "$SKIP_TESTS" -eq 1 ]; then

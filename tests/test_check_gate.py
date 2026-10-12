@@ -46,7 +46,7 @@ GATE_COMMANDS = [
     "uv run ruff check .",
     "uv run ruff format --check .",
     "uv run basedpyright --warnings",
-    "uv run pytest",
+    "uv run --group dev pytest",
 ]
 
 # The stubbed `uv` argv log mirrors GATE_COMMANDS with the `uv ` prefix removed.
@@ -249,7 +249,7 @@ def test_skip_tests_banner_reports_skipped_gate() -> None:
     result = _skip_tests_run()
     assert result.returncode == 0, result.stderr[-2000:]
     assert "SKIPPED" in result.stdout
-    assert "uv run pytest was skipped" in result.stdout
+    assert "uv run --group dev pytest was skipped" in result.stdout
     assert "3/4 gates passed (pytest skipped: --skip-tests)" in result.stdout
     # Pinning the absence: the unconditional "All gates passed." must not lie
     # when gate 4 never ran.
@@ -275,7 +275,7 @@ def test_stubbed_gate2_failure_stops_before_gate3(tmp_path: Path) -> None:
     invoked = calls.read_text()
     assert "run ruff check ." in invoked
     assert "basedpyright" not in invoked, "early stop broken: gate 3 ran after gate 2 failed"
-    assert "run pytest" not in invoked, "early stop broken: gate 4 ran after gate 2 failed"
+    assert "--group dev pytest" not in invoked, "early stop broken: gate 4 ran after gate 2 failed"
     assert "All gates passed." not in result.stdout
 
 
@@ -331,7 +331,7 @@ def test_pre_commit_hook_skip_tests_env_escape(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "3/4 gates passed (pytest skipped: --skip-tests)" in result.stdout
     assert "All gates passed." not in result.stdout
-    assert "run pytest" not in calls.read_text()
+    assert "--group dev pytest" not in calls.read_text()
 
 
 def test_unknown_flag_exits_two_with_usage() -> None:

@@ -558,7 +558,7 @@ def wrap_with_envelope(
         tab_id=tab_id,
     )
     header = f"{utc_stamp()}\n{envelope}"
-    return f"{header}\n\n{payload}\n\n{render_reply_contract(sender, ticket_id)}"
+    return f"{header}\n---\n\n{payload}\n\n{render_reply_contract(sender, ticket_id)}"
 
 
 def build_prompt_argv(

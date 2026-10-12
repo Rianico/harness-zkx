@@ -349,7 +349,7 @@ Return a structured review verdict:
 
 ### E. Layered Envelope (Style 2) & the Correlation IDs
 
-Every `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` message renders three nested YAML blocks instead of the old flat lines: `Routing:` (position refs and the live roster), `Hierarchy:` (task-group, Ticket-ID, Task-ID, and `In-Reply-To:` correlation), and `Protocol:` (the Herdr skill notice). An absent field renders no line. The forward-only `Runtime:` (Cwd/Resume) block is not part of the default envelope; `--verbose` opts it back in for debugging, and recovery metadata otherwise lives in `.lane/tasks.yaml`.
+Every `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` message renders three nested YAML blocks instead of the old flat lines: `Routing:` (position refs and the live roster), `Hierarchy:` (task-group, Ticket-ID, Task-ID, and `In-Reply-To:` correlation), and `Protocol:` (the Herdr skill notice). An absent field renders no line. The forward-only `Runtime:` (Cwd/Resume) block is not part of the default envelope; `--verbose` opts it back in for debugging, and recovery metadata otherwise lives in `.lane/tasks.yaml`. A `---` paging delimiter line separates the envelope from the payload, so transport headers never blur into message content.
 
 Dispatch — forwards a ticket, with the correlation IDs that bind it to the lane's task record:
 
@@ -365,6 +365,9 @@ Hierarchy:
   Task-ID: #182-herdr-msg-enhance#impl-bootstrap
 Protocol:
   Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all coordination, never the bare herdr CLI
+---
+
+<ticket body>
 ```
 
 Reply — reports a result: `Routing:` and `Hierarchy:` only, with `Task-Group:` (the tab) and `In-Reply-To:` naming the Task-ID it answers (no forward-only `Runtime:`; the reply reuses the sender's session):
@@ -380,6 +383,9 @@ Hierarchy:
   In-Reply-To: #182-herdr-msg-enhance#impl-bootstrap
 Protocol:
   Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all coordination, never the bare herdr CLI
+---
+
+<STATUS> <artifacts> <issues>
 ```
 
 #### Ticket-ID / Task-ID contract

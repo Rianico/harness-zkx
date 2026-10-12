@@ -1752,7 +1752,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     shape, heading = payload_shape(payload)
     # The pointer and the index row carry the same bounded label, never the heading text.
     evidence = evidence_label(heading)
-    prelude = f"{utc_stamp()}\n{reply_envelope}\n\n"
+    prelude = f"{utc_stamp()}\n{reply_envelope}\n---\n\n"
     record_id: str | None = None
     if options.dry_run:
         # A dry run submits nothing, so it records nothing: the payload stays pointer-free.
