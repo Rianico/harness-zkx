@@ -68,7 +68,7 @@ Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or 
 | Title Shape | `refusing squash merge: commit title is not a Conventional Commit "type(scope): subject": <title> (#N)` | 1 |
 | Squash Shape | `refusing squash merge: squash body carries no Core section` · `… a fix squash body carries no Root section` · `… the Blast Radius section carries neither a \`Door:\` line nor the template's \`Rollback / containment:\` line` · `… the Blast Radius section states no rollback` · `… the Evidence section states no before -> after` · `… the Links section carries no PR link` · `… closing-keyword line is not one issue` · `… squash body carries N bullets (max 5)` | 1 |
 | Body Required | `refusing to open PR: no --body/--body-file supplied` · `refusing PR: no description supplied` | 1 |
-| Fail-Closed Squash Message | `refusing squash merge: --merge requires an explicit squash commit message` (spec: `CONTEXT.md` — Curated Squash Message) · `refusing squash merge: PR body is empty or the unfilled repo template` (the `--check` preview path) | 1 |
+| Fail-Closed Squash Message | `refusing squash merge: --merge requires an explicit squash commit message` (spec: `GLOSSARY.md` — Curated Squash Message) · `refusing squash merge: PR body is empty or the unfilled repo template` (the `--check` preview path) | 1 |
 | Raw Token | `refusing squash message: raw CODE_AUTHORS token still present` | 1 |
 | Reused Draft | `reused PR #N is still a draft and --draft was not passed` | 1 |
 | Ready Flip | `gh pr ready failed for PR #N` + the verbatim `gh pr ready N --repo <repo>` remediation | 1 |

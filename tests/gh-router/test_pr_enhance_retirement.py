@@ -19,7 +19,7 @@ TOUCHED_DOCS = [
     PR_ENHANCE_SKILL,
     REPO_ROOT / "skills/gh-router/subskills/pr-land/SKILL.md",
     REPO_ROOT / "skills/gh-router/SKILL.md",
-    REPO_ROOT / "skills/dynamic-workflow-wrapper/references/agents/merger.md",
+    REPO_ROOT / "retired/dynamic-workflow-wrapper/references/agents/merger.md",
 ]
 
 RETIRED_SYMBOLS = [

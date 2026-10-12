@@ -6,7 +6,7 @@ Date: 2026-08-25
 
 Accepted
 
-Implements [Context Load](../..//CONTEXT.md#context-load) and [Platform Adapter](../..//CONTEXT.md#platform-adapter)
+Implements [Context Load](../../GLOSSARY.md#context-load) and [Platform Adapter](../../GLOSSARY.md#language)
 
 ## Context
 

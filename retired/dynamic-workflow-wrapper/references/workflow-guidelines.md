@@ -7,7 +7,7 @@ Pointers: role definitions live in [`agents/`](agents/); the wrapper's operator 
 ## Layout
 
 ```text
-skills/dynamic-workflow-wrapper/
+retired/dynamic-workflow-wrapper/
   workflows/converge-tasks.js
                          the run: tasks[] ➔ plan ➔ prepare ➔ per task [copy ➔ developer ➔ gate ➔
                          review ➔ merge] ➔ composite gate ➔ report; never pushes, never opens a PR
