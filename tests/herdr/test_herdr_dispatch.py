@@ -160,9 +160,8 @@ def test_dispatch_renders_the_reply_contract_with_the_ticket_bound(
     """#246 E1.1 pin 1: the envelope a callee receives binds the derived ticket id.
 
     Asserted on the RENDERED ENVELOPE (the text `herdr agent prompt` delivers), never on an
-    intermediate option: the reply contract must carry `--ticket <derived id>` so the reply
-    side can bind an explicit name instead of inferring the sender's sole open task. E1.2
-    deletes that inference only once this lands.
+    intermediate option: the reply contract carries `--ticket <derived id>` — the explicit name
+    the reply side binds. E1.2 (landed) deleted the sole-open-task inference this replaces.
     """
     ticket = tmp_path / "182-herdr-msg-enhance.md"
     _ = ticket.write_text("TICKET BODY", encoding="utf-8")

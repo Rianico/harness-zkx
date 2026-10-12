@@ -182,48 +182,57 @@ def test_a_refused_reply_keeps_the_lease_so_the_corrected_reply_advances(
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
-def test_a_second_reply_for_the_same_ticket_keeps_the_task_linkage(
-    stub: StubHarness, tmp_path: Path
+def test_a_correction_for_a_lease_expired_ticket_binds_the_rendered_task(
+    stub_factory: Callable[[Path], StubHarness], tmp_path: Path
 ) -> None:
-    """#246 D1.2 pin 1: the first reply consumes the lease, not the ticket's task linkage.
+    """#246 E1.2 positive: a correction after the lease is gone binds THE CORRECT task.
 
-    The linkage used to be resolved from the sender's lease alone, which the first reply
-    releases, so a legitimate second reply for the same ticket was recorded with
-    `task_id: null` and could never advance the task. The second send here binds to the
-    sender's sole open task and advances it to `completed`; the lease-only resolution (the
-    pre-change behaviour) cannot, so reverting the mechanism fails this case.
+    Old role (D1.2 pin 1): the second reply re-bound through the sender's sole open task — the
+    inference E1.2 deletes. New role: the dispatcher renders `--ticket <derived id>`; the first
+    reply consumes the lease; the follow-up correction for the same ticket resends with that
+    rendered `--ticket` value and must advance THAT task. No inference is involved, so no other
+    open task can move. A dropped `--ticket` leaves the correction unlinked (see the key pin).
     """
-    task_id = "#246#d12-second"
-    _ = herdr_lease.acquire_lease(
-        "reviewer",
-        "246.md",
-        "orchestrator",
-        base_dir=tmp_path,
-        ticket_id="#246",
-        task_id=task_id,
-    )
+    dispatch = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
+    reply = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
+    ticket = tmp_path / "246-e12-correction.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
 
-    first = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    dispatched = dispatch.run(
+        "reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)}
+    )
+    assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
+    (prompt,) = dispatch.prompts()
+    rendered = re.search(r"--ticket (\S+)", prompt[4])
+    assert rendered, prompt[4]
+    rendered_ticket = rendered.group(1)
+    task_id = rendered_ticket  # the dispatcher mirrors the task id onto the derived ticket id
+
+    first = reply.run(
+        "orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)}
+    )
     assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None, (
+        "the first reply consumed the lease; only the rendered --ticket can bind the next"
+    )
     first_task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert first_task is not None and first_task["status"] == "blocked"
-    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None, (
-        "the first reply consumed the sender's lease"
-    )
 
-    second = stub.run(
+    corrected = reply.run(
         "orchestrator",
         "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        rendered_ticket,
         env={"PWD": str(tmp_path)},
     )
-    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    assert corrected.returncode == herdr_cli.EXIT_OK, corrected.stderr
 
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
-    assert record["task_id"] == task_id, "the second reply keeps the ticket's task linkage"
+    assert record["task_id"] == rendered_ticket, "the rendered --ticket names the correct task"
     advanced = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert advanced is not None and advanced["status"] == "completed"
     assert [event for event in advanced["trajectory"] if event["event"] == "completed"], (
-        "the second reply must be able to advance the task"
+        "the correction must advance the correct task"
     )
 
 
@@ -363,12 +372,12 @@ def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
 ) -> None:
     """#246 E1.1 pin 2: the RENDERED contract binds with no lease.
 
-    This pin is what makes E1.2's deletion of the sole-open-task inference safe — do NOT
-    "simplify" it back to a lease-only or inference path. The dispatch renders the reply
-    contract; the callee's first reply consumes the lease; the callee then resends using the
-    exact `--ticket` value the rendered contract carried. Nothing else can bind the second
-    reply, and it must advance THAT task. A dropped `--ticket` (mutant a) and a foreign id
-    (mutant b, e.g. the sender's name) both fail here.
+    This pin is what replaced the sole-open-task inference (deleted in E1.2) — do NOT
+    "simplify" it back to a lease-only path. The dispatch renders the reply contract; the
+    callee's first reply consumes the lease; the callee then resends using the exact `--ticket`
+    value the rendered contract carried. Nothing else can bind the second reply, and it must
+    advance THAT task. A dropped `--ticket` (mutant a) and a foreign id (mutant b, e.g. the
+    sender's name) both fail here.
     """
     dispatch = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
     reply = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
@@ -454,18 +463,19 @@ def test_in_reply_to_record_rebinds_a_followup_without_restating_the_ticket(
     assert first_state is not None and first_state["status"] == "dispatched"
 
 
-def test_a_reply_whose_open_task_cannot_be_named_is_recorded_unlinked_with_a_loud_warning(
+def test_a_reply_whose_open_task_cannot_be_named_is_still_unlinked_and_never_guessed(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """#246 D1.3 pin 1: the last silent recorded-unlinked path now warns, loudly.
+    """#246 E1.2 (rewritten D1.3 pin 1): a damaged task id changes nothing, and nothing is guessed.
 
-    The sender's sole open task record has lost its string `task_id` (a damaged store), so the
-    resolver cannot name it. The resolver used to answer `(None, None)`: the reply was recorded
-    with `task_id: null` and stderr stayed empty. Now the reply is recorded unlinked exactly as
-    before, but one warning line says the sender holds open work and no linkage was made. The
-    sender holds open work, so the line is the loud form, never the quiet "holds no open task".
+    Old role: the sender's sole open task record had lost its string `task_id`, and the
+    now-deleted sole-open-task branch answered a loud "holds open work" warning. With that
+    branch gone there is no inference left to warn about: the single open task falls into the
+    same count-based refusal as any other flagless reply, is recorded unlinked, and mutates
+    nothing. The damaged id can never be bound while the reply names no ticket.
 
-    Mutant killed: restore `return (None, None)` for the unnameable id and the warning vanishes.
+    Mutant killed: restore the `len(open_tasks) == 1` binding and the record carries the task id
+    again (or the warning changes shape); the reply must stay unlinked.
     """
     task_id = "#246#d13-nameless"
     _ = herdr_lease.acquire_lease(
@@ -489,7 +499,7 @@ def test_a_reply_whose_open_task_cannot_be_named_is_recorded_unlinked_with_a_lou
     assert record["task_id"] is None, "an unnameable task is never attributed by guesswork"
     warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
     assert len(warnings) == 1, done.stderr
-    assert "open work" in warnings[0], warnings[0]
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
     assert "no open task" not in warnings[0], warnings[0]
 
 
@@ -723,33 +733,30 @@ def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
     assert not (nongit / ".lane").exists(), "no store was written: the anchor never resolved"
 
 
-def test_the_inferred_sole_open_task_linkage_warns_and_names_the_bound_task(
+def test_a_flagless_reply_with_one_open_task_is_unlinked_and_mutates_nothing(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """#246 D1.4 pin 1 / D1.5 F1: an INFERRED linkage is never silent, names the task, and
-    carries NO record tail — it is a bound reply, not an unlinked one.
+    """#246 E1.2 KEY pin: a sole open task is NO LONGER a ticket signal.
 
-    The sender holds exactly one open task and no lease, so the linkage can only come from the
-    count of its open tasks — the one step that cannot see which ticket the payload is about.
-    The reply still binds and still advances the task (D1.2 pin 1 depends on that), but the
-    caller now sees one warning line naming the task it was bound to and the flag that would
-    override it. That line is a WHOLE-LINE claim: it must end with neither record clause,
-    because the reply WAS bound — the `stored is not None` predicate the caller uses for an
-    unlinked reply does not apply to a linked one.
+    INCIDENT (do not "restore" this convenience later): a guard that guesses mutated the wrong
+    row. An addendum reply about `#246` arrived flagless while the sender held exactly one open
+    task, `#247#probe-unrelated`; the sole-open-task inference bound the addendum to that row and
+    flipped it `dispatched -> completed`. The ticket signal is no longer missing — the rendered
+    dispatch contract carries `--ticket` (E1.1) — so a reply that names no ticket is recorded
+    UNLINKED and mutates no task. A guard that is told does not guess.
 
-    Mutants killed: drop the warning from the `len(open_tasks) == 1` branch and the count, the
-    loud marker, and the named id all vanish; restore the unconditional record clause and the
-    line ends `...recording the reply unlinked`, labelling a bound reply unlinked; drop the
-    clause on UNLINKED replies too and the sibling unlinked pins lose their tails (pinned in
-    both directions).
+    Mutant killed: restore the `len(open_tasks) == 1` binding and the record carries the task id
+    again and the task advances to `completed`.
     """
-    task_id = "#246#d14-inferred"
+    task_id = "#246#e12-sole"
     _ = herdr_lease.acquire_lease(
         "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=task_id
     )
     assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True, (
-        "no lease: inference only"
+        "no lease: nothing may bind this reply"
     )
+    before = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert before is not None and before["status"] == "dispatched"
 
     done = stub.run(
         "orchestrator",
@@ -759,34 +766,35 @@ def test_the_inferred_sole_open_task_linkage_warns_and_names_the_bound_task(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
-    assert record["task_id"] == task_id, "the inference still binds; this pin is about visibility"
+    assert record["task_id"] is None, "a flagless reply is recorded unlinked, never guessed"
     warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
     assert len(warnings) == 1, done.stderr
-    assert task_id in warnings[0], warnings[0]
-    assert "sole open task" in warnings[0], warnings[0]
-    assert "--ticket" in warnings[0], warnings[0]
-    assert not warnings[0].endswith(herdr_reply.RECORDED_CLAUSE), warnings[0]
-    assert not warnings[0].endswith(herdr_reply.NOT_RECORDED_CLAUSE), warnings[0]
-    advanced = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert advanced is not None and advanced["status"] == "completed"
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
+    after = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert after is not None and after["status"] == "dispatched", "no task may move"
+    assert not [event for event in after["trajectory"] if event["event"] == "completed"], (
+        "the flagless reply must not append a completed event to any task"
+    )
 
 
-def test_a_reply_about_another_ticket_bound_to_the_sole_open_task_warns(
+def test_a_reply_about_another_ticket_never_flips_the_unrelated_open_task(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """#246 D1.4 pin 2: the PROBE1 scenario, pinned for visibility (the linkage still happens).
+    """#246 E1.2 incident reconstruction: the flagless addendum no longer flips the wrong row.
 
-    The sender holds exactly one open task, for `#246`, while its payload is about `#247`, and it
-    carries no lease and no flag — so the payload holds no ticket signal and the linkage can only
-    be the sole-open-task inference. PROBE1 recorded `task_id: '#246#probe-a'` with EMPTY stderr.
-    This pin asserts the linkage is now VISIBLE: exactly one line naming the bound task, so the
-    mis-attribution is the caller's to notice. A silent inference passes every other D1.2 pin.
+    Old role (D1.4 pin 2 / PROBE1): the sender held exactly one open task while its payload was
+    about another ticket, and the sole-open-task inference bound the foreign reply to that row.
+    New role: reconstruct the live incident — the sender held exactly one open task,
+    `#247#probe-unrelated` (`dispatched`), when an addendum about ticket `#246` arrived with no
+    ticket flag. The inference flipped `#247#probe-unrelated` `dispatched -> completed`. Now the
+    flagless reply is recorded UNLINKED with its reason and NO task changes status.
 
-    Mutant killed: silence the `== 1` branch and the warning count drops to zero.
+    Mutant killed: restore the inference and this reply re-binds to `#247#probe-unrelated`, whose
+    status flips, failing both assertions below.
     """
-    task_id = "#246#d14-probe-a"
+    task_id = "#247#probe-unrelated"
     _ = herdr_lease.acquire_lease(
-        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=task_id
+        "reviewer", "247.md", "orchestrator", base_dir=tmp_path, ticket_id="#247", task_id=task_id
     )
     assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True
     open_before = [
@@ -798,31 +806,33 @@ def test_a_reply_about_another_ticket_bound_to_the_sole_open_task_warns(
 
     done = stub.run(
         "orchestrator",
-        "BLOCKED this reply is about ticket #247, not #246\n",
+        "COMPLETED deadbeef\n\n## Evidence\n- addendum for #246\n",
         env={"HERDR_LANE_DIR": str(tmp_path)},
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
-    assert record["task_id"] == task_id, "PROBE1: the inference still binds the foreign reply"
+    assert record["task_id"] is None, "the flagless reply is unlinked, not bound to the wrong row"
     warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
     assert len(warnings) == 1, done.stderr
-    assert task_id in warnings[0], warnings[0]
-    assert not warnings[0].endswith(herdr_reply.RECORDED_CLAUSE), warnings[0]
-    assert not warnings[0].endswith(herdr_reply.NOT_RECORDED_CLAUSE), warnings[0]
-    bound = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert bound is not None and bound["status"] == "blocked"
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
+    after = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert after is not None and after["status"] == "dispatched", (
+        "#247#probe-unrelated must not have been flipped"
+    )
+    assert not [event for event in after["trajectory"] if event["event"] == "completed"], (
+        "no completed event may be appended to the unrelated task"
+    )
 
 
-def test_explicit_linkage_bindings_never_warn_about_inference(
-    stub: StubHarness, tmp_path: Path
-) -> None:
-    """#246 D1.4 pin 3 (negative): a flag is the caller's instruction, so it is never "inferred".
+def test_explicit_linkage_bindings_stay_silent(stub: StubHarness, tmp_path: Path) -> None:
+    """#246 (rewritten D1.4 pin 3): a flag is the caller's instruction, so it never warns.
 
-    Both runs give the sender exactly one open task and no lease — the state that makes the
-    inference warn — so the quiet stderr can only come from the explicit binding winning first.
-    The `--in-reply-to` run names a stored record whose task is still open (a BLOCKED first
-    reply leaves the round running).
+    Old role: proved the explicit paths stayed quiet while the sole-open-task inference used to
+    warn. New role: the same negative with the inference gone — a flagless reply is the loud
+    case now, so a quiet stderr here can only come from the explicit binding winning first. The
+    `--in-reply-to` run names a stored record whose task is still open (a BLOCKED first reply
+    leaves the round running).
 
     Mutant killed: make the explicit paths warn and both runs report a linkage line.
 
@@ -888,10 +898,10 @@ def test_explicit_linkage_bindings_never_warn_about_inference(
 def test_the_open_and_terminal_status_partition_covers_every_canonical_status() -> None:
     """#246 D1.4 F2: the partition is explicit, so no canonical status defaults to open.
 
-    `_is_open_task` decides which tasks the `== 1` inference may bind. While it hardcoded the
-    singleton {"completed"}, any status added later would silently count as open and become an
-    inference target. The partition is now enumerated and pinned total and disjoint against the
-    store's `CANONICAL_STATUSES`, so a new status forces a decision instead of defaulting.
+    `_is_open_task` decides which tasks count as the sender's open work for the linkage. While it
+    hardcoded the singleton {"completed"}, any status added later would silently count as open.
+    The partition is now enumerated and pinned total and disjoint against the store's
+    `CANONICAL_STATUSES`, so a new status forces a decision instead of defaulting.
     """
     open_statuses = herdr_reply.OPEN_TASK_STATUSES
     terminal_statuses = herdr_reply.TERMINAL_TASK_STATUSES

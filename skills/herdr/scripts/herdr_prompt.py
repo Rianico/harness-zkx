@@ -427,10 +427,11 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
     """Render the completion-reply contract; without an agent name no target is addressable.
 
     A known ticket id is bound with `--ticket`, so the callee's reply names its task and the
-    reply side binds explicitly instead of inferring the sender's sole open task (#246 E1.1).
-    The dispatcher reuses the same `derive_ticket_id` it stores on the lease, so the rendered
-    id and the task it names cannot drift. Without a derived id (`--file -`, stdin) the
-    contract renders in its pre-change form and the reply lands unlinked with D1.3's warning.
+    reply side binds explicitly. This replaced the sender's sole-open-task inference, which
+    #246 E1.2 deleted. The dispatcher reuses the same `derive_ticket_id` it stores on the
+    lease, so the rendered id and the task it names cannot drift. Without a derived id
+    (`--file -`, stdin) the contract renders without `--ticket` and the reply lands unlinked
+    with D1.3's warning.
     """
     if sender.agent:
         contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'

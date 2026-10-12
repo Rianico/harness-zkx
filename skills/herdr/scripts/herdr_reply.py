@@ -14,21 +14,21 @@ never model-authored, so it cannot be forgotten.
 
 The record's task linkage is resolved from the whole store, not just the lease (#246 D1.2):
 an explicit `--ticket <id>` (or `--in-reply-to <record-id>`) wins, else the sender's active
-lease, else the sender's sole open task. Zero or several open tasks — or an explicit name the
-sender does not hold open — records the reply unlinked with one warning line, never a guess,
-so a second reply for the same ticket still advances the task instead of losing the linkage
-when the first reply consumes the lease. Every unlinked line leads with a stable severity
+lease. The ticket signal comes from the rendered dispatch contract, which binds `--ticket`
+(#246 E1.1), so a reply that names no ticket is never guessed at: with no lease and no flag it
+is recorded unlinked, mutating no task. Zero, one, or several open tasks — or an explicit name
+the sender does not hold open — records the reply unlinked with one warning line, never a
+guess, so a second reply for the same ticket still advances the task through `--ticket`
+instead of losing the linkage when the first reply consumes the lease. Every unlinked line
+leads with a stable severity
 marker (#246 D1.5): "open work refused" when the step refused to bind what it was told (open
 work it would not guess at, or a flag that names no open task of the sender), "nothing to
 link" when there was nothing to link, and "sender or store unreadable" when there was no
-answer at all (no sender resolved, or the anchor/store could not be read). An UNLINKED warning
+answer at all (no sender resolved, or the anchor/store could not be read). An unlinked warning
 claims a record only when one was written — that clause is appended after the store answers,
-so it can never contradict the `NOT RECORDED` pointer delivered in the same run; the linked
-line names a binding that was made, so it carries no record clause at all. The
-sole-open-task step is the one INFERRED binding, so it warns even when it succeeds (#246
-D1.4): it counts candidates and cannot read which ticket the payload is about, so the line
-names the task it chose and the `--ticket` flag that overrides it. The explicit steps stay
-silent — they are the caller's instruction.
+so it can never contradict the `NOT RECORDED` pointer delivered in the same run. Every warning
+now accompanies an unlinked reply; the explicit `--ticket`/`--in-reply-to` bindings stay
+silent, because they are the caller's instruction.
 
 Prompt text is never provenance (#231). Before the prompt is sent the payload is persisted
 as a store record — a body file plus one metadata-only index sidecar carrying its digest,
@@ -237,7 +237,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "bind this reply's task linkage to the named task (its task id, or a ticket id "
             "whose open task this sender owns is unique); without it the linkage comes from "
-            "the sender's lease, else its sole open task, else the reply is unlinked"
+            "the sender's active lease, else the reply is recorded unlinked"
         ),
     )
     _ = parser.add_argument(
@@ -1218,10 +1218,10 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
 
 # ── reply task linkage (#246 D1.2) ──────────────────────────────────────────────────
 
-# The open/terminal partition that decides which tasks the INFERRED linkage may bind (#246
-# D1.4/F2). Both sets are enumerated and a test pins that they partition the store's
-# `CANONICAL_STATUSES`, so a status added there cannot silently default to open and become an
-# inference target. `completed` is the only status this store writes that ends the round;
+# The open/terminal partition that decides which of the sender's tasks count as open work for
+# the linkage (#246 D1.4/F2). Both sets are enumerated and a test pins that they partition the
+# store's `CANONICAL_STATUSES`, so a status added there cannot silently default to open.
+# `completed` is the only status this store writes that ends the round;
 # `dispatched`/`in_progress`/`blocked`/`rework` all still await their assignee.
 OPEN_TASK_STATUSES = frozenset({"dispatched", "in_progress", "blocked", "rework"})
 TERMINAL_TASK_STATUSES = frozenset({"completed"})
@@ -1248,8 +1248,8 @@ UNLINKED_UNREADABLE_MARKER = "unlinked reply (sender or store unreadable)"
 # The caller-side tail of an UNLINKED warning (#246 D1.5 F1): the resolver cannot know whether
 # the store will take the record, so the claim is emitted only after `persist_reply` answers,
 # and the opposite outcome is stated just as plainly when no record was written. A warning must
-# never contradict the `NOT RECORDED` pointer the caller is about to read. A LINKED warning
-# carries no tail: its reply was bound to a task, which is not an unlinked outcome at all.
+# never contradict the `NOT RECORDED` pointer the caller is about to read. Every warning line is
+# an unlinked outcome (#246 E1.2): the explicit bindings stay silent, so no linked warning exists.
 RECORDED_CLAUSE = "; recording the reply unlinked"
 NOT_RECORDED_CLAUSE = "; no store record was written"
 
@@ -1264,21 +1264,6 @@ def _unlinked(marker: str, reason: str, exc: BaseException | None = None) -> str
     """
     detail = f" ({_one_line(str(exc))})" if exc is not None else ""
     return f"{marker}: task linkage unresolved — {reason}{detail}"
-
-
-def _inferred(task_id: str) -> str:
-    """The one warning line for a linkage this step INFERRED rather than was told (#246 D1.4).
-
-    The sole-open-task step counts the sender's open tasks; it cannot see which ticket the
-    payload is about, so "exactly one candidate" is not evidence of a correct attribution. The
-    default stays (it is what advances a corrected or addendum reply with no lease), and its
-    silence becomes this line: the caller can tell an inferred binding from the one it asked
-    for, and knows the flag that overrides it. PROBE1 measured the cost of that silence.
-    """
-    return (
-        f"task linkage inferred — bound to your sole open task {task_id!r}; "
-        "pass --ticket if this reply is about another ticket"
-    )
 
 
 def _sender_open_tasks(sender: str, env: Mapping[str, str]) -> list[dict[str, Any]] | None:
@@ -1391,27 +1376,24 @@ def resolve_task_linkage(
     a legitimate second reply for the same ticket was recorded with `task_id: null` and could
     never advance anything (#246 D1.2). Precedence, most explicit first: the `--in-reply-to`
     record, then the `--ticket` name, then the sender's active lease (the legacy path for the
-    first reply), then the sender's SOLE open task. Only that last step infers, and only when
-    the answer is unique: zero or several open tasks, or an explicit name that does not
-    resolve to one of the sender's open tasks, records the reply unlinked with one warning
-    line — a wrong linkage is worse than none.
+    first reply). No step infers: the rendered dispatch contract carries `--ticket` (#246
+    E1.1), so a reply that names nothing is never guessed at. Zero or several open tasks, or
+    an explicit name that does not resolve to one of the sender's open tasks, records the
+    reply unlinked with one warning line — a wrong linkage is worse than none. The
+    sole-open-task branch deleted in E1.2 bound the wrong row exactly once; a guard that is
+    told does not guess.
 
-    Every unlinked answer now carries a reason (#246 D1.3), so a recorded reply with
+    Every unlinked answer carries a reason (#246 D1.3), so a recorded reply with
     `task_id: null` is never silent. The reason states the severity, and the line leads with a
     stable marker for that severity (#246 D1.5): "open work refused" when the step refused to
-    bind what it was told — open work it would not guess at (several open tasks, or a task
-    record whose id cannot be named), or a flag that names no open task of the sender —
-    "nothing to link" when there was nothing to link, and "sender or store unreadable" when
-    there was no answer at all (no sender resolved, or the anchor/store could not be read).
-    The last of those is the third wording, distinct from both a refusal and an empty answer.
-    The warning never claims a record here: whether one was written depends on the store, so
-    the caller appends that clause after the store answers — and only for an UNLINKED warning,
-    since the inferred (linked) line carries no record clause at all.
-
-    The inferred step also warns when it SUCCEEDS (#246 D1.4): it counts candidates, it cannot
-    read which ticket the payload is about, so its binding is reported with the task id it
-    chose and the flag that overrides it. The explicit steps stay silent — they are the
-    caller's instruction, so a warning there would carry no information.
+    bind what it was told — open work it would not guess at (one or several open tasks), or a
+    flag that names no open task of the sender — "nothing to link" when there was nothing to
+    link, and "sender or store unreadable" when there was no answer at all (no sender
+    resolved, or the anchor/store could not be read). The last of those is the third wording,
+    distinct from both a refusal and an empty answer. The warning never claims a record here:
+    whether one was written depends on the store, so the caller appends that clause after the
+    store answers. Every warning now accompanies an unlinked reply; the explicit `--ticket`
+    and `--in-reply-to` bindings stay silent, because they are the caller's instruction.
     """
     if in_reply_to_record is not None:
         return _linkage_from_record(in_reply_to_record, sender=sender, env=env)
@@ -1435,19 +1417,13 @@ def resolve_task_linkage(
         return None, _unlinked(
             UNLINKED_UNREADABLE_MARKER, "the sender's open tasks could not be read"
         )
-    if len(open_tasks) == 1:
-        task_id = open_tasks[0].get("task_id")
-        if isinstance(task_id, str):
-            return task_id, _inferred(task_id)
-        return None, _unlinked(
-            UNLINKED_REFUSED_MARKER,
-            f"sender {sender!r} holds open work, but the task id is not a string",
-        )
     if not open_tasks:
         return None, _unlinked(UNLINKED_NOTHING_MARKER, f"sender {sender!r} holds no open task")
+    count = len(open_tasks)
     return None, _unlinked(
         UNLINKED_REFUSED_MARKER,
-        f"sender {sender!r} holds {len(open_tasks)} open tasks, so the ticket is ambiguous",
+        f"sender {sender!r} holds {count} open task{'s' if count != 1 else ''}, "
+        "so the ticket is ambiguous",
     )
 
 
@@ -1655,11 +1631,10 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         if isinstance(lease_task, str):
             in_reply_to = lease_task
     # #246 D1.2: the lease is consumed by the first reply, so the task this reply advances is
-    # resolved from the whole store — the explicit flag, else the lease, else the sender's sole
-    # open task — and an unresolvable answer is recorded unlinked with one warning line. The
-    # inferred step warns even on success (#246 D1.4): it counts candidates, so the line names
-    # the task it bound and the flag that overrides it. A dry run records nothing, so it resolves
-    # nothing.
+    # resolved from the whole store — the explicit flag, else the lease — and an unresolvable
+    # answer is recorded unlinked with one warning line. No step infers (#246 E1.2): the
+    # rendered contract carries `--ticket`, so a reply that names nothing mutates nothing. A dry
+    # run records nothing, so it resolves nothing.
     linked_task_id: str | None = None
     linkage_warning: str | None = None
     if not options.dry_run:
@@ -1716,14 +1691,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             # same branch records or not depending on whether the store resolves at all. Claim a
             # record only when one was written, and say plainly when none was, so the warning
             # never contradicts the NOT RECORDED pointer in the prompt delivered in this run.
-            # Only an UNLINKED warning states a recording outcome: a LINKED one (the inferred
-            # sole-open-task binding) names a task the reply was bound and advanced to, so a
-            # record clause there would label a bound reply "unlinked".
-            clause = (
-                (RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE)
-                if linked_task_id is None
-                else ""
-            )
+            # Every warning is unlinked (#246 E1.2): the explicit bindings stay silent, so the
+            # clause always states a recording outcome.
+            clause = RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE
             print(f"herdr-reply: {linkage_warning}{clause}", file=sys.stderr)
         pointer = pointer_block(shape=shape, evidence=evidence, stored=stored, reason=reason)
         # The pointer rides between the envelope and the body; the body stays last.
