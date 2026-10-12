@@ -55,6 +55,27 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+# The `herdr agent get` unwrap and the state vocabulary moved to `herdr_agent`; the
+# fail-soft policies below stay here and catch what the seam raises. These names stay
+# reachable as `herdr_prompt.<name>` for every existing consumer.
+from herdr_agent import (
+    AgentObservation as AgentObservation,  # noqa: F401
+)
+from herdr_agent import (
+    has_active_subagents as has_active_subagents,  # noqa: F401
+)
+from herdr_agent import (
+    is_agent_settled as is_agent_settled,  # noqa: F401
+)
+from herdr_agent import (
+    is_recognized as is_recognized,  # noqa: F401
+)
+from herdr_agent import (
+    observe_agent as observe_agent,
+)
+from herdr_agent import (
+    read_interactive_ready as read_interactive_ready,
+)
 from herdr_bootstrap import load_kind_entry
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
@@ -538,23 +559,11 @@ def fetch_agent_revision(
     herdr: str, target: str, env: Mapping[str, str]
 ) -> tuple[str | None, str | None]:
     """Fetch (revision, pane_id) from `herdr agent get <target>`, if available."""
-    done = run_herdr([herdr, "agent", "get", target], env)
-    if done.returncode != 0:
-        return None, None
     try:
-        data = decode_response(done.stdout).get("result")
-        if isinstance(data, dict):
-            agent = data.get("agent")
-            if isinstance(agent, dict):
-                rev = agent.get("revision")
-                pane = agent.get("pane_id")
-                return (
-                    str(rev) if rev is not None else None,
-                    str(pane) if pane is not None else None,
-                )
+        obs = observe_agent(herdr, target, env)
     except Exception:
-        pass
-    return None, None
+        return None, None
+    return obs.revision, obs.pane_id
 
 
 def _format_seconds(seconds: float) -> str:
@@ -640,26 +649,15 @@ def agent_readiness(
 
     ready is true only when the agent is settled (`idle`/`done`) and its
     `interactive_ready` field is not explicitly false (a missing field counts as
-    ready, for back-compat). A non-zero exit or unreadable response is not ready.
+    ready, for back-compat). A failed read — non-zero exit, unreadable response,
+    or missing record — is not ready.
     """
-    done = run_herdr([herdr, "agent", "get", target], env)
-    if done.returncode != 0:
-        return (False, None, None)
     try:
-        result = decode_response(done.stdout).get("result")
+        obs = observe_agent(herdr, target, env)
     except HerdrError:
         return (False, None, None)
-    if not isinstance(result, dict):
-        return (False, None, None)
-    agent = result.get("agent")
-    if not isinstance(agent, dict):
-        return (False, None, None)
-    raw_status = agent.get("agent_status")
-    status = raw_status if isinstance(raw_status, str) and raw_status else None
-    revision = agent.get("revision")
-    revision_str = str(revision) if revision is not None else None
-    ready = status in ("idle", "done") and agent.get("interactive_ready") is not False
-    return (ready, status, revision_str)
+    ready = obs.status in ("idle", "done") and obs.interactive_ready is not False
+    return (ready, obs.status, obs.revision)
 
 
 def _read_interactive_ready(herdr: str, target: str, env: Mapping[str, str]) -> bool | None:
@@ -670,24 +668,7 @@ def _read_interactive_ready(herdr: str, target: str, env: Mapping[str, str]) -> 
     once, after the readiness loop has already refused, so it cannot change
     where the gate fires.
     """
-    done = run_herdr([herdr, "agent", "get", target], env)
-    if done.returncode != 0:
-        return None
-    try:
-        result = decode_response(done.stdout).get("result")
-    except HerdrError:
-        return None
-    if not isinstance(result, dict):
-        return None
-    agent = result.get("agent")
-    if not isinstance(agent, dict):
-        return None
-    flag = agent.get("interactive_ready")
-    if flag is False:
-        return False
-    if flag is True:
-        return True
-    return None
+    return read_interactive_ready(herdr, target, env)
 
 
 def wait_for_ready(

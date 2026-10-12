@@ -14,6 +14,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import herdr_agent
 import herdr_cli
 import herdr_wait
 import pytest
@@ -278,6 +279,66 @@ def test_is_settled_rejects_active_subagents() -> None:
 
     assert not herdr_wait.is_settled(snap_busy, wanted)
     assert herdr_wait.is_settled(snap_free, wanted)
+
+
+def test_snapshot_agent_carries_the_seam_observation_fields(stub: StubHarness) -> None:
+    """One fake-herdr record reads identically through `snapshot_agent` and `observe_agent`."""
+    state = settled_state(
+        a={
+            "agent_status": "idle",
+            "revision": "r1",
+            "session": "/tmp/s.jsonl",
+            "tokens": {"summary": "2 subagents running"},
+        }
+    )
+    stub.write_state(state)
+    snap = herdr_wait.snapshot_agent(str(stub.herdr), "a", stub.base_env())
+    obs = herdr_agent.observe_agent(str(stub.herdr), "a", stub.base_env())
+    assert (snap.target, snap.status, snap.revision, snap.session, snap.tokens) == (
+        obs.target,
+        obs.status,
+        obs.revision,
+        obs.session,
+        obs.tokens,
+    )
+    assert not herdr_wait.is_settled(snap, ["idle", "done"])
+    assert not herdr_agent.is_agent_settled(obs, ["idle", "done"])
+
+
+def test_wait_and_seam_agree_on_transitions_and_subagent_clearing(stub: StubHarness) -> None:
+    """A scripted feed (working, then idle while subagents run, then cleared) settles both paths alike.
+
+    Each round consumes two polls (one per reader), so the sequences repeat each
+    scripted value in pairs and both readers see the same interpreted state.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {"a": {"agent_status": "idle", "revision": "r1"}},
+        "agent_get_seq": {"a": ["working"] * 2 + ["idle"] * 4},
+        "agent_get_tokens_seq": {
+            "a": [{"summary": "⏳ 1 subagent"}] * 4 + [None, None],
+        },
+    }
+    stub.write_state(state)
+    herdr = str(stub.herdr)
+    env = stub.base_env()
+    wanted = ["idle", "done"]
+    first_snap = herdr_wait.snapshot_agent(herdr, "a", env)
+    first_obs = herdr_agent.observe_agent(herdr, "a", env)
+    second_snap = herdr_wait.snapshot_agent(herdr, "a", env)
+    second_obs = herdr_agent.observe_agent(herdr, "a", env)
+    third_snap = herdr_wait.snapshot_agent(herdr, "a", env)
+    third_obs = herdr_agent.observe_agent(herdr, "a", env)
+
+    assert (first_snap.status, first_snap.tokens) == (first_obs.status, first_obs.tokens)
+    assert (second_snap.status, second_snap.tokens) == (second_obs.status, second_obs.tokens)
+    assert (third_snap.status, third_snap.tokens) == (third_obs.status, third_obs.tokens)
+    assert not herdr_wait.is_settled(first_snap, wanted)
+    assert not herdr_agent.is_agent_settled(first_obs, wanted)
+    assert not herdr_wait.is_settled(second_snap, wanted)
+    assert not herdr_agent.is_agent_settled(second_obs, wanted)
+    assert herdr_wait.is_settled(third_snap, wanted)
+    assert herdr_agent.is_agent_settled(third_obs, wanted)
 
 
 def test_wait_treats_subagents_as_unsettled_until_cleared(stub: StubHarness) -> None:

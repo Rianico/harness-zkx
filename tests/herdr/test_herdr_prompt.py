@@ -12,10 +12,12 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import herdr_agent
 import herdr_bootstrap
 import herdr_cli
 import herdr_envelope
 import herdr_prompt
+import herdr_wait
 import pytest
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
@@ -1306,6 +1308,64 @@ def test_preflight_respects_explicit_interactive_ready_false(
     assert code == herdr_cli.EXIT_OK
     assert len(stub.prompts()) == 1
     assert len(slept) == 1
+
+
+# ── cross-consistency: the wait and prompt paths interpret one feed alike ──────────
+
+
+def test_readiness_and_fetch_agree_with_the_seam_observation(stub: StubHarness) -> None:
+    """One fake-herdr record yields the same interpreted state through both consumers."""
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {
+                "reviewer": {
+                    "agent_status": "idle",
+                    "revision": "r4",
+                    "tokens": {"summary": "⏳ 1 subagent (developer)"},
+                }
+            },
+        }
+    )
+    herdr = str(stub.herdr)
+    env = stub.base_env()
+    obs = herdr_agent.observe_agent(herdr, "reviewer", env)
+    ready, status, revision = herdr_prompt.agent_readiness(herdr, "reviewer", env)
+    rev, pane = herdr_prompt.fetch_agent_revision(herdr, "reviewer", env)
+    snap = herdr_wait.snapshot_agent(herdr, "reviewer", env)
+
+    assert (status, revision) == (obs.status, obs.revision)
+    assert (rev, pane) == (obs.revision, obs.pane_id)
+    assert (snap.status, snap.revision, snap.tokens) == (obs.status, obs.revision, obs.tokens)
+    assert ready  # idle and interactive_ready true, so prompt delivery would proceed
+    assert herdr_agent.has_active_subagents(obs)
+    assert herdr_wait.has_active_subagents(snap)
+    assert not herdr_agent.is_agent_settled(obs, ["idle", "done"])
+    assert not herdr_wait.is_settled(snap, ["idle", "done"])
+
+
+def test_readiness_tracks_the_same_transitions_as_the_seam(stub: StubHarness) -> None:
+    """A working→idle feed is read alike by `agent_readiness` and `observe_agent`.
+
+    Each round consumes two polls (one per reader), so the sequence repeats each
+    scripted status in pairs and both readers see the same interpreted state.
+    """
+    stub.write_state(
+        {**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working", "working", "idle", "idle"]}}
+    )
+    herdr = str(stub.herdr)
+    env = stub.base_env()
+
+    busy_ready, busy_status, busy_revision = herdr_prompt.agent_readiness(herdr, "reviewer", env)
+    busy_obs = herdr_agent.observe_agent(herdr, "reviewer", env)
+    idle_ready, idle_status, idle_revision = herdr_prompt.agent_readiness(herdr, "reviewer", env)
+    idle_obs = herdr_agent.observe_agent(herdr, "reviewer", env)
+
+    assert not busy_ready
+    assert (busy_status, busy_revision) == (busy_obs.status, busy_obs.revision)
+    assert (idle_status, idle_revision) == (idle_obs.status, idle_obs.revision)
+    assert idle_ready
+    assert herdr_agent.is_agent_settled(idle_obs, ["idle", "done"])
 
 
 # ── #238: a revision-0 kind is not told to re-check a state that cannot move ────────

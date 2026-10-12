@@ -55,6 +55,23 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+# The `herdr agent get` unwrap and the state vocabulary moved to `herdr_agent`; these
+# names stay reachable as `herdr_wait.<name>` for every existing consumer.
+# `is_recognized`/`has_active_subagents` resolve from this module's namespace in the
+# hold loop below; `is_agent_settled` is the shared settle rule `is_settled` adapts.
+from herdr_agent import (
+    has_active_subagents as has_active_subagents,
+)
+from herdr_agent import (
+    is_agent_settled as is_agent_settled,
+)
+from herdr_agent import (
+    is_recognized as is_recognized,
+)
+from herdr_agent import (
+    observe_agent as observe_agent,
+)
+
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_BLOCKED,
@@ -62,16 +79,13 @@ from herdr_cli import (
     EXIT_OK,
     EXIT_USAGE,
     METHOD_CONSTRAINT_EPILOG,
-    HerdrError,
     UsageError,
     add_shared_argument,
-    decode_response,
     entries,
     entry_optional_text,
     find_herdr,
     guard,
     require_herdr_env,
-    run_herdr,
     run_herdr_checked,
 )
 
@@ -194,70 +208,19 @@ def resolve_until(until: Sequence[str]) -> list[str]:
 
 def snapshot_agent(herdr: str, target: str, env: Mapping[str, str]) -> Snapshot:
     """Poll one target's state via `herdr agent get`; a failed poll is fail-loud."""
-    done = run_herdr([herdr, "agent", "get", target], env)
-    if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
-        raise HerdrError(f"herdr agent get {target} failed: {detail}")
-    result = decode_response(done.stdout).get("result")
-    if not isinstance(result, dict):
-        raise HerdrError(f"herdr agent get {target} returned no result")
-    agent = result.get("agent")
-    if not isinstance(agent, dict):
-        raise HerdrError(f"herdr agent get {target} returned no agent record")
-    status = agent.get("agent_status")
-    if not isinstance(status, str) or not status:
-        raise HerdrError(f"herdr agent get {target} returned no agent_status")
-    revision_raw = agent.get("revision")
-    revision: str | None = None
-    if isinstance(revision_raw, str) and revision_raw:
-        revision = revision_raw
-    elif isinstance(revision_raw, int) and revision_raw >= 0:
-        revision = str(revision_raw)
-    session_raw = agent.get("agent_session")
-    session: str | None = None
-    if isinstance(session_raw, dict):
-        session = entry_optional_text(session_raw, "value")
-    tokens_raw = agent.get("tokens")
-    tokens: dict[str, str] | None = None
-    if isinstance(tokens_raw, dict):
-        tokens = {str(k): str(v) for k, v in tokens_raw.items() if isinstance(v, str)}
+    obs = observe_agent(herdr, target, env)
     return Snapshot(
-        target=target,
-        status=status,
-        revision=revision,
-        session=session,
-        tokens=tokens,
+        target=obs.target,
+        status=obs.status,
+        revision=obs.revision,
+        session=obs.session,
+        tokens=obs.tokens,
     )
-
-
-def is_recognized(snap: Snapshot) -> bool:
-    """Revision 0 means Herdr has not recognized an agent turn yet.
-
-    Seen on agy panes: `agent get` reports idle/done with revision 0 and no
-    session while the pane status bar still reads WORKING. Such a record never
-    settles the barrier; the wait is failed fast (exit 2) instead of hanging.
-    """
-    return snap.revision != "0"
-
-
-def has_active_subagents(snap: Snapshot) -> bool:
-    """True when tokens indicate active subagents (e.g. ⏳ in summary or title-suffix)."""
-    if not snap.tokens:
-        return False
-    summary = snap.tokens.get("summary", "")
-    title_suffix = snap.tokens.get("title-suffix", "")
-    return "⏳" in summary or "subagent" in summary.lower() or "⏳" in title_suffix
 
 
 def is_settled(snap: Snapshot, wanted: Sequence[str]) -> bool:
     """Check if agent is settled: in wanted states, recognized, and without active subagents."""
-    if snap.status not in wanted:
-        return False
-    if not is_recognized(snap):
-        return False
-    if has_active_subagents(snap):
-        return False
-    return True
+    return is_agent_settled(snap, wanted)
 
 
 def format_table(snaps: Sequence[Snapshot]) -> str:
