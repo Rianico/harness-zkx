@@ -129,6 +129,14 @@ def git_facts(
         return completed(argv, stdout="true\n" if bare else "false\n")
     if "--git-common-dir" in argv:
         return completed(argv, stdout=f"{root / '.git'}\n")
+    if "--verify" in argv:
+        rev = argv[-1]
+        sha = (
+            "1111111111111111111111111111111111111111"
+            if rev == "HEAD"
+            else "2222222222222222222222222222222222222222"
+        )
+        return completed(argv, stdout=f"{sha}\n")
     raise AssertionError(f"unexpected rev-parse probe: {argv}")
 
 
@@ -154,7 +162,13 @@ def test_allocate_with_wt_reads_path_back(
     assert hw.main(["allocate", "feat/184"], env) == herdr_cli.EXIT_OK
     assert capsys.readouterr().out == "/repo.feat-184\n"
     (switch_call,) = [call for call in calls if call[0][1] == "switch"]
-    assert switch_call[0][1:] == ["switch", "--create", "feat/184"]
+    assert switch_call[0][1:] == [
+        "switch",
+        "--create",
+        "feat/184",
+        "--base",
+        "1111111111111111111111111111111111111111",
+    ]
     assert switch_call[1]["CI"] == "1"
 
 
@@ -193,6 +207,10 @@ def test_allocate_with_wt_recovers_existing_branch(
     list_json = json.dumps([{"branch": "feat/184", "path": "/wt"}])
 
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "rev-parse", "--verify"]:
+            return completed(argv, stdout="1111111111111111111111111111111111111111\n")
+        if argv[:2] == ["git", "rev-parse"]:
+            return completed(argv, stdout="false\n")
         if argv[1] == "switch":
             return completed(argv, returncode=1, stderr="branch exists")
         return completed(argv, stdout=list_json)
@@ -208,6 +226,10 @@ def test_allocate_with_wt_failure_exits_one(
     env = env_with_wt(tmp_path)
 
     def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "rev-parse", "--verify"]:
+            return completed(argv, stdout="1111111111111111111111111111111111111111\n")
+        if argv[:2] == ["git", "rev-parse"]:
+            return completed(argv, stdout="false\n")
         if argv[1] == "switch":
             return completed(argv, returncode=1, stderr="boom")
         return completed(argv, stdout=json.dumps([]))
@@ -262,6 +284,8 @@ def test_allocate_git_fallback_retries_existing_branch(
     calls = patch_runner(monkeypatch, handler)
     assert hw.main(["allocate", "feat/184"], env) == herdr_cli.EXIT_OK
     assert calls[-1][0] == ["git", "worktree", "add", str(worktree), "feat/184"]
+    add_calls = [call for call in calls if call[0][:3] == ["git", "worktree", "add"]]
+    assert add_calls[0][0][-1] == "1111111111111111111111111111111111111111"
     assert capsys.readouterr().out.strip() == str(worktree)
 
 
@@ -444,6 +468,64 @@ def test_list_with_wt_plain_prints_rows(
     _ = patch_runner(monkeypatch, lambda argv, _env: completed(argv, stdout=list_json))
     assert hw.main(["list"], env) == herdr_cli.EXIT_OK
     assert capsys.readouterr().out == "feat/184  /wt\n"
+
+
+CALLER_HEAD_SHA = "1111111111111111111111111111111111111111"
+EXPLICIT_BASE_SHA = "2222222222222222222222222222222222222222"
+
+
+def test_allocate_without_base_targets_caller_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pin herdr228-reconcile#item-0: allocate without --base branches from the caller HEAD."""
+    env = env_with_wt(tmp_path)
+    list_json = json.dumps([{"branch": "feat/228", "path": "/wt-feat-228"}])
+    root = tmp_path / "work" / "repo"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "rev-parse", "--verify"]:
+            assert argv[3] == "HEAD"
+            return completed(argv, stdout=f"{CALLER_HEAD_SHA}\n")
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
+        if argv[1] == "list":
+            return completed(argv, stdout=list_json)
+        return completed(argv)
+
+    calls = patch_runner(monkeypatch, handler)
+    assert hw.main(["allocate", "feat/228"], env) == herdr_cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "/wt-feat-228"
+    assert CALLER_HEAD_SHA in captured.err
+    (switch_call,) = [call for call in calls if call[0][1] == "switch"]
+    assert switch_call[0][1:] == ["switch", "--create", "feat/228", "--base", CALLER_HEAD_SHA]
+
+
+def test_allocate_reports_resolved_base_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pin herdr228-reconcile#item-0: the resolved base SHA is reported on stderr."""
+    env = env_with_wt(tmp_path)
+    list_json = json.dumps([{"branch": "feat/228", "path": "/wt-feat-228"}])
+    root = tmp_path / "work" / "repo"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "rev-parse", "--verify"]:
+            assert argv[3] == "main"
+            return completed(argv, stdout=f"{EXPLICIT_BASE_SHA}\n")
+        facts = git_facts(argv, root)
+        if facts is not None:
+            return facts
+        if argv[1] == "list":
+            return completed(argv, stdout=list_json)
+        return completed(argv)
+
+    calls = patch_runner(monkeypatch, handler)
+    assert hw.main(["allocate", "feat/228", "--base", "main"], env) == herdr_cli.EXIT_OK
+    (switch_call,) = [call for call in calls if call[0][1] == "switch"]
+    assert switch_call[0][1:] == ["switch", "--create", "feat/228", "--base", "main"]
+    assert EXPLICIT_BASE_SHA in capsys.readouterr().err
 
 
 def test_empty_branch_is_usage_error(tmp_path: Path) -> None:

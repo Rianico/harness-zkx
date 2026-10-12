@@ -386,6 +386,12 @@ def allocate_with_git(branch: str, base: str | None, env: Mapping[str, str]) -> 
     return Allocation(branch=branch, path=str(path), engine=ENGINE_GIT)
 
 
+def resolve_base_sha(base: str | None, env: Mapping[str, str]) -> str:
+    """Resolve the branch base to a commit SHA, defaulting to the caller HEAD (#242)."""
+    rev = base if base else "HEAD"
+    return run_checked(["git", "rev-parse", "--verify", rev], env).strip()
+
+
 def allocate(branch: str, base: str | None, env: Mapping[str, str]) -> Allocation:
     """Allocate the branch's worktree through Worktrunk when present, else `git worktree`.
 
@@ -393,9 +399,12 @@ def allocate(branch: str, base: str | None, env: Mapping[str, str]) -> Allocatio
     git directory itself, so its sibling convention collapses to `<git-dir>.<slug>` (#207).
     """
     name = require_branch(branch)
+    resolved = resolve_base_sha(base, env)
+    print(f"herdr-worktree: base {resolved} for {name}", file=sys.stderr)
+    effective: str | None = base if base is not None else resolved
     wt = wt_binary(env)
     if wt is not None and not is_bare_repository(env):
-        allocation = allocate_with_wt(wt, name, base, env)
+        allocation = allocate_with_wt(wt, name, effective, env)
         guard_not_in_git_dir(Path(allocation.path), env)
         return allocation
     if wt is not None:
@@ -403,7 +412,7 @@ def allocate(branch: str, base: str | None, env: Mapping[str, str]) -> Allocatio
             "herdr-worktree: bare repository; allocating with git worktree instead of wt",
             file=sys.stderr,
         )
-    return allocate_with_git(name, base, env)
+    return allocate_with_git(name, effective, env)
 
 
 def resolve(branch: str, env: Mapping[str, str]) -> Allocation:
@@ -495,7 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = allocate_parser.add_argument("branch", help="branch to create and check out")
     _ = allocate_parser.add_argument(
-        "--base", help="base revision to branch from (defaults to wt/git)"
+        "--base", help="base revision to branch from (defaults to the caller HEAD)"
     )
     add_shared_argument(allocate_parser, "json", help="emit a JSON object")
 
