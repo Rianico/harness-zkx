@@ -772,6 +772,27 @@ def test_reply_contract_without_a_ticket_omits_the_flag() -> None:
     assert "--ticket" not in herdr_prompt.render_reply_contract(sender, None)
 
 
+def test_reply_contract_documents_the_sha_guard_waiver_with_a_quoted_example() -> None:
+    """herdr228-p3#P1: the rendered contract names the sanctioned waiver route in prose.
+
+    A callee quoting a review id (an eight-hex record such as 0c81f04c, which names no
+    commit) meets the broad #245 trigger, so the contract itself must tell the callee the
+    sanctioned route: waive the token by name with `--allow-unresolvable-sha`. The example
+    is itself single-quoted, so it survives copy-paste as one shell word — an unquoted
+    placeholder would be a parse error where the callee pastes it (review 399f6102) — and
+    the guidance is prose, never a shell template, so nothing pasted from it widens the
+    waiver. Mutant: delete the guidance and this pin fails on the missing flag name.
+    """
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    for contract in (
+        herdr_prompt.render_reply_contract(sender, "#228-waiver-doc"),
+        herdr_prompt.render_reply_contract(sender),
+    ):
+        assert "--allow-unresolvable-sha" in contract
+        assert "'0c81f04c'" in contract
+        assert "<TOKEN>" not in contract
+
+
 def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr

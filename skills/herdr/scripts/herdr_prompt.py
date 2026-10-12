@@ -443,6 +443,13 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
     arbitrary ticket names the dispatcher deliberately derives verbatim. This is the same
     treatment `herdr_bootstrap` gives a rendered path (`shlex.quote(target)`), and the reason
     agent names are refused for whitespace.
+
+    The contract also carries the SHA guard's waiver route in prose: a callee quoting a
+    review id (an eight-hex record such as '0c81f04c', which names no commit) meets the
+    broad #245 trigger, so without guidance the reply is refused with no sanctioned next
+    step. The guidance names `--allow-unresolvable-sha` with a single-quoted example, so
+    the example survives copy-paste as one shell word — prose advice, never a shell
+    template, so nothing pasted from it widens the waiver.
     """
     if sender.agent:
         contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
@@ -450,7 +457,10 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
             contract += f" --ticket {shlex.quote(ticket_id)}"
         return (
             "On completion, reply to the sender in one message using the herdr helper script:\n"
-            f"{contract}"
+            f"{contract}\n"
+            "  If the reply quotes a review id such as '0c81f04c' that names no commit,"
+            " the SHA guard refuses it: waive that token by name with"
+            " --allow-unresolvable-sha '0c81f04c' (one flag per token, reported on stderr)."
         )
     note = (
         "(the sending pane has no agent name; reply cannot be addressed — "

@@ -2921,6 +2921,49 @@ def test_an_eight_hex_review_id_is_refused_by_the_broad_trigger(
     assert stub.prompts() == []
 
 
+def test_a_review_id_is_accepted_only_through_the_documented_waiver(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """herdr228-p3#P1 pin: `0c81f04c` refused bare, delivered once waived by name.
+
+    The review id is shape-indistinguishable from a commit abbreviation, so the broad
+    trigger refuses it — and the rendered contract's documented route (waive the token by
+    name with `--allow-unresolvable-sha`) admits it, loudly on stderr. Both directions in
+    one pin, so neither a widened waiver nor a dropped guard can pass: without the flag
+    the reply is refused before any record exists; with it the body is delivered verbatim.
+    Mutant: exempt review-shaped tokens and the first half fails; break the waiver lookup
+    and the second half fails.
+    """
+    repo, _short = sha_guard_repo(tmp_path)
+    review_id = "0c81f04c"
+    body = reply_payload(f"- Source: D2's review (`{review_id}`) approved with findings")
+    path = tmp_path / "reply.md"
+    _ = path.write_text(body, encoding="utf-8")
+
+    refused = stub.run(
+        "orchestrator", "--file", str(path), env={"HERDR_LANE_DIR": str(repo)}, cwd=repo
+    )
+    assert refused.returncode == herdr_cli.EXIT_USAGE, (refused.stdout, refused.stderr)
+    assert review_id in refused.stderr
+    assert herdr_lease.list_replies(base_dir=repo) == []
+    assert stub.prompts() == []
+
+    waived = stub.run(
+        "orchestrator",
+        "--file",
+        str(path),
+        herdr_reply.ALLOW_UNRESOLVABLE_SHA,
+        review_id,
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+    assert waived.returncode == herdr_cli.EXIT_OK, waived.stderr
+    assert "waived" in waived.stderr
+    assert review_id in waived.stderr
+    (call,) = stub.prompts()
+    assert call[4].endswith(body)
+
+
 # ── #245 D2-rework-2: which git overrides actually move the object store ───────────────
 
 # The four names whose presence relocates the objects `git rev-parse` reads, so the guard's verdict
