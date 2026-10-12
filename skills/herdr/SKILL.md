@@ -198,7 +198,7 @@ Multi-agent coordination is event-driven via completion callbacks:
    If `herdr-prompt` exits 4 (timeout) or was dispatched with `--no-wait`, the prompt was delivered and the callee is working asynchronously. The orchestrator yields turn (stops calling tools, enters idle).
 
 4. **Callee executes completion callback (and soft-releases its lease):**
-   Upon completion or blocking, the callee executes the contract callback via `herdr_reply.py`, adhering to the settled **Final Reply Template** (`skills/dynamic-workflow-wrapper/references/resp-format.md`):
+   Upon completion or blocking, the callee executes the contract callback via `herdr_reply.py`, adhering to the settled **Final Reply Template** (`skills/ai-engineering-expert/references/resp-format.md`):
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md --ticket '<ticket-id>'
    # Or an inline stdin payload (a here-doc or a pipe keeps it off the shell's argv):

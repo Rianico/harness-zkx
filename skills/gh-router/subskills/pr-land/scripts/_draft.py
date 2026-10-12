@@ -272,11 +272,12 @@ def run_draft_phase(
         "dirty_files": dirty_files,
     }
     hint = (
-        f"curate {body_path.name} to <=5 bullets "
-        "(Core + Root for fix + Risk:Door + Proof + Links), "
+        f"body: keep {body_path.name} in the repo's installed PR template shape "
+        "(pr-enhance owns the prose); squash: author a separate overview in "
+        "--squash-message-file, <=5 bullets (Core + Root for fix + Risk:Door + Proof + Links), "
         "drop wip/fixup trivia, strip Mermaid/details/checklist; "
         f"then land with --body-file {body_path} "
-        '(spec: CONTEXT.md "Curated Squash Message" + pr-land SKILL.md Squash Shape)'
+        '(spec: GLOSSARY.md "Curated Squash Message" + pr-land SKILL.md Squash Shape)'
     )
     payload = build_draft_payload(
         repo=repo,

@@ -30,7 +30,10 @@ testpaths = [
 ]
 # skill-comply has its own pyproject.toml and needs to run from its directory
 pythonpath = ["."]
-addopts = "-q --tb=short -n auto"
+# Reason: hyphenated skill test dirs (`tests/setup-lsz-skills/`) can't carry `__init__.py`, so
+# prepend mode collides on shared basenames like `test_templates.py`. importlib mode derives
+# unique module names from paths.
+addopts = "-q --tb=short -n auto --import-mode=importlib"
 
 [tool.ruff]
 line-length = 100

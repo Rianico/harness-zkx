@@ -324,6 +324,29 @@ metadata:
   version: '1.0'
 ```
 
+### `credits` (Attribution & Provenance)
+
+Declares upstream origins when a skill is adapted or ported from an external reference (repo, blog, paper). Optional; `validate-deps.py lint` structurally validates it when present.
+
+```yaml
+metadata:
+  credits:
+    source: https://github.com/example/upstream/blob/main/skills/setup-upstream/SKILL.md
+    author: example
+    version: main
+    note: Adapted from upstream-setup
+```
+
+**Rules:**
+
+- Either a single mapping or a list of mappings (one skill may credit several sources)
+- Each entry needs at least `source` or `author`; both is preferred
+- `source` should deep-link to the specific upstream document (blob file path), not just the repository root
+- Only `source`, `author`, `version`, `note` keys are allowed, and all values must be strings
+- Malformed or unrecognized structure fails `lint`
+
+**Validation:** `uv run $SKILL_DIR/scripts/validate-deps.py lint` reports `LINT FAIL` with the offending path when a `credits` entry violates the schema.
+
 ## Parent Skill with Sub-Skills
 
 When a skill manages multiple related capabilities, use the parent-skill-with-sub-skills pattern instead of routing commands.

@@ -28,6 +28,7 @@ from pathlib import Path
 
 from _errors import PrError, RefusalError, UsageError
 from _options import PrOptions
+from _squash import extract_closes_numbers
 
 _LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
 if _LIB_DIR not in sys.path:
@@ -60,6 +61,7 @@ __all__ = [
     "failing_run_ids",
     "fetch_merge_state",
     "fetch_mergeability",
+    "issue_state",
     "MergeFetch",
     "MergeObservation",
     "merge_state_verdict",
@@ -75,6 +77,7 @@ __all__ = [
     "resolve_repo",
     "resolve_title_and_body",
     "run_command",
+    "warn_closed_issues",
     "watch_checks",
 ]
 
@@ -214,6 +217,57 @@ def default_branch(repo: str, cwd: Path | None = None) -> str | None:
     if res.returncode == 0 and res.stdout.strip():
         return res.stdout.strip()
     return None
+
+
+def issue_state(repo: str, num: str, cwd: Path | None = None) -> tuple[str, str] | None:
+    """Return `(state, title)` for issue #num, or None on any failure.
+
+    The closed-issue advisory's read: `gh issue view` in one call. Fail-open by design — a
+    non-zero rc, unparsable JSON, or a `PrError` from the seam all come back as None, so a
+    flaky query never breaks a run.
+    """
+    try:
+        res = run_command(
+            ["gh", "issue", "view", num, "--json", "state,closedAt,title", "-R", repo],
+            cwd=cwd,
+        )
+    except PrError:
+        return None
+    if res.returncode != 0:
+        return None
+    try:
+        data = json.loads(res.stdout)
+    except ValueError, TypeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return str(data.get("state", "")), str(data.get("title", ""))
+
+
+def warn_closed_issues(repo: str, *texts: str, cwd: Path | None = None) -> int:
+    """Warn on stderr when a `Closes #N` in *texts* references an already-closed issue.
+
+    Advisory only: it never refuses, never raises, and never changes an exit code. It scans
+    every given text (the PR body and the squash message) for closing-keyword issue numbers,
+    queries each once, and prints a two-line hint for every CLOSED issue. A non-CLOSED state or
+    a failed query prints nothing, so the advisory stays silent rather than spamming. Returns
+    the number of CLOSED issues warned (the callers ignore it).
+    """
+    warned = 0
+    for num in extract_closes_numbers("\n".join(texts)):
+        state_title = issue_state(repo, num, cwd=cwd)
+        if state_title is None:
+            continue
+        state, title = state_title
+        if state.strip().upper() == "CLOSED":
+            print(f'advisory: issue #{num} is already CLOSED (title: "{title}")', file=sys.stderr)
+            print(
+                "hint: if this PR is a follow-up, consider using 'Part of #N' "
+                "and opening a dedicated issue for this scope.",
+                file=sys.stderr,
+            )
+            warned += 1
+    return warned
 
 
 def _authority_resolve(spec: str, mode: str, cwd: Path | None = None) -> RangeResolution:

@@ -40,6 +40,8 @@
     - `CHANGELOG.md` starts with `# Changelog`.
     - Every PR entry under `## [Unreleased]` references the PR (`(#N)`).
     - Unattributed entries match baseline or PR waiver.
+    - Entry shape floor: each `## [Unreleased]` bullet stays under 100 words and 4 lines, follows `**scope:** imperative summary — optional 1-2 sentence rationale — closing with `(#N)`, and carries no raw machine telemetry (load averages, percentiles, rate counters, error-code dumps, repeated sub-millisecond timings). The PR's own entries must name a `**scope:**`.
+  - Pre-merge audit: the `wt` `[pre-merge]` hook runs `changelog-gate.py ticket` (the shape-only phase over `## [Unreleased]`), and `changelog-gate.py ledger --pr N --squash-title "type(scope): subject"` audits that the squash subject's scope matches one of the PR's entry scopes before landing.
 - **PR tooling & squash-merge hygiene:**
   - `pr.py` (in the `gh-router` skill: `subskills/pr-land/scripts/pr.py`) auto-attributes `(#N)` upon PR creation so the changelog ledger gate stays green without manual intervention.
   - Squash commit body cleans ephemeral review and CI procedural noise (`## Checklist`, `Landing: squash`, `Ledger-Waiver:`, HTML comments, empty headings, fenced Mermaid diagrams, `<details>` blocks, `## Architecture`, and `## Verification Evidence`) while preserving authored sections (`## Summary`, `## What Changed`, `## Blast Radius & Safety`, `## Evidence`), `Closes #NN` issue closing directives, and `Co-authored-by:` trailers. `pr.py` requires an explicit `--squash-message` / `--squash-message-file` on the merge path (no PR-body fallback, exit 1) and fails closed (exit 1) if the `--check` preview body is empty or unfilled without one, preventing mechanical commit subject dumps on squash.

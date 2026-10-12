@@ -1,0 +1,17 @@
+# Issue tracker: GitLab
+
+Issues and MRDs for `{{ project }}` live as GitLab issues. Use the `glab` CLI.
+
+## Conventions
+
+- **Create**: `glab issue create --title "..." --description "..."`.
+- **Read**: `glab issue view <number> --comments`.
+- **List**: `glab issue list --label "~needs-triage"`.
+- **Label**: `glab issue update <number> --label "..."` / `--unlabel "..."`.
+- **Close**: `glab issue close <number>`, or write `Closes #NN` on its own line
+  at the bottom of a merge request so the merge closes it automatically.
+
+Infer the project from `git remote -v`; `glab` resolves it inside a clone.
+
+When a skill says "publish to the issue tracker", create a GitLab issue.
+When it says "fetch the relevant ticket", run `glab issue view <number> --comments`.

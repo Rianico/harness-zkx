@@ -36,7 +36,7 @@ from tests.herdr.test_herdr_reply_store import entry_for, failing_write, index_w
 SCRIPT = SCRIPTS_DIR / "herdr_reply.py"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LANE_COORDINATION = REPO_ROOT / "skills" / "herdr" / "references" / "lane-coordination.md"
-RESP_FORMAT = REPO_ROOT / "skills" / "dynamic-workflow-wrapper" / "references" / "resp-format.md"
+RESP_FORMAT = REPO_ROOT / "skills" / "ai-engineering-expert" / "references" / "resp-format.md"
 SKILL_MD = REPO_ROOT / "skills" / "herdr" / "SKILL.md"
 
 METACHARS = """COMPLETED artifacts=[foo.py] issues=[]

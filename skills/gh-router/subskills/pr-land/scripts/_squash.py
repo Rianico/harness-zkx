@@ -65,6 +65,7 @@ __all__ = [
     "DOOR_RE",
     "EMAIL_KEY_RE",
     "EMPTY_BULLET_RE",
+    "extract_closes_numbers",
     "FENCE_RE",
     "FIX_TYPE",
     "HEADING_RE",
@@ -464,6 +465,22 @@ def check_closes_lines(msg: str) -> None:
             )
 
 
+def extract_closes_numbers(text: str) -> list[str]:
+    """The issue numbers on every `CLOSES_REF_RE` line, deduped in first-seen order.
+
+    A pure text scan for the closed-issue advisory: each line whose stripped form opens with
+    a closing keyword (`Closes #87`) yields its `#\\d+` numbers (bare digits, `87`), so a
+    non-closing line mentioning `#88` in prose is never pulled in.
+    """
+    numbers: list[str] = []
+    for line in text.splitlines():
+        if CLOSES_REF_RE.match(line.strip()):
+            for number in re.findall(r"#(\d+)", line):
+                if number not in numbers:
+                    numbers.append(number)
+    return numbers
+
+
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
 
 
@@ -766,7 +783,7 @@ def refuse_unfilled_body(body: str) -> None:
 
 
 SQUASH_MESSAGE_SPEC = (
-    'CONTEXT.md "Curated Squash Message" and '
+    'GLOSSARY.md "Curated Squash Message" and '
     "skills/gh-router/subskills/pr-land/SKILL.md (Fail-Closed Squash Message)"
 )
 

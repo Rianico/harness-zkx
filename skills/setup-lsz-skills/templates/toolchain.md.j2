@@ -1,0 +1,12 @@
+# Toolchain
+
+Detected CLI toolchain for `{{ project }}`. Missing tools fall back to the listed alternative.
+
+| Tool | Status | Fallback |
+| ---- | ------ | -------- |
+{% for name, tool in toolchain.items() %}
+| `{{ name }}` | {% if tool.detected %}found{% else %}missing{% endif %} | {{ tool.fallback }} |
+{% endfor %}
+
+Prefer the found tool. When a tool is missing, use its fallback and note the gap
+rather than silently changing the workflow.

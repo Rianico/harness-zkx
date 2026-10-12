@@ -101,6 +101,7 @@ from _github import dump_failure_logs as dump_failure_logs
 from _github import failing_run_ids as failing_run_ids
 from _github import fetch_merge_state as fetch_merge_state
 from _github import fetch_mergeability as fetch_mergeability
+from _github import issue_state as issue_state
 from _github import merge_state_verdict as merge_state_verdict
 from _github import pr_conflict_verdict as pr_conflict_verdict
 from _github import pr_url as pr_url
@@ -114,6 +115,7 @@ from _github import resolve_merge_state as resolve_merge_state
 from _github import resolve_repo as resolve_repo
 from _github import resolve_title_and_body as resolve_title_and_body
 from _github import run_command as run_command
+from _github import warn_closed_issues as warn_closed_issues
 from _github import watch_checks as watch_checks
 from _options import PrOptions as PrOptions
 from _squash import AFTER_MARKERS as AFTER_MARKERS
@@ -175,6 +177,7 @@ from _squash import check_title_length as check_title_length
 from _squash import clean_squash_body as clean_squash_body
 from _squash import copy_body_coverage as copy_body_coverage
 from _squash import copy_overlap as copy_overlap
+from _squash import extract_closes_numbers as extract_closes_numbers
 from _squash import insert_trailers as insert_trailers
 from _squash import is_closing_line as is_closing_line
 from _squash import is_fallback_body as is_fallback_body
@@ -214,7 +217,7 @@ Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--
   --draft : leave the PR a draft (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens (caller owns the changelog) — head unstamped, expect a red changelog gate
   --body/--body-file : required to open a PR; the caller drafts the description (pr-enhance workflow). An empty body or the unfilled repo template is refused.
-  --squash-message/--squash-message-file : explicit squash commit message (mutually exclusive); REQUIRED with --merge — no PR-body fallback (spec: CONTEXT.md "Curated Squash Message"). --check still previews a derived message.
+  --squash-message/--squash-message-file : explicit squash commit message (mutually exclusive); REQUIRED with --merge — no PR-body fallback (spec: GLOSSARY.md "Curated Squash Message"). --check still previews a derived message.
   --verbose : full failure logs (gh run view bodies + gh pr checks tail); default is slim — failing run id(s) + one gh run view pointer
 Draft handshake: a NEWLY CREATED PR is created as a draft (draft=true), stamped (commit+push), then readied via gh pr ready so CI's ready_for_review fires; a failed flip prints the verbatim manual fix and exits 1. Existing open PRs are reused untouched — never readied, never re-drafted; a reused draft without --draft fails loudly with the same manual remediation and exits 1.
 Squash body is the PR body plus one Co-authored-by trailer per distinct PR commit author except the merger (an explicit commit_message disables GitHub's own auto-attribution, so the script rebuilds it). A body still holding the raw CODE_AUTHORS template token is refused pre-merge.
@@ -642,6 +645,8 @@ def main(argv: list[str] | None = None) -> int:
         repo = resolve_repo(head)
 
         if options.check:
+            # Advisory-only: a Closes #N on an already-closed issue warns, never refuses.
+            _ = warn_closed_issues(repo, body, squash_override or "")
             return run_draft_phase(
                 options=options,
                 repo=repo,
@@ -735,6 +740,8 @@ def main(argv: list[str] | None = None) -> int:
             if not options.watch:
                 if not watch_checks(repo, num, base, verbose=options.verbose):
                     return 1
+            # Advisory-only: warn on a Closes #N already closed, then merge regardless.
+            _ = warn_closed_issues(repo, final_body, squash_override or "")
             if not merge_pr(
                 repo=repo,
                 num=num,

@@ -7,15 +7,13 @@
 
 ## Summary
 
-<!-- 2-3 sentences: why this change, user-visible effect. -->
+<!-- Lead with the visual that carries the change — pseudocode, a call tree, a component or
+     state diagram, a Mermaid block, or a shaped diff — pasted straight into this section.
+     Then write brief supporting text on the intent and the user-visible effect. Do not
+     narrate the diff line by line. -->
 <!-- Review path (optional): start at <file:line>. -->
-
-## What Changed
-
-<!-- Grouped by system/feature, not a file list. For a large refactor, add a short sequence
-outline. Flag migrations, contract, or payload changes. -->
-
--
+<!-- The squash gate strips Mermaid from the derived squash message but keeps fenced
+     pseudocode, call trees, and shaped diffs, so one compact visual beats a wall of prose. -->
 
 ## Root Cause
 
@@ -41,16 +39,6 @@ outline. Flag migrations, contract, or payload changes. -->
 **Before (command + output):**
 **After (command + output):**
 
-## Architecture
-
-<!-- OPTIONAL: Mermaid before/after only when structural seams, layering, or data-flow change.
-     Delete this whole section for docs, chore, and small-fix changes. Mermaid stays in the PR
-     body for humans; the squash gate strips this section from the squash message. -->
-
-## Landing
-
-Landing: squash <!-- or: Landing: merge — see git-convention §5 -->
-
 ## Checklist
 
 - [ ] Formatter, linter, typecheck, and tests green (exact commands in `CONTRIBUTING.md`)
@@ -59,6 +47,8 @@ Landing: squash <!-- or: Landing: merge — see git-convention §5 -->
 - [ ] Docs / `docs/adr/` updated when seams or contracts change
 - [ ] No generated artifacts committed outside `.lsz/tmp`
 - [ ] Linked issue with `Closes #NN` (if applicable)
+
+---
 
 <!-- Related issues: list each on its own line below (never comma-separated: "Closes #1, #2" fails to close #2).
 Closes #123

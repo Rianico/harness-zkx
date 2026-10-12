@@ -52,7 +52,7 @@ When you are lost in a specific area of code, perform a "Zoom Out" to regain per
    - **Identify Interfaces/Contracts**: Determine the boundaries and contracts that define how this area interacts with the rest of the system.
 3. **Abstract**: 
    - Move up one layer (e.g., from `Repository` to `Service`, or `Component` to `Page`).
-   - Map how this module fits into the **Domain Glossary** (from `CONTEXT.md`).
+   - Map how this module fits into the **Domain Glossary** (from `GLOSSARY.md`).
 4. **Output**: A concise mental map or diagram (text-based) of the local architecture.
 
 ---
@@ -61,7 +61,7 @@ When you are lost in a specific area of code, perform a "Zoom Out" to regain per
 
 1. **Focus on Discovery**: Use file discovery and text search tools for mapping; use targeted reading only for verification.
 2. **Respect CLAUDE.md**: Use existing project instructions to anchor the "Zoom Out" mapping.
-3. **Domain-First**: Always use the terms found in `CONTEXT.md` to describe the map.
+3. **Domain-First**: Always use the terms found in `GLOSSARY.md` to describe the map.
 
 
 ## Anti-Patterns

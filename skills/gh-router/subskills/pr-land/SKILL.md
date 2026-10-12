@@ -50,11 +50,11 @@ uv run $SKILL_DIR/scripts/pr.py --check --body-file tmp/drafts/pr_body.md --out-
 
 `--out-dir DIR` sets the output directory (default `<repo-root>/.lsz/tmp`). Missing parent directories are created automatically. Every run writes both files, including a refused run.
 
-stdout carries exactly five lines: `commits: N`, `trailers: N`, the two paths, and one `hint:` line. The hint names the curation spec. Full text lives on disk only.
+stdout carries exactly five lines: `commits: N`, `trailers: N`, the two paths, and one `hint:` line. The hint splits the two duties: the PR body keeps the repo's installed template shape (see `install-template.sh`; prose owned by `pr-enhance`), while the squash overview — never the PR body — is the artifact under the curation spec. Full text lives on disk only.
 
 `draft.json` records range facts (one row per commit: full `sha`, `subject`, and `body` capped at 15 lines), trailers, and `squash_body` (cleaned merge text). It also includes `pr_number`, `pr_url`, `status`, `exit_code`, and `note`. A `dirty` block records porcelain and diff stat rows when worktree changes exist. The count field tracks `dirty_files`. Uncommitted work never enters the fingerprint.
 
-Curate `<out-dir>/pr_body.md` before passing it to the create phase. It keeps the authored body as supplied or fetched, including human-facing Mermaid diagrams and `<details>` blocks, plus appended `Co-authored-by` trailers.
+Curate `<out-dir>/pr_body.md` before passing it to the create phase, in the repo's installed PR template shape (Summary · Root Cause for fixes · Blast Radius & Safety · Evidence · Checklist). It keeps the authored body as supplied or fetched, including human-facing Mermaid diagrams and `<details>` blocks, plus appended `Co-authored-by` trailers.
 
 Author prose from the git-diff-digest brief with `pr-enhance`. The PR body is the reviewer's artifact, not the commit message. Author the squash overview as a separate file (at most 5 bullets and 15 lines). Pass that file to `--merge` with `--squash-message-file`. The merge operation never falls back to the PR body. A message that reproduces `pr_body.md` is refused.
 
@@ -68,7 +68,7 @@ Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or 
 | Title Shape | `refusing squash merge: commit title is not a Conventional Commit "type(scope): subject": <title> (#N)` | 1 |
 | Squash Shape | `refusing squash merge: squash body carries no Core section` · `… a fix squash body carries no Root section` · `… the Blast Radius section carries neither a \`Door:\` line nor the template's \`Rollback / containment:\` line` · `… the Blast Radius section states no rollback` · `… the Evidence section states no before -> after` · `… the Links section carries no PR link` · `… closing-keyword line is not one issue` · `… squash body carries N bullets (max 5)` | 1 |
 | Body Required | `refusing to open PR: no --body/--body-file supplied` · `refusing PR: no description supplied` | 1 |
-| Fail-Closed Squash Message | `refusing squash merge: --merge requires an explicit squash commit message` (spec: `CONTEXT.md` — Curated Squash Message) · `refusing squash merge: PR body is empty or the unfilled repo template` (the `--check` preview path) | 1 |
+| Fail-Closed Squash Message | `refusing squash merge: --merge requires an explicit squash commit message` (spec: `GLOSSARY.md` — Curated Squash Message) · `refusing squash merge: PR body is empty or the unfilled repo template` (the `--check` preview path) | 1 |
 | Raw Token | `refusing squash message: raw CODE_AUTHORS token still present` | 1 |
 | Reused Draft | `reused PR #N is still a draft and --draft was not passed` | 1 |
 | Ready Flip | `gh pr ready failed for PR #N` + the verbatim `gh pr ready N --repo <repo>` remediation | 1 |

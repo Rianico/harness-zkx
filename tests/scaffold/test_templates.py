@@ -114,7 +114,7 @@ RAW_SHA256: dict[str, str] = {
     "git/.github/ISSUE_TEMPLATE/01-bug_report.yml": "042c8a9647b165ef3c354cfd60e1a1b619b81b86f60bdc5fec65e324e061d676",
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
     "git/.github/ISSUE_TEMPLATE/config.yml": "27539305684d7673d88e80ec149c4ec9714da05a054b09fee67d56b8a7e5a820",
-    "git/.github/workflows/changelog-check.yml": "437681ce2c8cfd511285e2607200bd2049322b5dabb21691d248cbb60ffb8aac",
+    "git/.github/workflows/changelog-check.yml": "e221ca910407e5b98895a354e260fae7314d1d9d1de42267112079a31690e9bf",
     "git/.releaserc.json": "d0f2d1efed519451867179ca8af3d8bae1001955b1601936108d20b9696dfa54",
     "git/CHANGELOG.md": "4f54bff5b026e07b59863211308e82335c0691389775863eb9611c5a884840f4",
     "git/commitlint.config.js": "9c46dd6e2258b8783f57255cbcdd09fd13c0283069b281568806ba147df85340",

@@ -277,9 +277,9 @@ On completion, reply to the caller in one message using the herdr helper script:
 
 ---
 
-### C. The Final Reply Template (Aligned with `skills/dynamic-workflow-wrapper/references/resp-format.md`)
+### C. The Final Reply Template (Aligned with `skills/ai-engineering-expert/references/resp-format.md`)
 
-All completion replies delivered via `herdr_reply.py` adhere strictly to the dual-mode response format defined in `skills/dynamic-workflow-wrapper/references/resp-format.md` and `skills/ai-engineering-expert/references/resp-format.md`. `herdr_reply.py` prepends the timestamped `Sender:`/`Receiver:` envelope itself, so the reply body below starts at the status line:
+All completion replies delivered via `herdr_reply.py` adhere strictly to the dual-mode response format defined in `retired/dynamic-workflow-wrapper/references/resp-format.md` and `skills/ai-engineering-expert/references/resp-format.md`. `herdr_reply.py` prepends the timestamped `Sender:`/`Receiver:` envelope itself, so the reply body below starts at the status line:
 
 ```markdown
 COMPLETED <commit-sha>
@@ -585,7 +585,7 @@ Multi-agent coordination across Herdr lanes is governed by four core pillars tha
   - Every dispatch pairs upstream teleological purpose (**IDD**: Problem, Proposed Outcome, Non-Negotiable Constraints) with downstream verifiable targets (**GDD/EDD**: Check Command, Required Evidence).
   - This pairing eliminates both Goodhart specification gaming and semantic drift.
 - **Dual-Mode Response Contract**:
-  - All replies delivered across the lane follow the **Final Reply Template** aligned with `dynamic-workflow-wrapper/references/resp-format.md`:
+  - All replies delivered across the lane follow the **Final Reply Template** aligned with `skills/ai-engineering-expert/references/resp-format.md`:
     - Status Triad: `COMPLETED <sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
     - `## Summary` (Carmack-style technical rationale, ≤100 words)
     - `## Artifacts` (absolute paths with kinds: diff, spec, report, eval)
