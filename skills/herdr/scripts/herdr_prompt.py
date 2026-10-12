@@ -819,6 +819,34 @@ def agent_readiness(
     return (ready, status, revision_str)
 
 
+def _read_interactive_ready(herdr: str, target: str, env: Mapping[str, str]) -> bool | None:
+    """Read only the `interactive_ready` flag for refusal messaging (never a gate).
+
+    Returns False only when the field is explicitly false, True when explicitly
+    true, and None when the probe is unreadable or the field is absent. Called
+    once, after the readiness loop has already refused, so it cannot change
+    where the gate fires.
+    """
+    done = run_herdr([herdr, "agent", "get", target], env)
+    if done.returncode != 0:
+        return None
+    try:
+        result = decode_response(done.stdout).get("result")
+    except HerdrError:
+        return None
+    if not isinstance(result, dict):
+        return None
+    agent = result.get("agent")
+    if not isinstance(agent, dict):
+        return None
+    flag = agent.get("interactive_ready")
+    if flag is False:
+        return False
+    if flag is True:
+        return True
+    return None
+
+
 def wait_for_ready(
     herdr: str,
     target: str,
@@ -827,10 +855,11 @@ def wait_for_ready(
     timeout: float = READY_TIMEOUT_SECONDS,
     interval: float = READY_INTERVAL_SECONDS,
 ) -> str | None:
-    """Block until the target settles, else fail naming the pane-unblock path.
+    """Block until the target settles, else fail reporting the observed status.
 
     The loop is attempt-counted (never wall-clocked) so a monkeypatched `_sleep`
     runs it instantly; the immediate first probe means a settled agent never sleeps.
+    The refusal names what the readiness read observed — never a hypothesized cause.
     """
     attempts = max(1, math.ceil(timeout / interval))
     last_status: str | None = None
@@ -841,10 +870,31 @@ def wait_for_ready(
             return status
         if attempt < attempts - 1:
             _sleep(interval)
+    status_label = last_status or "unknown"
+    held = f"{_format_seconds(timeout)}s over {attempts} readiness probes"
+    interactive_ready = _read_interactive_ready(herdr, target, env)
+    if interactive_ready is False:
+        detail = (
+            "observed BLOCKED-ON-INPUT — the readiness read reports "
+            f"interactive_ready=false (status={status_label}); open the pane and "
+            "clear the pending input, then retry"
+        )
+    elif last_status == "working":
+        detail = (
+            "observed BUSY — the readiness read reports status='working', held for "
+            f"the full {held}: a turn is in progress; wait and retry after a longer "
+            "interval, do not inject mid-turn"
+        )
+    else:
+        detail = (
+            f"observed status={status_label!r} with no conclusive busy/blocked signal "
+            "(the readiness read cannot distinguish a busy turn from blocked-on-input "
+            "here); wait and re-check the pane before retrying"
+        )
     raise UsageError(
         f"target {target!r} did not settle for prompt delivery within "
-        f"{_format_seconds(timeout)}s (last status={last_status or 'unknown'}): the agent may be "
-        "waiting on an auth/approval dialog; open the pane and clear it, then retry"
+        f"{_format_seconds(timeout)}s (last status={status_label}, held for the full "
+        f"{held}): {detail}"
     )
 
 

@@ -1184,7 +1184,64 @@ def test_preflight_timeout_aborts_before_prompting(
     err = capsys.readouterr().err
     assert "did not settle for prompt delivery" in err
     assert "last status=working" in err
-    assert "auth/approval dialog" in err
+    assert "dialog" not in err.lower()
+    assert "BUSY" in err
+
+
+def test_preflight_timeout_reports_observed_busy_without_dialog_guess(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 1 (#249): a working target's refusal reports the observation, never a hypothesis.
+
+    Mutant killed: restore the dialog-guess wording, so the refusal again claims an
+    auth/approval dialog for a merely busy pane — the `dialog` absence assertion fails.
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state({**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert len(slept) == 49
+    err = capsys.readouterr().err
+    assert "did not settle for prompt delivery" in err
+    assert "working" in err
+    assert "dialog" not in err.lower()
+    assert "BUSY" in err
+    assert "longer interval" in err
+
+
+def test_preflight_timeout_names_blocked_on_input_with_evidence(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 2 (#249): interactive_ready=false refusal names BLOCKED-ON-INPUT with evidence."""
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["working"]},
+            "agent_get_ready_seq": {"reviewer": [False]},
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert len(slept) == 49
+    err = capsys.readouterr().err
+    assert "did not settle for prompt delivery" in err
+    assert "BLOCKED-ON-INPUT" in err
+    assert "interactive_ready=false" in err
 
 
 def test_no_wait_handshake_confirms_acceptance(
