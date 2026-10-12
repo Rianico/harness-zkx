@@ -453,7 +453,7 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
 
     The contract also carries the SHA guard's waiver route in prose: a callee quoting a
     review id (an eight-hex record such as '0c81f04c', which names no commit) meets the
-    broad #245 trigger, so without guidance the reply is refused with no sanctioned next
+    broad #247 trigger, so without guidance the reply is refused with no sanctioned next
     step. The guidance names `--allow-unresolvable-sha` with a single-quoted example, so
     the example survives copy-paste as one shell word — prose advice, never a shell
     template, so nothing pasted from it widens the waiver.

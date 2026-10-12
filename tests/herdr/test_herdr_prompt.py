@@ -779,7 +779,7 @@ def test_reply_contract_documents_the_sha_guard_waiver_with_a_quoted_example() -
     """herdr228-p3#P1: the rendered contract names the sanctioned waiver route in prose.
 
     A callee quoting a review id (an eight-hex record such as 0c81f04c, which names no
-    commit) meets the broad #245 trigger, so the contract itself must tell the callee the
+    commit) meets the broad #247 trigger, so the contract itself must tell the callee the
     sanctioned route: waive the token by name with `--allow-unresolvable-sha`. The example
     is itself single-quoted, so it survives copy-paste as one shell word — an unquoted
     placeholder would be a parse error where the callee pastes it (review 399f6102) — and

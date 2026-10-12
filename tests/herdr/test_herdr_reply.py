@@ -2596,7 +2596,7 @@ def test_auto_start_dry_run_shows_the_planned_settle_and_never_sleeps(
     assert stub.prompts() == []
 
 
-# ── an outbound payload may not cite a SHA that resolves to nothing (#245 D2) ─────────
+# ── an outbound payload may not cite a SHA that resolves to nothing (#247 D2) ─────────
 
 # The measured pair from the defect: `8d9fa742` is a real abbreviated commit in this lane,
 # `8d9a742` is its one-hex-digit drift — seven characters, and no git object at all.
@@ -2880,7 +2880,7 @@ def test_the_sha_guard_still_refuses_when_git_location_is_not_redirected(
     assert stub.prompts() == []
 
 
-# ── #245 E2: the guard's scope decision, pinned so the choice is visible ────────────────
+# ── #247 E2: the guard's scope decision, pinned so the choice is visible ────────────────
 
 # The E2 measurement decided the trigger's SCOPE: the broad rule (every backticked hex token in
 # the body) is kept rather than narrowed to marked tokens. The evidence is that the incident token
@@ -3015,7 +3015,7 @@ def test_a_review_id_is_accepted_only_through_the_documented_waiver(
     assert call[4].endswith(body)
 
 
-# ── #245 D2-rework-2: which git overrides actually move the object store ───────────────
+# ── #247 D2-rework-2: which git overrides actually move the object store ───────────────
 
 # The four names whose presence relocates the objects `git rev-parse` reads, so the guard's verdict
 # would be about another repository. A literal, never read from the module under test: a name
@@ -3047,7 +3047,7 @@ def redirect_value(var: str, other: Path) -> str:
 def test_the_sha_guard_skips_loudly_when_the_object_store_is_relocated(
     stub: StubHarness, tmp_path: Path, redirect_var: str
 ) -> None:
-    """#245 D2-rework-2 (a) and (b): the object-store overrides skip loudly, in both directions.
+    """#247 D2-rework-2 (a) and (b): the object-store overrides skip loudly, in both directions.
 
     (a) `GIT_OBJECT_DIRECTORY` and `GIT_ALTERNATE_OBJECT_DIRECTORIES` were the unguarded pair: an
     override plus a token that resolves only in the foreign store used to be delivered with no
@@ -3092,7 +3092,7 @@ def test_the_sha_guard_skips_loudly_when_the_object_store_is_relocated(
 def test_a_verdict_neutral_override_still_refuses_a_dead_token(
     stub: StubHarness, tmp_path: Path, redirect_var: str
 ) -> None:
-    """#245 D2-rework-2 (c): the index and work-tree overrides must not skip.
+    """#247 D2-rework-2 (c): the index and work-tree overrides must not skip.
 
     Measured: with only `GIT_INDEX_FILE` or `GIT_WORK_TREE` set, the probe's verdict is identical
     to a clean environment — the lane's commit still resolves, a foreign or dead token still does

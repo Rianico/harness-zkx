@@ -629,7 +629,7 @@ def test_reply_docstring_states_the_backticked_review_id_refusal_and_waiver() ->
 def test_e2_do_not_rewrite_pin_cross_references_the_scope_issue() -> None:
     """P4 item 2: the E2 pin-1 docstring cites #247, not #245.
 
-    The section header names the scope decision #245 E2 while the pin-1 line cites the
+    The section header names the scope decision #247 E2 while the pin-1 line cites the
     incident #247 (the incident number was confirmed via the issue tracker, not
     retyped from memory). Mutant: re-apply #245 and this pin fails on both halves.
     """
@@ -676,3 +676,90 @@ def test_skill_quotes_the_rendered_waiver_route_verbatim() -> None:
     waiver_line = rendered.splitlines()[-1].strip()
     assert waiver_line.startswith("If the reply quotes a review id"), rendered
     assert _skill_waiver_quote() == waiver_line
+
+
+# ── herdr228-closeout#C1: the SHA-guard citation referents ─────────────────────────
+
+# Every live citation of the SHA-guard convention names its tracking referent inline
+# (`#<n>` beside the D2/E2 label). The audit found the long-standing `#245` referent
+# does not resolve — tracker 245 is a gh-router PR — while `#247` is the drifted-SHA
+# incident the guard exists to refuse. The fixture freezes both verified titles so
+# this pin runs without network; refresh it with `gh issue view <n> --json title`.
+SHA_GUARD_REFERENTS_FIXTURE = Path(__file__).with_name("sha_guard_citation_referents.json")
+
+# One stable number-free fragment per live citation line: the fragment finds the line
+# before and after any re-citation, so the pin holds the referent, never the prose.
+SHA_GUARD_CITATION_SITES: tuple[tuple[Path, str], ...] = (
+    (REPO_ROOT / "CHANGELOG.md", "instead of paraphrasing it"),
+    (OVERVIEW_DOC, "token drifted by one digit points at nothing"),
+    (COORDINATION_DOC, "one that drifts by a digit points at nothing"),
+    (SCRIPTS_DIR / "herdr_reply.py", "the outbound payload itself is checked"),
+    (
+        SCRIPTS_DIR / "herdr_reply.py",
+        "an outbound payload may not cite a SHA that resolves to nothing",
+    ),
+    (SCRIPTS_DIR / "herdr_reply.py", "scanned 668"),
+    (SCRIPTS_DIR / "herdr_reply.py", "byte-identical to a clean environment"),
+    (
+        SCRIPTS_DIR / "herdr_reply.py",
+        "Refuse a payload whose backticked SHA-shaped token names no commit",
+    ),
+    (
+        SCRIPTS_DIR / "herdr_reply.py",
+        "is an instruction, and an instruction that names no",
+    ),
+    (
+        SCRIPTS_DIR / "herdr_prompt.py",
+        "trigger, so without guidance the reply is refused with no sanctioned next",
+    ),
+    (
+        Path(__file__).with_name("test_herdr_reply.py"),
+        "an outbound payload may not cite a SHA that resolves to nothing",
+    ),
+    (
+        Path(__file__).with_name("test_herdr_reply.py"),
+        "the guard's scope decision, pinned so the choice is visible",
+    ),
+    (
+        Path(__file__).with_name("test_herdr_reply.py"),
+        "which git overrides actually move the object store",
+    ),
+    (
+        Path(__file__).with_name("test_herdr_reply.py"),
+        "the object-store overrides skip loudly",
+    ),
+    (
+        Path(__file__).with_name("test_herdr_reply.py"),
+        "the index and work-tree overrides must not skip",
+    ),
+    (
+        Path(__file__).with_name("test_herdr_prompt.py"),
+        "so the contract itself must tell the callee the",
+    ),
+)
+
+
+def test_sha_guard_citations_resolve_to_the_verified_referent() -> None:
+    """C1: each SHA-guard citation names the referent whose title states the subject.
+
+    The fixture records the verified tracker titles: the referent's title carries the
+    drifted-SHA subject while the superseded number's title is an unrelated gh-router
+    PR — the audit's mismatch evidence, frozen so the pin runs without network. Every
+    citation line must carry the referent and none of the superseded number. Mutant:
+    re-point one citation at the superseded (or any unrelated) number and this pin
+    fails on that line.
+    """
+    fixture = json.loads(SHA_GUARD_REFERENTS_FIXTURE.read_text(encoding="utf-8"))
+    referent = str(fixture["referent"])
+    superseded = str(fixture["superseded"])
+    keywords = [str(keyword) for keyword in fixture["asserted_subject_keywords"]]
+    titles = {str(number): str(title) for number, title in fixture["titles"].items()}
+    assert all(keyword in titles[referent] for keyword in keywords), titles[referent]
+    assert not all(keyword in titles[superseded] for keyword in keywords), titles[superseded]
+    assert len(SHA_GUARD_CITATION_SITES) == 16, "audit site dropped without review"
+    for path, needle in SHA_GUARD_CITATION_SITES:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if needle in line]
+        assert len(lines) == 1, (str(path), needle, lines)
+        (line,) = lines
+        assert f"#{referent}" in line, (str(path), line)
+        assert f"#{superseded}" not in line, (str(path), line)

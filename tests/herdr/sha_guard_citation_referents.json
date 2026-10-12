@@ -1,0 +1,9 @@
+{
+  "referent": "247",
+  "superseded": "245",
+  "asserted_subject_keywords": ["drifted", "SHA"],
+  "titles": {
+    "245": "feat(gh-router): refine pr template, changelog shape gate, and closed advisory",
+    "247": "fix(herdr): the dispatcher inlines ticket text, and a drifted copy names a SHA that is not a git object"
+  }
+}

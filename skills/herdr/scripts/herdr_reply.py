@@ -48,7 +48,7 @@ when the store cannot resolve. The pointer only ever names a record the reader c
 the store is read before it is written (an unreadable index is preserved, never clobbered),
 and the row that was written is re-resolved through the same `get_reply` the reader uses.
 
-Before any of that, the outbound payload itself is checked (#245 D2): every *backticked* 7-40
+Before any of that, the outbound payload itself is checked (#247 D2): every *backticked* 7-40
 lowercase-hex token in the *body* must name a commit (`git rev-parse --verify <token>^{commit}`
 against the lane's repository anchor, never the ambient working directory, so one payload gets one
 verdict from any directory), because a backticked hex token is an instruction — "do not
@@ -654,12 +654,12 @@ def payload_shape(payload: str) -> tuple[str, str | None]:
     return "complete", heading
 
 
-# ── an outbound payload may not cite a SHA that resolves to nothing (#245 D2) ─────────────
+# ── an outbound payload may not cite a SHA that resolves to nothing (#247 D2) ─────────────
 
 # A backticked 7-40 lowercase-hex token is an *instruction* — "do not rewrite `8d9fa742`" — and an
 # instruction that names no commit points at nothing. The rule is deliberately narrow: the pattern
 # matches a whole code span, so a bare hex word in prose stays prose. The measurement that chose it
-# (#245 D2) scanned 668 `.md` files (`.lane/tickets`, `skills/**`, `docs/**`, `.lane/reports`): 37
+# (#247 D2) scanned 668 `.md` files (`.lane/tickets`, `skills/**`, `docs/**`, `.lane/reports`): 37
 # distinct non-resolving tokens appear bare, and reading those as instructions would have refused 6
 # innocent files whose backticked hex is a decimal (`1234567`), a binary literal (`0b00000011`) or an
 # 8-hex review-record id. The narrow rule still refuses 10 files — 4 tickets, 4 docs, and 2 stored
@@ -674,7 +674,7 @@ ALLOW_UNRESOLVABLE_SHA = "--allow-unresolvable-sha"
 # `GIT_COMMON_DIR` relocate the whole repository, `GIT_OBJECT_DIRECTORY` replaces its object store,
 # and `GIT_ALTERNATE_OBJECT_DIRECTORIES` adds foreign ones. Each outranks `cwd`, so the verdict is
 # unverifiable rather than a false negative. Measured, not assumed: with only `GIT_INDEX_FILE` or
-# `GIT_WORK_TREE` set the probe's verdict is byte-identical to a clean environment (#245
+# `GIT_WORK_TREE` set the probe's verdict is byte-identical to a clean environment (#247
 # D2-rework-2), so those two are deliberately absent here — skipping on them would excuse a refusal
 # the probe can answer, a silent false pass the other way. They never skip for that reason alone:
 # neither name is read here, so a skip with one set can only come from the generic "no work tree"
@@ -800,7 +800,7 @@ def require_resolvable_shas(
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> None:
-    """Refuse a payload whose backticked SHA-shaped token names no commit (#245 D2).
+    """Refuse a payload whose backticked SHA-shaped token names no commit (#247 D2).
 
     Runs on the payload BODY `read_payload` returned, which is the only text it is ever handed:
     the envelope and the pointer are composed later, and envelope fields are never backticked, so
@@ -1615,7 +1615,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             "COMPLETED, BLOCKED, or REJECTED (see the Final Reply Template in "
             "skills/herdr/references/lane-coordination.md); refusing to record or submit the reply"
         )
-    # #245 D2: a backticked SHA-shaped token is an instruction, and an instruction that names no
+    # #247 D2: a backticked SHA-shaped token is an instruction, and an instruction that names no
     # commit points at nothing. This runs before any record exists — and before `--dry-run`
     # returns — so a refused payload consumes no lease and submits nothing.
     require_resolvable_shas(
