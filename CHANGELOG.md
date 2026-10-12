@@ -92,7 +92,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
-* **gh-router:** the `pr.py --check` hint now splits the two drafting duties — the PR body keeps the repo's installed template shape (pr-enhance owns prose) and the ≤5-bullet strip rules bind only to the squash overview in `--squash-message-file` — ending the conflation that produced squash-shaped PR bodies
+* **gh-router:** the `pr.py --check` hint now splits the two drafting duties — the PR body keeps the repo's installed template shape (pr-enhance owns prose) and the ≤5-bullet strip rules bind only to the squash overview in `--squash-message-file` — ending the conflation that produced squash-shaped PR bodies (#251)
 * **changelog-gate:** strip inline code spans before placeholder evaluation to prevent false-positive refusals on angle brackets inside backticks (#245)
 * **herdr:** emit `pi --session` with the session path or id for every pi resume, because `--resume` is a value-less picker that opens the session list ([#211](https://github.com/Rianico/harness-zkx/issues/211)) (#223)
 * **herdr:** refuse a whitespace TARGET before reading the payload, and name `--file`/stdin in the empty-payload refusal ([#212](https://github.com/Rianico/harness-zkx/issues/212)) (#223)
