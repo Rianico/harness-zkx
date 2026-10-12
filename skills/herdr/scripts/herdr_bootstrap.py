@@ -18,12 +18,15 @@ name.
 
 Two delivery mechanisms, chosen by `--kind` via skills/herdr/references/kinds.yaml:
 
-- Inline kinds (`pi`, `claude`) take the snippet through ``agent start
-  --append-system-prompt``, whose value is the absolute path of a per-agent lane-local file
-  (``<target_dir>/.lane/invariants/<agent-name>.md``) holding the snippet, keyed by the
-  resolved agent name so one lane's agents never overwrite each other. herdr refuses any
-  agent arg that cannot be encoded safely for the target shell — a newline is enough — and
-  the rendered snippet is multi-line, so the text itself can never ride inline.
+- Inline kinds take the snippet through the kind's own `invariant_flag` (see
+  skills/herdr/references/kinds.yaml), whose value is the absolute path of a per-agent
+  lane-local file (``<target_dir>/.lane/invariants/<agent-name>.md``) holding the snippet,
+  keyed by the resolved agent name so one lane's agents never overwrite each other. The
+  flag is per-kind because the flags differ: `pi` reads file contents through
+  ``--append-system-prompt`` while `claude` reads a path only through
+  ``--append-system-prompt-file``. Herdr refuses any agent arg that cannot be encoded
+  safely for the target shell — a newline is enough — and the rendered snippet is
+  multi-line, so the text itself can never ride inline.
 - File-reading kinds (`cline`, `codex`, `copilot`, `qodercli`, `agy`) and any unknown kind get
   the marker-wrapped block appended to ``AGENTS.md`` in the target directory. `cline` prefers
   an existing ``.clinerules`` over ``AGENTS.md``.
@@ -142,6 +145,7 @@ class KindEntry:
 
     trust_flags: tuple[str, ...]
     inline_invariant: bool
+    invariant_flag: str | None = None
     revision_moves: bool = True
     lifecycle_bridge: str | None = None
 
@@ -193,7 +197,8 @@ def _parse_flow_flags(value: str, lineno: int) -> tuple[str, ...]:
 
 
 def parse_kinds_config(text: str) -> dict[str, KindEntry]:
-    """Parse the strict kinds.yaml subset: kind tables with trust_flags and invariant only.
+    """Parse the strict kinds.yaml subset: kind tables with trust_flags, invariant,
+    invariant_flag, revision_moves, and lifecycle_bridge.
 
     Values may not contain `#`; block sequences are rejected — use the flow list.
     Raises ValueError with a line number on anything outside the subset.
@@ -227,6 +232,12 @@ def parse_kinds_config(text: str) -> dict[str, KindEntry]:
                 if cleaned not in ("inline", "file"):
                     raise ValueError(f"line {lineno}: invariant must be inline or file")
                 raw[current][key] = cleaned
+            elif key == "invariant_flag":
+                if not cleaned.startswith("--") or any(ch.isspace() for ch in cleaned):
+                    raise ValueError(
+                        f"line {lineno}: invariant_flag must be one --flag without spaces"
+                    )
+                raw[current][key] = cleaned
             elif key == "revision_moves":
                 if cleaned not in ("true", "false"):
                     raise ValueError(f"line {lineno}: revision_moves must be true or false")
@@ -245,13 +256,23 @@ def parse_kinds_config(text: str) -> dict[str, KindEntry]:
     for kind, item in raw.items():
         flags = item.get("trust_flags")
         invariant = item.get("invariant")
+        flag = item.get("invariant_flag")
         moves = item.get("revision_moves", True)
         bridge = item.get("lifecycle_bridge")
         if not isinstance(flags, tuple) or invariant not in ("inline", "file"):
             raise ValueError(f"kind {kind!r}: needs trust_flags [...] and invariant inline|file")
+        if invariant == "inline" and not isinstance(flag, str):
+            raise ValueError(
+                f"kind {kind!r}: an inline kind needs invariant_flag naming the flag "
+                "that takes the snippet file (a text-only flag would receive the path "
+                "as literal prompt text)"
+            )
+        if invariant == "file" and flag is not None:
+            raise ValueError(f"kind {kind!r}: a file kind takes no invariant_flag")
         entries[kind] = KindEntry(
             trust_flags=flags,
             inline_invariant=invariant == "inline",
+            invariant_flag=flag if isinstance(flag, str) else None,
             revision_moves=bool(moves),
             lifecycle_bridge=bridge if isinstance(bridge, str) else None,
         )
@@ -784,14 +805,22 @@ def build_start_argv(
     `invariant_path` is the absolute path of the already-written snippet file, required by
     inline kinds and ignored otherwise: the snippet must never ride inline, since herdr
     refuses any agent arg it cannot encode safely for the target shell — a newline is
-    enough. No I/O happens here.
+    enough. The flag is the kind's own `invariant_flag` from kinds.yaml, never a hardcoded
+    name: `pi` reads file contents through `--append-system-prompt`, but `claude` takes a
+    path only through `--append-system-prompt-file` and would read the path string as
+    literal prompt text otherwise (#240). No I/O happens here.
     """
     argv = [herdr, "agent", "start", name, "--kind", options.kind, "--pane", options.pane]
     agent_args: list[str] = []
     if entry.inline_invariant:
         if not invariant_path:
             raise ValueError("inline kinds need the role-invariant file path")
-        agent_args += ["--append-system-prompt", invariant_path]
+        if not entry.invariant_flag:
+            raise ValueError(
+                f"kind {options.kind!r}: an inline kind needs invariant_flag naming the "
+                "flag that takes the snippet file"
+            )
+        agent_args += [entry.invariant_flag, invariant_path]
     if options.model:
         agent_args += ["--model", options.model]
     agent_args += entry.trust_flags

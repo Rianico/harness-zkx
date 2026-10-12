@@ -38,6 +38,53 @@ def payload_file(tmp_path: Path, text: str = "TICKET BODY") -> Path:
     return path
 
 
+DRIFTED_ABBREV = "8d9a742"
+
+
+def filled_ticket(evidence_line: str = "- base `66053e2`") -> str:
+    """A ticket with filled sections, so only the SHA guard can refuse it."""
+    return (
+        "## Task\n\nShip it.\n\n## Context\n\n" + evidence_line + "\n\n"
+        "## Acceptance criteria\n\nTests pass.\n"
+    )
+
+
+def sha_repo(root: Path) -> tuple[Path, str]:
+    """A scratch git repository with one commit; returns (repo, abbreviated commit SHA).
+
+    The scratch repo is the lane anchor the dispatch SHA guard resolves against, so the
+    pins exercise the real `git rev-parse --verify <token>^{commit}` probe instead of a
+    stub of it. Mirrors the reply-path `sha_guard_repo` pin; kept local so the dispatch
+    pins do not couple to the reply test module.
+    """
+    repo = root / "dispatch-sha-repo"
+    repo.mkdir()
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+        )
+
+    assert git("init", "-q", "-b", "main").returncode == 0
+    assert (
+        git(
+            "-c",
+            "user.name=herdr",
+            "-c",
+            "user.email=herdr@example.invalid",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "dispatch-sha-repo seed",
+        ).returncode
+        == 0
+    )
+    short = git("rev-parse", "--short", "HEAD").stdout.strip()
+    assert len(short) >= 7
+    return repo, short
+
+
 def _no_settle(_seconds: float) -> None:
     """Stand in for the fresh-spawn settle in tests that assert delivery, not timing."""
 
@@ -152,6 +199,9 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
     assert Path(reply.group(1)).is_file(), reply.group(1)
+    # #241 P2-B (new pin): the helper must be THIS tree's sibling script, not merely an
+    # existing path — `is_file()` passes for a foreign copy too.
+    assert Path(reply.group(1)).resolve().parent == SCRIPTS_DIR, reply.group(1)
     assert "~/.agents" not in text
 
 
@@ -857,6 +907,66 @@ def test_dispatch_refuses_live_draft_marker(stub: StubHarness, tmp_path: Path) -
     assert stub.prompts() == []
 
 
+def test_dispatch_refuses_a_ticket_naming_an_unresolvable_sha(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 1 (#247, dispatch path): the drifted token is refused before any lease is taken.
+
+    The dispatcher inlines the ticket file verbatim, so a drifted SHA copy would otherwise
+    reach the callee with no mechanism to detect it. Refused before the store is touched:
+    no prompt, and no lease for the callee that a corrected re-send would have to force
+    past.
+
+    Mutant killed: skip the guard on the dispatch path — this exits 0 and prompts.
+    """
+    repo, _short = sha_repo(tmp_path)
+    ticket = payload_file(tmp_path, filled_ticket(f"- base `{DRIFTED_ABBREV}`"))
+    done = stub.run("callee", "--file", str(ticket), "--no-wait", env={"HERDR_LANE_DIR": str(repo)})
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert DRIFTED_ABBREV in done.stderr
+    assert str(ticket) in done.stderr
+    assert stub.prompts() == []
+    assert herdr_lease.get_lease("callee", base_dir=repo) is None
+
+
+def test_dispatch_delivers_a_ticket_naming_a_resolving_sha(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 2 (#247, dispatch path): a real abbreviated commit passes the guard."""
+    repo, short = sha_repo(tmp_path)
+    ticket = payload_file(tmp_path, filled_ticket(f"- base `{short}`"))
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--dry-run",
+        env={"HERDR_LANE_DIR": str(repo)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+
+def test_dispatch_waiver_names_the_intentional_token_on_stderr(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 3 (#247, dispatch path): a waived token dispatches, and the waiver is loud."""
+    repo, _short = sha_repo(tmp_path)
+    ticket = payload_file(tmp_path, filled_ticket(f"- base `{DRIFTED_ABBREV}`"))
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--dry-run",
+        "--allow-unresolvable-sha",
+        DRIFTED_ABBREV,
+        env={"HERDR_LANE_DIR": str(repo)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert DRIFTED_ABBREV in done.stderr
+
+
 def test_dispatch_refuses_untouched_skeleton(stub: StubHarness, tmp_path: Path) -> None:
     ticket = payload_file(
         tmp_path,
@@ -1224,9 +1334,12 @@ def test_dispatch_auto_start_uses_claude_trust_flags(
     split = start.index("--")
     assert "--append-system-prompt" not in start[:split]
     assert "--model" not in start[:split]
-    assert "--append-system-prompt" in start[split + 1 :]
+    # #240 (rewritten pin, was: the text flag): claude takes the snippet file through its
+    # `-file` flag — the text flag would boot it with the path string as its system prompt.
+    assert "--append-system-prompt-file" in start[split + 1 :]
+    assert "--append-system-prompt" not in start[split + 1 :]
     assert start[-1] == "--dangerously-skip-permissions"
-    assert "--append-system-prompt" in start
+    assert "--append-system-prompt-file" in start
 
 
 def test_dispatch_auto_start_without_flag_keeps_bare_shell_refusal(

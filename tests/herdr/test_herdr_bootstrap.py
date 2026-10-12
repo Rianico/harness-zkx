@@ -539,15 +539,62 @@ def test_claude_start_carries_its_own_trust_flag(stub: StubHarness, tmp_path: Pa
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     start = starts(stub)[0]
     after = start[start.index("--") + 1 :]
-    path = flag_value(after, "--append-system-prompt")
+    path = flag_value(after, "--append-system-prompt-file")
     assert after == [
-        "--append-system-prompt",
+        "--append-system-prompt-file",
         path,
         "--dangerously-skip-permissions",
     ]
     assert Path(path) == invariant_file(tmp_path, "tm")
     assert Path(path).read_text() == herdr_bootstrap.render_invariant("tm")
     assert not (tmp_path / "AGENTS.md").exists()
+
+
+@pytest.mark.parametrize(
+    ("kind", "flag"),
+    [
+        ("pi", "--append-system-prompt"),
+        ("claude", "--append-system-prompt-file"),
+    ],
+)
+def test_each_inline_kind_passes_the_snippet_file_through_its_own_flag(
+    stub: StubHarness, tmp_path: Path, kind: str, flag: str
+) -> None:
+    """Per-kind flag pin (#240): the invariant file rides through the flag the kind reads.
+
+    `pi` reads file contents through `--append-system-prompt`; `claude` treats that flag's
+    value as literal text and reads a path only through `--append-system-prompt-file`, so a
+    claude launch carrying the path under the text flag boots with the path string as its
+    system prompt. The suite could not distinguish the two, which is why the defect shipped.
+
+    Mutant killed: route claude through `--append-system-prompt` again — the claude case
+    fails naming the literal-path defect. Mutant killed: drop `invariant_flag` from
+    kinds.yaml — the config parser refuses the inline kind without its flag.
+    """
+    done = stub.run(
+        "--kind",
+        kind,
+        "--pane",
+        "w9:p1",
+        "--role",
+        "tm",
+        "--cwd",
+        str(tmp_path),
+        state=cwd_state(tmp_path),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    start = starts(stub)[0]
+    after = start[start.index("--") + 1 :]
+    path = flag_value(after, flag)
+    assert Path(path) == invariant_file(tmp_path, "tm")
+    assert Path(path).read_text() == herdr_bootstrap.render_invariant("tm")
+    other = (
+        "--append-system-prompt-file"
+        if flag == "--append-system-prompt"
+        else "--append-system-prompt"
+    )
+    assert other not in after
 
 
 def test_unknown_kind_falls_back_to_file_without_trust_flags(
@@ -652,6 +699,23 @@ def test_inline_kind_without_an_invariant_path_is_refused() -> None:
         )
 
 
+def test_inline_kind_without_its_flag_is_refused() -> None:
+    """An inline entry naming no flag is refused even when the file path is present (#240).
+
+    Mutant killed: default the flag to `--append-system-prompt` inside `build_start_argv`
+    — this passes and the claude launch silently returns to the literal-path defect.
+    """
+    entry = herdr_bootstrap.KindEntry(trust_flags=(), inline_invariant=True)
+    with pytest.raises(ValueError, match="invariant_flag"):
+        _ = herdr_bootstrap.build_start_argv(
+            "herdr",
+            herdr_bootstrap.Options(kind="pi", pane="w9:p1"),
+            "msg-tm",
+            entry=entry,
+            invariant_path="/tmp/lane/.lane/invariants/tm.md",
+        )
+
+
 def test_file_kind_trust_flags_ride_after_a_single_separator() -> None:
     entry = herdr_bootstrap.KindEntry(trust_flags=("--auto-approve",), inline_invariant=False)
     argv = herdr_bootstrap.build_start_argv(
@@ -744,11 +808,13 @@ def test_kinds_config_loads_the_verified_kinds() -> None:
     config = SCRIPTS_DIR.parent / "references" / "kinds.yaml"
     table = herdr_bootstrap.parse_kinds_config(config.read_text())
 
-    assert table["pi"] == herdr_bootstrap.KindEntry(("--approve",), True)
-    assert table["claude"] == herdr_bootstrap.KindEntry(("--dangerously-skip-permissions",), True)
+    assert table["pi"] == herdr_bootstrap.KindEntry(("--approve",), True, "--append-system-prompt")
+    assert table["claude"] == herdr_bootstrap.KindEntry(
+        ("--dangerously-skip-permissions",), True, "--append-system-prompt-file"
+    )
     assert table["codex"] == herdr_bootstrap.KindEntry((), False)
     # `lifecycle_bridge` is the kind's own bridge, named by the revision-static remedy (#238).
-    assert table["agy"] == herdr_bootstrap.KindEntry((), False, False, "herdr-agy-bridge")
+    assert table["agy"] == herdr_bootstrap.KindEntry((), False, None, False, "herdr-agy-bridge")
     assert table["pi"].lifecycle_bridge is None
 
 
@@ -761,6 +827,9 @@ def test_load_kind_entry_falls_back_for_unknown_kinds() -> None:
     [
         "pi:\n  invariant: inline\n",
         "pi:\n  trust_flags: [--approve]\n  invariant: inline\n",
+        "pi:\n  trust_flags: []\n  invariant: file\n  invariant_flag: --append-system-prompt\n",
+        "pi:\n  trust_flags: []\n  invariant: inline\n  invariant_flag: not-a-flag\n",
+        "pi:\n  trust_flags: []\n  invariant: inline\n  invariant_flag: --a --b\n",
         "pi:\n  trust_flags: []\n  invariant: everywhere\n",
         "pi:\n  trust_flags: []\n  model: x\n  invariant: file\n",
         "pi:\n trust_flags: []\n  invariant: file\n",

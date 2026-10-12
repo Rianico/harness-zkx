@@ -98,7 +98,17 @@ from typing import Any
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_bootstrap import (
     DEFAULT_SETTLE_SECONDS,
+    append_invariant,
+    lane_invariant_path,
+    load_kind_entry,
+    pane_cwd,
+    planned_invariant_content,
+    read_if_exists,
+    render_invariant,
     settle_fresh_pane,
+    target_is_tracked,
+    target_path,
+    write_role_invariant,
 )
 from herdr_cli import (
     EXIT_BLOCKED,
@@ -799,6 +809,8 @@ def require_resolvable_shas(
     waived: Sequence[str] = (),
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
+    origin: str = "herdr-reply",
+    refusal_action: str = "record or submit the reply",
 ) -> None:
     """Refuse a payload whose backticked SHA-shaped token names no commit (#247 D2).
 
@@ -810,6 +822,10 @@ def require_resolvable_shas(
     payload path; a token waived by `--allow-unresolvable-sha` is named on stderr; and a git that
     cannot answer — no work tree, no binary, or one of `GIT_LOCATION_REDIRECT_VARS` pointing it at
     another repository's objects — is reported as a skipped check, never as a pass.
+
+    Shared by the reply and dispatch paths: `origin` names the helper in the stderr lines and
+    `refusal_action` names what the refusal declines to do, so neither path reports under the
+    other's name.
     """
     tokens = backticked_sha_tokens(payload)
     if not tokens:
@@ -827,7 +843,7 @@ def require_resolvable_shas(
             else f"git cannot resolve commits in {directory} (no work tree, or no git binary)"
         )
         print(
-            f"herdr-reply: SHA guard skipped for {payload_path}: {reason}; unchecked: {listed}",
+            f"{origin}: SHA guard skipped for {payload_path}: {reason}; unchecked: {listed}",
             file=sys.stderr,
         )
         return
@@ -835,7 +851,7 @@ def require_resolvable_shas(
     for token in verdict:
         if token in vouched:
             print(
-                f"herdr-reply: SHA guard waived `{token}` ({ALLOW_UNRESOLVABLE_SHA}): it names "
+                f"{origin}: SHA guard waived `{token}` ({ALLOW_UNRESOLVABLE_SHA}): it names "
                 "no commit in this lane",
                 file=sys.stderr,
             )
@@ -845,8 +861,8 @@ def require_resolvable_shas(
         raise UsageError(
             f"payload {payload_path} names a SHA-shaped token that resolves to no commit: "
             f"{listed}. A backticked 7-40 hex token is an instruction, so correct it — or waive "
-            f"an intentional one with {ALLOW_UNRESOLVABLE_SHA} <TOKEN>. Refusing to record or "
-            "submit the reply"
+            f"an intentional one with {ALLOW_UNRESOLVABLE_SHA} <TOKEN>. Refusing to "
+            f"{refusal_action}"
         )
 
 
@@ -1562,6 +1578,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
 
     shell_info = inspect_target_shell_pane(herdr, target, env)
     revive_argv: list[str] | None = None
+    revive_invariant: str | None = None
     if shell_info is not None:
         if options.auto_start:
             kind = options.auto_start.strip().lower()
@@ -1580,6 +1597,70 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 "--pane",
                 shell_info.pane_id,
             ]
+            # #237: a revived caller is a fresh agent, so it receives the same invariant
+            # injection as a bootstrapped one — otherwise the reply lands on a contract-less
+            # agent. The role is unknowable here, so the agent name stands in, exactly as
+            # `herdr-bootstrap` falls back to the name when no role is given. The snippet file
+            # for an inline kind lives under the resolved store base: any absolute path the
+            # spawned binary can read will do, and the pane cwd is not needed for it. A file
+            # kind is appended to the pane's live cwd, the surface that kind reads; with no
+            # determinable cwd, or a tracked target the append would change, the revive is
+            # refused loudly rather than delivering to an agent that holds no contract.
+            # Deliberately stricter than bootstrap's tracked rule (which offers an override
+            # flag): the reply path carries no such flag, so ambiguity refuses.
+            entry = load_kind_entry(kind)
+            snippet = render_invariant(start_name)
+            agent_args: list[str] = []
+            invariant_surface: str | None = None
+            if entry.inline_invariant:
+                if not entry.invariant_flag:
+                    raise UsageError(
+                        f"--auto-start kind {kind!r} names no invariant flag in kinds.yaml; "
+                        "refusing to revive a caller that would hold no lane contract"
+                    )
+                invariant_file = lane_invariant_path(str(resolve_base_dir(env=env)), start_name)
+                if not options.dry_run:
+                    try:
+                        write_role_invariant(invariant_file, snippet)
+                    except OSError as exc:
+                        raise UsageError(f"cannot write {invariant_file}: {exc}") from exc
+                agent_args += [entry.invariant_flag, str(invariant_file)]
+                invariant_surface = str(invariant_file)
+            else:
+                pane_dir = pane_cwd(herdr, shell_info.pane_id, env)
+                if not pane_dir:
+                    raise UsageError(
+                        f"cannot determine the cwd of pane {shell_info.pane_id}; a {kind!r} "
+                        "caller reads its invariant from a file there, so reviving it would "
+                        "deliver this reply to an agent with no lane contract — bootstrap the "
+                        "caller explicitly instead"
+                    )
+                agents_file = target_path(pane_dir, kind)
+                try:
+                    current = read_if_exists(agents_file)
+                except OSError as exc:
+                    raise UsageError(f"cannot read {agents_file}: {exc}") from exc
+                if planned_invariant_content(current, snippet) != current:
+                    if target_is_tracked(agents_file, env) is not False:
+                        raise UsageError(
+                            f"refusing to append the lane invariant to {agents_file}: its "
+                            "version-control state is not certainly untracked — bootstrap the "
+                            "caller explicitly with --allow-tracked-invariant instead of "
+                            "reviving it into a contract-less agent"
+                        )
+                    if not options.dry_run:
+                        try:
+                            _ = append_invariant(agents_file, snippet)
+                        except OSError as exc:
+                            raise UsageError(f"cannot write {agents_file}: {exc}") from exc
+                invariant_surface = str(agents_file)
+            agent_args += entry.trust_flags
+            for arg in agent_args:
+                if "\n" in arg or "\r" in arg:
+                    raise UsageError(f"revive agent args must be single-line: {arg!r}")
+            if agent_args:
+                revive_argv += ["--", *agent_args]
+            revive_invariant = invariant_surface
             if not options.dry_run:
                 _ = run_herdr_checked(revive_argv, env)
                 # A revived caller is a fresh spawn too: settle before the reply is delivered
@@ -1722,13 +1803,14 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         argv += ["--timeout", str(options.timeout)]
 
     if options.dry_run:
-        # A revive plan shows the spawn, its settle, and the delivery argv; a plain plan stays
-        # the delivery argv alone.
+        # A revive plan shows the spawn, the invariant surface, its settle, and the
+        # delivery argv; a plain plan stays the delivery argv alone.
         if revive_argv is None:
             print(json.dumps(argv))
         else:
             plan: dict[str, object] = {
                 "agent_start": revive_argv,
+                "role_invariant": revive_invariant,
                 "settle": options.settle,
                 "agent_prompt": argv,
             }

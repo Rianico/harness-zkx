@@ -7,10 +7,15 @@
 #   invents flags. Verified against the real CLIs
 #   (`<agent> --help`); unverified kinds MUST stay empty.
 # invariant: how the ROLE INVARIANT reaches the agent.
-#   inline — the agent binary accepts --append-system-prompt
-#     (verified: pi, claude).
-#   file — marker-wrapped append to AGENTS.md in the target
-#     dir (cline prefers .clinerules).
+#   inline — the agent binary takes the snippet file through the kind's invariant_flag.
+#     pi reads file contents through --append-system-prompt (verified: text or file
+#     contents); claude reads a path ONLY through --append-system-prompt-file (verified:
+#     the text flag takes the value as literal prompt text, so a path passed there boots
+#     the agent with the path string as its system prompt, #240).
+#   file — marker-wrapped append to AGENTS.md in the target dir (cline prefers .clinerules).
+# invariant_flag: the one flag taking the snippet file path; required for inline kinds,
+#   forbidden for file kinds. qodercli stays file: its --append-system-prompt takes text
+#   only, and the multi-line snippet cannot ride an agent arg, so no flag works there.
 # revision_moves: whether this kind's revision is a usable
 #   acceptance signal. The prompt handshake confirms a
 #   `--no-wait` delivery when the status turns `working` OR
@@ -32,9 +37,11 @@
 pi:
   trust_flags: ["--approve"]
   invariant: inline
+  invariant_flag: --append-system-prompt
 claude:
   trust_flags: ["--dangerously-skip-permissions"]
   invariant: inline
+  invariant_flag: --append-system-prompt-file
 cline:
   trust_flags: []
   invariant: file

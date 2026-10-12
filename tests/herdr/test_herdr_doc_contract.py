@@ -349,6 +349,70 @@ def test_pointer_policy_classifies_tokens(token: str, expected: str | None) -> N
     assert _exclusion_rule(token) == expected
 
 
+def test_lane_coordination_documents_the_superset_merge_workaround() -> None:
+    """#244: the skill references name the --ff-only workaround for superset integrations."""
+    text = (SKILL_DIR / "references" / "lane-coordination.md").read_text(encoding="utf-8")
+    assert "git merge --ff-only" in text
+    assert "merge-base --is-ancestor" in text
+    assert "squash" in text
+
+
+def test_superset_merge_workaround_keeps_a_cited_sha_on_history(tmp_path: Path) -> None:
+    """#244: the workaround text is accurate — a fast-forward keeps the cited SHA on history.
+
+    A descendant task branch integrated with `git merge --ff-only` writes no new commit,
+    so the cited per-unit commit is an ancestor of the landed HEAD; a squash landing
+    leaves it off-history. Ancestry — not bare resolvability, which a lingering object
+    store still answers — is what the evidence citations need.
+
+    Mutant killed: land with `--squash` instead of `--ff-only` — the cited SHA is no
+    ancestor of HEAD and the final `merge-base --is-ancestor` fails.
+    """
+    repo = tmp_path / "ff-only-repo"
+    repo.mkdir()
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+        )
+
+    assert git("init", "-q", "-b", "main").returncode == 0
+    assert (
+        git(
+            "-c",
+            "user.name=herdr",
+            "-c",
+            "user.email=herdr@example.invalid",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "base",
+        ).returncode
+        == 0
+    )
+    assert git("checkout", "-q", "-b", "task").returncode == 0
+    assert (
+        git(
+            "-c",
+            "user.name=herdr",
+            "-c",
+            "user.email=herdr@example.invalid",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "per-unit work",
+        ).returncode
+        == 0
+    )
+    unit_sha = git("rev-parse", "HEAD").stdout.strip()
+    assert git("checkout", "-q", "main").returncode == 0
+    assert git("merge-base", "--is-ancestor", "main", "task").returncode == 0
+    assert git("merge", "-q", "--ff-only", "task").returncode == 0
+    assert git("merge-base", "--is-ancestor", unit_sha, "HEAD").returncode == 0
+
+
 def test_skill_overview_qualifies_the_reply_template_pointer() -> None:
     """The overview cites the final-reply template by path, not as a bare basename."""
     template = "resp-format.md"

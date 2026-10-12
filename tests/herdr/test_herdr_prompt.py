@@ -775,6 +775,33 @@ def test_reply_contract_without_a_ticket_omits_the_flag() -> None:
     assert "--ticket" not in herdr_prompt.render_reply_contract(sender, None)
 
 
+def test_reply_contract_points_at_this_trees_helper_not_a_foreign_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#241 P2-B: the sibling rule tells this tree's helper from an existing foreign one.
+
+    `is_file()` passes for ANY existing path, so the old pin stayed green when the rendered
+    helper pointed at the resolved foreign copy — the original defect in its resolved shape.
+    A foreign file that exists satisfies the old assertion and fails the sibling rule, which
+    is exactly the discrimination the pin was missing.
+
+    Mutant killed: point any rendered REPLY_HELPER at an existing foreign `herdr_reply.py`
+    — the sibling assertions at the render sites fail while every `is_file()` assertion
+    still passes.
+    """
+    foreign = tmp_path / "herdr_reply.py"
+    _ = foreign.write_text("# a foreign copy that exists\n", encoding="utf-8")
+    assert foreign.is_file()
+    assert foreign.resolve().parent != SCRIPTS_DIR
+    monkeypatch.setattr(herdr_prompt, "REPLY_HELPER", foreign)
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    contract = herdr_prompt.render_reply_contract(sender, "#182-test")
+    match = re.search(r'uv run "([^"]+)"', contract)
+    assert match, contract
+    assert Path(match.group(1)).is_file()  # the old pin: blind to this mutant
+    assert Path(match.group(1)).resolve().parent != SCRIPTS_DIR  # the new rule catches it
+
+
 def test_reply_contract_documents_the_sha_guard_waiver_with_a_quoted_example() -> None:
     """herdr228-p3#P1: the rendered contract names the sanctioned waiver route in prose.
 
@@ -822,6 +849,10 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
     assert Path(reply.group(1)).is_file(), reply.group(1)
+    # #241 P2-B (new pin): the helper must be THIS tree's sibling script, not merely an
+    # existing path — `is_file()` passes for a foreign copy too, so it cannot tell the
+    # resolved foreign referent (the original defect) from the correct one.
+    assert Path(reply.group(1)).resolve().parent == SCRIPTS_DIR, reply.group(1)
     assert "~/.agents" not in text
 
 
@@ -949,6 +980,9 @@ def test_dry_run_renders_caller_payload_without_prompting(
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', argv[4])
     assert reply, argv[4]
     assert Path(reply.group(1)).is_file(), reply.group(1)
+    # #241 P2-B (new pin): same sibling rule as above — an existing foreign path is not
+    # this tree's helper.
+    assert Path(reply.group(1)).resolve().parent == SCRIPTS_DIR, reply.group(1)
     assert "~/.agents" not in argv[4]
 
 

@@ -593,3 +593,7 @@ Multi-agent coordination across Herdr lanes is governed by four core pillars tha
     - `## Route` (`continue | remediate | blocked`)
     - `## Issues` (P1/P2/P3 severity with file:line, invariant, defect, remediation)
     - `## Suggestions` (optional non-blocking environment observations)
+
+### 5. Superset task-branch integrations keep cited SHAs resolvable
+
+The sanctioned merge path squashes a task branch into a single commit, so the landed history carries none of the cited per-unit SHAs. When the task branch is a strict descendant of the integration branch, integrate with `git merge --ff-only` instead: the fast-forward writes no new commit and every cited SHA stays on the landed history. Confirm the superset first with `git merge-base --is-ancestor`; a branch that is not a descendant stays on the sanctioned path.

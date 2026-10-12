@@ -1179,6 +1179,9 @@ def test_auto_start_starts_agent_on_shell_pane_and_delivers_reply(stub: StubHarn
     }
     done = stub.run("lens-orchestrator", "COMPLETED", "--auto-start", "pi", state=state)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    # #237 (new pin, was: the bare spawn with no invariant): the revive carries the kind's
+    # invariant flag, the snippet file, and the kind trust flags after `--`.
+    invariant = Path(stub.tmp_path).resolve() / ".lane" / "invariants" / "lens-orchestrator.md"
     assert stub.starts() == [
         [
             str(stub.herdr),
@@ -1189,8 +1192,13 @@ def test_auto_start_starts_agent_on_shell_pane_and_delivers_reply(stub: StubHarn
             "pi",
             "--pane",
             "wM:p1N",
+            "--",
+            "--append-system-prompt",
+            str(invariant),
+            "--approve",
         ]
     ]
+    assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
     (call,) = stub.prompts()
     assert call[1:4] == ["agent", "prompt", "lens-orchestrator"]
     assert call[4].endswith("COMPLETED")
@@ -1221,6 +1229,9 @@ def test_auto_start_on_pane_id_with_label(stub: StubHarness) -> None:
     }
     done = stub.run("wM:p1N", "COMPLETED", "--auto-start", "claude", state=state)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    # #237 + #240 (new pin, was: the bare spawn): claude revives through its `-file` flag —
+    # the text flag would boot it with the path string as its system prompt.
+    invariant = Path(stub.tmp_path).resolve() / ".lane" / "invariants" / "lens-orchestrator.md"
     assert stub.starts() == [
         [
             str(stub.herdr),
@@ -1231,8 +1242,13 @@ def test_auto_start_on_pane_id_with_label(stub: StubHarness) -> None:
             "claude",
             "--pane",
             "wM:p1N",
+            "--",
+            "--append-system-prompt-file",
+            str(invariant),
+            "--dangerously-skip-permissions",
         ]
     ]
+    assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
     (call,) = stub.prompts()
     assert call[1:4] == ["agent", "prompt", "lens-orchestrator"]
     assert call[4].endswith("COMPLETED")
@@ -1280,6 +1296,108 @@ def test_auto_start_dry_run_skips_submitting(stub: StubHarness) -> None:
         "lens-orchestrator", "COMPLETED", "--auto-start", "pi", "--dry-run", state=state
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == []
+    assert stub.prompts() == []
+
+
+def _shell_pane_state_in(directory: Path) -> dict[str, object]:
+    """`_shell_pane_state` with the shell pane working in `directory`."""
+    state = dict(_shell_pane_state())
+    raw = state["panes"]
+    assert isinstance(raw, list)
+    panes = [dict(pane) for pane in raw if isinstance(pane, dict)]
+    panes[0]["cwd"] = str(directory)
+    state["panes"] = panes
+    return state
+
+
+def test_auto_start_revive_injects_the_invariant_file_for_an_inline_kind(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 1 (#237): a revived caller receives the same invariant injection as bootstrapped.
+
+    The revive spawn carries the kind's invariant flag pointing at a snippet file holding
+    the rendered invariant — the raw `herdr agent start` without it boots a contract-less
+    agent. Fails on the pre-fix revive, which started the agent with no invariant at all.
+
+    Mutant killed: drop the invariant args from the revive argv — the `--` tail assertion
+    fails. Mutant killed: skip `write_role_invariant` on revive — the file-content
+    assertion fails.
+    """
+    lane = tmp_path / "lane"
+    lane.mkdir()
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        "--auto-start",
+        "pi",
+        env={"HERDR_LANE_DIR": str(lane)},
+        state=_shell_pane_state_in(tmp_path),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    after = start[start.index("--") + 1 :]
+    path = after[after.index("--append-system-prompt") + 1]
+    assert after == ["--append-system-prompt", path, "--approve"]
+    invariant = Path(path)
+    assert invariant == (lane / ".lane" / "invariants" / "lens-orchestrator.md").resolve()
+    assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
+
+
+def test_auto_start_revive_appends_the_invariant_file_for_a_file_kind(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 2 (#237): a revived file-kind caller gets the marker-wrapped append, not silence.
+
+    The pane's live cwd is the delivery surface a file kind reads, so the revive appends
+    there — the same target `herdr-bootstrap` would choose for that pane.
+    """
+    lane = tmp_path / "lane"
+    lane.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        "--auto-start",
+        "codex",
+        env={"HERDR_LANE_DIR": str(lane)},
+        state=_shell_pane_state_in(work),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    assert "--" not in start
+    written = (work / "AGENTS.md").read_text()
+    assert herdr_bootstrap.render_invariant("lens-orchestrator") in written
+
+
+def test_auto_start_revive_without_a_determinable_pane_cwd_fails_loudly(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 3 (#237): an unstartable revival fails loudly, never delivering contract-less.
+
+    A file kind with no pane cwd to write into cannot receive the invariant through any
+    surface, so the revive is refused before any spawn — the reply is not delivered to an
+    agent that holds no reply contract.
+    """
+    state = _shell_pane_state_in(tmp_path)
+    raw = state["panes"]
+    assert isinstance(raw, list)
+    panes = [dict(pane) for pane in raw if isinstance(pane, dict)]
+    del panes[0]["cwd"]
+    state["panes"] = panes
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        "--auto-start",
+        "codex",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+        state=state,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
     assert stub.starts() == []
     assert stub.prompts() == []
 
@@ -1531,6 +1649,8 @@ def test_reply_auto_start_revives_and_delivers_with_recovery(
         state=_shell_target_state(),
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    # #237 (new pin, was: the bare spawn with no invariant).
+    invariant = Path(stub.tmp_path).resolve() / ".lane" / "invariants" / "lens-orchestrator.md"
     assert stub.starts() == [
         [
             str(stub.herdr),
@@ -1541,8 +1661,13 @@ def test_reply_auto_start_revives_and_delivers_with_recovery(
             "pi",
             "--pane",
             "wM:p1N",
+            "--",
+            "--append-system-prompt",
+            str(invariant),
+            "--approve",
         ]
     ]
+    assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
     (call,) = stub.prompts()
     assert call[1:4] == ["agent", "prompt", "lens-orchestrator"]
     assert call[4].endswith("COMPLETED")

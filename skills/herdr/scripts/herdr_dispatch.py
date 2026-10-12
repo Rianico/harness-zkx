@@ -79,6 +79,7 @@ class Options(PromptOptions):
     cwd: str | None = None
     model: str | None = None
     settle: float = DEFAULT_SETTLE_SECONDS
+    allow_unresolvable_sha: list[str] | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -182,6 +183,18 @@ def build_parser() -> argparse.ArgumentParser:
             "seconds to wait after the auto-started callee's fresh `agent start`, before "
             "dispatching, so a still-initialising pane is not treated as acceptant; "
             f"0 waits not at all (default: {DEFAULT_SETTLE_SECONDS:g})"
+        ),
+    )
+    _ = parser.add_argument(
+        "--allow-unresolvable-sha",
+        dest="allow_unresolvable_sha",
+        action="append",
+        metavar="TOKEN",
+        default=None,
+        help=(
+            "waive the outbound-SHA guard for one backticked 7-40 hex token that deliberately "
+            "names no commit in this lane (repeatable); every waiver is reported on stderr, so "
+            "it is never a silent bypass"
         ),
     )
     _ = parser.add_argument(
@@ -660,6 +673,22 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
             )
         )
         validate_ticket(ticket)
+        # #247: the dispatcher inlines the ticket file verbatim, so a drifted SHA copy in
+        # the ticket would otherwise reach the callee with no mechanism to detect it. The
+        # same guard as the reply path refuses it here, before any lease is acquired, and
+        # the stdin (`-`) stream stays unchecked: it is read once and verbatim downstream,
+        # and reading it here as well would consume it and starve that read.
+        from herdr_reply import lane_git_dir, require_resolvable_shas
+
+        require_resolvable_shas(
+            ticket,
+            payload_path=ticket_path,
+            waived=options.allow_unresolvable_sha or (),
+            cwd=lane_git_dir(env),
+            env=env,
+            origin="herdr-dispatch",
+            refusal_action="acquire a lease or prompt the callee",
+        )
 
     ticket_id = options.ticket_id or derive_ticket_id(ticket_path)
     task_id = options.task_id or ticket_id
