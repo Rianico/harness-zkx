@@ -627,16 +627,16 @@ def test_reply_docstring_states_the_backticked_review_id_refusal_and_waiver() ->
 
 
 def test_e2_do_not_rewrite_pin_cross_references_the_scope_issue() -> None:
-    """P4 item 2: the E2 pin-1 docstring cites #245, not #247.
+    """P4 item 2: the E2 pin-1 docstring cites #247, not #245.
 
-    The section header, the lane ticket, and the ledger bullet all name the scope
-    decision #245 (the replacement number was confirmed via the issue tracker, not
-    retyped from memory). Mutant: restore #247 and this pin fails on both halves.
+    The section header names the scope decision #245 E2 while the pin-1 line cites the
+    incident #247 (the incident number was confirmed via the issue tracker, not
+    retyped from memory). Mutant: re-apply #245 and this pin fails on both halves.
     """
     text = Path(__file__).with_name("test_herdr_reply.py").read_text(encoding="utf-8")
     line = next(line for line in text.splitlines() if "drifted by one hex digit" in line)
-    assert "#245" in line, line
-    assert "#247" not in line, line
+    assert "#247" in line, line
+    assert "#245" not in line, line
 
 
 def test_changelog_states_the_length_difference_not_exact_likeness() -> None:

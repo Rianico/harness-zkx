@@ -2896,7 +2896,7 @@ def test_a_do_not_rewrite_list_with_a_truncated_sha_is_refused(
 ) -> None:
     """E2 pin 1: the incident's own context — a backticked truncated SHA in a do-not-rewrite list.
 
-    #245 was a "do not rewrite these SHAs" list whose token had drifted by one hex digit. The
+    #247 was a "do not rewrite these SHAs" list whose token had drifted by one hex digit. The
     retained broad guard reads the whole body, so it refuses the list wherever it appears. Mutant:
     disable the guard (early-return in `require_resolvable_shas`) and this pin fails, delivering
     the dead token with the list intact.
