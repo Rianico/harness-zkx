@@ -565,3 +565,85 @@ def test_callers_reports_no_dependents(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "Inbound Dependencies (callers):" in result.stdout
     assert "(None)" in result.stdout
+
+
+def _credited_frontmatter(credits_body: str) -> str:
+    return (
+        "name: credited\ndescription: >-\n  A credited skill.\n"
+        f"metadata:\n  credits:\n{credits_body}"
+    )
+
+
+def test_lint_passes_single_mapping_credits(tmp_path: Path) -> None:
+    """metadata.credits as one mapping with source+author passes lint."""
+    write_raw_skill(
+        tmp_path,
+        "credited",
+        _credited_frontmatter(
+            "    source: https://github.com/example/upstream\n"
+            "    author: example\n"
+            "    version: main\n"
+            "    note: Adapted from upstream-setup\n"
+        ),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "lint")
+
+    assert result.returncode == 0, result.stdout
+    assert "Lint passed" in result.stdout
+
+
+def test_lint_passes_credits_list(tmp_path: Path) -> None:
+    """metadata.credits as a list of mappings, each with source or author, passes lint."""
+    write_raw_skill(
+        tmp_path,
+        "credited",
+        _credited_frontmatter(
+            "    - source: https://github.com/example/one\n"
+            "      author: one\n"
+            "    - author: two\n"
+            "      note: blog post\n"
+        ),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "lint")
+
+    assert result.returncode == 0, result.stdout
+    assert "Lint passed" in result.stdout
+
+
+def test_lint_fails_credits_as_string(tmp_path: Path) -> None:
+    """metadata.credits must be a mapping or list of mappings, not a bare string."""
+    write_raw_skill(tmp_path, "credited", _credited_frontmatter("    just-a-string\n"))
+
+    result = run_validate_deps("--project-root", str(tmp_path), "lint")
+
+    assert result.returncode == 1
+    assert "LINT FAIL:" in result.stdout
+    assert "must be a mapping or a list of mappings" in result.stdout
+
+
+def test_lint_fails_credit_missing_source_and_author(tmp_path: Path) -> None:
+    """A credit entry without source and without author fails lint."""
+    write_raw_skill(tmp_path, "credited", _credited_frontmatter("    version: '1.0'\n"))
+
+    result = run_validate_deps("--project-root", str(tmp_path), "lint")
+
+    assert result.returncode == 1
+    assert "LINT FAIL:" in result.stdout
+    assert "needs a non-empty 'source' or 'author'" in result.stdout
+
+
+def test_lint_fails_credit_unknown_key(tmp_path: Path) -> None:
+    """A credit entry with an unrecognized key fails lint."""
+    write_raw_skill(
+        tmp_path,
+        "credited",
+        _credited_frontmatter("    source: https://example.com\n    repo: bad\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "lint")
+
+    assert result.returncode == 1
+    assert "LINT FAIL:" in result.stdout
+    assert "unrecognized keys: repo" in result.stdout

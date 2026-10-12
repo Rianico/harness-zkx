@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **skill-authoring:** lint-enforced `metadata.credits` provenance schema — mapping or list of mappings, each needing `source` or `author`, keys restricted to `source`/`author`/`version`/`note`; `setup-lsz-skills` declares its upstream credits
 * **setup-lsz-skills:** new onboarding skill — environment detector, `CONTEXT.md`→`GLOSSARY.md` migration with merge-staging, `.lsz/tmp` workspace, and Jinja-rendered `docs/agents/` docs
 * **gh-router:** visual-first PR template with shaped summary, delimiter separation, closed-issue state advisory, and deterministic changelog shape gate (#245)
 * **changelog-gate:** enforce 100-word/4-line entry budget, reject machine telemetry, activate ticket phase, and exempt hidden-type PRs from ledger requirement (#245)

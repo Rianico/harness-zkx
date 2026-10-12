@@ -205,13 +205,30 @@ metadata:
 
 The `metadata` field supports project-specific structural declarations. The LSZ architecture defines these conventions:
 
-| Key          | Type   | Purpose                                                                           |
-| ------------ | ------ | --------------------------------------------------------------------------------- |
-| `manage`     | list   | Parent skill: names of sub-skills this parent manages                             |
-| `managed-by` | string | Sub-skill: name of the parent skill                                               |
-| `depends-on` | list   | Hard dependencies on other skills (must exist in `skills/` or `skills-lock.json`) |
-| `author`     | string | Attribution for third-party skills                                                |
-| `version`    | string | Version for third-party skills                                                    |
+| Key          | Type              | Purpose                                                                           |
+| ------------ | ----------------- | --------------------------------------------------------------------------------- |
+| `manage`     | list              | Parent skill: names of sub-skills this parent manages                             |
+| `managed-by` | string            | Sub-skill: name of the parent skill                                               |
+| `depends-on` | list              | Hard dependencies on other skills (must exist in `skills/` or `skills-lock.json`) |
+| `author`     | string            | Attribution for third-party skills                                                |
+| `version`    | string            | Version for third-party skills                                                    |
+| `credits`    | mapping or list   | Upstream provenance for adapted/ported skills (see rules below)                   |
+
+**`credits` rules:**
+
+- Optional; validated by `validate-deps.py lint` only when present
+- Single mapping or list of mappings — one skill may credit several upstreams
+- Each entry needs at least `source` or `author`; allowed keys are `source`, `author`, `version`, `note`, all string values
+- Example:
+
+  ```yaml
+  metadata:
+    credits:
+      source: https://github.com/example/upstream
+      author: example
+      version: main
+      note: Adapted from upstream-setup
+  ```
 
 **`depends-on` rules:**
 

@@ -3,6 +3,12 @@ name: setup-lsz-skills
 description: >-
   Scaffold and migrate repo configuration for engineering skills — issue tracker, triage labels, GLOSSARY.md layout, CLI toolchain, and .lsz runtime. Use when initializing a repo, updating toolchain, or migrating CONTEXT.md.
 disable-model-invocation: true
+metadata:
+  credits:
+    source: https://github.com/mattpocock/skills
+    author: mattpocock
+    version: main
+    note: Adapted from setup-matt-pocock-skills
 ---
 
 # Setup LSZ Skills
