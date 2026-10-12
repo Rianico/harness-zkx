@@ -57,9 +57,11 @@ checked: the envelope is composed later and is never inspected. A bare hex word
 in prose stays prose, so mutant labels, review-record ids and UUID fragments inside cited paths
 are not read as citations. An unresolvable token is refused loudly (exit 2, naming the token and
 the payload path) before any record exists, so a refused payload consumes no lease; `--dry-run`
-reports it the same way instead of accepting the payload silently. A git location override
-(`GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`) skips the check loudly, naming
-every unchecked token, rather than let one resolve in another repository. A genuinely intentional
+reports it the same way instead of accepting the payload silently. A git override that moves the
+object store the probe reads (`GIT_DIR`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`,
+`GIT_ALTERNATE_OBJECT_DIRECTORIES`) skips the check loudly, naming every unchecked token, rather
+than let one resolve in another repository; the two verdict-neutral location overrides
+(`GIT_WORK_TREE`, `GIT_INDEX_FILE`) never skip for that reason alone. A genuinely intentional
 non-resolving token is waived by name with `--allow-unresolvable-sha <TOKEN>`, and every waiver
 is reported on stderr — never a silent bypass.
 
@@ -671,8 +673,11 @@ ALLOW_UNRESOLVABLE_SHA = "--allow-unresolvable-sha"
 # unverifiable rather than a false negative. Measured, not assumed: with only `GIT_INDEX_FILE` or
 # `GIT_WORK_TREE` set the probe's verdict is byte-identical to a clean environment (#245
 # D2-rework-2), so those two are deliberately absent here — skipping on them would excuse a refusal
-# the probe can answer, a silent false pass the other way. `herdr_bootstrap` refuses on them because
-# its question is tracked state, which the index and the work tree do decide (#238).
+# the probe can answer, a silent false pass the other way. They never skip for that reason alone:
+# neither name is read here, so a skip with one set can only come from the generic "no work tree"
+# path — a non-existent `GIT_WORK_TREE`, say, makes `git rev-parse --is-inside-work-tree` exit 128
+# and the check is reported unchecked, never passed. `herdr_bootstrap` refuses on them because its
+# question is tracked state, which the index and the work tree do decide (#238).
 GIT_LOCATION_REDIRECT_VARS: tuple[str, ...] = (
     "GIT_DIR",
     "GIT_COMMON_DIR",

@@ -2829,6 +2829,98 @@ def test_the_sha_guard_still_refuses_when_git_location_is_not_redirected(
     assert stub.prompts() == []
 
 
+# ── #245 E2: the guard's scope decision, pinned so the choice is visible ────────────────
+
+# The E2 measurement decided the trigger's SCOPE: the broad rule (every backticked hex token in
+# the body) is kept rather than narrowed to marked tokens. The evidence is that the incident token
+# and the review-id friction class are shape-indistinguishable — seven and eight lowercase hex in
+# backticks — so no marker, length, or context rule refuses the incident and exempts the friction
+# without either refusing innocent literals or silently passing a drifted abbreviation. These pins
+# fix both directions of that choice: the incident shape is refused, and the friction id is refused
+# too (the escape hatch stays `--allow-unresolvable-sha`).
+
+
+def test_a_do_not_rewrite_list_with_a_truncated_sha_is_refused(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """E2 pin 1: the incident's own context — a backticked truncated SHA in a do-not-rewrite list.
+
+    #247 was a "do not rewrite these SHAs" list whose token had drifted by one hex digit. The
+    retained broad guard reads the whole body, so it refuses the list wherever it appears. Mutant:
+    disable the guard (early-return in `require_resolvable_shas`) and this pin fails, delivering
+    the dead token with the list intact.
+    """
+    repo, short = sha_guard_repo(tmp_path)
+    body = reply_payload(f"- do not rewrite `{short}`, `{DRIFTED_ABBREV}`")
+    path = tmp_path / "reply.md"
+    _ = path.write_text(body, encoding="utf-8")
+
+    done = stub.run(
+        "orchestrator", "--file", str(path), env={"HERDR_LANE_DIR": str(repo)}, cwd=repo
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert DRIFTED_ABBREV in done.stderr
+    assert short not in done.stderr, "the resolving token must not be named as dead"
+    assert herdr_lease.list_replies(base_dir=repo) == []
+    assert stub.prompts() == []
+
+
+def test_the_unmarked_incident_shape_is_refused_bare_in_prose(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """E2 required pin: the unmarked, bare incident shape is still refused.
+
+    The incident token was carried bare and unmarked, so a rule that reads only marked tokens or
+    only a do-not-rewrite context would leave this payload unrefused. The retained broad guard
+    refuses it: seven lowercase hex in backticks, naming no commit, with neither marker nor list.
+    Mutant: narrow the trigger to marked forms (see the review-id pin below) and this pin fails.
+    """
+    repo, _short = sha_guard_repo(tmp_path)
+
+    done = stub.run(
+        "orchestrator",
+        reply_payload(f"- the base `{DRIFTED_ABBREV}` drifted by one digit"),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert DRIFTED_ABBREV in done.stderr
+    assert "SHA guard skipped" not in done.stderr
+    assert stub.prompts() == []
+
+
+def test_an_eight_hex_review_id_is_refused_by_the_broad_trigger(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """E2 scope decision, made visible: an eight-hex review id IS refused.
+
+    This is the friction class the directive wanted exempted: a backticked review-record id that
+    names no commit. The measurement found it shape-indistinguishable from the incident token
+    (seven hex, bare, unmarked), and no narrowing rule catches the incident while exempting it
+    without either refusing innocent seven-hex literals or silently passing a drifted eight-hex
+    abbreviation. So E2 keeps the broad trigger and pins the friction as accepted behaviour rather
+    than hiding it; the escape hatch stays `--allow-unresolvable-sha`, pinned by
+    `test_the_documented_waiver_admits_an_intentional_nonresolving_token`. Mutant: exempt
+    review-shaped or marked tokens and this pin fails.
+    """
+    repo, _short = sha_guard_repo(tmp_path)
+    review_id = "0c81f04c"
+    body = reply_payload(f"- Source: D2's review (`{review_id}`) approved with findings")
+    path = tmp_path / "reply.md"
+    _ = path.write_text(body, encoding="utf-8")
+
+    done = stub.run(
+        "orchestrator", "--file", str(path), env={"HERDR_LANE_DIR": str(repo)}, cwd=repo
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert review_id in done.stderr
+    assert herdr_lease.list_replies(base_dir=repo) == []
+    assert stub.prompts() == []
+
+
 # ── #245 D2-rework-2: which git overrides actually move the object store ───────────────
 
 # The four names whose presence relocates the objects `git rev-parse` reads, so the guard's verdict
