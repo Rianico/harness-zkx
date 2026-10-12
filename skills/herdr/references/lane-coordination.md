@@ -34,8 +34,8 @@ Without explicit, enforceable boundaries, multi-agent lanes degrade into three c
 To resolve all three anti-patterns and manage context pressure asymmetry, enforce a clean two-tier delegation architecture:
 
 > [!IMPORTANT] Subagent-First Execution Mandate
-> Subagent-First Execution is a **Universal Mandate across all coding agents**, regardless of underlying kind or engine (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, etc.). All coding agents in lane coordination (both Task Managers and Implementers) **MUST** use subagents for heavy tasks:
-> - **Implementers**: MUST delegate deep codebase exploration (Scout), multi-file code editing / refactoring (Editor), and test failure log triage (Test Runner) to ephemeral subagents. Direct execution of heavy work in the callee host pane exhausts context windows, triggers severe compaction degradation, and leads to instruction amnesia.
+> Subagent-First Execution is a **Universal Mandate across all coding agents**, regardless of underlying kind or engine (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, `qodercli`, etc.). All coding agents in lane coordination (both Task Managers and Implementers) **MUST** use subagents as drafts for heavy tasks:
+> - **Implementers**: MUST delegate deep exploration (Scout), code development and multi-file drafting (Editor), research, and test failure log triage (Test Runner) to ephemeral subagents. Treat subagent outputs as disposable drafts; the host pane main session focuses on synthesizing, verifying, and evaluating the results before committing. Direct execution of heavy work in the callee host pane exhausts context windows, triggers severe compaction degradation, and leads to instruction amnesia.
 > - **Task Managers**: MUST delegate crux adversarial code review under `keel`, `coding-protocol`, and `programming-expert` to an internal review subagent. Reviewing massive diffs directly in the TM pane blinds the TM to lane invariants and architectural oversight.
 
 1. **Tier 1: Lane-Level Coordination (Herdr Inter-Pane)**

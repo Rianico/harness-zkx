@@ -50,12 +50,10 @@ import argparse
 import json
 import math
 import os
-import shlex
 import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 
 from herdr_bootstrap import load_kind_entry
 
@@ -79,11 +77,60 @@ from herdr_cli import (
     find_herdr,
     guard,
     read_payload_stream,
-    reply_helper,
     require_herdr_env,
     run_herdr,
     run_herdr_checked,
     verify_target_not_bare_shell,
+)
+
+# The envelope domain moved to `herdr_envelope`; these names stay reachable as
+# `herdr_prompt.<name>` for every existing consumer. Identity producers above import
+# `CallerContext`, and `prompt_agents` calls `wrap_with_envelope`; the rest are explicit
+# re-exports (the `name as name` form marks them as public API for the type checker).
+from herdr_envelope import (  # noqa: F401
+    PAGING_DELIMITER as PAGING_DELIMITER,
+)
+from herdr_envelope import (
+    REPLY_HELPER as REPLY_HELPER,
+)
+from herdr_envelope import (
+    SKILL_NOTICE as SKILL_NOTICE,
+)
+from herdr_envelope import (
+    CallerContext as CallerContext,
+)
+from herdr_envelope import (
+    _scalar as _scalar,  # pyright: ignore[reportPrivateUsage]
+)
+from herdr_envelope import (
+    _single_line as _single_line,  # pyright: ignore[reportPrivateUsage]
+)
+from herdr_envelope import (
+    parse_envelope as parse_envelope,
+)
+from herdr_envelope import (
+    receiver_ref as receiver_ref,
+)
+from herdr_envelope import (
+    render_envelope as render_envelope,
+)
+from herdr_envelope import (
+    render_prelude as render_prelude,
+)
+from herdr_envelope import (
+    render_reply_contract as render_reply_contract,
+)
+from herdr_envelope import (
+    sender_ref as sender_ref,
+)
+from herdr_envelope import (
+    split_envelope_and_body as split_envelope_and_body,
+)
+from herdr_envelope import (
+    utc_stamp as utc_stamp,
+)
+from herdr_envelope import (
+    wrap_with_envelope as wrap_with_envelope,
 )
 
 BLOCKED = "blocked"
@@ -207,20 +254,6 @@ def read_payload(source: str | None) -> str:
     return payload
 
 
-@dataclass(frozen=True)
-class CallerContext:
-    """The envelope sender: pane id, visible label, addressable agent name, kind, session, tab, cwd."""
-
-    pane_id: str
-    label: str | None = None
-    agent: str | None = None
-    kind: str | None = None
-    session_id: str | None = None
-    resume_cmd: str | None = None
-    tab_id: str | None = None
-    cwd: str | None = None
-
-
 def build_resume_cmd(kind: str | None, session_id: str | None) -> str | None:
     """Build the agent-native resume command string for the caller, if known."""
     if kind == "agy":
@@ -313,169 +346,6 @@ def resolve_receiver(
     return build_identity(panes, agents, pane_id)
 
 
-def _single_line(value: str, limit: int = 64) -> str:
-    """Collapse a free-form pane label onto one header line; labels are operator input."""
-    return " ".join(value.split())[:limit]
-
-
-def _scalar(value: str) -> str:
-    """Render a header value; quote only when a YAML reader would mangle it."""
-    if not value:
-        return ""
-    if (
-        '"' in value
-        or "'" in value
-        or "#" in value
-        or '": "' in value
-        or any(ch.isspace() for ch in value)
-    ):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    return value
-
-
-def sender_ref(sender: CallerContext) -> str:
-    """Render the targetable `<agent>@<pane>` ref plus position fields; a pane label is never a name."""
-    label = _single_line(sender.label) if sender.label else ""
-    parts = [f"{sender.agent}@{sender.pane_id}" if sender.agent else sender.pane_id]
-    if label and label != sender.agent:
-        parts.append(f"label {_scalar(label)}")
-    if sender.tab_id:
-        parts.append(f"tab {_scalar(sender.tab_id)}")
-    if sender.kind:
-        parts.append(f"kind {_scalar(sender.kind)}")
-    return " - ".join(parts)
-
-
-def receiver_ref(receiver: str | CallerContext) -> str:
-    """Render the addressee as a position ref when it resolved, else as the bare target token."""
-    if isinstance(receiver, CallerContext):
-        return sender_ref(receiver)
-    return _scalar(receiver)
-
-
-def render_envelope(
-    sender: CallerContext,
-    *,
-    receiver: str | CallerContext | None = None,
-    group_members: Sequence[str] = (),
-    include_recovery: bool = False,
-    ticket_id: str | None = None,
-    task_id: str | None = None,
-    task_group: str | None = None,
-    tab_id: str | None = None,
-    in_reply_to: str | None = None,
-) -> str:
-    """Render the Style 2 envelope; the receiver closes the Routing block, and an absent field renders no line."""
-    routing = ["Routing:", f"  Sender: {sender_ref(sender)}"]
-    if group_members:
-        routing.append(f"  Group: [{', '.join(group_members)}]")
-    if receiver:
-        routing.append(f"  Receiver(You): {receiver_ref(receiver)}")
-
-    hierarchy: list[str] = []
-    if task_group and tab_id:
-        hierarchy.append(f"  Task-Group: {task_group} ({tab_id})")
-    elif task_group:
-        hierarchy.append(f"  Task-Group: {task_group}")
-    elif tab_id:
-        hierarchy.append(f"  Task-Group: {tab_id}")
-    if ticket_id:
-        hierarchy.append(f"  Ticket-ID: {ticket_id}")
-    if task_id:
-        hierarchy.append(f"  Task-ID: {task_id}")
-    if in_reply_to:
-        hierarchy.append(f"  In-Reply-To: {in_reply_to}")
-
-    runtime: list[str] = []
-    if include_recovery:
-        if sender.cwd:
-            runtime.append(f"  Cwd: {_scalar(sender.cwd)}")
-        if sender.resume_cmd:
-            runtime.append(f"  Resume: {_scalar(sender.resume_cmd)}")
-
-    lines = [*routing]
-    if hierarchy:
-        lines.append("Hierarchy:")
-        lines.extend(hierarchy)
-    if runtime:
-        lines.append("Runtime:")
-        lines.extend(runtime)
-    lines.append("Protocol:")
-    lines.append(f"  {SKILL_NOTICE}")
-    return "\n".join(lines)
-
-
-def utc_stamp() -> str:
-    """Timestamp an envelope; both directions stamp, so a transcript reads in order."""
-    return f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
-
-
-SKILL_NOTICE = (
-    "Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all "
-    "coordination, never the bare herdr CLI"
-)
-
-# The reply contract is an executable command, so it names this lane's own `herdr_reply.py` as an
-# absolute path resolved from this tree: the receiving agent runs it from any cwd, and a
-# placeholder would render a command that cannot run. The derivation is single-sourced in
-# `herdr_cli.reply_helper()` — the `~/.agents/skills/herdr` symlink is deliberately not used,
-# since it can resolve into another worktree whose `herdr_*` code may be older.
-REPLY_HELPER = reply_helper()
-
-
-def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -> str:
-    """Render the completion-reply contract; without an agent name no target is addressable.
-
-    A known ticket id is bound with `--ticket`, so the callee's reply names its task and the
-    reply side binds explicitly. This replaced the sender's sole-open-task inference, which
-    #246 E1.2 deleted. The dispatcher reuses the same `derive_ticket_id` it stores on the
-    lease, so the rendered id and the task it names cannot drift. Without a derived id
-    (`--file -`, stdin) the contract renders without `--ticket` and the reply lands unlinked
-    with D1.3's warning.
-
-    The id is rendered shell-quoted in `=` form (`--ticket=` + `shlex.quote`), because
-    this line is a command the callee copy-pastes: a lane ticket stem starts with a digit,
-    so the derived id starts with `#`, which a shell reads as the start of a comment and
-    would swallow the id — the helper then exits 2 with `argument --ticket: expected one
-    argument`. The `=` form additionally keeps a leading-dash id (`-rf.md` derives `-rf`;
-    `shlex.quote('-rf')` is `-rf`) from being parsed as a flag — the space form renders
-    `--ticket -rf`, which argparse refuses with the same exit-2 `expected one argument`
-    and the reply is never sent. A loud refusal of leading-dash ids at render time was
-    rejected because it would make such tickets undispatchable; the `=` form delivers
-    them, and argparse binds `--ticket=<value>` as the value even with a leading dash.
-    Quoting also keeps a filename's shell metacharacters inert (`pwn;touch PWNED.md` used
-    to run `touch PWNED`). Quoting is preferred over validating the id against a safe
-    grammar because a grammar would refuse the arbitrary ticket names the dispatcher
-    deliberately derives verbatim. This is the same treatment `herdr_bootstrap` gives a
-    rendered path (`shlex.quote(target)`), and the reason agent names are refused for
-    whitespace.
-
-    The contract also carries the SHA guard's waiver route in prose: a callee quoting a
-    review id (an eight-hex record such as '0c81f04c', which names no commit) meets the
-    broad #247 trigger, so without guidance the reply is refused with no sanctioned next
-    step. The guidance names `--allow-unresolvable-sha` with a single-quoted example, so
-    the example survives copy-paste as one shell word — prose advice, never a shell
-    template, so nothing pasted from it widens the waiver.
-    """
-    if sender.agent:
-        contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
-        if ticket_id:
-            contract += f" --ticket={shlex.quote(ticket_id)}"
-        return (
-            "On completion, reply to the sender in one message using the herdr helper script:\n"
-            f"{contract}\n"
-            "  If the reply quotes a review id such as '0c81f04c' that names no commit,"
-            " the SHA guard refuses it: waive that token by name with"
-            " --allow-unresolvable-sha '0c81f04c' (one flag per token, reported on stderr)."
-        )
-    note = (
-        "(the sending pane has no agent name; reply cannot be addressed — "
-        "report completion to the user instead)"
-    )
-    return f"On completion, reply to the sender in one message:\n  {note}"
-
-
 def resolve_group_members(
     panes: Sequence[Mapping[str, object]],
     agents: Sequence[Mapping[str, object]],
@@ -532,33 +402,6 @@ def resolve_group_members(
             others.append(f"{name}@{pid}")
     members.extend(sorted(dict.fromkeys(others)))
     return members
-
-
-def wrap_with_envelope(
-    payload: str,
-    sender: CallerContext,
-    *,
-    group_members: Sequence[str] = (),
-    receiver: str | CallerContext | None = None,
-    include_recovery: bool = False,
-    ticket_id: str | None = None,
-    task_id: str | None = None,
-    task_group: str | None = None,
-    tab_id: str | None = None,
-) -> str:
-    """Prepend the timestamped envelope and append the reply contract around the payload."""
-    envelope = render_envelope(
-        sender,
-        receiver=receiver,
-        group_members=group_members,
-        include_recovery=include_recovery,
-        ticket_id=ticket_id,
-        task_id=task_id,
-        task_group=task_group,
-        tab_id=tab_id,
-    )
-    header = f"{utc_stamp()}\n{envelope}"
-    return f"{header}\n---\n\n{payload}\n\n{render_reply_contract(sender, ticket_id)}"
 
 
 def build_prompt_argv(

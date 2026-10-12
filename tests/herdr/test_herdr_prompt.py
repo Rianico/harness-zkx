@@ -14,6 +14,7 @@ from pathlib import Path
 
 import herdr_bootstrap
 import herdr_cli
+import herdr_envelope
 import herdr_prompt
 import pytest
 
@@ -793,7 +794,7 @@ def test_reply_contract_points_at_this_trees_helper_not_a_foreign_copy(
     _ = foreign.write_text("# a foreign copy that exists\n", encoding="utf-8")
     assert foreign.is_file()
     assert foreign.resolve().parent != SCRIPTS_DIR
-    monkeypatch.setattr(herdr_prompt, "REPLY_HELPER", foreign)
+    monkeypatch.setattr(herdr_envelope, "REPLY_HELPER", foreign)
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
     contract = herdr_prompt.render_reply_contract(sender, "#182-test")
     match = re.search(r'uv run "([^"]+)"', contract)

@@ -138,6 +138,7 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
+from herdr_envelope import render_envelope, render_prelude
 from herdr_lease import (
     REPLIES_DIR_LANE,
     check_reply_store,
@@ -153,10 +154,8 @@ from herdr_lease import (
     state_is_readable,
 )
 from herdr_prompt import (
-    render_envelope,
     resolve_caller,
     resolve_receiver,
-    utc_stamp,
 )
 
 BLOCKED = "blocked"
@@ -1752,7 +1751,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     shape, heading = payload_shape(payload)
     # The pointer and the index row carry the same bounded label, never the heading text.
     evidence = evidence_label(heading)
-    prelude = f"{utc_stamp()}\n{reply_envelope}\n---\n\n"
+    prelude = render_prelude(reply_envelope)
     record_id: str | None = None
     if options.dry_run:
         # A dry run submits nothing, so it records nothing: the payload stays pointer-free.

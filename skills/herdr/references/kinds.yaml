@@ -52,7 +52,7 @@ copilot:
   trust_flags: []
   invariant: file
 qodercli:
-  trust_flags: []
+  trust_flags: ["--dangerously-skip-permissions"]
   invariant: file
 agy:
   trust_flags: []
