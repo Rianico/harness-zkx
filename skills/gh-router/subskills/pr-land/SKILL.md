@@ -50,11 +50,11 @@ uv run $SKILL_DIR/scripts/pr.py --check --body-file tmp/drafts/pr_body.md --out-
 
 `--out-dir DIR` sets the output directory (default `<repo-root>/.lsz/tmp`). Missing parent directories are created automatically. Every run writes both files, including a refused run.
 
-stdout carries exactly five lines: `commits: N`, `trailers: N`, the two paths, and one `hint:` line. The hint names the curation spec. Full text lives on disk only.
+stdout carries exactly five lines: `commits: N`, `trailers: N`, the two paths, and one `hint:` line. The hint splits the two duties: the PR body keeps the repo's installed template shape (see `install-template.sh`; prose owned by `pr-enhance`), while the squash overview — never the PR body — is the artifact under the curation spec. Full text lives on disk only.
 
 `draft.json` records range facts (one row per commit: full `sha`, `subject`, and `body` capped at 15 lines), trailers, and `squash_body` (cleaned merge text). It also includes `pr_number`, `pr_url`, `status`, `exit_code`, and `note`. A `dirty` block records porcelain and diff stat rows when worktree changes exist. The count field tracks `dirty_files`. Uncommitted work never enters the fingerprint.
 
-Curate `<out-dir>/pr_body.md` before passing it to the create phase. It keeps the authored body as supplied or fetched, including human-facing Mermaid diagrams and `<details>` blocks, plus appended `Co-authored-by` trailers.
+Curate `<out-dir>/pr_body.md` before passing it to the create phase, in the repo's installed PR template shape (Summary · Root Cause for fixes · Blast Radius & Safety · Evidence · Checklist). It keeps the authored body as supplied or fetched, including human-facing Mermaid diagrams and `<details>` blocks, plus appended `Co-authored-by` trailers.
 
 Author prose from the git-diff-digest brief with `pr-enhance`. The PR body is the reviewer's artifact, not the commit message. Author the squash overview as a separate file (at most 5 bullets and 15 lines). Pass that file to `--merge` with `--squash-message-file`. The merge operation never falls back to the PR body. A message that reproduces `pr_body.md` is refused.
 
