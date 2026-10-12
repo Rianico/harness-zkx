@@ -5,7 +5,7 @@ description: >-
 disable-model-invocation: true
 metadata:
   credits:
-    source: https://github.com/mattpocock/skills
+    source: https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md
     author: mattpocock
     version: main
     note: Adapted from setup-matt-pocock-skills

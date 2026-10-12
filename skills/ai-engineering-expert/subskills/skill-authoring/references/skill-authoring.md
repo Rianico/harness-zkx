@@ -219,12 +219,13 @@ The `metadata` field supports project-specific structural declarations. The LSZ 
 - Optional; validated by `validate-deps.py lint` only when present
 - Single mapping or list of mappings — one skill may credit several upstreams
 - Each entry needs at least `source` or `author`; allowed keys are `source`, `author`, `version`, `note`, all string values
+- `source` should deep-link to the specific upstream document (blob file path), not just the repository root
 - Example:
 
   ```yaml
   metadata:
     credits:
-      source: https://github.com/example/upstream
+      source: https://github.com/example/upstream/blob/main/skills/setup-upstream/SKILL.md
       author: example
       version: main
       note: Adapted from upstream-setup
