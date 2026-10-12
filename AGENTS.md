@@ -11,10 +11,10 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
 - **Goal-Driven Development (GDD)**:
   - **BDD for Intent Alignment**: Bridge the intent-code gap with shared contracts (Given/When/Then).
   - **EDD for Empirical Truth**: Environmental truth is supreme authority. Trust only what the environment (tests, linters, compilers) says, never what the model claims.
-- **Deterministic vs. Semantic Split**:
+- **Formal Substrate vs. Semantic Reasoner Split**:
   - Default to building checks over writing rules.
-  - Mechanical constraints (syntax, imports, file locations, banned APIs) → deterministic tools (linters, pre-commit, CI).
-  - Markdown steering & prompts → reserved strictly for genuine qualitative **judgment calls** verified via adversarial orchestration ("Skeptic" reviewer).
+  - Mechanical constraints (syntax, imports, schema, banned APIs) → **Formal Substrate** (linters, pre-commit, compilers, CI).
+  - Markdown steering & prompts → reserved strictly for the **Semantic Reasoner**'s qualitative **judgment calls** verified via adversarial orchestration ("Skeptic" reviewer).
 - **Progressive Disclosure & Pointer-First**:
   - `AGENTS.md` is minimal and strictly for **navigation pointers**, never inline specs.
   - Follow the 80/20 rule: 20% in skill/pointer, 80% behind context pointers in `references/` or `docs/`.

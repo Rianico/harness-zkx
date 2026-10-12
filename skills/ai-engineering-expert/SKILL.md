@@ -20,7 +20,7 @@ Core principles for building reliable AI systems in the LSZ harness. This file h
 
 ## The Foundation: IDD (Intent-Driven Development) & GDD (Goal-Driven Development)
 
-AI engineering translates **Human Intent** into verifiable reality. LLMs are **Probabilistic Engines** operating in a **Deterministic World**. **IDD** is the upstream source of authority; **GDD** is the derived operational spine.
+AI engineering translates **Human Intent** into verifiable reality. It structures the symbiotic boundary between the **Formal Substrate** (deterministic rules, compilers, typecheckers, databases, linters, git algorithms) and the **Semantic Reasoner** (probabilistic LLM agents operating under uncertainty). **IDD** is the upstream source of authority; **GDD** is the derived operational spine.
 
 ### 1. IDD (Intent-Driven Development): Source of Authority
 Answers *"Why are we changing reality?"* Anchors teleological purpose and boundary invariants before any code or goals are authored. Defined by the **4-part Intent Formula**:
@@ -43,7 +43,7 @@ Both ends are strictly required. A goal without intent invites **Specification G
 ### 4. Root-Cause Archetypes for Agent Failure
 Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules. When an agent fails, classify the root cause:
 
-- **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → deterministic tools (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
+- **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → deterministic tools in the Formal Substrate (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
 - **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → refine prompt contracts (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
 - **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → enforce via Context Pressure Asymmetry (move to Skeptic reviewer) or build a hard tool gate. Prune ignored prose.
 - **Route Friction** (model bypassed rule because compliance was too manual or multi-step) → pack steps into a script (`scripts/<cmd>`). Make the governed path the cheapest path.
@@ -51,11 +51,14 @@ Hard reality and qualitative alignment are distinct domains. Default to building
 ### 5. Unified Message Format
 All inter-agent dispatches and completion replies adhere to an isomorphic dual-mode contract (Markdown prose and structured JSON schema) covering Summary (Carmack-style), Artifacts, Evidence, Route, and Issues. (See [Subagent Response Format](references/resp-format.md) and [Lane Coordination](../herdr/references/lane-coordination.md)).
 
-## Information Boundary Design
+## Information Boundary Design: Formal Substrate vs. Semantic Reasoner
 
-- Tool owns what it can deterministically verify. Model owns intent. Never require the model to supply verification data or to re-read just to keep a check honest.
-- Expose minimal anchors/handles for the model to reference. Hide verbose content and persistence details behind the tool. The model copies the handle, the tool resolves and verifies.
-- Grade the boundary by determinism: hard checks (content, type, existence) go to the tool. Qualitative choices (what to change, wording) go to the model.
+The boundary between deterministic computation and language models is absolute:
+
+- **Formal Substrate owns environmental truth and mechanical verification**: Compilers, linters, property tests, ACID databases, AST parsers, and git engines. Anything checkable without judgment stays in the substrate. It diagnoses conflicts, validates invariants, and renders binary verdicts. Never require the model to supply verification data or to echo text to prove honesty.
+- **Semantic Reasoner owns intent, synthesis, and conflict resolution**: The model navigates ambiguity, interprets human objectives, bridges conceptual mismatches, and proposes semantic integrations when the formal substrate flags an impasse (e.g. merge conflicts, type divergences, schema mutations).
+- **Minimal handles, hidden substrate mechanics**: Expose minimal anchors/handles for the model to reference. Hide verbose content, AST nodes, and persistence mechanics behind the tool. The model copies the handle; the substrate resolves, executes, and verifies.
+- **Grade by determinism**: Hard checks (syntax, types, hashes, invariants) belong to the formal substrate. Qualitative decisions (phrasing, architecture trade-offs, scoping) belong to the semantic reasoner.
 
 > Reference: [Information boundary pattern](references/information-boundary.md)
 
