@@ -845,7 +845,7 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     assert f"  {herdr_prompt.SKILL_NOTICE}" in text
     assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
-    assert "\n\nhi\n\n" in text
+    assert "\n---\n\nhi\n\n" in text
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
     assert Path(reply.group(1)).is_file(), reply.group(1)
