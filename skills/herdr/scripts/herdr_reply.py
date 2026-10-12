@@ -53,9 +53,12 @@ lowercase-hex token in the *body* must name a commit (`git rev-parse --verify <t
 against the lane's repository anchor, never the ambient working directory, so one payload gets one
 verdict from any directory), because a backticked hex token is an instruction — "do not
 rewrite `8d9fa742`" — and an instruction that names no commit points at nothing. Only the body is
-checked: the envelope is composed later and is never inspected. A bare hex word
-in prose stays prose, so mutant labels, review-record ids and UUID fragments inside cited paths
-are not read as citations. An unresolvable token is refused loudly (exit 2, naming the token and
+checked: the envelope is composed later and is never inspected. Hex left bare
+in prose stays prose — UUID fragments inside cited paths are never read as
+citations — but a backticked review-record id or mutant label IS refused: the
+broad trigger reads it exactly like a drifted commit abbreviation, and the
+sanctioned route is to waive that token by name with `--allow-unresolvable-sha`.
+An unresolvable token is refused loudly (exit 2, naming the token and
 the payload path) before any record exists, so a refused payload consumes no lease; `--dry-run`
 reports it the same way instead of accepting the payload silently. A git override that moves the
 object store the probe reads (`GIT_DIR`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`,

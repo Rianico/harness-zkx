@@ -234,10 +234,8 @@ On completion, reply to the sender in one message using the herdr helper script:
   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file <reply-payload.md> --ticket '<ticket-id>'
 ```
 
-The rendered contract also carries the SHA guard's waiver route in prose, worded
-as rendered: if the reply quotes a review id such as '0c81f04c' that names no
-commit, the guard refuses it unless that token is waived by name with
---allow-unresolvable-sha '0c81f04c' (one flag per token, reported on stderr).
+The rendered contract also carries the SHA guard's waiver route in prose, quoted
+verbatim from the rendered line: "If the reply quotes a review id such as '0c81f04c' that names no commit, the SHA guard refuses it: waive that token by name with --allow-unresolvable-sha '0c81f04c' (one flag per token, reported on stderr)."
 
 `STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked callee names what it needs instead of waiting silently. The **agent name** is the load-bearing part of a `Sender:` line — the pane id and label tell a person where to look, and only the name is addressable.
 

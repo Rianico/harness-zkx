@@ -32,6 +32,7 @@ from pathlib import Path
 import herdr_cli
 import herdr_pane
 import herdr_prompt
+import herdr_reply
 import pytest
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
@@ -596,3 +597,82 @@ def test_direction_flag_form_is_refused_by_the_parser() -> None:
     with pytest.raises(SystemExit) as excinfo:
         _ = herdr_pane.build_parser().parse_args(argv)
     assert excinfo.value.code == herdr_cli.EXIT_USAGE
+
+
+# ── herdr228-p3#P4: the guard-doc drift pins ───────────────────────────────────────
+
+# Five doc/code drifts the E2 review found (F2–F5, plus the SKILL.md paraphrase folded
+# in from P1's review): each pin parses the doc text and holds it against the code
+# (imported, never re-stated), so the prose cannot drift from behaviour again.
+
+
+def _reply_docstring() -> str:
+    """The reply helper's module docstring: the guard contract most callers read first."""
+    assert herdr_reply.__doc__ is not None
+    return herdr_reply.__doc__
+
+
+def test_reply_docstring_states_the_backticked_review_id_refusal_and_waiver() -> None:
+    """P4 item 1: a backticked review-record id IS refused; the waiver is the sanctioned route.
+
+    The docstring once claimed review-record ids "are not read as citations" while the
+    broad trigger refuses a backticked one. Mutant: restore that sentence and this pin
+    fails on the revived claim and the missing refusal.
+    """
+    doc = _reply_docstring()
+    assert "are not read as citations" not in doc
+    assert "backticked review-record id" in doc
+    assert "waive that token by name" in doc
+    assert herdr_reply.ALLOW_UNRESOLVABLE_SHA in doc
+
+
+def test_e2_do_not_rewrite_pin_cross_references_the_scope_issue() -> None:
+    """P4 item 2: the E2 pin-1 docstring cites #245, not #247.
+
+    The section header, the lane ticket, and the ledger bullet all name the scope
+    decision #245 (the replacement number was confirmed via the issue tracker, not
+    retyped from memory). Mutant: restore #247 and this pin fails on both halves.
+    """
+    text = Path(__file__).with_name("test_herdr_reply.py").read_text(encoding="utf-8")
+    line = next(line for line in text.splitlines() if "drifted by one hex digit" in line)
+    assert "#245" in line, line
+    assert "#247" not in line, line
+
+
+def test_changelog_states_the_length_difference_not_exact_likeness() -> None:
+    """P4 item 3: seven-hex notation merely resembles the eight-hex ids; it is not like them.
+
+    Seven and eight hex differ in length, so "exactly like" overclaims. Mutant: restore
+    the phrase and this pin fails.
+    """
+    bullet = next(
+        line
+        for line in (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+        if "seven hex characters" in line
+    )
+    assert "exactly like" not in bullet
+    assert "differing in length" in bullet
+
+
+def _skill_waiver_quote() -> str:
+    """The double-quoted waiver sentence in the skill overview."""
+    match = re.search(
+        r'"(If the reply quotes a review id.*?)"',
+        OVERVIEW_DOC.read_text(encoding="utf-8"),
+        re.S,
+    )
+    assert match is not None, "the overview quotes no waiver sentence"
+    return match.group(1)
+
+
+def test_skill_quotes_the_rendered_waiver_route_verbatim() -> None:
+    """P4 item 5: the overview quotes the rendered waiver line verbatim, not paraphrased.
+
+    The renderer is the single implementation: the pin compares the overview's quote
+    against `render_reply_contract` itself. Mutant: reword either side and this pin fails.
+    """
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
+    rendered = herdr_prompt.render_reply_contract(sender, "herdr228-p3#P4")
+    waiver_line = rendered.splitlines()[-1].strip()
+    assert waiver_line.startswith("If the reply quotes a review id"), rendered
+    assert _skill_waiver_quote() == waiver_line

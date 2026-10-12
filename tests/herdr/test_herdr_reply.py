@@ -2771,16 +2771,17 @@ def test_a_dry_run_reports_an_unresolvable_sha_instead_of_accepting_it_silently(
     assert json.loads(planned.stdout)[1:3] == ["agent", "prompt"]
 
 
-@pytest.mark.parametrize("waived_token", [DRIFTED_ABBREV, "bb8e69bf1bef"])
+@pytest.mark.parametrize("waived_token", [DRIFTED_ABBREV, "bb8e69bf1bef", "0c81f04c"])
 def test_the_documented_waiver_admits_an_intentional_nonresolving_token(
     stub: StubHarness, tmp_path: Path, waived_token: str
 ) -> None:
-    """The escape hatch, on the two measured false-positive classes.
+    """The escape hatch, on the three measured false-positive classes.
 
-    The drifted commit abbreviation is one; the other is the payload shape the scan found in
-    today's tree — a backticked mutant or review-record id, which no shape rule can tell apart
-    from a commit abbreviation. Both are delivered once the token is named, and the waiver is
-    reported on stderr rather than silently.
+    The drifted commit abbreviation is one; the second is a longer backticked token; the
+    third is the eight-hex review-id shape itself — the very class the broad trigger
+    refuses — which no shape rule can tell apart from a commit abbreviation. All three
+    are delivered once the token is named, and the waiver is reported on stderr rather
+    than silently.
     """
     repo, _short = sha_guard_repo(tmp_path)
     body = reply_payload(f"- the wrapper's drifted `{waived_token}`, quoted deliberately")
@@ -2895,7 +2896,7 @@ def test_a_do_not_rewrite_list_with_a_truncated_sha_is_refused(
 ) -> None:
     """E2 pin 1: the incident's own context — a backticked truncated SHA in a do-not-rewrite list.
 
-    #247 was a "do not rewrite these SHAs" list whose token had drifted by one hex digit. The
+    #245 was a "do not rewrite these SHAs" list whose token had drifted by one hex digit. The
     retained broad guard reads the whole body, so it refuses the list wherever it appears. Mutant:
     disable the guard (early-return in `require_resolvable_shas`) and this pin fails, delivering
     the dead token with the list intact.
