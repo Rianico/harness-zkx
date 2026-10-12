@@ -303,6 +303,28 @@ def test_hint_carries_the_curation_spec(tmp_path: Path) -> None:
     assert "pr-land SKILL.md Squash Shape" in r.stdout
 
 
+def test_hint_splits_body_template_duty_from_squash_overview(tmp_path: Path) -> None:
+    """The hint routes the PR body to the installed template (pr-enhance) and confines the
+    <=5-bullet strip rules to the squash overview carried by --squash-message-file.
+
+    Mutation: restore the conflated hint (curate pr_body.md to <=5 bullets, no template
+    clause, no --squash-message-file) -> the template and squash-file assertions fail.
+    """
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+
+    r = _run_check(repo, env, "--body-file", str(body_file))
+
+    assert r.returncode == 0, r.stderr
+    assert "PR template" in r.stdout
+    assert "pr-enhance" in r.stdout
+    assert "--squash-message-file" in r.stdout
+    assert "curate pr_body.md to <=5 bullets" not in r.stdout
+
+
 def test_check_merge_writes_the_draft_instead_of_refusing(
     tmp_path: Path,
 ) -> None:
