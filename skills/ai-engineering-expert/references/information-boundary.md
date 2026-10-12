@@ -1,29 +1,30 @@
-# Information Boundary Pattern
+# Information Boundary Pattern: Formal Substrate vs. Semantic Reasoner
 
-How to split verification and intent between tool and model without leaking implementation detail into the agent's context.
+How to split mechanical verification and probabilistic intent without leaking implementation details or state into the agent's context.
 
 ## The Boundary
 
-- **Tool = verification.** Anything the tool can check deterministically (content equality, type, existence, range validity) stays inside the tool. The tool is the authority; the model never supplies the ground truth for the tool's own check.
-- **Model = intent.** What to change, why, and what wording to use stays with the model. The tool does not guess intent.
-- **Never require the model to re-read or to echo verification data just to keep the tool honest.** If the tool needs data to verify, it resolves it itself from its own store.
+- **Formal Substrate = Environmental Verification & Mechanical Guarantees.** Anything checkable deterministically (type safety, AST validity, content equality, database integrity, range limits, test suites) stays inside the formal substrate. The substrate is the supreme authority; the reasoner never supplies the ground truth for the substrate's own check.
+- **Semantic Reasoner = Intent, Synthesis & Disambiguation.** What to change, why, how to align with user goals, and how to resolve semantic conflicts stays with the model. The formal substrate does not guess intent.
+- **Never require the reasoner to re-read or echo verification data just to keep the substrate honest.** If the substrate needs data to verify, it resolves it directly from its own store or environment.
 
 ## Minimal Handle, Hidden Detail
 
-Expose the smallest stable handle the model can copy (an anchor, short id, or line handle). Hide verbose content, persistence mechanics, and storage layout behind the tool:
+Expose the smallest stable handle the model can copy (an anchor, short id, or line handle). Hide verbose content, persistence mechanics, AST nodes, and storage layout behind the tool:
 
 - The model copies the handle verbatim.
-- The tool resolves the handle, fetches the authoritative content, and verifies before acting.
+- The substrate resolves the handle, fetches the authoritative content, and verifies before acting.
 - Stale or mismatched handles fail closed with a fresh handle — no silent fallback.
 
 This keeps the agent's context lean (a short handle vs. a full dump) and eliminates a class of hallucination where the model invents verification data.
 
 ## Grading by Determinism
 
-| Determinism        | Owner | Example                                             |
-| ------------------ | ----- | --------------------------------------------------- |
-| Hard / checkable   | Tool  | content match, type, file existence, range validity |
-| Soft / qualitative | Model | what to change, phrasing, scope of edit             |
+| Determinism        | Owner | Examples |
+| ------------------ | ----- | -------- |
+| Hard / checkable   | **Formal Substrate** (Compilers, DBs, Linters, CI, AST) | Content match, type checks, schema invariants, file existence, git merges |
+| Soft / qualitative | **Semantic Reasoner** (LLMs, Evaluators) | Intent synthesis, trade-off analysis, phrasing, semantic conflict resolution |
+
 
 When in doubt, ask: _can this be checked without judgment?_ If yes, it belongs to the tool.
 
