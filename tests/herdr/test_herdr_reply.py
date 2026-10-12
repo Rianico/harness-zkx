@@ -14,6 +14,7 @@ import secrets
 import shlex
 import shutil
 import subprocess
+import sys
 import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -3173,3 +3174,57 @@ def test_the_guard_skip_set_agrees_with_the_canonical_git_location_list() -> Non
     assert set(OBJECT_STORE_REDIRECT_VARS) | set(VERDICT_NEUTRAL_REDIRECT_VARS) == set(
         GIT_LOCATION_VARS
     )
+
+
+def test_space_form_dash_ticket_value_is_refused_with_equals_form_guidance(
+    stub_factory: Callable[[Path], StubHarness], tmp_path: Path
+) -> None:
+    """herdr228-closeout#C2: a hand-typed `--ticket -rf` is refused with the equals remedy.
+
+    A hand-typed space-form dash-led value used to exit 2 with argparse's bare
+    "expected one argument": safe (nothing accepted) but unhelpful. The fix refuses
+    loudly (exit 2) and names the `--ticket=<value>` remedy instead. Refusal, not
+    rebinding, is the outcome: argparse already binds the equals form (`--ticket=-rf`)
+    with no code, so only the unhelpful space-form error needed guidance, and a custom
+    pre-parse that rebound argv would silently accept things argparse rejects.
+    The shell boundary is exercised: the dash-led value crosses a real shell as a
+    separate word. Mutant: silently accepting the space form (exit 0, no bind, no
+    `--ticket=` remedy) fails the refusal half; dropping the equals bind fails the P2 half.
+    """
+    harness = stub_factory(SCRIPT)
+    shell_cmd = (
+        f"{shlex.quote(sys.executable)} {shlex.quote(str(SCRIPT))} "
+        "orchestrator --ticket -rf --dry-run"
+    )
+    done = subprocess.run(
+        ["bash", "-c", shell_cmd],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env=harness.base_env(),
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "--ticket=" in done.stderr, done.stderr
+    assert harness.prompts() == [], "a refused reply delivers nothing"
+    assert herdr_lease.list_replies(base_dir=tmp_path) == [], "a refused reply records nothing"
+
+    # The P2 rendered equals form still binds intact, including for a dash-led value.
+    assert herdr_reply.build_parser().parse_args(["t", "--ticket=-rf"]).ticket == "-rf"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "dash.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="-rf",
+        task_id="-rf",
+    )
+    bound = harness.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- ok\n",
+        "--ticket=-rf",
+        env={"PWD": str(tmp_path)},
+    )
+    assert bound.returncode == herdr_cli.EXIT_OK, bound.stderr
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] == "-rf", "the equals form binds a dash-led value"

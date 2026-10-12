@@ -1777,9 +1777,35 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     return EXIT_OK
 
 
+def refuse_space_form_dash_ticket(parser: argparse.ArgumentParser, argv: Sequence[str]) -> None:
+    """Refuse a hand-typed `--ticket -value` with the equals-form remedy (herdr228-closeout#C2).
+
+    Argparse already binds the equals form (`--ticket=-rf`) with no code, so the only
+    gap is the space form with a dash-led value, which argparse reports as a bare
+    "expected one argument" (exit 2, nothing accepted, nothing explained). This names
+    the remedy instead, still exiting 2 with nothing accepted. It never rebinds: a
+    pre-parse that reattached the value would silently accept things argparse rejects.
+    A missing value errors the same bare way, so it gets the same remedy.
+    """
+    raw = list(argv)
+    for index, token in enumerate(raw):
+        if token != "--ticket":
+            continue
+        following = raw[index + 1] if index + 1 < len(raw) else None
+        if following is None or following.startswith("-"):
+            parser.error(
+                "--ticket needs a value; a value starting with '-' cannot be passed "
+                f"as a separate word (got {following!r}); attach it with '=' instead: "
+                "--ticket=<value> (for example: --ticket=-rf)"
+            )
+
+
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
+    parser = build_parser()
+    raw = list(sys.argv[1:] if argv is None else argv)
+    refuse_space_form_dash_ticket(parser, raw)
+    options = parser.parse_args(raw, namespace=Options())
     try:
         return guard("herdr-reply", lambda: reply_caller(options, env_map))
     except WaitTimeout as exc:
