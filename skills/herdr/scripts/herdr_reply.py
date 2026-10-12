@@ -1424,11 +1424,16 @@ def resolve_task_linkage(
         )
     if not open_tasks:
         return None, _unlinked(UNLINKED_NOTHING_MARKER, f"sender {sender!r} holds no open task")
+    if len(open_tasks) == 1:
+        return None, _unlinked(
+            UNLINKED_REFUSED_MARKER,
+            f"sender {sender!r} holds 1 open task, "
+            "so no ticket was inferred \u2014 pass --ticket <id>",
+        )
     count = len(open_tasks)
     return None, _unlinked(
         UNLINKED_REFUSED_MARKER,
-        f"sender {sender!r} holds {count} open task{'s' if count != 1 else ''}, "
-        "so the ticket is ambiguous",
+        f"sender {sender!r} holds {count} open tasks, so the ticket is ambiguous",
     )
 
 

@@ -895,6 +895,45 @@ def test_a_reply_about_another_ticket_never_flips_the_unrelated_open_task(
     )
 
 
+def test_a_flagless_reply_with_one_open_task_says_no_ticket_was_inferred(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 D1.3 pin 3 (count-1 reason) (herdr228-p3#P3): one candidate is not ambiguous.
+
+    With exactly one open task there is nothing to disambiguate, so the flagless reply
+    renders the dedicated count-1 reason instead of the count-N ambiguous clause. The
+    severity is unchanged (open work refused): the step still refuses to guess and records
+    the reply unlinked with no task moving.
+
+    Mutant killed: restore the "so the ticket is ambiguous" wording for the count-1 branch
+    and this pin fails on "ambiguous" present and the dedicated reason absent.
+    """
+    task_id = "#246#d13-count-1"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=task_id
+    )
+    assert herdr_lease.release_lease("reviewer", base_dir=tmp_path) is True
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] is None, "a flagless reply is recorded unlinked, never guessed"
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
+    assert "holds 1 open task" in warnings[0], warnings[0]
+    assert "ambiguous" not in warnings[0], warnings[0]
+    assert "no ticket was inferred" in warnings[0], warnings[0]
+    assert "--ticket" in warnings[0], warnings[0]
+    after = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert after is not None and after["status"] == "dispatched", "no task may move"
+
+
 def test_explicit_linkage_bindings_stay_silent(stub: StubHarness, tmp_path: Path) -> None:
     """#246 (rewritten D1.4 pin 3): a flag is the caller's instruction, so it never warns.
 
