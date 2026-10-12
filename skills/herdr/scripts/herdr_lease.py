@@ -771,6 +771,35 @@ def list_replies(
     return records[-limit:] if limit > 0 else []
 
 
+# Callee-observed delivery (herdr228-delivered): the assignee marks its own observed
+# consumption. The first working (`in_progress`) transition of a dispatched task also
+# records one `delivered` binding on the task, inside the same atomic store write as
+# the transition itself. Consumption, minimally: only that first working transition
+# counts. What does NOT count, explicitly: output events after dispatch (no cheap
+# callee seam observes them, so they are excluded here, never silent), revision
+# movement (no store path reads a revision), pane reads or wait barriers
+# (dispatcher-side, never callee-observed), `blocked`/`rework`/`completed`
+# transitions (not working), a direct `dispatched` -> terminal run with no working
+# transition (no consumption observed), and tasks whose trajectory holds no
+# `dispatched` event (no dispatch timestamp to be after). A pane that never
+# transitions writes nothing; the absent mark is the honest signal. The mark
+# degrades to current behaviour: pure in-memory work ahead of the one write the
+# transition already performs, so no new failure mode, exit code, or trajectory
+# shape, and the dispatch path never waits on it.
+DELIVERED_EVENT = "delivered"
+WORKING_STATUS = "in_progress"
+DISPATCHED_EVENT = "dispatched"
+
+
+def _needs_delivered_mark(task: Mapping[str, Any], trajectory: list[Any]) -> bool:
+    """Whether this working transition is the task's first observed consumption."""
+    if task.get("delivered") is not None:
+        return False
+    return any(
+        isinstance(item, dict) and item.get("event") == DISPATCHED_EVENT for item in trajectory
+    )
+
+
 def record_event(
     task_id: str,
     to_status: str,
@@ -795,6 +824,14 @@ def record_event(
         task["trajectory"] = trajectory
 
     from_status = task.get("status")
+    if to_status == WORKING_STATUS and _needs_delivered_mark(task, trajectory):
+        task["delivered"] = {
+            "event": DELIVERED_EVENT,
+            "task_id": task_id,
+            "ticket_id": task.get("ticket_id"),
+            "timestamp": _now_iso(),
+            "actor": actor,
+        }
     entry: dict[str, Any] = {
         "seq": len(trajectory) + 1,
         "timestamp": _now_iso(),
