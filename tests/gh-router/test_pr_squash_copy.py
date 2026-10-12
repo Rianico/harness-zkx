@@ -122,7 +122,7 @@ def test_copy_detector_scores_identical_text_as_full_overlap(
         refuse_mechanic_copy(body, body)
     err = capsys.readouterr().err
     assert "mechanic copy" in err
-    assert "CONTEXT.md" in err and "pr-land/SKILL.md" in err
+    assert "GLOSSARY.md" in err and "pr-land/SKILL.md" in err
 
 
 def test_copy_detector_ignores_co_authored_by_trailers() -> None:
@@ -149,7 +149,7 @@ def test_resolve_squash_message_refuses_the_body_copied_into_the_squash_slot(
         resolve_squash_message(body, explicit=body, supplied=True)
     err = capsys.readouterr().err
     assert "mechanic copy" in err
-    assert "CONTEXT.md" in err and "pr-land/SKILL.md" in err
+    assert "GLOSSARY.md" in err and "pr-land/SKILL.md" in err
 
 
 def test_full_template_into_the_squash_slot_refuses_as_copy(
@@ -172,7 +172,7 @@ def test_full_template_into_the_squash_slot_refuses_as_copy(
     err = capsys.readouterr().err
     assert "mechanic copy" in err
     assert "CODE_AUTHORS" not in err
-    assert "CONTEXT.md" in err and "pr-land/SKILL.md" in err
+    assert "GLOSSARY.md" in err and "pr-land/SKILL.md" in err
 
 
 def test_near_identical_paraphrase_still_refuses(

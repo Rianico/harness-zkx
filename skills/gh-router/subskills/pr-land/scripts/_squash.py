@@ -783,7 +783,7 @@ def refuse_unfilled_body(body: str) -> None:
 
 
 SQUASH_MESSAGE_SPEC = (
-    'CONTEXT.md "Curated Squash Message" and '
+    'GLOSSARY.md "Curated Squash Message" and '
     "skills/gh-router/subskills/pr-land/SKILL.md (Fail-Closed Squash Message)"
 )
 

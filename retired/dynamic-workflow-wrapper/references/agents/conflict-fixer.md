@@ -52,6 +52,6 @@ The gate is the point. A merge you made happen by bypassing it is a failure, not
 
 ## Response
 
-Use the dual-mode format in `~/.agents/skills/dynamic-workflow-wrapper/references/resp-format.md`.
+Use the dual-mode format in `retired/dynamic-workflow-wrapper/references/resp-format.md`.
 Report the router exit code and every file you changed. Never claim the merge succeeded — the
 orchestrator re-verifies from exit codes, never from your report.

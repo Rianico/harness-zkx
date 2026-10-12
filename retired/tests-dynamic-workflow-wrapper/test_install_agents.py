@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SKILL_DIR = REPO_ROOT / "skills" / "dynamic-workflow-wrapper"
+SKILL_DIR = REPO_ROOT / "retired" / "dynamic-workflow-wrapper"
 CANONICAL_AGENTS_DIR = SKILL_DIR / "references" / "agents"
 LOCK_PATH = SKILL_DIR / "references" / "agents.lock.json"
 INSTALL_SCRIPT = SKILL_DIR / "scripts" / "install-agents.mjs"

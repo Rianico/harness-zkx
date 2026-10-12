@@ -1,23 +1,17 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues and PRDs for `harness-zkx` live as GitHub issues. Use the `gh` CLI.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
-- **Close via PR / squash commit**: Write `Closes #NN` or `Fixes #NN` on standalone lines at the bottom of the PR description (never comma-separated like `Closes #1, #2`, which only closes #1). Merging via `pr.sh` carries these directives into the squash commit on `main`, automatically closing the issues.
+- **Create**: `gh issue create --title "..." --body "..."` (heredoc for multi-line bodies).
+- **Read**: `gh issue view <number> --comments`.
+- **List**: `gh issue list --state open --json number,title,body,labels`.
+- **Label**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`.
+- **Close**: `gh issue close <number> --comment "..."`, or write `Closes #NN` on its own line
+  at the bottom of a PR description so the squash merge closes it automatically.
 
-Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
+Infer the repo from `git remote -v`; `gh` does this inside a clone.
 
-## When a skill says "publish to the issue tracker"
-
-Create a GitHub issue.
-
-## When a skill says "fetch the relevant ticket"
-
-Run `gh issue view <number> --comments`.
+When a skill says "publish to the issue tracker", create a GitHub issue.
+When it says "fetch the relevant ticket", run `gh issue view <number> --comments`.

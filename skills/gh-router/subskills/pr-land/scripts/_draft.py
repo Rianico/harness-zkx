@@ -277,7 +277,7 @@ def run_draft_phase(
         "--squash-message-file, <=5 bullets (Core + Root for fix + Risk:Door + Proof + Links), "
         "drop wip/fixup trivia, strip Mermaid/details/checklist; "
         f"then land with --body-file {body_path} "
-        '(spec: CONTEXT.md "Curated Squash Message" + pr-land SKILL.md Squash Shape)'
+        '(spec: GLOSSARY.md "Curated Squash Message" + pr-land SKILL.md Squash Shape)'
     )
     payload = build_draft_payload(
         repo=repo,

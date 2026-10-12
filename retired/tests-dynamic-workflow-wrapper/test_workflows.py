@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SKILL_DIR = REPO_ROOT / "skills" / "dynamic-workflow-wrapper"
+SKILL_DIR = REPO_ROOT / "retired" / "dynamic-workflow-wrapper"
 WORKFLOWS_DIR = SKILL_DIR / "workflows"
 
 # Mirrors pi-dynamic-workflows' DETERMINISM_BLOCKLIST, applied to the RAW script text:

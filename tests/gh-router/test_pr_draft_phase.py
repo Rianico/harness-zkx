@@ -299,7 +299,7 @@ def test_hint_carries_the_curation_spec(tmp_path: Path) -> None:
     assert r.stdout.count("hint:") == 1
     assert "Core" in r.stdout
     assert "Mermaid" in r.stdout
-    assert 'CONTEXT.md "Curated Squash Message"' in r.stdout
+    assert 'GLOSSARY.md "Curated Squash Message"' in r.stdout
     assert "pr-land SKILL.md Squash Shape" in r.stdout
 
 

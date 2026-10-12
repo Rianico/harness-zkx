@@ -6,7 +6,7 @@ Date: 2026-08-26
 
 Accepted
 
-Implements [Worktree Workflow](../../CONTEXT.md#worktree-workflow) and [Respect Tool Feedback](../../CONTEXT.md#respect-tool-feedback)
+Implements [Worktree Workflow](../../GLOSSARY.md#worktree-workflow) and [Respect Tool Feedback](../../GLOSSARY.md#language)
 
 Relates from [16. Changelog Ledger Gate with Deterministic Floor and Adversarial Accounting](0016-changelog-ledger-gate-with-deterministic-floor-and-adversarial-accounting.md)
 

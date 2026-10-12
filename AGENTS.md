@@ -32,7 +32,7 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
   - Authoring & Verification: `skills/ai-engineering-expert/SKILL.md`.
   - Session Retros & Audit: `skills/harness-audit/SKILL.md`.
 - **Domain & Architecture**:
-  - Domain context & ubiquitous language: `CONTEXT.md` (see `docs/agents/domain.md`).
+  - Domain context & ubiquitous language: `GLOSSARY.md` (see `docs/agents/domain.md`). Env snapshot: `docs/agents/env.yaml`.
   - Architecture decisions: `docs/adr/` managed via `skills/adr/SKILL.md`.
   - Boundary & state governance: `skills/keel/SKILL.md`.
 - **Tests**:

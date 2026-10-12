@@ -222,7 +222,7 @@ def test_resolve_squash_message_merge_path_requires_explicit(
     err = capsys.readouterr().err
     assert "--merge requires an explicit squash commit message" in err
     assert "--squash-message" in err and "--squash-message-file" in err
-    assert "CONTEXT.md" in err and "pr-land/SKILL.md" in err
+    assert "GLOSSARY.md" in err and "pr-land/SKILL.md" in err
 
 
 def test_resolve_squash_message_check_path_still_derives_from_the_body() -> None:
@@ -285,7 +285,7 @@ def test_merge_pr_never_omits_commit_message(
     err = capsys.readouterr().err
     assert "--merge requires an explicit squash commit message" in err
     assert "--squash-message" in err and "--squash-message-file" in err
-    assert "CONTEXT.md" in err and "pr-land/SKILL.md" in err
+    assert "GLOSSARY.md" in err and "pr-land/SKILL.md" in err
 
 
 def test_merge_without_squash_message_refuses_before_any_gh_mutation(
@@ -308,7 +308,7 @@ def test_merge_without_squash_message_refuses_before_any_gh_mutation(
     assert captured.out == ""
     assert "--merge requires an explicit squash commit message" in captured.err
     assert "--squash-message" in captured.err and "--squash-message-file" in captured.err
-    assert "CONTEXT.md" in captured.err and "pr-land/SKILL.md" in captured.err
+    assert "GLOSSARY.md" in captured.err and "pr-land/SKILL.md" in captured.err
 
 
 def test_merge_with_missing_squash_message_file_is_a_usage_error(
