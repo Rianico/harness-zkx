@@ -434,15 +434,22 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
     (`--file -`, stdin) the contract renders without `--ticket` and the reply lands unlinked
     with D1.3's warning.
 
-    The id is rendered shell-quoted (`shlex.quote`), because this line is a command the callee
-    copy-pastes: a lane ticket stem starts with a digit, so the derived id starts with `#`,
-    which a shell reads as the start of a comment and would swallow the id — the helper then
-    exits 2 with `argument --ticket: expected one argument`. Quoting also keeps a filename's
-    shell metacharacters inert (`pwn;touch PWNED.md` used to run `touch PWNED`). Quoting is
-    preferred over validating the id against a safe grammar because a grammar would refuse the
-    arbitrary ticket names the dispatcher deliberately derives verbatim. This is the same
-    treatment `herdr_bootstrap` gives a rendered path (`shlex.quote(target)`), and the reason
-    agent names are refused for whitespace.
+    The id is rendered shell-quoted in `=` form (`--ticket=` + `shlex.quote`), because
+    this line is a command the callee copy-pastes: a lane ticket stem starts with a digit,
+    so the derived id starts with `#`, which a shell reads as the start of a comment and
+    would swallow the id — the helper then exits 2 with `argument --ticket: expected one
+    argument`. The `=` form additionally keeps a leading-dash id (`-rf.md` derives `-rf`;
+    `shlex.quote('-rf')` is `-rf`) from being parsed as a flag — the space form renders
+    `--ticket -rf`, which argparse refuses with the same exit-2 `expected one argument`
+    and the reply is never sent. A loud refusal of leading-dash ids at render time was
+    rejected because it would make such tickets undispatchable; the `=` form delivers
+    them, and argparse binds `--ticket=<value>` as the value even with a leading dash.
+    Quoting also keeps a filename's shell metacharacters inert (`pwn;touch PWNED.md` used
+    to run `touch PWNED`). Quoting is preferred over validating the id against a safe
+    grammar because a grammar would refuse the arbitrary ticket names the dispatcher
+    deliberately derives verbatim. This is the same treatment `herdr_bootstrap` gives a
+    rendered path (`shlex.quote(target)`), and the reason agent names are refused for
+    whitespace.
 
     The contract also carries the SHA guard's waiver route in prose: a callee quoting a
     review id (an eight-hex record such as '0c81f04c', which names no commit) meets the
@@ -454,7 +461,7 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
     if sender.agent:
         contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
         if ticket_id:
-            contract += f" --ticket {shlex.quote(ticket_id)}"
+            contract += f" --ticket={shlex.quote(ticket_id)}"
         return (
             "On completion, reply to the sender in one message using the herdr helper script:\n"
             f"{contract}\n"

@@ -753,15 +753,18 @@ def test_reply_contract_without_agent_is_unaddressable() -> None:
 
 
 def test_reply_contract_binds_a_derived_ticket_with_the_ticket_flag() -> None:
-    """#246 E1.1: a known ticket id is rendered, shell-quoted, as `--ticket <id>`.
+    """#246 E1.1: a known ticket id is rendered, shell-quoted, as `--ticket=<id>`.
 
     Old role: asserted the exact unquoted substring `--ticket #182-…` in the rendered contract.
-    New role: asserts the rendered id is quoted, so the `#` a lane stem starts with cannot open a
-    shell comment and swallow the id — the unit-level counterpart of the shell witness pin.
+    E1.1-rework role: asserted the quoted space-form substring `--ticket '#182-…'` and that
+    the unquoted form is absent — the unit counterpart of the shell witness pin.
+    New role (herdr228-p3#P2): asserts the `=`-form substring `--ticket='#182-…'`, so a
+    leading-dash id cannot be parsed as a flag, and that both space forms are absent.
     """
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
     bound = herdr_prompt.render_reply_contract(sender, "#182-herdr-msg-enhance")
-    assert "\"<STATUS> <artifacts> <issues>\" --ticket '#182-herdr-msg-enhance'" in bound
+    assert "\"<STATUS> <artifacts> <issues>\" --ticket='#182-herdr-msg-enhance'" in bound
+    assert "\"<STATUS> <artifacts> <issues>\" --ticket '#182-herdr-msg-enhance'" not in bound
     assert '"<STATUS> <artifacts> <issues>" --ticket #182-herdr-msg-enhance' not in bound
 
 

@@ -165,9 +165,11 @@ def test_dispatch_renders_the_reply_contract_with_the_ticket_bound(
     the reply side binds. E1.2 (landed) deleted the sole-open-task inference this replaces.
 
     Old role: scraped the whitespace-delimited token after `--ticket` and compared it to the
-    unquoted id, which asserted bytes of a command the pin never ran. New role: parses the
-    rendered line as a shell does (`shlex.split`) and asserts the id is `--ticket`'s argument, so
-    the pin tracks what the callee's shell actually receives.
+    unquoted id, which asserted bytes of a command the pin never ran. E1.1-rework role:
+    parsed the rendered line as a shell does (`shlex.split`) and asserted the id is
+    `--ticket`'s argument (`[-2:] == ["--ticket", "<id>"]`). New role (herdr228-p3#P2):
+    parses the rendered line as a shell does and asserts the id arrives as the single
+    `--ticket=<id>` token, so a leading-dash id cannot be parsed as a flag.
     """
     ticket = tmp_path / "182-herdr-msg-enhance.md"
     _ = ticket.write_text("TICKET BODY", encoding="utf-8")
@@ -175,10 +177,10 @@ def test_dispatch_renders_the_reply_contract_with_the_ticket_bound(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     envelope = call[4]
-    # Parse the rendered line as a shell does: the id is what `--ticket` receives once the
+    # Parse the rendered line as a shell does: the id is what `--ticket=` carries once the
     # shell has resolved quoting, which is exactly what the callee's copy-paste delivers.
     line = _rendered_contract_line(envelope)
-    assert shlex.split(line)[-2:] == ["--ticket", "#182-herdr-msg-enhance"]
+    assert shlex.split(line)[-1] == "--ticket=#182-herdr-msg-enhance", line
 
 
 def _rendered_contract_line(envelope: str) -> str:
@@ -214,6 +216,8 @@ def test_the_rendered_ticket_id_survives_a_real_shell(stub: StubHarness, tmp_pat
     shell. Every ticket in this lane starts with a number, so the derived id begins with `#`:
     unquoted, that `#` starts a shell comment, the id is swallowed, and the real helper exits 2
     with `argument --ticket: expected one argument`. Red on the unquoted render.
+    herdr228-p3#P2 role: the render is now `--ticket=<quoted>` (one shell word), so the pin
+    asserts the helper receives that single `--ticket=<id>` element.
     """
     ticket = tmp_path / "246-render-ticket-in-contract.md"
     _ = ticket.write_text("TICKET BODY", encoding="utf-8")
@@ -223,7 +227,7 @@ def test_the_rendered_ticket_id_survives_a_real_shell(stub: StubHarness, tmp_pat
     line = _rendered_contract_line(call[4])
 
     argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
-    assert argv[-2:] == ["--ticket", "#246-render-ticket-in-contract"], argv
+    assert argv[-1] == "--ticket=#246-render-ticket-in-contract", argv
 
 
 def test_a_hostile_ticket_filename_reaches_the_shell_quoted(
@@ -234,6 +238,8 @@ def test_a_hostile_ticket_filename_reaches_the_shell_quoted(
     Unquoted, `pwn;touch PWNED.md` derived `pwn;touch PWNED`, the `;` split the id off the flag,
     and the shell ran `touch PWNED`. The render must keep the id one argument and leave the
     side-effect file uncreated. Red on the unquoted render.
+    herdr228-p3#P2 role: the render is now `--ticket=<quoted>` (one shell word), so the pin
+    asserts the helper receives that single `--ticket=<id>` element.
     """
     ticket = tmp_path / "pwn;touch PWNED.md"
     _ = ticket.write_text("TICKET BODY", encoding="utf-8")
@@ -243,11 +249,38 @@ def test_a_hostile_ticket_filename_reaches_the_shell_quoted(
     line = _rendered_contract_line(call[4])
 
     argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
-    assert argv[-2:] == ["--ticket", "pwn;touch PWNED"], argv
+    assert argv[-1] == "--ticket=pwn;touch PWNED", argv
     assert not (tmp_path / "PWNED").exists(), "the shell executed text out of the ticket filename"
     assert not (tmp_path / "PWNED.md").exists(), (
         "the shell executed text out of the ticket filename"
     )
+
+
+def test_a_leading_dash_ticket_id_survives_a_real_shell(stub: StubHarness, tmp_path: Path) -> None:
+    """herdr228-p3#P2 pin: a ticket stem starting with a dash reaches the helper intact.
+
+    `shlex.quote('-rf')` is `-rf`, so the space form renders `--ticket -rf` and argparse
+    reads the value as option-like (`argument --ticket: expected one argument`, exit 2) —
+    the reply is never sent, with no refusal naming the cause. The `=` form renders
+    `--ticket=-rf`, which argparse binds as the value even with the leading dash.
+    The honest witness runs the RENDERED line through a real `bash -c` with the fake `uv`
+    shim on PATH and asserts the value arrives as ONE intact argv element. Red on the
+    space-form render (argv ends `[..., '--ticket', '-rf']`, and the reply parser exits 2).
+    """
+    ticket = tmp_path / "-rf.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    line = _rendered_contract_line(call[4])
+    assert "--ticket=" in line, line
+
+    argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
+    assert argv[-1] == "--ticket=-rf", argv
+    value = argv[-1].split("=", 1)[1]
+    assert value == "-rf", argv
+    bound = herdr_reply.build_parser().parse_args(["reviewer", "--file", "r.md", argv[-1]])
+    assert bound.ticket == "-rf", argv
 
 
 def test_dispatch_without_a_derivable_ticket_renders_the_unbound_contract(
