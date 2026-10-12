@@ -10,10 +10,11 @@ disable-model-invocation: true
 Scaffold a repo for the engineering skills. One deterministic script drives every
 step. `CONTEXT.md` is deprecated; `GLOSSARY.md` is canonical.
 
-Run the script from the repo root with `uv run`:
+Run from this harness repo root (its uv env carries the script's deps) and point
+`--cwd` at the target checkout (default: the current directory):
 
 ```bash
-uv run skills/setup-lsz-skills/scripts/setup_detect.py --cwd . <command>
+uv run skills/setup-lsz-skills/scripts/setup_detect.py --cwd /path/to/target <command>
 ```
 
 ## Steps
@@ -28,8 +29,10 @@ uv run skills/setup-lsz-skills/scripts/setup_detect.py detect --write-env
 ```
 
 Detection inspects the CLI toolchain, git provider, and steering file.
-`detect --write-env` writes compact YAML to `docs/agents/env.yaml`. Review that
-file; it records the detected toolchain and the deprecated `CONTEXT.md` files.
+`detect --write-env` writes compact YAML to `docs/agents/env.yaml` recording
+`project`, `provider`, `remote_url`, `steering_file`, `domain_layout` (glossary
+paths and deprecated `stale_files`), `runtime.tmp`, and `toolchain`. Review that
+file before migrating.
 
 ### 2. Migrate deprecated files
 
@@ -43,10 +46,11 @@ uv run skills/setup-lsz-skills/scripts/setup_detect.py migrate
 The migration renames `CONTEXT.md` to `GLOSSARY.md` and `CONTEXT-MAP.md` to
 `GLOSSARY-MAP.md`. It creates `docs/adr/` when missing.
 
-When both `CONTEXT.md` and `GLOSSARY.md` exist, the script stages `CONTEXT.md`
-under `.lsz/tmp/CONTEXT.md.pending-merge` and lists it as `merge required`. Do
-not clobber. Merge the two glossaries by hand: keep each unique term, resolve
-conflicting definitions, then delete the staged file.
+When both `CONTEXT.md` and `GLOSSARY.md` exist, the script stages a copy of
+`CONTEXT.md` under `.lsz/tmp/CONTEXT.md.pending-merge` and lists it as
+`merge required`; the original `CONTEXT.md` stays in place untouched. Merge the
+two glossaries by hand: keep each unique term, resolve conflicting definitions,
+then delete both the staged file and the legacy `CONTEXT.md`.
 
 Set up the workspace temp directory once, idempotently.
 

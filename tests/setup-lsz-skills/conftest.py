@@ -60,3 +60,17 @@ def git_repo(tmp_path: Path) -> Path:
         check=True,
     )
     return repo
+
+
+@pytest.fixture
+def run_cli():
+    """Invoke the skill script as a subprocess against a target `--cwd`."""
+
+    def _run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--cwd", str(cwd), *args],
+            capture_output=True,
+            text=True,
+        )
+
+    return _run

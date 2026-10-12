@@ -148,3 +148,32 @@ def test_detect_environment_reports_deprecated_direction(sd, tmp_repo: Path) -> 
     assert state["has_context_md"] is True
     assert state["has_adr_dir"] is True
     assert state["stale_files"] == {"CONTEXT.md": "GLOSSARY.md"}
+
+
+def test_cli_detect_write_env(tmp_repo: Path, run_cli) -> None:
+    result = run_cli(tmp_repo, "detect", "--write-env")
+    assert result.returncode == 0, result.stderr
+    loaded = yaml.safe_load((tmp_repo / "docs" / "agents" / "env.yaml").read_text())
+    assert loaded["runtime"]["tmp"] == ".lsz/tmp"
+    assert loaded["domain_layout"]["glossary"] == "GLOSSARY.md"
+
+
+def test_cli_workspace_then_migrate_end_to_end(tmp_repo: Path, run_cli) -> None:
+    _ = (tmp_repo / "CONTEXT.md").write_text("# Context", encoding="utf-8")
+    assert run_cli(tmp_repo, "workspace").returncode == 0
+    assert (tmp_repo / ".lsz" / "tmp").is_dir()
+    dry = run_cli(tmp_repo, "migrate", "--dry-run")
+    assert dry.returncode == 0, dry.stderr
+    assert (tmp_repo / "CONTEXT.md").exists()  # dry-run touches nothing
+    real = run_cli(tmp_repo, "migrate")
+    assert real.returncode == 0, real.stderr
+    assert not (tmp_repo / "CONTEXT.md").exists()
+    assert (tmp_repo / "GLOSSARY.md").is_file()
+
+
+def test_cli_render_writes_all_docs(tmp_repo: Path, run_cli) -> None:
+    result = run_cli(tmp_repo, "render")
+    assert result.returncode == 0, result.stderr
+    docs = tmp_repo / "docs" / "agents"
+    for name in ("domain.md", "toolchain.md", "issue-tracker.md", "triage-labels.md"):
+        assert (docs / name).is_file()
