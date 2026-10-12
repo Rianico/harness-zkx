@@ -1,0 +1,15 @@
+# Issue tracker: Local
+
+`{{ project }}` has no remote issue tracker. Track work as Markdown files under
+`.lsz/tmp/issues/` or a root `issues/` directory, one file per issue.
+
+## Conventions
+
+- **Create**: add `issues/<NN>-<slug>.md` with a title, body, and a `labels:` line.
+- **Read**: open the corresponding file.
+- **List**: `ls issues/` (or `fd . issues/`).
+- **Label**: edit the `labels:` line at the top of the file.
+- **Close**: set `status: closed` in the file header, or move it to `issues/closed/`.
+
+When a skill says "publish to the issue tracker", create a local issue file.
+When it says "fetch the relevant ticket", read the matching `issues/<NN>-*.md`.
