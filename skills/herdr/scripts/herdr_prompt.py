@@ -50,6 +50,7 @@ import argparse
 import json
 import math
 import os
+import shlex
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -432,11 +433,21 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
     lease, so the rendered id and the task it names cannot drift. Without a derived id
     (`--file -`, stdin) the contract renders without `--ticket` and the reply lands unlinked
     with D1.3's warning.
+
+    The id is rendered shell-quoted (`shlex.quote`), because this line is a command the callee
+    copy-pastes: a lane ticket stem starts with a digit, so the derived id starts with `#`,
+    which a shell reads as the start of a comment and would swallow the id — the helper then
+    exits 2 with `argument --ticket: expected one argument`. Quoting also keeps a filename's
+    shell metacharacters inert (`pwn;touch PWNED.md` used to run `touch PWNED`). Quoting is
+    preferred over validating the id against a safe grammar because a grammar would refuse the
+    arbitrary ticket names the dispatcher deliberately derives verbatim. This is the same
+    treatment `herdr_bootstrap` gives a rendered path (`shlex.quote(target)`), and the reason
+    agent names are refused for whitespace.
     """
     if sender.agent:
         contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
         if ticket_id:
-            contract += f" --ticket {ticket_id}"
+            contract += f" --ticket {shlex.quote(ticket_id)}"
         return (
             "On completion, reply to the sender in one message using the herdr helper script:\n"
             f"{contract}"

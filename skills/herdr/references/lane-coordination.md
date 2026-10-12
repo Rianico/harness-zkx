@@ -242,7 +242,7 @@ You are the **Task Manager** for this lane. You hold **coordination, design judg
 
 ## Reporting
 On gate pass and review approval, reply to the sender using the Final Reply Template:
-  `uv run ${herdr_skill}/scripts/herdr_reply.py <sender-name> "<STATUS> <summary>"`
+  `uv run ${herdr_skill}/scripts/herdr_reply.py <sender-name> "<STATUS> <summary>" --ticket '<ticket-id>'`
 ```
 
 ---
@@ -271,8 +271,8 @@ Target files / Seams: <paths or boundary definitions>
 - **The Iron Curtain**: Never let subagents call Herdr CLI commands or scripts (`herdr_reply.py`, `herdr_dispatch.py`). Aggregate all results in this host pane.
 
 On completion, reply to the caller in one message using the herdr helper script:
-  uv run ${herdr_skill}/scripts/herdr_reply.py <sender-name> --file <reply-payload.md> --ticket <ticket-id>
-  # (Or inline: uv run ${herdr_skill}/scripts/herdr_reply.py <caller-name> "<PAYLOAD>" --ticket <ticket-id>)
+  uv run ${herdr_skill}/scripts/herdr_reply.py <sender-name> --file <reply-payload.md> --ticket '<ticket-id>'
+  # (Or inline: uv run ${herdr_skill}/scripts/herdr_reply.py <caller-name> "<PAYLOAD>" --ticket '<ticket-id>')
 ```
 
 ---

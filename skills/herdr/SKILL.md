@@ -200,11 +200,11 @@ Multi-agent coordination is event-driven via completion callbacks:
 4. **Callee executes completion callback (and soft-releases its lease):**
    Upon completion or blocking, the callee executes the contract callback via `herdr_reply.py`, adhering to the settled **Final Reply Template** (`skills/dynamic-workflow-wrapper/references/resp-format.md`):
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md --ticket '<ticket-id>'
    # Or an inline stdin payload (a here-doc or a pipe keeps it off the shell's argv):
-   printf 'COMPLETED <commit-sha>\n\n## Evidence\n- <check_name>: PASS (`<command>`)\n' | uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file -
+   printf 'COMPLETED <commit-sha>\n\n## Evidence\n- <check_name>: PASS (`<command>`)\n' | uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file - --ticket '<ticket-id>'
    # Or auto-start the caller agent if its turn exited back to an open shell pane:
-   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md --auto-start pi
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md --ticket '<ticket-id>' --auto-start pi
    ```
    The reply payload contains:
    - Status Triad: `COMPLETED <commit-sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
@@ -231,7 +231,7 @@ Multi-agent coordination is event-driven via completion callbacks:
 <the payload (Synthesized IDD/GDD Ticket)>
 
 On completion, reply to the sender in one message using the herdr helper script:
-  uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file <reply-payload.md> --ticket <ticket-id>
+  uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file <reply-payload.md> --ticket '<ticket-id>'
 ```
 
 `STATUS` is `COMPLETED`, `BLOCKED`, or `REJECTED`; a blocked callee names what it needs instead of waiting silently. The **agent name** is the load-bearing part of a `Sender:` line — the pane id and label tell a person where to look, and only the name is addressable.
@@ -513,16 +513,16 @@ Fill the Task/Context/Acceptance sections and delete the `herdr-draft: unfilled`
 Delivers `<STATUS> <artifacts> <issues>` or a result payload to the sender agent, wrapped in the Style-2 nested YAML envelope `herdr-prompt` uses, with `Receiver(You)` naming the sender it is answering:
 
 ```bash
-uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED deadbeef evidence: 660 passed; scripts/check.sh"
-uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file result.md
-uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file - <<'EOF'
+uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED deadbeef evidence: 660 passed; scripts/check.sh" --ticket '<ticket-id>'
+uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file result.md --ticket '<ticket-id>'
+uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file - --ticket '<ticket-id>' <<'EOF'
 COMPLETED deadbeef
 
 ## Evidence
 - 660 passed; scripts/check.sh
 EOF
-uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED deadbeef evidence: 660 passed; scripts/check.sh" --wait --timeout 15000
-uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file result.md --auto-start pi
+uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED deadbeef evidence: 660 passed; scripts/check.sh" --ticket '<ticket-id>' --wait --timeout 15000
+uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file result.md --ticket '<ticket-id>' --auto-start pi
 ```
 
 `herdr-reply` automatically inspects `.lane/tasks.yaml` for the replying sender's lease and task, populates `Ticket-ID:` and `In-Reply-To: <Task-ID>` in the `Hierarchy:` envelope block, maps the payload's first token (`COMPLETED`→`completed`, `BLOCKED`→`blocked`, `REJECTED`→`rework`), appends that event (with the mapped status token and the commit SHA as the note) to the sender's task `trajectory`, and soft-releases only the sender's active lease upon successful prompt delivery — the task record survives. The record's `task_id` linkage is resolved separately from the envelope's correlation: an explicit `--ticket <ID>` (task id, or a ticket id whose sender-owned open task is unique) or `--in-reply-to <RECORD>` wins, else the sender's active lease. The rendered dispatch contract supplies the ticket — it binds `--ticket` to the dispatcher's derived id (#246 E1.1) — so a reply that names no ticket is never guessed at: with no lease and no flag it is recorded unlinked, mutating no task. A second reply for the same ticket still carries the linkage after the first reply consumed the lease by passing `--ticket`/`--in-reply-to`. Zero, one, or several open tasks, or a flag that does not name one of the sender's open tasks, records the reply unlinked with one warning line on stderr, never a guessed linkage; the line leads with a stable severity marker — `unlinked reply (open work refused)` when the step refused to bind what it was told (open work it would not guess at, or a flag that names no open task of the sender), `unlinked reply (nothing to link)` when it holds none, and the third wording `unlinked reply (sender or store unreadable)` when there was no answer at all because no sender resolved or the anchor/store could not be read (a store that cannot be read says so instead of claiming the sender holds no open task) — and it never claims a record the run did not write: the `; recording the reply unlinked` tail is appended only after the store took the record, and `; no store record was written` when it did not, so the warning cannot contradict the `NOT RECORDED` pointer in the prompt delivered in the same run. Every warning now accompanies an unlinked reply; the explicit `--ticket`/`--in-reply-to` bindings are the caller's instruction, so they stay silent. Validates the target agent name (refusing kinds) and reports post-delivery revision in one line. Never use bare `herdr agent prompt` directly for replies.

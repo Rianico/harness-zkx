@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -162,6 +163,11 @@ def test_dispatch_renders_the_reply_contract_with_the_ticket_bound(
     Asserted on the RENDERED ENVELOPE (the text `herdr agent prompt` delivers), never on an
     intermediate option: the reply contract carries `--ticket <derived id>` — the explicit name
     the reply side binds. E1.2 (landed) deleted the sole-open-task inference this replaces.
+
+    Old role: scraped the whitespace-delimited token after `--ticket` and compared it to the
+    unquoted id, which asserted bytes of a command the pin never ran. New role: parses the
+    rendered line as a shell does (`shlex.split`) and asserts the id is `--ticket`'s argument, so
+    the pin tracks what the callee's shell actually receives.
     """
     ticket = tmp_path / "182-herdr-msg-enhance.md"
     _ = ticket.write_text("TICKET BODY", encoding="utf-8")
@@ -169,11 +175,79 @@ def test_dispatch_renders_the_reply_contract_with_the_ticket_bound(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     envelope = call[4]
-    reply = re.search(
-        r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>" --ticket (\S+)', envelope
+    # Parse the rendered line as a shell does: the id is what `--ticket` receives once the
+    # shell has resolved quoting, which is exactly what the callee's copy-paste delivers.
+    line = _rendered_contract_line(envelope)
+    assert shlex.split(line)[-2:] == ["--ticket", "#182-herdr-msg-enhance"]
+
+
+def _rendered_contract_line(envelope: str) -> str:
+    """The reply-contract line out of a rendered envelope, verbatim and unstripped."""
+    return next(line for line in envelope.splitlines() if line.strip().startswith("uv run "))
+
+
+def _run_contract_line_in_a_shell(stub: StubHarness, contract_line: str, cwd: Path) -> list[str]:
+    """Run the rendered contract line through a real shell and return the helper's argv.
+
+    The `uv` on PATH is a shim that records its argv one element per line, so a value the
+    shell split, swallowed as a comment, or expanded into a new command is observable as such.
+    """
+    shim = stub.bin_dir / "uv"
+    _ = shim.write_text(
+        '#!/bin/sh\n: > "${FAKE_UV_LOG}"\nfor a in "$@"; do printf \'%s\\n\' "$a" >> "${FAKE_UV_LOG}"; done\n',
+        encoding="utf-8",
     )
-    assert reply, envelope
-    assert reply.group(2) == "#182-herdr-msg-enhance"
+    shim.chmod(0o755)
+    log = cwd / "fake-uv-argv.txt"
+    env = {**stub.base_env(), "FAKE_UV_LOG": str(log)}
+    done = subprocess.run(
+        ["bash", "-c", contract_line], cwd=cwd, env=env, capture_output=True, text=True
+    )
+    assert done.returncode == 0, done.stderr
+    return log.read_text(encoding="utf-8").splitlines()
+
+
+def test_the_rendered_ticket_id_survives_a_real_shell(stub: StubHarness, tmp_path: Path) -> None:
+    """#246 E1.1 rework F1.3 (a): a lane ticket stem reaches the helper as ONE argument.
+
+    The contract is a command a callee copy-pastes, so the honest witness runs it through a real
+    shell. Every ticket in this lane starts with a number, so the derived id begins with `#`:
+    unquoted, that `#` starts a shell comment, the id is swallowed, and the real helper exits 2
+    with `argument --ticket: expected one argument`. Red on the unquoted render.
+    """
+    ticket = tmp_path / "246-render-ticket-in-contract.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    line = _rendered_contract_line(call[4])
+
+    argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
+    assert argv[-2:] == ["--ticket", "#246-render-ticket-in-contract"], argv
+
+
+def test_a_hostile_ticket_filename_reaches_the_shell_quoted(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 E1.1 rework F1.3 (b): a crafted filename is quoted, so the shell executes nothing.
+
+    Unquoted, `pwn;touch PWNED.md` derived `pwn;touch PWNED`, the `;` split the id off the flag,
+    and the shell ran `touch PWNED`. The render must keep the id one argument and leave the
+    side-effect file uncreated. Red on the unquoted render.
+    """
+    ticket = tmp_path / "pwn;touch PWNED.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    line = _rendered_contract_line(call[4])
+
+    argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
+    assert argv[-2:] == ["--ticket", "pwn;touch PWNED"], argv
+    assert not (tmp_path / "PWNED").exists(), "the shell executed text out of the ticket filename"
+    assert not (tmp_path / "PWNED.md").exists(), (
+        "the shell executed text out of the ticket filename"
+    )
 
 
 def test_dispatch_without_a_derivable_ticket_renders_the_unbound_contract(

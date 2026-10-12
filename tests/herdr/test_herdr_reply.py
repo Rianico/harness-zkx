@@ -11,6 +11,7 @@ import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import threading
@@ -192,6 +193,9 @@ def test_a_correction_for_a_lease_expired_ticket_binds_the_rendered_task(
     reply consumes the lease; the follow-up correction for the same ticket resends with that
     rendered `--ticket` value and must advance THAT task. No inference is involved, so no other
     open task can move. A dropped `--ticket` leaves the correction unlinked (see the key pin).
+
+    The rendered value is parsed as a shell does (`shlex.split(line)[-1]`); the old
+    token-after-`--ticket` scrape captured the quotation marks too once the id was shell-quoted.
     """
     dispatch = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
     reply = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
@@ -203,9 +207,8 @@ def test_a_correction_for_a_lease_expired_ticket_binds_the_rendered_task(
     )
     assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
     (prompt,) = dispatch.prompts()
-    rendered = re.search(r"--ticket (\S+)", prompt[4])
-    assert rendered, prompt[4]
-    rendered_ticket = rendered.group(1)
+    rendered_line = next(line for line in prompt[4].splitlines() if "--ticket" in line)
+    rendered_ticket = shlex.split(rendered_line)[-1]
     task_id = rendered_ticket  # the dispatcher mirrors the task id onto the derived ticket id
 
     first = reply.run(
@@ -370,14 +373,18 @@ def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
 def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
     stub_factory: Callable[[Path], StubHarness], tmp_path: Path
 ) -> None:
-    """#246 E1.1 pin 2: the RENDERED contract binds with no lease.
+    """#246 E1.1 pin 2: the RENDERED contract binds with no lease — case A, ticket id == task id.
 
-    This pin is what replaced the sole-open-task inference (deleted in E1.2) — do NOT
-    "simplify" it back to a lease-only path. The dispatch renders the reply contract; the
-    callee's first reply consumes the lease; the callee then resends using the exact `--ticket`
-    value the rendered contract carried. Nothing else can bind the second reply, and it must
-    advance THAT task. A dropped `--ticket` (mutant a) and a foreign id (mutant b, e.g. the
-    sender's name) both fail here.
+    This pin covers case A, the default dispatch, where the lease's task id mirrors the derived
+    ticket id, so the rendered `--ticket` names the task directly. It replaced the
+    sole-open-task inference (deleted in E1.2) for that shape — do NOT "simplify" it back to a
+    lease-only path. The dispatch renders the reply contract; the callee's first reply consumes
+    the lease; the callee then resends using the exact `--ticket` value the rendered contract
+    carried. Nothing else can bind the second reply, and it must advance THAT task. A dropped
+    `--ticket` (mutant a) and a foreign id (mutant b, e.g. the sender's name) both fail here.
+    Case B — an explicit `--task-id` distinct from the ticket id, where the reply side must
+    resolve the ticket id through `_linkage_from_ticket`'s ticket-id branch — is NOT what this
+    pin covers; it is pinned by `test_the_rendered_ticket_resolves_to_a_distinct_task_id`.
     """
     dispatch = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
     reply = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
@@ -389,9 +396,8 @@ def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
     )
     assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
     (prompt,) = dispatch.prompts()
-    rendered = re.search(r"--ticket (\S+)", prompt[4])
-    assert rendered, prompt[4]
-    rendered_ticket = rendered.group(1)
+    rendered_line = next(line for line in prompt[4].splitlines() if "--ticket" in line)
+    rendered_ticket = shlex.split(rendered_line)[-1]
 
     first = reply.run(
         "orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)}
@@ -413,6 +419,59 @@ def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
     assert record["task_id"] == rendered_ticket, "the rendered --ticket names the task to advance"
     task = herdr_lease.get_task(rendered_ticket, base_dir=tmp_path)
     assert task is not None and task["status"] == "completed"
+
+
+def test_the_rendered_ticket_resolves_to_a_distinct_task_id(
+    stub_factory: Callable[[Path], StubHarness], tmp_path: Path
+) -> None:
+    """#246 E1.1 rework F2: the rendered `--ticket` reaches a task whose id DIFFERS from it.
+
+    Case B: the documented distinct-task-id dispatch (`--task-id` distinct from the derived
+    ticket id). The lease holds the distinct `task_id`, so the rendered `--ticket` value is NOT
+    any task id; the reply side must resolve it through `_linkage_from_ticket`'s ticket-id
+    branch to the sender's one open task with that `ticket_id`. The pin parses the rendered line
+    with `shlex.split` (which also makes it an F1 witness) and asserts the record lands on the
+    DISTINCT task id. An `if False` on that branch records the reply unlinked and leaves the
+    task `dispatched`, so this pin fails; no other pin covers the branch.
+    """
+    dispatch = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
+    reply = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
+    ticket = tmp_path / "246-e11-task-id.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    distinct_task = "#246-e11-task-id#impl-1"
+
+    dispatched = dispatch.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--task-id",
+        distinct_task,
+        "--no-wait",
+        env={"PWD": str(tmp_path)},
+    )
+    assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
+    (prompt,) = dispatch.prompts()
+    rendered_line = next(line for line in prompt[4].splitlines() if "--ticket" in line)
+    rendered_ticket = shlex.split(rendered_line)[-1]
+    assert rendered_ticket == "#246-e11-task-id", rendered_line
+    assert rendered_ticket != distinct_task
+
+    done = reply.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        rendered_ticket,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] == distinct_task, (
+        "the rendered ticket id must resolve to the DISTINCT task id, not the ticket id"
+    )
+    task = herdr_lease.get_task(distinct_task, base_dir=tmp_path)
+    assert task is not None and task["status"] == "completed"
+    assert "task linkage" not in done.stderr, done.stderr
 
 
 def test_in_reply_to_record_rebinds_a_followup_without_restating_the_ticket(
