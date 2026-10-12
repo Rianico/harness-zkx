@@ -22,6 +22,7 @@ import pytest
 import yaml
 
 from tests.herdr.stub import SCRIPTS_DIR, STUB_SOURCE, StubHarness, flag_value
+from tests.herdr.test_herdr_reply_store import entry_for, failing_write, index_write_seam
 
 DISPATCH = SCRIPTS_DIR / "herdr_dispatch.py"
 REPLY = SCRIPTS_DIR / "herdr_reply.py"
@@ -544,3 +545,176 @@ def test_submodule_store_is_its_common_dir_under_the_superproject(
     resolved = herdr_worktree.resolve_lane_base_dir({"PATH": os.environ["PATH"]})
 
     assert resolved == Path(os.path.realpath(superproject / ".git" / "modules" / "mods"))
+
+
+# ── save_verified_reply: the store's own record → verify → rollback transaction (#257) ──
+
+
+CANARY_BODY = "COMPLETED deadbeef\n\n## Evidence\n- 660 passed\n"
+
+
+def trouble_recorder() -> tuple[Callable[[str, Exception], None], list[tuple[str, Exception]]]:
+    """A typed `on_trouble` stand-in that captures the (action, exc) pairs for assertions."""
+    calls: list[tuple[str, Exception]] = []
+
+    def record(action: str, exc: Exception) -> None:
+        calls.append((action, exc))
+
+    return record, calls
+
+
+def test_save_verified_reply_lands_a_row_the_reader_resolves(tmp_path: Path) -> None:
+    """Happy path: the stored row is the row the reader produces; nothing is rolled back."""
+    entry = entry_for(CANARY_BODY, record_id="row-1")
+
+    stored, reason = herdr_lease.save_verified_reply(entry, CANARY_BODY, base_dir=tmp_path)
+
+    assert reason is None
+    assert stored is not None
+    assert herdr_lease.get_reply("row-1", base_dir=tmp_path) == stored
+    assert (tmp_path / ".lane" / "replies" / "row-1.md").is_file()
+    assert (tmp_path / ".lane" / "replies" / "row-1.yaml").is_file()
+
+
+def test_save_verified_reply_discards_a_row_the_reader_cannot_resolve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `None` lookup is an honest rollback, not a trouble: discarded, no callback fired."""
+
+    def unresolved(*args: object, **kwargs: object) -> None:
+        return None
+
+    record, calls = trouble_recorder()
+    monkeypatch.setattr(herdr_lease, "get_reply", unresolved)
+
+    stored, reason = herdr_lease.save_verified_reply(
+        entry_for(CANARY_BODY, record_id="row-2"),
+        CANARY_BODY,
+        base_dir=tmp_path,
+        on_trouble=record,
+    )
+
+    assert stored is None
+    assert reason == "the record did not resolve through the reader"
+    assert calls == []
+    assert list((tmp_path / ".lane" / "replies").glob("*.md")) == []
+    assert list((tmp_path / ".lane" / "replies").glob("*.yaml")) == []
+
+
+def test_save_verified_reply_reports_and_discards_when_the_lookup_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A raising lookup is reported as `reply record lookup`, then rolled back like a None."""
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("reader boom")
+
+    record, calls = trouble_recorder()
+    monkeypatch.setattr(herdr_lease, "get_reply", boom)
+
+    stored, reason = herdr_lease.save_verified_reply(
+        entry_for(CANARY_BODY, record_id="row-3"),
+        CANARY_BODY,
+        base_dir=tmp_path,
+        on_trouble=record,
+    )
+
+    assert stored is None
+    assert reason == "the record did not resolve through the reader"
+    assert [action for action, _exc in calls] == ["reply record lookup"]
+    assert list((tmp_path / ".lane" / "replies").glob("*.md")) == []
+    assert list((tmp_path / ".lane" / "replies").glob("*.yaml")) == []
+
+
+def test_save_verified_reply_reports_a_failed_record_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unwritable index is `reply record` trouble; the reason is the one-lined message."""
+    monkeypatch.setattr(
+        herdr_lease, index_write_seam(), failing_write(OSError("disk full\nsecond line"))
+    )
+    record, calls = trouble_recorder()
+
+    stored, reason = herdr_lease.save_verified_reply(
+        entry_for(CANARY_BODY, record_id="row-4"),
+        CANARY_BODY,
+        base_dir=tmp_path,
+        on_trouble=record,
+    )
+
+    assert stored is None
+    assert reason == "disk full second line"
+    assert [action for action, _exc in calls] == ["reply record"]
+    assert list((tmp_path / ".lane" / "replies").glob("*.md")) == []
+
+
+def test_save_verified_reply_reads_the_index_before_writing_anything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#231 F2's ordering is the store's now: a pre-flight read failure leaves no half-record."""
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise herdr_lease.ReplyStoreError("index unreadable")
+
+    record, calls = trouble_recorder()
+    monkeypatch.setattr(herdr_lease, "check_reply_store", boom)
+
+    stored, reason = herdr_lease.save_verified_reply(
+        entry_for(CANARY_BODY, record_id="row-5"),
+        CANARY_BODY,
+        base_dir=tmp_path,
+        on_trouble=record,
+    )
+
+    assert stored is None
+    assert reason == "index unreadable"
+    assert [action for action, _exc in calls] == ["reply record"]
+    assert list(tmp_path.rglob("*.md")) == []
+    assert list(tmp_path.rglob("*.yaml")) == []
+
+
+def test_save_verified_reply_degrades_without_an_anchor_and_reports_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unresolvable store is a silent degrade: the lease steps already say it (#229)."""
+
+    def raise_anchor(*args: object, **kwargs: object) -> None:
+        raise herdr_worktree.LaneAnchorError("no lane anchor")
+
+    record, calls = trouble_recorder()
+    monkeypatch.setattr(herdr_lease, "resolve_base_dir", raise_anchor)
+
+    stored, reason = herdr_lease.save_verified_reply(
+        entry_for(CANARY_BODY, record_id="row-6"),
+        CANARY_BODY,
+        env={},
+        on_trouble=record,
+    )
+
+    assert stored is None
+    assert reason == "no lane anchor"
+    assert calls == []
+
+
+def test_save_verified_reply_never_raises_even_when_the_callback_explodes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#229's never-fatal contract moved with the transaction: no step escapes as an exception."""
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("store step boom")
+
+    def angry(action: str, exc: Exception) -> None:
+        _ = action, exc
+        raise RuntimeError("callback boom")
+
+    monkeypatch.setattr(herdr_lease, "check_reply_store", boom)
+
+    stored, reason = herdr_lease.save_verified_reply(
+        entry_for(CANARY_BODY, record_id="row-7"), CANARY_BODY, base_dir=tmp_path, on_trouble=angry
+    )
+
+    assert stored is None
+    assert reason is not None
+    assert "callback boom" in reason
+    assert list((tmp_path / ".lane" / "replies").glob("*.md")) == []

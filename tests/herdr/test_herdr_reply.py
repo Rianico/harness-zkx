@@ -2425,9 +2425,10 @@ def test_a_record_that_does_not_resolve_is_discarded(
 ) -> None:
     """The pointer never names a record the reader cannot produce: it is dropped instead.
 
-    Driven at `persist_reply`, the helper's own module: the in-process script run executes the
-    file as `__main__`, so only a *module* attribute patched here is the global the stored
-    path resolves through. F1's re-resolution rule is what this pins.
+    Driven at `persist_reply`, whose transaction now runs in the store module: the in-process
+    script run executes the file as `__main__`, so only a *module* attribute patched on
+    `herdr_lease` — where `save_verified_reply` resolves `get_reply` — is the global the
+    stored path runs through. F1's re-resolution rule is what this pins.
     """
     base = tmp_path
     body = "COMPLETED deadbeef\n\n## Evidence\n- 660 passed\n"
@@ -2436,7 +2437,7 @@ def test_a_record_that_does_not_resolve_is_discarded(
     def unresolved(*args: Any, **kwargs: Any) -> None:
         return None
 
-    monkeypatch.setattr(herdr_reply, "get_reply", unresolved)
+    monkeypatch.setattr(herdr_lease, "get_reply", unresolved)
 
     stored, reason = herdr_reply.persist_reply(entry, body, env={"HERDR_LANE_DIR": str(base)})
 

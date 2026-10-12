@@ -48,7 +48,7 @@ import json
 import os
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -79,6 +79,11 @@ class ReplyStoreError(UsageError):
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _one_line(text: str, limit: int = 160) -> str:
+    """Collapse an exception message onto one line so it can ride inside a pointer."""
+    return " ".join(text.split())[:limit]
 
 
 def resolve_base_dir(
@@ -758,6 +763,72 @@ def discard_reply(
         return
     _unlink_quietly(directory / f"{record_id}.md")
     _unlink_quietly(directory / f"{record_id}.yaml")
+
+
+def save_verified_reply(
+    entry: Mapping[str, Any],
+    body: str,
+    *,
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+    on_trouble: Callable[[str, Exception], None] | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Record one reply, verify it through the reader, roll back if it does not resolve (#257).
+
+    The store owns this transaction: it alone knows what a written row must satisfy to
+    resolve through `get_reply`, so record → verify → rollback lives here, not in the
+    caller. Returns `(stored row, None)` when the reader produces the record, else
+    `(None, one-line reason)`. Never raises (#229): each step degrades to the reason, and
+    `on_trouble` — when given — is called with the failed step's action name
+    ("reply record" / "reply record lookup") exactly where a best-effort step failed.
+
+    Two orderings carry the honesty of the delivered pointer (#231 F2): the index is
+    *read* before anything is written, so a store whose index cannot be parsed leaves no
+    half-record behind; and the row that was written is re-resolved through the same
+    `get_reply` the reader uses, so a pointer only ever names a record the reader can
+    produce — one that does not resolve is discarded.
+    """
+    try:
+        return _reply_transaction(entry, body, base_dir=base_dir, env=env, on_trouble=on_trouble)
+    except Exception as exc:
+        return None, _one_line(str(exc))
+
+
+def _reply_transaction(
+    entry: Mapping[str, Any],
+    body: str,
+    *,
+    base_dir: Path | str | None,
+    env: Mapping[str, str] | None,
+    on_trouble: Callable[[str, Exception], None] | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """The ordered steps of `save_verified_reply`; the never-raise wrapper sits above it."""
+    try:
+        _ = resolve_base_dir(base_dir, env=env)
+    except Exception as exc:
+        return None, _one_line(str(exc))
+    try:
+        check_reply_store(base_dir, env=env)
+    except Exception as exc:
+        if on_trouble is not None:
+            on_trouble("reply record", exc)
+        return None, _one_line(str(exc))
+    try:
+        stored = record_reply(entry, body, base_dir=base_dir, env=env)
+    except Exception as exc:
+        if on_trouble is not None:
+            on_trouble("reply record", exc)
+        return None, _one_line(str(exc))
+    try:
+        resolved = get_reply(str(stored["id"]), base_dir=base_dir, env=env)
+    except Exception as exc:
+        if on_trouble is not None:
+            on_trouble("reply record lookup", exc)
+        resolved = None
+    if resolved is None:
+        discard_reply(str(stored["id"]), base_dir=base_dir, env=env)
+        return None, "the record did not resolve through the reader"
+    return resolved, None
 
 
 def list_replies(
