@@ -8,14 +8,18 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import herdr_bootstrap
 import herdr_cli
 import herdr_dispatch
+import herdr_lease
 import herdr_prompt
+import herdr_reply
 import pytest
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
@@ -32,6 +36,57 @@ def payload_file(tmp_path: Path, text: str = "TICKET BODY") -> Path:
     path = tmp_path / "ticket.md"
     _ = path.write_text(text, encoding="utf-8")
     return path
+
+
+DRIFTED_ABBREV = "8d9a742"
+
+
+def filled_ticket(evidence_line: str = "- base `66053e2`") -> str:
+    """A ticket with filled sections, so only the SHA guard can refuse it."""
+    return (
+        "## Task\n\nShip it.\n\n## Context\n\n" + evidence_line + "\n\n"
+        "## Acceptance criteria\n\nTests pass.\n"
+    )
+
+
+def sha_repo(root: Path) -> tuple[Path, str]:
+    """A scratch git repository with one commit; returns (repo, abbreviated commit SHA).
+
+    The scratch repo is the lane anchor the dispatch SHA guard resolves against, so the
+    pins exercise the real `git rev-parse --verify <token>^{commit}` probe instead of a
+    stub of it. Mirrors the reply-path `sha_guard_repo` pin; kept local so the dispatch
+    pins do not couple to the reply test module.
+    """
+    repo = root / "dispatch-sha-repo"
+    repo.mkdir()
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+        )
+
+    assert git("init", "-q", "-b", "main").returncode == 0
+    assert (
+        git(
+            "-c",
+            "user.name=herdr",
+            "-c",
+            "user.email=herdr@example.invalid",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "dispatch-sha-repo seed",
+        ).returncode
+        == 0
+    )
+    short = git("rev-parse", "--short", "HEAD").stdout.strip()
+    assert len(short) >= 7
+    return repo, short
+
+
+def _no_settle(_seconds: float) -> None:
+    """Stand in for the fresh-spawn settle in tests that assert delivery, not timing."""
 
 
 def test_dispatch_requires_file(stub: StubHarness) -> None:
@@ -137,12 +192,163 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     assert "Cwd:" not in text
     assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
-    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
+    assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
+    assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
+    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
     assert "\n\ndo this\n\n" in text
-    assert (
-        'uv run ~/.agents/skills/herdr/scripts/herdr_reply.py reviewer "<STATUS> <artifacts> <issues>"'
-        in text
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
+    assert reply, text
+    assert Path(reply.group(1)).is_file(), reply.group(1)
+    # #241 P2-B (new pin): the helper must be THIS tree's sibling script, not merely an
+    # existing path — `is_file()` passes for a foreign copy too.
+    assert Path(reply.group(1)).resolve().parent == SCRIPTS_DIR, reply.group(1)
+    assert "~/.agents" not in text
+
+
+def test_dispatch_renders_the_reply_contract_with_the_ticket_bound(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 E1.1 pin 1: the envelope a callee receives binds the derived ticket id.
+
+    Asserted on the RENDERED ENVELOPE (the text `herdr agent prompt` delivers), never on an
+    intermediate option: the reply contract carries `--ticket <derived id>` — the explicit name
+    the reply side binds. E1.2 (landed) deleted the sole-open-task inference this replaces.
+
+    Old role: scraped the whitespace-delimited token after `--ticket` and compared it to the
+    unquoted id, which asserted bytes of a command the pin never ran. E1.1-rework role:
+    parsed the rendered line as a shell does (`shlex.split`) and asserted the id is
+    `--ticket`'s argument (`[-2:] == ["--ticket", "<id>"]`). New role (herdr228-p3#P2):
+    parses the rendered line as a shell does and asserts the id arrives as the single
+    `--ticket=<id>` token, so a leading-dash id cannot be parsed as a flag.
+    """
+    ticket = tmp_path / "182-herdr-msg-enhance.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    envelope = call[4]
+    # Parse the rendered line as a shell does: the id is what `--ticket=` carries once the
+    # shell has resolved quoting, which is exactly what the callee's copy-paste delivers.
+    line = _rendered_contract_line(envelope)
+    assert shlex.split(line)[-1] == "--ticket=#182-herdr-msg-enhance", line
+
+
+def _rendered_contract_line(envelope: str) -> str:
+    """The reply-contract line out of a rendered envelope, verbatim and unstripped."""
+    return next(line for line in envelope.splitlines() if line.strip().startswith("uv run "))
+
+
+def _run_contract_line_in_a_shell(stub: StubHarness, contract_line: str, cwd: Path) -> list[str]:
+    """Run the rendered contract line through a real shell and return the helper's argv.
+
+    The `uv` on PATH is a shim that records its argv one element per line, so a value the
+    shell split, swallowed as a comment, or expanded into a new command is observable as such.
+    """
+    shim = stub.bin_dir / "uv"
+    _ = shim.write_text(
+        '#!/bin/sh\n: > "${FAKE_UV_LOG}"\nfor a in "$@"; do printf \'%s\\n\' "$a" >> "${FAKE_UV_LOG}"; done\n',
+        encoding="utf-8",
     )
+    shim.chmod(0o755)
+    log = cwd / "fake-uv-argv.txt"
+    env = {**stub.base_env(), "FAKE_UV_LOG": str(log)}
+    done = subprocess.run(
+        ["bash", "-c", contract_line], cwd=cwd, env=env, capture_output=True, text=True
+    )
+    assert done.returncode == 0, done.stderr
+    return log.read_text(encoding="utf-8").splitlines()
+
+
+def test_the_rendered_ticket_id_survives_a_real_shell(stub: StubHarness, tmp_path: Path) -> None:
+    """#246 E1.1 rework F1.3 (a): a lane ticket stem reaches the helper as ONE argument.
+
+    The contract is a command a callee copy-pastes, so the honest witness runs it through a real
+    shell. Every ticket in this lane starts with a number, so the derived id begins with `#`:
+    unquoted, that `#` starts a shell comment, the id is swallowed, and the real helper exits 2
+    with `argument --ticket: expected one argument`. Red on the unquoted render.
+    herdr228-p3#P2 role: the render is now `--ticket=<quoted>` (one shell word), so the pin
+    asserts the helper receives that single `--ticket=<id>` element.
+    """
+    ticket = tmp_path / "246-render-ticket-in-contract.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    line = _rendered_contract_line(call[4])
+
+    argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
+    assert argv[-1] == "--ticket=#246-render-ticket-in-contract", argv
+
+
+def test_a_hostile_ticket_filename_reaches_the_shell_quoted(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#246 E1.1 rework F1.3 (b): a crafted filename is quoted, so the shell executes nothing.
+
+    Unquoted, `pwn;touch PWNED.md` derived `pwn;touch PWNED`, the `;` split the id off the flag,
+    and the shell ran `touch PWNED`. The render must keep the id one argument and leave the
+    side-effect file uncreated. Red on the unquoted render.
+    herdr228-p3#P2 role: the render is now `--ticket=<quoted>` (one shell word), so the pin
+    asserts the helper receives that single `--ticket=<id>` element.
+    """
+    ticket = tmp_path / "pwn;touch PWNED.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    line = _rendered_contract_line(call[4])
+
+    argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
+    assert argv[-1] == "--ticket=pwn;touch PWNED", argv
+    assert not (tmp_path / "PWNED").exists(), "the shell executed text out of the ticket filename"
+    assert not (tmp_path / "PWNED.md").exists(), (
+        "the shell executed text out of the ticket filename"
+    )
+
+
+def test_a_leading_dash_ticket_id_survives_a_real_shell(stub: StubHarness, tmp_path: Path) -> None:
+    """herdr228-p3#P2 pin: a ticket stem starting with a dash reaches the helper intact.
+
+    `shlex.quote('-rf')` is `-rf`, so the space form renders `--ticket -rf` and argparse
+    reads the value as option-like (`argument --ticket: expected one argument`, exit 2) —
+    the reply is never sent, with no refusal naming the cause. The `=` form renders
+    `--ticket=-rf`, which argparse binds as the value even with the leading dash.
+    The honest witness runs the RENDERED line through a real `bash -c` with the fake `uv`
+    shim on PATH and asserts the value arrives as ONE intact argv element. Red on the
+    space-form render (argv ends `[..., '--ticket', '-rf']`, and the reply parser exits 2).
+    """
+    ticket = tmp_path / "-rf.md"
+    _ = ticket.write_text("TICKET BODY", encoding="utf-8")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait", env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    line = _rendered_contract_line(call[4])
+    assert "--ticket=" in line, line
+
+    argv = _run_contract_line_in_a_shell(stub, line, tmp_path)
+    assert argv[-1] == "--ticket=-rf", argv
+    value = argv[-1].split("=", 1)[1]
+    assert value == "-rf", argv
+    bound = herdr_reply.build_parser().parse_args(["reviewer", "--file", "r.md", argv[-1]])
+    assert bound.ticket == "-rf", argv
+
+
+def test_dispatch_without_a_derivable_ticket_renders_the_unbound_contract(
+    stub: StubHarness,
+) -> None:
+    """#246 E1.1 pin 3: no derivable ticket renders today's contract, without `--ticket`.
+
+    `--file -` reads the ticket from stdin, and a stdin ticket has no filename to derive an id
+    from, so the derivation returns None. The contract must still render (no crash) in its
+    pre-change form; the reply then lands unlinked with D1.3's warning.
+    """
+    done = stub.run("reviewer", "--file", "-", "--no-wait", stdin="TICKET BODY\n")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    envelope = call[4]
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', envelope)
+    assert reply, envelope
+    assert "--ticket" not in envelope
 
 
 def test_dispatch_refuses_agent_kind(stub: StubHarness, tmp_path: Path) -> None:
@@ -253,6 +459,202 @@ def test_dispatch_refuses_lease_whose_recorded_pane_is_alive(
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "active ticket lease (round-1.md)" in done.stderr
     assert stub.prompts() == []
+
+
+# ── #234: a label that outlived its agent is reported during a normal dispatch ─────
+
+
+def test_dispatch_reports_a_label_whose_agent_has_exited(stub: StubHarness, tmp_path: Path) -> None:
+    """A normal dispatch reports the orphaned label; no operator --verify/--sync pass is run.
+
+    Pin -> mutant: build the staleness rows from the *agent* inventory (the #234 defect),
+    so the exited pane is invisible and this advisory never prints.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "w9:p2" in done.stderr
+    assert "buildbot" in done.stderr
+    # The operator ran no verification pass: the dispatch itself reported the staleness.
+    assert "--verify" not in done.stderr
+    # The remedy must name a command that acts on the orphan (#234 rework). `--sync` cannot:
+    # it converges label/agent pairs from the agent inventory, where this orphan is absent.
+    assert "herdr-label --clear --pane w9:p2" in done.stderr
+    assert "--sync" not in done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_reports_an_orphan_whose_name_is_live_on_another_pane(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The orphaned pane is reported end to end although its label names a live sibling.
+
+    `reviewer` is live on `w9:p1`; `w9:p2` keeps the label `reviewer` with no live agent in
+    it, so a normal dispatch must still report it.
+
+    Pin -> mutant: build the name-match from every agent row (`label in live_names`), so the
+    live name on another pane suppresses the advisory and stderr is empty here.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "reviewer", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "w9:p2" in done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_advisory_tells_the_operator_to_replace_the_name_placeholder(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The re-label template cannot be copied verbatim into a literal `<name>` label.
+
+    `herdr-label '<name>' --pane w9:p2` on an orphan exits 0 and writes the literal `<name>`,
+    because `validate_agent_name` does not fire without a live agent, so the advisory must tell
+    the operator to substitute.
+
+    Pin -> mutant: print the bare copy-pasteable template (`herdr-label <name> --pane w9:p2`)
+    with no substitution instruction, so stderr lacks the hint and this fails.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "replace `<name>`" in done.stderr
+
+
+def test_dispatch_reports_no_stale_label_when_every_label_has_its_agent(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A live label matching its live agent is never reported stale (no false positives).
+
+    Pin -> mutant: drop the `pane_id not in live_panes` filter, so the live `w9:p1` row is
+    also reported and the advisory prints for a healthy lane.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {"pane_id": "w9:p1", "label": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "label": "buildbot", "agent": "pi", "agent_status": "idle"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "buildbot", "agent": "pi", "agent_status": "idle"},
+        ],
+    }
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "outlived" not in done.stderr
+
+
+def test_report_stale_labels_is_silent_when_the_pane_inventory_is_unreadable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Positivist (#210): an unreadable pane inventory answers nothing, so nothing is reported.
+
+    Pin -> mutant: remove the `try/except` around the inventory read, so a `pane list`
+    failure propagates instead of leaving the advisory silent.
+    """
+    bin_dir = tmp_path / "fake-bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "herdr"
+    _ = fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args[:2] == ['pane', 'list']:\n"
+        "    sys.exit(1)\n"
+        "if args[:2] == ['agent', 'list']:\n"
+        "    print(json.dumps({'result': {'agents': [{'pane_id': 'w9:p1', 'name': 'reviewer'}]}}))\n"
+        "    sys.exit(0)\n"
+        "sys.exit(0)\n"
+    )
+    os.chmod(fake, 0o755)
+    real_path = os.environ.get("PATH", "")
+    herdr_dispatch.report_stale_labels(str(fake), {"PATH": f"{bin_dir}:{real_path}"})
+    assert capsys.readouterr().err == ""
+
+
+def test_dispatch_identity_comes_from_the_agent_inventory_not_the_label(
+    stub: StubHarness,
+) -> None:
+    """Dispatch targeting resolves by identifier: a reused label does not move the identity.
+
+    Pin -> mutant: match `target` against the pane *label* in `resolve_target_identity`, so
+    ownership comes from decoration; the first assert then returns `(\"reviewer\", None)`.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "label": "reused-elsewhere",
+                "agent": "pi",
+                "agent_status": "working",
+            },
+            {"pane_id": "w9:p2", "label": "reviewer", "agent": None, "agent_status": "unknown"},
+        ],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+    }
+    stub.write_state(state)
+    env = stub.base_env()
+    herdr = str(stub.herdr)
+    assert herdr_dispatch.resolve_target_identity(herdr, "reviewer", env) == ("reviewer", "w9:p1")
+    assert herdr_dispatch.resolve_target_identity(herdr, "w9:p1", env) == ("reviewer", "w9:p1")
 
 
 def test_dispatch_force_bypasses_active_lease(stub: StubHarness, tmp_path: Path) -> None:
@@ -505,6 +907,66 @@ def test_dispatch_refuses_live_draft_marker(stub: StubHarness, tmp_path: Path) -
     assert stub.prompts() == []
 
 
+def test_dispatch_refuses_a_ticket_naming_an_unresolvable_sha(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 1 (#247, dispatch path): the drifted token is refused before any lease is taken.
+
+    The dispatcher inlines the ticket file verbatim, so a drifted SHA copy would otherwise
+    reach the callee with no mechanism to detect it. Refused before the store is touched:
+    no prompt, and no lease for the callee that a corrected re-send would have to force
+    past.
+
+    Mutant killed: skip the guard on the dispatch path — this exits 0 and prompts.
+    """
+    repo, _short = sha_repo(tmp_path)
+    ticket = payload_file(tmp_path, filled_ticket(f"- base `{DRIFTED_ABBREV}`"))
+    done = stub.run("callee", "--file", str(ticket), "--no-wait", env={"HERDR_LANE_DIR": str(repo)})
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert DRIFTED_ABBREV in done.stderr
+    assert str(ticket) in done.stderr
+    assert stub.prompts() == []
+    assert herdr_lease.get_lease("callee", base_dir=repo) is None
+
+
+def test_dispatch_delivers_a_ticket_naming_a_resolving_sha(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 2 (#247, dispatch path): a real abbreviated commit passes the guard."""
+    repo, short = sha_repo(tmp_path)
+    ticket = payload_file(tmp_path, filled_ticket(f"- base `{short}`"))
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--dry-run",
+        env={"HERDR_LANE_DIR": str(repo)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+
+def test_dispatch_waiver_names_the_intentional_token_on_stderr(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Pin 3 (#247, dispatch path): a waived token dispatches, and the waiver is loud."""
+    repo, _short = sha_repo(tmp_path)
+    ticket = payload_file(tmp_path, filled_ticket(f"- base `{DRIFTED_ABBREV}`"))
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--dry-run",
+        "--allow-unresolvable-sha",
+        DRIFTED_ABBREV,
+        env={"HERDR_LANE_DIR": str(repo)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert DRIFTED_ABBREV in done.stderr
+
+
 def test_dispatch_refuses_untouched_skeleton(stub: StubHarness, tmp_path: Path) -> None:
     ticket = payload_file(
         tmp_path,
@@ -516,6 +978,44 @@ def test_dispatch_refuses_untouched_skeleton(stub: StubHarness, tmp_path: Path) 
     assert stub.prompts() == []
 
 
+def test_dispatch_refuses_untouched_skeleton_with_cr_line_endings(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The boundary search is newline-agnostic: a CR-separated unfilled skeleton is refused.
+
+    The payload is validated as the raw delivered bytes, and `read_bytes().decode` keeps a
+    lone `\r` as-is (unlike `read_text`, which translated it to `\n`). An LF-only boundary
+    search then finds no section end, so the guard fails open and the unfilled ticket is
+    dispatched (exit 0, a prompt, a lease).
+    """
+    ticket = tmp_path / "ticket.md"
+    _ = ticket.write_bytes(
+        b"## Routing\r\r- Sender: reviewer@w9:p1\r\r"
+        b"## Task\r\r## Context\r\r## Acceptance criteria\r"
+    )
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "empty Task/Context/Acceptance sections" in done.stderr
+    assert stub.prompts() == []
+    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
+
+
+def test_dispatch_refuses_untouched_skeleton_with_mixed_crlf_sections(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A `\n\r## ` boundary (LF then a lone CR before the heading) is still a section end."""
+    ticket = tmp_path / "ticket.md"
+    _ = ticket.write_bytes(
+        b"## Routing\n\r- Sender: reviewer@w9:p1\n\r"
+        b"## Task\n\r## Context\n\r## Acceptance criteria\n"
+    )
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "empty Task/Context/Acceptance sections" in done.stderr
+    assert stub.prompts() == []
+    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
+
+
 def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: Path) -> None:
     ticket = payload_file(
         tmp_path,
@@ -525,11 +1025,91 @@ def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: P
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
 
-def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
+# ── pin: the dispatch ticket payload goes through the shared reader ────────────────
+#
+# `herdr-dispatch` used to read its own ticket with `Path(...).read_text(encoding="utf-8")`.
+# A NUL byte passed that read (NUL is valid UTF-8) and was only refused later, by the
+# prompt reader's second read of the same file; invalid UTF-8 was not refused at all, it
+# died as a bare `UnicodeDecodeError` traceback (exit 1), never a usage refusal. The read
+# now goes through `herdr_cli.read_payload_stream` + `decode_payload`, so dispatch refuses
+# both payloads in the same sentence `herdr-prompt` and `herdr-reply` use. The pin compares
+# all three paths, so a dispatch-specific paraphrase fails here too, and so does dropping
+# the refusal from the shared reader.
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b"TICKET BODY\x00tail\n", b"TICKET BODY \xff\xfe bad\n"],
+    ids=["nul", "invalid-utf8"],
+)
+def test_dispatch_refuses_what_the_shared_payload_reader_refuses(
+    stub: StubHarness, tmp_path: Path, body: bytes
+) -> None:
+    ticket = tmp_path / "ticket.md"
+    _ = ticket.write_bytes(body)
+
+    with pytest.raises(herdr_cli.UsageError) as prompt_raised:
+        _ = herdr_prompt.read_payload(str(ticket))
+    with pytest.raises(herdr_cli.UsageError) as reply_raised:
+        _ = herdr_reply.read_payload(str(ticket), None)
+    prompt_sentence = str(prompt_raised.value)
+    reply_sentence = str(reply_raised.value)
+
+    done = stub.run("callee", "--file", str(ticket), "--no-wait")
+
+    assert prompt_sentence == reply_sentence, "prompt and reply must keep one shared sentence"
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "Traceback" not in done.stderr
+    assert done.stderr.strip() == f"herdr-dispatch: {prompt_sentence}"
+    assert stub.prompts() == []
+    # The refusal now lands BEFORE `acquire_lease`, not after the lease via the prompt
+    # reader's second read of the same file. Without this the pin passes on the old
+    # ordering too: the NUL sentence and exit code are identical, only the lease differs.
+    # Asserted on the RESOLVED store, never on `tmp_path / ".lane"`: dropping the stub's
+    # `HERDR_LANE_DIR` anchor would otherwise let a lease land in this repository's own
+    # store while the `tmp_path` copy stayed absent, and the pin would still pass.
+    store = herdr_lease.resolve_tasks_file(env=stub.base_env())
+    assert store == Path(stub.tmp_path).resolve() / herdr_lease.STATE_FILE_LANE
+    assert not store.exists()
+
+
+def test_dispatch_missing_file_refusal_names_the_seam_sentence(
     stub: StubHarness, tmp_path: Path
 ) -> None:
+    """Pin the unreadable-ticket sentence: it is now the shared seam's, a caller contract.
+
+    `herdr-dispatch` used to raise its own `cannot read ticket file ...`; the shared payload
+    seam (`herdr_cli.read_payload_stream`) now covers the missing file too, in the sentence
+    `herdr-prompt` and `herdr-reply` also print. The sentence carries the path twice and the
+    Python errno repr; that shape is pinned here, so a paraphrase or a seam tidy-up is a
+    deliberate, visible change rather than silent drift.
+    """
+    missing = tmp_path / "nope.md"
+    with pytest.raises(OSError) as missing_exc:
+        _ = missing.read_bytes()
+    detail = str(missing_exc.value)
+    done = stub.run("callee", "--file", str(missing), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert done.stderr.strip() == (
+        f"herdr-dispatch: cannot read payload from {str(missing)!r}: {detail}"
+    )
+    assert stub.prompts() == []
+    assert not (tmp_path / ".lane" / "tasks.yaml").exists()
+
+
+def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Issue #225: a ticket for a role with no live agent starts it via the
-    bootstrap contract (kind trust flags + ROLE INVARIANT), then dispatches."""
+    bootstrap contract (kind trust flags + ROLE INVARIANT), then dispatches.
+
+    The invariant reaches the agent as the absolute path of the lane-local snippet file,
+    because herdr refuses a multi-line agent arg; read that file to prove delivery.
+
+    The spawn's 5s settle is faked here (this test asserts delivery, not timing); pin 4
+    (`test_dispatch_auto_start_settles_the_fresh_pane_once`) owns the settle assertion.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -540,7 +1120,7 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee",
             }
         ],
@@ -568,10 +1148,65 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert "--kind" in start and start[start.index("--kind") + 1] == "pi"
     assert "--append-system-prompt" in start
     invariant = start[start.index("--append-system-prompt") + 1]
-    assert "ROLE INVARIANT" in invariant
-    assert start[start.index("--") + 1 :] == ["--approve"]
+    assert invariant == str(tmp_path / ".lane" / "invariants" / "callee.md")
+    assert Path(invariant).is_absolute()
+    assert Path(invariant).read_text() == herdr_bootstrap.render_invariant("callee")
+    for arg in start[start.index("--") + 1 :]:
+        assert "\n" not in arg
+    split = start.index("--")
+    assert "--append-system-prompt" not in start[:split]
+    assert "--model" not in start[:split]
+    assert "--append-system-prompt" in start[split + 1 :]
+    assert start[-1] == "--approve"
     (prompt,) = stub.prompts()
     assert prompt[3] == "callee"
+
+
+def test_dispatch_auto_start_contract_rides_for_a_scoped_implementer_label(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """BLOCKING-1: without `--task-group` the role falls back to the scoped agent name, so
+    `herdr228-impl-1` must still receive the implementer cooperation contract."""
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
+    state = {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": str(tmp_path),
+                "label": "herdr228-impl-1",
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "herdr228-impl-1",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    invariant = start[start.index("--append-system-prompt") + 1]
+    assert invariant == str(tmp_path / ".lane" / "invariants" / "herdr228-impl-1.md")
+    text = Path(invariant).read_text()
+    assert "single writer for your task" in text
+    assert text == herdr_bootstrap.render_invariant("herdr228-impl-1")
 
 
 def test_dispatch_auto_start_skips_bootstrap_for_live_agent(
@@ -656,8 +1291,11 @@ def test_dispatch_auto_start_rejects_unknown_kind(stub: StubHarness, tmp_path: P
     assert stub.prompts() == []
 
 
-def test_dispatch_auto_start_uses_claude_trust_flags(stub: StubHarness, tmp_path: Path) -> None:
+def test_dispatch_auto_start_uses_claude_trust_flags(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Issue #225: the bootstrap contract owns trust flags (claude path)."""
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -668,7 +1306,7 @@ def test_dispatch_auto_start_uses_claude_trust_flags(stub: StubHarness, tmp_path
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee",
             }
         ],
@@ -693,8 +1331,15 @@ def test_dispatch_auto_start_uses_claude_trust_flags(stub: StubHarness, tmp_path
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (start,) = stub.starts()
     assert start[start.index("--kind") + 1] == "claude"
-    assert start[start.index("--") + 1 :] == ["--dangerously-skip-permissions"]
-    assert "--append-system-prompt" in start
+    split = start.index("--")
+    assert "--append-system-prompt" not in start[:split]
+    assert "--model" not in start[:split]
+    # #240 (rewritten pin, was: the text flag): claude takes the snippet file through its
+    # `-file` flag — the text flag would boot it with the path string as its system prompt.
+    assert "--append-system-prompt-file" in start[split + 1 :]
+    assert "--append-system-prompt" not in start[split + 1 :]
+    assert start[-1] == "--dangerously-skip-permissions"
+    assert "--append-system-prompt-file" in start
 
 
 def test_dispatch_auto_start_without_flag_keeps_bare_shell_refusal(
@@ -745,6 +1390,7 @@ def test_dispatch_auto_start_triggers_on_typed_signal_despite_reworded_prose(
     Rewords both bare-shell diagnostic messages; auto-start must still fire.
     Fails if is_bare_shell_failure is re-coupled to message text.
     """
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     import herdr_cli
 
     orig_format = herdr_cli.format_shell_pane_diagnostic
@@ -765,7 +1411,7 @@ def test_dispatch_auto_start_triggers_on_typed_signal_despite_reworded_prose(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee",
             }
         ],
@@ -854,13 +1500,14 @@ def test_dispatch_auto_start_mixed_targets_bootstraps_none_and_reraises(
 
 
 def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
-    stub: StubHarness, tmp_path: Path
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Round 2: two bare-shell targets, the SECOND fails mid-bootstrap.
 
     The first agent is already started; the raised error must NAME it (loud,
     never a silent orphan), and no ticket may be dispatched to anyone.
     """
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     state = {
         **DEFAULT_STATE,
         "agents": [],
@@ -871,7 +1518,7 @@ def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee-one",
             },
             {
@@ -880,7 +1527,7 @@ def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
                 "workspace_id": "wM",
                 "agent": None,
                 "agent_status": "unknown",
-                "cwd": "/tmp",
+                "cwd": str(tmp_path),
                 "label": "callee-two",
             },
         ],
@@ -919,9 +1566,10 @@ def test_dispatch_auto_start_mid_bootstrap_failure_orphans_nothing_silent(
 
 
 def test_dispatch_auto_start_converges_pane_cwd_then_starts(
-    stub: StubHarness, tmp_path: Path
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Issue #225: the lane worktree cwd rides through bootstrap, pane converges."""
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", _no_settle)
     lane = tmp_path / "lane"
     lane.mkdir()
     state = {
@@ -993,3 +1641,165 @@ def test_dispatch_auto_start_live_agent_makes_no_extra_herdr_calls(
     assert auto.returncode == herdr_cli.EXIT_OK, auto.stderr
     assert stub.starts() == []
     assert len(stub.calls()) == 2 * plain_calls
+
+
+# ── #238: a warm pane is never settled ──────────────────────────────────────────────
+
+
+def test_warm_agent_dispatch_settles_nothing(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 3 (#238): a live idle agent is warm — an ordinary dispatch adds no settle delay.
+
+    Mutant killed: call `settle_fresh_pane(DEFAULT_SETTLE_SECONDS)` on the warm dispatch path
+    (`herdr_prompt.prompt_one`) — `herdr_bootstrap._sleep` then records a wait and this fails.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    monkeypatch.setattr(herdr_prompt, "_sleep", slept.append)
+    ticket = payload_file(tmp_path, "TICKET BODY")
+
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.starts() == [], "a live agent is warm: nothing is spawned"
+    (prompt,) = stub.prompts()
+    assert prompt[3] == "reviewer"
+    assert slept == [], "a warm dispatch must add no settle delay"
+
+
+# ── #238: the dispatch auto-start flow settles a fresh pane, and --settle overrides ──
+
+
+def _bare_shell_state(tmp_path: Path, label: str = "callee") -> dict[str, object]:
+    """DEFAULT_STATE with no agents and one bare shell pane carrying `label`."""
+    return {
+        **DEFAULT_STATE,
+        "agents": [],
+        "panes": [
+            {
+                "pane_id": "wM:p1N",
+                "tab_id": "wM:t1",
+                "workspace_id": "wM",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": str(tmp_path),
+                "label": label,
+            }
+        ],
+        "process_info": {
+            "wM:p1N": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+
+
+def test_dispatch_auto_start_settles_the_fresh_pane_once(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 4 (#238, dispatch auto-start): the bootstrap the dispatch runs settles once, 5s.
+
+    A pin, not a behaviour change: `run_bootstrap_contract` builds `herdr_bootstrap.Options(...)`
+    with no `settle`, so the auto-started callee inherits `DEFAULT_SETTLE_SECONDS` today.
+    Mutant killed: add `settle=0.0` to that `Options(...)` call — `slept == []` and this fails.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    ticket = payload_file(tmp_path, "TICKET BODY")
+
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        state=_bare_shell_state(tmp_path),
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = stub.starts()
+    assert start[3] == "callee"
+    assert slept == [herdr_bootstrap.DEFAULT_SETTLE_SECONDS], (
+        "the dispatch auto-start path must pay the 5s handshake exactly once"
+    )
+
+
+def test_dispatch_auto_start_settle_zero_is_exact(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--settle 0` on herdr-dispatch spawns without sleeping; the default stays 5.
+
+    RED on base: `herdr-dispatch` declares no `--settle`, so argparse refuses the flag (exit 2).
+    Mutant killed: forward a hard-coded default instead of `options.settle` — the 0 run sleeps.
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(herdr_bootstrap, "_sleep", slept.append)
+    ticket = payload_file(tmp_path, "TICKET BODY")
+
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        "--settle",
+        "0",
+        state=_bare_shell_state(tmp_path),
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.starts()) == 1
+    assert slept == [], "--settle 0 must not sleep at all on the dispatch path"
+
+
+def test_dispatch_parser_declares_settle_with_the_bootstrap_default() -> None:
+    """`--settle` rides on herdr-dispatch like `--role`/`--cwd`/`--model`; default 5.
+
+    RED on base: the parser has no `--settle`.
+    """
+    parser = herdr_dispatch.build_parser()
+    assert (
+        parser.parse_args(["callee", "--file", "t"]).settle
+        == herdr_bootstrap.DEFAULT_SETTLE_SECONDS
+    )
+    assert parser.parse_args(["callee", "--file", "t", "--settle", "2.5"]).settle == 2.5
+
+
+def test_dispatch_auto_start_dry_run_forwards_the_settle(stub: StubHarness, tmp_path: Path) -> None:
+    """A dry-run auto-start plan carries the forwarded `--settle` value, never sleeps.
+
+    RED on base: the parser has no `--settle`.
+    """
+    ticket = payload_file(tmp_path, "TICKET BODY")
+    done = stub.run(
+        "callee",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        "--settle",
+        "2.5",
+        "--dry-run",
+        state=_bare_shell_state(tmp_path),
+        env={"PWD": str(tmp_path)},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    plan = json.loads(done.stdout.splitlines()[0])
+    assert plan["settle"] == 2.5
+    assert stub.starts() == []

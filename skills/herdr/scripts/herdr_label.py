@@ -31,7 +31,8 @@ on that mismatch and `--sync` converges it, which is what keeps `herdr-label NAM
 more than one moment. Convergence runs both ways: a drifting label is set from the agent name,
 and an agent that came back without a name takes the surviving label as its own. A label on a
 pane with no live agent is not a mismatch — that is the state an agent leaves behind, and the
-label is waiting for an occupant.
+label is waiting for an occupant; `stale_labels` is what reports that orphaned label, and a
+normal `herdr-dispatch` prints it on stderr without any operator-invoked pass.
 
 Exit status: 0 ok, 1 herdr failure, 2 usage or missing precondition, 3 label/agent mismatch.
 
@@ -54,6 +55,7 @@ from herdr_cli import (
     EXIT_OK,
     METHOD_CONSTRAINT_EPILOG,
     UsageError,
+    add_shared_argument,
     current_pane_id,
     entries,
     entry_optional_text,
@@ -98,19 +100,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _ = parser.add_argument("name", nargs="?", metavar="NAME", help="the name to set")
-    _ = parser.add_argument(
-        "--pane", metavar="ID", help="label this pane instead of the calling pane"
-    )
-    _ = parser.add_argument(
-        "--tab",
-        metavar="NAME",
-        default=None,
+    add_shared_argument(parser, "pane", help="label this pane instead of the calling pane")
+    add_shared_argument(
+        parser,
+        "tab",
         help="rename the calling tab (Task Group) instead of labelling a pane",
     )
-    _ = parser.add_argument(
-        "--task-group",
-        metavar="SLUG",
-        default=None,
+    add_shared_argument(
+        parser,
+        "task_group",
         help="scope NAME with this task-group slug before naming the pane and agent",
     )
     _ = parser.add_argument(
@@ -119,10 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="set the pane label but leave the agent name alone",
     )
     _ = parser.add_argument("--clear", action="store_true", help="drop both names")
-    _ = parser.add_argument("--json", action="store_true", help="print the result as JSON")
-    _ = parser.add_argument(
-        "--dry-run", action="store_true", help="print the herdr calls, rename nothing"
-    )
+    add_shared_argument(parser, "json", help="print the result as JSON")
+    add_shared_argument(parser, "dry_run", help="print the herdr calls, rename nothing")
     _ = parser.add_argument(
         "--verify",
         action="store_true",
@@ -220,6 +216,50 @@ def restorable_agents(
         for pane, label in unnamed_agents(panes, agents, pane_id)
         if label and AGENT_NAME.match(label) and label not in named
     ]
+
+
+def stale_labels(
+    panes: Sequence[Mapping[str, object]] | None,
+    agents: Sequence[Mapping[str, object]] | None,
+) -> list[tuple[str, str]]:
+    """Panes carrying an agent-shaped label that no live agent owns: (pane id, label).
+
+    `pairs`, `pair_mismatches` and `descriptive_labels` all iterate the *agent* inventory, so a
+    pane whose agent has exited is invisible to every one of them. This iterates the *pane*
+    inventory instead, so a normal dispatch reports the orphan from inventories it reads anyway.
+
+    A pane counts as live when the agent inventory gives it a `pane_id`, or when its label is
+    the name of a live agent whose `agent list` row carries no `pane_id` (then the row does not
+    say which pane it occupies, so the match is the only evidence available), so a healthy pair
+    is never reported. An agent row that names another pane does not excuse this one: the row
+    locates its agent elsewhere, so a pane no live agent occupies stays stale. Rows are deduped
+    by pane id, since `pane list` can repeat one.
+
+    Positivist evidence (#210): an unreadable or empty inventory answers nothing, so `None` or
+    an empty sequence reports no stale label rather than declaring every label stale.
+    """
+    if not panes or not agents:
+        return []
+    live_panes = {pane for entry in agents if (pane := entry_optional_text(entry, "pane_id"))}
+    # A name-match suppresses only when the agent row does not say which pane it occupies.
+    faceless_names = {
+        name
+        for entry in agents
+        if not entry_optional_text(entry, "pane_id")
+        and (name := entry_optional_text(entry, "name"))
+    }
+    stale: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for entry in panes:
+        pane = entry_optional_text(entry, "pane_id")
+        label = entry_optional_text(entry, "label")
+        if not pane or not label or not AGENT_NAME.match(label):
+            continue
+        if pane in live_panes or label in faceless_names or pane in seen:
+            continue
+        seen.add(pane)
+        stale.append((pane, label))
+    return stale
 
 
 def check_pairs(options: Options, env: Mapping[str, str]) -> int:

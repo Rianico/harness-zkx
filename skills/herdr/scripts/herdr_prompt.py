@@ -50,12 +50,14 @@ import argparse
 import json
 import math
 import os
+import shlex
 import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
+
+from herdr_bootstrap import load_kind_entry
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
@@ -64,7 +66,9 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     current_pane_id,
+    decode_payload,
     decode_response,
     diagnose_agent_not_found,
     diagnose_target_pane,
@@ -74,13 +78,14 @@ from herdr_cli import (
     fetch_inventory,
     find_herdr,
     guard,
+    read_payload_stream,
+    reply_helper,
     require_herdr_env,
     run_herdr,
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
 
-STDIN = "-"
 BLOCKED = "blocked"
 BLOCKED_CODE = "agent_blocked"
 PROMPT_STATES = "idle, working, blocked, done, or unknown"
@@ -138,48 +143,46 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "targets", nargs="*", metavar="TARGET", help="agent names or pane ids (one or more)"
     )
-    _ = parser.add_argument(
-        "--label",
-        metavar="LABEL",
+    add_shared_argument(
+        parser,
+        "label",
         help="exact pane label to resolve to a pane id, instead of TARGET",
     )
-    _ = parser.add_argument(
-        "--file",
-        metavar="PATH",
+    add_shared_argument(
+        parser,
+        "file",
         help="payload file; '-' or omitted reads stdin verbatim",
     )
-    _ = parser.add_argument(
-        "--wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "wait",
         help="wait for the first settled state after submission",
     )
-    _ = parser.add_argument(
-        "--no-wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "no_wait",
         help="dispatch without waiting; fails when combined with --wait",
     )
-    _ = parser.add_argument(
-        "--until",
-        action="append",
-        metavar="STATUS",
+    add_shared_argument(
+        parser,
+        "until",
         help=f"exact state to match after --wait, repeatable ({PROMPT_STATES})",
     )
-    _ = parser.add_argument(
-        "--timeout",
-        type=int,
-        metavar="MS",
+    add_shared_argument(
+        parser,
+        "timeout",
         help="fail after this many milliseconds",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
-    _ = parser.add_argument("--dry-run", action="store_true", help="print the argv, submit nothing")
-    _ = parser.add_argument(
-        "--no-caller-context",
-        action="store_true",
+    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
+    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser,
+        "no_caller_context",
         help="send the payload verbatim without the Sender/Receiver envelope and reply contract",
     )
-    _ = parser.add_argument(
-        "--verbose",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "verbose",
         help=(
             "include Runtime: Cwd/Resume recovery metadata; "
             "default envelope is Routing/Hierarchy/Protocol only"
@@ -190,27 +193,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def read_payload(source: str | None) -> str:
     """Read the payload verbatim; only the choice of stream is validated, not its content."""
-    if source is None or source == STDIN:
-        if sys.stdin.isatty():
-            raise UsageError(
-                "no --file given and stdin is a terminal; pass --file PATH or pipe the payload"
-            )
-        try:
-            raw = sys.stdin.buffer.read()
-        except OSError as exc:
-            raise UsageError(f"cannot read payload from stdin: {exc}") from exc
-    else:
-        try:
-            raw = Path(source).read_bytes()
-        except OSError as exc:
-            raise UsageError(f"cannot read payload from {source!r}: {exc}") from exc
-
-    if b"\x00" in raw:
-        raise UsageError("payload contains a NUL byte, which cannot appear in an argv element")
-    try:
-        payload = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise UsageError(f"payload is not valid UTF-8: {exc}") from exc
+    payload = decode_payload(
+        read_payload_stream(
+            source,
+            tty_refusal="no --file given and stdin is a terminal; pass --file PATH or pipe the payload",
+        )
+    )
     if not payload.strip():
         raise UsageError(
             "payload is empty; refusing to submit an empty prompt. The payload comes from "
@@ -423,16 +411,63 @@ def utc_stamp() -> str:
     return f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
 
 
-SKILL_NOTICE = "Herdr: see skill ~/.agents/skills/herdr/SKILL.md — use scripts in ~/.agents/skills/herdr/scripts/ for communication, not bare herdr CLI"
+SKILL_NOTICE = (
+    "Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scripts/ for all "
+    "coordination, never the bare herdr CLI"
+)
+
+# The reply contract is an executable command, so it names this lane's own `herdr_reply.py` as an
+# absolute path resolved from this tree: the receiving agent runs it from any cwd, and a
+# placeholder would render a command that cannot run. The derivation is single-sourced in
+# `herdr_cli.reply_helper()` — the `~/.agents/skills/herdr` symlink is deliberately not used,
+# since it can resolve into another worktree whose `herdr_*` code may be older.
+REPLY_HELPER = reply_helper()
 
 
-def render_reply_contract(sender: CallerContext) -> str:
-    """Render the completion-reply contract; without an agent name no target is addressable."""
+def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -> str:
+    """Render the completion-reply contract; without an agent name no target is addressable.
+
+    A known ticket id is bound with `--ticket`, so the callee's reply names its task and the
+    reply side binds explicitly. This replaced the sender's sole-open-task inference, which
+    #246 E1.2 deleted. The dispatcher reuses the same `derive_ticket_id` it stores on the
+    lease, so the rendered id and the task it names cannot drift. Without a derived id
+    (`--file -`, stdin) the contract renders without `--ticket` and the reply lands unlinked
+    with D1.3's warning.
+
+    The id is rendered shell-quoted in `=` form (`--ticket=` + `shlex.quote`), because
+    this line is a command the callee copy-pastes: a lane ticket stem starts with a digit,
+    so the derived id starts with `#`, which a shell reads as the start of a comment and
+    would swallow the id — the helper then exits 2 with `argument --ticket: expected one
+    argument`. The `=` form additionally keeps a leading-dash id (`-rf.md` derives `-rf`;
+    `shlex.quote('-rf')` is `-rf`) from being parsed as a flag — the space form renders
+    `--ticket -rf`, which argparse refuses with the same exit-2 `expected one argument`
+    and the reply is never sent. A loud refusal of leading-dash ids at render time was
+    rejected because it would make such tickets undispatchable; the `=` form delivers
+    them, and argparse binds `--ticket=<value>` as the value even with a leading dash.
+    Quoting also keeps a filename's shell metacharacters inert (`pwn;touch PWNED.md` used
+    to run `touch PWNED`). Quoting is preferred over validating the id against a safe
+    grammar because a grammar would refuse the arbitrary ticket names the dispatcher
+    deliberately derives verbatim. This is the same treatment `herdr_bootstrap` gives a
+    rendered path (`shlex.quote(target)`), and the reason agent names are refused for
+    whitespace.
+
+    The contract also carries the SHA guard's waiver route in prose: a callee quoting a
+    review id (an eight-hex record such as '0c81f04c', which names no commit) meets the
+    broad #247 trigger, so without guidance the reply is refused with no sanctioned next
+    step. The guidance names `--allow-unresolvable-sha` with a single-quoted example, so
+    the example survives copy-paste as one shell word — prose advice, never a shell
+    template, so nothing pasted from it widens the waiver.
+    """
     if sender.agent:
-        contract = f'  uv run ~/.agents/skills/herdr/scripts/herdr_reply.py {sender.agent} "<STATUS> <artifacts> <issues>"'
+        contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
+        if ticket_id:
+            contract += f" --ticket={shlex.quote(ticket_id)}"
         return (
             "On completion, reply to the sender in one message using the herdr helper script:\n"
-            f"{contract}"
+            f"{contract}\n"
+            "  If the reply quotes a review id such as '0c81f04c' that names no commit,"
+            " the SHA guard refuses it: waive that token by name with"
+            " --allow-unresolvable-sha '0c81f04c' (one flag per token, reported on stderr)."
         )
     note = (
         "(the sending pane has no agent name; reply cannot be addressed — "
@@ -523,7 +558,7 @@ def wrap_with_envelope(
         tab_id=tab_id,
     )
     header = f"{utc_stamp()}\n{envelope}"
-    return f"{header}\n\n{payload}\n\n{render_reply_contract(sender)}"
+    return f"{header}\n\n{payload}\n\n{render_reply_contract(sender, ticket_id)}"
 
 
 def build_prompt_argv(
@@ -684,6 +719,77 @@ def _format_seconds(seconds: float) -> str:
     return f"{seconds:g}"
 
 
+def resolve_agent_kinds(
+    herdr: str, targets: Sequence[str], env: Mapping[str, str]
+) -> dict[str, str | None]:
+    """Map each target to its agent kind from one `herdr agent list`; None when unresolved.
+
+    Read only on a failure path — the unconfirmed handshake and the wait timeout — to decide
+    whether a revision-based re-check can ever succeed. A read that fails, or a target the
+    list does not hold, leaves that target unresolved; the caller then keeps the previous
+    advice rather than guessing about the kind.
+    """
+    kinds: dict[str, str | None] = dict.fromkeys(targets)
+    try:
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except HerdrError:
+        return kinds
+    for target in targets:
+        for agent in agents:
+            if target in (
+                entry_optional_text(agent, "name"),
+                entry_optional_text(agent, "pane_id"),
+            ):
+                kinds[target] = entry_optional_text(agent, "agent")
+                break
+    return kinds
+
+
+def revision_can_move(kind: str | None) -> bool:
+    """Whether a revision increment is a usable acceptance signal for this kind.
+
+    `false` for a kind `references/kinds.yaml` declares `revision_moves: false` (agy, #238): its
+    revision never moves, so the handshake's revision half can never fire and a revision-based
+    re-check (`herdr-wait`) is unsatisfiable there (exit 2) — only the status half remains. An
+    unresolved kind, or a config this process cannot read, defaults to true, keeping the
+    previous advice whenever the kind is unknown.
+    """
+    if not kind:
+        return True
+    try:
+        return load_kind_entry(kind).revision_moves
+    except UsageError:
+        return True
+
+
+def kind_lifecycle_bridge(kind: str | None) -> str | None:
+    """The bridge script `references/kinds.yaml` declares for this kind, if any (#238).
+
+    The bridge is a per-kind fact, not a constant here, so a second revision-static kind is
+    pointed at its own bridge and a kind that declares none is not sent to another kind's. An
+    unresolved kind, or a config this process cannot read, reads as no bridge, keeping the
+    advice bridge-neutral rather than guessing.
+    """
+    if not kind:
+        return None
+    try:
+        return load_kind_entry(kind).lifecycle_bridge
+    except UsageError:
+        return None
+
+
+def revision_static_surface(kind: str | None) -> str:
+    """The status surface advice may trust for a kind whose revision cannot move (#238).
+
+    Derived from the kind's own contract: a kind that declares a `lifecycle_bridge` is named
+    with that bridge, and a kind that declares none gets phrasing that names no bridge at all.
+    """
+    bridge = kind_lifecycle_bridge(kind)
+    if bridge:
+        return f"the {kind} bridge's status title ({bridge})"
+    return "the kind's own status surface"
+
+
 def agent_readiness(
     herdr: str, target: str, env: Mapping[str, str]
 ) -> tuple[bool, str | None, str | None]:
@@ -713,6 +819,34 @@ def agent_readiness(
     return (ready, status, revision_str)
 
 
+def _read_interactive_ready(herdr: str, target: str, env: Mapping[str, str]) -> bool | None:
+    """Read only the `interactive_ready` flag for refusal messaging (never a gate).
+
+    Returns False only when the field is explicitly false, True when explicitly
+    true, and None when the probe is unreadable or the field is absent. Called
+    once, after the readiness loop has already refused, so it cannot change
+    where the gate fires.
+    """
+    done = run_herdr([herdr, "agent", "get", target], env)
+    if done.returncode != 0:
+        return None
+    try:
+        result = decode_response(done.stdout).get("result")
+    except HerdrError:
+        return None
+    if not isinstance(result, dict):
+        return None
+    agent = result.get("agent")
+    if not isinstance(agent, dict):
+        return None
+    flag = agent.get("interactive_ready")
+    if flag is False:
+        return False
+    if flag is True:
+        return True
+    return None
+
+
 def wait_for_ready(
     herdr: str,
     target: str,
@@ -721,10 +855,11 @@ def wait_for_ready(
     timeout: float = READY_TIMEOUT_SECONDS,
     interval: float = READY_INTERVAL_SECONDS,
 ) -> str | None:
-    """Block until the target settles, else fail naming the pane-unblock path.
+    """Block until the target settles, else fail reporting the observed status.
 
     The loop is attempt-counted (never wall-clocked) so a monkeypatched `_sleep`
     runs it instantly; the immediate first probe means a settled agent never sleeps.
+    The refusal names what the readiness read observed — never a hypothesized cause.
     """
     attempts = max(1, math.ceil(timeout / interval))
     last_status: str | None = None
@@ -735,10 +870,31 @@ def wait_for_ready(
             return status
         if attempt < attempts - 1:
             _sleep(interval)
+    status_label = last_status or "unknown"
+    held = f"{_format_seconds(timeout)}s over {attempts} readiness probes"
+    interactive_ready = _read_interactive_ready(herdr, target, env)
+    if interactive_ready is False:
+        detail = (
+            "observed BLOCKED-ON-INPUT — the readiness read reports "
+            f"interactive_ready=false (status={status_label}); open the pane and "
+            "clear the pending input, then retry"
+        )
+    elif last_status == "working":
+        detail = (
+            "observed BUSY — the readiness read reports status='working', held for "
+            f"the full {held}: a turn is in progress; wait and retry after a longer "
+            "interval, do not inject mid-turn"
+        )
+    else:
+        detail = (
+            f"observed status={status_label!r} with no conclusive busy/blocked signal "
+            "(the readiness read cannot distinguish a busy turn from blocked-on-input "
+            "here); wait and re-check the pane before retrying"
+        )
     raise UsageError(
         f"target {target!r} did not settle for prompt delivery within "
-        f"{_format_seconds(timeout)}s (last status={last_status or 'unknown'}): the agent may be "
-        "waiting on an auth/approval dialog; open the pane and clear it, then retry"
+        f"{_format_seconds(timeout)}s (last status={status_label}, held for the full "
+        f"{held}): {detail}"
     )
 
 
@@ -845,11 +1001,24 @@ def prompt_one(
         # it. Failing here, or re-sending to "confirm", both re-created #193: a delivered
         # prompt reported as dropped, and a duplicate injection.
         _, last_status, _ = agent_readiness(herdr, target, env)
+        kind = resolve_agent_kinds(herdr, [target], env)[target]
+        if revision_can_move(kind):
+            remedy = "check with herdr-wait before resubmitting"
+        else:
+            # A revision-0 kind (#238): its revision never moves, so a wanted state is
+            # unsatisfiable and re-reading the state feed can confirm nothing. Name the
+            # signal that is trustworthy there instead of the one that structurally cannot be.
+            # Which signal that is comes from the kind's own contract, never from a constant.
+            remedy = (
+                f"confirm through {revision_static_surface(kind)}, which is trustworthy "
+                "where the raw state feed is not, and await the reply callback; a state "
+                "re-check cannot confirm delivery for this kind"
+            )
         print(
             f"herdr-prompt: warning: acceptance was not confirmed within "
             f"{_format_seconds(HANDSHAKE_TIMEOUT_SECONDS)}s for {target} "
             f"(last status={last_status or 'unknown'}, revision unchanged); the CLI accepted "
-            "the payload — check with herdr-wait before resubmitting",
+            f"the payload — {remedy}",
             file=sys.stderr,
         )
 
@@ -938,10 +1107,29 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
             hint = f"still working after {options.timeout}ms (wait timed out)"
         else:
             hint = "still working when the wait timed out"
-        raise WaitTimeout(
-            f"prompt delivered to {names} but {hint}; "
-            f"working asynchronously. Yield turn and await reply callback, or resume with herdr-wait {names} --timeout <ms> instead of resubmitting"
-        )
+        # A revision-0 kind (#238) cannot be re-checked by state: its revision never moves, so a
+        # wanted state is unsatisfiable and `herdr-wait` exits 2. Advice goes per target, and
+        # only the targets whose kind can move are told to resume with `herdr-wait`.
+        kinds = resolve_agent_kinds(herdr, timed_out, env)
+        movable = [target for target in timed_out if revision_can_move(kinds[target])]
+        static = [target for target in timed_out if not revision_can_move(kinds[target])]
+        advice = "working asynchronously. Yield turn and await reply callback"
+        if movable:
+            advice += (
+                f", or resume with herdr-wait {', '.join(movable)} --timeout <ms> "
+                "instead of resubmitting"
+            )
+        if static:
+            advice += (
+                f"; {', '.join(static)} cannot be re-checked that way — the kind's revision "
+                "never moves, so "
+                + "; ".join(
+                    f"confirm through {revision_static_surface(kinds[target])} and await the "
+                    "reply callback instead"
+                    for target in static
+                )
+            )
+        raise WaitTimeout(f"prompt delivered to {names} but {hint}; {advice}")
     return EXIT_OK
 
 

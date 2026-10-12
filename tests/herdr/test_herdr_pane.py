@@ -6,6 +6,7 @@ touched: the stub records the argv it received and replays canned JSON.
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -193,7 +194,11 @@ def test_cwd_ratio_and_env_are_forwarded(stub: StubHarness, tmp_path: Path) -> N
     call = stub.splits()[0]
     assert flag_value(call, "--cwd") == str(tmp_path)
     assert flag_value(call, "--ratio") == "0.3"
-    assert call.count("--env") == 2
+    # N3 (#229): the resolved lane anchor is always carried too, so the callee cannot
+    # derive a store of its own.
+    anchors = [item for item in call if item.startswith("HERDR_LANE_DIR=")]
+    assert anchors == [f"HERDR_LANE_DIR={stub.tmp_path}"]
+    assert call.count("--env") == 3
     assert "FOO=bar" in call and "BAZ=1" in call
 
 
@@ -305,6 +310,206 @@ def test_unusable_split_response_is_reported(stub: StubHarness) -> None:
     done = stub.run("vertical", state={**DEFAULT_STATE, "split_pane": {"tab_id": "w9:t1"}})
     assert done.returncode == herdr_cli.EXIT_HERDR
     assert "result.pane.pane_id" in done.stderr
+
+
+# ── launch-line completion sentinel (#230) ──────────────────────────────────────────
+
+
+def launch_payload(plan: str) -> str:
+    """The wrapped command line a plan sends to the pane's shell."""
+    return shlex.split(plan)[-1]
+
+
+def run_payload(payload: str) -> subprocess.CompletedProcess[str]:
+    """Execute the composed launch line the way a pane's shell would."""
+    return subprocess.run(["/bin/sh", "-c", payload], capture_output=True, text=True, check=False)
+
+
+def test_launch_line_emits_the_sentinel_when_the_command_fails(stub: StubHarness) -> None:
+    """A failing launch still produces end-of-line evidence, carrying the non-zero status."""
+    planned = stub.run("--pane", "w9:p1", "--command", "sh -c 'exit 9'", "--dry-run")
+    assert planned.returncode == herdr_cli.EXIT_OK, planned.stderr
+    argv = shlex.split(planned.stdout.strip())
+    assert argv[1:4] == ["pane", "run", "w9:p1"]
+
+    ran = run_payload(launch_payload(planned.stdout))
+
+    # The wrapper never exits the pane's shell, so its own status is the sentinel's print;
+    # the launched command's status travels in the sentinel line.
+    assert ran.returncode == 0
+    assert "[herdr-launch] finished exit=9" in ran.stdout
+
+
+def test_launch_line_sentinel_reports_a_command_that_never_starts(stub: StubHarness) -> None:
+    """The sentinel also fires when the command dies before doing any work."""
+    planned = stub.run("--pane", "w9:p1", "--command", "not-a-command-230", "--dry-run")
+    assert planned.returncode == herdr_cli.EXIT_OK, planned.stderr
+
+    ran = run_payload(launch_payload(planned.stdout))
+
+    # The wrapper's own status is the sentinel's print; 127 travels in the sentinel line.
+    assert ran.returncode == 0
+    assert "[herdr-launch] finished exit=127" in ran.stdout
+
+
+def test_launch_line_sentinel_reports_success_too(stub: StubHarness) -> None:
+    planned = stub.run("--pane", "w9:p1", "--command", "echo working", "--dry-run")
+    assert planned.returncode == herdr_cli.EXIT_OK, planned.stderr
+
+    ran = run_payload(launch_payload(planned.stdout))
+
+    assert ran.returncode == 0
+    assert "working" in ran.stdout
+    assert "[herdr-launch] finished exit=0" in ran.stdout
+
+
+def test_launch_line_records_the_wrapped_command_without_splitting(stub: StubHarness) -> None:
+    done = stub.run("--pane", "w9:p1", "--command", "make check")
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.splits() == []
+    (call,) = [entry for entry in stub.calls() if entry[1:3] == ["pane", "run"]]
+    assert call[3] == "w9:p1"
+    assert call[4].startswith("make check;")
+    assert "[herdr-launch]" in call[4]
+    assert "sentinel=[herdr-launch]" in done.stdout
+
+
+def test_launch_line_rejects_split_only_flags(stub: StubHarness) -> None:
+    done = stub.run("--pane", "w9:p1", "--command", "true", "--ratio", "0.3")
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "--ratio" in done.stderr
+    assert stub.calls() == []
+
+
+def test_launch_line_rejects_an_empty_or_multiline_command(stub: StubHarness) -> None:
+    empty = stub.run("--pane", "w9:p1", "--command", "   ")
+    assert empty.returncode == herdr_cli.EXIT_USAGE
+    assert "--command must not be empty" in empty.stderr
+
+    multiline = stub.run("--pane", "w9:p1", "--command", "echo a\necho b")
+    assert multiline.returncode == herdr_cli.EXIT_USAGE
+    assert "one line" in multiline.stderr
+    assert stub.calls() == []
+
+
+def seed_call_log(stub: StubHarness) -> list[list[str]]:
+    """Record one real herdr call and hand back the log.
+
+    A rejected launch line asserts "nothing launched"; without a seeded log an absent
+    call log reads exactly like an unchanged one, so the check would be vacuous.
+    """
+    seeded = stub.run("--pane", "w9:p1", "--command", "true")
+    assert seeded.returncode == herdr_cli.EXIT_OK, seeded.stderr
+    calls = stub.calls()
+    assert [call for call in calls if call[1:3] == ["pane", "run"]]
+    return calls
+
+
+def test_command_rejects_a_bare_ampersand_launch_line(stub: StubHarness) -> None:
+    """The sentinel is appended with `;`, so `&` at the end composes `&;` — a shell syntax error."""
+    before = seed_call_log(stub)
+
+    done = stub.run("--pane", "w9:p1", "--command", "sleep 0.05 &")
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "bare '&'" in done.stderr
+    assert "( <line> & )" in done.stderr
+    assert stub.calls() == before
+
+
+def test_command_rejects_a_bare_trailing_semicolon_launch_line(stub: StubHarness) -> None:
+    """A complete line ending in `;` composes `;;`: syntax error, so the pane never runs it."""
+    before = seed_call_log(stub)
+
+    done = stub.run("--pane", "w9:p1", "--command", "echo hi;")
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "bare ';'" in done.stderr
+    assert "Drop the trailing ';'" in done.stderr
+    assert stub.calls() == before
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo a && echo b",
+        "echo a \\&",
+        'echo "a &"',
+    ],
+)
+def test_command_accepts_ampersands_that_are_not_a_bare_trailing_operator(
+    stub: StubHarness, command: str
+) -> None:
+    """Only a bare trailing `&` is refused; `&&`, `\\&`, and a quoted `&` still compose a launch."""
+    done = stub.run("--pane", "w9:p1", "--command", command, "--dry-run")
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    payload = launch_payload(done.stdout)
+    assert payload.startswith(command)
+    assert "[herdr-launch]" in payload
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "( sleep 0.05 & )",
+        "echo hi # note",
+        "exit 5",
+        "a && b",
+        'echo "a &"',
+        "echo a \\&",
+    ],
+)
+def test_command_accepts_trailing_forms_that_still_compose(stub: StubHarness, command: str) -> None:
+    """Only a bare trailing `&` or `;` is refused; every other trailing form still composes."""
+    done = stub.run("--pane", "w9:p1", "--command", command, "--dry-run")
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    payload = launch_payload(done.stdout)
+    assert payload.startswith(command)
+    assert "[herdr-launch]" in payload
+
+
+def test_command_escaped_ampersand_still_runs_and_prints_the_sentinel(stub: StubHarness) -> None:
+    """The `\\&` exemption is safe: it is a literal `&`, so the appended `;` still separates."""
+    planned = stub.run("--pane", "w9:p1", "--command", "echo a \\&", "--dry-run")
+    assert planned.returncode == herdr_cli.EXIT_OK, planned.stderr
+
+    ran = run_payload(launch_payload(planned.stdout))
+
+    assert ran.returncode == 0
+    assert "a &" in ran.stdout
+    assert "[herdr-launch] finished exit=0" in ran.stdout
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo a \\;;",
+        "echo a \\\\&",
+        "echo hi;;",
+    ],
+)
+def test_command_refuses_lines_that_break_once_the_sentinel_is_appended(
+    stub: StubHarness, command: str
+) -> None:
+    """The parse check is the general net: an odd-count escape or `;;` composes a syntax error.
+
+    `echo a \\;;`, `echo a \\\\&`, and `echo hi;;` are each valid alone but break once the
+    sentinel is appended with `;`; the suffix fast-path cannot see them, so `/bin/sh -n`
+    refuses the line before any herdr call, naming the fix.
+    """
+    before = seed_call_log(stub)
+
+    done = stub.run("--pane", "w9:p1", "--command", command)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "does not compose with the appended sentinel" in done.stderr
+    assert "( <line> & )" in done.stderr
+    assert "composed line:" in done.stderr
+    assert stub.calls() == before
 
 
 # ── integration: --task-group scoping ──────────────────────────────────────────────

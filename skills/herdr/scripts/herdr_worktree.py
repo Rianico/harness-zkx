@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from herdr_cli import EXIT_OK, HerdrError, UsageError, guard
+from herdr_cli import EXIT_OK, HerdrError, UsageError, add_shared_argument, guard
 
 ENGINE_WORKTRUNK = "worktrunk"
 ENGINE_GIT = "git"
@@ -224,6 +224,54 @@ def git_repo_root(env: Mapping[str, str]) -> Path:
     return common.parent if common.name == ".git" else common
 
 
+LANE_DIR_ENV = "HERDR_LANE_DIR"
+
+
+class LaneAnchorError(UsageError):
+    """No lane state anchor could be resolved (exit status 2).
+
+    A lane's state must resolve to one path for the two agents answering each other
+    inside it. Refusing loudly, naming the missing anchors, beats guessing a directory
+    that nothing else reads (#229); `PWD` is not an anchor for the same reason.
+    """
+
+
+def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
+    """The directory one lane's shared state lives in: `HERDR_LANE_DIR`, else the repo root.
+
+    The explicit anchor wins, so a pane provisioned by `herdr-pane` seats its callee's
+    store deliberately instead of letting the callee derive its own. Without it, the
+    repository root that the git common directory sits in is the one path every worktree
+    and every nested subdirectory of this repository agrees on. That root is what
+    `git_repo_root` derives, and it is the repository root only when the common directory
+    is named `.git`. For a bare repository, a submodule (common directory under the
+    superproject's `.git/modules/…`), or `git init --separate-git-dir`, the common
+    directory itself is the base. It can live inside a git directory, and it is still one
+    path per repository.
+
+    `PWD` and the process cwd are deliberately not anchors: a dispatcher and the callee
+    it dispatched to ran in different working directories, resolved different stores
+    through them, and left a lease nobody could release (#229). With no anchor this
+    raises `LaneAnchorError` instead of guessing.
+
+    The result is resolved, so a caller and its callee usually agree on one spelling: an
+    anchor written as a symlink or as `/tmp/...` would otherwise name the same directory as
+    its `realpath` under a second string. Resolution alone is not identity — a case-insensitive
+    volume keeps `MyLaneRepo` and `mylanerepo` as one file and two strings — so the lease
+    comparison decides identity physically, with `os.path.samefile` (#229).
+    """
+    env_dir = env.get(LANE_DIR_ENV)
+    if env_dir:
+        return Path(env_dir).resolve()
+    try:
+        return git_repo_root(env).resolve()
+    except WorktreeError as exc:
+        raise LaneAnchorError(
+            "no lane state anchor: HERDR_LANE_DIR is unset and no git common dir "
+            f"resolves for this working directory ({exc})"
+        ) from exc
+
+
 def is_bare_repository(env: Mapping[str, str]) -> bool:
     """Whether this repository has no working tree of its own."""
     state = run_checked(["git", "rev-parse", "--is-bare-repository"], env).strip()
@@ -338,6 +386,12 @@ def allocate_with_git(branch: str, base: str | None, env: Mapping[str, str]) -> 
     return Allocation(branch=branch, path=str(path), engine=ENGINE_GIT)
 
 
+def resolve_base_sha(base: str | None, env: Mapping[str, str]) -> str:
+    """Resolve the branch base to a commit SHA, defaulting to the caller HEAD (#242)."""
+    rev = base if base else "HEAD"
+    return run_checked(["git", "rev-parse", "--verify", rev], env).strip()
+
+
 def allocate(branch: str, base: str | None, env: Mapping[str, str]) -> Allocation:
     """Allocate the branch's worktree through Worktrunk when present, else `git worktree`.
 
@@ -345,9 +399,12 @@ def allocate(branch: str, base: str | None, env: Mapping[str, str]) -> Allocatio
     git directory itself, so its sibling convention collapses to `<git-dir>.<slug>` (#207).
     """
     name = require_branch(branch)
+    resolved = resolve_base_sha(base, env)
+    print(f"herdr-worktree: base {resolved} for {name}", file=sys.stderr)
+    effective: str | None = base if base is not None else resolved
     wt = wt_binary(env)
     if wt is not None and not is_bare_repository(env):
-        allocation = allocate_with_wt(wt, name, base, env)
+        allocation = allocate_with_wt(wt, name, effective, env)
         guard_not_in_git_dir(Path(allocation.path), env)
         return allocation
     if wt is not None:
@@ -355,7 +412,7 @@ def allocate(branch: str, base: str | None, env: Mapping[str, str]) -> Allocatio
             "herdr-worktree: bare repository; allocating with git worktree instead of wt",
             file=sys.stderr,
         )
-    return allocate_with_git(name, base, env)
+    return allocate_with_git(name, effective, env)
 
 
 def resolve(branch: str, env: Mapping[str, str]) -> Allocation:
@@ -447,18 +504,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = allocate_parser.add_argument("branch", help="branch to create and check out")
     _ = allocate_parser.add_argument(
-        "--base", help="base revision to branch from (defaults to wt/git)"
+        "--base", help="base revision to branch from (defaults to the caller HEAD)"
     )
-    _ = allocate_parser.add_argument("--json", action="store_true", help="emit a JSON object")
+    add_shared_argument(allocate_parser, "json", help="emit a JSON object")
 
     resolve_parser = subparsers.add_parser(
         "resolve", help="print the existing worktree path for a branch"
     )
     _ = resolve_parser.add_argument("branch", help="branch to look up")
-    _ = resolve_parser.add_argument("--json", action="store_true", help="emit a JSON object")
+    add_shared_argument(resolve_parser, "json", help="emit a JSON object")
 
     list_parser = subparsers.add_parser("list", help="list every active worktree")
-    _ = list_parser.add_argument("--json", action="store_true", help="emit a JSON object")
+    add_shared_argument(list_parser, "json", help="emit a JSON object")
     return parser
 
 

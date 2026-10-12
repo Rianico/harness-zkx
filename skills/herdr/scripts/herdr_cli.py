@@ -6,6 +6,11 @@ Internal — import it, do not run it. `herdr_pane.py`, `herdr_prompt.py`, and
 location of the `herdr` binary, a way to run it, and one error/exit taxonomy. Owning them
 here keeps a change to the guard, the exit statuses, or the response decoding in one place
 instead of three.
+
+The argument families that several parsers repeat live here too (`SHARED_ARGUMENTS` and
+`add_shared_argument`), so a flag declared in more than one `build_parser()` cannot drift
+in its dest, action, type, or default. Each caller still supplies its own measured `help`
+sentence, which is why the help text is not part of the shared table.
 """
 
 from __future__ import annotations
@@ -19,7 +24,9 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Protocol, cast
 
 EXIT_OK = 0
 EXIT_HERDR = 1
@@ -87,6 +94,63 @@ def find_herdr(env: Mapping[str, str]) -> str:
     if found is None:
         raise UsageError("herdr not found on PATH (HERDR_BIN_PATH unset)")
     return found
+
+
+def reply_helper() -> Path:
+    """Absolute path to this tree's `herdr_reply.py`, a sibling of this module.
+
+    The three modules that render a reply command (`herdr_bootstrap`, `herdr_prompt`,
+    `herdr_reply`) each need the same value: an absolute path resolved from the tree the
+    module itself lives in, never the `~/.agents/skills/herdr` symlink, which can point into
+    another worktree whose `herdr_*` code may be older. Deriving it here means one definition
+    they cannot drift apart from. Pure: resolves this file's own location, no I/O, no state.
+    """
+    return Path(__file__).resolve().parent / "herdr_reply.py"
+
+
+STDIN = "-"
+NUL_BYTE_MESSAGE = "payload contains a NUL byte, which cannot appear in an argv element"
+
+
+def read_payload_stream(source: str | None, *, tty_refusal: str) -> bytes:
+    """Read raw payload bytes from stdin (`-` or None) or a `--file` path.
+
+    Only the choice of stream is validated here; the bytes go back to
+    `decode_payload` for the shared NUL and UTF-8 checks. `tty_refusal` is the
+    caller's own sentence, because each caller names a different fallback
+    (`--file PATH` for prompt, `MESSAGE, --file PATH` for reply).
+    """
+    if source is None or source == STDIN:
+        if sys.stdin.isatty():
+            raise UsageError(tty_refusal)
+        try:
+            return sys.stdin.buffer.read()
+        except OSError as exc:
+            raise UsageError(f"cannot read payload from stdin: {exc}") from exc
+    try:
+        return Path(source).read_bytes()
+    except OSError as exc:
+        raise UsageError(f"cannot read payload from {source!r}: {exc}") from exc
+
+
+def decode_payload(raw: bytes | str) -> str:
+    """Refuse a NUL byte, then decode UTF-8. NUL is checked before decoding.
+
+    A NUL can never appear in an argv element, and reporting it first means a
+    payload that is both NUL-bearing and invalid UTF-8 names the argv-safety
+    blocker rather than the codec. A `str` (a MESSAGE argument argv already
+    decoded) is checked as-is; `bytes` are then decoded as UTF-8.
+    """
+    if isinstance(raw, bytes):
+        if b"\x00" in raw:
+            raise UsageError(NUL_BYTE_MESSAGE)
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise UsageError(f"payload is not valid UTF-8: {exc}") from exc
+    if "\x00" in raw:
+        raise UsageError(NUL_BYTE_MESSAGE)
+    return raw
 
 
 AGENT_NAME_PATTERN = r"[a-z][a-z0-9_-]{0,31}"  # Herdr agent name: 1..32 chars
@@ -471,3 +535,125 @@ def guard(prog: str, action: Callable[[], int]) -> int:
     except HerdrError as exc:
         print(f"{prog}: {exc}", file=sys.stderr)
         return EXIT_HERDR
+
+
+class ArgumentSink(Protocol):
+    """The `add_argument` surface an `ArgumentParser` and a mutually exclusive group share."""
+
+    def add_argument(self, *args: str, **kwargs: Any) -> object: ...
+
+
+@dataclass(frozen=True)
+class SharedArgument:
+    """One argument declaration that several helper parsers repeat.
+
+    `dest` is fixed here and handed to `add_argument` explicitly, so a caller reusing a
+    family can never pick a different namespace attribute by accident. `kwargs` is the rest
+    of the canonical declaration, and it is frozen on construction, so neither the table nor
+    a caller can edit a family in place. `varying` names the keys a caller may override,
+    because the measured declarations differ there (for example `--role` defaults to `""` in
+    bootstrap and `"assistant"` in transcript); `help` is always the caller's, since every
+    script has its own sentence.
+    """
+
+    options: tuple[str, ...]
+    dest: str
+    kwargs: Mapping[str, object]
+    varying: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        """Freeze `kwargs`: a frozen dataclass blocks rebinding, not an in-place edit."""
+        object.__setattr__(self, "kwargs", MappingProxyType(dict(self.kwargs)))
+
+
+# Keyed by family, and itself read-only. Every entry preserves the dest, action, type,
+# metavar, nargs, required, and default that the declaring parsers already had at commit
+# 630eab12; the pin in tests/herdr/test_herdr_shared_arguments.py freezes that per script and
+# flag, subparsers included.
+SHARED_ARGUMENTS: Mapping[str, SharedArgument] = MappingProxyType(
+    {
+        "json": SharedArgument(("--json",), "json", {"action": "store_true"}),
+        "dry_run": SharedArgument(("--dry-run",), "dry_run", {"action": "store_true"}),
+        "verbose": SharedArgument(("--verbose",), "verbose", {"action": "store_true"}),
+        "wait": SharedArgument(("--wait",), "wait", {"action": "store_true"}),
+        "no_wait": SharedArgument(("--no-wait",), "no_wait", {"action": "store_true"}),
+        "no_caller_context": SharedArgument(
+            ("--no-caller-context",), "no_caller_context", {"action": "store_true"}
+        ),
+        "yaml": SharedArgument(("--yaml",), "yaml", {"action": "store_true"}),
+        "file": SharedArgument(("--file",), "file", {"metavar": "PATH"}),
+        "label": SharedArgument(("--label",), "label", {"metavar": "LABEL"}),
+        "model": SharedArgument(("--model",), "model", {"metavar": "MODEL", "default": None}),
+        "cwd": SharedArgument(("--cwd",), "cwd", {"metavar": "DIR", "default": None}),
+        "pane": SharedArgument(("--pane",), "pane", {"metavar": "ID"}, frozenset({"required"})),
+        "task_group": SharedArgument(
+            ("--task-group",),
+            "task_group",
+            {"metavar": "SLUG", "default": None},
+            frozenset({"metavar"}),
+        ),
+        "role": SharedArgument(
+            ("--role",),
+            "role",
+            {"metavar": "ROLE", "default": None},
+            frozenset({"metavar", "default"}),
+        ),
+        "auto_start": SharedArgument(
+            ("--auto-start",), "auto_start", {"metavar": "KIND", "default": None}
+        ),
+        "tab": SharedArgument(
+            ("--tab",),
+            "tab",
+            {"metavar": "NAME", "default": None},
+            frozenset({"metavar", "nargs", "const"}),
+        ),
+        "until": SharedArgument(
+            ("--until",),
+            "until",
+            {"action": "append", "metavar": "STATUS", "default": None},
+            frozenset({"default"}),
+        ),
+        "timeout": SharedArgument(
+            ("--timeout",),
+            "timeout",
+            {"type": int, "metavar": "MS", "default": None},
+            frozenset({"default"}),
+        ),
+        "settle": SharedArgument(
+            ("--settle",),
+            "settle",
+            {"type": float, "metavar": "SEC", "default": None},
+            frozenset({"default"}),
+        ),
+        "limit": SharedArgument(
+            ("--limit",), "limit", {"type": int, "metavar": "N", "default": 20}
+        ),
+    }
+)
+
+
+def add_shared_argument(
+    parser: ArgumentSink,
+    family: str,
+    *,
+    help: str,
+    short: str | None = None,
+    **varying: object,
+) -> None:
+    """Declare one shared family on `parser`, keeping its dest, action, type, and default.
+
+    `family` indexes `SHARED_ARGUMENTS`, so a typo raises `KeyError` at parser build time
+    instead of silently declaring nothing. `help` is required because every caller owns its
+    own sentence; only the keys in the family's `varying` set may be overridden, and any
+    other keyword raises `TypeError`, which is what stops a caller from changing `dest`.
+    `short` adds a one-letter alias (`-l` for `--label`); the dest still comes from the
+    table, so the alias cannot move the namespace attribute.
+    """
+    spec = SHARED_ARGUMENTS[family]
+    unexpected = set(varying) - spec.varying
+    if unexpected:
+        raise TypeError(f"{family}: not overridable: {', '.join(sorted(unexpected))}")
+    options = (short, *spec.options) if short is not None else spec.options
+    kwargs: dict[str, object] = dict(spec.kwargs)
+    kwargs.update(varying)
+    _ = parser.add_argument(*options, dest=spec.dest, help=help, **kwargs)

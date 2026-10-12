@@ -38,19 +38,24 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
+from herdr_bootstrap import DEFAULT_SETTLE_SECONDS
 from herdr_cli import (
     EXIT_OK,
     KNOWN_AGENT_KINDS,
     METHOD_CONSTRAINT_EPILOG,
     UsageError,
+    add_shared_argument,
+    decode_payload,
     entries,
     entry_optional_text,
     find_herdr,
     guard,
     inspect_target_shell_pane,
+    read_payload_stream,
     require_herdr_env,
     run_herdr_checked,
 )
+from herdr_label import stale_labels
 from herdr_lease import acquire_lease, get_lease, release_lease
 from herdr_prompt import (
     EXIT_WAIT_TIMEOUT,
@@ -73,6 +78,8 @@ class Options(PromptOptions):
     role: str | None = None
     cwd: str | None = None
     model: str | None = None
+    settle: float = DEFAULT_SETTLE_SECONDS
+    allow_unresolvable_sha: list[str] | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -94,9 +101,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TARGET",
         help="callee agent names or pane ids (one or more)",
     )
-    _ = parser.add_argument(
-        "--file",
-        metavar="PATH",
+    add_shared_argument(
+        parser,
+        "file",
         help="ticket payload file (required unless --draft); '-' reads stdin verbatim",
     )
     _ = parser.add_argument(
@@ -104,72 +111,91 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print a ticket skeleton with routing prefilled (or write it to --file); send nothing",
     )
-    _ = parser.add_argument(
-        "--label",
-        metavar="LABEL",
+    add_shared_argument(
+        parser,
+        "label",
         help="exact pane label to resolve to a pane id, instead of TARGET",
     )
-    _ = parser.add_argument(
-        "--wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "wait",
         help="wait for callee to settle after receiving ticket",
     )
-    _ = parser.add_argument(
-        "--no-wait",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "no_wait",
         help="dispatch without waiting; fails when combined with --wait",
     )
-    _ = parser.add_argument(
-        "--until",
-        action="append",
-        metavar="STATUS",
+    add_shared_argument(
+        parser,
+        "until",
         help=f"exact state to match after --wait, repeatable ({PROMPT_STATES})",
     )
-    _ = parser.add_argument(
-        "--timeout",
-        type=int,
-        metavar="MS",
+    add_shared_argument(
+        parser,
+        "timeout",
         help="fail after this many milliseconds",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print herdr's raw JSON response")
-    _ = parser.add_argument("--dry-run", action="store_true", help="print the argv, submit nothing")
-    _ = parser.add_argument(
-        "--no-caller-context",
-        action="store_true",
-        help="send payload verbatim without the Sender/Receiver envelope and reply contract (warns loudly)",
+    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
+    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser,
+        "no_caller_context",
+        help=(
+            "send payload verbatim without the Sender/Receiver envelope and reply contract "
+            "(warns loudly)"
+        ),
     )
     _ = parser.add_argument(
         "--force",
         action="store_true",
         help="bypass active ticket lease checks and dispatch anyway",
     )
-    _ = parser.add_argument(
-        "--auto-start",
-        metavar="KIND",
-        default=None,
+    add_shared_argument(
+        parser,
+        "auto_start",
         help=(
             "bootstrap a missing callee through the herdr-bootstrap contract "
             "(ROLE INVARIANT, kind trust flags, pane cwd) before dispatching; "
             "live agents dispatch with no extra calls"
         ),
     )
-    _ = parser.add_argument(
-        "--role",
-        metavar="ROLE",
-        default=None,
+    add_shared_argument(
+        parser,
+        "role",
         help="role named in the ROLE INVARIANT when --auto-start boots a missing callee",
     )
-    _ = parser.add_argument(
-        "--cwd",
-        metavar="DIR",
-        default=None,
+    add_shared_argument(
+        parser,
+        "cwd",
         help="worktree dir the auto-started callee must start in (pane converges first)",
     )
-    _ = parser.add_argument(
-        "--model",
-        metavar="MODEL",
-        default=None,
+    add_shared_argument(
+        parser,
+        "model",
         help="model for the auto-started callee's agent start",
+    )
+    add_shared_argument(
+        parser,
+        "settle",
+        default=DEFAULT_SETTLE_SECONDS,
+        help=(
+            "seconds to wait after the auto-started callee's fresh `agent start`, before "
+            "dispatching, so a still-initialising pane is not treated as acceptant; "
+            f"0 waits not at all (default: {DEFAULT_SETTLE_SECONDS:g})"
+        ),
+    )
+    _ = parser.add_argument(
+        "--allow-unresolvable-sha",
+        dest="allow_unresolvable_sha",
+        action="append",
+        metavar="TOKEN",
+        default=None,
+        help=(
+            "waive the outbound-SHA guard for one backticked 7-40 hex token that deliberately "
+            "names no commit in this lane (repeatable); every waiver is reported on stderr, so "
+            "it is never a silent bypass"
+        ),
     )
     _ = parser.add_argument(
         "--ticket-id",
@@ -189,15 +215,15 @@ def build_parser() -> argparse.ArgumentParser:
             "Ticket-ID when omitted"
         ),
     )
-    _ = parser.add_argument(
-        "--task-group",
+    add_shared_argument(
+        parser,
+        "task_group",
         metavar="NAME",
-        default=None,
         help="Task Group (Herdr Tab) label for the Hierarchy block; omitted when not given",
     )
-    _ = parser.add_argument(
-        "--verbose",
-        action="store_true",
+    add_shared_argument(
+        parser,
+        "verbose",
         help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
     )
     return parser
@@ -252,9 +278,49 @@ def lease_pane_is_gone(lease: Mapping[str, object], herdr: str, env: Mapping[str
     return live is not None and pane_id not in live
 
 
+def report_stale_labels(herdr: str, env: Mapping[str, str]) -> None:
+    """One advisory stderr line per pane whose agent-shaped label outlived its agent (#234).
+
+    A label is never a target, so an orphaned one misleads a person reading the pane border
+    while a dispatch still keys on identifiers. This issues its own `pane list` and `agent list`
+    snapshots, so the operator needs no separate pass; the remedy it prints,
+    `herdr-label --clear --pane <id>` (or a re-label for the next occupant), acts on the orphan;
+    the re-label template tells the operator to replace its `<name>` placeholder, so a verbatim
+    copy cannot write that literal text as the pane label.
+
+    The report is server-wide by design: `pane list` is the whole Herdr server, so an orphan in
+    another workspace prints on every dispatch in this lane.
+
+    Advisory only: it changes no target, acquires or releases no lease, and interrupts nothing.
+    Positivist evidence (#210): an unreadable or empty inventory is no evidence, so it reports
+    nothing rather than declaring every label stale. Its `except Exception` swallow is silent, so
+    `test_dispatch_reports_a_label_whose_agent_has_exited` is the only detector of a broken
+    inventory key path inside it (mutant M6 dies only there).
+    """
+    try:
+        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    except Exception:
+        # An unreadable inventory answers nothing; stay silent instead of guessing.
+        return
+    for pane_id, label in stale_labels(panes, agents):
+        print(
+            f"herdr-dispatch: pane {pane_id} carries the label {label!r} but no live agent owns "
+            f"it; the label outlived its agent (clear it with `herdr-label --clear --pane "
+            f"{pane_id}`; to hand the pane on, replace `<name>` in `herdr-label <name> --pane "
+            f"{pane_id}` with the new agent's name)",
+            file=sys.stderr,
+        )
+
+
 PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
 DRAFT_MARKER = "herdr-draft: unfilled"
 DRAFT_SECTIONS = ("## Task", "## Context", "## Acceptance criteria")
+# A section ends at the next heading of the same or higher level, matched newline-agnostically:
+# the ticket is validated as the raw delivered bytes, so a lone `\r`, a `\r\n`, and a mixed
+# `\n\r## ` all end a section. An LF-only literal search finds no section end in CR text, so
+# the guard fails open and dispatches an unfilled ticket.
+SECTION_END_RE = re.compile(r"(?:\r\n|\r|\n)#{1,2} ")
 DERIVE_TICKET_ID_RE = re.compile(r"^\d+([-_].+)?$")
 
 
@@ -276,19 +342,20 @@ def find_unfilled_placeholders(ticket: str) -> list[str]:
 
 
 def ticket_is_untouched_skeleton(ticket: str) -> bool:
-    """Check whether every `--draft` semantic section is present and empty."""
+    """Check whether every `--draft` semantic section is present and empty.
+
+    The section boundary is newline-agnostic, so a CR-separated or mixed `\n\r## ` skeleton is
+    refused exactly like an LF one. The validation stays on the raw delivered text: the caller
+    decodes the bytes verbatim, with no universal-newline translation.
+    """
     bodies: list[str] = []
     for section in DRAFT_SECTIONS:
         start = ticket.find(section)
         if start < 0:
             return False
         rest = ticket[start + len(section) :]
-        end = len(rest)
-        for marker in ("\n## ", "\n# "):
-            at = rest.find(marker)
-            if at >= 0:
-                end = min(end, at)
-        bodies.append(rest[:end].strip())
+        match = SECTION_END_RE.search(rest)
+        bodies.append(rest[: match.start() if match else len(rest)].strip())
     return all(body == "" for body in bodies)
 
 
@@ -384,6 +451,7 @@ def run_bootstrap_contract(
     task_group: str | None,
     cwd: str | None,
     model: str | None,
+    settle: float,
     dry_run: bool,
     env: Mapping[str, str],
 ) -> str | None:
@@ -404,6 +472,7 @@ def run_bootstrap_contract(
         task_group=task_group,
         model=model,
         cwd=cwd,
+        settle=settle,
         dry_run=dry_run,
     )
     if dry_run:
@@ -443,6 +512,7 @@ def bootstrap_one_shell_target(
         task_group=options.task_group,
         cwd=options.cwd,
         model=options.model,
+        settle=options.settle,
         dry_run=options.dry_run,
         env=env,
     )
@@ -559,6 +629,7 @@ def dry_run_bootstrap_plans(
 def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
+    report_stale_labels(herdr, env)
     kind = normalize_auto_start_kind(options.auto_start)
     try:
         targets = resolve_targets(options, herdr, env)
@@ -588,13 +659,36 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     if ticket_path is None:
         raise UsageError("pass --file PATH to dispatch a ticket")
     if ticket_path != "-":
-        try:
-            ticket = Path(ticket_path).read_text(encoding="utf-8")
-        except OSError as exc:
-            raise UsageError(
-                f"cannot read ticket file {ticket_path}: {exc.strerror or exc}"
-            ) from exc
+        # The shared payload seam, so the ticket refuses a NUL byte and invalid UTF-8 in the
+        # same sentence `herdr-prompt` and `herdr-reply` use. `tty_refusal` cannot fire from
+        # here: `-` skips this read entirely, because stdin is the payload stream that
+        # `herdr_prompt.read_payload` reads once and verbatim when it prompts the callee, and
+        # reading it here as well would consume it and starve that read.
+        ticket = decode_payload(
+            read_payload_stream(
+                ticket_path,
+                tty_refusal=(
+                    "no --file given and stdin is a terminal; pass --file PATH with the ticket"
+                ),
+            )
+        )
         validate_ticket(ticket)
+        # #247: the dispatcher inlines the ticket file verbatim, so a drifted SHA copy in
+        # the ticket would otherwise reach the callee with no mechanism to detect it. The
+        # same guard as the reply path refuses it here, before any lease is acquired, and
+        # the stdin (`-`) stream stays unchecked: it is read once and verbatim downstream,
+        # and reading it here as well would consume it and starve that read.
+        from herdr_reply import lane_git_dir, require_resolvable_shas
+
+        require_resolvable_shas(
+            ticket,
+            payload_path=ticket_path,
+            waived=options.allow_unresolvable_sha or (),
+            cwd=lane_git_dir(env),
+            env=env,
+            origin="herdr-dispatch",
+            refusal_action="acquire a lease or prompt the callee",
+        )
 
     ticket_id = options.ticket_id or derive_ticket_id(ticket_path)
     task_id = options.task_id or ticket_id

@@ -3,8 +3,11 @@
 Barrier, --any, blocked, and timeout paths run through the shared stub `herdr`;
 `agent get` answers come from scripted per-target state (`agent_get` for static
 status, `agent_get_seq` for a status per poll, indexed by prior poll count).
+Wall-clock-sensitive paths inject a fake monotonic clock, so loop time advances
+only on sleeps.
 """
 
+import functools
 import json
 import shutil
 import subprocess
@@ -303,6 +306,247 @@ def test_wait_times_out_if_subagents_never_clear(stub: StubHarness) -> None:
     assert done.returncode == herdr_cli.EXIT_HERDR
     assert "timed out after 100ms" in done.stderr
     assert "a (idle)" in done.stderr
+
+
+# ── opt-in staleness advisory (#230) ────────────────────────────────────────────────
+
+STALLED = {"a": {"agent_status": "working", "revision": "r5"}}
+
+
+def test_staleness_advisory_is_off_by_default(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The default wait path is unchanged: no advisory unless asked for."""
+    stub.write_state(settled_state(**STALLED))
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" not in captured.err
+    assert "staleness advisory" not in captured.out
+
+
+def test_staleness_advisory_fires_once_per_stall_episode(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One stall, many polls, one report — and it never terminates anything."""
+    stub.write_state(settled_state(**STALLED))
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.001)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    assert captured.err.count("staleness advisory: a has held status") == 1
+    assert "never kills, retries, restarts, or interrupts" in captured.err
+    assert "cooperative, not guaranteed" in captured.err
+
+
+def test_staleness_advisory_opens_a_new_episode_after_progress(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A status change ends the episode, so the next stall reports again."""
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {"a": {"agent_status": "working"}},
+        "agent_get_seq": {"a": ["working", "working", "unknown"]},
+    }
+    stub.write_state(state)
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.001)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    reports = [line for line in captured.err.splitlines() if "has held status" in line]
+    assert len(reports) == 2
+    assert "status working" in reports[0]
+    assert "status unknown" in reports[1]
+
+
+def test_staleness_advisory_rearms_after_a_blip(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A status blip ends the episode, so the re-armed clock restarts at the blip's own poll.
+
+    Fake-clock trace (polls at t=0.0/0.25/0.5/0.75/1.0): `working` at t=0 opens an
+    episode, `unknown` at t=0.25 opens a fresh one, and the two `working` polls that
+    follow hold for 0.25 s each -- never the full 0.6 s window. A clock that never
+    re-arms, or that stamps every episode from the wait start, would fabricate a
+    stall on those last two polls and emit a false advisory.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_seq": {"a": ["working", "unknown", "working", "working"]},
+    }
+    stub.write_state(state)
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.6)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" not in captured.err
+
+
+def test_staleness_advisory_revision_tick_ends_the_episode(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A revision advance is normal progress: it ends the episode, so no false advisory.
+
+    Fake-clock trace with a constant `working` status and revision sequence
+    r1,r1,r2,r2 (polls at t=0/0.25/0.5/0.75/1.0): the tick at t=0.5 opens a fresh
+    episode, leaving the last two polls holding `r2` for 0.25 s and 0.5 s -- both
+    below the 0.6 s window. A status-only comparison that ignores revision would
+    stamp the episode from t=0 and fabricate an advisory at t=0.75.
+    """
+    state = {
+        **DEFAULT_STATE,
+        "agent_get": {"a": {"agent_status": "working"}},
+        "agent_get_rev_seq": {"a": ["r1", "r1", "r2", "r2"]},
+    }
+    stub.write_state(state)
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.6)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" not in captured.err
+
+
+def test_staleness_advisory_issues_only_read_only_calls(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The advisory is warning-only: every herdr call it makes is a read."""
+    stub.write_state(settled_state(**STALLED))
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.001)
+
+    _ = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert "staleness advisory" in captured.err
+    assert {(call[1], call[2]) for call in stub.calls()} == {("agent", "list"), ("agent", "get")}
+
+
+def test_staleness_advisory_rejects_a_non_positive_window(stub: StubHarness) -> None:
+    # `--timeout 500` keeps the pin cheap if a regression stops forwarding `--stale-after`
+    # to `Options`: the wait would then run to a 0.5 s watchdog instead of the 300 s default.
+    done = stub.run("a", "--stale-after", "0", "--timeout", "500", state=settled_state(**STALLED))
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "not positive" in done.stderr
+
+
+def test_staleness_advisory_rejects_a_non_finite_window(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`nan`/`inf` are not durations: refuse them instead of firing on every poll."""
+    stub.write_state(settled_state(**STALLED))
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    for window in ("nan", "inf"):
+        options = herdr_wait.Options(
+            targets=["a"], interval=0.25, timeout=200, stale_after=float(window)
+        )
+        # `wait_agents` raises before the loop; route through `guard` so the
+        # assertion keeps its exit-status meaning (UsageError -> EXIT_USAGE).
+        rc = herdr_cli.guard(
+            "herdr-wait", functools.partial(herdr_wait.wait_agents, options, stub.base_env())
+        )
+        err = capsys.readouterr().err
+
+        assert rc == herdr_cli.EXIT_USAGE
+        assert "finite" in err
+
+
+@pytest.mark.parametrize("window", ["nan", "inf"])
+def test_staleness_advisory_rejects_a_non_finite_window_from_argv(
+    stub: StubHarness, window: str
+) -> None:
+    """The finite-duration guard is reachable from argv, not only from a built `Options`."""
+    done = stub.run(
+        "a", "--stale-after", window, "--timeout", "500", state=settled_state(**STALLED)
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "must be a finite number of seconds" in done.stderr
+    assert f"not {window}" in done.stderr
+
+
+def test_staleness_advisory_honours_the_window(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A window longer than the observed stall stays silent: a report needs a full window."""
+    stub.write_state(settled_state(**STALLED))
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=60)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" not in captured.err
+
+
+def test_staleness_advisory_window_reaches_the_loop_from_argv(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--stale-after` reaches the loop as the seconds asked for, not 1000x them.
+
+    Seam: `herdr_wait.main` is the CLI entry point; it parses argv into `Options` and
+    calls the module-level `wait_agents`. Wrapping that global records the parsed
+    window, then delegates to the real loop on the fake clock. A 1000x converter
+    (`float(value) * 1000`) would hand the loop 600.0 for `--stale-after 0.6`, so the
+    0.6 s stall below would never fire the advisory and the recorded window would be
+    600.0 instead of 0.6.
+    """
+    stub.write_state(settled_state(**STALLED))
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    seen: dict[str, float | None] = {}
+    real_wait = herdr_wait.wait_agents
+
+    def spy(options: herdr_wait.Options, env: dict[str, str]) -> int:
+        seen["stale_after"] = options.stale_after
+        return real_wait(options, env)
+
+    _ = monkeypatch.setattr(herdr_wait, "wait_agents", spy)
+    rc = herdr_wait.main(
+        ["a", "--interval", "0.25", "--timeout", "1000", "--stale-after", "0.6"],
+        stub.base_env(),
+    )
+    err = capsys.readouterr().err
+
+    assert seen["stale_after"] == 0.6
+    assert rc == herdr_cli.EXIT_HERDR
+    assert "staleness advisory" in err
+
+
+def test_staleness_advisory_never_changes_the_settle_path(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Armed advisory, target settles on a later poll: exit 0 on a clean stdout table."""
+    state = {
+        **DEFAULT_STATE,
+        "agent_get_seq": {"a": ["working", "done"]},
+    }
+    stub.write_state(state)
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a"], interval=0.25, timeout=1000, stale_after=0.001)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_OK, captured.err
+    assert any(line.split()[:2] == ["a", "done"] for line in captured.out.splitlines())
+    assert "staleness advisory" not in captured.out
 
 
 def test_any_exits_on_first_settled_target(stub: StubHarness) -> None:

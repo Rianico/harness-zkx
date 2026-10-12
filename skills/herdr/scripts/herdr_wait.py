@@ -29,6 +29,14 @@ the watchdog: ANY held target in barrier mode, ALL held in ``--any`` mode.
 A watchdog ``--timeout`` (default 300s) always applies; expiry exits 1 naming the
 unsettled targets.
 
+An opt-in ``--stale-after SEC`` advisory (#230) reports a target once per stall episode —
+status and revision unchanged for that long (the clock restarts each time the status/revision
+pair changes, and starts at the target's first sighting, so a target already stalled still waits
+a further full window) — and never kills, retries, restarts, or
+interrupts it. It collects evidence only: it never establishes a result, and completion for
+a pane this skill did not launch is cooperative, not guaranteed.
+
+
 Exit status: 0 settled, 1 herdr failure or timeout, 2 usage, missing precondition,
 or an unsatisfiable wait (revision-0 weakly-recognized targets), 3 a target needs
 human input (blocked).
@@ -40,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -55,6 +64,7 @@ from herdr_cli import (
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
+    add_shared_argument,
     decode_response,
     entries,
     entry_optional_text,
@@ -83,6 +93,7 @@ class Options:
     interval: float = DEFAULT_INTERVAL_S
     hold_interval: float = DEFAULT_HOLD_WARN_INTERVAL_S
     json: bool = False
+    stale_after: float | None = None
 
 
 @dataclass
@@ -113,18 +124,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="exit 0 when ANY target settles instead of ALL (default is barrier mode)",
     )
-    _ = parser.add_argument(
-        "--until",
-        action="append",
+    add_shared_argument(
+        parser,
+        "until",
         default=[],
-        metavar="STATUS",
         help=f"exact state to match, repeatable (default: {', '.join(DEFAULT_SETTLED)})",
     )
-    _ = parser.add_argument(
-        "--timeout",
-        type=int,
+    add_shared_argument(
+        parser,
+        "timeout",
         default=DEFAULT_TIMEOUT_MS,
-        metavar="MS",
         help=f"watchdog: fail after this many milliseconds (default {DEFAULT_TIMEOUT_MS})",
     )
     _ = parser.add_argument(
@@ -141,7 +150,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SEC",
         help=f"heartbeat period in seconds for held revision 0 targets (default {DEFAULT_HOLD_WARN_INTERVAL_S})",
     )
-    _ = parser.add_argument("--json", action="store_true", help="print a machine-readable summary")
+
+    _ = parser.add_argument(
+        "--stale-after",
+        type=float,
+        default=None,
+        metavar="SEC",
+        help=(
+            "opt-in staleness advisory: report a target once per stall episode (status and "
+            "revision unchanged for SEC seconds; the window restarts each time the "
+            "status/revision pair changes and starts at the first sighting, so an already-stalled "
+            "target still waits a full window); warning only, never kills, retries, or restarts"
+        ),
+    )
+    add_shared_argument(parser, "json", help="print a machine-readable summary")
     return parser
 
 
@@ -295,6 +317,14 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
         raise UsageError(f"--interval {options.interval} is not positive")
     if options.hold_interval <= 0:
         raise UsageError(f"--hold-interval {options.hold_interval} is not positive")
+
+    if options.stale_after is not None:
+        if not math.isfinite(options.stale_after):
+            raise UsageError(
+                f"--stale-after must be a finite number of seconds, not {options.stale_after:g}"
+            )
+        if options.stale_after <= 0:
+            raise UsageError(f"--stale-after {options.stale_after} is not positive")
     if len(set(options.targets)) != len(options.targets):
         raise UsageError("duplicate TARGETs; list each agent once")
     wanted = resolve_until(options.until)
@@ -307,6 +337,10 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
     held_targets: set[str] = set()
     hold_start: dict[str, float] = {}
     hold_last_warn: dict[str, float] = {}
+
+    stall_seen: dict[str, tuple[str, str | None]] = {}
+    stall_since: dict[str, float] = {}
+    stall_reported: set[str] = set()
     try:
         agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
         for a in agents:
@@ -387,6 +421,31 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
                 del hold_start[target]
                 _ = hold_last_warn.pop(target, None)
 
+        if options.stale_after is not None:
+            for snap in snaps:
+                target = snap.target
+                observed = (snap.status, snap.revision)
+                settled_now = is_settled(snap, wanted) or target in held_now
+                if settled_now or stall_seen.get(target) != observed:
+                    # Progress, a stop, or the first sighting: open a fresh episode.
+                    stall_seen[target] = observed
+                    stall_since[target] = now
+                    stall_reported.discard(target)
+                    continue
+                stalled_for = now - stall_since[target]
+                if target in stall_reported or stalled_for < options.stale_after:
+                    continue
+                stall_reported.add(target)
+                print(
+                    f"herdr-wait: staleness advisory: {target} has held status {snap.status} "
+                    f"revision {snap.revision or '-'} for {stalled_for:.1f}s "
+                    f"(--stale-after {options.stale_after:g}s); nothing has advanced it in that window.\n"
+                    "herdr-wait: staleness advisory: collect evidence yourself (read the pane, prompt the "
+                    "target, check its transcript). This helper never kills, retries, restarts, or interrupts "
+                    "a target and never establishes a result; for a pane this skill did not launch, "
+                    "completion is cooperative, not guaranteed.",
+                    file=sys.stderr,
+                )
         if unsatisfiable:
             emit(snaps, as_json=options.json)
             names = ", ".join(sorted(held_now))

@@ -12,6 +12,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import herdr_bootstrap
 import herdr_cli
 import herdr_prompt
 import pytest
@@ -751,6 +752,77 @@ def test_reply_contract_without_agent_is_unaddressable() -> None:
     assert "herdr agent prompt w9:p2" not in contract
 
 
+def test_reply_contract_binds_a_derived_ticket_with_the_ticket_flag() -> None:
+    """#246 E1.1: a known ticket id is rendered, shell-quoted, as `--ticket=<id>`.
+
+    Old role: asserted the exact unquoted substring `--ticket #182-…` in the rendered contract.
+    E1.1-rework role: asserted the quoted space-form substring `--ticket '#182-…'` and that
+    the unquoted form is absent — the unit counterpart of the shell witness pin.
+    New role (herdr228-p3#P2): asserts the `=`-form substring `--ticket='#182-…'`, so a
+    leading-dash id cannot be parsed as a flag, and that both space forms are absent.
+    """
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    bound = herdr_prompt.render_reply_contract(sender, "#182-herdr-msg-enhance")
+    assert "\"<STATUS> <artifacts> <issues>\" --ticket='#182-herdr-msg-enhance'" in bound
+    assert "\"<STATUS> <artifacts> <issues>\" --ticket '#182-herdr-msg-enhance'" not in bound
+    assert '"<STATUS> <artifacts> <issues>" --ticket #182-herdr-msg-enhance' not in bound
+
+
+def test_reply_contract_without_a_ticket_omits_the_flag() -> None:
+    """#246 E1.1 pin 3 (unit): an absent ticket id renders the pre-change contract, no crash."""
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    assert "--ticket" not in herdr_prompt.render_reply_contract(sender)
+    assert "--ticket" not in herdr_prompt.render_reply_contract(sender, None)
+
+
+def test_reply_contract_points_at_this_trees_helper_not_a_foreign_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#241 P2-B: the sibling rule tells this tree's helper from an existing foreign one.
+
+    `is_file()` passes for ANY existing path, so the old pin stayed green when the rendered
+    helper pointed at the resolved foreign copy — the original defect in its resolved shape.
+    A foreign file that exists satisfies the old assertion and fails the sibling rule, which
+    is exactly the discrimination the pin was missing.
+
+    Mutant killed: point any rendered REPLY_HELPER at an existing foreign `herdr_reply.py`
+    — the sibling assertions at the render sites fail while every `is_file()` assertion
+    still passes.
+    """
+    foreign = tmp_path / "herdr_reply.py"
+    _ = foreign.write_text("# a foreign copy that exists\n", encoding="utf-8")
+    assert foreign.is_file()
+    assert foreign.resolve().parent != SCRIPTS_DIR
+    monkeypatch.setattr(herdr_prompt, "REPLY_HELPER", foreign)
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    contract = herdr_prompt.render_reply_contract(sender, "#182-test")
+    match = re.search(r'uv run "([^"]+)"', contract)
+    assert match, contract
+    assert Path(match.group(1)).is_file()  # the old pin: blind to this mutant
+    assert Path(match.group(1)).resolve().parent != SCRIPTS_DIR  # the new rule catches it
+
+
+def test_reply_contract_documents_the_sha_guard_waiver_with_a_quoted_example() -> None:
+    """herdr228-p3#P1: the rendered contract names the sanctioned waiver route in prose.
+
+    A callee quoting a review id (an eight-hex record such as 0c81f04c, which names no
+    commit) meets the broad #247 trigger, so the contract itself must tell the callee the
+    sanctioned route: waive the token by name with `--allow-unresolvable-sha`. The example
+    is itself single-quoted, so it survives copy-paste as one shell word — an unquoted
+    placeholder would be a parse error where the callee pastes it (review 399f6102) — and
+    the guidance is prose, never a shell template, so nothing pasted from it widens the
+    waiver. Mutant: delete the guidance and this pin fails on the missing flag name.
+    """
+    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="reviewer")
+    for contract in (
+        herdr_prompt.render_reply_contract(sender, "#228-waiver-doc"),
+        herdr_prompt.render_reply_contract(sender),
+    ):
+        assert "--allow-unresolvable-sha" in contract
+        assert "'0c81f04c'" in contract
+        assert "<TOKEN>" not in contract
+
+
 def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
@@ -768,14 +840,20 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
         "Protocol:",
         f"  {herdr_prompt.SKILL_NOTICE}",
     ]
-    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in text
+    assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
+    assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
+    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
     assert "Group: [reviewer@w9:p1]" in text
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "\n\nhi\n\n" in text
-    assert (
-        'uv run ~/.agents/skills/herdr/scripts/herdr_reply.py reviewer "<STATUS> <artifacts> <issues>"'
-        in text
-    )
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
+    assert reply, text
+    assert Path(reply.group(1)).is_file(), reply.group(1)
+    # #241 P2-B (new pin): the helper must be THIS tree's sibling script, not merely an
+    # existing path — `is_file()` passes for a foreign copy too, so it cannot tell the
+    # resolved foreign referent (the original defect) from the correct one.
+    assert Path(reply.group(1)).resolve().parent == SCRIPTS_DIR, reply.group(1)
+    assert "~/.agents" not in text
 
 
 def test_resolve_caller_extracts_kind_without_a_runtime_block(
@@ -898,8 +976,14 @@ def test_dry_run_renders_caller_payload_without_prompting(
         f"  {herdr_prompt.SKILL_NOTICE}",
     ]
     assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in argv[4]
-    assert "Herdr: see skill ~/.agents/skills/herdr/SKILL.md" in argv[4]
-    assert "~/.agents/skills/herdr/scripts/herdr_reply.py reviewer" in argv[4]
+    assert "${herdr_skill}" in argv[4]
+    reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', argv[4])
+    assert reply, argv[4]
+    assert Path(reply.group(1)).is_file(), reply.group(1)
+    # #241 P2-B (new pin): same sibling rule as above — an existing foreign path is not
+    # this tree's helper.
+    assert Path(reply.group(1)).resolve().parent == SCRIPTS_DIR, reply.group(1)
+    assert "~/.agents" not in argv[4]
 
 
 def test_dry_run_opt_out_renders_verbatim(stub: StubHarness, tmp_path: Path) -> None:
@@ -1100,7 +1184,64 @@ def test_preflight_timeout_aborts_before_prompting(
     err = capsys.readouterr().err
     assert "did not settle for prompt delivery" in err
     assert "last status=working" in err
-    assert "auth/approval dialog" in err
+    assert "dialog" not in err.lower()
+    assert "BUSY" in err
+
+
+def test_preflight_timeout_reports_observed_busy_without_dialog_guess(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 1 (#249): a working target's refusal reports the observation, never a hypothesis.
+
+    Mutant killed: restore the dialog-guess wording, so the refusal again claims an
+    auth/approval dialog for a merely busy pane — the `dialog` absence assertion fails.
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state({**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert len(slept) == 49
+    err = capsys.readouterr().err
+    assert "did not settle for prompt delivery" in err
+    assert "working" in err
+    assert "dialog" not in err.lower()
+    assert "BUSY" in err
+    assert "longer interval" in err
+
+
+def test_preflight_timeout_names_blocked_on_input_with_evidence(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 2 (#249): interactive_ready=false refusal names BLOCKED-ON-INPUT with evidence."""
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["working"]},
+            "agent_get_ready_seq": {"reviewer": [False]},
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert len(slept) == 49
+    err = capsys.readouterr().err
+    assert "did not settle for prompt delivery" in err
+    assert "BLOCKED-ON-INPUT" in err
+    assert "interactive_ready=false" in err
 
 
 def test_no_wait_handshake_confirms_acceptance(
@@ -1164,3 +1305,342 @@ def test_preflight_respects_explicit_interactive_ready_false(
     assert code == herdr_cli.EXIT_OK
     assert len(stub.prompts()) == 1
     assert len(slept) == 1
+
+
+# ── #238: a revision-0 kind is not told to re-check a state that cannot move ────────
+
+
+def _agy_idle_state(**extra: object) -> dict[str, object]:
+    """DEFAULT_STATE with the reviewer running as agy: a revision that never moves."""
+    return {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "agy", "agent_status": "idle"}
+        ],
+        "agent_get_seq": {"reviewer": ["idle"]},
+        "agent_get_rev_seq": {"reviewer": ["r0"] * 40},
+        **extra,
+    }
+
+
+def test_unconfirmed_warning_drops_herdr_wait_for_a_revision_static_kind(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 4 (#238): the unconfirmed-acceptance warning stops naming `herdr-wait` where the
+    target's kind can never move its revision, and still names it for an ordinary target.
+
+    Mutant killed: drop the `revision_can_move` branch, so the warning always reads "check with
+    herdr-wait before resubmitting" — the agy half then names `herdr-wait` and fails.
+    """
+
+    def no_sleep(seconds: float) -> None:
+        """Swallow the handshake tick; this test only inspects the warning text."""
+
+    monkeypatch.setattr(herdr_prompt, "_sleep", no_sleep)
+
+    stub.write_state(_agy_idle_state())
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    agy_err = capsys.readouterr().err
+    assert "acceptance was not confirmed" in agy_err
+    assert "herdr-agy-bridge" in agy_err, "the honest remedy must be named"
+    assert "herdr-wait" not in agy_err, (
+        "a revision-0 kind must not be sent to an unsatisfiable wait"
+    )
+
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["idle"]},
+            "agent_get_rev_seq": {"reviewer": ["r1"] * 40},
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert "herdr-wait" in capsys.readouterr().err
+
+
+def test_wait_timeout_advice_drops_herdr_wait_for_a_revision_static_kind(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The wait-timeout advice names `herdr-wait` only where the revision can move (#238)."""
+    error = {"code": "timeout", "message": "wait timed out after 120000ms"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--wait",
+        "--timeout",
+        "120000",
+        state=_agy_idle_state(prompt_error=error),
+    )
+
+    assert done.returncode == herdr_prompt.EXIT_WAIT_TIMEOUT
+    assert "Yield turn and await reply callback" in done.stderr
+    assert "herdr-agy-bridge" in done.stderr
+    assert "herdr-wait" not in done.stderr
+
+
+# ── #238: the revision-static remedy is derived from the kind, not a constant ──────
+
+# Two revision-static kinds, each with its OWN bridge. The remedy must read the target kind's
+# contract, so a second revision-static kind is never sent to the agy bridge.
+_TWO_STATIC_KIND_CONFIG = """\
+agy:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+  lifecycle_bridge: herdr-agy-bridge
+maki:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+  lifecycle_bridge: herdr-maki-bridge
+"""
+
+_STATIC_KIND_CASES = (
+    ("agy", "herdr-agy-bridge", "herdr-maki-bridge"),
+    ("maki", "herdr-maki-bridge", "herdr-agy-bridge"),
+)
+
+
+def _two_static_kind_config(tmp_path: Path) -> Path:
+    """Write the fixture kinds.yaml and return its path for `herdr_bootstrap.KINDS_CONFIG`."""
+    path = tmp_path / "kinds.yaml"
+    _ = path.write_text(_TWO_STATIC_KIND_CONFIG, encoding="utf-8")
+    return path
+
+
+def _static_kind_state(kind: str, **extra: object) -> dict[str, object]:
+    """DEFAULT_STATE with the reviewer running as `kind`: a revision that never moves."""
+    return {
+        **DEFAULT_STATE,
+        "agents": [{"pane_id": "w9:p1", "name": "reviewer", "agent": kind, "agent_status": "idle"}],
+        "agent_get_seq": {"reviewer": ["idle"]},
+        "agent_get_rev_seq": {"reviewer": ["r0"] * 40},
+        **extra,
+    }
+
+
+@pytest.mark.parametrize(("kind", "own_bridge", "other_bridge"), _STATIC_KIND_CASES)
+def test_unconfirmed_warning_remedy_names_the_kinds_own_bridge(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    kind: str,
+    own_bridge: str,
+    other_bridge: str,
+) -> None:
+    """Pin 5 (#238): the unconfirmed-acceptance remedy is derived from the target kind, so a
+    second revision-static kind is pointed at its own bridge, never at the agy bridge.
+
+    Mutant killed: hardcode `herdr-agy-bridge` in the remedy again — the `maki` case then names
+    the agy bridge and fails on `other_bridge not in err`.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _two_static_kind_config(tmp_path))
+
+    def no_sleep(seconds: float) -> None:
+        """Swallow the handshake tick; this test only inspects the warning text."""
+
+    monkeypatch.setattr(herdr_prompt, "_sleep", no_sleep)
+
+    stub.write_state(_static_kind_state(kind))
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    err = capsys.readouterr().err
+    assert "acceptance was not confirmed" in err
+    assert own_bridge in err, f"the {kind} bridge must be named for its own kind"
+    assert other_bridge not in err, "a kind must never be sent to another kind's bridge"
+    assert "herdr-wait" not in err
+
+
+@pytest.mark.parametrize(("kind", "own_bridge", "other_bridge"), _STATIC_KIND_CASES)
+def test_wait_timeout_remedy_names_the_kinds_own_bridge(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    own_bridge: str,
+    other_bridge: str,
+) -> None:
+    """Pin 6 (#238): the wait-timeout advice derives the bridge from the target kind too, so
+    the second call site cannot keep naming one kind's bridge while the first is generalised.
+
+    Mutant killed: hardcode `herdr-agy-bridge` at the timeout site — the `maki` case then names
+    the agy bridge and fails on `other_bridge not in done.stderr`.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _two_static_kind_config(tmp_path))
+    error = {"code": "timeout", "message": "wait timed out after 120000ms"}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--wait",
+        "--timeout",
+        "120000",
+        state=_static_kind_state(kind, prompt_error=error),
+    )
+
+    assert done.returncode == herdr_prompt.EXIT_WAIT_TIMEOUT
+    assert own_bridge in done.stderr, f"the {kind} bridge must be named for its own kind"
+    assert other_bridge not in done.stderr, "a kind must never be sent to another kind's bridge"
+    assert "herdr-wait" not in done.stderr
+
+
+# ── #241: both branches of the revision-static advice, against the real kind contract ──
+
+AGY_BRIDGE = "herdr-agy-bridge"
+NEUTRAL_SURFACE = "the kind's own status surface"
+
+# A second revision-static kind that declares NO bridge. The real config has no such kind
+# (every real kind either moves its revision or declares a bridge), so the neutral branch
+# is pinned here on a fixture and on the real config's bridge-less kinds below.
+_BRIDGELESS_STATIC_KIND_CONFIG = """\
+agy:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+  lifecycle_bridge: herdr-agy-bridge
+maki:
+  trust_flags: []
+  invariant: file
+  revision_moves: false
+"""
+
+
+def _real_kind_names() -> list[str]:
+    """Every kind key declared in the real `skills/herdr/references/kinds.yaml`, in file order."""
+    return [
+        line[:-1]
+        for line in herdr_bootstrap.KINDS_CONFIG.read_text(encoding="utf-8").splitlines()
+        if re.fullmatch(r"[A-Za-z0-9_-]+:", line)
+    ]
+
+
+def test_kind_lifecycle_bridge_reads_only_the_real_configs_bridge() -> None:
+    """Pin 7 (#241): the bridge is a per-kind fact read from the REAL kinds.yaml.
+
+    Measured at 4df1fd4a: `agy` is the only real kind declaring `lifecycle_bridge`, so it is
+    the only kind whose advice may name a bridge, and it names its own.
+    """
+    bridged = [kind for kind in _real_kind_names() if herdr_prompt.kind_lifecycle_bridge(kind)]
+    assert bridged == ["agy"], "the real config declares exactly one bridge kind"
+    assert herdr_prompt.kind_lifecycle_bridge("agy") == AGY_BRIDGE
+    assert herdr_prompt.revision_static_surface("agy") == (
+        f"the agy bridge's status title ({AGY_BRIDGE})"
+    )
+
+
+def test_revision_static_surface_is_bridge_neutral_for_every_bridgeless_real_kind() -> None:
+    """Pin 8 (#241): the neutral branch of the real config: phrasing that names no bridge.
+
+    `pi`, `claude`, `cline`, `codex`, `copilot`, and `qodercli` all declare no bridge, and
+    none of them may be sent to `agy`'s.
+
+    Mutant killed: drop the `if bridge:` guard in `revision_static_surface` — every kind here
+    then renders `the <kind> bridge's status title` and this test fails.
+    """
+    neutral_kinds = [kind for kind in _real_kind_names() if kind != "agy"]
+    assert neutral_kinds, "the real config must still carry bridge-less kinds to pin here"
+    for kind in neutral_kinds:
+        advice = herdr_prompt.revision_static_surface(kind)
+        assert advice == NEUTRAL_SURFACE, kind
+        assert "bridge" not in advice, kind
+        assert AGY_BRIDGE not in advice, kind
+
+
+def test_revision_static_surface_stays_neutral_when_the_kind_is_unresolved(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Pin 9 (#241): `None`, a blank name, an unknown kind, an unreadable and a malformed
+    config all read as no bridge, so none of them borrows a real kind's bridge.
+
+    Mutant killed: fall back to another kind's bridge when the kind declares none or cannot
+    be resolved — the `AGY_BRIDGE not in advice` assertions here fail.
+    """
+    for probe in (None, "", "no-such-kind"):
+        advice = herdr_prompt.revision_static_surface(probe)
+        assert advice == NEUTRAL_SURFACE, probe
+        assert "bridge" not in advice, probe
+        assert AGY_BRIDGE not in advice, probe
+
+    unreadable = tmp_path / "missing-kinds.yaml"
+    malformed = tmp_path / "malformed-kinds.yaml"
+    _ = malformed.write_text("agy:\n  invariant: nope\n", encoding="utf-8")
+    for path in (unreadable, malformed):
+        monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", path)
+        advice = herdr_prompt.revision_static_surface("agy")
+        assert advice == NEUTRAL_SURFACE, path
+        assert "bridge" not in advice, path
+        assert AGY_BRIDGE not in advice, path
+
+
+def _bridgeless_static_kind_config(tmp_path: Path) -> Path:
+    """Write the one-bridged/one-bridgeless fixture and return its path."""
+    path = tmp_path / "kinds.yaml"
+    _ = path.write_text(_BRIDGELESS_STATIC_KIND_CONFIG, encoding="utf-8")
+    return path
+
+
+def test_a_bridgeless_static_kind_is_never_sent_to_another_kinds_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin 10 (#241): the cross-kind promise, on a kind that declares none.
+
+    The existing pair (`_STATIC_KIND_CASES`) covers two kinds that each declare a bridge; this
+    covers the kind that declares none, which must read as neutral while its neighbour keeps
+    naming its own bridge.
+
+    Mutant killed: return the first declared bridge when the kind declares none — `maki` then
+    renders `herdr-agy-bridge` and the `AGY_BRIDGE not in` assertion fails.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _bridgeless_static_kind_config(tmp_path))
+    maki = herdr_prompt.revision_static_surface("maki")
+    assert maki == NEUTRAL_SURFACE
+    assert AGY_BRIDGE not in maki
+    assert herdr_prompt.revision_static_surface("agy") == (
+        f"the agy bridge's status title ({AGY_BRIDGE})"
+    )
+
+
+def test_unconfirmed_warning_renders_the_neutral_advice_for_a_bridgeless_static_kind(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pin 11 (#241): the RENDERED warning for a revision-static kind with no bridge.
+
+    Mutant killed: drop the `if bridge:` guard, so this warning claims a `maki bridge's status
+    title` that does not exist and `"bridge" not in err` fails.
+    """
+    monkeypatch.setattr(herdr_bootstrap, "KINDS_CONFIG", _bridgeless_static_kind_config(tmp_path))
+
+    def no_sleep(seconds: float) -> None:
+        """Swallow the handshake tick; this test only inspects the warning text."""
+
+    monkeypatch.setattr(herdr_prompt, "_sleep", no_sleep)
+
+    stub.write_state(_static_kind_state("maki"))
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    err = capsys.readouterr().err
+    assert "acceptance was not confirmed" in err
+    assert NEUTRAL_SURFACE in err
+    assert "bridge" not in err, "a bridge-less kind must not be told to read a bridge"
