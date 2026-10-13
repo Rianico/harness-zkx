@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **herdr:** deepen three seams — envelope message packaging, a store-owned verified reply transaction (`save_verified_reply` with auto-discard and degraded fallback), and a unified agent-observation seam (`observe_agent`, `has_active_subagents`, `is_agent_settled`) shared by `herdr-wait` and `herdr-prompt`; callers keep re-exports, rendered bytes and CLI exit statuses unchanged (#258)
 * **herdr:** render a `---` paging delimiter between the script-built envelope and the payload in `herdr-prompt` and `herdr-reply`, so transport headers never blur into message content (#255)
 * **herdr:** harden lane coordination facts end to end (single lease store, completion evidence, reply authority, asserted documented contract) — spec #228 and follow-ons, full gate green (#254)
 * **herdr:** refuse to append the role invariant to a version-controlled `AGENTS.md`/`.clinerules` (exit 2 naming the file and the `--allow-tracked-invariant` override), skip the write when the exact block is already committed, and report the tracked verdict in `--dry-run` ([#233](https://github.com/Rianico/harness-zkx/issues/233)) (#254)
