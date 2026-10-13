@@ -306,8 +306,8 @@ INVARIANT_HEADER = (
     "Follow the lane coordination pattern."
 )
 INVARIANT_RULES = (
-    "Subagent-First: MUST delegate deep search, multi-file edits, and test triage to "
-    "subagents.\n"
+    "Subagent-First: MUST delegate exploration, drafting, research, and triage to subagents as "
+    "drafts; main session synthesizes, verifies, and evaluates.\n"
     "Reply Contract: MUST reply via `uv run {helper} <caller> --file <reply.md>` on completion "
     "or blocker; never exit silently."
 )

@@ -138,25 +138,22 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
+from herdr_envelope import render_envelope, render_prelude
 from herdr_lease import (
     REPLIES_DIR_LANE,
-    check_reply_store,
-    discard_reply,
     get_lease,
     get_reply,
     get_task,
     list_tasks,
     record_event,
-    record_reply,
     release_lease,
     resolve_base_dir,
+    save_verified_reply,
     state_is_readable,
 )
 from herdr_prompt import (
-    render_envelope,
     resolve_caller,
     resolve_receiver,
-    utc_stamp,
 )
 
 BLOCKED = "blocked"
@@ -965,35 +962,11 @@ def persist_reply(
     unresolvable anchor; a resolvable store that fails is reported once via
     `report_lease_trouble` and degrades the same way. The reply is delivered either way.
 
-    Two orderings carry the honesty of the pointer (#231 F2): the index is *read* before
-    anything is written, so a store whose index cannot be parsed leaves no half-record behind
-    (the damaged file is preserved, not clobbered); and the row that was written is
-    re-resolved through the same `get_reply` the reader uses, so a pointer is only ever
-    delivered for a record the reader can produce — one that does not resolve is discarded.
+    The transaction itself — record, re-resolve through the reader, discard what does not
+    resolve (#231 F2) — is owned by the store: `herdr_lease.save_verified_reply`. This
+    caller only supplies the trouble report the pointer contract demands.
     """
-    try:
-        _ = resolve_base_dir(env=env)
-    except Exception as exc:
-        return None, _one_line(str(exc))
-    try:
-        check_reply_store(env=env)
-    except Exception as exc:
-        report_lease_trouble("reply record", exc)
-        return None, _one_line(str(exc))
-    try:
-        stored = record_reply(entry, body, env=env)
-    except Exception as exc:
-        report_lease_trouble("reply record", exc)
-        return None, _one_line(str(exc))
-    try:
-        resolved = get_reply(str(stored["id"]), env=env)
-    except Exception as exc:
-        report_lease_trouble("reply record lookup", exc)
-        resolved = None
-    if resolved is None:
-        discard_reply(str(stored["id"]), env=env)
-        return None, "the record did not resolve through the reader"
-    return resolved, None
+    return save_verified_reply(entry, body, env=env, on_trouble=report_lease_trouble)
 
 
 def pointer_block(
@@ -1752,7 +1725,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     shape, heading = payload_shape(payload)
     # The pointer and the index row carry the same bounded label, never the heading text.
     evidence = evidence_label(heading)
-    prelude = f"{utc_stamp()}\n{reply_envelope}\n---\n\n"
+    prelude = render_prelude(reply_envelope)
     record_id: str | None = None
     if options.dry_run:
         # A dry run submits nothing, so it records nothing: the payload stays pointer-free.

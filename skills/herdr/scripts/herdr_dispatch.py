@@ -376,7 +376,8 @@ def validate_ticket(ticket: str) -> None:
 
 def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, str]) -> str:
     """Render a ticket skeleton; routing comes from live state, sections stay empty for the model."""
-    from herdr_prompt import resolve_caller, sender_ref, utc_stamp
+    from herdr_envelope import sender_ref, utc_stamp
+    from herdr_prompt import resolve_caller
 
     sender = resolve_caller(herdr, env)
     lines = [

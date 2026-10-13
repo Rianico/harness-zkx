@@ -1,6 +1,6 @@
 """Pin the single-sourced reply-helper derivation across the herdr helper scripts.
 
-`herdr_bootstrap.py`, `herdr_prompt.py`, and `herdr_reply.py` each render a command that runs
+`herdr_bootstrap.py`, `herdr_envelope.py`, and `herdr_reply.py` each render a command that runs
 this tree's `herdr_reply.py`. The value is derived once, in the shared seam
 `herdr_cli.reply_helper()`, so no module can silently name another worktree's helper.
 
@@ -27,14 +27,14 @@ from types import ModuleType
 
 import herdr_bootstrap
 import herdr_cli
-import herdr_prompt
+import herdr_envelope
 import herdr_reply
 import pytest
 
 from tests.herdr.stub import SCRIPTS_DIR
 
-MODULES = (herdr_bootstrap, herdr_prompt, herdr_reply)
-MODULE_IDS = ("herdr_bootstrap", "herdr_prompt", "herdr_reply")
+MODULES = (herdr_bootstrap, herdr_envelope, herdr_reply)
+MODULE_IDS = ("herdr_bootstrap", "herdr_envelope", "herdr_reply")
 
 
 def _module_dir(module: ModuleType) -> Path:
@@ -77,12 +77,12 @@ def test_invariant_contract_names_this_trees_helper() -> None:
 
 
 def test_envelope_reply_contract_names_this_trees_helper() -> None:
-    sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="lane", agent="reviewer")
-    text = herdr_prompt.render_reply_contract(sender)
+    sender = herdr_envelope.CallerContext(pane_id="w1:p1", label="lane", agent="reviewer")
+    text = herdr_envelope.render_reply_contract(sender)
     named = _helper_named_by(text, r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"')
-    assert named.resolve().parent == _module_dir(herdr_prompt)
+    assert named.resolve().parent == _module_dir(herdr_envelope)
     assert named.name == "herdr_reply.py"
-    assert named.resolve() == Path(herdr_prompt.REPLY_HELPER).resolve()
+    assert named.resolve() == Path(herdr_envelope.REPLY_HELPER).resolve()
     assert "~/.agents" not in text
 
 

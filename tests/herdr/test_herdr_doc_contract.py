@@ -773,7 +773,7 @@ SHA_GUARD_CITATION_SITES: tuple[tuple[Path, str], ...] = (
         "is an instruction, and an instruction that names no",
     ),
     (
-        SCRIPTS_DIR / "herdr_prompt.py",
+        SCRIPTS_DIR / "herdr_envelope.py",
         "trigger, so without guidance the reply is refused with no sanctioned next",
     ),
     (

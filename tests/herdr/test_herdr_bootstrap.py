@@ -58,11 +58,11 @@ def test_snippet_stays_within_the_word_budget() -> None:
     assert len(herdr_bootstrap.render_invariant("Implementer").split()) <= 80
 
 
-def test_coordination_snippet_stays_within_the_45_word_budget() -> None:
-    """A coordination-only role pays nothing for the implementer block: the cap stays 45."""
-    assert len(herdr_bootstrap.render_invariant("tm").split()) == 45
+def test_coordination_snippet_stays_within_the_55_word_budget() -> None:
+    """A coordination-only role pays nothing for the implementer block: the cap stays 55."""
+    assert len(herdr_bootstrap.render_invariant("tm").split()) == 51
     for role in ("msg-tm", "herdr228-task-manager"):
-        assert len(herdr_bootstrap.render_invariant(role).split()) <= 45
+        assert len(herdr_bootstrap.render_invariant(role).split()) <= 55
 
 
 def test_scoped_implementer_names_carry_the_cooperation_contract() -> None:
@@ -811,6 +811,9 @@ def test_kinds_config_loads_the_verified_kinds() -> None:
     assert table["pi"] == herdr_bootstrap.KindEntry(("--approve",), True, "--append-system-prompt")
     assert table["claude"] == herdr_bootstrap.KindEntry(
         ("--dangerously-skip-permissions",), True, "--append-system-prompt-file"
+    )
+    assert table["qodercli"] == herdr_bootstrap.KindEntry(
+        ("--dangerously-skip-permissions",), False, None
     )
     assert table["codex"] == herdr_bootstrap.KindEntry((), False)
     # `lifecycle_bridge` is the kind's own bridge, named by the revision-static remedy (#238).
