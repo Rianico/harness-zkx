@@ -2086,6 +2086,15 @@ def test_sectioned_bullet_attributes_pr(tmp_path: Path) -> None:
     assert unreleased_attributes_pr("7", cwd=tmp_path) is True
 
 
+def test_unreleased_attributes_pr_ignores_empty_section_heading(tmp_path: Path) -> None:
+    """An attributed bullet under an empty `### ` heading does not attribute, matching the gate (mutation: relax the section regex to ^###\\s+ -> flips true)."""
+    _ = (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### \n* **pr-land:** entry (#7)\n",
+        encoding="utf-8",
+    )
+    assert unreleased_attributes_pr("7", cwd=tmp_path) is False
+
+
 def test_no_stamp_draft_prints_milder_note(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
