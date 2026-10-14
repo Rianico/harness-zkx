@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
@@ -18,6 +21,7 @@ PR_TEMPLATE = REPO_ROOT / ".github/pull_request_template.md"
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
+import _draft as _draft_mod  # noqa: E402
 import _github as github_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
 
@@ -2166,3 +2170,268 @@ def test_baseline_entry_stamp_is_noop_and_advisory_silent(
     assert "warning:" not in err
     assert "carries" not in err
     assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+# --- candidate pr_body.md scaffold (#260) ---------------------------------------------
+#
+# The body-less `--check` writes a signed scaffold instead of the bare placeholder:
+# template shape + mechanical facts (range diff, detected closes) + `<FILL: …>` sentinels,
+# never subjective prose. The signature (sha256 of everything below the top line) tells a
+# later run untouched from hand-edited, so an authored file is preserved byte-for-byte.
+
+_SCAFFOLD_TEMPLATE = (
+    "## Summary\n"
+    "<!-- one screen -->\n"
+    "\n"
+    "## Root Cause\n"
+    "\n"
+    "## What Changed\n"
+    "\n"
+    "## Blast Radius & Safety\n"
+    "\n"
+    "**Door:** one-way / two-way\n"
+    "**Rollback / containment:**\n"
+    "\n"
+    "## Evidence\n"
+)
+
+_SCAFFOLD_GH_STUB = """#!/usr/bin/env bash
+for arg in "$@"; do
+  if [[ "$arg" =~ pulls\\?head= ]]; then echo "null"; exit 0; fi
+  if [[ "$arg" == "user" ]]; then echo "merger-user"; exit 0; fi
+done
+exit 0
+"""
+
+
+def _make_scaffold_repo(tmp_path: Path) -> Path:
+    """Synthetic repo: main + origin/main + feat-draft (2 commits, one closing #12)."""
+    repo = tmp_path / "repo"
+    _ = repo.mkdir(parents=True)
+
+    def git(*args: str) -> None:
+        _ = subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, check=True, env=git_env()
+        )
+
+    _ = subprocess.run(
+        ["git", "init", "-b", "main", str(repo)], capture_output=True, check=True, env=git_env()
+    )
+    git("config", "user.name", "Scaffold Synthetic")
+    git("config", "user.email", "scaffold@x.io")
+    git("config", "commit.gpgsign", "false")
+    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    git("add", "base.txt")
+    git("commit", "-m", "chore: base")
+    git("remote", "add", "origin", "https://github.com/test/scaffold.git")
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    github_dir = repo / ".github"
+    github_dir.mkdir()
+    _ = (github_dir / "pull_request_template.md").write_text(_SCAFFOLD_TEMPLATE, encoding="utf-8")
+    git("checkout", "-b", "feat-draft")
+    _ = (repo / "one.txt").write_text("one\n", encoding="utf-8")
+    git("add", "one.txt")
+    git("commit", "-m", "feat: one")
+    _ = (repo / "two.txt").write_text("two edited\nbaseline removed\n", encoding="utf-8")
+    git("add", "two.txt")
+    git("commit", "-m", "feat: two", "-m", "Closes #12")
+    return repo
+
+
+def _scaffold_env(tmp_path: Path) -> dict[str, str]:
+    bindir = tmp_path / "bin"
+    _ = bindir.mkdir(exist_ok=True)
+    gh = bindir / "gh"
+    _ = gh.write_text(_SCAFFOLD_GH_STUB, encoding="utf-8")
+    gh.chmod(0o755)
+    return git_env(PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}")
+
+
+def _run_scaffold_check(
+    repo: Path, env: dict[str, str], *extra: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(PR_PY), "--check", "--head", "feat-draft", *extra],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+    )
+
+
+def _scaffold_body_path(repo: Path) -> Path:
+    return repo / ".lsz" / "tmp" / "pr_body.md"
+
+
+def _assert_valid_signature(text: str) -> None:
+    first, sep, rest = text.partition("\n")
+    assert sep, "the scaffold top line must end in a newline"
+    assert first.startswith("<!-- draft: scaffold sha256="), first
+    digest = first[len("<!-- draft: scaffold sha256=") : -len(" -->")]
+    assert digest == hashlib.sha256(rest.encode("utf-8")).hexdigest()
+
+
+def test_scaffold_written_with_valid_hash_and_facts_on_bodyless_check(tmp_path: Path) -> None:
+    """(1) Body-less --check emits the signed scaffold: template shape, range fact, FILL door,
+    detected closes — and the no-body refusal (exit 2) stays unchanged."""
+    repo = _make_scaffold_repo(tmp_path)
+    env = _scaffold_env(tmp_path)
+
+    r = _run_scaffold_check(repo, env)
+
+    assert r.returncode == 2, r.stderr
+    text = _scaffold_body_path(repo).read_text(encoding="utf-8")
+    _assert_valid_signature(text)
+    assert "<!-- Range: 2 commits, +3/-0 across 2 files -->" in text
+    assert "**Door:** <FILL: one-way | two-way>" in text
+    assert "**Door:** one-way / two-way" not in text
+    assert "Closes #12" in text, "the commit-body closing line is a mechanical fact"
+    assert "<FILL: issue number" not in text
+    assert "Root Cause: keep only for a fix" in text
+    assert "scaffold:" in r.stderr
+
+    mutation_text = text.replace("Closes #12", "Closes #13")
+    assert not pr_mod.is_untouched_scaffold(mutation_text)
+
+
+def test_scaffold_preserved_byte_for_byte_after_hand_edit(tmp_path: Path) -> None:
+    """(2) A second --check must not clobber an edited scaffold: the signature mismatch means
+    the author owns the file now, and it round-trips verbatim."""
+    repo = _make_scaffold_repo(tmp_path)
+    env = _scaffold_env(tmp_path)
+    _ = _run_scaffold_check(repo, env)
+    body = _scaffold_body_path(repo)
+    edited = body.read_text(encoding="utf-8").replace(
+        "**Door:** <FILL: one-way | two-way>", "**Door:** two-way"
+    )
+    _ = body.write_text(edited, encoding="utf-8")
+
+    r = _run_scaffold_check(repo, env)
+
+    assert r.returncode == 2, r.stderr
+    assert body.read_text(encoding="utf-8") == edited
+    assert "scaffold:" not in r.stderr, "the advisory prints only when a scaffold is written"
+
+
+def test_force_scaffold_regenerates_over_hand_edit(tmp_path: Path) -> None:
+    """(3) --force-scaffold overwrites even an edited file, re-signing the fresh scaffold."""
+    repo = _make_scaffold_repo(tmp_path)
+    env = _scaffold_env(tmp_path)
+    _ = _run_scaffold_check(repo, env)
+    body = _scaffold_body_path(repo)
+    _ = body.write_text("hand written, unsigned\n", encoding="utf-8")
+
+    r = _run_scaffold_check(repo, env, "--force-scaffold")
+
+    assert r.returncode == 2, r.stderr
+    text = body.read_text(encoding="utf-8")
+    _assert_valid_signature(text)
+    assert "hand written" not in text
+
+
+def test_check_refuses_scaffold_body_that_still_carries_sentinels(tmp_path: Path) -> None:
+    """(4/5) Passing the unfilled scaffold as --body-file refuses at the gate (exit 1);
+    the same body with every sentinel filled passes (exit 0)."""
+    repo = _make_scaffold_repo(tmp_path)
+    env = _scaffold_env(tmp_path)
+    _ = _run_scaffold_check(repo, env)
+    scaffold_text = _scaffold_body_path(repo).read_text(encoding="utf-8")
+
+    unfilled = _run_scaffold_check(repo, env, "--body-file", str(_scaffold_body_path(repo)))
+    assert unfilled.returncode == 1, unfilled.stderr
+    assert "unfilled placeholder" in unfilled.stderr
+    assert "replace every" in unfilled.stderr
+
+    filled = (
+        scaffold_text.replace("**Door:** <FILL: one-way | two-way>", "**Door:** two-way")
+        .replace("<!-- one screen -->", "real change landed")
+        .replace("## Root Cause\n", "")
+        .replace("## What Changed\n", "")
+        .replace("**Rollback / containment:**", "**Rollback / containment:** revert the squash")
+        .replace("## Evidence\n", "## Evidence\nbefore: 1 failed -> after: 0 failed\n")
+    )
+    filled_file = tmp_path / "filled.md"
+    _ = filled_file.write_text(filled, encoding="utf-8")
+
+    ok = _run_scaffold_check(repo, env, "--body-file", str(filled_file))
+    assert ok.returncode == 0, ok.stderr
+    assert "scaffold:" not in ok.stderr, "an authored body keeps the authored branch"
+
+
+def test_scaffold_create_path_refuses_before_any_pr_call(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """(4) Opening a PR with a sentinel-bearing body refuses pre-gh: no POST, exit 1."""
+    fake = _FakeRun()
+    monkeypatch.setattr(github_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(
+        [
+            "--head",
+            "feat-x",
+            "--title",
+            "feat: x",
+            "--body",
+            "## Summary\nwip\n\n**Door:** <FILL: one-way | two-way>\n",
+        ]
+    )
+
+    assert rc == 1, fake.calls
+    assert not [c for c in fake.calls if "pulls -X POST" in " ".join(c)]
+    err = capsys.readouterr().err
+    assert "unfilled placeholders" in err
+    assert "remediation:" in err
+
+
+def test_scaffold_sentinel_explicit_squash_message_is_refused() -> None:
+    """(4) The merge gate refuses an explicit squash message that copied the scaffold door;
+    a chosen door value passes the sentinel gate untouched."""
+    with pytest.raises(RefusalError):
+        resolve_squash_message(
+            "## Summary\nreal\n",
+            explicit="- Core: x\n- Risk: **Door:** <FILL: one-way | two-way>\n",
+            supplied=True,
+        )
+    # the unchosen template literal is refused even without a <FILL> marker
+    with pytest.raises(RefusalError):
+        resolve_squash_message(
+            "## Summary\nreal\n",
+            explicit="- Core: x\n**Door:** one-way / two-way\n",
+            supplied=True,
+        )
+    ok = resolve_squash_message(
+        "## Summary\nreal change\n",
+        explicit="- Core: x\n- Risk: **Door:** two-way\n",
+        supplied=True,
+    )
+    assert "**Door:** two-way" in ok
+
+
+def test_scaffold_closes_detection_and_signature_roundtrip() -> None:
+    """(6) Pure units: closes prefers commit trailers then the branch number; the signature
+    round-trips and any byte change (or its absence) is detected; a template-less scaffold
+    still places the FILL door under Blast Radius."""
+    assert _draft_mod._scaffold_closes("feat/260-x", [{"body": ""}]) == ["Closes #260"]
+    assert _draft_mod._scaffold_closes("feat-draft", [{"body": "Closes #12"}]) == ["Closes #12"]
+    assert _draft_mod._scaffold_closes("feat-draft", [{"body": "no refs here"}]) == []
+
+    scaffold = _draft_mod.build_scaffold(
+        title="feat: x",
+        head_ref="feat-draft",
+        commits=[],
+        range_resolution=None,
+        template_text=_draft_mod.DRAFT_BODY_PLACEHOLDER,
+    )
+    assert _draft_mod.is_untouched_scaffold(scaffold)
+    assert not _draft_mod.is_untouched_scaffold(scaffold + "extra\n")
+    assert not _draft_mod.is_untouched_scaffold("## Summary\nno signature\n")
+    assert "**Door:** <FILL: one-way | two-way>" in scaffold
+    assert "<!-- Closes #<FILL: issue number or delete> -->" in scaffold
+
+
+def test_scaffold_parse_accepts_force_flag() -> None:
+    """--force-scaffold parses to PrOptions.force_scaffold and nothing else changes."""
+    assert parse_args(["--force-scaffold", "--check"]).force_scaffold is True
+    assert parse_args(["--check"]).force_scaffold is False

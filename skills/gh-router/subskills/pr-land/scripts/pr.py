@@ -4,12 +4,13 @@
 # ///
 """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
 
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
   --check : preflight + draft phase — run the merge gates, write <out-dir>/draft.json and
     <out-dir>/pr_body.md, and print only counts, the two paths, and one curation hint (no PR created)
   --out-dir DIR : directory for the --check draft files (default <repo-root>/.lsz/tmp); parents are created
+  --force-scaffold : with a body-less --check, regenerate pr_body.md over a hand-edited scaffold (default: an edited file is preserved byte-for-byte)
   --draft : leave the PR a draft after stamping (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens
     (the caller owns the changelog) — the head was not stamped, so expect a red changelog gate
@@ -63,11 +64,14 @@ from _draft import DRAFT_BODY_MAX_LINES as DRAFT_BODY_MAX_LINES
 from _draft import DRAFT_BODY_PLACEHOLDER as DRAFT_BODY_PLACEHOLDER
 from _draft import DRAFT_OUT_DIR as DRAFT_OUT_DIR
 from _draft import DRAFT_SCHEMA as DRAFT_SCHEMA
+from _draft import SCAFFOLD_SIGNATURE_PREFIX as SCAFFOLD_SIGNATURE_PREFIX
 from _draft import _draft_dirty as _draft_dirty
 from _draft import _draft_range as _draft_range
 from _draft import build_draft_payload as build_draft_payload
+from _draft import build_scaffold as build_scaffold
 from _draft import cap_draft_body as cap_draft_body
 from _draft import draft_commits as draft_commits
+from _draft import is_untouched_scaffold as is_untouched_scaffold
 from _draft import resolve_out_dir as resolve_out_dir
 from _draft import run_draft_phase as run_draft_phase
 from _errors import CheckFailureError as CheckFailureError
@@ -178,6 +182,7 @@ from _squash import clean_squash_body as clean_squash_body
 from _squash import copy_body_coverage as copy_body_coverage
 from _squash import copy_overlap as copy_overlap
 from _squash import extract_closes_numbers as extract_closes_numbers
+from _squash import has_unfilled_sentinels as has_unfilled_sentinels
 from _squash import insert_trailers as insert_trailers
 from _squash import is_closing_line as is_closing_line
 from _squash import is_fallback_body as is_fallback_body
@@ -188,6 +193,7 @@ from _squash import print_squash_message_required as print_squash_message_requir
 from _squash import refuse_mechanic_copy as refuse_mechanic_copy
 from _squash import refuse_raw_token as refuse_raw_token
 from _squash import refuse_unfilled_body as refuse_unfilled_body
+from _squash import refuse_unfilled_sentinels as refuse_unfilled_sentinels
 from _squash import resolve_squash_message as resolve_squash_message
 from _squash import split_squash_sections as split_squash_sections
 from _squash import squash_message as squash_message
@@ -210,10 +216,10 @@ from range_authority import resolve_range as resolve_range
 
 def print_usage() -> None:
     usage = """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
-  --check : preflight + draft phase — write <out-dir>/draft.json + <out-dir>/pr_body.md, print counts, both paths, one curation hint (no PR created; --out-dir DIR defaults to <repo-root>/.lsz/tmp, parents created)
+  --check : preflight + draft phase — write <out-dir>/draft.json + <out-dir>/pr_body.md, print counts, both paths, one curation hint (no PR created; --out-dir DIR defaults to <repo-root>/.lsz/tmp, parents created; body-less runs write a signed candidate scaffold, --force-scaffold regenerates over a hand-edited one)
   --draft : leave the PR a draft (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens (caller owns the changelog) — head unstamped, expect a red changelog gate
   --body/--body-file : required to open a PR; the caller drafts the description (pr-enhance workflow). An empty body or the unfilled repo template is refused.
@@ -244,6 +250,7 @@ def parse_args(args: list[str]) -> PrOptions:
     draft = False
     no_stamp = False
     verbose = False
+    force_scaffold = False
 
     i = 0
     while i < len(args):
@@ -323,6 +330,9 @@ def parse_args(args: list[str]) -> PrOptions:
         elif arg == "--stamp":
             no_stamp = False
             i += 1
+        elif arg == "--force-scaffold":
+            force_scaffold = True
+            i += 1
         elif arg == "--verbose":
             verbose = True
             i += 1
@@ -353,6 +363,7 @@ def parse_args(args: list[str]) -> PrOptions:
         squash_message=squash_message,
         squash_message_file=squash_message_file,
         squash_message_supplied=squash_message_supplied,
+        force_scaffold=force_scaffold,
     )
 
 
@@ -431,6 +442,8 @@ def create_or_reuse_pr(
     template_path = (cwd / DEFAULT_TEMPLATE_PATH) if cwd else DEFAULT_TEMPLATE_PATH
     if body_supplied and is_unfilled_body(body, template_path=template_path):
         refuse_unfilled_body(body)
+    if body_supplied:
+        refuse_unfilled_sentinels(body)
 
     owner = repo.split("/")[0]
     res = _github.run_command(
