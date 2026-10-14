@@ -758,14 +758,15 @@ SHA_GUARD_CITATION_SITES: tuple[tuple[Path, str], ...] = (
     (OVERVIEW_DOC, "token drifted by one digit points at nothing"),
     (COORDINATION_DOC, "one that drifts by a digit points at nothing"),
     (SCRIPTS_DIR / "herdr_reply.py", "the outbound payload itself is checked"),
+    # The four citation sites below moved with the guard code into `herdr_git_guard.py`.
     (
-        SCRIPTS_DIR / "herdr_reply.py",
+        SCRIPTS_DIR / "herdr_git_guard.py",
         "an outbound payload may not cite a SHA that resolves to nothing",
     ),
-    (SCRIPTS_DIR / "herdr_reply.py", "scanned 668"),
-    (SCRIPTS_DIR / "herdr_reply.py", "byte-identical to a clean environment"),
+    (SCRIPTS_DIR / "herdr_git_guard.py", "scanned 668"),
+    (SCRIPTS_DIR / "herdr_git_guard.py", "byte-identical to a clean environment"),
     (
-        SCRIPTS_DIR / "herdr_reply.py",
+        SCRIPTS_DIR / "herdr_git_guard.py",
         "Refuse a payload whose backticked SHA-shaped token names no commit",
     ),
     (

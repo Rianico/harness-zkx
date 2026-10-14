@@ -55,6 +55,7 @@ from herdr_cli import (
     require_herdr_env,
     run_herdr_checked,
 )
+from herdr_git_guard import lane_git_dir, require_resolvable_shas
 from herdr_label import stale_labels
 from herdr_lease import acquire_lease, get_lease, release_lease
 from herdr_prompt import (
@@ -685,8 +686,6 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
         # same guard as the reply path refuses it here, before any lease is acquired, and
         # the stdin (`-`) stream stays unchecked: it is read once and verbatim downstream,
         # and reading it here as well would consume it and starve that read.
-        from herdr_reply import lane_git_dir, require_resolvable_shas
-
         require_resolvable_shas(
             ticket,
             payload_path=ticket_path,
