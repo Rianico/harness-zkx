@@ -31,7 +31,7 @@ __all__ = [
 _UNRELEASED_BULLET_RE = re.compile(r"^[*+-]\s+")
 
 
-_UNRELEASED_SECTION_RE = re.compile(r"^###\s+")
+_UNRELEASED_SECTION_RE = re.compile(r"^###\s+\S")
 
 
 _UNRELEASED_VERSION_END_RE = re.compile(r"^## \[[^\]]+\]", re.MULTILINE)
