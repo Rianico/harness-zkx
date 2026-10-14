@@ -101,6 +101,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
+* **gh-router:** pr-land's `unreleased_attributes_pr` no longer treats an empty `### ` heading as a section — `_UNRELEASED_SECTION_RE` now requires a non-space name, mirroring the changelog gate's `SECTION_HEADING_RE`, so an attributed bullet under an empty heading reads unattributed and the ready-flip warning fires instead of being silently suppressed
 * **scripts:** run gate 4 pytest in `check.sh` with `--group dev`, so the `-n auto` addopts from pyproject resolve when dev deps are not otherwise installed (#255)
 * **wt:** the pre-merge gate delegates to `bash scripts/check.sh`, so the merge path runs the authoritative local gate (ruff check, ruff format --check, basedpyright --warnings, pytest) instead of restating two of its four steps, and the delegation is pinned both against a weaker restated gate and against a check.sh that drops a step (#254)
 * **herdr:** refuse an outbound reply payload that backticks a hex token naming no commit, resolving each token against the lane repository before any store record exists, for tokens matching eight-hex review ids in shape while differing in length (seven hex characters, not eight), with a documented per-token waiver that quotes the rendered line verbatim instead of paraphrasing it ([#247](https://github.com/Rianico/harness-zkx/issues/247)) (#254)
