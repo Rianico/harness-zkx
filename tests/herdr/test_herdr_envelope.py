@@ -287,3 +287,54 @@ def test_split_envelope_and_body_refuses_non_envelope_text() -> None:
 
 def test_parse_envelope_refuses_an_unknown_section_header() -> None:
     assert herdr_envelope.parse_envelope("Routing:\n  Sender: a@p\nBogus:\n") is None
+
+
+# ── caller-facing delivery summary (#259, anchor addendum) ─────────────────────────────────────
+
+
+def delivered_copy(receiver_line: str = "Receiver(You): orchestrator") -> str:
+    head = "\n".join(
+        [
+            "[2026-01-02T03:04:05.678Z]",
+            "Routing:",
+            "  Sender: reviewer@w9:p1",
+            f"  {receiver_line}",
+            "Protocol:",
+            f"  {herdr_envelope.SKILL_NOTICE}",
+        ]
+    )
+    return f"{head}\n{herdr_envelope.PAGING_DELIMITER}\n\nbody text"
+
+
+def test_caller_anchor_names_agent_at_pane_and_falls_back_to_the_bare_pane() -> None:
+    assert (
+        herdr_envelope.caller_anchor(sender(agent="reviewer", pane_id="w9:p1")) == "reviewer@w9:p1"
+    )
+    assert herdr_envelope.caller_anchor(herdr_envelope.CallerContext(pane_id="w11:p1")) == "w11:p1"
+
+
+def test_envelope_metadata_lines_rewrites_receiver_you_for_the_caller_copy() -> None:
+    lines = herdr_envelope.envelope_metadata_lines(delivered_copy())
+    assert "  Receiver: orchestrator" in lines
+    assert "Receiver(You)" not in "\n".join(lines)
+
+
+def test_envelope_metadata_lines_leaves_other_receiver_forms_untouched() -> None:
+    lines = herdr_envelope.envelope_metadata_lines(delivered_copy("Receiver: orchestrator"))
+    assert "  Receiver: orchestrator" in lines
+
+
+def test_format_delivery_summary_leads_with_the_status_line_then_two_delimiters() -> None:
+    rendered = herdr_envelope.format_delivery_summary(
+        "[You: reviewer@w9:p1] prompted orchestrator", delivered_copy(), "body text", "File: t.md"
+    )
+    assert rendered.splitlines() == [
+        "[You: reviewer@w9:p1] prompted orchestrator",
+        "---",
+        "Routing:",
+        "  Sender: reviewer@w9:p1",
+        "  Receiver: orchestrator",
+        "---",
+        "File: t.md",
+        "body text",
+    ]

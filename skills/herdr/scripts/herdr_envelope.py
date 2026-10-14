@@ -343,14 +343,30 @@ def split_envelope_and_body(text: str) -> tuple[Envelope | None, str | None]:
     return envelope, body
 
 
+_RECEIVER_YOU_PREFIX = "  Receiver(You):"
+
+
+def caller_anchor(caller: CallerContext) -> str:
+    """The `<agent>@<pane>` self-anchor, rendered as `[You: <anchor>]` on the caller's status line.
+
+    A weak model reading the caller's stdout can mistake `Receiver(You):` for its own persona;
+    the anchor names who is speaking in the status line, so the caller reads itself first and the
+    receiver second. Falls back to the bare pane id when no agent name resolved.
+    """
+    if caller.agent:
+        return f"{caller.agent}@{caller.pane_id}"
+    return caller.pane_id
+
+
 def envelope_metadata_lines(delivered: str) -> list[str]:
     """The delivered envelope's `Routing:`/`Hierarchy:`/`Runtime:` header lines, boilerplate dropped.
 
     Caller-facing only: the callee still receives the full envelope. The leading timestamp is
-    stripped, and rendering stops at `Protocol:` so the fixed Herdr skill notice — the same on
-    every message — never reaches the orchestrator's context. Text with no parseable envelope
-    header (`--no-caller-context`, a body that is not an envelope) yields no lines, so a
-    body containing a bare `---` is never mistaken for a header.
+    stripped, rendering stops at `Protocol:` so the fixed Herdr skill notice — the same on every
+    message — never reaches the orchestrator's context, and `Receiver(You):` is rewritten to
+    `Receiver:` on the caller's copy so a weak model cannot mistake the receiver for itself.
+    Text with no parseable envelope header (`--no-caller-context`, a body that is not an
+    envelope) yields no lines, so a body containing a bare `---` is never mistaken for a header.
     """
     head, sep, _rest = delivered.partition(f"\n{PAGING_DELIMITER}\n\n")
     if not sep:
@@ -364,6 +380,8 @@ def envelope_metadata_lines(delivered: str) -> list[str]:
     for line in lines:
         if line == "Protocol:":
             break
+        if line.startswith(_RECEIVER_YOU_PREFIX):
+            line = "  Receiver:" + line[len(_RECEIVER_YOU_PREFIX) :]
         out.append(line)
     return out
 
@@ -382,13 +400,25 @@ def preview_body(body: str, limit: int = 3) -> list[str]:
     return [non_empty[0], f"... [skipped {skipped} lines]", non_empty[-1]]
 
 
-def format_delivery_summary(delivered: str, body: str, source: str) -> str:
-    """Render the caller-facing delivery summary below the status line: metadata, `---`, preview.
+def format_delivery_summary(status_line: str, delivered: str, body: str, source: str) -> str:
+    """Render the caller-facing delivery summary: status, `---`, metadata, `---`, source, preview.
 
-    `delivered` is the full wrapped payload (for the envelope metadata); `body` is the original
-    payload (for the preview, so an appended reply contract or inserted pointer never leaks into
-    it); `source` names where the payload came from. This is what trims the orchestrator's
-    context: the callee delivery is untouched, only this caller-side echo shrinks.
+    `status_line` is the anchored first line (live prompt/reply status or the `dry-run:` plan
+    line); `delivered` is the full wrapped payload (for the envelope metadata, whose
+    `Receiver(You)` is stripped to `Receiver`); `body` is the original payload (for the preview,
+    so an appended reply contract or inserted pointer never leaks into it); `source` names where
+    the payload came from. The two `---` delimiters separate status from metadata and metadata
+    from preview — the same page-break the callee's envelope uses. This is what trims the
+    orchestrator's context: the callee delivery is untouched, only this caller-side echo changes.
     """
-    lines = [*envelope_metadata_lines(delivered), PAGING_DELIMITER, source, *preview_body(body)]
-    return "\n".join(lines)
+    metadata = envelope_metadata_lines(delivered)
+    return "\n".join(
+        [
+            status_line,
+            PAGING_DELIMITER,
+            *metadata,
+            PAGING_DELIMITER,
+            source,
+            *preview_body(body),
+        ]
+    )

@@ -1021,6 +1021,9 @@ def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
 ) -> None:
     """#259: a caller-side dry run echoes metadata + a body preview, never the serialized argv.
 
+    #259 anchor addendum: the status line carries the `[You: …]` self-anchor in the colon form,
+    and the caller copy rewrites `Receiver(You):` to `Receiver:`.
+
     Pin -> mutant: printing `json.dumps(argv)` (the pre-#259 dry run) — this output is not one
     JSON line and carries no `Protocol:` notice, so a raw-argv render fails it.
     """
@@ -1029,14 +1032,18 @@ def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     out = done.stdout
-    assert out.splitlines()[0] == "dry-run (would prompt reviewer)"
+    lines = out.splitlines()
+    assert lines[0] == "[You: reviewer@w9:p1] dry-run: would prompt reviewer (w9:p1)"
+    assert lines[1] == "---"
     assert "Routing:" in out and "Hierarchy:" in out
+    assert "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in out
+    assert "(You)" not in out
     assert "Protocol:" not in out
     assert herdr_prompt.SKILL_NOTICE not in out
-    assert "---" in out.splitlines()
+    assert lines.count("---") == 2
     assert f"File: {ticket}" in out
     assert "do the thing" in out
-    assert not out.lstrip().startswith("[")
+    assert not out.startswith("{")
 
 
 def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
@@ -1058,14 +1065,18 @@ def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
 
 
 def test_live_prompt_prints_status_then_trimmed_summary(stub: StubHarness, tmp_path: Path) -> None:
-    """#259: a live run leads with the status line, then the same trimmed metadata + preview."""
+    """#259: a live run leads with the anchored status line, then the trimmed metadata + preview."""
     ticket = payload_file(tmp_path, "do the thing")
     done = stub.run("reviewer", "--file", str(ticket), "--no-wait")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     out = done.stdout
-    assert out.splitlines()[0].startswith("prompted reviewer")
-    assert "bytes=" in out.splitlines()[0]
+    lines = out.splitlines()
+    assert lines[0].startswith("[You: reviewer@w9:p1] prompted reviewer")
+    assert "bytes=" in lines[0]
+    assert lines[1] == "---"
     assert "Routing:" in out and "Hierarchy:" in out
+    assert "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in out
+    assert "(You)" not in out
     assert "Protocol:" not in out
     assert f"File: {ticket}" in out
     assert "do the thing" in out

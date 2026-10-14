@@ -138,7 +138,12 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
-from herdr_envelope import format_delivery_summary, render_envelope, render_prelude
+from herdr_envelope import (
+    caller_anchor,
+    format_delivery_summary,
+    render_envelope,
+    render_prelude,
+)
 from herdr_lease import (
     REPLIES_DIR_LANE,
     get_lease,
@@ -1727,9 +1732,11 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         )
     panes, agents = fetch_inventory(herdr, env)
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
+    receiver = resolve_receiver(panes, agents, target)
+    anchor = f"[You: {caller_anchor(caller_ctx)}]"
     reply_envelope = render_envelope(
         caller_ctx,
-        receiver=resolve_receiver(panes, agents, target) or target,
+        receiver=receiver or target,
         include_recovery=options.verbose,
         ticket_id=ticket_id,
         in_reply_to=in_reply_to,
@@ -1803,8 +1810,10 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 }
                 print(json.dumps(plan))
         else:
-            print(f"dry-run (would reply to {target})")
-            print(format_delivery_summary(delivered, body, source))
+            dry_pane = receiver.pane_id if receiver is not None else None
+            dry_pane_str = f" ({dry_pane})" if dry_pane and dry_pane != target else ""
+            status = f"{anchor} dry-run: would reply to {target}{dry_pane_str}"
+            print(format_delivery_summary(status, delivered, body, source))
         return EXIT_OK
 
     done = run_herdr(argv, env)
@@ -1845,8 +1854,8 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         resolved_pane = pane or (shell_info.pane_id if shell_info else None)
         pane_str = f" ({resolved_pane})" if resolved_pane and resolved_pane != target else ""
         rev_str = f"  revision={rev}" if rev else ""
-        print(f"replied to {target}{pane_str}  bytes={size}{rev_str}{suffix}")
-        print(format_delivery_summary(delivered, body, source))
+        status = f"{anchor} replied to {target}{pane_str}  bytes={size}{rev_str}{suffix}"
+        print(format_delivery_summary(status, delivered, body, source))
     return EXIT_OK
 
 

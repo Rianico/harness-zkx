@@ -1149,16 +1149,24 @@ def test_dry_run_prints_argv_without_submitting(stub: StubHarness) -> None:
 
 
 def test_reply_dry_run_prints_a_trimmed_summary_not_the_raw_argv(stub: StubHarness) -> None:
-    """#259: a reply dry run echoes metadata + a body preview, never the serialized argv."""
+    """#259: a reply dry run echoes metadata + a body preview, never the serialized argv.
+
+    #259 anchor addendum: the status line is `[You: …] dry-run: would reply to <target>`, and the
+    caller copy shows `Receiver:` where the callee payload keeps `Receiver(You):`.
+    """
     done = stub.run("orchestrator", "COMPLETED", "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     out = done.stdout
-    assert out.splitlines()[0] == "dry-run (would reply to orchestrator)"
+    lines = out.splitlines()
+    assert lines[0] == "[You: reviewer@w9:p1] dry-run: would reply to orchestrator"
+    assert lines[1] == "---"
     assert "Routing:" in out
+    assert "  Receiver:" in out
+    assert "(You)" not in out
     assert "Protocol:" not in out
     assert herdr_prompt.SKILL_NOTICE not in out
-    assert "---" in out.splitlines()
+    assert lines.count("---") == 2
     assert "Payload: inline (9 bytes)" in out
     assert "COMPLETED" in out
     assert not out.lstrip().startswith("{")
@@ -1177,13 +1185,17 @@ def test_reply_dry_run_json_prints_the_full_wrapped_callee_payload(stub: StubHar
 
 
 def test_live_reply_prints_status_then_trimmed_summary(stub: StubHarness) -> None:
-    """#259: a live reply leads with the status line, then metadata + preview."""
+    """#259: a live reply leads with the anchored status line, then metadata + preview."""
     done = stub.run("orchestrator", "COMPLETED")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     out = done.stdout
-    assert out.splitlines()[0].startswith("replied to orchestrator")
-    assert "bytes=" in out.splitlines()[0]
+    lines = out.splitlines()
+    assert lines[0].startswith("[You: reviewer@w9:p1] replied to orchestrator")
+    assert "bytes=" in lines[0]
+    assert lines[1] == "---"
     assert "Routing:" in out
+    assert "  Receiver:" in out
+    assert "(You)" not in out
     assert "Protocol:" not in out
     assert "Payload: inline (9 bytes)" in out
     assert "COMPLETED" in out
