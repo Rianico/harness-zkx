@@ -2334,6 +2334,31 @@ def test_record_sender_status_is_silent_without_a_store_record(
     still_dispatched()
 
 
+def test_reply_record_id_slugs_underscore_and_dot_senders() -> None:
+    r"""hrg-t4: the record id binds the slug's character class (#264).
+
+    `_slug` held a shared regex until hrg-t1 gave it a private copy; `[^a-z0-9]+` is now
+    refutable only through the id itself. `_` and `.` must both collapse to `-`, so the
+    plausible one-class variants (`[^a-z0-9_]+`, `[^a-z0-9.]+`, `[^a-z0-9_-]+`, `\W+`)
+    fail this assertion. Driven through the public `build_reply_entry`, not `_slug`.
+    """
+    entry = herdr_reply.build_reply_entry(
+        "COMPLETED deadbeef",
+        sender="Impl_1.two",
+        caller="orchestrator",
+        ticket_id="#264",
+        task_id=None,
+        in_reply_to=None,
+        mapped="completed",
+        sha="deadbeef",
+        shape="complete",
+        evidence=None,
+    )
+    stamp, *slug_parts, digest = str(entry["id"]).split("-")
+    assert slug_parts == ["impl", "1", "two"]
+    assert stamp and len(digest) == 8
+
+
 # ── the store under concurrency and failure (#231 F1/F2/F-C1/F-C2) ───────────────────
 
 CANARY_LINE1 = "SECRETCANARYLINE1"
