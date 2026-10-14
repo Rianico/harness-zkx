@@ -112,6 +112,18 @@ BARE_SCRIPT_NAME_PATTERN = r"[A-Za-z0-9._-]+"
 NON_NAME_SEGMENTS = (".", "..")
 # Roles the docs spell `impl-<n>`; only they carry the implementer cooperation contract.
 IMPLEMENTER_PREFIX = "impl"
+# Roles spelling a coordination authority — bare or scoped (`tm`, `msg-tm`, `lane-orch`,
+# `task-manager`). A term is itself split on the role separators, so `task-manager` matches as
+# one consecutive segment run and `orchid` never matches `orch`.
+TM_ROLE_TERMS = (
+    "tm",
+    "task-manager",
+    "task_manager",
+    "orch",
+    "orchestrator",
+    "coord",
+    "coordinator",
+)
 # The scoped naming convention `<task-group-slug>-<role>[-<subrole|index>]` puts the role in a
 # segment of its own, so the discriminator splits before it matches a prefix.
 IMPLEMENTER_SEGMENT_SPLIT = re.compile(r"[-_]")
@@ -318,6 +330,18 @@ IMPLEMENTER_CONTRACT = (
     "Evidence: red-then-green test results, artifacts reported by path.\n"
     "Blockers: report immediately, never idle."
 )
+# Role-conditional mirror of the implementer block: a TM that drifted into editing source or
+# test code after compaction gets its authority boundary restated in its own invariant.
+TM_CONTRACT = (
+    "Task Manager: coordination, design, and review authority only; NEVER edit source or test "
+    "code directly.\n"
+    "Dispatch: explore problem space; decompose briefs into atomic tickets; dispatch via "
+    "`herdr-dispatch`.\n"
+    "Eval & Review: run verification gates in pane; audit callee diffs with review subagents "
+    "before accepting.\n"
+    "Synthesize: track lane progress; synthesize results and report completion to caller via "
+    "`herdr-reply`."
+)
 
 
 def role_article(role: str) -> str:
@@ -339,11 +363,29 @@ def is_implementer_role(role: str) -> bool:
     )
 
 
+def is_tm_role(role: str) -> bool:
+    """True for a coordination-authority vocabulary term occupying whole role segments.
+
+    Segment-aware like `is_implementer_role`, but a term must match as a consecutive run of
+    segments rather than a prefix: `msg-tm` and `lane-orch` qualify, `tmux` and `orchid` do
+    not, and `task-manager`/`task_manager` match despite carrying a separator in the term.
+    """
+    tokens = IMPLEMENTER_SEGMENT_SPLIT.split(role.lower())
+    for term in TM_ROLE_TERMS:
+        run = term.replace("_", "-").split("-")
+        for start in range(len(tokens) - len(run) + 1):
+            if tokens[start : start + len(run)] == run:
+                return True
+    return False
+
+
 def render_invariant(role: str) -> str:
     """Render the role invariant snippet for one role.
 
     Every role carries the coordination pattern and the two standing rules; `impl`-named
-    roles additionally carry the cooperation contract that role needs after compaction.
+    roles additionally carry the cooperation contract that role needs after compaction, and
+    coordination-authority roles (`tm`, `orch`, `coordinator`, scoped forms) carry the Task
+    Manager contract instead.
     """
     lines = [
         INVARIANT_HEADER.format(article=role_article(role), role=role),
@@ -351,6 +393,8 @@ def render_invariant(role: str) -> str:
     ]
     if is_implementer_role(role):
         lines.append(IMPLEMENTER_CONTRACT)
+    if is_tm_role(role):
+        lines.append(TM_CONTRACT)
     return "\n".join(lines)
 
 

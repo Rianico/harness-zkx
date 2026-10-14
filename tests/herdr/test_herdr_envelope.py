@@ -87,7 +87,7 @@ def test_render_envelope_default_is_routing_and_protocol_only() -> None:
         [
             "Routing:",
             "  Sender: orchestrator@w1:p1 - kind pi",
-            "  Receiver(You): impl-1",
+            "  Receiver: impl-1",
             "Protocol:",
             f"  {herdr_envelope.SKILL_NOTICE}",
         ]
@@ -292,7 +292,7 @@ def test_parse_envelope_refuses_an_unknown_section_header() -> None:
 # ── caller-facing delivery summary (#259, anchor addendum) ─────────────────────────────────────
 
 
-def delivered_copy(receiver_line: str = "Receiver(You): orchestrator") -> str:
+def delivered_copy(receiver_line: str = "Receiver: orchestrator") -> str:
     head = "\n".join(
         [
             "[2026-01-02T03:04:05.678Z]",
@@ -313,15 +313,24 @@ def test_caller_anchor_names_agent_at_pane_and_falls_back_to_the_bare_pane() -> 
     assert herdr_envelope.caller_anchor(herdr_envelope.CallerContext(pane_id="w11:p1")) == "w11:p1"
 
 
-def test_envelope_metadata_lines_rewrites_receiver_you_for_the_caller_copy() -> None:
+def test_render_envelope_delivers_receiver_without_the_you_parenthetical() -> None:
+    rendered = herdr_envelope.render_envelope(sender(), receiver="impl-1")
+    assert "  Receiver: impl-1" in rendered
+    assert "(You)" not in rendered
+
+
+def test_parse_envelope_accepts_the_legacy_receiver_you_header_and_the_new_form() -> None:
+    legacy = herdr_envelope.parse_envelope("Routing:\n  Sender: a@p\n  Receiver(You): impl-1\n")
+    current = herdr_envelope.parse_envelope("Routing:\n  Sender: a@p\n  Receiver: impl-1\n")
+    assert legacy is not None and current is not None
+    assert legacy.receiver == "impl-1"
+    assert current.receiver == "impl-1"
+
+
+def test_envelope_metadata_lines_passes_the_receiver_header_through_verbatim() -> None:
     lines = herdr_envelope.envelope_metadata_lines(delivered_copy())
     assert "  Receiver: orchestrator" in lines
-    assert "Receiver(You)" not in "\n".join(lines)
-
-
-def test_envelope_metadata_lines_leaves_other_receiver_forms_untouched() -> None:
-    lines = herdr_envelope.envelope_metadata_lines(delivered_copy("Receiver: orchestrator"))
-    assert "  Receiver: orchestrator" in lines
+    assert "(You)" not in "\n".join(lines)
 
 
 def test_format_delivery_summary_leads_with_the_status_line_then_two_delimiters() -> None:

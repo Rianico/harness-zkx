@@ -59,10 +59,41 @@ def test_snippet_stays_within_the_word_budget() -> None:
 
 
 def test_coordination_snippet_stays_within_the_55_word_budget() -> None:
-    """A coordination-only role pays nothing for the implementer block: the cap stays 55."""
-    assert len(herdr_bootstrap.render_invariant("tm").split()) == 51
-    for role in ("msg-tm", "herdr228-task-manager"):
+    """A role outside both block vocabularies pays for neither: the cap stays 55."""
+    for role in ("reviewer", "msg-reviewer"):
         assert len(herdr_bootstrap.render_invariant(role).split()) <= 55
+
+
+def test_tm_named_roles_carry_the_task_manager_contract() -> None:
+    """#260: bare and scoped TM vocabulary appends the Task Manager contract."""
+    for role in (
+        "tm",
+        "msg-tm",
+        "lane-orch",
+        "task-manager",
+        "task_manager",
+        "herdr228-task-manager",
+        "orchestrator",
+        "sr-coord",
+        "coordinator",
+        "gaps-orch-2",
+    ):
+        assert herdr_bootstrap.is_tm_role(role) is True, role
+        text = herdr_bootstrap.render_invariant(role)
+        assert "NEVER edit source or test code directly" in text, role
+        assert "single writer for your task" not in text, role
+
+
+def test_tm_contract_is_appended_verbatim_and_within_its_budget() -> None:
+    text = herdr_bootstrap.render_invariant("tm")
+    assert text.endswith(herdr_bootstrap.TM_CONTRACT)
+    assert len(text.split()) == 51 + len(herdr_bootstrap.TM_CONTRACT.split())
+
+
+def test_tm_match_is_segment_exact_not_prefix() -> None:
+    """`tmux`/`orchid`/`coordination` hold a TM term only as a prefix — no contract for them."""
+    for role in ("tmux", "orchid", "coordination", "impl-1", "reviewer"):
+        assert herdr_bootstrap.is_tm_role(role) is False, role
 
 
 def test_scoped_implementer_names_carry_the_cooperation_contract() -> None:
@@ -73,7 +104,7 @@ def test_scoped_implementer_names_carry_the_cooperation_contract() -> None:
 
 
 def test_coordination_names_omit_the_implementer_block() -> None:
-    """`tm`/`task-manager` stay coordination-only whether scoped or not."""
+    """`tm`/`task-manager` never match the implementer vocabulary, scoped or bare."""
     for role in ("tm", "msg-tm", "task-manager", "herdr228-task-manager"):
         assert herdr_bootstrap.is_implementer_role(role) is False, role
         assert "single writer for your task" not in herdr_bootstrap.render_invariant(role), role

@@ -30,7 +30,7 @@ callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Sender context is prepended by default (see `resolve_caller`): the payload opens
 with the Style 2 nested envelope — `Routing:` (Sender, Group, and the
-`Receiver(You)` position field), `Hierarchy:` (Task-Group, Ticket-ID, Task-ID,
+`Receiver` position field), `Hierarchy:` (Task-Group, Ticket-ID, Task-ID,
 and In-Reply-To correlation), and `Protocol:` (the Herdr skill notice) — and
 closes with the completion-reply contract via `herdr-reply`, so a callee can
 answer the sender by name using the helper script without shell mangling. The
