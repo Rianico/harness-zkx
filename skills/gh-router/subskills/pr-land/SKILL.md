@@ -4,7 +4,7 @@ description: >-
   Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
 arguments: title_or_branch
 argument-hint: |-
-  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--out-dir DIR] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
+  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--out-dir DIR] [--force-scaffold] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
 metadata:
   managed-by: gh-router
 ---
@@ -38,6 +38,7 @@ uv run $SKILL_DIR/scripts/pr.py --watch --merge --body-file .lsz/tmp/pr_body.md 
 | `--draft` | Keep new PR as draft after stamping. Skips ready flip. |
 | `--no-stamp` | Skip auto-stamping `(#NUM)` into `CHANGELOG.md`. The ready flip still runs. |
 | `--check` / `--out-dir` | Run drafting preflight. See [Draft Phase](#draft-phase). |
+| `--force-scaffold` | With a body-less `--check`, regenerate `pr_body.md` over a hand-edited scaffold. An edited file is otherwise preserved byte-for-byte. |
 
 ## Draft Phase
 
@@ -49,6 +50,8 @@ uv run $SKILL_DIR/scripts/pr.py --check --body-file tmp/drafts/pr_body.md --out-
 ```
 
 `--out-dir DIR` sets the output directory (default `<repo-root>/.lsz/tmp`). Missing parent directories are created automatically. Every run writes both files, including a refused run.
+
+Without a supplied body, `pr_body.md` is a signed candidate scaffold: the installed template shape plus mechanical facts only — a `<!-- Range: N commits, +X/-Y across Z files -->` line, the unchosen Door swapped for a `<FILL: one-way | two-way>` sentinel, Root Cause guidance, and detected `Closes #NN` lines or a visible FILL Closes slot. The top line carries the sha256 of the lines below, so a later run tells untouched from hand-edited and preserves your edits (`--force-scaffold` regenerates anyway). Fill or delete every sentinel before feeding the file back: the create, `--check`, and merge gates all refuse an unfilled placeholder.
 
 stdout carries exactly five lines: `commits: N`, `trailers: N`, the two paths, and one `hint:` line. The hint splits the two duties: the PR body keeps the repo's installed template shape (see `install-template.sh`; prose owned by `pr-enhance`), while the squash overview — never the PR body — is the artifact under the curation spec. Full text lives on disk only.
 

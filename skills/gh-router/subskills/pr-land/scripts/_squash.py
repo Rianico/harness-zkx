@@ -67,8 +67,10 @@ __all__ = [
     "EMPTY_BULLET_RE",
     "extract_closes_numbers",
     "FENCE_RE",
+    "FILL_SENTINEL_RE",
     "FIX_TYPE",
     "HEADING_RE",
+    "has_unfilled_sentinels",
     "insert_trailers",
     "is_closing_line",
     "is_fallback_body",
@@ -83,6 +85,7 @@ __all__ = [
     "refuse_mechanic_copy",
     "refuse_raw_token",
     "refuse_unfilled_body",
+    "refuse_unfilled_sentinels",
     "resolve_squash_message",
     "REVIEW_ONLY_SECTION_RE",
     "ROLLBACK_RE",
@@ -99,6 +102,7 @@ __all__ = [
     "SQUASH_TITLE_RE",
     "trailer_email_key",
     "TRAILER_RE",
+    "UNCHOOSEN_DOOR_RE",
 ]
 
 
@@ -195,6 +199,16 @@ AFTER_MARKERS = ("after", "now", "new")
 LABEL_ONLY_RE = re.compile(r":[ \t]*(?:[*_`]+[ \t]*)*$")
 CODE_AUTHORS_TOKEN = "CODE_AUTHORS"
 DEFAULT_TEMPLATE_PATH = Path(".github/pull_request_template.md")
+# Scaffold sentinels: an unfilled slot the candidate pr_body.md leaves for the author.
+FILL_SENTINEL_RE = re.compile(r"<FILL:[^>\n]*>")
+# The installed template's unchosen Door literal is an unfilled slot too: an author who
+# pastes the template verbatim never picked a door. The shipped bold puts the colon
+# INSIDE the markers (`**Door:** one-way / two-way`), so asterisks sit on both sides.
+UNCHOOSEN_DOOR_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?[*]{0,2}Door[*]{0,2}:[ \t]*[*]{0,2}[ \t]*"
+    r"one-way[ \t]*/[ \t]*two-way[ \t]*[*]{0,2}[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def trailer_email_key(line: str) -> str:
@@ -593,6 +607,12 @@ def check_squash_body(msg: str, *, title: str = "", pr_link: str = "") -> None:
     SQUASH_BODY_MAX_BULLETS bullets outside any fenced block
     keep the message one screen.
     """
+    if has_unfilled_sentinels(msg):
+        _refuse_squash(
+            "the squash body carries an unfilled placeholder",
+            "replace every `<FILL: …>` sentinel and choose one Door value "
+            "(`one-way` or `two-way`), then re-run",
+        )
     sections, prose = split_squash_sections(msg)
     if not _section_content(sections, "summary") and not "\n".join(prose).strip():
         _refuse_squash(
@@ -782,6 +802,32 @@ def refuse_unfilled_body(body: str) -> None:
     raise RefusalError("PR body is empty or an unfilled template")
 
 
+def has_unfilled_sentinels(text: str) -> bool:
+    """True when *text* still carries a scaffold `<FILL: …>` sentinel or the unchosen Door."""
+    return bool(FILL_SENTINEL_RE.search(text)) or bool(UNCHOOSEN_DOOR_RE.search(text))
+
+
+def refuse_unfilled_sentinels(text: str) -> None:
+    """Refuse a raw PR body that still carries scaffold placeholders (exit 1).
+
+    Stricter than the squash gate on purpose: the raw-body scan also sees a sentinel inside
+    an HTML comment (the scaffold's `<!-- Closes #<FILL: …> -->` slot), forcing the author
+    to fill or delete every slot before a PR is opened or updated.
+    """
+    if not has_unfilled_sentinels(text):
+        return
+    print(
+        "refusing PR: the description still carries unfilled placeholders (<FILL: …> or an unchosen Door)",
+        file=sys.stderr,
+    )
+    print(
+        "remediation: edit the candidate pr_body.md — replace every <FILL: …> sentinel, "
+        "pick one Door value, fill or delete the Closes slot — then re-run with --body-file",
+        file=sys.stderr,
+    )
+    raise RefusalError("unfilled placeholders remain in the PR body")
+
+
 SQUASH_MESSAGE_SPEC = (
     'GLOSSARY.md "Curated Squash Message" and '
     "skills/gh-router/subskills/pr-land/SKILL.md (Fail-Closed Squash Message)"
@@ -924,6 +970,11 @@ def check_explicit_squash_message(msg: str) -> None:
     the contract's own section names are the only headings the overview carries.
     """
     refuse_raw_token(msg)
+    if has_unfilled_sentinels(msg):
+        _refuse_explicit(
+            "an unfilled placeholder stayed in the explicit squash message",
+            "fill or delete every `<FILL: …>` sentinel and choose one Door value, then re-run",
+        )
     lines = msg.splitlines()
     quoted = _fenced_line_mask(msg)
     for index, line in enumerate(lines):

@@ -28,3 +28,4 @@ class PrOptions:
     squash_message_file: Path | None = None
     squash_message_supplied: bool = False
     verbose: bool = False
+    force_scaffold: bool = False

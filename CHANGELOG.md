@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **gh-router/pr-land:** a body-less `--check` writes a signed candidate `pr_body.md` scaffold — installed-template shape plus mechanical facts (range diff, detected closes) and `<FILL: …>` sentinels, signed by a top-line sha256 so hand-edits are preserved and `--force-scaffold` regenerates; create, `--check`, and merge gates refuse any unfilled placeholder (#260) (#261)
 * **herdr:** deepen three seams — envelope message packaging, a store-owned verified reply transaction (`save_verified_reply` with auto-discard and degraded fallback), and a unified agent-observation seam (`observe_agent`, `has_active_subagents`, `is_agent_settled`) shared by `herdr-wait` and `herdr-prompt`; callers keep re-exports, rendered bytes and CLI exit statuses unchanged (#258)
 * **herdr:** render a `---` paging delimiter between the script-built envelope and the payload in `herdr-prompt` and `herdr-reply`, so transport headers never blur into message content (#255)
 * **herdr:** harden lane coordination facts end to end (single lease store, completion evidence, reply authority, asserted documented contract) — spec #228 and follow-ons, full gate green (#254)
