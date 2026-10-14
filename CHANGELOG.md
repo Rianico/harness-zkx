@@ -266,6 +266,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **oxlint:** add metadata headers and align with ASD-STE100 (#181)
 * **jinja:** tighten prose to ASD-STE100 guidelines (#181)
 * **herdr:** derive the reply-helper path once in `herdr_cli.reply_helper()` instead of three hand-rolled copies, resolve `${herdr_skill}`-prefixed doc pointers like `$SKILL_DIR` ones, document `--settle` in the dispatch row, and read dispatch ticket payloads through the shared reader ([#241](https://github.com/Rianico/harness-zkx/issues/241)) (#254)
+* **herdr:** split `herdr_reply`'s two deepest seams into their own modules — `herdr_evidence` owns Markdown status and evidence classification and `herdr_git_guard` owns the outbound SHA guard, which `herdr-dispatch` now imports at module top level instead of mid-command; `herdr-reply` re-exports every moved public name as the identical object, so CLI arguments, rendered bytes and the module docstring are unchanged (#264)
 
 ### Miscellaneous Chores
 
