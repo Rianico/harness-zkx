@@ -66,7 +66,7 @@ def test_positional_message_is_delivered_verbatim(stub: StubHarness) -> None:
     envelope = call[4].splitlines()
     assert envelope[1] == "Routing:"
     assert envelope[2] == "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
-    assert envelope[3] == "  Receiver(You): orchestrator"
+    assert envelope[3] == "  Receiver: orchestrator"
     assert envelope[4] == "Hierarchy:"
     assert envelope[5] == "  Task-Group: w9:t1"
     assert envelope[6] == "Protocol:"
@@ -82,7 +82,7 @@ def test_file_payload_is_delivered_verbatim(stub: StubHarness, tmp_path: Path) -
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(METACHARS)
-    assert "Receiver(You): orchestrator" in call[4]
+    assert "Receiver: orchestrator" in call[4]
 
 
 def test_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
@@ -90,7 +90,7 @@ def test_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(METACHARS)
-    assert "Receiver(You): orchestrator" in call[4]
+    assert "Receiver: orchestrator" in call[4]
 
 
 def test_missing_target_is_rejected(stub: StubHarness) -> None:
@@ -1151,8 +1151,9 @@ def test_dry_run_prints_argv_without_submitting(stub: StubHarness) -> None:
 def test_reply_dry_run_prints_a_trimmed_summary_not_the_raw_argv(stub: StubHarness) -> None:
     """#259: a reply dry run echoes metadata + a body preview, never the serialized argv.
 
-    #259 anchor addendum: the status line is `[You: …] dry-run: would reply to <target>`, and the
-    caller copy shows `Receiver:` where the callee payload keeps `Receiver(You):`.
+    #259 anchor addendum: the status line is `[You: …] dry-run: would reply to <target>`.
+    #260: the delivered reply carries a plain `Receiver:` — the `(You)` form is gone everywhere,
+    and only the legacy header still parses.
     """
     done = stub.run("orchestrator", "COMPLETED", "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr

@@ -109,7 +109,7 @@ The forward handoff that opens a task: it carries the ticket payload, binds the 
 _Avoid_: send, submission.
 
 **Delivery Summary**:
-The trimmed echo a dispatch or reply prints on the **caller's** stdout: an anchored status line (`[You: <agent>@<pane>]` — who is speaking, so the caller never reads itself as the receiver), a `---` delimiter, the envelope's `Routing:`/`Hierarchy:` metadata with `Receiver(You):` rewritten to `Receiver:` and the `Protocol:` notice dropped, another `---`, a source line, and a bounded body preview. The callee always receives the full envelope with `Receiver(You):` intact; `--json` restores the caller's raw machine render.
+The trimmed echo a dispatch or reply prints on the **caller's** stdout: an anchored status line (`[You: <agent>@<pane>]` — who is speaking, so the caller never reads itself as the receiver), a `---` delimiter, the envelope's `Routing:`/`Hierarchy:` metadata (the delivered header carries a plain `Receiver:` since #260; the `Protocol:` notice is dropped), another `---`, a source line, and a bounded body preview. The callee always receives the full envelope; `--json` restores the caller's raw machine render.
 _Avoid_: message body echo, argv dump.
 
 **Reply**:

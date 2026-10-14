@@ -17,7 +17,7 @@ When a workflow requires both high-level coordination (triage, planning, verific
 > Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
 
 > [!NOTE] Receiver Target Parsing
-> The `Group:` line lists participants as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **live agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string — or the pane id, which is the only other target `herdr agent prompt` accepts. A pane `label` is never a target; use the pane id or `--label` to resolve it. `Receiver(You)` renders the position ref when the target resolves to a live pane or agent name, and the bare target token when it does not.
+> The `Group:` line lists participants as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **live agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string — or the pane id, which is the only other target `herdr agent prompt` accepts. A pane `label` is never a target; use the pane id or `--label` to resolve it. `Receiver` renders the position ref when the target resolves to a live pane or agent name, and the bare target token when it does not.
 
 ### Core Anti-Patterns & Their Tells
 
@@ -195,10 +195,10 @@ Each artifact in the lane coordination lifecycle has **exactly one author role**
 
 ### The Injected Context Header & Caller Recovery
 
-Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects the envelope at turn zero, before the ticket payload (see **Know your post** in `$SKILL_DIR/SKILL.md`). The envelope carries lane topology and the correlation IDs, giving full context fidelity and debugging observability. `Receiver(You)` sits at the bottom of the header and names the recipient with its own position, so an agent that was addressed in a broadcast can read its role straight off the message. `herdr_reply.py` wraps a completion reply in the same envelope.
+Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects the envelope at turn zero, before the ticket payload (see **Know your post** in `$SKILL_DIR/SKILL.md`). The envelope carries lane topology and the correlation IDs, giving full context fidelity and debugging observability. `Receiver` sits at the bottom of the header and names the recipient with its own position, so an agent that was addressed in a broadcast can read its role straight off the message. `herdr_reply.py` wraps a completion reply in the same envelope.
 
 - **Caller recovery (`kind + session_path + cwd`)**: any participant, watchdog, or human operator can re-enter or resume the exact sending agent session in the identical working directory without amnesia. The resumption triple is no longer in the envelope; dispatch persists it as `caller_recovery` on the task record in `.lane/tasks.yaml`, retrieved just-in-time only when a reply target has exited or is a bare shell (see **JIT Diagnostic Recovery** in section 7). Pass `--verbose` to any of the three helpers to opt the forward-only `Runtime:` (Cwd/Resume) block back into the envelope for debugging.
-- **Topological coordinates**: the `Sender:` line carries `agent`, `pane`, `tab`, and `label`; `Receiver(You)` closes the envelope alone and carries the same coordinates for the addressee.
+- **Topological coordinates**: the `Sender:` line carries `agent`, `pane`, `tab`, and `label`; `Receiver` closes the envelope alone and carries the same coordinates for the addressee. The legacy `Receiver(You):` header parses to the same field for envelopes written before #260; it is no longer rendered.
 - **`Group:` roster**: lists lane participants as `name@pane_id`, sending agent first. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
 
 ---
@@ -358,7 +358,7 @@ Dispatch — forwards a ticket, with the correlation IDs that bind it to the lan
 Routing:
   Sender: msg-tm@w1:p1 - tab w1:t1 - kind pi
   Group: [msg-tm@w1:p1, msg-impl-1@w1:p3]
-  Receiver(You): msg-impl-1@w1:p3 - tab w1:t1 - kind pi
+  Receiver: msg-impl-1@w1:p3 - tab w1:t1 - kind pi
 Hierarchy:
   Task-Group: msg-enhance (w1:t1)
   Ticket-ID: #182-herdr-msg-enhance
@@ -376,7 +376,7 @@ Reply — reports a result: `Routing:` and `Hierarchy:` only, with `Task-Group:`
 [2026-10-05T06:31:04.117Z]
 Routing:
   Sender: msg-impl-1@w1:p3 - tab w1:t1 - kind pi
-  Receiver(You): msg-tm@w1:p1 - tab w1:t1 - kind pi
+  Receiver: msg-tm@w1:p1 - tab w1:t1 - kind pi
 Hierarchy:
   Task-Group: w1:t1
   Ticket-ID: #182-herdr-msg-enhance
@@ -394,7 +394,7 @@ The envelope above is what the **callee** receives, byte-for-byte. What the **ca
 
 - **First line** — the anchored status the caller reads, prefixed with its own identity `[You: <agent>@<pane>]` so a weak model never mistakes itself for the receiver (the bare pane id when no agent name resolved; no anchor under `--no-caller-context` unless `HERDR_PANE_ID` is set): live `prompted <target> (<pane>)  bytes=<size>  revision=<rev>  state=<state>`, live reply `replied to <target> (<pane>)  bytes=<size>  revision=<rev>  state=<state>`, or a dry run `dry-run: would prompt <target> (<pane>)` / `dry-run: would reply to <target> (<pane>)`. The pane suffix prints only when it resolves and differs from the target name.
 - **`---`** — the paging delimiter, closing the status line before the metadata block.
-- **Metadata** — the envelope's `Routing:` and `Hierarchy:` (and `Runtime:` under `--verbose`) blocks, rendered verbatim except that `Receiver(You):` is rewritten to `Receiver:` on the caller's copy — the callee payload itself keeps `Receiver(You):` untouched. The boilerplate `Protocol:` Herdr skill notice is dropped: it is identical on every message and carries nothing the caller needs.
+- **Metadata** — the envelope's `Routing:` and `Hierarchy:` (and `Runtime:` under `--verbose`) blocks, rendered exactly as delivered — since #260 the delivered envelope itself carries a plain `Receiver:`, so the caller copy needs no rewrite. The boilerplate `Protocol:` Herdr skill notice is dropped: it is identical on every message and carries nothing the caller needs.
 - **`---`** — the same paging delimiter that separates the callee's envelope from its body.
 - **Source** — one line naming where the payload came from: a file-backed dispatch prints `File: <path>`; a direct string or stdin prints `Payload: inline (<N> bytes)` (reply) or `Payload: stdin (<N> bytes)`.
 - **Body preview** — the original payload (never the appended reply contract or inserted pointer): if it has ≤ 3 non-empty lines they all print; a longer body prints its first and last non-empty lines with `... [skipped N lines]` between them.

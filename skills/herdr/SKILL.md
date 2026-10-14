@@ -43,7 +43,7 @@ Every cross-pane message carries a script-rendered envelope of nested YAML block
 Routing:
   Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi
   Group: [orchestrator@w1:p1, impl-1@w1:p3, impl-2@w1:p4]
-  Receiver(You): impl-1@w1:p3 - tab w1:t1 - kind pi
+  Receiver: impl-1@w1:p3 - tab w1:t1 - kind pi
 Hierarchy:
   Task-Group: msg-enhance (w1:t1)
   Ticket-ID: #182-herdr-msg-enhance
@@ -57,7 +57,7 @@ Protocol:
 
 Pass `--verbose` to `herdr-prompt`, `herdr-dispatch`, or `herdr-reply` to opt the `Runtime:` (Cwd/Resume) block back in for debugging. Recovery metadata otherwise lives in `.lane/tasks.yaml`, never in the envelope.
 
-`herdr-prompt`, `herdr-dispatch`, and `herdr-reply` render those blocks from live Herdr state and prepend them to every payload, in both directions. A `---` paging line separates the envelope from the payload, so transport headers never blur into message content. Role, position, roster, and the agent kind therefore arrive with the message whether or not the sender remembered them; an absent field renders no line at all. `Receiver(You)` closes the `Routing:` block and names *you* with *your* position — read it first when several panes were addressed at once. Relay a message with its envelope intact; a message that arrives without a `Sender:` line did not come from these scripts. The dispatch/reply Style 2 samples and the Ticket-ID/Task-ID contract live in [lane-coordination.md](references/lane-coordination.md).
+`herdr-prompt`, `herdr-dispatch`, and `herdr-reply` render those blocks from live Herdr state and prepend them to every payload, in both directions. A `---` paging line separates the envelope from the payload, so transport headers never blur into message content. Role, position, roster, and the agent kind therefore arrive with the message whether or not the sender remembered them; an absent field renders no line at all. `Receiver` closes the `Routing:` block and names the addressee with its position — read it first when several panes were addressed at once. Relay a message with its envelope intact; a message that arrives without a `Sender:` line did not come from these scripts. The dispatch/reply Style 2 samples and the Ticket-ID/Task-ID contract live in [lane-coordination.md](references/lane-coordination.md).
 
 The token before `@` is the **live agent name**, the only human-readable target `herdr agent prompt` accepts besides the pane id. A pane **label** is border decoration and is never a target, so it always rides its own `label` field — a pane that carries only a label renders as its pane id:
 
@@ -516,7 +516,7 @@ Fill the Task/Context/Acceptance sections and delete the `herdr-draft: unfilled`
 
 ### `herdr-reply` — callee completion callback
 
-Delivers `<STATUS> <artifacts> <issues>` or a result payload to the sender agent, wrapped in the Style-2 nested YAML envelope `herdr-prompt` uses, with `Receiver(You)` naming the sender it is answering:
+Delivers `<STATUS> <artifacts> <issues>` or a result payload to the sender agent, wrapped in the Style-2 nested YAML envelope `herdr-prompt` uses, with `Receiver` naming the sender it is answering:
 
 ```bash
 uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator "COMPLETED deadbeef evidence: 660 passed; scripts/check.sh" --ticket '<ticket-id>'

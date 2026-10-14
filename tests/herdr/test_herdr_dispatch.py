@@ -180,7 +180,7 @@ def test_dispatch_injects_caller_context_and_reply_contract(
         "Routing:",
         "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "  Group: [reviewer@w9:p1]",
-        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "Hierarchy:",
         "  Task-Group: w9:t1",
         "  Ticket-ID: ticket",
@@ -191,7 +191,7 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     assert "Runtime:" not in text
     assert "Cwd:" not in text
     assert "Group: [reviewer@w9:p1]" in text
-    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
+    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
     assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
     assert f"  {herdr_prompt.SKILL_NOTICE}" in text
@@ -771,7 +771,7 @@ def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None
     assert isinstance(parsed, list)
     assert parsed[3] == "reviewer"
     assert "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
-    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
+    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
 
 
 def test_dispatch_rolls_back_lease_on_blocked_outcome(stub: StubHarness, tmp_path: Path) -> None:

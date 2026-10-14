@@ -123,6 +123,17 @@ Evidence: red-then-green test results, artifacts reported by path.
 Blockers: report immediately, never idle.
 ```
 
+Task Manager roles — the coordination-authority vocabulary (`tm`, `task-manager`, `orch`,
+`orchestrator`, `coord`, `coordinator`), scoped or bare (`msg-tm`, `lane-orch`), matched on whole
+role segments — append the Task Manager contract:
+
+```text
+Task Manager: coordination, design, and review authority only; NEVER edit source or test code directly.
+Dispatch: explore problem space; decompose briefs into atomic tickets; dispatch via `herdr-dispatch`.
+Eval & Review: run verification gates in pane; audit callee diffs with review subagents before accepting.
+Synthesize: track lane progress; synthesize results and report completion to caller via `herdr-reply`.
+```
+
 That block is role-conditional: it rides only for an implementer role, so a coordination-only role does not pay for it and stays inside the original 45-word budget, while the implementer variant is capped at 80. The discriminator is segment-aware because the lane convention is `<task-group-slug>-<role>[-<subrole|index>]`: `herdr228-impl-1` and `msg-impl-1` carry the block, `herdr228-task-manager` and `msg-tm` stay coordination-only. Accepted over-match: a lane *slug* segment that itself begins with `impl` (an `impl-hardening` lane) drags its coordination roles into the block too. The shared Reply Contract already owes the reply, so the block adds only implementer-only content and stays at 69 words. The article follows the role's first letter (`a tm`, `an impl-1`). The reply command is **absolute** on purpose: the rendered text embeds the lane's own helper, resolved from the running `herdr_bootstrap.py`'s own directory, and `uv run` stays in front, so an agent whose shell sits anywhere — `/tmp`, `$HOME` — still spawns it. The `~/.agents/skills/herdr` symlink is deliberately not used: it resolves into another worktree whose `herdr_*` code may be older.
 
 ### The per-agent invariant file

@@ -579,7 +579,7 @@ def test_envelope_renders_position_receiver_and_group() -> None:
             "Routing:",
             "  Sender: orchestrator@w1:p1 - kind pi",
             "  Group: [orchestrator@w1:p1, impl-1@w1:p3]",
-            "  Receiver(You): impl-1",
+            "  Receiver: impl-1",
             "Protocol:",
             f"  {herdr_prompt.SKILL_NOTICE}",
         ]
@@ -621,7 +621,7 @@ def test_envelope_renders_a_resolved_receiver_as_a_position_ref() -> None:
         [
             "Routing:",
             "  Sender: orchestrator@w1:p1",
-            "  Receiver(You): impl-1@w1:p3 - tab w1:t1 - kind agy",
+            "  Receiver: impl-1@w1:p3 - tab w1:t1 - kind agy",
             "Protocol:",
             f"  {herdr_prompt.SKILL_NOTICE}",
         ]
@@ -850,7 +850,7 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
         "Routing:",
         "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "  Group: [reviewer@w9:p1]",
-        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "Hierarchy:",
         "  Task-Group: w9:t1",
         "Protocol:",
@@ -860,7 +860,7 @@ def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) 
     assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
     assert f"  {herdr_prompt.SKILL_NOTICE}" in text
     assert "Group: [reviewer@w9:p1]" in text
-    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in text
+    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in text
     assert "\n---\n\nhi\n\n" in text
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
@@ -896,7 +896,7 @@ def test_resolve_caller_extracts_kind_without_a_runtime_block(
         "Routing:",
         "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "  Group: [reviewer@w9:p1]",
-        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "Hierarchy:",
         "  Task-Group: w9:t1",
         "Protocol:",
@@ -918,7 +918,7 @@ def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> 
         "Routing:",
         '  Sender: w9:p2 - label "scratch pad" - tab w9:t1',
         "  Group: [reviewer@w9:p1]",
-        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "Hierarchy:",
         "  Task-Group: w9:t1",
         "Protocol:",
@@ -950,7 +950,7 @@ def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) 
         "Routing:",
         "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "  Group: [reviewer@w9:p1]",
-        "  Receiver(You): callee1",
+        "  Receiver: callee1",
         "Hierarchy:",
         "  Task-Group: w9:t1",
         "Protocol:",
@@ -959,15 +959,11 @@ def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) 
     assert "Group: [reviewer@w9:p1]" in first[4]
     assert "Group: [reviewer@w9:p1]" in second[4]
     assert first[4] != second[4]
-    assert "Receiver(You): callee1" in first[4]
-    assert "Receiver(You): callee2" in second[4]
+    assert "Receiver: callee1" in first[4]
+    assert "Receiver: callee2" in second[4]
     assert first[4].splitlines()[1:] != second[4].splitlines()[1:]
-    body_first = "\n".join(first[4].splitlines()[1:]).replace(
-        "Receiver(You): callee1", "Receiver(You): X"
-    )
-    body_second = "\n".join(second[4].splitlines()[1:]).replace(
-        "Receiver(You): callee2", "Receiver(You): X"
-    )
+    body_first = "\n".join(first[4].splitlines()[1:]).replace("Receiver: callee1", "Receiver: X")
+    body_second = "\n".join(second[4].splitlines()[1:]).replace("Receiver: callee2", "Receiver: X")
     assert body_first == body_second
 
 
@@ -985,13 +981,13 @@ def test_dry_run_renders_caller_payload_without_prompting(
         "Routing:",
         "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "  Group: [reviewer@w9:p1]",
-        "  Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi",
+        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
         "Hierarchy:",
         "  Task-Group: w9:t1",
         "Protocol:",
         f"  {herdr_prompt.SKILL_NOTICE}",
     ]
-    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in argv[4]
+    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in argv[4]
     assert "${herdr_skill}" in argv[4]
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', argv[4])
     assert reply, argv[4]
@@ -1021,8 +1017,9 @@ def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
 ) -> None:
     """#259: a caller-side dry run echoes metadata + a body preview, never the serialized argv.
 
-    #259 anchor addendum: the status line carries the `[You: …]` self-anchor in the colon form,
-    and the caller copy rewrites `Receiver(You):` to `Receiver:`.
+    #259 anchor addendum: the status line carries the `[You: …]` self-anchor in the colon form.
+    #260: the delivered envelope carries a plain `Receiver:` — no `(You)` anywhere, in the
+    callee payload or the caller copy.
 
     Pin -> mutant: printing `json.dumps(argv)` (the pre-#259 dry run) — this output is not one
     JSON line and carries no `Protocol:` notice, so a raw-argv render fails it.
@@ -1060,7 +1057,7 @@ def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
     argv: list[str] = json.loads(done.stdout)
     delivered = argv[4]
     assert herdr_prompt.SKILL_NOTICE in delivered
-    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in delivered
+    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in delivered
     assert "On completion, reply to the sender" in delivered
 
 
@@ -1148,7 +1145,7 @@ def test_group_members_listed_in_caller_context(stub: StubHarness, tmp_path: Pat
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
     assert "Group: [reviewer@w9:p1, t7-impl@w9:p2]" in text
-    assert "Receiver(You): t7-impl@w9:p2 - label callee - tab w9:t1 - kind qodercli" in text
+    assert "Receiver: t7-impl@w9:p2 - label callee - tab w9:t1 - kind qodercli" in text
 
 
 def test_constant_nonzero_revision_accepted_without_retry(
