@@ -1139,13 +1139,77 @@ def test_delivery_reports_revision_increment(stub: StubHarness) -> None:
 
 
 def test_dry_run_prints_argv_without_submitting(stub: StubHarness) -> None:
-    done = stub.run("orchestrator", "COMPLETED", "--dry-run")
+    done = stub.run("orchestrator", "COMPLETED", "--dry-run", "--json")
     from typing import cast
 
     parsed = cast(object, json.loads(done.stdout))
     assert isinstance(parsed, list)
     assert parsed[1:4] == ["agent", "prompt", "orchestrator"]
     assert parsed[4].endswith("COMPLETED")
+
+
+def test_reply_dry_run_prints_a_trimmed_summary_not_the_raw_argv(stub: StubHarness) -> None:
+    """#259: a reply dry run echoes metadata + a body preview, never the serialized argv.
+
+    #259 anchor addendum: the status line is `[You: …] dry-run: would reply to <target>`, and the
+    caller copy shows `Receiver:` where the callee payload keeps `Receiver(You):`.
+    """
+    done = stub.run("orchestrator", "COMPLETED", "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    out = done.stdout
+    lines = out.splitlines()
+    assert lines[0] == "[You: reviewer@w9:p1] dry-run: would reply to orchestrator"
+    assert lines[1] == "---"
+    assert "Routing:" in out
+    assert "  Receiver:" in out
+    assert "(You)" not in out
+    assert "Protocol:" not in out
+    assert herdr_prompt.SKILL_NOTICE not in out
+    assert lines.count("---") == 2
+    assert "Payload: inline (9 bytes)" in out
+    assert "COMPLETED" in out
+    assert not out.lstrip().startswith("{")
+
+
+def test_reply_dry_run_json_prints_the_full_wrapped_callee_payload(stub: StubHarness) -> None:
+    """#259: `--json` keeps the machine render with the full callee payload.
+
+    Pin -> mutant: trimming the DELIVERED reply rather than only the caller echo — element [4]
+    still carries the `Protocol:` notice the callee reads.
+    """
+    done = stub.run("orchestrator", "COMPLETED", "--dry-run", "--json")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    argv: list[str] = json.loads(done.stdout)
+    assert herdr_prompt.SKILL_NOTICE in argv[4]
+
+
+def test_live_reply_prints_status_then_trimmed_summary(stub: StubHarness) -> None:
+    """#259: a live reply leads with the anchored status line, then metadata + preview."""
+    done = stub.run("orchestrator", "COMPLETED")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    out = done.stdout
+    lines = out.splitlines()
+    assert lines[0].startswith("[You: reviewer@w9:p1] replied to orchestrator")
+    assert "bytes=" in lines[0]
+    assert lines[1] == "---"
+    assert "Routing:" in out
+    assert "  Receiver:" in out
+    assert "(You)" not in out
+    assert "Protocol:" not in out
+    assert "Payload: inline (9 bytes)" in out
+    assert "COMPLETED" in out
+
+
+def test_reply_body_preview_skips_long_bodies(stub: StubHarness) -> None:
+    """#259: a reply body over 3 non-empty lines prints first, skip marker, last."""
+    body = "COMPLETED\nartifact one\nnote two\nnote three\nall done"
+    done = stub.run("orchestrator", body, "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    out = done.stdout
+    assert "COMPLETED" in out and "all done" in out
+    assert "... [skipped 3 lines]" in out
+    assert "note two" not in out
 
 
 def test_wait_and_timeout_forwarded(stub: StubHarness) -> None:
@@ -2710,6 +2774,7 @@ def test_auto_start_dry_run_shows_the_planned_settle_and_never_sleeps(
         "--auto-start",
         "pi",
         "--dry-run",
+        "--json",
         state=_shell_pane_state(),
     )
 
@@ -2891,6 +2956,7 @@ def test_a_dry_run_reports_an_unresolvable_sha_instead_of_accepting_it_silently(
         "orchestrator",
         reply_payload(f"- base `{short}`"),
         "--dry-run",
+        "--json",
         env={"HERDR_LANE_DIR": str(repo)},
         cwd=repo,
     )

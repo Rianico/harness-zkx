@@ -38,8 +38,10 @@ default envelope is strictly Routing/Hierarchy/Protocol; recovery metadata
 (`cwd`, session, resume command) is never in the default envelope and is
 retrieved just-in-time from `.lane/tasks.yaml`. Pass `--verbose` to restore the
 `Runtime:` (Cwd/Resume) block for debugging. The envelope is script-rendered,
-never model-authored, so it cannot be forgotten.
-`--dry-run` shows the exact rendered payload that would be submitted.
+never model-authored, so it cannot be forgotten. The callee always receives the full envelope
+and reply contract; only the caller's own stdout shrinks. `--dry-run` prints a trimmed delivery
+summary (envelope metadata, the `---` delimiter, and a body preview) without submitting, and
+`--json` prints the exact rendered argv instead.
 
 Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herdr``.
 """
@@ -83,6 +85,7 @@ from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
     METHOD_CONSTRAINT_EPILOG,
+    STDIN,
     HerdrError,
     UsageError,
     add_shared_argument,
@@ -125,6 +128,12 @@ from herdr_envelope import (
 )
 from herdr_envelope import (
     _single_line as _single_line,  # pyright: ignore[reportPrivateUsage]
+)
+from herdr_envelope import (
+    caller_anchor as caller_anchor,
+)
+from herdr_envelope import (
+    format_delivery_summary as format_delivery_summary,
 )
 from herdr_envelope import (
     parse_envelope as parse_envelope,
@@ -241,8 +250,14 @@ def build_parser() -> argparse.ArgumentParser:
         "timeout",
         help="fail after this many milliseconds",
     )
-    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
-    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser, "json", help="print herdr's raw JSON (and the raw argv under --dry-run)"
+    )
+    add_shared_argument(
+        parser,
+        "dry_run",
+        help="print a trimmed delivery summary, submit nothing (argv with --json)",
+    )
     add_shared_argument(
         parser,
         "no_caller_context",
@@ -782,9 +797,25 @@ class Dispatch:
 
 
 def prompt_one(
-    herdr: str, target: str, payload: str, options: Options, env: Mapping[str, str]
+    herdr: str,
+    target: str,
+    payload: str,
+    options: Options,
+    env: Mapping[str, str],
+    *,
+    body: str,
+    source: str,
+    caller_ref: str,
+    pane_hint: str | None = None,
 ) -> Dispatch:
-    """Deliver the payload to one target, mapping herdr's answer onto a Dispatch."""
+    """Deliver the payload to one target, mapping herdr's answer onto a Dispatch.
+
+    `payload` is the full wrapped text the callee receives; `body` is the original payload,
+    `source` names where it came from, and `caller_ref` is the caller's `[You: …]` self-anchor,
+    all used only for the caller-facing delivery summary. `pane_hint` resolves the target's pane
+    for a `--dry-run` status line, where no live `agent get` runs. The callee delivery is
+    byte-exact and untouched — only this caller's stdout changes shape (#259).
+    """
     argv = build_prompt_argv(
         herdr,
         target,
@@ -793,8 +824,14 @@ def prompt_one(
         until=options.until,
         timeout=options.timeout,
     )
+    dry_pane_str = f" ({pane_hint})" if pane_hint and pane_hint != target else ""
+    anchor = f"[You: {caller_ref}] " if caller_ref else ""
     if options.dry_run:
-        print(json.dumps(argv))
+        if options.json:
+            print(json.dumps(argv))
+        else:
+            status = f"{anchor}dry-run: would prompt {target}{dry_pane_str}"
+            print(format_delivery_summary(status, payload, body, source))
         return Dispatch(target)
 
     _ = wait_for_ready(herdr, target, env)
@@ -860,7 +897,8 @@ def prompt_one(
         suffix = f"  state={state}" if state else ""
         pane_str = f" ({pane})" if pane and pane != target else ""
         rev_str = f"  revision={post_rev}" if post_rev else ""
-        print(f"prompted {target}{pane_str}  bytes={size}{rev_str}{suffix}")
+        status = f"{anchor}prompted {target}{pane_str}  bytes={size}{rev_str}{suffix}"
+        print(format_delivery_summary(status, payload, body, source))
     return Dispatch(target, state=state, blocked=state == BLOCKED)
 
 
@@ -871,6 +909,11 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
     herdr = find_herdr(env)
     targets = resolve_targets(options, herdr, env)
     payload = read_payload(options.file)
+    body = payload
+    if options.file and options.file != STDIN:
+        source = f"File: {options.file}"
+    else:
+        source = f"Payload: stdin ({len(payload.encode('utf-8'))} bytes)"
     if options.no_caller_context:
         for target in targets:
             print(
@@ -878,16 +921,21 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
                 file=sys.stderr,
             )
         payloads = {target: payload for target in targets}
+        # The anchor names the caller to the caller; without the envelope path there is no
+        # inventory lookup, so the env pane id is the only identity available without a call.
+        caller_ref = env.get("HERDR_PANE_ID", "")
+        pane_hints: dict[str, str | None] = dict.fromkeys(targets)
     else:
         panes, agents = fetch_inventory(herdr, env)
         caller = resolve_caller(herdr, env, inventory=(panes, agents))
+        receivers = {target: resolve_receiver(panes, agents, target) for target in targets}
         group_members = resolve_group_members(panes, agents, caller.pane_id, targets)
         payloads = {
             target: wrap_with_envelope(
                 payload,
                 caller,
                 group_members=group_members,
-                receiver=resolve_receiver(panes, agents, target) or target,
+                receiver=receivers[target] or target,
                 include_recovery=options.verbose,
                 ticket_id=options.ticket_id,
                 task_id=options.task_id,
@@ -896,6 +944,8 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
             )
             for target in targets
         }
+        caller_ref = caller_anchor(caller)
+        pane_hints = {t: r.pane_id if r is not None else None for t, r in receivers.items()}
     if options.wait:
         try:
             agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
@@ -918,7 +968,20 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
                         )
         except Exception:
             pass
-    dispatches = [prompt_one(herdr, target, payloads[target], options, env) for target in targets]
+    dispatches = [
+        prompt_one(
+            herdr,
+            target,
+            payloads[target],
+            options,
+            env,
+            body=body,
+            source=source,
+            caller_ref=caller_ref,
+            pane_hint=pane_hints[target],
+        )
+        for target in targets
+    ]
     blocked = sorted(dispatch.target for dispatch in dispatches if dispatch.blocked)
     if blocked:
         names = ", ".join(blocked)

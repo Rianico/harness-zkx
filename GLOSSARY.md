@@ -108,6 +108,10 @@ _Avoid_: subtask id, job id.
 The forward handoff that opens a task: it carries the ticket payload, binds the correlation IDs, and records the active lease plus the task trajectory in `.lane/tasks.yaml`.
 _Avoid_: send, submission.
 
+**Delivery Summary**:
+The trimmed echo a dispatch or reply prints on the **caller's** stdout: an anchored status line (`[You: <agent>@<pane>]` — who is speaking, so the caller never reads itself as the receiver), a `---` delimiter, the envelope's `Routing:`/`Hierarchy:` metadata with `Receiver(You):` rewritten to `Receiver:` and the `Protocol:` notice dropped, another `---`, a source line, and a bounded body preview. The callee always receives the full envelope with `Receiver(You):` intact; `--json` restores the caller's raw machine render.
+_Avoid_: message body echo, argv dump.
+
 **Reply**:
 The callee's completion callback: a status triad plus `resp-format.md` evidence, keyed `In-Reply-To: <Task-ID>`, which appends the mapped status event to the task trajectory and soft-completes the sender's lease (dropping the lock, keeping the record).
 _Avoid_: response, answer.

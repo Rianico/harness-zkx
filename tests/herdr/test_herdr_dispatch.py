@@ -762,7 +762,7 @@ def test_dispatch_accepts_revision_zero_without_retry(stub: StubHarness, tmp_pat
 
 
 def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "dry")), "--dry-run")
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "dry")), "--dry-run", "--json")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     from typing import cast
