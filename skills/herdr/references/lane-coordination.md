@@ -388,6 +388,18 @@ Protocol:
 <STATUS> <artifacts> <issues>
 ```
 
+#### Caller delivery summary (#259)
+
+The envelope above is what the **callee** receives, byte-for-byte. What the **caller's own stdout** prints is deliberately trimmed, so an orchestrator dispatching many tickets is not flooded with full message bodies or serialized argv JSON. The callee delivery never changes; only this caller-side echo shrinks. Both `herdr-prompt`/`herdr-dispatch` and `herdr-reply` print the same shape:
+
+- **First line** — the status the caller reads: live `prompted <target> (<pane>)  bytes=<size>  revision=<rev>  state=<state>`, live reply `replied to <target> (<pane>)  bytes=<size>  revision=<rev>  state=<state>`, or a dry run `dry-run (would prompt <target>)` / `dry-run (would reply to <target>)`.
+- **Metadata** — the envelope's `Routing:` and `Hierarchy:` (and `Runtime:` under `--verbose`) blocks, rendered verbatim, but with the boilerplate `Protocol:` Herdr skill notice dropped: it is identical on every message and carries nothing the caller needs.
+- **`---`** — the same paging delimiter that separates the callee's envelope from its body.
+- **Source** — one line naming where the payload came from: a file-backed dispatch prints `File: <path>`; a direct string or stdin prints `Payload: inline (<N> bytes)` (reply) or `Payload: stdin (<N> bytes)`.
+- **Body preview** — the original payload (never the appended reply contract or inserted pointer): if it has ≤ 3 non-empty lines they all print; a longer body prints its first and last non-empty lines with `... [skipped N lines]` between them.
+
+`--json` is the escape hatch and keeps the machine render: under `--dry-run` it prints the raw argv array (for dispatch/prompt) or the raw argv / revive-plan JSON (for reply), and on a live run it prints herdr's raw JSON response. The trimmed summary is human-facing only; anything that parses the delivery programmatically passes `--json`.
+
 #### Ticket-ID / Task-ID contract
 
 - **Ticket-ID** identifies the dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). `herdr-dispatch --ticket-id` sets it explicitly; when omitted, the dispatcher derives it deterministically from the ticket filename.

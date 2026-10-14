@@ -136,8 +136,14 @@ def build_parser() -> argparse.ArgumentParser:
         "timeout",
         help="fail after this many milliseconds",
     )
-    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
-    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser, "json", help="print herdr's raw JSON (and the raw argv under --dry-run)"
+    )
+    add_shared_argument(
+        parser,
+        "dry_run",
+        help="print a trimmed delivery summary, submit nothing (argv with --json)",
+    )
     add_shared_argument(
         parser,
         "no_caller_context",

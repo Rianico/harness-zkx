@@ -244,6 +244,7 @@ def test_dry_run_prints_exact_argv_without_prompting(stub: StubHarness, tmp_path
         "--file",
         str(payload_file(tmp_path)),
         "--dry-run",
+        "--json",
         "--wait",
         "--no-caller-context",
     )
@@ -338,7 +339,12 @@ def test_label_resolves_to_the_pane_id(stub: StubHarness, tmp_path: Path) -> Non
 
 def test_label_dry_run_shows_the_resolved_pane_id(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run(
-        "--label", "scratch pad", "--file", str(payload_file(tmp_path, "hi")), "--dry-run"
+        "--label",
+        "scratch pad",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--dry-run",
+        "--json",
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
@@ -482,7 +488,14 @@ def test_broadcast_blocked_reports_exit_blocked(stub: StubHarness, tmp_path: Pat
 
 
 def test_broadcast_dry_run_prints_one_argv_per_target(stub: StubHarness, tmp_path: Path) -> None:
-    done = stub.run("callee1", "callee2", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
+    done = stub.run(
+        "callee1",
+        "callee2",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--dry-run",
+        "--json",
+    )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     argv_lines: list[list[str]] = [json.loads(line) for line in done.stdout.splitlines()]
@@ -961,7 +974,7 @@ def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) 
 def test_dry_run_renders_caller_payload_without_prompting(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run")
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run", "--json")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     argv: list[str] = json.loads(done.stdout)
@@ -991,11 +1004,88 @@ def test_dry_run_renders_caller_payload_without_prompting(
 
 def test_dry_run_opt_out_renders_verbatim(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run(
-        "reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run", "--no-caller-context"
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--dry-run",
+        "--json",
+        "--no-caller-context",
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     assert json.loads(done.stdout)[4] == "hi"
+
+
+def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#259: a caller-side dry run echoes metadata + a body preview, never the serialized argv.
+
+    Pin -> mutant: printing `json.dumps(argv)` (the pre-#259 dry run) — this output is not one
+    JSON line and carries no `Protocol:` notice, so a raw-argv render fails it.
+    """
+    ticket = payload_file(tmp_path, "do the thing")
+    done = stub.run("reviewer", "--file", str(ticket), "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    out = done.stdout
+    assert out.splitlines()[0] == "dry-run (would prompt reviewer)"
+    assert "Routing:" in out and "Hierarchy:" in out
+    assert "Protocol:" not in out
+    assert herdr_prompt.SKILL_NOTICE not in out
+    assert "---" in out.splitlines()
+    assert f"File: {ticket}" in out
+    assert "do the thing" in out
+    assert not out.lstrip().startswith("[")
+
+
+def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#259: `--json` keeps the machine render, and the callee payload is untouched by the trim.
+
+    Pin -> mutant: shrinking the DELIVERED payload rather than only the caller echo — the argv
+    element [4] must still carry the full `Protocol:` notice and reply contract.
+    """
+    ticket = payload_file(tmp_path, "do the thing")
+    done = stub.run("reviewer", "--file", str(ticket), "--dry-run", "--json")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    argv: list[str] = json.loads(done.stdout)
+    delivered = argv[4]
+    assert herdr_prompt.SKILL_NOTICE in delivered
+    assert "Receiver(You): reviewer@w9:p1 - tab w9:t1 - kind pi" in delivered
+    assert "On completion, reply to the sender" in delivered
+
+
+def test_live_prompt_prints_status_then_trimmed_summary(stub: StubHarness, tmp_path: Path) -> None:
+    """#259: a live run leads with the status line, then the same trimmed metadata + preview."""
+    ticket = payload_file(tmp_path, "do the thing")
+    done = stub.run("reviewer", "--file", str(ticket), "--no-wait")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    out = done.stdout
+    assert out.splitlines()[0].startswith("prompted reviewer")
+    assert "bytes=" in out.splitlines()[0]
+    assert "Routing:" in out and "Hierarchy:" in out
+    assert "Protocol:" not in out
+    assert f"File: {ticket}" in out
+    assert "do the thing" in out
+
+
+def test_body_preview_prints_short_bodies_and_skips_long_ones(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#259: a <=3-line body prints in full; a longer one prints first, skip marker, last."""
+    short = stub.run("reviewer", "--file", str(payload_file(tmp_path, "alpha\nbeta")), "--dry-run")
+    assert short.returncode == herdr_cli.EXIT_OK, short.stderr
+    assert "alpha" in short.stdout and "beta" in short.stdout
+    assert "skipped" not in short.stdout
+
+    long_body = "line1\nline2\nline3\nline4\nline5\nline6"
+    long_ = stub.run("reviewer", "--file", str(payload_file(tmp_path, long_body)), "--dry-run")
+    assert long_.returncode == herdr_cli.EXIT_OK, long_.stderr
+    assert "line1" in long_.stdout and "line6" in long_.stdout
+    assert "... [skipped 4 lines]" in long_.stdout
+    assert "line3" not in long_.stdout
 
 
 def test_refuses_target_that_is_an_agent_kind(stub: StubHarness, tmp_path: Path) -> None:

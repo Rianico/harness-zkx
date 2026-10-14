@@ -138,7 +138,7 @@ from herdr_cli import (
     run_herdr_checked,
     verify_target_not_bare_shell,
 )
-from herdr_envelope import render_envelope, render_prelude
+from herdr_envelope import format_delivery_summary, render_envelope, render_prelude
 from herdr_lease import (
     REPLIES_DIR_LANE,
     get_lease,
@@ -220,8 +220,14 @@ def build_parser() -> argparse.ArgumentParser:
         "timeout",
         help="fail after this many milliseconds",
     )
-    add_shared_argument(parser, "json", help="print herdr's raw JSON response")
-    add_shared_argument(parser, "dry_run", help="print the argv, submit nothing")
+    add_shared_argument(
+        parser, "json", help="print herdr's raw JSON (and the raw argv under --dry-run)"
+    )
+    add_shared_argument(
+        parser,
+        "dry_run",
+        help="print a trimmed delivery summary, submit nothing (argv with --json)",
+    )
     add_shared_argument(
         parser,
         "auto_start",
@@ -1657,6 +1663,13 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         verify_target_not_bare_shell(herdr, target, env)
 
     payload = read_payload(options.file, options.message)
+    body = payload
+    if options.file and options.file != STDIN:
+        source = f"File: {options.file}"
+    elif options.message is not None:
+        source = f"Payload: inline ({len(payload.encode('utf-8'))} bytes)"
+    else:
+        source = f"Payload: stdin ({len(payload.encode('utf-8'))} bytes)"
     mapped, sha, _line = parse_status_line(payload)
     if mapped is None:
         # #246 D1.1: the Final Reply Template requires the body to start at its status line.
@@ -1776,18 +1789,22 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         argv += ["--timeout", str(options.timeout)]
 
     if options.dry_run:
-        # A revive plan shows the spawn, the invariant surface, its settle, and the
-        # delivery argv; a plain plan stays the delivery argv alone.
-        if revive_argv is None:
-            print(json.dumps(argv))
+        if options.json:
+            # A revive plan shows the spawn, the invariant surface, its settle, and the
+            # delivery argv; a plain plan stays the delivery argv alone.
+            if revive_argv is None:
+                print(json.dumps(argv))
+            else:
+                plan: dict[str, object] = {
+                    "agent_start": revive_argv,
+                    "role_invariant": revive_invariant,
+                    "settle": options.settle,
+                    "agent_prompt": argv,
+                }
+                print(json.dumps(plan))
         else:
-            plan: dict[str, object] = {
-                "agent_start": revive_argv,
-                "role_invariant": revive_invariant,
-                "settle": options.settle,
-                "agent_prompt": argv,
-            }
-            print(json.dumps(plan))
+            print(f"dry-run (would reply to {target})")
+            print(format_delivery_summary(delivered, body, source))
         return EXIT_OK
 
     done = run_herdr(argv, env)
@@ -1829,6 +1846,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         pane_str = f" ({resolved_pane})" if resolved_pane and resolved_pane != target else ""
         rev_str = f"  revision={rev}" if rev else ""
         print(f"replied to {target}{pane_str}  bytes={size}{rev_str}{suffix}")
+        print(format_delivery_summary(delivered, body, source))
     return EXIT_OK
 
 

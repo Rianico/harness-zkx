@@ -341,3 +341,54 @@ def split_envelope_and_body(text: str) -> tuple[Envelope | None, str | None]:
     if envelope is None:
         return None, None
     return envelope, body
+
+
+def envelope_metadata_lines(delivered: str) -> list[str]:
+    """The delivered envelope's `Routing:`/`Hierarchy:`/`Runtime:` header lines, boilerplate dropped.
+
+    Caller-facing only: the callee still receives the full envelope. The leading timestamp is
+    stripped, and rendering stops at `Protocol:` so the fixed Herdr skill notice — the same on
+    every message — never reaches the orchestrator's context. Text with no parseable envelope
+    header (`--no-caller-context`, a body that is not an envelope) yields no lines, so a
+    body containing a bare `---` is never mistaken for a header.
+    """
+    head, sep, _rest = delivered.partition(f"\n{PAGING_DELIMITER}\n\n")
+    if not sep:
+        return []
+    lines = head.splitlines()
+    if lines and _TIMESTAMP.match(lines[0]):
+        lines = lines[1:]
+    if not lines or lines[0] != "Routing:":
+        return []
+    out: list[str] = []
+    for line in lines:
+        if line == "Protocol:":
+            break
+        out.append(line)
+    return out
+
+
+def preview_body(body: str, limit: int = 3) -> list[str]:
+    """A bounded preview of the payload: every non-empty line, or first/middle-marker/last.
+
+    A body of `limit` or fewer non-empty lines prints in full; a longer one prints its first and
+    last non-empty lines with a `... [skipped N lines]` marker for the lines in between, so the
+    orchestrator sees the shape of what it dispatched without the whole ticket on stdout.
+    """
+    non_empty = [line for line in body.splitlines() if line.strip()]
+    if len(non_empty) <= limit:
+        return non_empty
+    skipped = len(non_empty) - 2
+    return [non_empty[0], f"... [skipped {skipped} lines]", non_empty[-1]]
+
+
+def format_delivery_summary(delivered: str, body: str, source: str) -> str:
+    """Render the caller-facing delivery summary below the status line: metadata, `---`, preview.
+
+    `delivered` is the full wrapped payload (for the envelope metadata); `body` is the original
+    payload (for the preview, so an appended reply contract or inserted pointer never leaks into
+    it); `source` names where the payload came from. This is what trims the orchestrator's
+    context: the callee delivery is untouched, only this caller-side echo shrinks.
+    """
+    lines = [*envelope_metadata_lines(delivered), PAGING_DELIMITER, source, *preview_body(body)]
+    return "\n".join(lines)
