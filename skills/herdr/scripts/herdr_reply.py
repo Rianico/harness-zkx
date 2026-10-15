@@ -216,6 +216,11 @@ from herdr_git_guard import (
 from herdr_label import reconcile_lane
 from herdr_lease import (
     REPLIES_DIR_LANE,
+    STATE_COMPLETED,
+    STATE_FAILED,
+    STATE_INPUT_REQUIRED,
+    STATE_SUBMITTED,
+    STATE_WORKING,
     get_lease,
     get_reply,
     get_task,
@@ -225,6 +230,7 @@ from herdr_lease import (
     resolve_base_dir,
     save_verified_reply,
     state_is_readable,
+    status_of,
 )
 from herdr_prompt import (
     resolve_caller,
@@ -724,8 +730,9 @@ def resolve_lane_task_group(
     with one stderr line instead of renaming to a bare tab id or to a slug guessed from a
     visible label. Reading the store never decides delivery, so an unreadable record is swallowed
     here — the lease steps around it already reported the store on stderr, and the contract is
-    one line per skipped step. (Dispatch does not yet write `task_group` into the record it
-    creates, so today this usually answers None; that plumbing gap is a separate ticket.)
+    one line per skipped step. `herdr-dispatch` writes the slug it was given with `--task-group`
+    into both records it creates (#182 t3 C), so a lane opened with a task group heals its own
+    tab title on the reply side; a lane opened without one still answers None and stays skipped.
     """
     records: list[Mapping[str, Any] | None] = [lease]
     if task_id:
@@ -746,15 +753,23 @@ def resolve_lane_task_group(
 # The open/terminal partition that decides which of the sender's tasks count as open work for
 # the linkage (#246 D1.4/F2). Both sets are enumerated and a test pins that they partition the
 # store's `CANONICAL_STATUSES`, so a status added there cannot silently default to open.
-# `completed` is the only status this store writes that ends the round;
-# `dispatched`/`in_progress`/`blocked`/`rework` all still await their assignee.
-OPEN_TASK_STATUSES = frozenset({"dispatched", "in_progress", "blocked", "rework"})
-TERMINAL_TASK_STATUSES = frozenset({"completed"})
+# `TASK_STATE_COMPLETED` is the only state this store writes that ends the round;
+# `TASK_STATE_SUBMITTED`/`TASK_STATE_WORKING`/`TASK_STATE_INPUT_REQUIRED`/`TASK_STATE_FAILED`
+# all still await their assignee. `_is_open_task` normalizes through `herdr_lease.STATUS_ALIASES`
+# before comparing, so a record written by a pre-cutover worktree (`status: dispatched`) lands on
+# the same side of the partition as one written here (`status: TASK_STATE_SUBMITTED`) — the shared
+# live store cannot be upgraded in lockstep. A status that names no state reads as neither.
+OPEN_TASK_STATUSES = frozenset({STATE_SUBMITTED, STATE_WORKING, STATE_INPUT_REQUIRED, STATE_FAILED})
+TERMINAL_TASK_STATUSES = frozenset({STATE_COMPLETED})
 
 
 def _is_open_task(task: Mapping[str, Any]) -> bool:
-    """Whether a task still awaits its assignee: its status is one of the open ones."""
-    return task.get("status") in OPEN_TASK_STATUSES
+    """Whether a task still awaits its assignee: its state is one of the open ones.
+
+    Both vocabularies read alike, and an unknown or absent state is NOT open: a record nobody can
+    read must not be reported as the sender's open work.
+    """
+    return status_of(task) in OPEN_TASK_STATUSES
 
 
 # ── unlinked-warning severity markers (#246 D1.5 R2) ─────────────────────────────────

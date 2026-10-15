@@ -747,7 +747,7 @@ def test_dispatch_multi_hop_same_task_id_preserves_trajectory(
     trajectory = task["trajectory"]
     assert [event["seq"] for event in trajectory] == [1, 2]
     assert [event["event"] for event in trajectory] == ["dispatched", "dispatched"]
-    assert task["status"] == "dispatched"
+    assert task["status"] == herdr_lease.STATE_SUBMITTED
     assert task["assignee"] == "callee2"
     assert task["caller_recovery"] == {"pane_id": "w9:p2", "cwd": "/tmp/scratch"}
 

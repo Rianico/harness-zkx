@@ -57,7 +57,7 @@ from herdr_cli import (
 )
 from herdr_envelope import sender_ref, utc_stamp
 from herdr_git_guard import lane_git_dir, require_resolvable_shas
-from herdr_label import reconcile_lane, stale_labels
+from herdr_label import reconcile_lane, stale_labels, tab_id_by_pane
 from herdr_lease import acquire_lease, get_lease, release_lease
 from herdr_prompt import (
     EXIT_WAIT_TIMEOUT,
@@ -268,6 +268,20 @@ def live_pane_ids(herdr: str, env: Mapping[str, str]) -> set[str] | None:
     ids = {entry_optional_text(pane, "pane_id") for pane in panes}
     live = {pane_id for pane_id in ids if pane_id}
     return live or None
+
+
+def lane_tab_ids(herdr: str, env: Mapping[str, str]) -> dict[str, str]:
+    """Pane id -> tab id from one `pane list`: the physical anchors a lease records (#182 t3 A).
+
+    Best-effort like the rest of the lease bookkeeping — an inventory that cannot answer returns
+    an empty mapping, and the record then omits `tab_id` rather than guessing one from a visible
+    label or a tab title. It changes no target and no exit status.
+    """
+    try:
+        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    except Exception:
+        return {}
+    return tab_id_by_pane(panes)
 
 
 def lease_pane_is_gone(lease: Mapping[str, object], herdr: str, env: Mapping[str, str]) -> bool:
@@ -731,7 +745,14 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
 
     caller_name = "caller"
     caller_recovery: dict[str, str] | None = None
+    # The runtime identity persisted on the lease and task records (#182 t3 A): the leased pane's
+    # physical tab, and the dispatching agent's session id — the same value the envelope renders
+    # as `context_id`, so the store and the wire agree on one spelling. An inventory that cannot
+    # answer leaves either as None, and `acquire_lease` then omits the key instead of guessing.
+    lane_tabs: Mapping[str, str] = {}
+    caller_context_id: str | None = None
     if not options.dry_run:
+        lane_tabs = lane_tab_ids(herdr, env)
         try:
             caller_ctx = resolve_caller(herdr, env)
             caller_name = caller_ctx.agent or caller_ctx.label or caller_ctx.pane_id
@@ -744,6 +765,7 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
             }
             filtered = {key: value for key, value in subset.items() if value}
             caller_recovery = filtered or None
+            caller_context_id = caller_ctx.session_id or None
         except Exception:
             caller_recovery = None
 
@@ -756,9 +778,12 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
                 ticket_path,
                 caller_name,
                 pane_id=pane,
+                tab_id=lane_tabs.get(pane) if pane else None,
+                context_id=caller_context_id,
                 env=env,
                 ticket_id=ticket_id,
                 task_id=task_id,
+                task_group=options.task_group,
                 caller_recovery=caller_recovery,
             )
             acquired_targets.append(canonical)
