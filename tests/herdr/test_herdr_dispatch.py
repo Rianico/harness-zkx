@@ -1033,6 +1033,260 @@ def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: P
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
 
+# ── #182 t2: active ID-anchored reconciliation at dispatch (ADR-0020) ──────────────
+
+
+def reconcile_renames(stub: StubHarness) -> list[list[str]]:
+    """Every rename this dispatch issued (or attempted), minus the herdr argv head."""
+    return [call[1:] for call in stub.calls() if call[2] == "rename"]
+
+
+LANE_TAB = {"tab_id": "w9:t1", "workspace_id": "w9", "label": "harness"}
+
+
+def lane_state(**overrides: object) -> dict[str, object]:
+    """DEFAULT_STATE (tab titled `harness`, orchestrator pane w9:p1 hosts the live, named
+    `reviewer`) with the lane rows spelled out, so each drift below is one mutated row."""
+    state: dict[str, object] = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+            },
+            {
+                "pane_id": "w9:p3",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/work",
+                "label": "worker-1",
+            },
+        ],
+    }
+    return {**state, **overrides}
+
+
+def dispatch_into_lane(
+    stub: StubHarness, tmp_path: Path, state: dict[str, object], *extra: str
+) -> subprocess.CompletedProcess[str]:
+    return stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        *extra,
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+
+
+def test_dispatch_renames_a_generic_tab_title_on_its_physical_id(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 1: tab `w9:t1` titled `3` is set back to `<task_group>` by `tab_id`.
+
+    Pin -> mutant: anchor the rename on the visible title instead of `tab_id`, so the argv
+    row mismatches and this fails.
+    """
+    state = lane_state(tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}])
+    done = dispatch_into_lane(stub, tmp_path, state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == [["tab", "rename", "w9:t1", "harness"]]
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_renames_nothing_when_the_lane_is_already_correct(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 2: the no-op invariant — a correct lane earns zero renames.
+
+    Pin -> mutant: rename unconditionally at dispatch, so this logs a tab rename anyway.
+    """
+    done = dispatch_into_lane(stub, tmp_path, lane_state())
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == []
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_restores_a_dropped_agent_name_with_both_renames(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 3: ADR-0020 names BOTH commands; each is anchored on the worker's `pane_id`.
+
+    Pin -> mutant: issue only `agent rename` (or only `pane rename`), so the pair comes back
+    half-healed and this sees one argv where it asserts two.
+    """
+    state = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ]
+    )
+    done = dispatch_into_lane(stub, tmp_path, state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+    ]
+
+
+def test_dispatch_rename_failure_delivers_anything(stub: StubHarness, tmp_path: Path) -> None:
+    """Scenario 4: a refused rename is one stderr line — the exit status and the delivery stand.
+
+    Pin -> mutant: let `HerdrError` propagate out of the pass (or exit on it), so this
+    dispatch turns EXIT_OK into EXIT_HERDR or never prompts.
+    """
+    state = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ],
+        pane_rename_error_for=["w9:p3"],
+    )
+    done = dispatch_into_lane(stub, tmp_path, state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stderr.count("herdr-dispatch: rename skipped:") == 1
+    assert len(stub.prompts()) == 1
+    assert reconcile_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+    ]
+
+
+def test_dispatch_renames_a_dropped_orchestrator_to_the_composed_lane_name(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 5: the sending pane's agent lost its name -> re-registered `<task_group>-orch`.
+
+    The orchestrator pane carries the agent-shaped label `old-reviewer`, so case 1's worker
+    restoration WOULD claim it; pin -> mutant: let case 1 do so, and this sees a rename to
+    `old-reviewer` instead of exactly one rename to `harness-orch`.
+    """
+    state = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi", "agent_status": "idle"},
+        ],
+        panes=[
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+                "label": "old-reviewer",
+            },
+            {
+                "pane_id": "w9:p3",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/work",
+                "label": "worker-1",
+            },
+        ],
+    )
+    done = stub.run(
+        "worker-1",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == [["agent", "rename", "w9:p1", "harness-orch"]]
+
+
+def test_dispatch_second_run_over_a_corrected_lane_renames_nothing(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 6: idempotence — after the first pass heals the drift, the next pass is silent.
+
+    Pin -> mutant: rename from the dispatch's OWN intent rather than from the inventory
+    comparison, so the second run over the corrected fleet still issues renames.
+    """
+    drifted = lane_state(
+        tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}],
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ],
+    )
+    first = dispatch_into_lane(stub, tmp_path, drifted)
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert reconcile_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+        ["tab", "rename", "w9:t1", "harness"],
+    ]
+    # The fleet as the two healed rows leave it: worker holds its name, tab holds the slug.
+    corrected = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi", "agent_status": "idle"},
+        ]
+    )
+    before = len(stub.calls())
+    second = dispatch_into_lane(stub, tmp_path, corrected, "--force")
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    assert [call[1:] for call in stub.calls()[before:] if call[2] == "rename"] == []
+
+
+def test_dispatch_dry_run_prints_the_reconciliation_and_renames_nothing(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 7: `--dry-run` prints the planned argv, issues no rename, mutates nothing."""
+    state = lane_state(tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}])
+    done = dispatch_into_lane(stub, tmp_path, state, "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (planned,) = json.loads(done.stdout.splitlines()[0])
+    assert planned[1:] == ["tab", "rename", "w9:t1", "harness"]
+    assert reconcile_renames(stub) == []
+    assert stub.prompts() == []
+
+
+def test_dispatch_skips_an_ungrammatical_task_group_with_one_line(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 8: a violating slug is SKIPPED — one stderr line, and it never reaches herdr.
+
+    Pin -> mutant: validate the slug but still forward it, or crash on it, so this either
+    logs a tab rename or loses the delivery.
+    """
+    state = lane_state(tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}])
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--task-group",
+        "Bad Slug",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == []
+    assert done.stderr.count("left the tab title and the orchestrator name alone") == 1
+    assert len(stub.prompts()) == 1
+
+
 # ── pin: the dispatch ticket payload goes through the shared reader ────────────────
 #
 # `herdr-dispatch` used to read its own ticket with `Path(...).read_text(encoding="utf-8")`.

@@ -3550,3 +3550,150 @@ def test_space_form_dash_ticket_value_is_refused_with_equals_form_guidance(
     assert bound.returncode == herdr_cli.EXIT_OK, bound.stderr
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
     assert record["task_id"] == "-rf", "the equals form binds a dash-led value"
+
+
+# ── #182 t2: active ID-anchored reconciliation at reply (ADR-0020) ──────────────────
+
+
+def reply_renames(harness: StubHarness) -> list[list[str]]:
+    """Every rename the reply issued (or attempted), minus the herdr argv head."""
+    return [call[1:] for call in harness.calls() if call[2] == "rename"]
+
+
+REPLY_OK = "COMPLETED artifacts=[a.py] issues=[]\n\n## Evidence\n- 1 passed\n"
+
+REPLY_LANE_PANES: list[dict[str, object]] = [
+    {
+        "pane_id": "w9:p1",
+        "tab_id": "w9:t1",
+        "workspace_id": "w9",
+        "agent": "pi",
+        "agent_status": "working",
+        "cwd": "/tmp/harness",
+    },
+    {
+        "pane_id": "w9:p3",
+        "tab_id": "w9:t1",
+        "workspace_id": "w9",
+        "agent": "pi",
+        "agent_status": "idle",
+        "cwd": "/tmp/work",
+        "label": "worker-1",
+    },
+]
+LANE_TAB_CORRECT = {"tab_id": "w9:t1", "workspace_id": "w9", "label": "harness"}
+LANE_TAB_GENERIC = {"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}
+
+
+def test_reply_reconciles_a_drifted_tab_from_the_task_record(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """`herdr-reply` has no `--task-group`; the slug is read back from the task record and the
+    drifted title is renamed on its physical tab id — worker repair and delivery both stand.
+
+    Pin -> mutant: rename to the bare tab id or a guessed slug, so the argv tail mismatches.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#t2",
+        task_group="harness",
+    )
+    state = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB_GENERIC],
+        "panes": REPLY_LANE_PANES,
+    }
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reply_renames(stub) == [["tab", "rename", "w9:t1", "harness"]]
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_without_a_recorded_task_group_skips_with_one_line(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A lane whose records carry no slug says so ONCE and still heals worker names (case 1).
+
+    Pin -> mutant: fall back to the tab id as the slug, so a `tab rename` reaches herdr with
+    `w9:t1` as the title and this sees two renames instead of the worker pair alone.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#n",
+    )
+    state = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB_GENERIC],
+        "panes": REPLY_LANE_PANES,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ],
+    }
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stderr.count("no task group recorded for this lane") == 1
+    assert stub.tab_renames() == []
+    assert reply_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+    ]
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_rename_failure_still_delivers_the_payload(stub: StubHarness, tmp_path: Path) -> None:
+    """Scenario 4 at the reply seam: a refused rename is one skip line, never a lost reply.
+
+    Pin -> mutant: let `HerdrError` escape the reconciliation pass, so the reply exits non-zero
+    and the caller never gets the payload.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#f",
+        task_group="harness",
+    )
+    state = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB_GENERIC],
+        "panes": REPLY_LANE_PANES,
+        "tab_rename_error": "rename refused",
+    }
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stderr.count("herdr-reply: rename skipped:") == 1
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_renames_nothing_over_an_already_correct_lane(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The no-op invariant at the reply seam: a healed fleet earns zero renames.
+
+    Pin -> mutant: unconditional rename at reply, so this logs a tab rename anyway.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#ok",
+        task_group="harness",
+    )
+    state = {**DEFAULT_STATE, "tabs": [LANE_TAB_CORRECT], "panes": REPLY_LANE_PANES[:1]}
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reply_renames(stub) == []
+    assert len(stub.prompts()) == 1

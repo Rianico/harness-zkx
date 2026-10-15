@@ -57,7 +57,7 @@ from herdr_cli import (
 )
 from herdr_envelope import sender_ref, utc_stamp
 from herdr_git_guard import lane_git_dir, require_resolvable_shas
-from herdr_label import stale_labels
+from herdr_label import reconcile_lane, stale_labels
 from herdr_lease import acquire_lease, get_lease, release_lease
 from herdr_prompt import (
     EXIT_WAIT_TIMEOUT,
@@ -635,6 +635,20 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
     report_stale_labels(herdr, env)
+    # ADR-0020 active reconciliation (#182 t2): IDs are the anchors, so a worker whose agent
+    # process exited and came back nameless takes its surviving label back before any target is
+    # resolved, and a drifted lane title is set straight. Task-group source: `--task-group`, the
+    # operator's own opt-in — absent it, there is nothing to reconcile for the tab and the
+    # orchestrator, and the pass stays silent rather than printing on every dispatch. The pass
+    # is best-effort: a refused rename prints one line and changes neither this exit status nor
+    # the delivery below.
+    _ = reconcile_lane(
+        herdr,
+        env,
+        task_group=options.task_group,
+        marker="herdr-dispatch",
+        dry_run=options.dry_run,
+    )
     kind = normalize_auto_start_kind(options.auto_start)
     try:
         targets = resolve_targets(options, herdr, env)

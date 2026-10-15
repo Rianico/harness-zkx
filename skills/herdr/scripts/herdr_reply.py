@@ -213,6 +213,7 @@ from herdr_git_guard import (
 from herdr_git_guard import (
     unresolvable_sha_tokens as unresolvable_sha_tokens,
 )
+from herdr_label import reconcile_lane
 from herdr_lease import (
     REPLIES_DIR_LANE,
     get_lease,
@@ -704,6 +705,40 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
             _ = release_lease(sender, env=env)
     except Exception as exc:
         report_lease_trouble("lease release", exc)
+
+
+# ── lane task group for the ADR-0020 reconciliation pass (#182 t2) ──────────────────
+
+
+def resolve_lane_task_group(
+    lease: Mapping[str, Any] | None,
+    task_id: str | None,
+    env: Mapping[str, str],
+) -> str | None:
+    """The Task Group slug this lane was opened under, read back from the lane's own records.
+
+    `herdr-reply` has no `--task-group` flag, so the slug the reconciliation pass would write as
+    the tab title and as `<task_group>-orch` can only come from stored evidence: the sender's
+    lease, then the task record this reply advances. A record that carries none answers unknown,
+    and this returns None: the pass then leaves the tab title and the orchestrator name alone
+    with one stderr line instead of renaming to a bare tab id or to a slug guessed from a
+    visible label. Reading the store never decides delivery, so an unreadable record is swallowed
+    here — the lease steps around it already reported the store on stderr, and the contract is
+    one line per skipped step. (Dispatch does not yet write `task_group` into the record it
+    creates, so today this usually answers None; that plumbing gap is a separate ticket.)
+    """
+    records: list[Mapping[str, Any] | None] = [lease]
+    if task_id:
+        try:
+            records.append(get_task(task_id, env=env))
+        except Exception:
+            records.append(None)
+    for record in records:
+        if isinstance(record, Mapping):
+            value = record.get("task_group")
+            if isinstance(value, str) and value:
+                return value
+    return None
 
 
 # ── reply task linkage (#246 D1.2) ──────────────────────────────────────────────────
@@ -1231,6 +1266,27 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     panes, agents = fetch_inventory(herdr, env)
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     receiver = resolve_receiver(panes, agents, target)
+    # ADR-0020 active reconciliation (#182 t2), anchored on the physical ids this snapshot
+    # already resolved: `caller_ctx.pane_id` names the orchestrator pane, `caller_ctx.tab_id`
+    # names the lane's tab, and each worker is keyed by its own `pane_id`. Task-group source:
+    # no `--task-group` flag exists here, so the slug is read back from the lane's records (see
+    # `resolve_lane_task_group`); with none recorded the tab title and the orchestrator name are
+    # skipped with one stderr line, and the worker-name half still runs. Best-effort by contract:
+    # no rename below can change this exit status or delay the delivery after it.
+    _ = reconcile_lane(
+        herdr,
+        env,
+        task_group=resolve_lane_task_group(lease, envelope_task_id, env),
+        marker="herdr-reply",
+        dry_run=options.dry_run,
+        missing_note=(
+            "no task group recorded for this lane, so the tab title and the orchestrator "
+            "name were left alone"
+        ),
+        pane_id=caller_ctx.pane_id,
+        tab_id=caller_ctx.tab_id,
+        inventory=(panes, agents),
+    )
     anchor = f"[You: {caller_anchor(caller_ctx)}]"
     reply_envelope = render_envelope(
         caller_ctx,

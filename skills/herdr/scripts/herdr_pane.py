@@ -43,6 +43,7 @@ from herdr_cli import (
     text_field,
     validate_agent_name,
 )
+from herdr_label import pane_rename_argv
 from herdr_worktree import LANE_DIR_ENV, resolve_lane_base_dir
 
 DIRECTION_ALIASES = {
@@ -319,13 +320,13 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
     if options.dry_run:
         print(shlex.join(argv))
         if label:
-            rename_argv = [herdr, "pane", "rename", "<new_pane_id>", label]
+            rename_argv = pane_rename_argv(herdr, "<new_pane_id>", label)
             print(shlex.join(rename_argv))
         return EXIT_OK
     raw = run_herdr_checked(argv, env)
     new_pane = text_field(raw, "result", "pane", "pane_id")
     if label:
-        rename_argv = [herdr, "pane", "rename", new_pane, label]
+        rename_argv = pane_rename_argv(herdr, new_pane, label)
         _ = run_herdr_checked(rename_argv, env)
     if options.json:
         print(raw, end="" if raw.endswith("\n") else "\n")
