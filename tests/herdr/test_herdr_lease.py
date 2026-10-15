@@ -542,6 +542,27 @@ def test_transition_refuses_a_status_that_names_no_state(tmp_path: Path) -> None
     assert task is not None and task["status"] == herdr_lease.STATE_SUBMITTED
 
 
+def test_record_event_refuses_a_status_that_names_no_state(tmp_path: Path) -> None:
+    """Both write entry points refuse an unknown token alike (#182 t3b P3): `record_event`
+    persists no caller word `transition` would reject. The raise is the same `UsageError` the
+    reply call site already wraps, so lease bookkeeping stays one stderr skip line — never an
+    exit status (pinned at the reply seam by the best-effort suite in test_herdr_reply.py).
+
+    Pin -> mutant: let `record_event` write `"prancing"` verbatim, and this row carries a
+    status no reader can name while the refusal never fires.
+    """
+    _ = herdr_lease.acquire_lease(
+        "callee", "182.md", "orch", base_dir=tmp_path, ticket_id="#182", task_id=TASK_ID
+    )
+
+    with pytest.raises(herdr_lease.UsageError):
+        _ = herdr_lease.record_event(TASK_ID, "prancing", base_dir=tmp_path)
+
+    task = herdr_lease.get_task(TASK_ID, base_dir=tmp_path)
+    assert task is not None and task["status"] == herdr_lease.STATE_SUBMITTED
+    assert [entry["event"] for entry in task["trajectory"]] == ["dispatched"]
+
+
 def test_runtime_identity_survives_a_write_read_round_trip(tmp_path: Path) -> None:
     """Section A: the anchors ride on BOTH records and come back byte-identical.
 
@@ -578,7 +599,12 @@ def test_runtime_identity_survives_a_write_read_round_trip(tmp_path: Path) -> No
 
 
 def test_an_unobserved_anchor_is_omitted_never_guessed(tmp_path: Path) -> None:
-    """Section C's posture at the store seam: identity nobody observed is written as absent."""
+    """Section C's posture at the store seam: identity nobody observed is written as absent.
+
+    The slug joins the anchored ids: the row omits `task_group` entirely rather than holding a
+    null that a later guarded re-dispatch could not tell apart from never-recorded evidence
+    (#182 t3b P2 — absence, not null, is what "not observed" writes).
+    """
     lease = herdr_lease.acquire_lease(
         "callee", "182.md", "orch", base_dir=tmp_path, ticket_id="#182", task_id=TASK_ID
     )
@@ -586,9 +612,8 @@ def test_an_unobserved_anchor_is_omitted_never_guessed(tmp_path: Path) -> None:
     task = herdr_lease.get_task(TASK_ID, base_dir=tmp_path)
     assert task is not None
     for record in (lease, task):
-        for key in ("pane_id", "tab_id", "context_id"):
+        for key in ("pane_id", "tab_id", "context_id", "task_group"):
             assert key not in record, f"{key} in {record}"
-    assert task["task_group"] is None, "a slug that was not given may not be invented"
 
 
 def test_the_store_and_the_envelope_spell_shared_states_identically() -> None:

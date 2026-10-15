@@ -3785,3 +3785,94 @@ def test_a_dispatched_task_group_lets_a_later_reply_rename_the_drifted_tab(
 
     renames = [call[1:] for call in replier.calls()[calls_before:] if call[2] == "rename"]
     assert ["tab", "rename", "w9:t1", "harness"] in renames, renames
+
+
+def test_a_redispatch_without_task_group_keeps_the_recorded_slug_on_the_row(
+    stub_factory: Callable[[Path], StubHarness], tmp_path: Path
+) -> None:
+    """The re-dispatch that observes nothing leaves the last recorded slug standing (#182 t3 P2).
+
+    The single-dispatch acceptance above cannot refute the null-overwrite: it never runs the second
+    dispatch. This is the four-step scenario — dispatch WITH `--task-group`, reply (which consumes
+    and releases the lease), re-dispatch the SAME task-id WITHOUT `--task-group`, reply again. The
+    fresh lease carries no slug by contract, so only the durable task row can name it; an
+    unconditional row write nulls the exact evidence section C exists to provide, and the second
+    reply silently skips the rename.
+
+    Pin -> mutant: write `task["task_group"] = None` over the row on the re-dispatch, and this
+    sees the row lose `harness`, the "no task group recorded" line, and no tab rename.
+    """
+    dispatcher = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
+    replier = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
+    ticket = tmp_path / "182.md"
+    _ = ticket.write_text("## Task\n\nShip the envelope.\n", encoding="utf-8")
+
+    lane: dict[str, object] = {
+        **DEFAULT_STATE,
+        "panes": REPLY_LANE_PANES,
+        "tabs": [LANE_TAB_CORRECT],
+    }
+    drifted = {**DEFAULT_STATE, "panes": REPLY_LANE_PANES, "tabs": [LANE_TAB_GENERIC]}
+
+    # Step 1: dispatch WITH the slug; both records hold it.
+    dispatched = dispatcher.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        "--ticket-id",
+        "#182",
+        "--task-id",
+        "#182#t3",
+        state=lane,
+        env={"PWD": str(tmp_path)},
+    )
+    assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
+
+    # Step 2: the worker's reply consumes and releases the lease.
+    replied = replier.run(
+        "orchestrator",
+        REPLY_OK,
+        state=drifted,
+        env={"PWD": str(tmp_path)},
+    )
+    assert replied.returncode == herdr_cli.EXIT_OK, replied.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+    # Step 3: re-dispatch the SAME task-id WITHOUT `--task-group`: the fresh lease names no
+    # slug, and the durable row must still carry the one it was given.
+    redispatched = dispatcher.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--ticket-id",
+        "#182",
+        "--task-id",
+        "#182#t3",
+        state=drifted,
+        env={"PWD": str(tmp_path)},
+    )
+    assert redispatched.returncode == herdr_cli.EXIT_OK, redispatched.stderr
+
+    task = herdr_lease.get_task("#182#t3", base_dir=tmp_path)
+    assert task is not None
+    assert task.get("task_group") == "harness", (
+        "a re-dispatch that observes nothing must not write null over the last recorded slug"
+    )
+
+    # Step 4: the next reply resolves the slug from the row and still renames the drifted tab.
+    calls_before = len(replier.calls())
+    second = replier.run(
+        "orchestrator",
+        REPLY_OK,
+        state=drifted,
+        env={"PWD": str(tmp_path)},
+    )
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    assert "no task group recorded" not in second.stderr, second.stderr
+
+    renames = [call[1:] for call in replier.calls()[calls_before:] if call[2] == "rename"]
+    assert ["tab", "rename", "w9:t1", "harness"] in renames, renames

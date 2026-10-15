@@ -476,7 +476,8 @@ def acquire_lease(
         task["ticket_id"] = ticket_id
         task["task_id"] = task_id
         task["ticket_path"] = ticket_path
-        task["task_group"] = task_group
+        if task_group:
+            task["task_group"] = task_group
         task["status"] = STATE_SUBMITTED
         task["assignee"] = target
         task["caller"] = caller
@@ -1004,10 +1005,18 @@ def record_event(
 
     `to_status` accepts either vocabulary — a canonical `TASK_STATE_*` name or a historical
     token — and the persisted `status`, `from_status` and `to_status` always read canonical
-    (see `STATUS_ALIASES`). The trajectory's `event` label is the caller's own token when the
-    caller names an action; with no explicit label it falls back to the canonical state, the
-    only spelling this function is allowed to write.
+    (see `STATUS_ALIASES`). A token that names no state is refused with `UsageError`, the same
+    refusal `transition` makes, so the store's two write entry points agree on what is writable.
+    The trajectory's `event` label is the caller's own token when the caller names an action;
+    with no explicit label it falls back to the canonical state, the only spelling this function
+    is allowed to write.
     """
+    requested = normalize_status(to_status)
+    if requested is None:
+        raise UsageError(
+            f"unknown status {to_status!r}; expected one of {', '.join(CANONICAL_STATUSES)} "
+            f"(historical spellings {', '.join(HISTORICAL_STATUSES)} are also accepted)"
+        )
     state = _load_state(resolve_state_read_path(base_dir, env=env))
     task = state["tasks"].get(task_id)
     if not isinstance(task, dict):
@@ -1018,7 +1027,7 @@ def record_event(
         trajectory = []
         task["trajectory"] = trajectory
 
-    written_status = _status_for_write(to_status)
+    written_status = requested
     from_status = _status_for_write(task.get("status"))
     if written_status == WORKING_STATUS and _needs_delivered_mark(task, trajectory):
         task["delivered"] = {
