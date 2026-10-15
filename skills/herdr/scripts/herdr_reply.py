@@ -1239,14 +1239,10 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         else:
             lease = stored if isinstance(stored, dict) else None
     ticket_id: str | None = None
-    in_reply_to: str | None = None
     if isinstance(lease, dict):
         lease_ticket = lease.get("ticket_id")
         if isinstance(lease_ticket, str):
             ticket_id = lease_ticket
-        lease_task = lease.get("task_id")
-        if isinstance(lease_task, str):
-            in_reply_to = lease_task
     # #246 D1.2: the lease is consumed by the first reply, so the task this reply advances is
     # resolved from the whole store — the explicit flag, else the lease — and an unresolvable
     # answer is recorded unlinked with one warning line. No step infers (#246 E1.2): the
@@ -1260,14 +1256,19 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         in_reply_to_record=options.in_reply_to_record,
         env=env,
     )
-    # The envelope describes the task this reply advances, and the precedence is the resolver's:
-    # the resolved, store-backed linkage names `id`/`in_reply_to` first; the lease's task id is
-    # the fallback, reached only when the resolver returned nothing while a lease still names
-    # one; when neither resolves, `id` renders `''` and both correlation keys stay absent.
+    # The envelope names the task this reply ADVANCES, and it is the same value the store row
+    # below is written with: `envelope.id == record.task_id`, always. The resolver already carries
+    # the whole precedence — the `--in-reply-to` record, then `--ticket`, then the sender's lease
+    # when neither was supplied (#246 D1.2) — so its answer needs no fallback. `or in_reply_to`
+    # was one, and it was a wrong one: when an EXPLICIT binding was refused the resolver returns
+    # `None` while the lease half of the pair still named a task, so the envelope advertised a
+    # task the reply deliberately refused to bind, and a reader of `id`/`metadata.in_reply_to`
+    # drew a linkage the store row contradicts. A refused binding now renders `id: ''` and drops
+    # both correlation keys, exactly as the unlinked record does.
     # `ticket_id` prefers the lease's ticket, else the resolved task record's ticket, read back
     # through `get_task`. `status.state` is the status the payload's first token stated, mapped
     # above (a payload with no status is refused before this line renders anything).
-    envelope_task_id = linked_task_id or in_reply_to
+    envelope_task_id = linked_task_id
     envelope_ticket_id = ticket_id
     if envelope_ticket_id is None and envelope_task_id is not None:
         try:
@@ -1319,7 +1320,13 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     prelude = render_prelude(reply_envelope)
     record_id: str | None = None
     if options.dry_run:
-        # A dry run submits nothing, so it records nothing: the payload stays pointer-free.
+        # A dry run submits nothing, so it records nothing: the payload stays pointer-free. What it
+        # DOES resolve is the task linkage, and a refused binding is a fact about the correlation
+        # the preview is about to print — silent here, the preview would show a clean `id: ''`
+        # where the live send says why nothing was bound (#182 t5 2.5a). No record clause: a
+        # preview attempts no record, so it can only claim the refusal.
+        if linkage_warning:
+            print(f"herdr-reply: {linkage_warning}", file=sys.stderr)
         delivered = f"{prelude}{payload}"
     else:
         stored: dict[str, Any] | None

@@ -107,6 +107,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
+* **herdr:** a refused task binding no longer leaks the lease's task into the delivered envelope — `resolve_task_linkage` owns the whole precedence, so its `None` answer is now the envelope's `id` too, and a reply whose explicit `--ticket` or `--in-reply-to` was refused renders `id: ''` and drops both correlation keys exactly as its unlinked store row does; `--dry-run` prints the same refusal warning the live send prints (#264)
+* **herdr:** the reconciliation pass cannot abort a delivery — the plan builder moved inside the guarded read, so a row shape it cannot plan over is one `reconciliation skipped` line and dispatch and reply proceed; a lane whose pane inventory answers no `tab_id` now says so once on the dispatch side instead of writing an unanchored lease silently, and nameless workers a snapshot cannot anchor are counted instead of healed in silence (#264)
 * **gh-router:** pr-land's `unreleased_attributes_pr` no longer treats an empty `### ` heading as a section — `_UNRELEASED_SECTION_RE` now requires a non-space name, mirroring the changelog gate's `SECTION_HEADING_RE`, so an attributed bullet under an empty heading reads unattributed and the ready-flip warning fires instead of being silently suppressed (#259)
 * **scripts:** run gate 4 pytest in `check.sh` with `--group dev`, so the `-n auto` addopts from pyproject resolve when dev deps are not otherwise installed (#255)
 * **wt:** the pre-merge gate delegates to `bash scripts/check.sh`, so the merge path runs the authoritative local gate (ruff check, ruff format --check, basedpyright --warnings, pytest) instead of restating two of its four steps, and the delegation is pinned both against a weaker restated gate and against a check.sh that drops a step (#254)
@@ -271,6 +273,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **oxlint:** add metadata headers and align with ASD-STE100 (#181)
 * **jinja:** tighten prose to ASD-STE100 guidelines (#181)
 * **herdr:** derive the reply-helper path once in `herdr_cli.reply_helper()` instead of three hand-rolled copies, resolve `${herdr_skill}`-prefixed doc pointers like `$SKILL_DIR` ones, document `--settle` in the dispatch row, and read dispatch ticket payloads through the shared reader ([#241](https://github.com/Rianico/harness-zkx/issues/241)) (#254)
+* **herdr:** the label a bootstrap writes is spelled by one builder — `herdr-bootstrap` calls the shared `pane_rename_argv` instead of hand-assembling `[herdr, "pane", "rename", pane, name]`, so the physical-id-anchored rename the reconciliation pass and `herdr-label` issue is the same construction; the argv is byte-identical and the existing bootstrap pins hold (#264)
 * **herdr:** split `herdr_reply`'s two deepest seams into their own modules — `herdr_evidence` owns Markdown status and evidence classification and `herdr_git_guard` owns the outbound SHA guard, which `herdr-dispatch` now imports at module top level instead of mid-command; `herdr-reply` re-exports every moved public name as the identical object, so CLI arguments, rendered bytes and the module docstring are unchanged (#264)
 
 ### Miscellaneous Chores

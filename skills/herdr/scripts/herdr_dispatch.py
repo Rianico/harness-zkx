@@ -276,7 +276,8 @@ def lane_tab_ids(herdr: str, env: Mapping[str, str]) -> dict[str, str]:
 
     Best-effort like the rest of the lease bookkeeping — an inventory that cannot answer returns
     an empty mapping, and the record then omits `tab_id` rather than guessing one from a visible
-    label or a tab title. It changes no target and no exit status.
+    label or a tab title. It changes no target and no exit status. The empty answer is not silent:
+    the caller that writes the lease prints one advisory line for it (#182 t5 2.2).
     """
     try:
         panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
@@ -754,6 +755,20 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     caller_context_id: str | None = None
     if not options.dry_run:
         lane_tabs = lane_tab_ids(herdr, env)
+        if not lane_tabs:
+            # #182 t5 2.2: the reply side prints one line when it cannot anchor a tab title, while
+            # this call used to lose the same anchor in total silence — `lane_tab_ids` returns `{}`
+            # both when `pane list` raises and when its rows carry no `tab_id`, and `acquire_lease`
+            # then omits `tab_id` rather than guessing one. The anchor is not cosmetic: it is what
+            # a later reconciliation matches a worker pane against, so the silent version left the
+            # next reply unable to heal this lane with nobody telling it why. Advisory only, in the
+            # register the lease bookkeeping already uses: no exit status, no stdout, no skipped
+            # prompt, and no lease field that the inventory DID answer.
+            print(
+                "herdr-dispatch: the pane inventory answers no tab id, so this lease is written "
+                "without tab_id and a later reply has no tab anchor to reconcile on",
+                file=sys.stderr,
+            )
         try:
             caller_ctx = resolve_caller(herdr, env)
             caller_name = caller_ctx.agent or caller_ctx.label or caller_ctx.pane_id

@@ -17,6 +17,7 @@ from pathlib import Path
 import herdr_bootstrap
 import herdr_cli
 import herdr_dispatch
+import herdr_label
 import herdr_lease
 import herdr_prompt
 import herdr_reply
@@ -1260,6 +1261,111 @@ def test_dispatch_dry_run_prints_the_reconciliation_and_renames_nothing(
     assert planned[1:] == ["tab", "rename", "w9:t1", "harness"]
     assert reconcile_renames(stub) == []
     assert stub.prompts() == []
+
+
+def test_dispatch_advises_when_the_pane_inventory_gives_no_tab_anchor(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#182 t5 2.2: a `pane list` that answers no tab id costs the lease its anchor — say so.
+
+    `lane_tab_ids` returns `{}` both when the inventory raises (its `except` swallows every
+    failure) and when the rows simply carry no `tab_id`, so the lease then records no `tab_id`
+    and a later reply loses the anchor its reconciliation case 2 needs — while the reply side
+    DOES print a skip line for the same class of loss. One advisory makes the two sides
+    symmetric, and it is advisory only: same exit status, same delivery, and a delivery summary
+    whose shape is untouched apart from the fields a missing anchor legitimately changes (see
+    `_summary_shape`).
+
+    Pin -> mutants: return `{}` without printing, and no line matches; print onto stdout, and
+    the summary-shape comparison fails; print on the healthy path too, and the first dispatch's
+    stderr catches it; crash or skip the prompt, and those asserts fail.
+    """
+    healthy = dispatch_into_lane(stub, tmp_path, lane_state())
+    assert healthy.returncode == herdr_cli.EXIT_OK, healthy.stderr
+    assert "no tab" not in healthy.stderr, healthy.stderr
+    prompts_before = len(stub.prompts())
+    # The inventory answers, but neither row carries the physical tab anchor.
+    anchorless = [
+        {
+            "pane_id": "w9:p1",
+            "workspace_id": "w9",
+            "agent": "pi",
+            "agent_status": "working",
+            "cwd": "/tmp/harness",
+        },
+        {
+            "pane_id": "w9:p3",
+            "workspace_id": "w9",
+            "agent": "pi",
+            "agent_status": "idle",
+            "cwd": "/tmp/work",
+            "label": "worker-1",
+        },
+    ]
+    done = dispatch_into_lane(stub, tmp_path, lane_state(panes=anchorless), "--force")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    advisories = [line for line in done.stderr.splitlines() if "no tab" in line]
+    assert len(advisories) == 1, done.stderr
+    assert advisories[0].startswith("herdr-dispatch: "), advisories[0]
+    assert "no tab" not in done.stdout, "the advisory is stderr-only"
+    # The anchor the advisory names is missing from the delivered envelope too, and that IS the
+    # loss: the slug survives, its `@<tab>` half does not. Asserted here so `_summary_shape`
+    # filtering the line cannot hide it.
+    assert "  task_group: harness@w9:t1\n" in healthy.stdout, healthy.stdout
+    assert "  task_group: harness\n" in done.stdout, done.stdout
+    assert _summary_shape(done.stdout) == _summary_shape(healthy.stdout), (
+        f"stdout drifted: {done.stdout!r} vs {healthy.stdout!r}"
+    )
+    assert len(stub.prompts()) == prompts_before + 1, "the advisory never costs the delivery"
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert "tab_id" not in lease, "the anchor is absent, exactly as the advisory says"
+
+
+def _summary_shape(stdout: str) -> list[str]:
+    """The delivery-summary lines a dispatch advisory may not disturb, across two runs.
+
+    Three fields legitimately differ between one dispatch whose panes carry a tab id and one whose
+    panes do not, and the first two are the anchor under test rather than noise: the envelope's
+    `metadata.task_group` loses its `@<tab>` half (asserted directly, in the test below, never
+    quietly filtered away), the delivered prompt therefore shrinks, and the status line echoes
+    that size as `bytes=`; `revision=` is the stub's per-pane counter, which moves with each
+    delivery. The wall-clock `timestamp:` line varies between any two runs. Everything else — the
+    anchored target, both `---` delimiters, the ticket_id, the state, the source line and the body
+    preview — is deterministic under the stub, so a line added to stdout, or the summary changing
+    shape, still fails the comparison.
+    """
+    shape: list[str] = []
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if "timestamp:" in stripped or stripped.startswith("task_group:"):
+            continue
+        shape.append(re.sub(r"bytes=\d+  revision=\S+", "bytes=<n>  revision=<r>", line))
+    return shape
+
+
+def test_dispatch_delivers_when_the_reconciliation_planner_raises(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#182 t5 2.3: the planner is inside the guard, so a raise costs one line and no dispatch.
+
+    The same structural hole as the reply seam: `reconciliation_argv` ran outside `reconcile_lane`'s
+    `try`, and `herdr-dispatch` consumed its result unguarded before `resolve_targets`, so a
+    planner exception aborted the dispatch it promised only to annotate.
+
+    Pin -> mutant: move the planner call back outside the `try` and this exits 1 with a traceback
+    and zero prompts.
+    """
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise TypeError("planner boom")
+
+    _ = monkeypatch.setattr(herdr_label, "reconciliation_argv", boom)
+    done = dispatch_into_lane(stub, tmp_path, lane_state())
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "Traceback" not in done.stderr, done.stderr
+    assert done.stderr.count("herdr-dispatch: reconciliation skipped:") == 1, done.stderr
+    assert len(stub.prompts()) == 1
 
 
 def test_dispatch_skips_an_ungrammatical_task_group_with_one_line(

@@ -303,13 +303,14 @@ def plan(
     tabs: Mapping[str, str | None],
     *,
     task_group: str | None = "harness",
+    lane_tab_id: str | None = "w9:t1",
 ) -> tuple[list[list[str]], list[str]]:
     return herdr_label.reconciliation_argv(
         "herdr",
         panes,
         agents,
         tabs,
-        lane_tab_id="w9:t1",
+        lane_tab_id=lane_tab_id,
         orchestrator_pane_id="w9:p1",
         task_group=task_group,
     )
@@ -435,6 +436,47 @@ def test_a_name_from_another_lane_is_left_for_that_lane() -> None:
     assert argv == []
 
 
+def test_a_nameless_worker_with_no_tab_anchor_says_why_it_was_left_alone() -> None:
+    """#182 t5 2.5d: an unknown lane tab id used to skip the worker half in total silence.
+
+    Case 1 can only prove a nameless worker belongs to THIS lane through `tab_id`, so a snapshot
+    that answers no tab id heals nothing. Before the note that was indistinguishable from the
+    healthy lane's own empty plan — the pass said nothing while worker-name recovery could not
+    fire at all. One note, and only when a candidate actually waits on the anchor.
+
+    Pin -> mutants: drop the note and this sees the tab-title line alone; fire it without a
+    candidate and `test_a_correct_lane_reconciles_to_the_empty_plan` gets a non-empty note list.
+    """
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "name": "harness-orch", "agent": "pi"},
+        {"pane_id": "w9:p3", "agent": "pi"},
+    ]
+    anchorless: list[dict[str, str]] = [
+        {"pane_id": "w9:p1", "label": "harness-orch"},
+        {"pane_id": "w9:p3", "label": "worker-1"},
+    ]
+    argv, notes = plan(anchorless, agents, LANE_TABS, lane_tab_id=None)
+    assert argv == []
+    assert len(notes) == 2, notes
+    worker_notes = [note for note in notes if "worker" in note]
+    assert len(worker_notes) == 1, notes
+    assert "tab" in worker_notes[0], "the note names the anchor that is missing"
+
+
+def test_a_healthy_lane_with_no_tab_anchor_still_says_nothing_about_workers() -> None:
+    """The note is evidence-led: no nameless worker means nothing was withheld from recovery.
+
+    Pin -> mutant: append the note whenever `lane_tab_id is None`, ignoring the candidates, and
+    every anchorless-but-healthy lane starts printing a worker line.
+    """
+    anchorless: list[dict[str, str]] = [
+        {"pane_id": "w9:p1", "label": "harness-orch"},
+        {"pane_id": "w9:p3", "label": "worker-1"},
+    ]
+    _argv, notes = plan(anchorless, LANE_AGENTS, LANE_TABS, lane_tab_id=None)
+    assert [note for note in notes if "worker" in note] == []
+
+
 # ── integration: reconcile_lane through the stub herdr ───────────────────────────
 
 
@@ -508,6 +550,62 @@ def test_reconcile_lane_says_once_when_the_caller_derived_no_slug(
     assert issued == []
     assert captured.err == "herdr-reply: no task group recorded for this lane\n"
     assert renames(stub) == []
+
+
+def test_reconcile_lane_skips_the_whole_pass_when_the_planner_raises(
+    stub: StubHarness, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#182 t5 2.3: the planner sits inside the guard, so its raise costs one line and nothing else.
+
+    `reconciliation_argv` ran outside `reconcile_lane`'s `try`, so an exception escaping the
+    planner — a row shape it cannot plan over — propagated straight into `herdr-dispatch` before
+    `resolve_targets` and into `herdr-reply` before the delivery, aborting callers whose only
+    promise for this pass is that it annotates the delivery.
+
+    Pin -> mutant: move the planner call back outside the `try` and this raises TypeError with no
+    stderr line at all; widen the guard so far that it also swallows the rename loop, and
+    `test_reconcile_lane_keeps_going_when_one_rename_is_refused` loses its skipped line.
+    """
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise TypeError("planner boom")
+
+    stub.write_state(DEFAULT_STATE)
+    _ = monkeypatch.setattr(herdr_label, "reconciliation_argv", boom)
+    issued = herdr_label.reconcile_lane(
+        str(stub.herdr), stub.base_env(), task_group="harness", marker="herdr-label"
+    )
+    captured = capsys.readouterr()
+    assert issued == []
+    assert captured.err == "herdr-label: reconciliation skipped: planner boom\n"
+    assert captured.out == ""
+    assert renames(stub) == []
+
+
+def test_reconcile_lane_prints_the_missing_slug_note_once_when_the_planner_raises(
+    stub: StubHarness, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caller's own sentence stays behind the guard: a failed pass prints the skip line only.
+
+    Pin -> mutant: keep printing `missing_note` before the planner call and this sees two lines,
+    one of which claims a decision the pass never got to make.
+    """
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("planner crashed")
+
+    stub.write_state(DEFAULT_STATE)
+    _ = monkeypatch.setattr(herdr_label, "reconciliation_argv", boom)
+    issued = herdr_label.reconcile_lane(
+        str(stub.herdr),
+        stub.base_env(),
+        task_group=None,
+        marker="herdr-reply",
+        missing_note="no task group recorded for this lane",
+    )
+    captured = capsys.readouterr()
+    assert issued == []
+    assert captured.err == "herdr-reply: reconciliation skipped: planner crashed\n"
 
 
 # ── integration: convergence and unnamed agents ────────────────────────────────

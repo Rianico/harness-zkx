@@ -344,7 +344,11 @@ def reconciliation_argv(
     yields ZERO argv, so a caller may run this on every dispatch and reply:
 
     1. A worker in this lane whose live agent dropped its name takes the surviving pane label
-       back, as `agent rename` AND `pane rename` (ADR-0020 names both).
+       back, as `agent rename` AND `pane rename` (ADR-0020 names both — docs/adr/0020:41, so the
+       second rename is issued even when the pane already carries that label; see the loop).
+       Matching the worker to THIS lane is a `tab_id` question, so a snapshot that answers no lane
+       tab id cannot repair any worker: that skip prints a note too, rather than passing for the
+       healthy lane's silence.
     2. The lane's tab title differs from `<task_group>` -> `tab rename`.
     3. The sending orchestrator pane hosts a live agent with no name -> `agent rename` to
        `<task_group>-orch`. Case 1 skips that pane, so the orchestrator is named by its lane,
@@ -354,6 +358,12 @@ def reconciliation_argv(
     derived nothing says so itself (see `reconcile_lane`). A slug, or the slug with the
     `-orch` suffix appended, that breaks `[a-z][a-z0-9_-]{0,31}` is SKIPPED with a note and
     never reaches herdr. Notes carry no marker prefix: the caller owns its own stderr prefix.
+
+    The tab half distinguishes two absences, and only one of them is evidence (#182 t5 2.5e). A
+    `lane_tab_id` that is not a key of `tabs` means `tab list` never reported that tab at all, so
+    there is no row to compare and the tab is left alone with a note; a row that IS reported with
+    an empty label is a title that positively differs from `<task_group>`, so it takes the rename
+    and no note. Behaviour is unchanged here — this is the inventory of what each note means.
     """
     argv: list[list[str]] = []
     notes: list[str] = []
@@ -369,11 +379,33 @@ def reconciliation_argv(
         and conflict_with(agents, composed, orchestrator_pane_id) is None
     )
 
-    for pane, label in restorable_agents(panes, agents):
-        if lane_tab_id is None or pane_tabs.get(pane) != lane_tab_id:
-            continue
+    restorable = restorable_agents(panes, agents)
+    # Case 1 can only prove a nameless worker belongs to THIS lane through `tab_id`, so a snapshot
+    # that answers none heals nothing — and silence there looked exactly like the healthy lane's
+    # own empty plan (#182 t5 2.5d). Say it once, and only while a candidate actually waits on the
+    # anchor: the pane case 3 is about to name is not a worker left behind, and a pane on another
+    # tab was never this lane's to heal.
+    unanchorable = [
+        pane
+        for pane, _label in restorable
+        if pane != orchestrator_pane_id or not orchestrator_regained
+    ]
+    if lane_tab_id is None and unanchorable:
+        notes.append(
+            f"{len(unanchorable)} nameless worker pane(s) wait on a lane tab id this snapshot "
+            "does not answer; left their names alone"
+        )
+
+    for pane, label in restorable:
         if pane == orchestrator_pane_id and orchestrator_regained:
             continue
+        if lane_tab_id is None or pane_tabs.get(pane) != lane_tab_id:
+            continue
+        # ADR-0020 names BOTH commands for this case (docs/adr/0020:41), so the pane re-mark is
+        # issued even though the label being written is the one the pane already carries: the pair
+        # is the contract, and a pane that kept its label while its agent lost its name is only
+        # provably back in service once both renames answer. Dropping the second rename is the
+        # mutant `test_a_dropped_agent_name_takes_the_agent_rename_and_the_pane_rename` catches.
         argv.append(agent_rename_argv(herdr, pane, label))
         argv.append(pane_rename_argv(herdr, pane, label))
 
@@ -449,21 +481,28 @@ def reconcile_lane(
         caller = pane_id or env.get("HERDR_PANE_ID") or current_pane_id(herdr, env)
         lane_tab = tab_id or tab_id_by_pane(panes).get(caller)
         tabs = tab_titles(herdr, env) if task_group is not None else {}
+        # The planner is part of the guarded read, not of the verdict it hands back (#182 t5 2.3):
+        # it consumes the snapshot above, so a row shape it cannot plan over raises here, where
+        # one skipped pass is the answer. Left outside the `try` it propagated into
+        # `herdr-dispatch` before `resolve_targets` and into `herdr-reply` before the delivery —
+        # two callers whose whole contract for this pass is that it annotates, never aborts.
+        argv, notes = reconciliation_argv(
+            herdr,
+            panes,
+            agents,
+            tabs,
+            lane_tab_id=lane_tab,
+            orchestrator_pane_id=caller,
+            task_group=task_group,
+        )
     except Exception as exc:
         print(f"{marker}: reconciliation skipped: {_one_line(str(exc))}", file=sys.stderr)
         return []
 
+    # Both sentences are the pass's own answer, so neither is printed over a pass that never
+    # reached an answer.
     if task_group is None and missing_note is not None:
         print(f"{marker}: {missing_note}", file=sys.stderr)
-    argv, notes = reconciliation_argv(
-        herdr,
-        panes,
-        agents,
-        tabs,
-        lane_tab_id=lane_tab,
-        orchestrator_pane_id=caller,
-        task_group=task_group,
-    )
     for note in notes:
         print(f"{marker}: {note}", file=sys.stderr)
     if not argv:

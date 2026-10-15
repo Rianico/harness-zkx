@@ -93,6 +93,10 @@ from herdr_cli import (
     validate_agent_name,
 )
 
+# The one place a pane rename is spelled, shared with `herdr-label` and the reconciliation pass
+# (#182 t5 2.4); same flat-sibling import as `herdr-pane`.
+from herdr_label import pane_rename_argv
+
 AGENTS_MD = "AGENTS.md"
 CLINE_RULES = ".clinerules"
 # Lane-local delivery surface for the inline kinds: bootstrap writes one file per agent here
@@ -894,7 +898,10 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
     else:
         agents_file = target_path(target_dir, options.kind)
 
-    rename_argv = [herdr, "pane", "rename", options.pane, name]
+    # The shared builder, so the label bootstrap writes is spelled by the same function the
+    # reconciliation pass and `herdr-label` use — anchored on the physical `pane_id`, never on a
+    # visible label (#182 t5 2.4). Byte-identical to the argv this call used to hand-build.
+    rename_argv = pane_rename_argv(herdr, options.pane, name)
     start_argv = build_start_argv(
         herdr,
         options,
