@@ -1577,6 +1577,90 @@ def test_reply_populates_correlation_from_sender_lease_and_releases(
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
+def test_second_reply_after_lease_release_keeps_the_envelope_correlation(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """dispatch -> reply 1 -> reply 2: every delivered envelope carries the A2A correlation.
+
+    The first reply releases the sender's lease and the second reply re-resolves the task from
+    the store through `--ticket`. The envelope must describe that resolved task on BOTH
+    deliveries: `id`, `metadata.ticket_id` and `metadata.in_reply_to` populated with the exact
+    expected values, never the blanks the lease-only seeding rendered once the lease was gone
+    (#246 D1.2 reached the store record but not the envelope).
+    """
+    ticket = "#182-a2a-envelope"
+    task = "#182-a2a-envelope#t1-cutover"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "182.md", "orchestrator", base_dir=tmp_path, ticket_id=ticket, task_id=task
+    )
+
+    first = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+    second = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        task,
+        env={"PWD": str(tmp_path)},
+    )
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+
+    deliveries = stub.prompts()
+    assert len(deliveries) == 2
+    for call in deliveries:
+        envelope = herdr_prompt.parse_envelope(call[4])
+        assert envelope is not None
+        assert envelope.id == task
+        assert envelope.ticket_id == ticket
+        assert envelope.in_reply_to == task
+    records = herdr_lease.list_replies(base_dir=tmp_path)
+    assert [record.get("task_id") for record in records] == [task, task]
+
+
+def test_reply_dry_run_previews_the_correlation_the_real_send_carries(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Decision pin: `--dry-run` resolves the linkage read-only (option (a)) and writes nothing.
+
+    The preview carries the same correlation the live send carries — here the store-backed
+    `--ticket` linkage after the first reply released the lease — while the store is untouched:
+    no extra prompt is submitted, no extra record is written, and the released lease stays
+    released. A preview that omitted the correlation would mislead the caller about what the
+    real send delivers.
+    """
+    ticket = "#182-a2a-envelope"
+    task = "#182-a2a-envelope#t1-cutover"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "182.md", "orchestrator", base_dir=tmp_path, ticket_id=ticket, task_id=task
+    )
+    first = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        task,
+        "--dry-run",
+        "--json",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    argv: list[str] = json.loads(done.stdout)
+    envelope = herdr_prompt.parse_envelope(argv[4])
+    assert envelope is not None
+    assert envelope.id == task
+    assert envelope.ticket_id == ticket
+    assert envelope.in_reply_to == task
+
+    assert len(stub.prompts()) == 1
+    assert len(herdr_lease.list_replies(base_dir=tmp_path)) == 1
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
 def test_reply_without_sender_lease_omits_correlation_and_still_sends(
     stub: StubHarness, tmp_path: Path
 ) -> None:

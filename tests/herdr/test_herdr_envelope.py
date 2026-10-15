@@ -13,6 +13,7 @@ import re
 from typing import Any, cast
 
 import herdr_envelope
+import herdr_evidence
 import pytest
 import yaml
 
@@ -165,6 +166,18 @@ def test_render_envelope_carries_the_correlation_metadata_in_order() -> None:
             "in_reply_to": "#182-a2a-envelope#impl-1",
         },
     }
+    # Dict equality cannot see order, so the name's real property is checked on the rendered
+    # lines themselves: the metadata block emits `ticket_id` first and `in_reply_to` last, and
+    # a mutant that shuffles either keeps this list assertion, not just the parse above.
+    lines = rendered.splitlines()
+    metadata_at = lines.index("metadata:")
+    assert lines[metadata_at + 1 : -1] == [
+        "  ticket_id: '#182-a2a-envelope'",
+        "  sender: orchestrator@w1:p1",
+        "  receiver: impl-1@w1:p3",
+        "  task_group: refactor-herdr@w1:t1",
+        "  in_reply_to: '#182-a2a-envelope#impl-1'",
+    ]
 
 
 def test_render_envelope_renders_the_group_topology_as_a_list() -> None:
@@ -307,6 +320,17 @@ def test_reply_state_maps_each_settled_status_to_a_canonical_task_state() -> Non
     assert herdr_envelope.reply_state("completed") == "TASK_STATE_COMPLETED"
     assert herdr_envelope.reply_state("blocked") == "TASK_STATE_INPUT_REQUIRED"
     assert herdr_envelope.reply_state("rework") == "TASK_STATE_FAILED"
+
+
+def test_reply_state_vocabulary_is_bound_to_the_payload_status_map() -> None:
+    """The two status vocabularies move together or this fails loudly.
+
+    `herdr_evidence.STATUS_MAP` produces the tokens `REPLY_STATE_BY_STATUS` consumes: every
+    producible token must have a canonical state and the table must hold no token the parser
+    cannot emit. A fourth payload status added without its reply state (or the reverse) would
+    otherwise silently render `TASK_STATE_WORKING` through the `reply_state` fallback.
+    """
+    assert set(herdr_envelope.REPLY_STATE_BY_STATUS) == set(herdr_evidence.STATUS_MAP.values())
 
 
 def test_reply_state_of_an_unsettled_or_unknown_status_is_working() -> None:

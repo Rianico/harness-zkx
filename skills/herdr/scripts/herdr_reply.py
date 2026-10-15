@@ -1200,33 +1200,45 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     # #246 D1.2: the lease is consumed by the first reply, so the task this reply advances is
     # resolved from the whole store — the explicit flag, else the lease — and an unresolvable
     # answer is recorded unlinked with one warning line. No step infers (#246 E1.2): the
-    # rendered contract carries `--ticket`, so a reply that names nothing mutates nothing. A dry
-    # run records nothing, so it resolves nothing.
-    linked_task_id: str | None = None
-    linkage_warning: str | None = None
-    if not options.dry_run:
-        linked_task_id, linkage_warning = resolve_task_linkage(
-            sender=sender,
-            lease=lease,
-            explicit_ticket=options.ticket,
-            in_reply_to_record=options.in_reply_to_record,
-            env=env,
-        )
+    # rendered contract carries `--ticket`, so a reply that names nothing mutates nothing. The
+    # resolution only ever reads the store, so `--dry-run` runs it too: the preview carries the
+    # correlation the real send carries, while recording nothing.
+    linked_task_id, linkage_warning = resolve_task_linkage(
+        sender=sender,
+        lease=lease,
+        explicit_ticket=options.ticket,
+        in_reply_to_record=options.in_reply_to_record,
+        env=env,
+    )
+    # The envelope describes the task this reply advances, and the precedence is the resolver's:
+    # the resolved, store-backed linkage names `id`/`in_reply_to` first; the lease's task id is
+    # the fallback, reached only when the resolver returned nothing while a lease still names
+    # one; when neither resolves, `id` renders `''` and both correlation keys stay absent.
+    # `ticket_id` prefers the lease's ticket, else the resolved task record's ticket, read back
+    # through `get_task`. `status.state` is the status the payload's first token stated, mapped
+    # above (a payload with no status is refused before this line renders anything).
+    envelope_task_id = linked_task_id or in_reply_to
+    envelope_ticket_id = ticket_id
+    if envelope_ticket_id is None and envelope_task_id is not None:
+        try:
+            task_record = get_task(envelope_task_id, env=env)
+        except Exception:
+            task_record = None
+        if isinstance(task_record, dict):
+            record_ticket = task_record.get("ticket_id")
+            if isinstance(record_ticket, str) and record_ticket:
+                envelope_ticket_id = record_ticket
     panes, agents = fetch_inventory(herdr, env)
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     receiver = resolve_receiver(panes, agents, target)
     anchor = f"[You: {caller_anchor(caller_ctx)}]"
-    # A reply reports on the task it answers, so the envelope's `id` and `status.state` describe
-    # exactly that task: `in_reply_to` is the lease's task id and `mapped` is the status the
-    # payload's first token stated, resolved above (a payload with no status is refused before
-    # this line renders anything).
     reply_envelope = render_envelope(
         caller_ctx,
         receiver=receiver or target,
         include_recovery=options.verbose,
-        ticket_id=ticket_id,
-        task_id=in_reply_to,
-        in_reply_to=in_reply_to,
+        ticket_id=envelope_ticket_id,
+        task_id=envelope_task_id,
+        in_reply_to=envelope_task_id,
         tab_id=caller_ctx.tab_id,
         state=reply_state(mapped),
     )
