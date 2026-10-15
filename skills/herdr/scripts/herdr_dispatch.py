@@ -55,6 +55,7 @@ from herdr_cli import (
     require_herdr_env,
     run_herdr_checked,
 )
+from herdr_envelope import sender_ref, utc_stamp
 from herdr_git_guard import lane_git_dir, require_resolvable_shas
 from herdr_label import stale_labels
 from herdr_lease import acquire_lease, get_lease, release_lease
@@ -148,10 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_argument(
         parser,
         "no_caller_context",
-        help=(
-            "send payload verbatim without the Sender/Receiver envelope and reply contract "
-            "(warns loudly)"
-        ),
+        help=("send payload verbatim without the A2A envelope and reply contract (warns loudly)"),
     )
     _ = parser.add_argument(
         "--force",
@@ -226,12 +224,12 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         "task_group",
         metavar="NAME",
-        help="Task Group (Herdr Tab) label for the Hierarchy block; omitted when not given",
+        help="Task Group (Herdr Tab) label for the envelope metadata task_group; omitted when not given",
     )
     add_shared_argument(
         parser,
         "verbose",
-        help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
+        help="include cwd/resume recovery metadata in the envelope metadata (default trimmed)",
     )
     return parser
 
@@ -383,7 +381,6 @@ def validate_ticket(ticket: str) -> None:
 
 def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, str]) -> str:
     """Render a ticket skeleton; routing comes from live state, sections stay empty for the model."""
-    from herdr_envelope import sender_ref, utc_stamp
     from herdr_prompt import resolve_caller
 
     sender = resolve_caller(herdr, env)

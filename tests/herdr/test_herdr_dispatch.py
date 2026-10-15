@@ -122,7 +122,7 @@ def test_derive_ticket_id_returns_none_for_stdin() -> None:
     assert herdr_dispatch.derive_ticket_id("-") is None
 
 
-def test_dispatch_persists_derived_ids_and_renders_hierarchy(
+def test_dispatch_persists_derived_ids_and_renders_envelope(
     stub: StubHarness, tmp_path: Path
 ) -> None:
     import herdr_lease
@@ -137,8 +137,10 @@ def test_dispatch_persists_derived_ids_and_renders_hierarchy(
     assert lease["task_id"] == "#182-herdr-msg-enhance"
     (call,) = stub.prompts()
     text = call[4]
-    assert "  Ticket-ID: #182-herdr-msg-enhance" in text
-    assert "  Task-ID: #182-herdr-msg-enhance" in text
+    envelope = herdr_prompt.parse_envelope(text)
+    assert envelope is not None
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.id == "#182-herdr-msg-enhance"
 
 
 def test_dispatch_explicit_ids_override_derivation(stub: StubHarness, tmp_path: Path) -> None:
@@ -162,8 +164,10 @@ def test_dispatch_explicit_ids_override_derivation(stub: StubHarness, tmp_path: 
     assert lease["ticket_id"] == "#182-herdr-msg-enhance"
     assert lease["task_id"] == "#182-herdr-msg-enhance#full-stack"
     (call,) = stub.prompts()
-    assert "  Ticket-ID: #182-herdr-msg-enhance" in call[4]
-    assert "  Task-ID: #182-herdr-msg-enhance#full-stack" in call[4]
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.id == "#182-herdr-msg-enhance#full-stack"
 
 
 def test_dispatch_injects_caller_context_and_reply_contract(
@@ -175,27 +179,26 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     assert call[1:4] == ["agent", "prompt", "reviewer"]
     text = call[4]
     lines = text.splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:11] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "  Ticket-ID: ticket",
-        "  Task-ID: ticket",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
-    assert "Runtime:" not in text
-    assert "Cwd:" not in text
-    assert "Group: [reviewer@w9:p1]" in text
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in text
+    assert lines[0] == "---"
+    assert not re.match(r"^\[\d{4}-\d{2}-\d{2}T", text)
+    envelope, body = herdr_prompt.split_envelope_and_body(text)
+    assert envelope is not None
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.task_group == "w9:t1"
+    assert envelope.ticket_id == "ticket"
+    assert envelope.id == "ticket"
+    assert envelope.state == "TASK_STATE_WORKING"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", envelope.timestamp)
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in text
+    assert "cwd:" not in text
+    assert "resume:" not in text
     assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
     assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
-    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
-    assert "\n\ndo this\n\n" in text
+    assert f"\n---\n{herdr_prompt.SKILL_NOTICE}\n\ndo this\n\n" in text
+    assert body is not None and body.startswith("do this")
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
     assert Path(reply.group(1)).is_file(), reply.group(1)
@@ -770,8 +773,11 @@ def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None
     parsed = cast(object, json.loads(done.stdout))
     assert isinstance(parsed, list)
     assert parsed[3] == "reviewer"
-    assert "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
+    envelope = herdr_prompt.parse_envelope(str(parsed[4]))
+    assert envelope is not None
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.state == "TASK_STATE_WORKING"
 
 
 def test_dispatch_rolls_back_lease_on_blocked_outcome(stub: StubHarness, tmp_path: Path) -> None:
@@ -862,13 +868,15 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
     assert "usage: herdr-dispatch" in done.stdout
 
 
-def test_dispatch_draft_prints_skeleton_with_prefilled_routing(stub: StubHarness) -> None:
+def test_dispatch_draft_prints_skeleton_with_prefilled_addresses(stub: StubHarness) -> None:
     done = stub.run("callee", "--draft")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     assert "- Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in done.stdout
     assert "- Receiver: callee" in done.stdout
-    assert re.search(r"^- Drafted: \[\d{4}-\d{2}-\d{2}T", done.stdout, re.MULTILINE)
+    assert re.search(
+        r"^- Drafted: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", done.stdout, re.MULTILINE
+    )
     assert "## Task" in done.stdout
     assert "## Context" in done.stdout
     assert "## Acceptance criteria" in done.stdout

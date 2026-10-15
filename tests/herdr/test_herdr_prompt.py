@@ -11,6 +11,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 import herdr_agent
 import herdr_bootstrap
@@ -19,10 +20,14 @@ import herdr_envelope
 import herdr_prompt
 import herdr_wait
 import pytest
+import yaml
 
 from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
 
 SCRIPT = SCRIPTS_DIR / "herdr_prompt.py"
+
+# The delivered envelope's `status.timestamp` grammar: bare ISO-8601 UTC, no brackets.
+TIMESTAMP_RE = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
 
 METACHARS = """Do NOT expand: $HOME `whoami` "$(date)" 'single' \\backslash
 line2 → unicode ✓
@@ -402,7 +407,7 @@ def test_pep723_metadata_precedes_docstring() -> None:
     assert header.startswith("#!/usr/bin/env python3\n")
     assert "# /// script" in header
     assert 'requires-python = ">=3.14"' in header
-    assert "dependencies = []" in header
+    assert 'dependencies = ["pyyaml"]' in header
     assert header.rstrip().endswith("# ///")
 
 
@@ -550,14 +555,12 @@ def test_scalar_quotes_only_when_yaml_would_mangle() -> None:
 
 def test_envelope_renders_sender_alone_when_nothing_else_is_known() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
-    assert herdr_prompt.render_envelope(sender) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    block = _frontmatter(herdr_prompt.render_envelope(sender))
+    assert block["id"] == ""
+    assert block["context_id"] == ""
+    assert set(block) == {"id", "context_id", "status", "metadata"}
+    assert block["status"]["state"] == "TASK_STATE_WORKING"
+    assert block["metadata"] == {"sender": "orchestrator@w1:p1"}
 
 
 def test_envelope_renders_position_receiver_and_group() -> None:
@@ -574,21 +577,16 @@ def test_envelope_renders_position_receiver_and_group() -> None:
         receiver="impl-1",
         group_members=["orchestrator@w1:p1", "impl-1@w1:p3"],
     )
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1 - kind pi",
-            "  Group: [orchestrator@w1:p1, impl-1@w1:p3]",
-            "  Receiver: impl-1",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
-    assert "Runtime:" not in rendered
-    assert "Resume:" not in rendered
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.sender == "orchestrator@w1:p1"
+    assert envelope.receiver == "impl-1"
+    assert envelope.group == ("orchestrator@w1:p1", "impl-1@w1:p3")
+    assert envelope.context_id == "/tmp/session.jsonl"
+    assert not envelope.cwd and not envelope.resume
 
 
-def test_envelope_renders_runtime_block_only_when_recovery_included() -> None:
+def test_envelope_renders_recovery_metadata_only_when_included() -> None:
     sender = herdr_prompt.CallerContext(
         pane_id="w1:p1",
         label="orchestrator",
@@ -598,37 +596,30 @@ def test_envelope_renders_runtime_block_only_when_recovery_included() -> None:
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --session /tmp/session.jsonl",
     )
-    rendered = herdr_prompt.render_envelope(sender, include_recovery=True)
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1 - kind pi",
-            "Runtime:",
-            '  Cwd: "/path/to/my project"',
-            '  Resume: "pi --session /tmp/session.jsonl"',
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
+    envelope = herdr_prompt.parse_envelope(
+        herdr_prompt.render_envelope(sender, include_recovery=True)
     )
+    assert envelope is not None
+    assert envelope.cwd == "/path/to/my project"
+    assert envelope.resume == "pi --session /tmp/session.jsonl"
+    trimmed = herdr_prompt.parse_envelope(herdr_prompt.render_envelope(sender))
+    assert trimmed is not None
+    assert not trimmed.cwd and not trimmed.resume
 
 
-def test_envelope_renders_a_resolved_receiver_as_a_position_ref() -> None:
+def test_envelope_renders_a_resolved_receiver_as_an_address() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
     receiver = herdr_prompt.CallerContext(
         pane_id="w1:p3", label="impl-1", agent="impl-1", kind="agy", tab_id="w1:t1"
     )
-    assert herdr_prompt.render_envelope(sender, receiver=receiver) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1",
-            "  Receiver: impl-1@w1:p3 - tab w1:t1 - kind agy",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    envelope = herdr_prompt.parse_envelope(herdr_prompt.render_envelope(sender, receiver=receiver))
+    assert envelope is not None
+    assert envelope.sender == "orchestrator@w1:p1"
+    assert envelope.receiver == "impl-1@w1:p3"
+    assert "tab w1:t1" not in herdr_prompt.render_envelope(sender, receiver=receiver)
 
 
-def test_envelope_omits_tab_cwd_and_resume_by_default() -> None:
+def test_envelope_omits_cwd_and_resume_by_default() -> None:
     sender = herdr_prompt.CallerContext(
         pane_id="w1:p1",
         label="orchestrator",
@@ -639,18 +630,13 @@ def test_envelope_omits_tab_cwd_and_resume_by_default() -> None:
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --session /tmp/session.jsonl",
     )
-    rendered = herdr_prompt.render_envelope(sender)
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
-    assert "Runtime:" not in rendered
+    rendered = herdr_prompt.render_envelope(sender, tab_id=sender.tab_id)
     assert "Cwd:" not in rendered
     assert "Resume:" not in rendered
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.task_group == "w1:t1"
+    assert not envelope.cwd and not envelope.resume
 
 
 def test_envelope_keeps_a_label_that_differs_from_the_agent_name() -> None:
@@ -662,14 +648,9 @@ def test_envelope_keeps_a_label_that_differs_from_the_agent_name() -> None:
         resume_cmd="qodercli resume",
     )
     rendered = herdr_prompt.render_envelope(sender)
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: t7-impl@w1:p2 - label callee - kind qodercli",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.sender == "t7-impl@w1:p2"
     assert "Runtime:" not in rendered
 
 
@@ -680,85 +661,100 @@ def test_sender_ref_only_ever_uses_the_agent_name_as_the_target_token() -> None:
     assert herdr_prompt.sender_ref(spare_label) == "impl-1@w1:p1 - label callee"
 
 
-def test_envelope_omits_unknown_fields_never_invents() -> None:
+def test_envelope_omits_unknown_fields_never_invents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(herdr_envelope, "utc_stamp", lambda: "2026-01-02T03:04:05.678Z")
     sender = herdr_prompt.CallerContext(pane_id="w9:p1", agent="reviewer")
-    assert herdr_prompt.render_envelope(sender) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: reviewer@w9:p1",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    assert herdr_prompt.render_envelope(sender).splitlines() == [
+        "---",
+        "id: ''",
+        "context_id: ''",
+        "status:",
+        "  state: TASK_STATE_WORKING",
+        "  timestamp: '2026-01-02T03:04:05.678Z'",
+        "metadata:",
+        "  sender: reviewer@w9:p1",
+        "---",
+    ]
 
 
-def test_envelope_renders_hierarchy_block_from_correlation_params() -> None:
+def test_envelope_renders_correlation_metadata_from_the_params() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
-    assert herdr_prompt.render_envelope(
+    rendered = herdr_prompt.render_envelope(
         sender,
         ticket_id="#182-herdr-msg-enhance",
         task_id="#182-herdr-msg-enhance#full-stack",
         task_group="full-stack",
         tab_id="w1:t2",
-    ) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1",
-            "Hierarchy:",
-            "  Task-Group: full-stack (w1:t2)",
-            "  Ticket-ID: #182-herdr-msg-enhance",
-            "  Task-ID: #182-herdr-msg-enhance#full-stack",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
     )
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.id == "#182-herdr-msg-enhance#full-stack"
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.task_group == "full-stack@w1:t2"
+    assert rendered.splitlines()[0] == "---"
 
 
 def test_envelope_renders_task_group_alone_or_tab_alone() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
-    only_group = herdr_prompt.render_envelope(sender, task_group="full-stack")
-    assert "  Task-Group: full-stack" in only_group
-    assert "(" not in only_group.splitlines()[3]
-    only_tab = herdr_prompt.render_envelope(sender, tab_id="w1:t2")
-    assert "  Task-Group: w1:t2" in only_tab
+    only_group = herdr_prompt.parse_envelope(
+        herdr_prompt.render_envelope(sender, task_group="full-stack")
+    )
+    assert only_group is not None
+    assert only_group.task_group == "full-stack"
+    only_tab = herdr_prompt.parse_envelope(herdr_prompt.render_envelope(sender, tab_id="w1:t2"))
+    assert only_tab is not None
+    assert only_tab.task_group == "w1:t2"
 
 
 def test_envelope_renders_in_reply_to() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
     rendered = herdr_prompt.render_envelope(sender, in_reply_to="#182-herdr-msg-enhance#full-stack")
-    assert "Hierarchy:" in rendered
-    assert "  In-Reply-To: #182-herdr-msg-enhance#full-stack" in rendered
-
-
-def test_envelope_omits_hierarchy_and_runtime_blocks_when_params_absent() -> None:
-    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
-    rendered = herdr_prompt.render_envelope(sender, include_recovery=False)
     assert "Hierarchy:" not in rendered
-    assert "Runtime:" not in rendered
-    assert "Ticket-ID:" not in rendered
-    assert "Task-ID:" not in rendered
-    assert "In-Reply-To:" not in rendered
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.in_reply_to == "#182-herdr-msg-enhance#full-stack"
 
 
-def test_envelope_group_uses_bracket_form() -> None:
+def test_envelope_omits_correlation_and_recovery_metadata_when_params_absent() -> None:
+    sender = herdr_prompt.CallerContext(
+        pane_id="w1:p1", agent="orchestrator", cwd="/tmp/work", resume_cmd="pi --resume"
+    )
+    block = _frontmatter(herdr_prompt.render_envelope(sender, include_recovery=False))
+    assert block["metadata"] == {"sender": "orchestrator@w1:p1"}
+    assert "Ticket-ID:" not in str(block)
+    assert "In-Reply-To:" not in str(block)
+
+
+def _frontmatter(block: str) -> dict[str, Any]:
+    """Read the fenced frontmatter with a generic YAML reader — the ADR's compatibility promise."""
+    lines = block.splitlines()
+    assert lines[0] == "---" and lines[-1] == "---", lines
+    parsed = yaml.safe_load("\n".join(lines[1:-1]))
+    assert isinstance(parsed, dict)
+    return cast("dict[str, Any]", parsed)
+
+
+def test_envelope_group_renders_as_a_yaml_sequence() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
     rendered = herdr_prompt.render_envelope(
         sender, group_members=["orchestrator@w1:p1", "impl-1@w1:p3"]
     )
-    assert "  Group: [orchestrator@w1:p1, impl-1@w1:p3]" in rendered
+    block = _frontmatter(rendered)
+    assert block["metadata"]["group"] == ["orchestrator@w1:p1", "impl-1@w1:p3"]
 
 
-def test_envelope_sanitizes_label_to_single_line() -> None:
+def test_envelope_addresses_the_sender_and_never_leaks_the_label() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="review\npane\tX", agent="reviewer")
-    assert (
-        herdr_prompt.render_envelope(sender).splitlines()[1]
-        == '  Sender: reviewer@w1:p1 - label "review pane X"'
-    )
+    assert herdr_prompt.sender_ref(sender) == 'reviewer@w1:p1 - label "review pane X"'
+    block = _frontmatter(herdr_prompt.render_envelope(sender))
+    assert block["metadata"] == {"sender": "reviewer@w1:p1"}
 
 
 def test_envelope_drops_a_blank_label() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="   ", agent="reviewer")
-    assert herdr_prompt.render_envelope(sender).splitlines()[1] == "  Sender: reviewer@w1:p1"
+    assert herdr_prompt.sender_ref(sender) == "reviewer@w1:p1"
 
 
 def test_reply_contract_without_agent_is_unaddressable() -> None:
@@ -839,29 +835,34 @@ def test_reply_contract_documents_the_sha_guard_waiver_with_a_quoted_example() -
         assert "<TOKEN>" not in contract
 
 
+def delivered_envelope(text: str) -> tuple[herdr_prompt.Envelope, str]:
+    """The A2A envelope of a delivered payload plus its body, read through `herdr_prompt`."""
+    envelope, body = herdr_prompt.split_envelope_and_body(text)
+    assert envelope is not None, text
+    assert body is not None, text
+    return envelope, body
+
+
 def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
     lines = text.splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
+    assert lines[0] == "---"
+    assert not any(re.match(r"^\[\d{4}-", line) for line in lines)
+    envelope, body = delivered_envelope(text)
+    assert envelope.state == "TASK_STATE_WORKING"
+    assert re.match(TIMESTAMP_RE, envelope.timestamp)
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert envelope.task_group == "w9:t1"
+    assert body.startswith("hi\n\n")
     assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
     assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
-    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
-    assert "Group: [reviewer@w9:p1]" in text
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in text
-    assert "\n---\n\nhi\n\n" in text
+    assert herdr_prompt.SKILL_NOTICE in lines
+    assert f"\n---\n{herdr_prompt.SKILL_NOTICE}\n\nhi\n\n" in text
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
     assert Path(reply.group(1)).is_file(), reply.group(1)
@@ -890,18 +891,11 @@ def test_resolve_caller_extracts_kind_without_a_runtime_block(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
-    lines = text.splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
+    assert text.splitlines()[0] == "---"
+    envelope, _body = delivered_envelope(text)
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.context_id == "/tmp/session.jsonl"
+    assert not envelope.cwd and not envelope.resume
     assert "Runtime:" not in text
     assert "Resume:" not in text
 
@@ -912,18 +906,13 @@ def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> 
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
-    lines = prompt_call[4].splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        '  Sender: w9:p2 - label "scratch pad" - tab w9:t1',
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
+    text = prompt_call[4]
+    assert text.splitlines()[0] == "---"
+    envelope, _body = delivered_envelope(text)
+    assert envelope.sender == "w9:p2"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.task_group == "w9:t1"
     assert "cannot be addressed" in prompt_call[4]
 
 
@@ -945,26 +934,22 @@ def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) 
     (first, second) = stub.prompts()
     assert (first[3], second[3]) == ("callee1", "callee2")
     first_lines = first[4].splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", first_lines[0])
-    assert first_lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: callee1",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
-    assert "Group: [reviewer@w9:p1]" in first[4]
-    assert "Group: [reviewer@w9:p1]" in second[4]
+    assert first_lines[0] == "---"
+    assert not any(re.match(r"^\[\d{4}-", line) for line in first_lines)
+    first_env, _first_body = delivered_envelope(first[4])
+    assert first_env.sender == "reviewer@w9:p1"
+    assert first_env.receiver == "callee1"
+    assert first_env.group == ("reviewer@w9:p1",)
+    assert first_env.task_group == "w9:t1"
     assert first[4] != second[4]
-    assert "Receiver: callee1" in first[4]
-    assert "Receiver: callee2" in second[4]
+    assert "receiver: callee1" in first[4]
+    assert "receiver: callee2" in second[4]
     assert first[4].splitlines()[1:] != second[4].splitlines()[1:]
-    body_first = "\n".join(first[4].splitlines()[1:]).replace("Receiver: callee1", "Receiver: X")
-    body_second = "\n".join(second[4].splitlines()[1:]).replace("Receiver: callee2", "Receiver: X")
-    assert body_first == body_second
+    body_first = first[4].replace("receiver: callee1", "receiver: X")
+    body_second = second[4].replace("receiver: callee2", "receiver: X")
+    assert re.sub(r"timestamp: '[^']*'", "", body_first) == re.sub(
+        r"timestamp: '[^']*'", "", body_second
+    )
 
 
 def test_dry_run_renders_caller_payload_without_prompting(
@@ -976,18 +961,14 @@ def test_dry_run_renders_caller_payload_without_prompting(
     argv: list[str] = json.loads(done.stdout)
     assert argv[3] == "reviewer"
     lines = argv[4].splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in argv[4]
+    assert lines[0] == "---"
+    assert not any(re.match(r"^\[\d{4}-", line) for line in lines)
+    envelope, _body = delivered_envelope(argv[4])
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert envelope.task_group == "w9:t1"
+    assert "receiver: reviewer@w9:p1" in argv[4]
     assert "${herdr_skill}" in argv[4]
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', argv[4])
     assert reply, argv[4]
@@ -1018,11 +999,11 @@ def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
     """#259: a caller-side dry run echoes metadata + a body preview, never the serialized argv.
 
     #259 anchor addendum: the status line carries the `[You: …]` self-anchor in the colon form.
-    #260: the delivered envelope carries a plain `Receiver:` — no `(You)` anywhere, in the
+    #260: the delivered envelope carries a plain `receiver:` address — no `(You)` anywhere, in the
     callee payload or the caller copy.
 
     Pin -> mutant: printing `json.dumps(argv)` (the pre-#259 dry run) — this output is not one
-    JSON line and carries no `Protocol:` notice, so a raw-argv render fails it.
+    JSON line and carries no `Herdr:` notice, so a raw-argv render fails it.
     """
     ticket = payload_file(tmp_path, "do the thing")
     done = stub.run("reviewer", "--file", str(ticket), "--dry-run")
@@ -1032,10 +1013,10 @@ def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
     lines = out.splitlines()
     assert lines[0] == "[You: reviewer@w9:p1] dry-run: would prompt reviewer (w9:p1)"
     assert lines[1] == "---"
-    assert "Routing:" in out and "Hierarchy:" in out
-    assert "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in out
+    assert "metadata:" in out and "status:" in out
+    assert "  receiver: reviewer@w9:p1" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    assert "Routing:" not in out and "Protocol:" not in out
     assert herdr_prompt.SKILL_NOTICE not in out
     assert lines.count("---") == 2
     assert f"File: {ticket}" in out
@@ -1049,7 +1030,8 @@ def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
     """#259: `--json` keeps the machine render, and the callee payload is untouched by the trim.
 
     Pin -> mutant: shrinking the DELIVERED payload rather than only the caller echo — the argv
-    element [4] must still carry the full `Protocol:` notice and reply contract.
+    element [4] must still carry the full frontmatter block, the `Herdr:` notice and the reply
+    contract.
     """
     ticket = payload_file(tmp_path, "do the thing")
     done = stub.run("reviewer", "--file", str(ticket), "--dry-run", "--json")
@@ -1057,7 +1039,7 @@ def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
     argv: list[str] = json.loads(done.stdout)
     delivered = argv[4]
     assert herdr_prompt.SKILL_NOTICE in delivered
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in delivered
+    assert "receiver: reviewer@w9:p1" in delivered
     assert "On completion, reply to the sender" in delivered
 
 
@@ -1071,10 +1053,10 @@ def test_live_prompt_prints_status_then_trimmed_summary(stub: StubHarness, tmp_p
     assert lines[0].startswith("[You: reviewer@w9:p1] prompted reviewer")
     assert "bytes=" in lines[0]
     assert lines[1] == "---"
-    assert "Routing:" in out and "Hierarchy:" in out
-    assert "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in out
+    assert "metadata:" in out and "status:" in out
+    assert "  receiver: reviewer@w9:p1" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    assert "Routing:" not in out and "Protocol:" not in out
     assert f"File: {ticket}" in out
     assert "do the thing" in out
 
@@ -1144,8 +1126,10 @@ def test_group_members_listed_in_caller_context(stub: StubHarness, tmp_path: Pat
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
-    assert "Group: [reviewer@w9:p1, t7-impl@w9:p2]" in text
-    assert "Receiver: t7-impl@w9:p2 - label callee - tab w9:t1 - kind qodercli" in text
+    envelope, _body = delivered_envelope(text)
+    assert envelope.group == ("reviewer@w9:p1", "t7-impl@w9:p2")
+    assert envelope.receiver == "t7-impl@w9:p2"
+    assert "label callee" not in text
 
 
 def test_constant_nonzero_revision_accepted_without_retry(
@@ -1194,7 +1178,7 @@ def _session_caller_state() -> dict[str, object]:
     }
 
 
-def test_default_envelope_omits_runtime_cwd_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+def test_default_envelope_omits_recovery_metadata(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run(
         "reviewer", "--file", str(payload_file(tmp_path, "hi")), state=_session_caller_state()
     )
@@ -1203,10 +1187,12 @@ def test_default_envelope_omits_runtime_cwd_and_resume(stub: StubHarness, tmp_pa
     text = prompt_call[4]
     assert "Runtime:" not in text
     assert "Cwd:" not in text
-    assert "Resume:" not in text
+    envelope, _body = delivered_envelope(text)
+    assert envelope.context_id == "/tmp/session.jsonl"
+    assert not envelope.cwd and not envelope.resume
 
 
-def test_verbose_flag_restores_runtime_cwd_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+def test_verbose_flag_adds_cwd_and_resume_metadata(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run(
         "reviewer",
         "--file",
@@ -1217,9 +1203,11 @@ def test_verbose_flag_restores_runtime_cwd_and_resume(stub: StubHarness, tmp_pat
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     lines = prompt_call[4].splitlines()
-    assert "Runtime:" in lines
-    assert "  Cwd: /tmp/harness" in lines
-    assert '  Resume: "pi --session /tmp/session.jsonl"' in lines
+    assert "  cwd: /tmp/harness" in lines
+    assert "  resume: pi --session /tmp/session.jsonl" in lines
+    envelope, _body = delivered_envelope(prompt_call[4])
+    assert envelope.cwd == "/tmp/harness"
+    assert envelope.resume == "pi --session /tmp/session.jsonl"
 
 
 def test_resolve_caller_captures_session_and_resume() -> None:

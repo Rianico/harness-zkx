@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """herdr-envelope — the envelope domain: render, delimit, parse.
 
-Internal — import it, do not run it. The Style 2 nested envelope that a dispatched prompt or
-reply carries is formatted here: the `Routing:` (Sender, Group, `Receiver`), `Hierarchy:`
-(Task-Group, Ticket-ID, Task-ID, In-Reply-To), `Runtime:` (Cwd/Resume recovery metadata), and
-`Protocol:` (the Herdr skill notice) sections, the `---` paging delimiter around the payload,
-and the closing completion-reply contract. `parse_envelope` and `split_envelope_and_body`
-read the exact format the renderers write, so the envelope can be consumed as well as
-produced.
+Internal — import it, do not run it. Every inter-agent message carries the A2A Markdown
+frontmatter envelope that `docs/adr/0020-a2a-markdown-frontmatter-envelope.md` adopts: a block
+fenced by `---` on line 1 and closed by `---` before the payload, holding the canonical fields
+`id` (the task), `context_id` (the sender's session), `status` (`state` plus `timestamp`) and
+`metadata` (ticket, the sender/receiver addresses, the task group, the replied-to task, plus the
+lane topology the routing used to carry). The Herdr skill notice follows the closing fence as
+its own plain line, then the payload follows.
+
+PyYAML emits and reads the block, so a generic Markdown frontmatter parser reads an envelope
+without a bespoke regex: `parse_envelope` accepts exactly what the renderers write, and the
+retired Style 2 `Routing:`/`Hierarchy:`/`Runtime:`/`Protocol:` form is refused — the cutover
+ships no backward-compatibility shim. `status.state` is authoritative for the task lifecycle.
 
 Identity producers (`build_identity`, `resolve_caller`, `resolve_receiver`,
 `resolve_group_members`) stay in `herdr_prompt`: this module formats and parses the envelope
@@ -16,11 +21,13 @@ from a `CallerContext` it is handed, and never looks a pane up.
 
 from __future__ import annotations
 
-import re
 import shlex
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
+
+import yaml
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import reply_helper
@@ -46,7 +53,12 @@ def _single_line(value: str, limit: int = 64) -> str:
 
 
 def _scalar(value: str) -> str:
-    """Render a header value; quote only when a YAML reader would mangle it."""
+    """Render a routing-ref value; quote only when a YAML reader would mangle it.
+
+    This is the hand-written form used by `sender_ref`, whose composite position ref is prose an
+    operator reads in a ticket draft — never a frontmatter field. Frontmatter values go through
+    `yaml.safe_dump`, which owns its own quoting.
+    """
     if not value:
         return ""
     if (
@@ -74,11 +86,46 @@ def sender_ref(sender: CallerContext) -> str:
     return " - ".join(parts)
 
 
-def receiver_ref(receiver: str | CallerContext) -> str:
-    """Render the addressee as a position ref when it resolved, else as the bare target token."""
-    if isinstance(receiver, CallerContext):
-        return sender_ref(receiver)
-    return _scalar(receiver)
+def address_of(ref: str | CallerContext) -> str:
+    """The strict `<agent>@<pane>` address a frontmatter field carries, never a composite ref.
+
+    A resolved pane falls back to its bare pane id when no agent name registered; an unresolved
+    dispatch target is its own address, because that token is what `herdr agent prompt` accepted.
+    """
+    if isinstance(ref, CallerContext):
+        return caller_anchor(ref)
+    return ref
+
+
+# The canonical A2A `TaskState` names this harness renders; `status.state` is authoritative.
+STATE_WORKING = "TASK_STATE_WORKING"
+STATE_COMPLETED = "TASK_STATE_COMPLETED"
+STATE_INPUT_REQUIRED = "TASK_STATE_INPUT_REQUIRED"
+STATE_FAILED = "TASK_STATE_FAILED"
+
+# A reply's first token reaches the envelope through `herdr_evidence.parse_status_line`, which
+# maps COMPLETED/BLOCKED/REJECTED onto `completed`/`blocked`/`rework`. This table is the single
+# place the two vocabularies meet: a completion is `TASK_STATE_COMPLETED`, work awaiting input
+# is `TASK_STATE_INPUT_REQUIRED`, and a refusal is `TASK_STATE_FAILED`. An unmapped or absent
+# status renders `TASK_STATE_WORKING`, which is also what a dispatch or a prompt renders, since
+# the callee has not settled the task yet.
+REPLY_STATE_BY_STATUS: Mapping[str, str] = {
+    "completed": STATE_COMPLETED,
+    "blocked": STATE_INPUT_REQUIRED,
+    "rework": STATE_FAILED,
+}
+
+
+def reply_state(status: str | None) -> str:
+    """The canonical state a parsed reply status renders as; nothing settled is still working."""
+    return REPLY_STATE_BY_STATUS.get(status or "", STATE_WORKING)
+
+
+def _task_group_field(task_group: str | None, tab_id: str | None) -> str:
+    """The `<group_slug>@<tab_id>` task group; a lone side of it is its own value, neither is absent."""
+    if task_group and tab_id:
+        return f"{task_group}@{tab_id}"
+    return task_group or tab_id or ""
 
 
 def render_envelope(
@@ -92,50 +139,49 @@ def render_envelope(
     task_group: str | None = None,
     tab_id: str | None = None,
     in_reply_to: str | None = None,
+    state: str = STATE_WORKING,
 ) -> str:
-    """Render the Style 2 envelope; the receiver closes the Routing block, and an absent field renders no line."""
-    routing = ["Routing:", f"  Sender: {sender_ref(sender)}"]
-    if group_members:
-        routing.append(f"  Group: [{', '.join(group_members)}]")
-    if receiver:
-        routing.append(f"  Receiver: {receiver_ref(receiver)}")
+    """Render the A2A frontmatter block: fenced top and bottom, an absent field renders no key.
 
-    hierarchy: list[str] = []
-    if task_group and tab_id:
-        hierarchy.append(f"  Task-Group: {task_group} ({tab_id})")
-    elif task_group:
-        hierarchy.append(f"  Task-Group: {task_group}")
-    elif tab_id:
-        hierarchy.append(f"  Task-Group: {tab_id}")
+    The four top-level keys are always present — `id` and `context_id` render `''` when the
+    harness knows no task or session, so a reader never has to distinguish "absent" from "empty"
+    at the top level. `metadata` carries the A2A correlation fields plus the lane topology the
+    retired routing blocks used to hold: the `group` member list always, `cwd`/`resume` only when
+    `include_recovery` is set (the `--verbose` route), because recovery metadata is retrieved
+    just-in-time from `.lane/tasks.yaml` on the default path.
+    """
+    metadata: dict[str, Any] = {}
     if ticket_id:
-        hierarchy.append(f"  Ticket-ID: {ticket_id}")
-    if task_id:
-        hierarchy.append(f"  Task-ID: {task_id}")
+        metadata["ticket_id"] = ticket_id
+    metadata["sender"] = address_of(sender)
+    if receiver is not None:
+        metadata["receiver"] = address_of(receiver)
+    group_field = _task_group_field(task_group, tab_id)
+    if group_field:
+        metadata["task_group"] = group_field
     if in_reply_to:
-        hierarchy.append(f"  In-Reply-To: {in_reply_to}")
-
-    runtime: list[str] = []
+        metadata["in_reply_to"] = in_reply_to
+    if group_members:
+        metadata["group"] = list(group_members)
     if include_recovery:
         if sender.cwd:
-            runtime.append(f"  Cwd: {_scalar(sender.cwd)}")
+            metadata["cwd"] = sender.cwd
         if sender.resume_cmd:
-            runtime.append(f"  Resume: {_scalar(sender.resume_cmd)}")
+            metadata["resume"] = sender.resume_cmd
 
-    lines = [*routing]
-    if hierarchy:
-        lines.append("Hierarchy:")
-        lines.extend(hierarchy)
-    if runtime:
-        lines.append("Runtime:")
-        lines.extend(runtime)
-    lines.append("Protocol:")
-    lines.append(f"  {SKILL_NOTICE}")
-    return "\n".join(lines)
+    frontmatter: dict[str, Any] = {
+        "id": task_id or "",
+        "context_id": sender.session_id or "",
+        "status": {"state": state, "timestamp": utc_stamp()},
+        "metadata": metadata,
+    }
+    block = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True)
+    return "\n".join([PAGING_DELIMITER, *block.rstrip().splitlines(), PAGING_DELIMITER])
 
 
 def utc_stamp() -> str:
-    """Timestamp an envelope; both directions stamp, so a transcript reads in order."""
-    return f"[{datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}]"
+    """Timestamp an envelope as a bare ISO-8601 UTC string; both directions stamp, so a transcript reads in order."""
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 SKILL_NOTICE = (
@@ -203,13 +249,19 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
     return f"On completion, reply to the sender in one message:\n  {note}"
 
 
-# The body page-breaks after the envelope; renderers and the parser share this one delimiter.
+# The frontmatter fence and the caller-facing page-break are the same token by design: Markdown
+# reads `---` as the horizontal rule that closes the block, so one delimiter serves both roles.
 PAGING_DELIMITER = "---"
+
+# The delivered envelope is the frontmatter block, then the skill notice on its own line, then
+# the payload. This one constant joins them and is the exact string the readers split on, so a
+# renderer and a parser can never disagree about where the envelope ends.
+NOTICE_SEPARATOR = f"\n{SKILL_NOTICE}\n\n"
 
 
 def render_prelude(envelope: str) -> str:
-    """Stamp the envelope and page-break after it; the delivered body follows the delimiter."""
-    return f"{utc_stamp()}\n{envelope}\n{PAGING_DELIMITER}\n\n"
+    """Close the frontmatter block with the skill notice and the page break; the body follows."""
+    return f"{envelope}{NOTICE_SEPARATOR}"
 
 
 def wrap_with_envelope(
@@ -223,8 +275,9 @@ def wrap_with_envelope(
     task_id: str | None = None,
     task_group: str | None = None,
     tab_id: str | None = None,
+    state: str = STATE_WORKING,
 ) -> str:
-    """Prepend the timestamped envelope and append the reply contract around the payload."""
+    """Prepend the A2A envelope and skill notice and append the reply contract around the payload."""
     envelope = render_envelope(
         sender,
         receiver=receiver,
@@ -234,110 +287,121 @@ def wrap_with_envelope(
         task_id=task_id,
         task_group=task_group,
         tab_id=tab_id,
+        state=state,
     )
     prelude = render_prelude(envelope)
     return f"{prelude}{payload}\n\n{render_reply_contract(sender, ticket_id)}"
 
 
-_TIMESTAMP = re.compile(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$")
-
-_SECTION_HEADERS = frozenset({"Routing:", "Hierarchy:", "Runtime:", "Protocol:"})
-
-_FIELD_NAMES: dict[str, str] = {
-    "Sender": "sender",
-    # #260: the delivered form is `Receiver:`; the legacy `Receiver(You):` header parses to the
-    # same field so envelopes written before the change still round-trip.
-    "Receiver": "receiver",
-    "Receiver(You)": "receiver",
-    "Task-Group": "task_group",
-    "Ticket-ID": "ticket_id",
-    "Task-ID": "task_id",
-    "In-Reply-To": "in_reply_to",
-    "Cwd": "cwd",
-    "Resume": "resume",
-}
-
-
-def _unquote(value: str) -> str:
-    """Inverse of `_scalar`; a rendered header never starts a bare value with a double quote."""
-    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-        return value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
-    return value
+# The canonical top-level key set, and the key sets nested inside it. A frontmatter block with a
+# key outside its set is not an envelope this module rendered, so it is refused rather than
+# half-read: a silently ignored key is how a producer and a consumer drift apart.
+FRONTMATTER_KEYS = frozenset({"id", "context_id", "status", "metadata"})
+STATUS_KEYS = frozenset({"state", "timestamp"})
+METADATA_KEYS = frozenset(
+    {
+        "ticket_id",
+        "sender",
+        "receiver",
+        "task_group",
+        "in_reply_to",
+        "group",
+        "cwd",
+        "resume",
+    }
+)
 
 
 @dataclass(frozen=True)
 class Envelope:
-    """A parsed envelope header; a field is "" when the envelope rendered no line for it."""
+    """A parsed A2A envelope; a field is "" when the envelope carried no value for it.
 
+    The field names are the frontmatter key names, so a reader can trace any value back to the
+    block: `task_id` is the block's `id`, `state` and `timestamp` come from `status`, the rest
+    from `metadata`.
+    """
+
+    id: str = ""
+    context_id: str = ""
+    state: str = ""
+    timestamp: str = ""
     sender: str = ""
-    group: tuple[str, ...] = ()
     receiver: str = ""
-    task_group: str = ""
     ticket_id: str = ""
-    task_id: str = ""
+    task_group: str = ""
     in_reply_to: str = ""
+    group: tuple[str, ...] = ()
     cwd: str = ""
     resume: str = ""
-    protocol: str = ""
 
 
-def _group_members(value: str) -> tuple[str, ...]:
-    """Parse the bracket form `[a, b]` the renderer emits for Group."""
-    if not (value.startswith("[") and value.endswith("]")):
+def _text(value: object) -> str:
+    """A frontmatter scalar as text; a value the loader retyped (a bare `123`) is no envelope field."""
+    return value if isinstance(value, str) else ""
+
+
+def _names(value: object) -> tuple[str, ...]:
+    """The `group` member list, dropped whole unless every entry is a string."""
+    if not isinstance(value, list):
         return ()
-    inner = value[1:-1].strip()
-    if not inner:
-        return ()
-    return tuple(_unquote(item.strip()) for item in inner.split(","))
+    return tuple(item for item in value if isinstance(item, str))
+
+
+def _frontmatter_block(payload: str) -> str | None:
+    """The fenced frontmatter body of `payload`, or None when it opens or closes otherwise."""
+    lines = payload.splitlines()
+    if not lines or lines[0] != PAGING_DELIMITER:
+        return None
+    try:
+        close = lines.index(PAGING_DELIMITER, 1)
+    except ValueError:
+        return None
+    return "\n".join(lines[1:close])
 
 
 def parse_envelope(payload: str) -> Envelope | None:
-    """Parse an envelope header — bare, timestamped, or ahead of the paging delimiter; else None."""
-    head = payload.partition(f"\n{PAGING_DELIMITER}\n\n")[0]
-    lines = head.splitlines()
-    if lines and _TIMESTAMP.match(lines[0]):
-        lines = lines[1:]
-    if not lines or lines[0] != "Routing:":
+    """Parse an A2A envelope — the bare block or a whole delivered message; any other text is None.
+
+    A dispatched prompt, a reply, and a bare `render_envelope` result all open with the `---`
+    fence, so the same read serves each. The retired Style 2 header is refused here by shape: it
+    never opens with a fence, so it needs no special case and no compatibility branch.
+    """
+    block = _frontmatter_block(payload)
+    if block is None:
         return None
-    fields: dict[str, str] = {}
-    group: tuple[str, ...] = ()
-    protocol: list[str] = []
-    in_protocol = False
-    for line in lines[1:]:
-        if not line.startswith("  "):
-            if line not in _SECTION_HEADERS:
-                return None
-            in_protocol = line == "Protocol:"
-            continue
-        if in_protocol:
-            protocol.append(line[2:])
-            continue
-        key, sep, value = line[2:].partition(": ")
-        if not sep:
-            return None
-        if key == "Group":
-            group = _group_members(value)
-            continue
-        name = _FIELD_NAMES.get(key)
-        if name is not None:
-            fields[name] = _unquote(value)
+    try:
+        raw: Any = yaml.safe_load(block)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(raw, dict) or not FRONTMATTER_KEYS.issuperset(raw):
+        return None
+    status = raw.get("status")
+    if not isinstance(status, dict) or not STATUS_KEYS.issuperset(status):
+        return None
+    metadata = raw.get("metadata")
+    if metadata is None:
+        metadata = {}
+    if not isinstance(metadata, dict) or not METADATA_KEYS.issuperset(metadata):
+        return None
     return Envelope(
-        sender=fields.get("sender", ""),
-        group=group,
-        receiver=fields.get("receiver", ""),
-        task_group=fields.get("task_group", ""),
-        ticket_id=fields.get("ticket_id", ""),
-        task_id=fields.get("task_id", ""),
-        in_reply_to=fields.get("in_reply_to", ""),
-        cwd=fields.get("cwd", ""),
-        resume=fields.get("resume", ""),
-        protocol="\n".join(protocol),
+        id=_text(raw.get("id")),
+        context_id=_text(raw.get("context_id")),
+        state=_text(status.get("state")),
+        timestamp=_text(status.get("timestamp")),
+        sender=_text(metadata.get("sender")),
+        receiver=_text(metadata.get("receiver")),
+        ticket_id=_text(metadata.get("ticket_id")),
+        task_group=_text(metadata.get("task_group")),
+        in_reply_to=_text(metadata.get("in_reply_to")),
+        group=_names(metadata.get("group")),
+        cwd=_text(metadata.get("cwd")),
+        resume=_text(metadata.get("resume")),
     )
 
 
 def split_envelope_and_body(text: str) -> tuple[Envelope | None, str | None]:
-    """Split a wrapped payload at the paging delimiter; non-envelope text yields (None, None)."""
-    head, sep, body = text.partition(f"\n{PAGING_DELIMITER}\n\n")
+    """Split a wrapped payload at the skill-notice separator; non-envelope text yields (None, None)."""
+    head, sep, body = text.partition(NOTICE_SEPARATOR)
     if not sep:
         return None, None
     envelope = parse_envelope(head)
@@ -358,28 +422,19 @@ def caller_anchor(caller: CallerContext) -> str:
 
 
 def envelope_metadata_lines(delivered: str) -> list[str]:
-    """The delivered envelope's `Routing:`/`Hierarchy:`/`Runtime:` header lines, boilerplate dropped.
+    """The delivered envelope's frontmatter key lines, fence and skill notice dropped.
 
-    Caller-facing only: the callee still receives the full envelope. The leading timestamp is
-    stripped and rendering stops at `Protocol:` so the fixed Herdr skill notice — the same on
-    every message — never reaches the orchestrator's context. Text with no parseable envelope
-    header (`--no-caller-context`, a body that is not an envelope) yields no lines, so a body
-    containing a bare `---` is never mistaken for a header.
+    Caller-facing only: the callee still receives the full envelope. The `---` fences and the
+    `Herdr:` notice line are cut because that notice is identical on every message and would
+    otherwise repeat in the orchestrator's context, and the timestamp line stays — it is what
+    makes a transcript readable in order. Text with no parseable frontmatter block
+    (`--no-caller-context`, a body that is not an envelope) yields no lines, so a body containing
+    a bare `---` is never mistaken for a header.
     """
-    head, sep, _rest = delivered.partition(f"\n{PAGING_DELIMITER}\n\n")
+    head, sep, _rest = delivered.partition(NOTICE_SEPARATOR)
     if not sep:
         return []
-    lines = head.splitlines()
-    if lines and _TIMESTAMP.match(lines[0]):
-        lines = lines[1:]
-    if not lines or lines[0] != "Routing:":
-        return []
-    out: list[str] = []
-    for line in lines:
-        if line == "Protocol:":
-            break
-        out.append(line)
-    return out
+    return (_frontmatter_block(head) or "").splitlines()
 
 
 def preview_body(body: str, limit: int = 3) -> list[str]:
@@ -404,7 +459,7 @@ def format_delivery_summary(status_line: str, delivered: str, body: str, source:
     original payload (for the preview,
     so an appended reply contract or inserted pointer never leaks into it); `source` names where
     the payload came from. The two `---` delimiters separate status from metadata and metadata
-    from preview — the same page-break the callee's envelope uses. This is what trims the
+    from preview — the same fence the callee's envelope opens with. This is what trims the
     orchestrator's context: the callee delivery is untouched, only this caller-side echo changes.
     """
     metadata = envelope_metadata_lines(delivered)

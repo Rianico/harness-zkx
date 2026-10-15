@@ -63,16 +63,21 @@ def test_positional_message_is_delivered_verbatim(stub: StubHarness) -> None:
     (call,) = stub.prompts()
     assert call[1:4] == ["agent", "prompt", "orchestrator"]
     assert call[4].endswith(METACHARS)
-    envelope = call[4].splitlines()
-    assert envelope[1] == "Routing:"
-    assert envelope[2] == "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
-    assert envelope[3] == "  Receiver: orchestrator"
-    assert envelope[4] == "Hierarchy:"
-    assert envelope[5] == "  Task-Group: w9:t1"
-    assert envelope[6] == "Protocol:"
-    assert envelope[7] == f"  {herdr_prompt.SKILL_NOTICE}"
-    assert "Cwd:" not in call[4], "a reply stays short: no resumption fields"
-    assert "reply to the sender" not in call[4]
+    text = call[4]
+    envelope, _body = herdr_prompt.split_envelope_and_body(text)
+    assert envelope is not None
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "orchestrator"
+    assert envelope.task_group == "w9:t1"
+    assert envelope.state == "TASK_STATE_COMPLETED"
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", envelope.timestamp)
+    assert text.startswith("---\n")
+    assert f"\n---\n{herdr_prompt.SKILL_NOTICE}\n\n" in text
+    assert not any(line.startswith("[") for line in text.splitlines())
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in text
+    assert "cwd:" not in text, "a reply stays short: no resumption fields"
+    assert "reply to the sender" not in text
     assert "replied to orchestrator" in done.stdout
 
 
@@ -82,7 +87,9 @@ def test_file_payload_is_delivered_verbatim(stub: StubHarness, tmp_path: Path) -
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(METACHARS)
-    assert "Receiver: orchestrator" in call[4]
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    assert envelope.receiver == "orchestrator"
 
 
 def test_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
@@ -90,7 +97,9 @@ def test_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(METACHARS)
-    assert "Receiver: orchestrator" in call[4]
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    assert envelope.receiver == "orchestrator"
 
 
 def test_missing_target_is_rejected(stub: StubHarness) -> None:
@@ -1152,8 +1161,8 @@ def test_reply_dry_run_prints_a_trimmed_summary_not_the_raw_argv(stub: StubHarne
     """#259: a reply dry run echoes metadata + a body preview, never the serialized argv.
 
     #259 anchor addendum: the status line is `[You: …] dry-run: would reply to <target>`.
-    #260: the delivered reply carries a plain `Receiver:` — the `(You)` form is gone everywhere,
-    and only the legacy header still parses.
+    #260: the caller echo carries the A2A frontmatter metadata lines — bare `receiver:`, no
+    `(You)` form, no fences or `Herdr:` notice — between the two `---` page breaks.
     """
     done = stub.run("orchestrator", "COMPLETED", "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
@@ -1162,11 +1171,15 @@ def test_reply_dry_run_prints_a_trimmed_summary_not_the_raw_argv(stub: StubHarne
     lines = out.splitlines()
     assert lines[0] == "[You: reviewer@w9:p1] dry-run: would reply to orchestrator"
     assert lines[1] == "---"
-    assert "Routing:" in out
-    assert "  Receiver:" in out
+    assert "metadata:" in out
+    assert "  receiver: orchestrator" in out
+    assert "  sender: reviewer@w9:p1" in out
+    assert "  state: TASK_STATE_COMPLETED" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in out
     assert herdr_prompt.SKILL_NOTICE not in out
+    assert not any(line.startswith("[") for line in lines[2:])
     assert lines.count("---") == 2
     assert "Payload: inline (9 bytes)" in out
     assert "COMPLETED" in out
@@ -1177,7 +1190,7 @@ def test_reply_dry_run_json_prints_the_full_wrapped_callee_payload(stub: StubHar
     """#259: `--json` keeps the machine render with the full callee payload.
 
     Pin -> mutant: trimming the DELIVERED reply rather than only the caller echo — element [4]
-    still carries the `Protocol:` notice the callee reads.
+    still carries the fenced frontmatter and the `Herdr:` skill notice the callee reads.
     """
     done = stub.run("orchestrator", "COMPLETED", "--dry-run", "--json")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
@@ -1194,10 +1207,14 @@ def test_live_reply_prints_status_then_trimmed_summary(stub: StubHarness) -> Non
     assert lines[0].startswith("[You: reviewer@w9:p1] replied to orchestrator")
     assert "bytes=" in lines[0]
     assert lines[1] == "---"
-    assert "Routing:" in out
-    assert "  Receiver:" in out
+    assert "metadata:" in out
+    assert "  receiver: orchestrator" in out
+    assert "  sender: reviewer@w9:p1" in out
+    assert "  state: TASK_STATE_COMPLETED" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in out
+    assert not any(line.startswith("[") for line in lines[2:])
     assert "Payload: inline (9 bytes)" in out
     assert "COMPLETED" in out
 
@@ -1503,7 +1520,7 @@ def test_reply_is_delivered_when_no_lease_store_resolves(stub: StubHarness, tmp_
 def test_reply_without_a_resolvable_store_drops_envelope_metadata_only(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """F2: a skipped correlation loses `Ticket-ID`/`In-Reply-To`, never the reply.
+    """F2: a skipped correlation loses `metadata.ticket_id`/`in_reply_to`, never the reply.
 
     Correlation is by pane/target (`agent prompt <target> <payload>`), so the caller still
     matches the reply to its outstanding request; only the envelope enrichment degrades.
@@ -1517,8 +1534,8 @@ def test_reply_without_a_resolvable_store_drops_envelope_metadata_only(
 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
-    assert "Ticket-ID:" not in call[4]
-    assert "In-Reply-To:" not in call[4]
+    assert "ticket_id:" not in call[4]
+    assert "in_reply_to:" not in call[4]
     assert "COMPLETED" in call[4]
 
 
@@ -1552,8 +1569,11 @@ def test_reply_populates_correlation_from_sender_lease_and_releases(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     text = call[4]
-    assert "  Ticket-ID: #182-herdr-msg-enhance" in text
-    assert "  In-Reply-To: #182-herdr-msg-enhance#full-stack" in text
+    envelope = herdr_prompt.parse_envelope(text)
+    assert envelope is not None
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.id == "#182-herdr-msg-enhance#full-stack"
+    assert envelope.in_reply_to == "#182-herdr-msg-enhance#full-stack"
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
@@ -1563,8 +1583,8 @@ def test_reply_without_sender_lease_omits_correlation_and_still_sends(
     done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
-    assert "Ticket-ID:" not in call[4]
-    assert "In-Reply-To:" not in call[4]
+    assert "ticket_id:" not in call[4]
+    assert "in_reply_to:" not in call[4]
 
 
 def _shell_target_state() -> dict[str, object]:

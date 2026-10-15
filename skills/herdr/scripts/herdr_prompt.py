@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.14"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """herdr-prompt — deliver one prompt payload to a Herdr agent without shell mangling.
 
@@ -29,15 +29,14 @@ timed out first — the agent is working asynchronously: yield turn and await re
 callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Sender context is prepended by default (see `resolve_caller`): the payload opens
-with the Style 2 nested envelope — `Routing:` (Sender, Group, and the
-`Receiver` position field), `Hierarchy:` (Task-Group, Ticket-ID, Task-ID,
-and In-Reply-To correlation), and `Protocol:` (the Herdr skill notice) — and
-closes with the completion-reply contract via `herdr-reply`, so a callee can
+with the A2A Markdown frontmatter envelope (ADR 0020) — fenced by `---` and carrying
+`id`, `context_id`, `status` (state plus timestamp) and `metadata` (`ticket_id`,
+`sender`, `receiver`, `task_group`, `in_reply_to`) — then the Herdr skill notice on
+its own line, and closes with the completion-reply contract via `herdr-reply`, so a callee can
 answer the sender by name using the helper script without shell mangling. The
-default envelope is strictly Routing/Hierarchy/Protocol; recovery metadata
-(`cwd`, session, resume command) is never in the default envelope and is
-retrieved just-in-time from `.lane/tasks.yaml`. Pass `--verbose` to restore the
-`Runtime:` (Cwd/Resume) block for debugging. The envelope is script-rendered,
+default envelope carries no recovery metadata (`cwd`, session, resume command); it is
+retrieved just-in-time from `.lane/tasks.yaml`. Pass `--verbose` to add the
+`cwd`/`resume` fields under `metadata` for debugging. The envelope is script-rendered,
 never model-authored, so it cannot be forgotten. The callee always receives the full envelope
 and reply contract; only the caller's own stdout shrinks. `--dry-run` prints a trimmed delivery
 summary (envelope metadata, the `---` delimiter, and a body preview) without submitting, and
@@ -121,7 +120,22 @@ from herdr_envelope import (
     SKILL_NOTICE as SKILL_NOTICE,
 )
 from herdr_envelope import (
+    STATE_COMPLETED as STATE_COMPLETED,
+)
+from herdr_envelope import (
+    STATE_FAILED as STATE_FAILED,
+)
+from herdr_envelope import (
+    STATE_INPUT_REQUIRED as STATE_INPUT_REQUIRED,
+)
+from herdr_envelope import (
+    STATE_WORKING as STATE_WORKING,
+)
+from herdr_envelope import (
     CallerContext as CallerContext,
+)
+from herdr_envelope import (
+    Envelope as Envelope,
 )
 from herdr_envelope import (
     _scalar as _scalar,  # pyright: ignore[reportPrivateUsage]
@@ -139,9 +153,6 @@ from herdr_envelope import (
     parse_envelope as parse_envelope,
 )
 from herdr_envelope import (
-    receiver_ref as receiver_ref,
-)
-from herdr_envelope import (
     render_envelope as render_envelope,
 )
 from herdr_envelope import (
@@ -149,6 +160,9 @@ from herdr_envelope import (
 )
 from herdr_envelope import (
     render_reply_contract as render_reply_contract,
+)
+from herdr_envelope import (
+    reply_state as reply_state,
 )
 from herdr_envelope import (
     sender_ref as sender_ref,
@@ -261,14 +275,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_argument(
         parser,
         "no_caller_context",
-        help="send the payload verbatim without the Sender/Receiver envelope and reply contract",
+        help="send the payload verbatim without the A2A envelope and reply contract",
     )
     add_shared_argument(
         parser,
         "verbose",
         help=(
-            "include Runtime: Cwd/Resume recovery metadata; "
-            "default envelope is Routing/Hierarchy/Protocol only"
+            "include cwd/resume recovery metadata under the envelope metadata; "
+            "the default envelope carries recovery metadata nowhere"
         ),
     )
     return parser

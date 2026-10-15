@@ -6,10 +6,11 @@
 """herdr-reply — send a completion reply callback to a caller agent without shell mangling.
 
 Delivers `<STATUS> <artifacts> <issues>` or a result payload to the caller's agent
-name, wrapped in the same timestamped `Routing:`/`Hierarchy:`/`Protocol:` envelope
-`herdr-prompt` uses, so the party reading a reply always knows who reported and to
-whom. When the sender holds an active lease, its `Ticket-ID`/`Task-ID` ride along as
-`Ticket-ID:` and `In-Reply-To:` correlation lines. The envelope is script-rendered,
+name, wrapped in the same A2A Markdown frontmatter envelope `herdr-prompt` uses — its
+`status.state` carries the lifecycle state the reply's first token names — so the party
+reading a reply always knows who reported and to
+whom. When the sender holds an active lease, its task and ticket ride along as the
+envelope's `id`, `metadata.ticket_id`, and `metadata.in_reply_to` fields. The envelope is script-rendered,
 never model-authored, so it cannot be forgotten.
 
 The record's task linkage is resolved from the whole store, not just the lease (#246 D1.2):
@@ -141,6 +142,7 @@ from herdr_envelope import (
     format_delivery_summary,
     render_envelope,
     render_prelude,
+    reply_state,
 )
 
 # Re-exported: the evidence extraction must not move an attribute a test or caller pins.
@@ -318,7 +320,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_argument(
         parser,
         "verbose",
-        help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
+        help="include cwd/resume recovery metadata in the envelope metadata (default trimmed)",
     )
     _ = parser.add_argument(
         "--ticket",
@@ -1214,13 +1216,19 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     receiver = resolve_receiver(panes, agents, target)
     anchor = f"[You: {caller_anchor(caller_ctx)}]"
+    # A reply reports on the task it answers, so the envelope's `id` and `status.state` describe
+    # exactly that task: `in_reply_to` is the lease's task id and `mapped` is the status the
+    # payload's first token stated, resolved above (a payload with no status is refused before
+    # this line renders anything).
     reply_envelope = render_envelope(
         caller_ctx,
         receiver=receiver or target,
         include_recovery=options.verbose,
         ticket_id=ticket_id,
+        task_id=in_reply_to,
         in_reply_to=in_reply_to,
         tab_id=caller_ctx.tab_id,
+        state=reply_state(mapped),
     )
     shape, heading = payload_shape(payload)
     # The pointer and the index row carry the same bounded label, never the heading text.
