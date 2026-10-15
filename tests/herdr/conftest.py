@@ -36,6 +36,12 @@ def _never_resolve_the_live_store(monkeypatch: pytest.MonkeyPatch) -> None:
     isolated `base_dir`/`HERDR_LANE_DIR`, never weakened. Guards in-process calls only:
     subprocess tests are isolated by `tests/herdr/stub.py`'s `base_env()`, which pins
     `HERDR_LANE_DIR` to `tmp_path`.
+
+    Coverage is the lease module's own name lookup, so it spans every read and write of the task
+    store. A module that name-imported `resolve_base_dir` binds the original and is not wrapped —
+    today `herdr_git_guard` (lane git dir, read-only) and `herdr_reply`'s `--auto-start` path,
+    which writes a role invariant under `<lane>/.lane/invariants/`; that is a lane file, not
+    `tasks.yaml`, and no test reaches it without an anchored `env`.
     """
     original = herdr_lease.resolve_base_dir
 
