@@ -207,8 +207,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ID",
         default=None,
         help=(
-            "Ticket-ID for correlation (e.g. '#182-herdr-msg-enhance'); derived from the ticket "
-            "filename when omitted (see epilog for the derivation rule)"
+            "Ticket-ID for correlation (the envelope's metadata.ticket_id; e.g. "
+            "'#182-herdr-msg-enhance'); derived from the ticket filename when omitted "
+            "(see epilog for the derivation rule)"
         ),
     )
     _ = parser.add_argument(
@@ -216,8 +217,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ID",
         default=None,
         help=(
-            "Task-ID for correlation (e.g. '#182-herdr-msg-enhance#full-stack'); defaults to the "
-            "Ticket-ID when omitted"
+            "Task-ID for correlation (the envelope's id; e.g. "
+            "'#182-herdr-msg-enhance#full-stack'); defaults to the Ticket-ID when omitted"
         ),
     )
     add_shared_argument(

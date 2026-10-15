@@ -203,6 +203,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **tests:** resolve the pinned oxfmt once, stub real CLI spawns and retry sleeps (#139)
 
 ### Documentation
+* **herdr:** ticket #182 retires the drifted envelope prose — `skills/herdr/SKILL.md`, `references/lane-coordination.md` and `GLOSSARY.md` now show the A2A frontmatter the scripts render (harvested dispatch and reply samples keyed `id`/`context_id`/`status`/`metadata`), the lane status text states the real model (writes emit `TASK_STATE_*`, reads accept historical tokens through one `STATUS_ALIASES` table, records never migrated because the lane store is a shared live database), three `--help` strings follow, and a new test parses every documented sample and refuses the retired shape (#264)
 * **ai-engineering:** recast the deterministic/semantic split as Formal Substrate vs. Semantic Reasoner across `AGENTS.md`, the skill spine, and the information-boundary reference — name the substrate's verification authority and the reasoner's intent ownership explicitly (#257)
 * **harness-audit:** document the qodercli and agy session JSONL schemas beside Pi in `session-format.md`, with a polyglot-scanner roadmap note in `SKILL.md` (#255)
 * **rules:** refresh common rules against gh-router and the live repo — pr-land safeguard wording, release-ledger claim removal, real wt gate inventory, and repaired pointers (#218)

@@ -275,8 +275,8 @@ def build_parser() -> argparse.ArgumentParser:
             "3 target needs human input, 4 reply delivered but wait timed out\n\n"
             "lease bookkeeping is best-effort and never blocks delivery: an unresolvable lease\n"
             "store is reported on stderr, skipping the correlation lookup, trajectory note, or\n"
-            "release. A skipped correlation drops Ticket-ID/In-Reply-To from the envelope; the\n"
-            "reply still correlates by pane/target\n\n" + METHOD_CONSTRAINT_EPILOG
+            "release. A skipped correlation drops metadata.ticket_id/in_reply_to from the\n"
+            "envelope; the reply still correlates by pane/target\n\n" + METHOD_CONSTRAINT_EPILOG
         ),
     )
     _ = parser.add_argument("target", metavar="TARGET", help="caller agent name or pane id")
