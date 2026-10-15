@@ -6,7 +6,8 @@ sample in `skills/herdr/SKILL.md`, `skills/herdr/references/lane-coordination.md
 `GLOSSARY.md` must be valid A2A frontmatter — line 1 `---`, top-level keys exactly
 `id`/`context_id`/`status`/`metadata`, closed by `---`, the skill notice on its own line after
 the closing fence — and nothing may be presented as the format in use that `herdr_envelope.py`
-does not render. Retired-format text is allowed only where it is explicitly labelled retired.
+does not render. Retired-format text is allowed only in a block whose own fence line labels it
+retired.
 
 A sample is a fenced block whose first content line is exactly the paging delimiter. The floors
 below (`_MIN_SAMPLES_PER_DOC`) make extraction non-vacuous: a regex that silently matched zero
@@ -15,8 +16,9 @@ silent pass. Constants come from `herdr_envelope` and `herdr_lease` — never re
 literals here — so a docs-vs-code drift fails here instead of both sides agreeing on a stale
 shape.
 
-Refutability (each mutation below was executed against these docs and observed to fail the named
-cases; the harness applied the mutation, ran this module, and restored the doc byte-for-byte):
+Refutability (each mutation was applied to these docs, this module run against it, and the doc
+restored byte-for-byte with its sha256 checked and `git status` clean: t4 reports the first four,
+t5 re-ran the green baseline at HEAD and executed the last two itself):
 - Reintroduce a `Routing:` block into the `skills/herdr/SKILL.md` sample: it becomes a fifth
   top-level key, so `test_documented_envelope_samples_are_valid_a2a_frontmatter[SKILL.md]` fails,
   and the same line trips `test_no_fenced_block_renders_the_retired_envelope_shape[SKILL.md]`.
@@ -31,6 +33,19 @@ cases; the harness applied the mutation, ran this module, and restored the doc b
 - Restore "Canonical statuses: `dispatched`, `in_progress`, `blocked`, `completed`, `rework`":
   `test_documented_canonical_statuses_are_exactly_the_a2a_names` fails naming the doc, the line and
   the documented-vs-code enumerations.
+- Append to `skills/herdr/SKILL.md` an unlabelled `text` fence holding the one bare retired label
+  line `Sender: w1:p4 - label pr-orchestrator - tab w1:t1 - kind agy`: that is the shape t4 could
+  not catch — before the label-line regex existed every case stayed green on it, fifteen of fifteen
+  — and it now fails `test_no_fenced_block_renders_the_retired_envelope_shape[SKILL.md]`.
+- Delete `metadata.ticket_id` from the `GLOSSARY.md` Ticket-ID entry:
+  `test_glossary_names_the_envelope_fields_its_entries_claim` fails naming the field, and nothing
+  else does, because `GLOSSARY.md` carries no fence for the shape cases to scan (measured: zero).
+  The two helper-level mutations are pinned by their own cases instead of by a doc edit: a
+  byte-identical pair of fence bodies, fed to `_nearest_preceding_non_blank`, must be judged by
+  their own offsets
+  (`test_retired_exemption_reads_the_blocks_own_offset_not_the_first_matching_body`), and a doc
+  copied outside `REPO_ROOT` must still raise `AssertionError` rather than `ValueError`
+  (`test_a_failing_pin_reports_a_sandbox_copy_as_an_assertion`).
 """
 
 from __future__ import annotations
@@ -65,6 +80,18 @@ _RETIRED_LABEL_SPANS = ("Sender:", "Receiver:", "Ticket-ID:", "Task-ID:", "Group
 _RETIRED_BLOCK_RE = re.compile(r"^\s*(Routing|Hierarchy|Runtime|Protocol):", re.M)
 _BRACKET_TIMESTAMP_RE = re.compile(r"^\[\d{4}-\d{2}-\d{2}", re.M)
 
+# The pre-cutover header also rendered bare label LINES inside the block, one
+# `Sender: w1:p4 - label pr-orchestrator - tab w1:t1 - kind agy` at a time. The block-label
+# regex above cannot see them (none of its four words is a header label) and neither can the
+# backtick rule below (a fenced line is not a backticked span), so a fence body teaching the
+# retired format slipped through both. Inside a fence a `Word:` line is presentation of the
+# format, never a concept name, so the whole retired header vocabulary is refused here.
+_RETIRED_LABEL_LINE_RE = re.compile(
+    r"^\s*(Sender|Receiver|Ticket-ID|Task-ID|In-Reply-To|Group|Task-Group|Routing|Hierarchy|"
+    r"Runtime|Protocol):",
+    re.M,
+)
+
 # The enumeration a doc offers as canonical: the comma-separated backticked list that follows the
 # words "Canonical statuses:". The list ends at the first span that is not quoted, so prose after
 # it ("— every write emits these") and the parenthesized historical tokens stay out of scope.
@@ -76,12 +103,29 @@ _CANONICAL_LIST_RE = re.compile(r"Canonical statuses:(?:\s*`[A-Za-z0-9_]+`,?)+")
 _MIN_SAMPLES_PER_DOC = {OVERVIEW_DOC: 1, COORDINATION_DOC: 2}
 
 
+def _display_path(doc: Path) -> str:
+    """How a failure message names `doc`: repo-relative, or the basename when it is not under.
+
+    `relative_to` raises `ValueError` for a path outside `REPO_ROOT`, so the eager call this
+    module used to make inside the message path replaced the intended `AssertionError` with a
+    crash whenever the pin was driven from a sandbox copy of a doc. A missing-file message is
+    the one place that keeps the full path: there the caller needs the path it could not find.
+    """
+    try:
+        return str(doc.relative_to(REPO_ROOT))
+    except ValueError:
+        return doc.name
+
+
+def _fence_matches(text: str) -> list[re.Match[str]]:
+    """Every top-level fenced block, as matches, so a caller can read the block's own offset."""
+    return list(_FENCE_RE.finditer(text))
+
+
 def _fences(doc: Path) -> list[tuple[str, str]]:
     """Every top-level fenced block in `doc` as (info string, body)."""
-    return [
-        (match.group(1), match.group(2))
-        for match in _FENCE_RE.finditer(doc.read_text(encoding="utf-8"))
-    ]
+    text = doc.read_text(encoding="utf-8")
+    return [(match.group(1), match.group(2)) for match in _fence_matches(text)]
 
 
 def _envelope_samples(doc: Path) -> list[list[str]]:
@@ -114,9 +158,7 @@ def test_envelope_sample_extraction_is_not_vacuous(doc: Path) -> None:
     assert doc.exists(), f"{doc} vanished"
     minimum = _MIN_SAMPLES_PER_DOC.get(doc, 0)
     found = len(_envelope_samples(doc))
-    assert found >= minimum, (
-        f"{doc.relative_to(REPO_ROOT)}: {found} envelope samples < floor {minimum}"
-    )
+    assert found >= minimum, f"{_display_path(doc)}: {found} envelope samples < floor {minimum}"
 
 
 def test_envelope_samples_are_evidence_not_a_vacuum() -> None:
@@ -138,7 +180,7 @@ def test_documented_envelope_samples_are_valid_a2a_frontmatter(doc: Path) -> Non
     this case with the sample's doc and line 1 in the message.
     """
     for number, sample in enumerate(_envelope_samples(doc), 1):
-        where = f"{doc.relative_to(REPO_ROOT)} sample {number}"
+        where = f"{_display_path(doc)} sample {number}"
         assert sample[0] == herdr_envelope.PAGING_DELIMITER, f"{where}: line 1 must be `---`"
         assert herdr_envelope.PAGING_DELIMITER in sample[1:], f"{where}: no closing `---`"
         close = sample.index(herdr_envelope.PAGING_DELIMITER, 1)
@@ -168,40 +210,118 @@ def test_documented_envelope_samples_are_valid_a2a_frontmatter(doc: Path) -> Non
 
 @pytest.mark.parametrize("doc", DOCS, ids=lambda path: path.name)
 def test_no_fenced_block_renders_the_retired_envelope_shape(doc: Path) -> None:
-    """No fenced block shows `Routing:`/`Hierarchy:`/`Runtime:`/`Protocol:` or a bracket timestamp.
+    """No fenced block shows a retired block label, a bare retired header label line, or a stamp.
 
-    A block is exempt when its info string or the nearest preceding non-blank line labels it
-    retired — recording what was retired is allowed, presenting it as the format in use is not.
+    The block labels are `Routing:`/`Hierarchy:`/`Runtime:`/`Protocol:`; the bare label lines are
+    what the same pre-cutover header rendered line by line (`Sender:`, `Receiver:`, `Ticket-ID:`,
+    `Task-ID:`, `In-Reply-To:`, `Group:`, `Task-Group:`), and only the label-line regex refuses a
+    fence that holds nothing but one of them.
 
-    Mutant: reintroduce a `Routing:` block into a doc sample (labelled or not) without the word
-    "retired" on the info line or the line before it, and this case fails naming the marker.
+    A block is exempt when its own fence line labels it retired — recording what was retired is
+    allowed, presenting it as the format in use is not. The label is read at the block's own match
+    offset, so a later byte-identical block can never borrow an earlier block's label, and the
+    sentence above the fence is deliberately not consulted (`_nearest_preceding_non_blank` says why).
+
+    Mutant: reintroduce a `Routing:` block into a doc sample without the word "retired" on its own
+    fence line, and this case fails naming the marker; append an unlabelled `text` fence holding the
+    single line `Sender: w1:p4 - label pr-orchestrator - tab w1:t1 - kind agy` to
+    `skills/herdr/SKILL.md` and this case fails naming the `Sender:` label.
     """
     text = doc.read_text(encoding="utf-8")
-    fences = _fences(doc)
+    matches = _fence_matches(text)
     if doc in _MIN_SAMPLES_PER_DOC:
-        assert fences, f"{doc} has no fenced blocks to scan"
-    for info, body in fences:
-        preceding = _nearest_preceding_non_blank(text, body)
+        assert matches, f"{_display_path(doc)} has no fenced blocks to scan"
+    for match in matches:
+        info, body = match.group(1), match.group(2)
+        preceding = _nearest_preceding_non_blank(text, match.start(2))
         if "retired" in info.lower() or "retired" in preceding.lower():
             continue
         block = _RETIRED_BLOCK_RE.search(body)
         assert block is None, (
-            f"{doc.relative_to(REPO_ROOT)}: fenced block renders the retired "
-            f"{block.group(1)}: block"
+            f"{_display_path(doc)}: fenced block renders the retired {block.group(1)}: block"
+        )
+        label = _RETIRED_LABEL_LINE_RE.search(body)
+        assert label is None, (
+            f"{_display_path(doc)}: fenced block renders the retired "
+            f"{label.group(1)}: header label line"
         )
         stamp = _BRACKET_TIMESTAMP_RE.search(body)
         assert stamp is None, (
-            f"{doc.relative_to(REPO_ROOT)}: fenced block opens with the retired bracket "
+            f"{_display_path(doc)}: fenced block opens with the retired bracket "
             f"timestamp {stamp.group(0)!r}"
         )
 
 
-def _nearest_preceding_non_blank(text: str, body: str) -> str:
-    """The non-blank line directly before a fenced block's body, for the retired exemption."""
-    start = text.find(body)
-    assert start != -1, "fence body not found in its own doc"
-    before = text[:start].rstrip("\n").splitlines()
+def _nearest_preceding_non_blank(text: str, body_start: int) -> str:
+    """The nearest non-blank line before a fenced body, which for a top-level fence is its own
+    opening ``` line — so the retired label has to ride the fence itself, never prose above it.
+
+    Two facts this pins by construction. The offset comes from the block's own regex match, never
+    from `text.find(body)`: two byte-identical bodies would make the later block read the earlier
+    block's opening line and borrow its "retired" exemption. And because a top-level body starts
+    immediately after its own ``` line, what this returns is that fence line, not the prose above
+    the block — the stricter reading, and deliberately so: the third block of
+    `skills/herdr/references/lane-coordination.md` sits under a sentence citing
+    `retired/dynamic-workflow-wrapper/references/resp-format.md`, a path rather than a label, and
+    consulting prose would exempt that live reply sample from every refusal here.
+    """
+    before = text[:body_start].rstrip("\n").splitlines()
     return before[-1] if before else ""
+
+
+def test_retired_exemption_reads_the_blocks_own_offset_not_the_first_matching_body(
+    tmp_path: Path,
+) -> None:
+    """Two byte-identical fence bodies must be judged by their own fence line, not the first hit.
+
+    The collision is latent in the shipped docs — no body is duplicated there — but a
+    search-based offset makes it live the moment one is: labelled the first block retired, an
+    identical body in a later block inherits that label and skips every refusal.
+    """
+    text = (
+        "Recording the retired shape:\n"
+        "```retired\nSender: w1:p4\n```\n\n"
+        "Presenting the format in use:\n"
+        "```text\nSender: w1:p4\n```\n"
+    )
+    matches = _fence_matches(text)
+    assert len(matches) == 2, "the extractor must see both blocks before the offsets are compared"
+    assert matches[0].group(2) == matches[1].group(2), "the fixture needs byte-identical bodies"
+    assert text.find(matches[1].group(2)) == matches[0].start(2), (
+        "a search for the second body lands on the first block: that was the bug"
+    )
+    borrowed = _nearest_preceding_non_blank(text, text.find(matches[1].group(2)))
+    assert "retired" in borrowed.lower(), "so the search offset labels the later block retired"
+    own = _nearest_preceding_non_blank(text, matches[1].start(2))
+    assert own == "```text", "the block's own offset reads its own fence line"
+    assert "retired" not in own.lower(), "and its own fence line says nothing about retirement"
+    assert _RETIRED_LABEL_LINE_RE.search(matches[1].group(2)) is not None, (
+        "the body does carry a retired label line, so the pin has something to refuse"
+    )
+    copied = tmp_path / "SKILL.md"
+    _ = copied.write_text(text, encoding="utf-8")
+    with pytest.raises(AssertionError) as failure:
+        test_no_fenced_block_renders_the_retired_envelope_shape(copied)
+    assert "Sender" in str(failure.value), (
+        f"the later block must be refused on its own merits, got {failure.value}"
+    )
+
+
+def test_a_failing_pin_reports_a_sandbox_copy_as_an_assertion(tmp_path: Path) -> None:
+    """Driving the pin from a copy outside `REPO_ROOT` must still raise `AssertionError`.
+
+    The message path used to compute `doc.relative_to(REPO_ROOT)` eagerly, so the one situation
+    where a reviewer can point the pin at a mutation — a sandbox copy — died with `ValueError`
+    instead of naming the offender.
+    """
+    copied = tmp_path / "SKILL.md"
+    _ = copied.write_text("```text\nSender: w1:p4 - label pr-orchestrator\n```\n", encoding="utf-8")
+    assert _display_path(copied) == "SKILL.md" == copied.name
+    assert _display_path(OVERVIEW_DOC) == str(OVERVIEW_DOC.relative_to(REPO_ROOT))
+    with pytest.raises(AssertionError) as failure:
+        test_no_fenced_block_renders_the_retired_envelope_shape(copied)
+    assert "SKILL.md" in str(failure.value), "the message must name the doc it refused"
+    assert "Sender" in str(failure.value), "and the retired label it refused"
 
 
 @pytest.mark.parametrize("doc", DOCS, ids=lambda path: path.name)
@@ -220,7 +340,7 @@ def test_no_doc_label_presents_retired_header_labels_as_envelope_syntax(doc: Pat
         for span in _backtick_spans(line):
             for label in _RETIRED_LABEL_SPANS:
                 assert label not in span, (
-                    f"{doc.relative_to(REPO_ROOT)}:{line_no}: `{span}` presents the retired "
+                    f"{_display_path(doc)}:{line_no}: `{span}` presents the retired "
                     f"`{label}` header label as envelope syntax"
                 )
 
@@ -245,12 +365,12 @@ def test_documented_canonical_statuses_are_exactly_the_a2a_names() -> None:
     for doc in (OVERVIEW_DOC, COORDINATION_DOC):
         text = doc.read_text(encoding="utf-8")
         lists = list(_CANONICAL_LIST_RE.finditer(text))
-        assert lists, f"{doc.relative_to(REPO_ROOT)} states no canonical status enumeration"
+        assert lists, f"{_display_path(doc)} states no canonical status enumeration"
         for match in lists:
             named = re.findall(r"`([A-Za-z0-9_]+)`", match.group(0))
             line_no = text[: match.start()].count("\n") + 1
             assert named == list(herdr_lease.CANONICAL_STATUSES), (
-                f"{doc.relative_to(REPO_ROOT)}:{line_no}: canonical enumeration drifts — "
+                f"{_display_path(doc)}:{line_no}: canonical enumeration drifts — "
                 f"documented {named}, code emits {list(herdr_lease.CANONICAL_STATUSES)}"
             )
 
@@ -267,10 +387,45 @@ def test_docs_explain_the_read_accepts_writes_emit_split() -> None:
     """
     for doc in (OVERVIEW_DOC, COORDINATION_DOC):
         text = doc.read_text(encoding="utf-8")
-        assert "STATUS_ALIASES" in text, f"{doc.relative_to(REPO_ROOT)} never names the alias table"
+        assert "STATUS_ALIASES" in text, f"{_display_path(doc)} never names the alias table"
         assert "never written" in text or "are never migrated" in text, (
-            f"{doc.relative_to(REPO_ROOT)} does not say historical tokens are never written"
+            f"{_display_path(doc)} does not say historical tokens are never written"
         )
     assert "shared live database" in COORDINATION_DOC.read_text(encoding="utf-8"), (
         "lane-coordination.md must state why reads accept both vocabularies"
     )
+
+
+# The envelope fields `GLOSSARY.md` claims: the Ticket-ID entry names the first, the Task-ID and
+# Reply entries the second. Taken as bare key names and checked against `herdr_envelope`, so a
+# code-side rename lands here for review instead of quietly stranding the prose.
+_GLOSSARY_ENVELOPE_FIELDS = ("ticket_id", "in_reply_to")
+
+
+def test_glossary_names_the_envelope_fields_its_entries_claim() -> None:
+    """`GLOSSARY.md` holds no fenced block, so every shape case above is inert on it — this is not.
+
+    Measured, not assumed: `_fences(GLOSSARY_DOC)` is empty, which makes
+    `test_no_fenced_block_renders_the_retired_envelope_shape[GLOSSARY.md]` and
+    `test_documented_envelope_samples_are_valid_a2a_frontmatter[GLOSSARY.md]` structurally
+    incapable of failing no matter what the file says. The glossary is where the envelope's
+    correlation fields are named as domain concepts, so that is what gets pinned here.
+
+    Mutant: delete `metadata.ticket_id` from the Ticket-ID entry and this case fails naming the
+    field, while all three shape cases stay green.
+    """
+    for key in _GLOSSARY_ENVELOPE_FIELDS:
+        assert key in herdr_envelope.METADATA_KEYS, (
+            f"the code no longer renders metadata `{key}`; review what the glossary claims"
+        )
+    assert not _fences(GLOSSARY_DOC), (
+        f"{_display_path(GLOSSARY_DOC)} gained a fence, so the shape cases are no longer inert "
+        "on it: re-judge this pin against them"
+    )
+    text = GLOSSARY_DOC.read_text(encoding="utf-8")
+    for key in _GLOSSARY_ENVELOPE_FIELDS:
+        claim = f"metadata.{key}"
+        assert claim in text, (
+            f"{_display_path(GLOSSARY_DOC)} never names `{claim}`, the field its Ticket-ID, "
+            "Task-ID and Reply entries say the envelope carries"
+        )
