@@ -76,7 +76,7 @@ Enter loses the text and leaves the folder untrusted (verified end to end under 
 herdr agent send-keys q-impl enter          # the extra CR
 sleep 2
 herdr pane read "$PANE_ID" --source visible --lines 16   # expect the YOLO status line
-herdr_prompt.py q-impl --file ticket.md --no-wait
+uv run skills/herdr/scripts/herdr_prompt.py q-impl --file ticket.md --no-wait
 ```
 
 Confirm the main UI before prompting. The ready markers are the `YOLO` badge, the
