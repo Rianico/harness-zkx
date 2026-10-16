@@ -33,7 +33,10 @@ ENV = {
     "HOME": "/home/tester",
 }
 
-PANE_ENV = {key: value for key, value in ENV.items() if key != "HERDR_ENV"}
+# `HOME` stays out of the harness env: `ENV` fakes `/home/tester` for the pure renderers,
+# but `stub.run` refuses a `HOME` outside `tmp_path` — a fallback store is home-derived
+# (#182 h3) and only the sandbox pin makes that safe. `base_env()` supplies the pin.
+PANE_ENV = {key: value for key, value in ENV.items() if key not in ("HERDR_ENV", "HOME")}
 
 NASTY = 'quote" colon: hash # dash - tab\tnewline\nunicode ✓'
 

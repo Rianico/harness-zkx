@@ -28,6 +28,12 @@ evidence, and every part of it can fail silently:
 No case here reaches the shared live lane store or the operator's real user-level store: the
 subprocesses run in throwaway directories that are not this repository and never carry
 `HERDR_LANE_DIR`, and every in-process case pins `HOME` or `base_dir` into its own `tmp_path`.
+
+The last section is the pre-call complement of that guard (#182 h5): `tests/herdr/stub.py`'s
+`_require_sandboxed_home` refuses a harness run whose resulting `HOME` is absent, equal to the
+operator's real home, or not under the harness's `tmp_path` — so an override that drops or
+relocates the `base_env()` pin fails before the state file is written and before any code runs,
+rather than after a mutant's `mkdir` has already landed in `$HOME/.herdr/lane`.
 """
 
 from __future__ import annotations
@@ -45,7 +51,7 @@ import herdr_lease
 import herdr_reply
 import pytest
 
-from tests.herdr.stub import SCRIPTS_DIR
+from tests.herdr.stub import SCRIPTS_DIR, StubHarness
 
 REPO_ROOT = SCRIPTS_DIR.parents[2]
 CONFTEST = REPO_ROOT / "tests" / "herdr" / "conftest.py"
@@ -313,3 +319,193 @@ def test_an_unanchored_auto_start_style_call_through_the_git_guard_is_refused(
     pinned = herdr_git_guard.lane_git_dir({**env, "HOME": str(tmp_path)})
     assert pinned == (tmp_path / ".herdr" / "lane").resolve(), pinned
     assert not pinned.exists(), "the pinned fallback resolution created nothing either"
+
+
+# ── the stub harness's pre-call home guard (#182 h5) ────────────────────────────────
+
+_HOME_PROBE = '''"""Throwaway helper: report the `HOME` the call delivered, write nothing else."""
+
+import os
+import sys
+
+sys.stdout.write(os.environ.get("HOME") or "<unset>")
+'''
+
+_SENTINEL = '{"sentinel": true}'
+
+
+def _home_probe_harness(tmp_path: Path) -> StubHarness:
+    """A `StubHarness` over a probe script whose only observable is the `HOME` it sees.
+
+    Deliberately not `stub_factory`: a refusal test needs a `state.json` whose untouched
+    sentinel content proves the guard fires before `write_state`, and a log the run never
+    got a chance to seed.
+    """
+    script = tmp_path / "home_probe.py"
+    _ = script.write_text(_HOME_PROBE, encoding="utf-8")
+    state = tmp_path / "state.json"
+    _ = state.write_text(_SENTINEL, encoding="utf-8")
+    return StubHarness(script, tmp_path, tmp_path / "bin", tmp_path / "calls.jsonl", state)
+
+
+def test_a_run_homed_on_the_operators_real_home_is_refused_before_anything_is_written(
+    tmp_path: Path,
+) -> None:
+    """The h3 hazard turned into a check: a `HOME` naming the operator's real home dies at call time.
+
+    Since h3 an unanchored run derives the fallback lane store `<HOME>/.herdr/lane` from
+    `HOME` alone, and h3's mutation work watched a mutant's injected `mkdir` materialize
+    exactly that in the real home during a sandboxed test whose override relocated `HOME`.
+    Mutant killed: delete the guard, and the call returns — with the sentinel rewritten,
+    because an unguarded `run` reaches `write_state` before executing. The premise is read
+    from the environment, not assumed: the operator's home must sit outside this `tmp_path`
+    and must not already carry `.herdr`, or the after-the-fact absence would prove nothing
+    and this test would say so loudly instead of passing vacuously. The refusal's diagnosis
+    is part of the contract too: the message must name the operator's real home as the
+    reason. Mutant killed: collapse the three reason clauses into one string, and the
+    hazard phrase still appears while the diagnosis no longer says which hazard fired.
+    """
+    real_home = Path.home()
+    sandbox = tmp_path.resolve()
+    home = real_home.resolve()
+    assert home != sandbox and sandbox not in home.parents, (
+        f"the premise needs the operator's home {home} outside the sandbox {sandbox}"
+    )
+    herdr_dir = real_home / ".herdr"
+    assert not herdr_dir.exists(), (
+        f"premise: {herdr_dir} predates this test; its absence after the refused call "
+        f"would prove nothing about the run"
+    )
+    assert os.environ.get("HOME"), "the ambient HOME must name the same home Path.home() honors"
+    harness = _home_probe_harness(tmp_path)
+
+    with pytest.raises(RuntimeError) as raised:
+        _ = harness.run(env={"HOME": str(real_home), "HERDR_LANE_DIR": None})
+
+    message = str(raised.value)
+    assert "fallback lane store" in message, message
+    assert "is the operator's real home" in message, (
+        f"the refusal must diagnose which hazard fired, not just name the store: {message}"
+    )
+
+    assert harness.state_path.read_text(encoding="utf-8") == _SENTINEL, (
+        "the refusal happens before `write_state`, not just before execution"
+    )
+    assert not harness.log_path.exists(), "no stub call was ever made"
+    assert not herdr_dir.exists(), "the refused run wrote nothing into the operator's home"
+
+
+def test_a_run_that_drops_home_is_refused(tmp_path: Path) -> None:
+    """`{"HOME": None}` deletes the `base_env()` pin — the exact override shape the mutant rode.
+
+    With no `HOME` in the child environment `Path.home()` takes the passwd entry: the
+    operator's real home again. Mutant killed: check the pin in `base_env()` only and
+    never re-check after the caller's overrides are applied, and this call runs — the
+    sentinel comes back rewritten and stdout says `<unset>`. The message must also name
+    absence as the reason, not containment: collapsing the three reason clauses into one
+    string keeps the hazard phrase and loses this diagnosis.
+    """
+    harness = _home_probe_harness(tmp_path)
+
+    with pytest.raises(RuntimeError) as raised:
+        _ = harness.run(env={"HOME": None, "HERDR_LANE_DIR": None})
+
+    message = str(raised.value)
+    assert "HOME=None" in message, message
+    assert "is absent or empty" in message, (
+        f"a dropped `HOME` must be refused for being absent, not as a containment failure: {message}"
+    )
+    assert "fallback lane store" in message, message
+
+    assert harness.state_path.read_text(encoding="utf-8") == _SENTINEL
+    assert not harness.log_path.exists()
+
+
+def test_a_run_homed_on_a_directory_outside_the_sandbox_is_refused(
+    tmp_path: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """Another sandbox is not this sandbox: `HOME` must sit under THIS harness's `tmp_path`.
+
+    The foreign directory is pytest's temp ROOT — an ancestor of `tmp_path`, and the
+    resolved spelling `/private/var/...` on macOS. Mutant killed: accept any home that
+    is "somewhere in pytest's tmp tree" or compare both containment directions, and this
+    ancestor passes a guard that should only ever forgive descendants. The diagnosis must
+    be containment — a directory outside the harness's `tmp_path`; collapsing the three
+    reason clauses into one string survives the hazard phrase but fails this assertion.
+    """
+    outside = tmp_path_factory.getbasetemp()
+    assert outside in tmp_path.parents, "the premise: an ancestor of the sandbox, never inside it"
+    harness = _home_probe_harness(tmp_path)
+
+    with pytest.raises(RuntimeError) as raised:
+        _ = harness.run(env={"HOME": str(outside), "HERDR_LANE_DIR": None})
+
+    message = str(raised.value)
+    assert "fallback lane store" in message, message
+    assert "is outside the harness tmp_path" in message, (
+        f"a foreign directory must be refused for containment, never as the operator's home: {message}"
+    )
+
+    assert harness.state_path.read_text(encoding="utf-8") == _SENTINEL
+    assert not harness.log_path.exists()
+
+
+def test_home_pinned_into_the_sandbox_still_runs(tmp_path: Path) -> None:
+    """The sanctioned shapes pass: `base_env()`'s own pin, a subdirectory, a symlinked spelling.
+
+    Mutants killed: tighten the check to `HOME == tmp_path` and the subdirectory leg
+    raises. The symlink leg inside the sandbox is NOT resolve-sensitive — `link` sits
+    under `tmp_path`, so its unresolved parents already contain the sandbox and
+    containment holds with or without `.resolve()`; it only pins that a symlinked home
+    is a home. The spelling that refutes dropping `.resolve()` is the next case.
+    """
+    harness = _home_probe_harness(tmp_path)
+
+    done = harness.run()
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == str(tmp_path), "the default pin runs, and the probe reports it"
+
+    nested = tmp_path / "home"
+    done = harness.run(env={"HOME": str(nested)})
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == str(nested), "a subdirectory of the sandbox is inside the sandbox"
+
+    link = tmp_path / "link"
+    os.symlink(str(tmp_path.resolve()), link)
+    done = harness.run(env={"HOME": str(link)})
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == str(link), "a symlink spelling that resolves into the sandbox runs"
+
+
+def test_home_spelled_through_a_symlink_parked_outside_the_sandbox_runs(tmp_path: Path) -> None:
+    """Containment is judged after `.resolve()` on BOTH sides, measured, not claimed.
+
+    The link lives in the sandbox's parent and points at `tmp_path.resolve()`: the home
+    IS the sandbox, spelled from outside it. Its raw parents never contain `tmp_path`,
+    so an unresolved comparison refuses it while the guard's resolve-on-both-sides lets
+    it run. Mutant killed: `home = Path(home_value)`, `sandbox = tmp_path` — every other
+    case in this file passes unchanged (the inside-symlink leg's raw parents already
+    contain the sandbox), and only this leg changes color. This is the real-world shape
+    the rule exists for: on macOS `TMPDIR` arrives as `/var/folders/...`, the symlink
+    spelling of the `/private/var/folders/...` pytest hands `tmp_path` in, so an ambient
+    `HOME` derived from it names the sandbox without ever spelling it the same way.
+
+    The probe reports the spelling verbatim: the guard judges resolved, the child keeps
+    unresolved. The link is created in pytest's per-worker temp root and unlinked when
+    the run finishes, unique-named and premise-checked so a pre-existing path is never
+    clobbered.
+    """
+    link = tmp_path.parent / f"home-outside-link-{os.urandom(4).hex()}"
+    assert not link.exists(), f"premise: {link} predates this test; refusing to clobber it"
+    assert tmp_path not in link.parents, (
+        "the premise: an unresolved containment test against this spelling must fail, "
+        "or the leg proves nothing about .resolve()"
+    )
+    os.symlink(str(tmp_path.resolve()), link)
+    harness = _home_probe_harness(tmp_path)
+    try:
+        done = harness.run(env={"HOME": str(link)})
+    finally:
+        _ = link.unlink()
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == str(link), "the child receives the spelling the caller handed, verbatim"
