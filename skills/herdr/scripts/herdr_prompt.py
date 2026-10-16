@@ -763,10 +763,17 @@ TRUST_OPTION_ROW = re.compile(
 )
 
 # A numbered option row — `❯ 1. Yes`, `2. No`, `❯ 1. Yes  2. No` on one line, or the
-# real-render long label `❯ 1. Yes, and don't ask again for rm commands` — where the WHOLE
-# line is the row: `❯? <n>. <label>`, one or more words, no line-ending punctuation. A
-# sentence that opens with "1. " keeps its closing period and is never a row.
-_SELECTOR_LABEL = r"[A-Za-z0-9][A-Za-z0-9,'-]*(?:[ \t]+[A-Za-z0-9][A-Za-z0-9,'-]*)*"
+# real-render long label `❯ 1. Yes, and don't ask again for rm commands`, or a trailing
+# `2. No, and tell Claude what to do differently (esc)` — where the WHOLE line is the row:
+# `❯? <n>. <label>`. The label admits the punctuation real options use — commas, apostrophes,
+# hyphens, parentheses, slashes, colons, semicolons, quotes, underscores, tildes and dots INSIDE
+# it — but the WHOLE-LINE rule still rejects prose: a label must start on an alphanumeric and end
+# on an alphanumeric or a closing paren, so it can never end on a sentence-final `.`, `?` or `!`.
+# That sentence-final rejection is the ONLY thing the old narrow class protected ("1. Trust folder
+# is the first menu entry." is a sentence, not a row); a punctuation-free markdown list item that
+# happens to end in a word still matches, so it is the paired question row that makes a dialog,
+# never the label shape (see `_block_dialog_kind`).
+_SELECTOR_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9_,'\-():;/~\". \t]*[A-Za-z0-9)])?"
 SELECTOR_ROW = re.compile(
     rf"(?i)[ \t]*(?:❯[ \t]*)?\d+[.][ \t]+{_SELECTOR_LABEL}(?:[ \t]+\d+[.][ \t]+{_SELECTOR_LABEL})*[ \t]*"
 )
@@ -777,13 +784,55 @@ PERMISSION_QUESTION_ROW = re.compile(
     r"(?i)[ \t]*do you want to (?:allow|proceed)\b.{0,120}\?[ \t]*"
 )
 
-# The qodercli idle input row, verbatim from `references/agents/qodercli.md:82-84`, with any
-# leading cursor/glyph and spaces. The marker is evidenced for qodercli only: no other agent's
-# idle row is documented in this repo, so a dialog-shaped block with no idle row below it on
-# another agent's pane still refuses, and `--skip-screen-check` is that false positive's remedy.
-# The `Model · <cwd>` footer is deliberately NOT a veto marker: a live trust dialog with a
-# footer row below it shows no input box and must still refuse.
-IDLE_INPUT_ROW = re.compile(r"(?i)[^A-Za-z0-9]*Type your message or @path/to/file[^A-Za-z0-9]*")
+# The qodercli idle input placeholder, from the captured bottom of the screen in
+# `references/agents/qodercli.md` (the fenced render taken 2026-10-16 with
+# `herdr_transcript.py <pane> --source visible`). This is verbatim evidence, not prose. The
+# matched core is the row's LEADING PHRASE `Type your message` — a case-insensitive substring
+# SEARCH, not a whole-line match (the old `fullmatch` with leading and trailing
+# `[^A-Za-z0-9]*` classes let ANY decoration around the row — a leading glyph/bracket or a
+# trailing hint, cursor, or clipped box — leave the veto inert, so every trust-shaped block
+# quoted in a transcript refused), and NOT anchored to the line start, and the rest of the
+# placeholder is not required.
+# Why the leading phrase, in this order:
+#   1. The captured render in `references/agents/qodercli.md` (added in this ticket) shows the
+#      full row, but a terminal clips a row's right side, so the longest tail the gate can
+#      rely on is the row's own beginning. Matching the leading phrase is what actually
+#      delivers this ticket's truncation requirement: the previous full-placeholder substring
+#      form failed a clip into its own tail (`…@path/to/fi`, `…@path`, `…@pat`).
+#   2. Accepted cost, stated honestly: a shorter core can be echoed by an agent's own prose
+#      (a row merely saying "Type your message"). That is why the veto keeps its second
+#      witness — the existing `_loose_dialog_shape` rule (a placeholder row vetoes only when
+#      NO dialog-shaped row sits below it) — which is what bounds the false-delivery risk.
+#      The directions of error differ: the short core errs toward DELIVERY (a bare prose echo
+#      with nothing dialog-shaped under it can silence the veto); the loose witness errs
+#      toward REFUSAL (dialog-shaped text below a placeholder blocks the veto even when that
+#      placeholder is the live clipped box).
+#   3. Residuals that stay: when the operator has typed anything the placeholder is absent
+#      entirely and the veto cannot fire; a pane narrower than the matched core clips below
+#      `Type your message`. Both leave that pane unguarded, and `--skip-screen-check` is the
+#      remedy.
+# The core stays distinctive enough that its substring never collides with the `Model · …`
+# footer, which is deliberately NOT a marker: a live modal replaces the input box, so a footer
+# with no input row below the dialog still refuses.
+IDLE_INPUT_ROW = re.compile(r"(?i)Type your message")
+
+# The veto's second witness, deliberately LOOSER than `_SELECTOR_LABEL`: a numbered row prefix in
+# ANY form (`2. <anything>`, even a label the strict rule cannot name because it ends on sentence
+# punctuation), or a known question row. Rationale, from the captured idle UI in
+# `references/agents/qodercli.md`: nothing BELOW the input row is a numbered option row or a
+# question — only the rule rows and the `Model · …` footer — so dialog-shaped text below a
+# placeholder row means that row is NOT the pane's live input box (a live modal replaces the box),
+# and the veto must not fire from it.
+_LOOSE_NUMBERED_ROW = re.compile(r"\s*❯?\s*\d+[.]\s+\S")
+
+
+def _loose_dialog_shape(line: str) -> bool:
+    """Whether one line looks like dialog content under the deliberately loose veto test."""
+    return bool(
+        _LOOSE_NUMBERED_ROW.match(line)
+        or TRUST_QUESTION_ROW.fullmatch(line)
+        or PERMISSION_QUESTION_ROW.fullmatch(line)
+    )
 
 
 def _trust_row_option(line: str) -> str | None:
@@ -838,15 +887,22 @@ def _screen_modal_block(snapshot: str) -> tuple[str, str] | None:
     block, not its tail (see `_block_dialog_kind`), and the verdict is the LAST matching
     block.
 
-    The discriminator against a quote is the pane's input box: if a row matching
-    IDLE_INPUT_ROW appears strictly BELOW the last dialog line of the matched block — any
-    later line, including across blank lines — the input box is present, so the block is
-    transcript and the prompt delivers. Everything else below the block (mode badge,
-    `Model · …` footer, hint row, box border, `Esc to cancel`, spinner, status bar) is
-    chrome, not an input box, and never vetoes. A dialog-shaped block with no documented
-    idle row below it still refuses, even a quote: the veto marker is evidenced for
-    qodercli only, and `--skip-screen-check` is that false positive's remedy.
+    The discriminator against a quote is the pane's live input box. A placeholder row matching
+    IDLE_INPUT_ROW (the row's leading phrase, unanchored, so chrome AND a right-edge clip of the
+    row cannot silence it) strictly BELOW the last dialog line means the box is present, so the
+    block is transcript and the prompt delivers — but
+    only when that placeholder is the LIVE box: the veto may not fire from a placeholder row that
+    has dialog-shaped text below it (see `_loose_dialog_shape`), because a live modal replaces the
+    input box and leaves no placeholder under a dialog. Everything else below the block (mode
+    badge, `Model · …` footer, hint row, box border, `Esc to cancel`, spinner, status bar) is
+    chrome, not dialog content, and never vetoes. A dialog-shaped block with no placeholder row
+    below it still refuses — even a quote on a pane whose idle row this repo does not document,
+    and a pane whose operator has typed (the placeholder is then absent): `--skip-screen-check` is
+    that false positive's remedy.
     """
+    # Normalise line endings defensively so every row rule sees one shape. Whether `herdr agent
+    # read` can emit CRLF is UNKNOWN — this is defensive, not evidence of a live pane shape.
+    snapshot = snapshot.replace("\r\n", "\n").replace("\r", "\n")
     lines = snapshot.split("\n")
     verdict: tuple[str, Sequence[str], int] | None = None
     index = 0
@@ -868,9 +924,16 @@ def _screen_modal_block(snapshot: str) -> tuple[str, str] | None:
     if verdict is None:
         return None
     kind, block, last_dialog = verdict
-    for line in lines[last_dialog + 1 :]:
-        if IDLE_INPUT_ROW.fullmatch(line):
-            return None
+    for index in range(last_dialog + 1, len(lines)):
+        if not IDLE_INPUT_ROW.search(lines[index]):
+            continue
+        # A placeholder row below the dialog vetoes the verdict, but only when it is the pane's
+        # live input box: if dialog-shaped text sits BELOW this placeholder, the placeholder is a
+        # transcript prompt and a live modal renders under it, so this row cannot veto. Keep
+        # scanning for a lower placeholder with nothing dialog-shaped beneath it.
+        if any(_loose_dialog_shape(later) for later in lines[index + 1 :]):
+            continue
+        return None
     return (kind, _quoted_dialog(block))
 
 

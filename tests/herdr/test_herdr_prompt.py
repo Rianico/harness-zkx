@@ -1860,8 +1860,13 @@ QODERCLI_QUOTE_SCREEN = (
     " Model · 200K context · ~/repo\n"
 )
 
-# Prose that STARTS like the trust option row. Rejected as a row only because an option row
-# matches the WHOLE line: `is the first menu entry.` is part of the sentence, not a selector.
+# Prose that STARTS like the trust option row, measured to settle which rule saves it: it
+# delivers because `_block_dialog_kind` finds NO dialog STRUCTURE here — no question row and no
+# adjacent `1`/`2` trust pair — not because of the label shape. Even if `SELECTOR_ROW` were
+# loosened to accept this line, a lone numbered row with no paired question is not a dialog. The
+# whole-line rule is a second, redundant guard: `is the first menu entry.` ends on a period the
+# label class still rejects. The shipped comment claimed the whole-line rule alone saved it; that
+# was never measured and this screen proves it was not the operative reason.
 PROSE_TRUST_OPTION_SCREEN = (
     "◎ main · ◎ h2-writer 191s\n"
     "The selector has two rows:\n"
@@ -1969,8 +1974,13 @@ def test_dialog_with_the_idle_input_row_above_it_still_refuses_because_the_veto_
 
     A live modal replaces the input box, so an idle prompt row rendered ABOVE the dialog
     (transcript scrolled above a fresh modal) is not evidence of an idle pane: this pane
-    must refuse. Mutant killed: let the veto fire on a marker anywhere in the snapshot —
-    this pane then delivers, while every benign transcript case above still passes.
+    must refuse. Disclosure: with the loose veto witness present this refusal is enforced by
+    BOTH guards, and a mutation that drops only the `last_dialog + 1` start bound (letting the
+    veto scan from row 0) is EQUIVALENT — every dialog row is itself loose dialog-shaped, so a
+    marker above the block always has dialog-shaped text beneath it and the loose check blocks
+    the veto anyway. `test_loose_veto_…` is the test that pins the operative guard; this one
+    pins the direction (a marker below the block, with nothing dialog-shaped under it, does
+    veto) and stays green whatever the start bound is.
     """
     screen = "*   Type your message or @path/to/file\n\n" + H2C_TRUST_ROWS
     verdict = herdr_prompt._screen_modal_block(screen)
@@ -2012,6 +2022,209 @@ def test_blank_line_separation_keeps_a_transcript_question_from_pairing_with_a_l
     """
     screen = "Do you want to allow Bash to run this command?\n\n  ❯ 1. Yes\n"
     assert herdr_prompt._screen_modal_block(screen) is None
+
+
+# ── h2d: ground truth, the substring marker, the position-sensitive veto, CRLF ──────────────
+# These pins read the captured idle bottom of the screen back out of
+# `skills/herdr/references/agents/qodercli.md`, so the veto pattern and the doc that evidences
+# it cannot drift apart, and they pin the two hardening fixes (substring marker, veto position)
+# and the CRLF normalisation the source now performs.
+
+QODERCLI_DOC = Path(__file__).resolve().parents[2] / "skills/herdr/references/agents/qodercli.md"
+
+
+def _captured_idle_block() -> list[str]:
+    """The lines of the fenced ```text capture of the idle bottom of the screen in qodercli.md."""
+    block: list[str] = []
+    collected: list[str] = []
+    inside = False
+    for line in QODERCLI_DOC.read_text(encoding="utf-8").splitlines():
+        if line.strip() == "```text":
+            inside, block = True, []
+            continue
+        if inside and line.strip() == "```":
+            if any(herdr_prompt.IDLE_INPUT_ROW.search(entry) for entry in block):
+                collected = block
+                break
+            inside = False
+            continue
+        if inside:
+            block.append(line)
+    assert collected, "qodercli.md must carry the fenced idle-bottom capture"
+    return collected
+
+
+def test_captured_idle_ui_is_the_ground_truth_for_the_veto_marker() -> None:
+    """Requirement 0: the marker's ONLY verbatim evidence is the captured idle bottom of the
+    screen; pin the pattern against that capture, not against a hand-written string.
+
+    (a) exactly one captured row matches `IDLE_INPUT_ROW` — the `Type your message` prompt;
+    (b) the ` Model · …` footer row does NOT, so a footer can never stand in for the box;
+    (c) a snapshot whose bottom is the captured UI delivers (no dialog at all), while the same
+    UI with a live trust block overlaid above the `? for shortcuts` hint and the input row gone
+    (a modal replaced it) refuses. This is the shape the veto relies on: placeholder present
+    means an idle pane, footer without placeholder does not.
+    """
+    block = _captured_idle_block()
+    markers = [row for row in block if herdr_prompt.IDLE_INPUT_ROW.search(row)]
+    assert len(markers) == 1, f"exactly the prompt row may match, saw {markers!r}"
+    footers = [row for row in block if "Model" in row and "context" in row]
+    assert footers, "the capture must include the Model footer"
+    assert not any(herdr_prompt.IDLE_INPUT_ROW.search(row) for row in footers)
+
+    assert herdr_prompt._screen_modal_block("\n".join(block) + "\n") is None
+    chrome = [row for row in block if not herdr_prompt.IDLE_INPUT_ROW.search(row)]
+    overlay = H2C_TRUST_ROWS + "\n".join(chrome) + "\n"
+    verdict = herdr_prompt._screen_modal_block(overlay)
+    assert verdict is not None, "a live trust block with only footer chrome below must refuse"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_decorated_idle_input_row_still_vetoes_the_transcript_quote() -> None:
+    """P2-1: the veto is a substring search, so chrome around the placeholder cannot silence
+    it. A trailing `? for shortcuts` hint (an alphanumeric after `file`) and a leading `[i]`
+    bracket (an alphanumeric before `Type`) each defeated the old whole-line fullmatch with its
+    `[^A-Za-z0-9]*` classes, which left every decorated transcript quote refused. Measured
+    BEFORE (92dfb394): both refuse. AFTER: both deliver. Mutant killed: revert `IDLE_INPUT_ROW`
+    to the fullmatch-with-trailing-class form.
+    """
+    trailing = (
+        H2C_TRUST_ROWS
+        + "\n*   Type your message or @path/to/file? for shortcuts\n"
+        + " Model · 200K context · ~/repo\n"
+    )
+    leading = (
+        H2C_TRUST_ROWS
+        + "\n[i] Type your message or @path/to/file\n"
+        + " Model · 200K context · ~/repo\n"
+    )
+    assert herdr_prompt._screen_modal_block(trailing) is None
+    assert herdr_prompt._screen_modal_block(leading) is None
+
+
+@pytest.mark.parametrize(
+    "idle_row",
+    [
+        pytest.param(" *   Type your message or @path/to/file", id="full-row"),
+        pytest.param(" *   Type your message or @path/to/file? for shortcuts", id="tail-hint"),
+        pytest.param("│ *   Type your message or @path/to/file", id="box-glyph-head"),
+        pytest.param(" *   Type your message or @path/to/fi", id="clipped-tail"),
+        pytest.param(" *   Type your message or @path", id="clipped-deeper"),
+        pytest.param(" *   Type your message or @pat", id="clipped-mid"),
+    ],
+)
+def test_a_clipped_idle_input_row_still_vetoes_because_the_marker_is_the_leading_phrase(
+    idle_row: str,
+) -> None:
+    """Truncation pin: a narrow pane clips the idle row's RIGHT side, so the gate may only rely
+    on the row's own beginning. The marker core is the leading phrase `Type your message`;
+    decoration (a trailing `? for shortcuts`, a leading `│ ` box glyph) and any clip into the
+    placeholder's tail (`…@path/to/fi`, `…@path`, `…@pat`) must all still veto and deliver.
+    Measured BEFORE (full-placeholder substring at 92dfb394): the three clipped forms REFUSED —
+    the ticket's failure mode. AFTER: all six deliver. Mutant killed: revert `IDLE_INPUT_ROW`
+    to the full placeholder string (the three clipped params then refuse).
+    """
+    screen = H2C_TRUST_ROWS + "\n" + idle_row + "\n Model · 200K context · ~/repo\n"
+    assert herdr_prompt._screen_modal_block(screen) is None, f"{idle_row!r} is a clipped idle row"
+
+
+def test_prose_echoing_the_marker_core_needs_the_loose_witness_and_refuses() -> None:
+    """The accepted cost of the short core, bounded by the second witness: an agent's own prose
+    row containing only the words `Type your message` matches `IDLE_INPUT_ROW`, so the core
+    alone cannot tell it from the live box. The veto still refuses here because dialog-shaped
+    text (the live numbered option row) sits BELOW the echoed row — `_loose_dialog_shape` is
+    what does the bounding. If this screen delivers, the loose witness is not doing its job.
+    Mutant killed: drop the loose veto scan — the prose row then vetoes and this pane delivers.
+    """
+    screen = H2C_TRUST_ROWS + "\nType your message\n\n" + "  ❯ 1. Yes  2. No\n"
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "dialog-shaped text below an echoed marker must block the veto"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_prose_holding_the_bare_word_type_does_not_widen_the_marker() -> None:
+    """Marker-core guard: the veto marker is the captured leading phrase, not the word `type`.
+    An agent's prose row `Just type a reply and press Enter.` sits below the quoted trust block
+    with nothing dialog-shaped beneath it, so a shorter core than `Type your message` would find
+    a veto there and deliver into the dialog. Measured: with the deliberately over-broad mutant
+    `(?i)Type` this pane delivered (no shipped pin caught it before this one existed); with the
+    shipped core it refuses. Mutant killed: any widening of `IDLE_INPUT_ROW` below the leading
+    phrase.
+    """
+    screen = H2C_TRUST_ROWS + "\nJust type a reply and press Enter.\n"
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "the bare word `type` in prose is not the idle input row"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_widened_selector_label_recognizes_the_live_esc_permission_render() -> None:
+    """P2-2(1): the real selector ends `… (esc)` with a comma and parentheses, which the old
+    narrow label class rejected, so the question paired with nothing and the pane delivered
+    into a live dialog. The widened label admits interior punctuation but still rejects a
+    sentence-final period (see `test_loose_veto_…`). Mutant killed: revert `_SELECTOR_LABEL` to
+    its word/comma/apostrophe/dash class — this bottom-of-screen permission render then delivers.
+    """
+    screen = (
+        "⭯ Bash(rm -rf build)\n"
+        "Do you want to proceed?\n"
+        "  ❯ 1. Yes  2. No, and tell Claude what to do differently (esc)\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None
+    assert verdict[0] == herdr_prompt.PERMISSION_DIALOG_KIND
+    assert "No, and tell Claude what to do differently (esc)" in verdict[1]
+
+
+def test_quoted_trust_above_an_idle_row_with_a_live_permission_below_refuses() -> None:
+    """P2-2 named counterexample — the exact false delivery. A transcript quotes the trust
+    block, the pane's idle input row sits beneath it, and a live permission dialog renders
+    below that row. The old veto returned at the first idle row under the quote and injected
+    into the live dialog. The position-sensitive veto forbids a marker that has dialog-shaped
+    text beneath it, and the widened label promotes the tail to the permission verdict. Measured
+    BEFORE (92dfb394): None (delivered). Measured AFTER: refuses, naming the permission dialog.
+    """
+    screen = (
+        H2C_TRUST_ROWS
+        + "\n*   Type your message or @path/to/file\n\n"
+        + "⭯ Bash(rm -rf build)\nDo you want to proceed?\n"
+        + "  ❯ 1. Yes  2. No, and tell Claude what to do differently (esc)\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "a live permission dialog below the idle row must refuse"
+    assert verdict[0] == herdr_prompt.PERMISSION_DIALOG_KIND
+    assert "Do you want to proceed?" in verdict[1]
+
+
+def test_loose_veto_refuses_a_quote_whose_idle_row_has_a_numbered_period_tail_below() -> None:
+    """P2-2(2): position sensitivity stands alone, independent of the label widening. The
+    transcript quotes the trust block; the idle row below is the only veto candidate; a live
+    tail `    2. No, and ask what to do differently.` sits under that row. The tail ends in a
+    period, so the strict selector label still rejects it and it is not a recognised dialog —
+    only the LOOSE veto test (`_loose_dialog_shape`) sees it as dialog-shaped and blocks the
+    veto. Measured BEFORE (92dfb394): None. AFTER: refuses, naming the trust prompt. Mutant
+    killed: drop the loose veto — the idle row then vetoes and this pane delivers.
+    """
+    screen = (
+        H2C_TRUST_ROWS
+        + "\n*   Type your message or @path/to/file\n\n"
+        + "    2. No, and ask what to do differently.\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "a numbered tail below the idle row blocks the veto"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_crlf_trust_dialog_refuses_after_line_ending_normalisation() -> None:
+    """P3a: every row pattern ends in a space/tab class, so a carriage return left by a CRLF
+    snapshot breaks each whole-line match and a live trust dialog delivered. `_screen_modal_block`
+    normalises CRLF and lone CR at the top (defensive — whether `herdr agent read` emits CRLF is
+    UNKNOWN, not evidence). Measured BEFORE (no normalisation): None. AFTER: refuses. Mutant
+    killed: drop the normalisation.
+    """
+    crlf = H2C_TRUST_ROWS.replace("\n", "\r\n")
+    verdict = herdr_prompt._screen_modal_block(crlf)
+    assert verdict is not None
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
 
 
 def _screen_reads(stub: StubHarness) -> list[list[str]]:
