@@ -2171,3 +2171,71 @@ def test_dispatch_auto_start_dry_run_forwards_the_settle(stub: StubHarness, tmp_
     plan = json.loads(done.stdout.splitlines()[0])
     assert plan["settle"] == 2.5
     assert stub.starts() == []
+
+
+# ── #252: the screen gate rides dispatch's delivery path too ────────────────────────
+
+# Screens mirror `tests/herdr/test_herdr_prompt.py` (trust selector verbatim from
+# `references/agents/qodercli.md`); kept local so the dispatch pins do not couple to
+# the prompt module, mirroring the `sha_repo` convention.
+DISPATCH_TRUST_SCREEN = (
+    "◇ Qoder CLI CN\n"
+    "\n"
+    " Do you trust the files in this folder?\n"
+    " /private/tmp/example-worktree\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+)
+DISPATCH_CLEAN_SCREEN = "◎ main · ◎ h2-writer 191s\n*   Type your message or @path/to/file\n"
+
+
+def _dispatch_reads(stub: StubHarness) -> list[list[str]]:
+    """Every `herdr agent read` the stub recorded: the gate's screen reads."""
+    return [call for call in stub.calls() if call[1:3] == ["agent", "read"]]
+
+
+def test_dispatch_refuses_a_modal_screen_before_injection(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Both entry points: dispatch routes through `prompt_agents` -> `wait_for_ready`.
+
+    Mutant killed: remove the screen check — the prompt is injected into the selector and
+    both `EXIT_USAGE` and `prompts() == []` fail.
+    """
+    state = {**DEFAULT_STATE, "agent_read_text": DISPATCH_TRUST_SCREEN}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "refusing to inject the prompt into the dialog" in done.stderr
+    assert "Do you trust the files in this folder?" in done.stderr
+    assert stub.prompts() == [], "bytes must not be injected into a modal"
+    assert len(_dispatch_reads(stub)) == 1, "one confirm, no re-read"
+
+
+def test_dispatch_clean_screen_delivers_with_one_read(stub: StubHarness, tmp_path: Path) -> None:
+    """Mutant killed: make the screen check unconditional or screen-driven — a clean
+    settled pane then never delivers and this fails.
+    """
+    state = {**DEFAULT_STATE, "agent_read_text": DISPATCH_CLEAN_SCREEN}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    assert len(_dispatch_reads(stub)) == 1
+
+
+def test_dispatch_never_reads_the_screen_while_waiting(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The waiting path stays screen-free under dispatch too (SKILL.md: no `agent read` poll).
+
+    Mutant killed: move the screen read into `agent_readiness` or the per-attempt loop —
+    this run then records ~50 reads. `_sleep` is patched on the shared `herdr_prompt`
+    module, which the in-process dispatch body imports from `sys.modules`, so the 50
+    probes cost no real time.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _no_settle)
+    state = {**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "did not settle for prompt delivery" in done.stderr
+    assert stub.prompts() == []
+    assert _dispatch_reads(stub) == []

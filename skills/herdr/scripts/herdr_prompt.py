@@ -51,6 +51,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -176,6 +177,7 @@ from herdr_envelope import (
 from herdr_envelope import (
     wrap_with_envelope as wrap_with_envelope,
 )
+from herdr_transcript import build_agent_read_argv
 
 BLOCKED = "blocked"
 BLOCKED_CODE = "agent_blocked"
@@ -700,6 +702,86 @@ def _read_interactive_ready(herdr: str, target: str, env: Mapping[str, str]) -> 
     return read_interactive_ready(herdr, target, env)
 
 
+# #252 audit points 3/4: a pane sitting at a startup modal, permission dialog, or trust
+# prompt can report a settled status with `interactive_ready: true` (verified for qodercli
+# in `references/agents/qodercli.md`: the trust selector blocks while the feed says ready).
+# The screen is consulted exactly ONCE, at the moment `wait_for_ready` first sees the status
+# feed claim ready — never from `agent_readiness` and never per attempt, so the waiting path
+# issues zero screen reads (SKILL.md: never loop `herdr agent read` to poll).
+SCREEN_SOURCE = "visible"
+SCREEN_READ_LINES = 60
+
+# Blocking-dialog patterns. A false positive blocks a legitimate prompt, which is worse
+# than the bug being fixed, so each requires the question phrasing these dialogs
+# actually render — never a generic word like "yes/no".
+BLOCKING_DIALOG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        # The folder-trust prompt rendered verbatim by the qodercli startup selector
+        # (`references/agents/qodercli.md` "Do you trust the files in this folder?");
+        # `agents/claude.md` and `agents/gemini.md` document the same workspace-trust
+        # prompt class for their kinds.
+        re.compile(r"(?im)^\s*do you trust (?:the files in )?this folder\?"),
+        "startup folder-trust prompt",
+    ),
+    (
+        # The trust selector's numbered options ("❯ 1. Trust folder / 2. Don't trust and
+        # exit", `references/agents/qodercli.md`): the option list only renders while the
+        # blocking selector is on screen. The `❯` cursor is optional: the unselected row
+        # matches too, so a scrolled-off question line cannot hide the dialog.
+        re.compile(r"(?im)^\s*(?:❯\s*)?\d+\.\s*(?:trust folder|don't trust and exit)\b"),
+        "startup folder-trust prompt",
+    ),
+    (
+        # Tool-permission dialogs. `agents/cline.md` documents directory read/write
+        # permission prompts and `agents/copilot.md` interactive confirmation before
+        # running suggested shell commands; both ask the human with the "Do you want to
+        # allow …?" question form. Agent prose addresses itself ("do you want me to"),
+        # so the missing subject keeps this dialog-specific.
+        re.compile(r"(?im)^\s*do you want to allow\b[^\n]{0,120}[?:]\s*$"),
+        "permission dialog",
+    ),
+)
+
+
+def _screen_modal_line(herdr: str, target: str, env: Mapping[str, str]) -> tuple[str, str] | None:
+    """Confirm one settled readiness claim against the live screen; return (kind, line) or None.
+
+    Called once per readiness determination — at the moment the status probe first claims
+    ready — and never from `agent_readiness`, so the wait loop reads no screen. An
+    unreadable screen (non-zero exit, empty output, a raised subprocess) is not evidence of
+    a modal: one line goes to stderr and the status signal still decides.
+    """
+    argv = build_agent_read_argv(herdr, target, source=SCREEN_SOURCE, lines=SCREEN_READ_LINES)
+    try:
+        done = run_herdr(argv, env)
+    except HerdrError as exc:
+        print(
+            f"herdr-prompt: screen check for {target!r} could not run ({exc}); "
+            "trusting the status feed",
+            file=sys.stderr,
+        )
+        return None
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
+        print(
+            f"herdr-prompt: screen check for {target!r} failed ({detail}); trusting the status feed",
+            file=sys.stderr,
+        )
+        return None
+    if not done.stdout.strip():
+        print(
+            f"herdr-prompt: screen check for {target!r} returned no screen rows; "
+            "trusting the status feed",
+            file=sys.stderr,
+        )
+        return None
+    for pattern, kind in BLOCKING_DIALOG_PATTERNS:
+        match = pattern.search(done.stdout)
+        if match:
+            return (kind, match.group(0).strip())
+    return None
+
+
 def wait_for_ready(
     herdr: str,
     target: str,
@@ -712,6 +794,9 @@ def wait_for_ready(
 
     The loop is attempt-counted (never wall-clocked) so a monkeypatched `_sleep`
     runs it instantly; the immediate first probe means a settled agent never sleeps.
+    A settled claim is confirmed against the live screen exactly once, before delivery
+    (see `_screen_modal_line`): a blocking dialog on screen aborts the wait, and the
+    screen is never re-read and never polled while waiting.
     The refusal names what the readiness read observed — never a hypothesized cause.
     """
     attempts = max(1, math.ceil(timeout / interval))
@@ -720,6 +805,14 @@ def wait_for_ready(
         ready, status, _ = agent_readiness(herdr, target, env)
         last_status = status
         if ready:
+            modal = _screen_modal_line(herdr, target, env)
+            if modal is not None:
+                kind, line = modal
+                raise UsageError(
+                    f"target {target!r} reported status={status!r} but its screen shows a "
+                    f"{kind}: {line!r}; refusing to inject the prompt into the dialog — open "
+                    "the pane, clear the dialog, then retry"
+                )
             return status
         if attempt < attempts - 1:
             _sleep(interval)

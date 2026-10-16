@@ -368,6 +368,8 @@ When an implementer faces a large task or operates under a constrained context w
 
 Never `sleep`, `schedule`, or loop `herdr agent read` to poll for completion. Snapshot polling clips on alternate-screen agents, burns context, and re-enacts the #83 hang. Use `herdr-wait` (state barrier) for agents and `herdr pane wait-output --match` (content match) for commands.
 
+`herdr-prompt` and `herdr-dispatch` confirm a settled readiness claim with exactly **one** `herdr agent read --source visible` snapshot, taken the moment the status feed first claims ready, before any bytes are injected — a startup trust selector or permission dialog lives on the screen, not in the status feed. The wait loop itself reads no screen, so this one-shot check stays inside the ban above. An unreadable screen is not evidence of a dialog: the status signal decides, with one stderr line saying so.
+
 Deep CLI semantics (wait activity gate, rejection vs settled outcomes, read sources) live in `$SKILL_DIR/references/cli-reference.md`.
 
 ## Run an ordinary command in another pane

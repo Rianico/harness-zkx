@@ -9,7 +9,7 @@ import os
 import re
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
@@ -22,7 +22,7 @@ import herdr_wait
 import pytest
 import yaml
 
-from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
+from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness, flag_value
 
 SCRIPT = SCRIPTS_DIR / "herdr_prompt.py"
 
@@ -930,7 +930,9 @@ def test_no_caller_context_sends_verbatim_without_lookups(
     (prompt_call,) = stub.prompts()
     assert prompt_call[4] == "hi"
     kinds = [call[1:3] for call in stub.calls()]
-    assert kinds == [["agent", "get"], ["agent", "prompt"]]
+    # The one-shot screen read (#252) rides between the status claim and the injection:
+    # settled `agent get`, one `agent read`, then `agent prompt`. No caller-context lookups.
+    assert kinds == [["agent", "get"], ["agent", "read"], ["agent", "prompt"]]
     assert "--no-caller-context drops the Sender/Receiver envelope" in done.stderr
 
 
@@ -1798,3 +1800,249 @@ def test_unconfirmed_warning_renders_the_neutral_advice_for_a_bridgeless_static_
     assert "acceptance was not confirmed" in err
     assert NEUTRAL_SURFACE in err
     assert "bridge" not in err, "a bridge-less kind must not be told to read a bridge"
+
+
+# ── #252: the screen-aware readiness gate (one-shot, never polled) ──────────────────
+
+# Fake screens for the gate. The trust selector lines are verbatim from
+# `skills/herdr/references/agents/qodercli.md` ("Folder Trust"), which documents the
+# readiness lie this gate closes: `agent start` reports `idle`/`interactive_ready: true`
+# while the pane is blocked on the trust selector.
+
+TRUST_SELECTOR_SCREEN = (
+    "◇ Qoder CLI CN\n"
+    "\n"
+    " Do you trust the files in this folder?\n"
+    " /private/tmp/example-worktree\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+    " ↑/↓ navigate · Enter select · Esc back\n"
+)
+
+# The trust selector's option block with the question line scrolled off: the numbered
+# trust options alone are the dialog, so this pins the option-line pattern by itself.
+TRUST_OPTIONS_SCREEN = "…\n  ❯ 1. Trust folder\n    2. Don't trust and exit\n"
+
+# A tool-permission dialog: the "Do you want to allow …?" question form documented as the
+# prompt class in `references/agents/cline.md` and `references/agents/copilot.md`.
+PERMISSION_DIALOG_SCREEN = (
+    "⏺ Bash(git status)\nDo you want to allow Bash to run this command?\n❯ 1. Yes  2. No\n"
+)
+
+# A settled, unblocked pane: prompt line and status footer, no dialog anywhere.
+CLEAN_IDLE_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\n"
+    "*   Type your message or @path/to/file\n"
+    " Model · 200K context · ~/repo\n"
+)
+
+
+def _screen_reads(stub: StubHarness) -> list[list[str]]:
+    """Every `herdr agent read` the stub recorded: the gate's observable screen reads."""
+    return [call for call in stub.calls() if call[1:3] == ["agent", "read"]]
+
+
+@pytest.mark.parametrize(
+    ("screen", "matched"),
+    [
+        pytest.param(
+            TRUST_SELECTOR_SCREEN, "Do you trust the files in this folder?", id="startup-modal"
+        ),
+        pytest.param(TRUST_OPTIONS_SCREEN, "1. Trust folder", id="trust-options"),
+        pytest.param(
+            PERMISSION_DIALOG_SCREEN,
+            "Do you want to allow Bash to run this command?",
+            id="permission",
+        ),
+    ],
+)
+def test_modal_screen_with_settled_status_refuses_delivery(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    screen: str,
+    matched: str,
+) -> None:
+    """Core pin (#252 points 3/4): settled status + interactive_ready true + modal on screen.
+
+    The prompt must NOT be injected, the refusal quotes the observed line, and the screen
+    is confirmed exactly once — never re-read after the refusal.
+
+    Mutant killed: remove the screen check (the prompt is delivered and these asserts fail);
+    let a detected modal fall through to injection (`stub.prompts() == []` fails).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": screen,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == [], "bytes must never be injected into a modal"
+    err = capsys.readouterr().err
+    assert "refusing to inject the prompt into the dialog" in err
+    assert matched in err, "the refusal quotes the line the screen actually showed"
+    assert "reviewer" in err
+    assert len(_screen_reads(stub)) == 1, "one confirm, no re-read after the refusal"
+
+
+def test_clean_screen_still_delivers_with_exactly_one_screen_read(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Existing behaviour, unchanged: a settled idle pane with a clean screen is ready.
+
+    The wait takes three probes (working, working, idle) but the screen is consulted once,
+    at the claim, with the pinned source. Mutants killed: an unconditional per-attempt read
+    (3 reads here) and any screen-driven refusal on a clean pane (exit code here).
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["working", "working", "idle"]},
+            "agent_read_text": CLEAN_IDLE_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    assert slept == [herdr_prompt.READY_INTERVAL_SECONDS, herdr_prompt.READY_INTERVAL_SECONDS]
+    (read,) = _screen_reads(stub)
+    assert flag_value(read, "--source") == "visible"
+
+
+def test_zero_screen_reads_while_the_target_never_settles(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The count pin that catches a re-introduced poll (SKILL.md: never loop `agent read`).
+
+    A pane held `working` for the full timeout times out with ZERO screen reads: the read
+    rides only the moment a status probe claims ready.
+
+    Mutant killed: move the screen read into `agent_readiness` or the per-attempt loop —
+    this run then records ~50 reads and the empty assertion fails.
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state({**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert len(slept) == 49
+    assert _screen_reads(stub) == []
+
+
+def test_unreadable_screen_falls_back_to_the_status_signal(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Best effort (#252 requirement 6): a failed screen read is not modal evidence.
+
+    Mutant killed: treat an unreadable screen as a refusal (the clean/ready delivery here
+    turns into exit 2 and `EXIT_OK`/`prompts` fail).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE, "agent_read_error": {"code": "pane_unavailable"}})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    err = capsys.readouterr().err
+    assert "trusting the status feed" in err
+    assert len(_screen_reads(stub)) == 1, "a refused read is not retried either"
+
+
+def test_empty_screen_output_is_not_modal_evidence(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An empty snapshot is unreadable, not a modal: one stderr line, delivery proceeds."""
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE, "agent_read_text": ""})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    err = capsys.readouterr().err
+    assert "no screen rows" in err
+    assert "trusting the status feed" in err
+
+
+def test_screen_read_that_raises_is_reported_not_propagated(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A subprocess raise at the screen read must never crash the dispatch (requirement 6)."""
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE})
+    real_run = herdr_prompt.run_herdr
+
+    def flaky(argv: list[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[1:3] == ["agent", "read"]:
+            raise herdr_cli.HerdrError("cannot run herdr: boom")
+        return real_run(argv, env)
+
+    monkeypatch.setattr(herdr_prompt, "run_herdr", flaky)
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    assert "trusting the status feed" in err
+
+
+def test_broadcast_confirms_each_targets_screen_once(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One screen read per readiness DETERMINATION: two settled targets get two reads, one each.
+
+    Mutant killed: a per-run (not per-target) confirm — the second target then ships
+    unconfirmed and the per-target read counts here fail.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "callee1", "agent": "pi", "agent_status": "idle"},
+            {"pane_id": "w9:p2", "name": "callee2", "agent": "pi", "agent_status": "idle"},
+        ],
+        "agent_get": {
+            "callee1": {"agent_status": "idle"},
+            "callee2": {"agent_status": "idle"},
+        },
+        "agent_read_text": CLEAN_IDLE_SCREEN,
+    }
+    stub.write_state(state)
+    code = herdr_prompt.main(
+        ["callee1", "callee2", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 2
+    reads = _screen_reads(stub)
+    assert [call[3] for call in reads] == ["callee1", "callee2"]

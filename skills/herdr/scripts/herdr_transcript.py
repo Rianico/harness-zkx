@@ -131,13 +131,16 @@ def resolve_session(herdr: str, target: str, env: Mapping[str, str]) -> str:
     return path
 
 
+def build_agent_read_argv(herdr: str, target: str, *, source: str, lines: int) -> list[str]:
+    """The one argv builder for `herdr agent read` pane snapshots (one command, one builder)."""
+    return [herdr, "agent", "read", target, "--source", source, "--lines", str(lines)]
+
+
 def fallback_agent_read(
     herdr: str, target: str, env: Mapping[str, str], *, source: str, lines: int
 ) -> int:
     """Print the pane snapshot when the agent owns no session file."""
-    done = run_herdr(
-        [herdr, "agent", "read", target, "--source", source, "--lines", str(lines)], env
-    )
+    done = run_herdr(build_agent_read_argv(herdr, target, source=source, lines=lines), env)
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
         raise HerdrError(f"herdr agent read {target} failed: {detail}")
