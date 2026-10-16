@@ -804,9 +804,12 @@ PERMISSION_QUESTION_ROW = re.compile(
 #      witness — the existing `_loose_dialog_shape` rule (a placeholder row vetoes only when
 #      NO dialog-shaped row sits below it) — which is what bounds the false-delivery risk.
 #      The directions of error differ: the short core errs toward DELIVERY (a bare prose echo
-#      with nothing dialog-shaped under it can silence the veto); the loose witness errs
-#      toward REFUSAL (dialog-shaped text below a placeholder blocks the veto even when that
-#      placeholder is the live clipped box).
+#      with nothing dialog-shaped under it can silence the veto); the loose witness keys on
+#      structure, not any digit. A row below the placeholder blocks the veto only when it
+#      itself carries the selector cursor (`❯ n. …`) or is a whole-line trust/permission
+#      question, so benign chrome below the live box — a numbered todo widget, status bar,
+#      indented list item, or a markdown numbered list — never blocks it and never turns an
+#      idle pane into a false refusal.
 #   3. Residuals that stay: when the operator has typed anything the placeholder is absent
 #      entirely and the veto cannot fire; a pane narrower than the matched core clips below
 #      `Type your message`. Both leave that pane unguarded, and `--skip-screen-check` is the
@@ -816,14 +819,21 @@ PERMISSION_QUESTION_ROW = re.compile(
 # with no input row below the dialog still refuses.
 IDLE_INPUT_ROW = re.compile(r"(?i)Type your message")
 
-# The veto's second witness, deliberately LOOSER than `_SELECTOR_LABEL`: a numbered row prefix in
-# ANY form (`2. <anything>`, even a label the strict rule cannot name because it ends on sentence
-# punctuation), or a known question row. Rationale, from the captured idle UI in
-# `references/agents/qodercli.md`: nothing BELOW the input row is a numbered option row or a
-# question — only the rule rows and the `Model · …` footer — so dialog-shaped text below a
-# placeholder row means that row is NOT the pane's live input box (a live modal replaces the box),
-# and the veto must not fire from it.
-_LOOSE_NUMBERED_ROW = re.compile(r"\s*❯?\s*\d+[.]\s+\S")
+# The veto's second witness, deliberately LOOSER than `_SELECTOR_LABEL` in the LABEL but STRICTER
+# than it in the GLYPH: the row must carry the selector cursor `❯` before the number. So the
+# numbered witness matches `❯ n. <anything>` — even a label the strict rule cannot name because it
+# ends on sentence punctuation — but never a bare `n. <anything>`. A known question row still
+# matches unchanged. Rationale: the cursor is structural evidence of a RENDERED selector. Every
+# documented live render carries one (`references/agents/qodercli.md:47` `❯ 1. Trust folder`, and
+# the real permission renders in the tests), while benign chrome below the box — a one-line numbered
+# todo widget (`1. Fix the parser  2. Ship it`), a numbered status bar (`2. pending dispatch`), an
+# indented `    12. something`, or an agent message's markdown numbered list — never does. Without
+# the cursor requirement any such row under the live placeholder was read as dialog-shaped, blocked
+# the veto, and refused an IDLE pane: a false refusal, the direction this gate treats as worse than
+# the miss (see above). Requiring the cursor keys the witness on what a rendered selector actually
+# shows, so dialog-shaped text below a placeholder row still means that row is NOT the pane's live
+# input box (a live modal replaces the box) and the veto must not fire from it.
+_LOOSE_NUMBERED_ROW = re.compile(r"\s*❯\s*\d+[.]\s+\S")
 
 
 def _loose_dialog_shape(line: str) -> bool:
@@ -893,12 +903,14 @@ def _screen_modal_block(snapshot: str) -> tuple[str, str] | None:
     block is transcript and the prompt delivers — but
     only when that placeholder is the LIVE box: the veto may not fire from a placeholder row that
     has dialog-shaped text below it (see `_loose_dialog_shape`), because a live modal replaces the
-    input box and leaves no placeholder under a dialog. Everything else below the block (mode
-    badge, `Model · …` footer, hint row, box border, `Esc to cancel`, spinner, status bar) is
-    chrome, not dialog content, and never vetoes. A dialog-shaped block with no placeholder row
-    below it still refuses — even a quote on a pane whose idle row this repo does not document,
-    and a pane whose operator has typed (the placeholder is then absent): `--skip-screen-check` is
-    that false positive's remedy.
+    input box and leaves no placeholder under a dialog. A row below the box is dialog-shaped only
+    when it itself carries the selector cursor (`❯ n. …`) or is a whole-line trust/permission
+    question; chrome below the block (mode badge, `Model · …` footer, hint row, box border, `Esc to
+    cancel`, spinner, status bar, a numbered todo widget or markdown list) is not, so it never
+    vetoes and never turns an idle pane into a false refusal. A dialog-shaped block with no
+    placeholder row below it still refuses — even a quote on a pane whose idle row this repo does
+    not document, and a pane whose operator has typed (the placeholder is then absent):
+    `--skip-screen-check` is that false positive's remedy.
     """
     # Normalise line endings defensively so every row rule sees one shape. Whether `herdr agent
     # read` can emit CRLF is UNKNOWN — this is defensive, not evidence of a live pane shape.

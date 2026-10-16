@@ -152,11 +152,13 @@ def unresolvable_sha_tokens(
 
 
 def lane_git_dir(env: Mapping[str, str]) -> Path | None:
-    """The lane repository the guard resolves against, or None when no anchor resolves.
+    """The lane store the guard resolves against, or None only when the resolver fails hard.
 
     Deliberately the store anchor `herdr-lease` already resolves (#229) rather than the ambient
-    cwd: the same payload must get the same verdict from any working directory. Only a broken
-    anchor leaves this None, and the guard then falls back to where the helper itself was invoked.
+    cwd: one payload gets one verdict from any working directory. Since #182 h3 a run with no
+    anchor returns the deterministic fallback store `<HOME>/.herdr/lane`, not None — a
+    non-repository path, so the SHA probe skips there identically to a repo-less cwd. Only a
+    hard resolver exception yields None, whose caller fallback is `Path.cwd()`.
     """
     try:
         return herdr_lease.resolve_base_dir(env=env)

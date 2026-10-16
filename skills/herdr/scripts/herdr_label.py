@@ -42,6 +42,7 @@ Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herd
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -310,13 +311,20 @@ TAB_TITLE_BUDGET = AGENT_NAME_MAX
 
 
 def fit_slug(slug: str, budget: int) -> str:
-    """Truncate a slug's prefix to `budget`; fixes length only, never the characters (#182 h1).
+    """Fit a slug to `budget`: truncate the prefix, stamping a short digest when it truncates.
 
     A short-enough slug comes back byte-identical, so every existing lane renders unchanged.
-    A slug whose characters the grammar forbids stays forbidden after truncation — the caller
-    still validates against `AGENT_NAME`.
+    An over-long slug keeps its human-readable stem and gains a 4-hex digest of the FULL slug,
+    so two lanes sharing a ≥27-char prefix no longer fit to the same `<27 chars>-orch` name
+    while `conflict_with` refuses the second one forever. The digest is deterministic — no
+    time, no random — so a lane keeps its fitted name between dispatches. A slug whose
+    characters the grammar forbids stays forbidden — the caller still validates against
+    `AGENT_NAME`.
     """
-    return slug[:budget]
+    if len(slug) <= budget:
+        return slug
+    digest = hashlib.sha256(slug.encode("utf-8")).hexdigest()[:4]
+    return f"{slug[: budget - len(digest) - 1]}-{digest}"
 
 
 def _one_line(text: str, limit: int = 160) -> str:
@@ -388,10 +396,12 @@ def reconciliation_argv(
     `task_group` None asks for neither case 2 nor case 3, so it is silent: the caller that
     derived nothing says so itself (see `reconcile_lane`). A slug longer than the grammar
     allows is FITTED: `fit_slug` truncates the prefix to each half's own budget —
-    `TAB_TITLE_BUDGET` for the title, `ORCHESTRATOR_SLUG_BUDGET` for the name — so what
-    reaches herdr lands inside `[a-z][a-z0-9_-]{0,31}` and the rename is issued with no note
-    (#182 h1). A slug whose characters the grammar forbids stays invalid after truncation
-    and is SKIPPED with a note, never reaching herdr. Notes carry no marker prefix: the
+    `TAB_TITLE_BUDGET` for the title, `ORCHESTRATOR_SLUG_BUDGET` for the name — and stamps a
+    stable 4-hex digest of the full slug when it truncates, so two lanes sharing a long
+    prefix fit to DISTINCT names instead of colliding on one `-orch` forever (#182 h1).
+    What reaches herdr lands inside `[a-z][a-z0-9_-]{0,31}` and the rename is issued with no
+    note. A slug whose characters the grammar forbids stays invalid after fitting and is
+    SKIPPED with a note, never reaching herdr. Notes carry no marker prefix: the
     caller owns its own stderr prefix.
 
     The tab half distinguishes two absences, and only one of them is evidence (#182 t5 2.5e). A
@@ -406,8 +416,9 @@ def reconciliation_argv(
     names = agent_name_by_pane(agents)
     # Fit the slug FIRST (#182 h1), per half: the tab title takes the whole cap, the composed
     # name the cap minus its suffix, so a legal 28-32 char slug keeps its full title while an
-    # over-long one lands inside the grammar. `fit_slug` fixes length only; the character-class
-    # gate below stays exactly as strict.
+    # over-long one lands inside the grammar carrying a digest that separates co-prefixed
+    # lanes. `fit_slug` shortens and stamps a digest, never rewrites characters; the
+    # character-class gate below stays exactly as strict.
     tab_title = fit_slug(task_group, TAB_TITLE_BUDGET) if task_group else ""
     name_slug = fit_slug(task_group, ORCHESTRATOR_SLUG_BUDGET) if task_group else ""
     # len(name_slug) <= ORCHESTRATOR_SLUG_BUDGET by construction, so a grammatical `name_slug`
@@ -456,12 +467,13 @@ def reconciliation_argv(
         return argv, notes
 
     if not AGENT_NAME.match(tab_title):
-        # Truncate first, validate after (#182 h1): fitting repairs length, so an over-long
-        # slug no longer takes this return — only characters the grammar forbids can survive
-        # truncation. `tab_title` is the longer fitted value, so checking it covers everything
-        # the name half issues too. One ungrammatical slug still poisons both halves — the tab
-        # title and the composed `<slug>-orch` share it — so it is one skipped decision and one
-        # note, not two.
+        # Truncate first, validate after (#182 h1): fitting repairs length — and its digest
+        # only adds grammar-legal hex chars — so an over-long slug no longer takes this
+        # return; only characters the grammar forbids can survive fitting, since a forbidden
+        # head is kept by the stem. `tab_title` is the longer fitted value, so checking it
+        # covers everything the name half issues too. One ungrammatical slug still poisons
+        # both halves — the tab title and the composed `<slug>-orch` share it — so it is one
+        # skipped decision and one note, not two.
         notes.append(
             f"task group {task_group!r} is not a valid name (want {AGENT_NAME_PATTERN} "
             "(max 32 chars)); left the tab title and the orchestrator name alone"

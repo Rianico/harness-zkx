@@ -2198,20 +2198,52 @@ def test_quoted_trust_above_an_idle_row_with_a_live_permission_below_refuses() -
 def test_loose_veto_refuses_a_quote_whose_idle_row_has_a_numbered_period_tail_below() -> None:
     """P2-2(2): position sensitivity stands alone, independent of the label widening. The
     transcript quotes the trust block; the idle row below is the only veto candidate; a live
-    tail `    2. No, and ask what to do differently.` sits under that row. The tail ends in a
-    period, so the strict selector label still rejects it and it is not a recognised dialog —
-    only the LOOSE veto test (`_loose_dialog_shape`) sees it as dialog-shaped and blocks the
-    veto. Measured BEFORE (92dfb394): None. AFTER: refuses, naming the trust prompt. Mutant
-    killed: drop the loose veto — the idle row then vetoes and this pane delivers.
+    tail `  ❯ 2. No, and ask what to do differently.` sits under that row. Two facts make this
+    the LOOSE-witness case: the row ends in a period, so the strict selector label still rejects
+    it and it is not a recognised dialog; and it carries the selector cursor `❯`, which is now
+    what the loose numbered witness keys on (see `_LOOSE_NUMBERED_ROW`) — without the cursor this
+    same tail would be a bare `2. …` numbered line and, as chrome below the box, would NOT block
+    the veto. With the glyph present, only the LOOSE veto test (`_loose_dialog_shape`) sees it as
+    dialog-shaped and blocks the veto. Measured BEFORE (92dfb394): None. AFTER: refuses, naming
+    the trust prompt. Mutant killed: drop the loose veto — the idle row then vetoes and this pane
+    delivers.
     """
     screen = (
         H2C_TRUST_ROWS
         + "\n*   Type your message or @path/to/file\n\n"
-        + "    2. No, and ask what to do differently.\n"
+        + "  ❯ 2. No, and ask what to do differently.\n"
     )
     verdict = herdr_prompt._screen_modal_block(screen)
-    assert verdict is not None, "a numbered tail below the idle row blocks the veto"
+    assert verdict is not None, "a cursor-bearing numbered tail below the idle row blocks the veto"
     assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+@pytest.mark.parametrize(
+    "chrome",
+    [
+        pytest.param("1. Fix the parser  2. Ship it", id="todo-widget-one-line"),
+        pytest.param("2. pending dispatch", id="numbered-status-bar"),
+        pytest.param("    12. something", id="indented-numbered-line"),
+        pytest.param("1. step one\n2. step two\n3. step three", id="markdown-numbered-list"),
+    ],
+)
+def test_numbered_chrome_below_an_idle_row_does_not_block_the_veto_and_delivers(
+    chrome: str,
+) -> None:
+    """False-refusal direction (#182 h5): benign numbered chrome below the live input row must
+    DELIVER. A transcript quotes the trust block, the pane's idle `Type your message` row sits
+    below it, and the pane's own chrome — a one-line numbered todo widget (`1. Fix the parser
+    2. Ship it`), a numbered status bar (`2. pending dispatch`), an indented `    12. something`,
+    or a markdown numbered list — renders under that row. None of these carries the selector
+    cursor, so `_loose_dialog_shape` does not read them as dialog-shaped, the idle row stays the
+    live box, and the veto fires. Measured BEFORE (the optional-cursor `❯?` witness): all four
+    REFUSED — the ticket's false-refusal defect (the direction this gate treats as worse than the
+    miss). AFTER requiring the cursor: all four deliver. Mutant killed: revert `_LOOSE_NUMBERED_ROW`
+    to the optional `❯?` — a bare `N.` line then matches the loose witness, blocks the veto, and
+    every case here refuses.
+    """
+    screen = H2C_TRUST_ROWS + "\n*   Type your message or @path/to/file\n\n" + chrome + "\n"
+    assert herdr_prompt._screen_modal_block(screen) is None, f"{chrome!r} is chrome, not a dialog"
 
 
 def test_crlf_trust_dialog_refuses_after_line_ending_normalisation() -> None:

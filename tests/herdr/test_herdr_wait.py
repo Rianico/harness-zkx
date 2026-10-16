@@ -107,14 +107,44 @@ def test_agent_get_failure_is_herdr_error(stub: StubHarness) -> None:
 # ── integration: barrier and reactive modes ───────────────────────────────────
 
 
-def test_barrier_waits_for_all_targets(stub: StubHarness) -> None:
+def test_barrier_waits_for_all_targets(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The ALL barrier returns the settled table only once BOTH scripted targets match.
+
+    Determinism: the old shape ran through `stub.run`, which re-executes the script body
+    through `runpy.run_path` (`tests/in_process.py:74`), so the body re-binds `import time`
+    in its own `__main__` namespace and a patch of `herdr_wait.time` never reaches it. That
+    left a wall-clock `--timeout 5000` watchdog racing real `herdr` stub spawns every poll:
+    on a loaded xdist worker spawn latency alone could burn the budget and the barrier
+    returned EXIT_HERDR ("timed out") instead of EXIT_OK (flaky). Calling `wait_agents`
+    directly keeps the module patch live — the mechanism removed is the real-time watchdog
+    racing real spawn latency; the test is a gate, not a benchmark.
+
+    Fake-clock arithmetic: `_FakeTime` advances only on `sleep()`. start=0.0, deadline =
+    timeout/1000 = 5.0s, interval=0.25s. Round 1 (t=0.0): a=working, b=working, sleep 0.25.
+    Round 2 (t=0.25): a=done, b=working, sleep 0.25. Round 3 (t=0.5): a still done (the stub
+    repeats the last scripted value), b=idle — all settled, emit, EXIT_OK. Three polling
+    rounds, exactly as the old `--interval 0.01` sequences intended; remaining >= 4.5s on
+    every check, so `min(interval, remaining)` is always the full interval and the watchdog
+    never bites.
+
+    What it still proves: exit EXIT_OK, the emitted header carries TARGET and SESSION_PATH,
+    and >= 2 `agent get a` polls — the barrier polls, it is not event-driven.
+    """
     state = {
         **DEFAULT_STATE,
         "agent_get_seq": {"a": ["working", "done"], "b": ["working", "working", "idle"]},
     }
-    done = stub.run("a", "b", "--interval", "0.01", "--timeout", "5000", state=state)
-    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
-    assert "TARGET" in done.stdout and "SESSION_PATH" in done.stdout
+    stub.write_state(state)
+    _ = monkeypatch.setattr(herdr_wait, "time", _FakeTime())
+    options = herdr_wait.Options(targets=["a", "b"], interval=0.25, timeout=5000)
+
+    rc = herdr_wait.wait_agents(options, stub.base_env())
+    captured = capsys.readouterr()
+
+    assert rc == herdr_cli.EXIT_OK, captured.err
+    assert "TARGET" in captured.out and "SESSION_PATH" in captured.out
     gets = [call for call in stub.calls() if call[1:4] == ["agent", "get", "a"]]
     assert len(gets) >= 2  # polled, not a single event-driven wait
 

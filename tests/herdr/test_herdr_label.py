@@ -2,8 +2,10 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -399,8 +401,8 @@ def test_the_composed_name_is_fitted_not_just_validated() -> None:
     sees the oversized argv (or a skip note) instead.
     """
     slug = "g" * 32
-    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
-    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    fitted = herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)
+    title = herdr_label.fit_slug(slug, herdr_label.TAB_TITLE_BUDGET)
     composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     agents: list[dict[str, object]] = [
         {"pane_id": "w9:p1", "agent": "pi"},
@@ -425,8 +427,8 @@ def test_an_overlong_slug_fits_the_name_with_no_note(length: int) -> None:
     this sees a skip note and no renames.
     """
     slug = "g" * length
-    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
-    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    fitted = herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)
+    title = herdr_label.fit_slug(slug, herdr_label.TAB_TITLE_BUDGET)
     composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     agents: list[dict[str, object]] = [
         {"pane_id": "w9:p1", "agent": "pi"},
@@ -449,8 +451,8 @@ def test_a_sixty_four_char_slug_fits_to_exactly_the_grammar_cap() -> None:
     name that leaves the cap unspent — and any lane built to the real cap stops converging.
     """
     slug = "g" * 64
-    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
-    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    fitted = herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)
+    title = herdr_label.fit_slug(slug, herdr_label.TAB_TITLE_BUDGET)
     composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     assert len(composed) == herdr_label.AGENT_NAME_MAX
     assert herdr_label.AGENT_NAME.match(composed)
@@ -475,8 +477,8 @@ def test_the_fitted_rename_never_lets_case_one_name_the_orchestrator_twice() -> 
     renamed twice — once by the label, once by the fitted name.
     """
     slug = "g" * 35
-    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
-    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    fitted = herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)
+    title = herdr_label.fit_slug(slug, herdr_label.TAB_TITLE_BUDGET)
     composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     panes: list[dict[str, str]] = [
         {"pane_id": "w9:p1", "tab_id": "w9:t1", "label": "old-reviewer"},
@@ -498,8 +500,8 @@ def test_a_fitted_name_already_used_by_another_pane_is_not_handed_to_herdr() -> 
     name a live sibling already holds and herdr refuses the duplicate.
     """
     slug = "g" * 35
-    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
-    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    fitted = herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)
+    title = herdr_label.fit_slug(slug, herdr_label.TAB_TITLE_BUDGET)
     composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     panes: list[dict[str, str]] = [{"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"}]
     agents: list[dict[str, object]] = [
@@ -510,6 +512,111 @@ def test_a_fitted_name_already_used_by_another_pane_is_not_handed_to_herdr() -> 
     argv, notes = plan(panes, agents, {"w9:t1": title}, task_group=slug)
     assert argv == []
     assert len(notes) == 1
+    assert "already used by pane w9:p9" in notes[0]
+
+
+# Two real lane slugs that share their whole human-readable stem: plain truncation fit both
+# to `refactor-herdr-coordination` and both orchestrators composed the SAME `-orch` name, so
+# `conflict_with` refused the second lane on every pass and its note printed forever.
+LANE_ONE_SLUG = "refactor-herdr-coordination-hardening-lane-one"
+LANE_TWO_SLUG = "refactor-herdr-coordination-hardening-lane-two"
+
+
+def test_two_co_prefixed_lanes_fit_to_distinct_orchestrator_names() -> None:
+    """A ≥27-char shared prefix no longer fits two lanes onto one `-orch` name.
+
+    Pin -> mutant: revert `fit_slug` to plain `slug[:budget]`, so both slugs truncate to the
+    same 27 chars, these composed names collide, and the second lane's rename is refused
+    forever. Both halves stay grammar-valid and at the cap, so the disambiguation never buys
+    its distinctness by breaking the grammar.
+    """
+    shared = 27
+    assert LANE_ONE_SLUG[:shared] == LANE_TWO_SLUG[:shared]
+    one = f"{herdr_label.fit_slug(LANE_ONE_SLUG, herdr_label.ORCHESTRATOR_SLUG_BUDGET)}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    two = f"{herdr_label.fit_slug(LANE_TWO_SLUG, herdr_label.ORCHESTRATOR_SLUG_BUDGET)}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    assert one != two
+    for composed in (one, two):
+        assert herdr_label.AGENT_NAME.match(composed)
+        assert len(composed) <= herdr_label.AGENT_NAME_MAX
+    assert len(one) == herdr_label.AGENT_NAME_MAX
+    assert len(two) == herdr_label.AGENT_NAME_MAX
+
+
+def test_the_fitted_digest_is_stable_across_repeats_and_a_fresh_process() -> None:
+    """The same slug fits to the same string, in-process twice and in a fresh interpreter.
+
+    This is what stops a lane's name churning between dispatches: a rename the lane converged
+    on stays converged.
+
+    Pin -> mutant: seed the digest with something that varies — `id(slug)`, so the id differs
+    in the subprocess and the repeat mismatches; the current time, so even the in-process pair
+    mismatches. Deterministic sha256 of the full slug answers both.
+    """
+    budget = herdr_label.ORCHESTRATOR_SLUG_BUDGET
+    first = herdr_label.fit_slug(LANE_TWO_SLUG, budget)
+    second = herdr_label.fit_slug(LANE_TWO_SLUG, budget)
+    assert first == second
+    code = (
+        "import sys; sys.path.insert(0, sys.argv[1]); import herdr_label;"
+        f"print(herdr_label.fit_slug(sys.argv[2], {budget}))"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", code, str(SCRIPTS_DIR), LANE_TWO_SLUG],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == first
+
+
+def test_a_short_slug_is_untouched_and_a_fitted_slug_keeps_its_stem_and_digest_shape() -> None:
+    """A slug that fits comes back byte-identical; a fitted one keeps a readable stem.
+
+    The 22-char stem before the `-` still carries the shared human-readable prefix, so the
+    name stays recognisable, and the digest is exactly 4 lowercase hex — the shape the grammar
+    gate tolerates.
+
+    Pin -> mutants: widen the digest to 8 chars (or any non-hex padding) and the shape asserts
+    here fail even though the length still lands inside the cap; run any digest at all on a
+    short-enough slug and `fit_slug("harness", budget)` no longer comes back byte-identical,
+    renaming every existing lane.
+    """
+    budget = herdr_label.ORCHESTRATOR_SLUG_BUDGET
+    assert herdr_label.fit_slug("harness", budget) == "harness"
+    assert herdr_label.fit_slug(LANE_TWO_SLUG, budget) != LANE_TWO_SLUG
+    fitted = herdr_label.fit_slug(LANE_ONE_SLUG, budget)
+    stem = LANE_ONE_SLUG[: budget - 5]
+    assert fitted.startswith(stem)
+    assert fitted[len(stem)] == "-"
+    assert re.fullmatch(r"[0-9a-f]{4}", fitted[len(stem) + 1 :])
+    assert len(fitted) == budget
+
+
+def test_identical_full_slugs_still_collide_and_the_refusal_names_the_holding_pane() -> None:
+    """Two lanes with the SAME full slug fit to the SAME name: digest cannot separate equals.
+
+    `conflict_with` stays the last line of defence: the second rename is refused with one note
+    naming the pane that already holds the name, never issued over a sibling.
+
+    Pin -> mutant: seed the digest per call (pane id, random, time), so the two equal slugs fit
+    apart and this plan hands herdr a rename that silently overwrites the sibling's claim.
+    """
+    budget = herdr_label.ORCHESTRATOR_SLUG_BUDGET
+    fitted = herdr_label.fit_slug(LANE_ONE_SLUG, budget)
+    assert herdr_label.fit_slug(LANE_ONE_SLUG, budget) == fitted
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    title = herdr_label.fit_slug(LANE_ONE_SLUG, herdr_label.TAB_TITLE_BUDGET)
+    panes: list[dict[str, str]] = [{"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"}]
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+        {"pane_id": "w9:p9", "name": composed, "agent": "pi"},
+    ]
+    argv, notes = plan(panes, agents, {"w9:t1": title}, task_group=LANE_ONE_SLUG)
+    assert argv == []
+    assert len(notes) == 1
+    assert composed in notes[0]
     assert "already used by pane w9:p9" in notes[0]
 
 
@@ -556,7 +663,10 @@ def test_the_tab_title_keeps_a_legal_slug_the_name_budget_would_cut() -> None:
     that needed no fitting at all.
     """
     slug = "g" * 30
-    composed = f"{slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    composed = (
+        f"{herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)}"
+        f"{herdr_label.ORCHESTRATOR_SUFFIX}"
+    )
     agents: list[dict[str, object]] = [
         {"pane_id": "w9:p1", "agent": "pi"},
         {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
@@ -578,8 +688,8 @@ def test_a_fitted_lane_converges_so_the_next_pass_renames_nothing() -> None:
     converged lane never compares equal and a rename is re-issued on every dispatch and reply.
     """
     slug = "g" * 35
-    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
-    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    fitted = herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)
+    title = herdr_label.fit_slug(slug, herdr_label.TAB_TITLE_BUDGET)
     composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     panes: list[dict[str, str]] = [
         {"pane_id": "w9:p1", "tab_id": "w9:t1", "label": composed},
@@ -697,8 +807,8 @@ def test_reconcile_lane_fits_a_35_char_task_group_with_no_stderr_noise(
     and a second pass over the corrected lane renames again.
     """
     slug = "g" * 35
-    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
-    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    fitted = herdr_label.fit_slug(slug, herdr_label.ORCHESTRATOR_SLUG_BUDGET)
+    title = herdr_label.fit_slug(slug, herdr_label.TAB_TITLE_BUDGET)
     composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     state = {
         **DEFAULT_STATE,
