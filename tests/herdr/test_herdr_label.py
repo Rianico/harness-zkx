@@ -390,22 +390,208 @@ def test_an_ungrammatical_task_group_is_skipped_with_one_note() -> None:
     assert "left the tab title and the orchestrator name alone" in notes[0]
 
 
-def test_the_composed_name_is_validated_not_just_the_slug() -> None:
-    """A legal 32-char slug oversizes at `-orch`: the tab still renames, the name is skipped.
+def test_the_composed_name_is_fitted_not_just_validated() -> None:
+    """A legal 32-char slug oversizes at `-orch`: the plan FITS it, and says nothing (#182 h1).
 
-    Pin -> mutant: validate only the slug, so `<32 chars>-orch` (37) reaches herdr and is
-    refused there.
+    Pin -> mutant: pass `task_group` through to `composed` un-truncated, so `<32 chars>-orch`
+    (37) reaches herdr and is refused there; the pinned argv carries only the fitted name, so
+    assert it is `<= AGENT_NAME_MAX` and grammar-valid, and forward without truncation and this
+    sees the oversized argv (or a skip note) instead.
     """
     slug = "g" * 32
+    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
+    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
     agents: list[dict[str, object]] = [
         {"pane_id": "w9:p1", "agent": "pi"},
         {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
     ]
     panes: list[dict[str, str]] = [{"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"}]
     argv, notes = plan(panes, agents, {"w9:t1": "3"}, task_group=slug)
-    assert argv == [["herdr", "tab", "rename", "w9:t1", slug]]
+    assert notes == []
+    assert argv == [
+        ["herdr", "tab", "rename", "w9:t1", title],
+        ["herdr", "agent", "rename", "w9:p1", composed],
+    ]
+    assert len(composed) <= herdr_label.AGENT_NAME_MAX
+    assert herdr_label.AGENT_NAME.match(composed)
+
+
+@pytest.mark.parametrize("length", [33, 35])
+def test_an_overlong_slug_fits_the_name_with_no_note(length: int) -> None:
+    """Beyond the cap itself the shape is unchanged: fit, rename, silence — never skip (#182 h1).
+
+    Pin -> mutant: validate BEFORE truncating, so the over-long slug trips the gate first and
+    this sees a skip note and no renames.
+    """
+    slug = "g" * length
+    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
+    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+    ]
+    panes: list[dict[str, str]] = [{"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"}]
+    argv, notes = plan(panes, agents, {"w9:t1": "3"}, task_group=slug)
+    assert notes == []
+    assert argv == [
+        ["herdr", "tab", "rename", "w9:t1", title],
+        ["herdr", "agent", "rename", "w9:p1", composed],
+    ]
+
+
+def test_a_sixty_four_char_slug_fits_to_exactly_the_grammar_cap() -> None:
+    """The fitted composed name lands on 32 chars exactly, and the 64-char slug never survives.
+
+    Pin -> mutant: budget the ticket's illustrative 26 rather than the derived
+    `AGENT_NAME_MAX - len(ORCHESTRATOR_SUFFIX)`, so the composed name is 31 and this sees a
+    name that leaves the cap unspent — and any lane built to the real cap stops converging.
+    """
+    slug = "g" * 64
+    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
+    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    assert len(composed) == herdr_label.AGENT_NAME_MAX
+    assert herdr_label.AGENT_NAME.match(composed)
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+    ]
+    panes: list[dict[str, str]] = [{"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"}]
+    argv, notes = plan(panes, agents, {"w9:t1": "3"}, task_group=slug)
+    assert notes == []
+    assert argv == [
+        ["herdr", "tab", "rename", "w9:t1", title],
+        ["herdr", "agent", "rename", "w9:p1", composed],
+    ]
+
+
+def test_the_fitted_rename_never_lets_case_one_name_the_orchestrator_twice() -> None:
+    """`orchestrator_regained` guards on the FITTED composed name, so one rename, never two.
+
+    Pin -> mutant: compute `orchestrator_regained` from the unfitted `<35 chars>-orch` (40), so
+    the guard reads false, case 1 claims the orchestrator from its stale label, and the pane is
+    renamed twice — once by the label, once by the fitted name.
+    """
+    slug = "g" * 35
+    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
+    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    panes: list[dict[str, str]] = [
+        {"pane_id": "w9:p1", "tab_id": "w9:t1", "label": "old-reviewer"},
+        {"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"},
+    ]
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+    ]
+    argv, notes = plan(panes, agents, {"w9:t1": title}, task_group=slug)
+    assert notes == []
+    assert argv == [["herdr", "agent", "rename", "w9:p1", composed]]
+
+
+def test_a_fitted_name_already_used_by_another_pane_is_not_handed_to_herdr() -> None:
+    """The collision gate applies to the fitted name exactly as to any other (#182 h1).
+
+    Pin -> mutant: drop the `conflict_with` gate, so the plan renames the orchestrator to a
+    name a live sibling already holds and herdr refuses the duplicate.
+    """
+    slug = "g" * 35
+    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
+    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    panes: list[dict[str, str]] = [{"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"}]
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+        {"pane_id": "w9:p9", "name": composed, "agent": "pi"},
+    ]
+    argv, notes = plan(panes, agents, {"w9:t1": title}, task_group=slug)
+    assert argv == []
     assert len(notes) == 1
-    assert "not a valid agent name" in notes[0]
+    assert "already used by pane w9:p9" in notes[0]
+
+
+def test_truncation_fixes_length_never_the_characters() -> None:
+    """An over-long slug whose prefix the grammar forbids is still skipped: one note, zero argv.
+
+    Pin -> mutant: let fitting stand in for the character-class guard (validate length only, or
+    sanitize instead of truncate), and this 40-char slug with a capital start emits renames.
+    """
+    slug = "Bad" + "x" * 37
+    assert len(slug) > herdr_label.ORCHESTRATOR_SLUG_BUDGET
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "name": "harness-orch", "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+    ]
+    argv, notes = plan(LANE_PANES, agents, {"w9:t1": "3"}, task_group=slug)
+    assert argv == []
+    assert len(notes) == 1
+    assert "left the tab title and the orchestrator name alone" in notes[0]
+
+
+def test_the_slug_budget_is_derived_from_the_grammar_and_the_suffix() -> None:
+    """Budget = cap - suffix, computed: the ticket's illustrative 26 is pinned out (#182 h1).
+
+    Pin -> mutant: hard-code 26 (or 27) in place of the derivation, so the budget drifts the
+    moment the pattern or the suffix changes and the longest fitted name no longer lands on
+    `AGENT_NAME_MAX`.
+    """
+    assert herdr_label.ORCHESTRATOR_SLUG_BUDGET == (
+        herdr_label.AGENT_NAME_MAX - len(herdr_label.ORCHESTRATOR_SUFFIX)
+    )
+    assert herdr_label.AGENT_NAME.match("g" * herdr_label.AGENT_NAME_MAX)
+    assert not herdr_label.AGENT_NAME.match("g" * (herdr_label.AGENT_NAME_MAX + 1))
+    longest_composed = f"{herdr_label.fit_slug('g' * 64, herdr_label.ORCHESTRATOR_SLUG_BUDGET)}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    assert len(longest_composed) == herdr_label.AGENT_NAME_MAX
+    assert herdr_label.fit_slug("harness", herdr_label.ORCHESTRATOR_SLUG_BUDGET) == "harness"
+
+
+def test_the_tab_title_keeps_a_legal_slug_the_name_budget_would_cut() -> None:
+    """Two budgets, not one: a 30-char slug is a legal TAB TITLE even though its name must fit.
+
+    Pin -> mutant: share `ORCHESTRATOR_SLUG_BUDGET` across both halves, and this lane's title is
+    silently truncated to 27 characters — a title no record carries, renamed away from a slug
+    that needed no fitting at all.
+    """
+    slug = "g" * 30
+    composed = f"{slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+    ]
+    panes: list[dict[str, str]] = [{"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"}]
+    argv, notes = plan(panes, agents, {"w9:t1": "3"}, task_group=slug)
+    assert notes == []
+    assert argv == [
+        ["herdr", "tab", "rename", "w9:t1", slug],
+        ["herdr", "agent", "rename", "w9:p1", composed],
+    ]
+    assert herdr_label.AGENT_NAME.match(slug)
+
+
+def test_a_fitted_lane_converges_so_the_next_pass_renames_nothing() -> None:
+    """The central invariant survives fitting: compare and rename carry the SAME fitted value.
+
+    Pin -> mutant: rename the tab to `fitted` while comparing against the full slug, so this
+    converged lane never compares equal and a rename is re-issued on every dispatch and reply.
+    """
+    slug = "g" * 35
+    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
+    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    panes: list[dict[str, str]] = [
+        {"pane_id": "w9:p1", "tab_id": "w9:t1", "label": composed},
+        {"pane_id": "w9:p3", "tab_id": "w9:t1", "label": "worker-1"},
+    ]
+    agents: list[dict[str, object]] = [
+        {"pane_id": "w9:p1", "name": composed, "agent": "pi"},
+        {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi"},
+    ]
+    tabs = {"w9:t1": title}
+    assert plan(panes, agents, tabs, task_group=slug) == ([], [])
+    assert plan(panes, agents, tabs, task_group=slug) == ([], [])
 
 
 def test_no_task_group_leaves_the_tab_and_orchestrator_silent_but_heals_workers() -> None:
@@ -499,6 +685,51 @@ def test_reconcile_lane_dry_run_prints_the_plan_and_renames_nothing(
     assert printed == [[str(stub.herdr), "tab", "rename", "w9:t1", "harness"]]
     assert [call[1:] for call in issued] == [["tab", "rename", "w9:t1", "harness"]]
     assert renames(stub) == []
+
+
+def test_reconcile_lane_fits_a_35_char_task_group_with_no_stderr_noise(
+    stub: StubHarness, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The acceptance clause end to end: a 35-char group GETS a valid ≤32 name, silently.
+
+    Pin -> mutant: keep the length skip, and this sees the "left the orchestrator name alone"
+    line on stderr and no `agent rename` at all; fit but compare the tab against the full slug,
+    and a second pass over the corrected lane renames again.
+    """
+    slug = "g" * 35
+    fitted = slug[: herdr_label.ORCHESTRATOR_SLUG_BUDGET]
+    title = slug[: herdr_label.TAB_TITLE_BUDGET]
+    composed = f"{fitted}{herdr_label.ORCHESTRATOR_SUFFIX}"
+    state = {
+        **DEFAULT_STATE,
+        "tabs": [{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}],
+        "agents": [{"pane_id": "w9:p1", "agent": "pi", "agent_status": "working"}],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+            }
+        ],
+    }
+    stub.write_state(state)
+    issued = herdr_label.reconcile_lane(
+        str(stub.herdr), stub.base_env(), task_group=slug, marker="herdr-dispatch"
+    )
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert [call[1:] for call in issued] == [
+        ["tab", "rename", "w9:t1", title],
+        ["agent", "rename", "w9:p1", composed],
+    ]
+    assert herdr_label.AGENT_NAME.match(composed)
+    assert renames(stub) == [
+        ["tab", "rename", "w9:t1", title],
+        ["agent", "rename", "w9:p1", composed],
+    ]
 
 
 def test_reconcile_lane_keeps_going_when_one_rename_is_refused(

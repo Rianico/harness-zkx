@@ -288,6 +288,37 @@ def tab_rename_argv(herdr: str, tab_id: str, title: str) -> list[str]:
 ORCHESTRATOR_SUFFIX = "-orch"
 
 
+def _derive_agent_name_max() -> int:
+    """The grammar's length cap, read off `AGENT_NAME_PATTERN` itself (one char plus `{0,N}`).
+
+    Derived, not typed: a pattern change moves the cap with it, where a hard-coded 32 would
+    rot silently. The quantifier-less shape raises rather than guessing (#182 h1).
+    """
+    quantifier = re.search(r"\{0,(\d+)\}", AGENT_NAME_PATTERN)
+    if quantifier is None:
+        raise RuntimeError(f"cannot derive the agent-name length cap from {AGENT_NAME_PATTERN!r}")
+    return 1 + int(quantifier.group(1))
+
+
+AGENT_NAME_MAX = _derive_agent_name_max()
+
+# The slug budget the composed `<slug>-orch` leaves inside the cap (#182 h1).
+ORCHESTRATOR_SLUG_BUDGET = AGENT_NAME_MAX - len(ORCHESTRATOR_SUFFIX)
+# A tab title carries no suffix, so it gets the whole cap. Keeping one budget for both halves
+# would truncate a legal 28-32 char slug's title to 27 (#182 h1 review).
+TAB_TITLE_BUDGET = AGENT_NAME_MAX
+
+
+def fit_slug(slug: str, budget: int) -> str:
+    """Truncate a slug's prefix to `budget`; fixes length only, never the characters (#182 h1).
+
+    A short-enough slug comes back byte-identical, so every existing lane renders unchanged.
+    A slug whose characters the grammar forbids stays forbidden after truncation — the caller
+    still validates against `AGENT_NAME`.
+    """
+    return slug[:budget]
+
+
 def _one_line(text: str, limit: int = 160) -> str:
     """Collapse a message onto one line, so one skipped step prints exactly one line."""
     return " ".join(text.split())[:limit]
@@ -349,27 +380,39 @@ def reconciliation_argv(
        Matching the worker to THIS lane is a `tab_id` question, so a snapshot that answers no lane
        tab id cannot repair any worker: that skip prints a note too, rather than passing for the
        healthy lane's silence.
-    2. The lane's tab title differs from `<task_group>` -> `tab rename`.
+    2. The lane's tab title differs from the slug fitted to the name cap -> `tab rename`.
     3. The sending orchestrator pane hosts a live agent with no name -> `agent rename` to
-       `<task_group>-orch`. Case 1 skips that pane, so the orchestrator is named by its lane,
-       never by a stale label, and never renamed twice.
+       the slug fitted to the name cap minus `-orch`, plus `-orch`. Case 1 skips that pane, so
+       the orchestrator is named by its lane, never by a stale label, and never renamed twice.
 
     `task_group` None asks for neither case 2 nor case 3, so it is silent: the caller that
-    derived nothing says so itself (see `reconcile_lane`). A slug, or the slug with the
-    `-orch` suffix appended, that breaks `[a-z][a-z0-9_-]{0,31}` is SKIPPED with a note and
-    never reaches herdr. Notes carry no marker prefix: the caller owns its own stderr prefix.
+    derived nothing says so itself (see `reconcile_lane`). A slug longer than the grammar
+    allows is FITTED: `fit_slug` truncates the prefix to each half's own budget —
+    `TAB_TITLE_BUDGET` for the title, `ORCHESTRATOR_SLUG_BUDGET` for the name — so what
+    reaches herdr lands inside `[a-z][a-z0-9_-]{0,31}` and the rename is issued with no note
+    (#182 h1). A slug whose characters the grammar forbids stays invalid after truncation
+    and is SKIPPED with a note, never reaching herdr. Notes carry no marker prefix: the
+    caller owns its own stderr prefix.
 
     The tab half distinguishes two absences, and only one of them is evidence (#182 t5 2.5e). A
     `lane_tab_id` that is not a key of `tabs` means `tab list` never reported that tab at all, so
     there is no row to compare and the tab is left alone with a note; a row that IS reported with
-    an empty label is a title that positively differs from `<task_group>`, so it takes the rename
+    an empty label is a title that positively differs from the fitted slug, so it takes the rename
     and no note. Behaviour is unchanged here — this is the inventory of what each note means.
     """
     argv: list[list[str]] = []
     notes: list[str] = []
     pane_tabs = tab_id_by_pane(panes)
     names = agent_name_by_pane(agents)
-    composed = f"{task_group}{ORCHESTRATOR_SUFFIX}" if task_group else ""
+    # Fit the slug FIRST (#182 h1), per half: the tab title takes the whole cap, the composed
+    # name the cap minus its suffix, so a legal 28-32 char slug keeps its full title while an
+    # over-long one lands inside the grammar. `fit_slug` fixes length only; the character-class
+    # gate below stays exactly as strict.
+    tab_title = fit_slug(task_group, TAB_TITLE_BUDGET) if task_group else ""
+    name_slug = fit_slug(task_group, ORCHESTRATOR_SLUG_BUDGET) if task_group else ""
+    # len(name_slug) <= ORCHESTRATOR_SLUG_BUDGET by construction, so a grammatical `name_slug`
+    # composes a grammatical `composed`: the name half needs no second length check.
+    composed = f"{name_slug}{ORCHESTRATOR_SUFFIX}" if name_slug else ""
     orchestrator_regained = bool(
         orchestrator_pane_id
         and composed
@@ -412,9 +455,13 @@ def reconciliation_argv(
     if task_group is None:
         return argv, notes
 
-    if not AGENT_NAME.match(task_group):
-        # One ungrammatical slug poisons both halves — the tab title and the composed
-        # `<task_group>-orch` share it — so it is one skipped decision and one note, not two.
+    if not AGENT_NAME.match(tab_title):
+        # Truncate first, validate after (#182 h1): fitting repairs length, so an over-long
+        # slug no longer takes this return — only characters the grammar forbids can survive
+        # truncation. `tab_title` is the longer fitted value, so checking it covers everything
+        # the name half issues too. One ungrammatical slug still poisons both halves — the tab
+        # title and the composed `<slug>-orch` share it — so it is one skipped decision and one
+        # note, not two.
         notes.append(
             f"task group {task_group!r} is not a valid name (want {AGENT_NAME_PATTERN} "
             "(max 32 chars)); left the tab title and the orchestrator name alone"
@@ -424,16 +471,13 @@ def reconciliation_argv(
         notes.append("cannot anchor a tab id on the calling pane; left the tab title alone")
     elif lane_tab_id not in tabs:
         notes.append(f"tab {lane_tab_id!r} carries no title to compare; left it alone")
-    elif tabs[lane_tab_id] != task_group:
-        argv.append(tab_rename_argv(herdr, lane_tab_id, task_group))
+    elif tabs[lane_tab_id] != tab_title:
+        # Compare and rename against the same fitted value: a lane renamed to `tab_title` but
+        # compared to the full slug never converges, and this pass would re-issue the rename
+        # on every dispatch and reply (#182 h1).
+        argv.append(tab_rename_argv(herdr, lane_tab_id, tab_title))
 
-    if not AGENT_NAME.match(composed):
-        notes.append(
-            f"{composed!r} is not a valid agent name (want {AGENT_NAME_PATTERN} (max 32 chars), "
-            f"the slug plus the {len(ORCHESTRATOR_SUFFIX)}-char '{ORCHESTRATOR_SUFFIX}' "
-            "suffix); left the orchestrator name alone"
-        )
-    elif orchestrator_pane_id is None:
+    if orchestrator_pane_id is None:
         notes.append("cannot anchor a pane id for the sending orchestrator; left it alone")
     elif names.get(orchestrator_pane_id) is None and orchestrator_pane_id in names:
         # A live agent on that pane that dropped its name: the only state worth a rename.
