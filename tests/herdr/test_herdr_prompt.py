@@ -1819,12 +1819,17 @@ TRUST_SELECTOR_SCREEN = (
     " ↑/↓ navigate · Enter select · Esc back\n"
 )
 
-# The trust selector's option block with the question line scrolled off: the numbered
-# trust options alone are the dialog, so this pins the option-line pattern by itself.
+# The trust selector's option block with the question line scrolled off: the complete
+# adjacent pair ("1. Trust folder" immediately followed by "2. Don't trust and exit") is the
+# dialog even with no question and no cursor on screen.
 TRUST_OPTIONS_SCREEN = "…\n  ❯ 1. Trust folder\n    2. Don't trust and exit\n"
 
-# A tool-permission dialog: the "Do you want to allow …?" question form documented as the
-# prompt class in `references/agents/cline.md` and `references/agents/copilot.md`.
+# A live trust selector whose option rows scrolled away, leaving the question as the LAST
+# rendered line: a dialog is the final thing the pane drew, so this refuses too.
+TRUST_QUESTION_ONLY_SCREEN = "◇ Qoder CLI CN\n\n Do you trust the files in this folder?\n"
+
+# A tool-permission dialog: the question form AND the compact numbered Yes/No selector row
+# these dialogs render, together as the last block on screen.
 PERMISSION_DIALOG_SCREEN = (
     "⏺ Bash(git status)\nDo you want to allow Bash to run this command?\n❯ 1. Yes  2. No\n"
 )
@@ -1834,6 +1839,45 @@ CLEAN_IDLE_SCREEN = (
     "◎ main · ◎ h2-writer 191s\n"
     "*   Type your message or @path/to/file\n"
     " Model · 200K context · ~/repo\n"
+)
+
+# ── benign screens: agent PROSE that renders dialog-shaped text (#182 h2, P2-1) ─────────
+# A false positive here blocks a legitimate prompt, which is worse than the bug the gate
+# fixes. Each screen below is settled AND shows dialog-looking text, and each must DELIVER.
+# The four were reproduced against the shipped patterns: all four were refused.
+
+# The self-inflicted case in THIS repo: an agent that just reviewed
+# `references/agents/qodercli.md` prints the trust block it documents. The block is itself
+# contiguous question+options, so contiguity alone cannot save it — the pane's idle UI below
+# it is what proves the block is transcript, not a live dialog.
+QODERCLI_QUOTE_SCREEN = (
+    "◎ main · ◎ h2-reviewer 42s\n"
+    "The reference documents the selector verbatim:\n"
+    " Do you trust the files in this folder?\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+    "*   Type your message or @path/to/file\n"
+    " Model · 200K context · ~/repo\n"
+)
+
+# Prose that STARTS like the trust option row. Rejected as a row only because an option row
+# matches the WHOLE line: `is the first menu entry.` is part of the sentence, not a selector.
+PROSE_TRUST_OPTION_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\n"
+    "The selector has two rows:\n"
+    "1. Trust folder is the first menu entry.\n"
+)
+
+# Prose in the permission question's own form, with no selector row anywhere near it. The
+# shipped pattern needed only the literal prefix, so this alone was refused.
+PROSE_PERMISSION_QUESTION_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\nDo you want to allow network access?\n"
+)
+
+# The same question addressed to the agent itself. The shipped comment claimed the missing
+# subject ("allow me to") kept that pattern dialog-specific; the regex never checked it.
+PROSE_PERMISSION_SELF_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\nDo you want to allow me to rewrite the fixture?\n"
 )
 
 
@@ -1849,6 +1893,11 @@ def _screen_reads(stub: StubHarness) -> list[list[str]]:
             TRUST_SELECTOR_SCREEN, "Do you trust the files in this folder?", id="startup-modal"
         ),
         pytest.param(TRUST_OPTIONS_SCREEN, "1. Trust folder", id="trust-options"),
+        pytest.param(
+            TRUST_QUESTION_ONLY_SCREEN,
+            "Do you trust the files in this folder?",
+            id="trust-question-only",
+        ),
         pytest.param(
             PERMISSION_DIALOG_SCREEN,
             "Do you want to allow Bash to run this command?",
@@ -1892,6 +1941,223 @@ def test_modal_screen_with_settled_status_refuses_delivery(
     assert len(_screen_reads(stub)) == 1, "one confirm, no re-read after the refusal"
 
 
+@pytest.mark.parametrize(
+    "screen",
+    [
+        pytest.param(PROSE_TRUST_OPTION_SCREEN, id="prose-trust-option-row"),
+        pytest.param(PROSE_PERMISSION_QUESTION_SCREEN, id="prose-permission-question"),
+        pytest.param(PROSE_PERMISSION_SELF_SCREEN, id="prose-permission-self-addressed"),
+        pytest.param(QODERCLI_QUOTE_SCREEN, id="quoted-qodercli-trust-block"),
+    ],
+)
+def test_dialog_shaped_prose_delivers_rather_than_refusing_the_prompt(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    screen: str,
+) -> None:
+    """P2-1 (#182 h2): structure, not a literal, is what makes a screen modal.
+
+    Each screen shows dialog text inside an agent's own prose while reporting settled +
+    interactive_ready, and the shipped patterns refused every one of them. A refusal here
+    blocks a legitimate prompt, which is worse than the readiness lie the gate closes.
+
+    Mutants killed: a bare numbered-option or bare question pattern (the refusal then fires
+    and `EXIT_OK`/`prompts()` fail); a matcher that drops the whole-line row rule or the
+    screen-tail rule (the quoted block and the prose sentence then refuse too).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": screen,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK, capsys.readouterr().err
+    assert len(stub.prompts()) == 1
+    assert "refusing to inject" not in capsys.readouterr().err
+
+
+def test_qodercli_quote_in_a_transcript_delivers_because_the_footer_follows(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The tail rule specifically (#182 h2): the same block is a dialog at the tail, prose above it.
+
+    The quoted block is contiguous question+options, so no contiguity window can separate it
+    from a live selector. What separates them is that a live dialog is the LAST content the
+    pane rendered: here the agent's idle prompt line and model footer follow the block, so
+    the block is transcript. Mutant killed: let a block match anywhere in the snapshot — this
+    run then refuses, and `trust-options` above still passes.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": QODERCLI_QUOTE_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+
+
+def test_live_trust_block_still_refuses_with_only_a_hint_line_below(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The tail rule's other half: one selector-hint row may follow a live dialog.
+
+    `↑/↓ navigate · Enter select · Esc back` is part of the selector chrome, verbatim from
+    `references/agents/qodercli.md:49`, so it does not demote the block to transcript.
+    Mutant killed: treat ANY line below the block as disqualifying content — the shipped
+    `TRUST_SELECTOR_SCREEN` refusal then delivers and this pin plus `startup-modal` fail.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": TRUST_SELECTOR_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert "Do you trust the files in this folder?" in capsys.readouterr().err
+
+
+def test_one_screen_read_across_a_full_delivery(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The real invariant: ONE screen read per readiness DETERMINATION, whole delivery.
+
+    What is counted is the total `herdr agent read` traffic of a delivered prompt, so every
+    path that re-reads readiness is inside the pin: the pre-injection confirm in
+    `wait_for_ready`, the `herdr agent prompt` itself, then `--no-wait`'s post-injection
+    probe — `fetch_agent_revision` before the prompt, the up-to-50 `verify_prompt_accepted`
+    readiness re-probes, and the trailing revision read. The pinned `revision` never moves
+    and the status never leaves `idle`, so the handshake runs all 50 attempts and reports
+    "acceptance was not confirmed": the re-probe path demonstrably ran, and still exactly one
+    screen read was issued.
+
+    Mutant killed: move the screen read into `agent_readiness` (or into the post-injection
+    probe) — the delivery below then issues ~53 reads and the count fails. That mutant passes
+    the never-settles case, which is why this pins the total instead.
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {
+                "reviewer": {"agent_status": "idle", "interactive_ready": True, "revision": "r1"}
+            },
+            "agent_read_text": CLEAN_IDLE_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK, capsys.readouterr().err
+    assert len(stub.prompts()) == 1
+    assert "acceptance was not confirmed" in capsys.readouterr().err
+    assert len(slept) == 49, "the post-injection probe ran its full handshake"
+    assert len(_screen_reads(stub)) == 1
+
+
+def test_skip_screen_check_delivers_to_a_modal_screen_without_reading_it(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The escape hatch (#182 h2): a false-positive refusal must not be a dead end.
+
+    A modal screen plus `--skip-screen-check` delivers, no refusal fires, and the screen is
+    read ZERO times — the flag skips the confirm rather than re-running it and ignoring the
+    verdict. Mutants killed: make the flag a no-op (exit 2, no prompt); re-check the screen
+    after the skip (the read count then fails).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": TRUST_SELECTOR_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--skip-screen-check"],
+        env=stub.base_env(),
+    )
+    err = capsys.readouterr().err
+    assert code == herdr_cli.EXIT_OK, err
+    assert len(stub.prompts()) == 1
+    assert "refusing to inject" not in err
+    assert _screen_reads(stub) == []
+
+
+def test_modal_refusal_names_the_skip_screen_check_escape_hatch(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The operator reading the refusal has to be told how to get past it.
+
+    Mutant killed: drop the flag from the remedy sentence — a false positive then leaves the
+    operator with an instruction that cannot work (clear a dialog that is not there).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": TRUST_SELECTOR_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    err = capsys.readouterr().err
+    assert "--skip-screen-check" in err
+    assert "clear the dialog" in err
+
+
+def test_dry_run_reads_no_screen_even_on_a_modal_screen(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--dry-run` returns before the readiness gate, so it never consults the screen."""
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE, "agent_read_text": TRUST_SELECTOR_SCREEN})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert _screen_reads(stub) == []
+    assert stub.prompts() == []
+
+
 def test_clean_screen_still_delivers_with_exactly_one_screen_read(
     stub: StubHarness,
     tmp_path: Path,
@@ -1932,8 +2198,12 @@ def test_zero_screen_reads_while_the_target_never_settles(
     A pane held `working` for the full timeout times out with ZERO screen reads: the read
     rides only the moment a status probe claims ready.
 
-    Mutant killed: move the screen read into `agent_readiness` or the per-attempt loop —
-    this run then records ~50 reads and the empty assertion fails.
+    Mutant killed: move the screen read into the per-attempt loop — this run then records ~50
+    reads and the empty assertion fails. It does NOT kill a read moved into
+    `agent_readiness`'s READY branch: a target held `working` never takes that branch, so the
+    mutant records zero reads here and this case passes. `test_one_screen_read_across_a_full_
+    delivery` pins that branch, because a delivery does reach it and re-reaches it through the
+    post-injection probe.
     """
     slept, fake_sleep = _sleep_recorder()
     monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)

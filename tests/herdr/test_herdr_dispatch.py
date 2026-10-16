@@ -2227,10 +2227,12 @@ def test_dispatch_never_reads_the_screen_while_waiting(
 ) -> None:
     """The waiting path stays screen-free under dispatch too (SKILL.md: no `agent read` poll).
 
-    Mutant killed: move the screen read into `agent_readiness` or the per-attempt loop —
-    this run then records ~50 reads. `_sleep` is patched on the shared `herdr_prompt`
-    module, which the in-process dispatch body imports from `sys.modules`, so the 50
-    probes cost no real time.
+    Mutant killed: move the screen read into the per-attempt loop — this run then records ~50
+    reads. It does NOT kill a read inside `agent_readiness`'s READY branch: a target held
+    `working` never takes that branch, so that mutant records zero reads here; dispatch's
+    delivered case `test_dispatch_clean_screen_delivers_with_one_read` pins it. `_sleep` is
+    patched on the shared `herdr_prompt` module, which the in-process dispatch body imports
+    from `sys.modules`, so the 50 probes cost no real time.
     """
     monkeypatch.setattr(herdr_prompt, "_sleep", _no_settle)
     state = {**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}}
@@ -2239,3 +2241,50 @@ def test_dispatch_never_reads_the_screen_while_waiting(
     assert "did not settle for prompt delivery" in done.stderr
     assert stub.prompts() == []
     assert _dispatch_reads(stub) == []
+
+
+def test_dispatch_skip_screen_check_delivers_to_a_modal_screen(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The escape hatch on the dispatch entry point (`--skip-screen-check` is inherited).
+
+    Mutants killed: make the flag a no-op in dispatch's parser (exit 2, no prompt); declare
+    it on `herdr-prompt` only (argparse refuses the unknown flag here).
+    """
+    state = {**DEFAULT_STATE, "agent_read_text": DISPATCH_TRUST_SCREEN}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--skip-screen-check",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    assert "refusing to inject" not in done.stderr
+    assert _dispatch_reads(stub) == []
+
+
+def test_dispatch_delivers_past_a_quoted_dialog_in_the_callee_transcript(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """P2-1 through dispatch: prose that QUOTES the trust block is not a modal (#182 h2).
+
+    A callee summarising `references/agents/qodercli.md` prints the block, and the shipped
+    patterns refused that dispatch. Mutant killed: match the block anywhere in the snapshot —
+    the footer below the quote then stops being evidence and this dispatch exits 2.
+    """
+    screen = (
+        "◎ main · ◎ h2-reviewer 42s\n"
+        "The reference documents the selector verbatim:\n"
+        " Do you trust the files in this folder?\n"
+        "  ❯ 1. Trust folder\n"
+        "    2. Don't trust and exit\n"
+        "*   Type your message or @path/to/file\n"
+    )
+    state = {**DEFAULT_STATE, "agent_read_text": screen}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    assert len(_dispatch_reads(stub)) == 1

@@ -151,6 +151,14 @@ def build_parser() -> argparse.ArgumentParser:
         "no_caller_context",
         help=("send payload verbatim without the A2A envelope and reply contract (warns loudly)"),
     )
+    add_shared_argument(
+        parser,
+        "skip_screen_check",
+        help=(
+            "dispatch without confirming a settled readiness claim against the callee's "
+            "screen; use it only when the reported dialog is not on the pane"
+        ),
+    )
     _ = parser.add_argument(
         "--force",
         action="store_true",

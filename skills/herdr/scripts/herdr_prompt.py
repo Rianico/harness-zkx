@@ -217,6 +217,7 @@ class Options:
     json: bool = False
     dry_run: bool = False
     no_caller_context: bool = False
+    skip_screen_check: bool = False
     ticket_id: str | None = None
     task_id: str | None = None
     task_group: str | None = None
@@ -278,6 +279,14 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         "no_caller_context",
         help="send the payload verbatim without the A2A envelope and reply contract",
+    )
+    add_shared_argument(
+        parser,
+        "skip_screen_check",
+        help=(
+            "deliver without confirming a settled readiness claim against the screen; "
+            "use it only when the reported dialog is not on the pane (a false positive)"
+        ),
     )
     add_shared_argument(
         parser,
@@ -711,46 +720,127 @@ def _read_interactive_ready(herdr: str, target: str, env: Mapping[str, str]) -> 
 SCREEN_SOURCE = "visible"
 SCREEN_READ_LINES = 60
 
-# Blocking-dialog patterns. A false positive blocks a legitimate prompt, which is worse
-# than the bug being fixed, so each requires the question phrasing these dialogs
-# actually render — never a generic word like "yes/no".
-BLOCKING_DIALOG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (
-        # The folder-trust prompt rendered verbatim by the qodercli startup selector
-        # (`references/agents/qodercli.md` "Do you trust the files in this folder?");
-        # `agents/claude.md` and `agents/gemini.md` document the same workspace-trust
-        # prompt class for their kinds.
-        re.compile(r"(?im)^\s*do you trust (?:the files in )?this folder\?"),
-        "startup folder-trust prompt",
-    ),
-    (
-        # The trust selector's numbered options ("❯ 1. Trust folder / 2. Don't trust and
-        # exit", `references/agents/qodercli.md`): the option list only renders while the
-        # blocking selector is on screen. The `❯` cursor is optional: the unselected row
-        # matches too, so a scrolled-off question line cannot hide the dialog.
-        re.compile(r"(?im)^\s*(?:❯\s*)?\d+\.\s*(?:trust folder|don't trust and exit)\b"),
-        "startup folder-trust prompt",
-    ),
-    (
-        # Tool-permission dialogs. `agents/cline.md` documents directory read/write
-        # permission prompts and `agents/copilot.md` interactive confirmation before
-        # running suggested shell commands; both ask the human with the "Do you want to
-        # allow …?" question form. Agent prose addresses itself ("do you want me to"),
-        # so the missing subject keeps this dialog-specific.
-        re.compile(r"(?im)^\s*do you want to allow\b[^\n]{0,120}[?:]\s*$"),
-        "permission dialog",
-    ),
+TRUST_DIALOG_KIND = "startup folder-trust prompt"
+PERMISSION_DIALOG_KIND = "permission dialog"
+
+# Detection demands dialog STRUCTURE at the screen TAIL, never one literal anywhere in the
+# snapshot. A false positive blocks a legitimate prompt, which is worse than the readiness
+# lie the gate closes, and agent prose quotes these dialogs: an agent that just read
+# `references/agents/qodercli.md` prints the trust block it documents, and the shipped literal
+# patterns then refused that pane. Two structural facts separate a live dialog from a quote:
+#
+#   * an option row matches the WHOLE line, so prose that merely starts like one
+#     ("1. Trust folder is the first menu entry.") is not a row; and
+#   * a live dialog is the LAST content the pane rendered — nothing follows it but its own
+#     selector hint — while a quoted block sits in a transcript with the agent's idle prompt
+#     line or model footer below it. Contiguity alone cannot separate them, because the quoted
+#     block is itself contiguous question-plus-options; the tail is what does it.
+#
+# Wording: the trust question and both option rows are verbatim from
+# `references/agents/qodercli.md:45-49`, the only dialog this repository documents verbatim.
+# The permission class is STRUCTURE-BASED and NOT sourced from a verbatim transcript:
+# `references/agents/cline.md:11` and `references/agents/copilot.md:11` record only that those
+# kinds prompt for permission or confirmation, never the wording they use. So a permission
+# refusal requires the question line AND a numbered selector row in the same tail block —
+# never the question phrase alone. English-and-structure only: no language heuristic.
+SELECTOR_HINT_ROW = re.compile(r"[ \t]*[↑↓].*")
+
+# `references/agents/qodercli.md:45`.
+TRUST_QUESTION_ROW = re.compile(r"(?i)[ \t]*do you trust (?:the files in )?this folder\?[ \t]*")
+
+# `references/agents/qodercli.md:47-48`, whole line, cursor optional: the option list renders
+# only while the blocking selector is on screen, and the complete adjacent pair identifies the
+# dialog even when the question line has scrolled off the top.
+TRUST_OPTION_ROW = re.compile(
+    r"(?i)[ \t]*(?:❯[ \t]*)?([12])[.][ \t]+(?:trust folder|don'?t trust and exit)[ \t]*"
 )
 
+# A compact numbered selector row — `1. Yes`, or `❯ 1. Yes  2. No` on one line — where every
+# label is one word and the whole line is the row. A multi-word label fails, so a prose
+# sentence that opens with "1. " is never mistaken for a live option.
+SELECTOR_ROW = re.compile(r"(?i)[ \t]*(?:❯[ \t]*)?\d+[.][ \t]+\w+(?:[ \t]+\d+[.][ \t]+\w+)*[ \t]*")
 
-def _screen_modal_line(herdr: str, target: str, env: Mapping[str, str]) -> tuple[str, str] | None:
-    """Confirm one settled readiness claim against the live screen; return (kind, line) or None.
+# The question form reported for permission dialogs (form only, no quoted source — see above).
+PERMISSION_QUESTION_ROW = re.compile(r"(?i)[ \t]*do you want to allow\b.{0,120}\?[ \t]*")
+
+
+def _trust_row_option(line: str) -> str | None:
+    """Which trust-selector option a whole line is ("1" or "2"); None for anything else."""
+    match = TRUST_OPTION_ROW.fullmatch(line)
+    return match.group(1) if match else None
+
+
+def _is_dialog_line(line: str) -> bool:
+    """Whether one line is dialog content: a question row or an option row."""
+    return bool(
+        TRUST_QUESTION_ROW.fullmatch(line)
+        or PERMISSION_QUESTION_ROW.fullmatch(line)
+        or _trust_row_option(line)
+        or SELECTOR_ROW.fullmatch(line)
+    )
+
+
+def _quoted_dialog(block: Sequence[str]) -> str:
+    """The block's dialog lines in screen order, so the refusal quotes what it matched."""
+    lines = [line.strip() for line in block if _is_dialog_line(line)][:6]
+    return " | ".join(lines)
+
+
+def _screen_modal_block(snapshot: str) -> tuple[str, str] | None:
+    """Judge one pane snapshot; return (kind, quoted lines) only for a dialog at the TAIL.
+
+    Pure — one snapshot in, one verdict out — which is what keeps it callable exactly once per
+    readiness determination. The tail is the last non-blank line, after one selector-hint row
+    may be dropped; the block is the run of non-blank lines ending there. A block above that
+    run is transcript, so an empty screen, a footer, or any further output ends the tail and
+    delivers.
+    """
+    lines = snapshot.split("\n")
+    while lines and not lines[-1].strip():
+        del lines[-1]
+    if lines and SELECTOR_HINT_ROW.match(lines[-1]):
+        del lines[-1]
+        while lines and not lines[-1].strip():
+            del lines[-1]
+    if not lines:
+        return None
+    block_start = 1 + max(
+        (index for index, line in enumerate(lines) if not line.strip()), default=-1
+    )
+    block = lines[block_start:]
+    tail = block[-1]
+    if TRUST_QUESTION_ROW.fullmatch(tail):
+        # The question with no option row below it: still the last thing the pane rendered.
+        return (TRUST_DIALOG_KIND, _quoted_dialog(block))
+    options = [_trust_row_option(line) for line in block]
+    if options[-1] is not None:
+        scrolled_off_pair = any(
+            options[index] == "1" and options[index + 1] == "2" for index in range(len(block) - 1)
+        )
+        if any(TRUST_QUESTION_ROW.fullmatch(line) for line in block) or scrolled_off_pair:
+            return (TRUST_DIALOG_KIND, _quoted_dialog(block))
+    if SELECTOR_ROW.fullmatch(tail) and any(
+        PERMISSION_QUESTION_ROW.fullmatch(line) for line in block
+    ):
+        return (PERMISSION_DIALOG_KIND, _quoted_dialog(block))
+    return None
+
+
+def _screen_modal(
+    herdr: str, target: str, env: Mapping[str, str], *, skip_screen_check: bool
+) -> tuple[str, str] | None:
+    """Confirm one settled readiness claim against the live screen; return (kind, quote) or None.
 
     Called once per readiness determination — at the moment the status probe first claims
     ready — and never from `agent_readiness`, so the wait loop reads no screen. An
     unreadable screen (non-zero exit, empty output, a raised subprocess) is not evidence of
     a modal: one line goes to stderr and the status signal still decides.
+    `--skip-screen-check` skips the confirm entirely, on the operator's authority: a modal
+    screen then delivers and no refusal fires. The read still happens zero times when the
+    screen is never consulted, and never more than once when it is.
     """
+    if skip_screen_check:
+        return None
     argv = build_agent_read_argv(herdr, target, source=SCREEN_SOURCE, lines=SCREEN_READ_LINES)
     try:
         done = run_herdr(argv, env)
@@ -775,11 +865,7 @@ def _screen_modal_line(herdr: str, target: str, env: Mapping[str, str]) -> tuple
             file=sys.stderr,
         )
         return None
-    for pattern, kind in BLOCKING_DIALOG_PATTERNS:
-        match = pattern.search(done.stdout)
-        if match:
-            return (kind, match.group(0).strip())
-    return None
+    return _screen_modal_block(done.stdout)
 
 
 def wait_for_ready(
@@ -789,14 +875,16 @@ def wait_for_ready(
     *,
     timeout: float = READY_TIMEOUT_SECONDS,
     interval: float = READY_INTERVAL_SECONDS,
+    skip_screen_check: bool = False,
 ) -> str | None:
     """Block until the target settles, else fail reporting the observed status.
 
     The loop is attempt-counted (never wall-clocked) so a monkeypatched `_sleep`
     runs it instantly; the immediate first probe means a settled agent never sleeps.
     A settled claim is confirmed against the live screen exactly once, before delivery
-    (see `_screen_modal_line`): a blocking dialog on screen aborts the wait, and the
-    screen is never re-read and never polled while waiting.
+    (see `_screen_modal`): a blocking dialog on screen aborts the wait, and the
+    screen is never re-read and never polled while waiting. `skip_screen_check` (the
+    `--skip-screen-check` flag) drops that confirm on the operator's authority.
     The refusal names what the readiness read observed — never a hypothesized cause.
     """
     attempts = max(1, math.ceil(timeout / interval))
@@ -805,13 +893,14 @@ def wait_for_ready(
         ready, status, _ = agent_readiness(herdr, target, env)
         last_status = status
         if ready:
-            modal = _screen_modal_line(herdr, target, env)
+            modal = _screen_modal(herdr, target, env, skip_screen_check=skip_screen_check)
             if modal is not None:
-                kind, line = modal
+                kind, block = modal
                 raise UsageError(
                     f"target {target!r} reported status={status!r} but its screen shows a "
-                    f"{kind}: {line!r}; refusing to inject the prompt into the dialog — open "
-                    "the pane, clear the dialog, then retry"
+                    f"{kind}: {block!r}; refusing to inject the prompt into the dialog — "
+                    "clear the dialog and retry, or pass --skip-screen-check if there is "
+                    "no dialog"
                 )
             return status
         if attempt < attempts - 1:
@@ -941,7 +1030,7 @@ def prompt_one(
             print(format_delivery_summary(status, payload, body, source))
         return Dispatch(target)
 
-    _ = wait_for_ready(herdr, target, env)
+    _ = wait_for_ready(herdr, target, env, skip_screen_check=options.skip_screen_check)
 
     pre_revision: str | None = None
     if options.no_wait:

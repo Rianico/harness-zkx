@@ -580,6 +580,9 @@ SHARED_ARGUMENTS: Mapping[str, SharedArgument] = MappingProxyType(
         "no_caller_context": SharedArgument(
             ("--no-caller-context",), "no_caller_context", {"action": "store_true"}
         ),
+        "skip_screen_check": SharedArgument(
+            ("--skip-screen-check",), "skip_screen_check", {"action": "store_true"}
+        ),
         "yaml": SharedArgument(("--yaml",), "yaml", {"action": "store_true"}),
         "file": SharedArgument(("--file",), "file", {"metavar": "PATH"}),
         "label": SharedArgument(("--label",), "label", {"metavar": "LABEL"}),
