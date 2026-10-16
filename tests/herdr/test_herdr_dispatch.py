@@ -2269,11 +2269,13 @@ def test_dispatch_skip_screen_check_delivers_to_a_modal_screen(
 def test_dispatch_delivers_past_a_quoted_dialog_in_the_callee_transcript(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """P2-1 through dispatch: prose that QUOTES the trust block is not a modal (#182 h2).
+    """P2-1 through dispatch: prose that QUOTES the trust block is not a modal (#182 h2c).
 
     A callee summarising `references/agents/qodercli.md` prints the block, and the shipped
-    patterns refused that dispatch. Mutant killed: match the block anywhere in the snapshot —
-    the footer below the quote then stops being evidence and this dispatch exits 2.
+    patterns refused that dispatch. The screen's LAST line is the documented idle input row
+    `Type your message or @path/to/file` — that row, below the quoted block, is the veto that
+    makes this deliver. Mutant killed: drop the idle-input veto — the quote then refuses and
+    this dispatch exits 2.
     """
     screen = (
         "◎ main · ◎ h2-reviewer 42s\n"

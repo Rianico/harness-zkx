@@ -723,27 +723,34 @@ SCREEN_READ_LINES = 60
 TRUST_DIALOG_KIND = "startup folder-trust prompt"
 PERMISSION_DIALOG_KIND = "permission dialog"
 
-# Detection demands dialog STRUCTURE at the screen TAIL, never one literal anywhere in the
+# Detection demands dialog STRUCTURE inside one block, never one literal anywhere in the
 # snapshot. A false positive blocks a legitimate prompt, which is worse than the readiness
 # lie the gate closes, and agent prose quotes these dialogs: an agent that just read
-# `references/agents/qodercli.md` prints the trust block it documents, and the shipped literal
+# `references/agents/qodercli.md` prints the trust block it documents, and bare-literal
 # patterns then refused that pane. Two structural facts separate a live dialog from a quote:
 #
 #   * an option row matches the WHOLE line, so prose that merely starts like one
-#     ("1. Trust folder is the first menu entry.") is not a row; and
-#   * a live dialog is the LAST content the pane rendered — nothing follows it but its own
-#     selector hint — while a quoted block sits in a transcript with the agent's idle prompt
-#     line or model footer below it. Contiguity alone cannot separate them, because the quoted
-#     block is itself contiguous question-plus-options; the tail is what does it.
+#     ("1. Trust folder is the first menu entry.") is not a row, and a question pairs with
+#     its option rows only inside the same blank-line-separated block, so a transcript
+#     question and a later selector tail never combine; and
+#   * the discriminator is the pane's INPUT BOX, not the snapshot tail. A live modal
+#     replaces the input box — `references/agents/qodercli.md:44-50` records that the trust
+#     selector "loads nothing else" while it is up — so no idle prompt row exists below it.
+#     A dialog quoted in a transcript sits ABOVE the pane's idle input row: the same
+#     reference documents the idle main UI at :82-84 (`YOLO` badge, the
+#     `Type your message or @path/to/file` prompt, the `Model · <cwd>` footer). Only the
+#     documented idle input row (`IDLE_INPUT_ROW`) vetoes a match; trailing chrome rows
+#     (mode badge, footer, hint row, box border, `Esc to cancel`, spinner, status bar) are
+#     not evidence of an idle pane and are not enumerated — they are simply irrelevant once
+#     the input-row veto exists.
 #
 # Wording: the trust question and both option rows are verbatim from
 # `references/agents/qodercli.md:45-49`, the only dialog this repository documents verbatim.
 # The permission class is STRUCTURE-BASED and NOT sourced from a verbatim transcript:
 # `references/agents/cline.md:11` and `references/agents/copilot.md:11` record only that those
 # kinds prompt for permission or confirmation, never the wording they use. So a permission
-# refusal requires the question line AND a numbered selector row in the same tail block —
+# refusal requires the question row AND a numbered selector row in the same block —
 # never the question phrase alone. English-and-structure only: no language heuristic.
-SELECTOR_HINT_ROW = re.compile(r"[ \t]*[↑↓].*")
 
 # `references/agents/qodercli.md:45`.
 TRUST_QUESTION_ROW = re.compile(r"(?i)[ \t]*do you trust (?:the files in )?this folder\?[ \t]*")
@@ -755,13 +762,28 @@ TRUST_OPTION_ROW = re.compile(
     r"(?i)[ \t]*(?:❯[ \t]*)?([12])[.][ \t]+(?:trust folder|don'?t trust and exit)[ \t]*"
 )
 
-# A compact numbered selector row — `1. Yes`, or `❯ 1. Yes  2. No` on one line — where every
-# label is one word and the whole line is the row. A multi-word label fails, so a prose
-# sentence that opens with "1. " is never mistaken for a live option.
-SELECTOR_ROW = re.compile(r"(?i)[ \t]*(?:❯[ \t]*)?\d+[.][ \t]+\w+(?:[ \t]+\d+[.][ \t]+\w+)*[ \t]*")
+# A numbered option row — `❯ 1. Yes`, `2. No`, `❯ 1. Yes  2. No` on one line, or the
+# real-render long label `❯ 1. Yes, and don't ask again for rm commands` — where the WHOLE
+# line is the row: `❯? <n>. <label>`, one or more words, no line-ending punctuation. A
+# sentence that opens with "1. " keeps its closing period and is never a row.
+_SELECTOR_LABEL = r"[A-Za-z0-9][A-Za-z0-9,'-]*(?:[ \t]+[A-Za-z0-9][A-Za-z0-9,'-]*)*"
+SELECTOR_ROW = re.compile(
+    rf"(?i)[ \t]*(?:❯[ \t]*)?\d+[.][ \t]+{_SELECTOR_LABEL}(?:[ \t]+\d+[.][ \t]+{_SELECTOR_LABEL})*[ \t]*"
+)
 
-# The question form reported for permission dialogs (form only, no quoted source — see above).
-PERMISSION_QUESTION_ROW = re.compile(r"(?i)[ \t]*do you want to allow\b.{0,120}\?[ \t]*")
+# The question forms reported for permission dialogs — `do you want to allow …?` and
+# `do you want to proceed …?` (forms only, no quoted source — see above).
+PERMISSION_QUESTION_ROW = re.compile(
+    r"(?i)[ \t]*do you want to (?:allow|proceed)\b.{0,120}\?[ \t]*"
+)
+
+# The qodercli idle input row, verbatim from `references/agents/qodercli.md:82-84`, with any
+# leading cursor/glyph and spaces. The marker is evidenced for qodercli only: no other agent's
+# idle row is documented in this repo, so a dialog-shaped block with no idle row below it on
+# another agent's pane still refuses, and `--skip-screen-check` is that false positive's remedy.
+# The `Model · <cwd>` footer is deliberately NOT a veto marker: a live trust dialog with a
+# footer row below it shows no input box and must still refuse.
+IDLE_INPUT_ROW = re.compile(r"(?i)[^A-Za-z0-9]*Type your message or @path/to/file[^A-Za-z0-9]*")
 
 
 def _trust_row_option(line: str) -> str | None:
@@ -786,44 +808,70 @@ def _quoted_dialog(block: Sequence[str]) -> str:
     return " | ".join(lines)
 
 
+def _block_dialog_kind(block: Sequence[str]) -> str | None:
+    """Which dialog class one non-blank block shows, judged over the WHOLE block; else None.
+
+    (a) a trust question row; (b) trust option rows with the question present or the
+    adjacent `1`/`2` pair present (the pair covers options whose question scrolled off);
+    (c) a permission question row AND a numbered selector row in the same block — a bare
+    question is never a dialog. The dialog verdict is the LAST block that matches.
+    """
+    if any(TRUST_QUESTION_ROW.fullmatch(line) for line in block):
+        return TRUST_DIALOG_KIND
+    options = [_trust_row_option(line) for line in block]
+    if any(options[index] == "1" and options[index + 1] == "2" for index in range(len(block) - 1)):
+        return TRUST_DIALOG_KIND
+    if any(PERMISSION_QUESTION_ROW.fullmatch(line) for line in block) and any(
+        SELECTOR_ROW.fullmatch(line) for line in block
+    ):
+        return PERMISSION_DIALOG_KIND
+    return None
+
+
 def _screen_modal_block(snapshot: str) -> tuple[str, str] | None:
-    """Judge one pane snapshot; return (kind, quoted lines) only for a dialog at the TAIL.
+    """Judge one pane snapshot; return (kind, quoted lines) only for a LIVE modal.
 
     Pure — one snapshot in, one verdict out — which is what keeps it callable exactly once per
-    readiness determination. The tail is the last non-blank line, after one selector-hint row
-    may be dropped; the block is the run of non-blank lines ending there. A block above that
-    run is transcript, so an empty screen, a footer, or any further output ends the tail and
-    delivers.
+    readiness determination. The screen splits at blank lines into blocks (a block is a
+    maximal run of non-blank lines); that extent is what pairs a question with its option
+    rows, and pairing never spans the whole snapshot. Structural rules run over the WHOLE
+    block, not its tail (see `_block_dialog_kind`), and the verdict is the LAST matching
+    block.
+
+    The discriminator against a quote is the pane's input box: if a row matching
+    IDLE_INPUT_ROW appears strictly BELOW the last dialog line of the matched block — any
+    later line, including across blank lines — the input box is present, so the block is
+    transcript and the prompt delivers. Everything else below the block (mode badge,
+    `Model · …` footer, hint row, box border, `Esc to cancel`, spinner, status bar) is
+    chrome, not an input box, and never vetoes. A dialog-shaped block with no documented
+    idle row below it still refuses, even a quote: the veto marker is evidenced for
+    qodercli only, and `--skip-screen-check` is that false positive's remedy.
     """
     lines = snapshot.split("\n")
-    while lines and not lines[-1].strip():
-        del lines[-1]
-    if lines and SELECTOR_HINT_ROW.match(lines[-1]):
-        del lines[-1]
-        while lines and not lines[-1].strip():
-            del lines[-1]
-    if not lines:
-        return None
-    block_start = 1 + max(
-        (index for index, line in enumerate(lines) if not line.strip()), default=-1
-    )
-    block = lines[block_start:]
-    tail = block[-1]
-    if TRUST_QUESTION_ROW.fullmatch(tail):
-        # The question with no option row below it: still the last thing the pane rendered.
-        return (TRUST_DIALOG_KIND, _quoted_dialog(block))
-    options = [_trust_row_option(line) for line in block]
-    if options[-1] is not None:
-        scrolled_off_pair = any(
-            options[index] == "1" and options[index + 1] == "2" for index in range(len(block) - 1)
+    verdict: tuple[str, Sequence[str], int] | None = None
+    index = 0
+    while index < len(lines):
+        if not lines[index].strip():
+            index += 1
+            continue
+        start = index
+        while index < len(lines) and lines[index].strip():
+            index += 1
+        block = lines[start:index]
+        kind = _block_dialog_kind(block)
+        if kind is None:
+            continue
+        last_dialog = start + max(
+            offset for offset, line in enumerate(block) if _is_dialog_line(line)
         )
-        if any(TRUST_QUESTION_ROW.fullmatch(line) for line in block) or scrolled_off_pair:
-            return (TRUST_DIALOG_KIND, _quoted_dialog(block))
-    if SELECTOR_ROW.fullmatch(tail) and any(
-        PERMISSION_QUESTION_ROW.fullmatch(line) for line in block
-    ):
-        return (PERMISSION_DIALOG_KIND, _quoted_dialog(block))
-    return None
+        verdict = (kind, block, last_dialog)
+    if verdict is None:
+        return None
+    kind, block, last_dialog = verdict
+    for line in lines[last_dialog + 1 :]:
+        if IDLE_INPUT_ROW.fullmatch(line):
+            return None
+    return (kind, _quoted_dialog(block))
 
 
 def _screen_modal(

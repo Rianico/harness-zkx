@@ -1880,6 +1880,139 @@ PROSE_PERMISSION_SELF_SCREEN = (
     "◎ main · ◎ h2-writer 191s\nDo you want to allow me to rewrite the fixture?\n"
 )
 
+# ── h2c: the input box is the discriminator — the P1 table, judged as a pure function ──────
+# `_screen_modal_block` is pure and takes one snapshot, so the reviewer's seven live-dialog
+# panes are pinned against it directly, not stub-plumbed one case at a time. All seven
+# returned None (the prompt delivered into the dialog) on f6f1d978: the shipped tail rule
+# was defeated by ANY trailing chrome row.
+
+H2C_TRUST_ROWS = (
+    " Do you trust the files in this folder?\n"
+    " /private/tmp/example-worktree\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+)
+H2C_PERMISSION_ROWS = (
+    "⭯ Bash(rm -rf build)\nDo you want to allow Bash to run this command?\n  ❯ 1. Yes  2. No\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("screen", "kind", "quoted"),
+    [
+        pytest.param(
+            H2C_TRUST_ROWS + " ⏵⏵ bypass permissions on\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "Do you trust the files in this folder?",
+            id="trust-plus-mode-badge",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + "\n◎ main · ◎ w11:p1Q 191s\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "1. Trust folder",
+            id="trust-blank-statusbar",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + " Model · 200K context · ~/repo\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "Do you trust the files in this folder?",
+            id="trust-plus-footer",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + " └────╯\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "1. Trust folder",
+            id="trust-plus-box-border",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + " Esc to cancel\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "Do you trust the files in this folder?",
+            id="trust-plus-esc-cancel",
+        ),
+        pytest.param(
+            H2C_PERMISSION_ROWS + " ✻ Waiting…\n",
+            herdr_prompt.PERMISSION_DIALOG_KIND,
+            "Do you want to allow Bash to run this command?",
+            id="permission-plus-spinner",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS
+            + " ↑/↓ navigate · Enter select · Esc back\n Model · 200K context · ~/repo\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "2. Don't trust and exit",
+            id="trust-hint-and-footer",
+        ),
+    ],
+)
+def test_trailing_chrome_below_a_live_dialog_still_refuses(
+    screen: str, kind: str, quoted: str
+) -> None:
+    """P1: trailing chrome is not an input box and never vetoes the dialog verdict.
+
+    A live modal replaces the pane's input box (`references/agents/qodercli.md:44-50`: the
+    selector "loads nothing else"), so a mode badge, blank line plus status bar, model
+    footer, box border, `Esc to cancel`, spinner, or hint row below the dialog says nothing
+    about an idle pane: every pane here must refuse. Mutants killed: the shipped tail rule
+    (all seven delivered); counting the ` Model · …` footer as the idle-input veto marker
+    (`trust-plus-footer` and `trust-hint-and-footer` deliver).
+    """
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, f"{screen!r} shows a live dialog and must refuse"
+    observed_kind, quote = verdict
+    assert observed_kind == kind
+    assert quoted in quote
+
+
+def test_dialog_with_the_idle_input_row_above_it_still_refuses_because_the_veto_is_below() -> None:
+    """The marker's POSITION is load-bearing: only a row BELOW the block can veto it.
+
+    A live modal replaces the input box, so an idle prompt row rendered ABOVE the dialog
+    (transcript scrolled above a fresh modal) is not evidence of an idle pane: this pane
+    must refuse. Mutant killed: let the veto fire on a marker anywhere in the snapshot —
+    this pane then delivers, while every benign transcript case above still passes.
+    """
+    screen = "*   Type your message or @path/to/file\n\n" + H2C_TRUST_ROWS
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_real_permission_render_refuses_with_a_multiline_label_and_a_proceed_question() -> None:
+    """P2-1: real renders ask `Do you want to proceed?` with `1. Yes, and don't ask again`
+    labels; the shipped one-word selector row and literal `allow` question could never fire.
+    Widening keeps the WHOLE-LINE rule: a label is words, commas, apostrophes and dashes,
+    never a sentence ending in `.`. Mutants killed: the shipped one-word SELECTOR_ROW or the
+    `allow`-only PERMISSION_QUESTION_ROW (this pane then delivers).
+    """
+    screen = (
+        "⭯ Bash(rm -rf build)\n"
+        "Do you want to proceed?\n"
+        "  ❯ 1. Yes, and don't ask again for rm commands\n"
+        "    2. No\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None
+    kind, quote = verdict
+    assert kind == herdr_prompt.PERMISSION_DIALOG_KIND
+    assert "Do you want to proceed?" in quote
+    assert "1. Yes, and don't ask again for rm commands" in quote
+
+
+def test_blank_line_separation_keeps_a_transcript_question_from_pairing_with_a_later_selector() -> (
+    None
+):
+    """P3: the block extent is the non-blank run — pairing must NOT span blank lines.
+
+    A permission question in a transcript block, a blank line, then `❯ 1. Yes` as the next
+    block's tail: no single block holds question and selector together, so the pane delivers.
+    Mutant killed: pair question and options across the whole snapshot (ignore the
+    blank-line blocks) — that mutant refuses here while `trust-options`, `permission` and
+    every P1 refusal still pass, so nothing else pinned the block extent.
+    """
+    screen = "Do you want to allow Bash to run this command?\n\n  ❯ 1. Yes\n"
+    assert herdr_prompt._screen_modal_block(screen) is None
+
 
 def _screen_reads(stub: StubHarness) -> list[list[str]]:
     """Every `herdr agent read` the stub recorded: the gate's observable screen reads."""
@@ -1988,13 +2121,15 @@ def test_qodercli_quote_in_a_transcript_delivers_because_the_footer_follows(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The tail rule specifically (#182 h2): the same block is a dialog at the tail, prose above it.
+    """The input-row veto specifically (#182 h2c): the same block is a dialog only with no idle row below it.
 
     The quoted block is contiguous question+options, so no contiguity window can separate it
-    from a live selector. What separates them is that a live dialog is the LAST content the
-    pane rendered: here the agent's idle prompt line and model footer follow the block, so
-    the block is transcript. Mutant killed: let a block match anywhere in the snapshot — this
-    run then refuses, and `trust-options` above still passes.
+    from a live selector. What separates them is the pane's input box: a live modal replaces
+    it, while here the agent's documented idle row `Type your message or @path/to/file`
+    (references/agents/qodercli.md:82-84) follows the block, so the block is transcript and
+    the veto delivers. Mutant killed: drop the idle-input veto entirely — this run then
+    refuses; `test_dialog_with_the_idle_input_row_above_it_still_refuses_because_the_veto_is_below`
+    pins the veto's direction.
     """
     monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
     stub.write_state(
