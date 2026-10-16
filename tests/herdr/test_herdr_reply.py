@@ -976,18 +976,22 @@ def test_the_flag_path_markers_are_pinned_at_the_resolver(
     assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warning, warning
 
 
-def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
+def test_a_missing_lane_anchor_falls_back_records_and_warns_once(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """#246 D1.5 F1/F2: with no lane anchor the warning names the real outcome, and no record.
+    """#182 h3 rewrite of the #246 D1.5 F1 pin: no anchor is no longer unreadable — it falls back.
 
-    `resolve_base_dir` raises `LaneAnchorError` before the store is read or written, so the
-    run records nothing and the delivered prompt carries the `NOT RECORDED` pointer. The
-    warning used to end with "; recording the reply unlinked" anyway — one run, two
-    contradictory statements about what happened. The record claim is caller-side now.
+    Before h3 `resolve_base_dir` raised `LaneAnchorError` here, the run recorded nothing,
+    and the delivered pointer said `NOT RECORDED`; the pin was that the warning never
+    claimed a record the resolver never saw written. Now an unanchored pane resolves the
+    user-level store (`HOME` pinned to `tmp_path` by `base_env()`), the store takes the
+    record, and the record claim is the truth: the linkage warning names the nothing-to-link
+    severity and the pointer cites the recorded id. The resolver-level pins that refuse a
+    record claim when nothing was written stay in
+    `test_the_flag_path_markers_are_pinned_at_the_resolver` and its neighbours above.
 
-    Mutant killed: append the recording clause inside `_unlinked` again and this pin fails on
-    the warning claiming a record the pointer delivered in the same run says was not written.
+    Mutant killed: remove the fallback from `resolve_base_dir` and the run is back to the
+    abort-plus-`NOT RECORDED` shape this test no longer accepts.
     """
     nongit = tmp_path / "nongit"
     nongit.mkdir()
@@ -999,17 +1003,20 @@ def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
+    assert done.stderr.count("user-level lane store") == 1, done.stderr
     warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
     assert len(warnings) == 1, done.stderr
-    assert "could not be read" in warnings[0], warnings[0]
-    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warnings[0], warnings[0]
-    assert herdr_reply.RECORDED_CLAUSE not in warnings[0], warnings[0]
-    assert warnings[0].endswith(herdr_reply.NOT_RECORDED_CLAUSE), warnings[0]
-    assert len([line for line in done.stderr.splitlines() if "could not be read" in line]) == 1
+    assert herdr_reply.UNLINKED_NOTHING_MARKER in warnings[0], warnings[0]
 
     (call,) = stub.prompts()
-    assert "Payload: NOT RECORDED" in call[4], call[4]
-    assert not (nongit / ".lane").exists(), "no store was written: the anchor never resolved"
+    assert "Payload: NOT RECORDED" not in call[4], call[4]
+    fallback_store = tmp_path / ".herdr" / "lane"
+    assert list((fallback_store / ".lane" / "replies").glob("*.yaml")), (
+        "the fallback store must hold the reply record"
+    )
+    assert not (nongit / ".lane").exists(), (
+        "the fallback store is home-derived, not cwd-derived (#229)"
+    )
 
 
 def test_a_flagless_reply_with_one_open_task_is_unlinked_and_mutates_nothing(
@@ -1707,12 +1714,18 @@ def test_reply_releases_lease_for_current_agent(stub: StubHarness, tmp_path: Pat
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
-def test_reply_is_delivered_when_no_lease_store_resolves(stub: StubHarness, tmp_path: Path) -> None:
-    """B1: delivery is not a function of store resolution (#229).
+def test_reply_is_delivered_and_recorded_when_no_lane_anchor_resolves(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """B1 (#229), restated for #182 h3: delivery is not a function of store resolution.
 
-    A callee in a scratch directory no anchor covers still gets its completion through —
-    exit 0 and one prompt — and every lease step it could not run says so on stderr
-    (correlation, trajectory note, release) instead of aborting the reply or vanishing.
+    A callee in a scratch directory no repo anchor covers still gets its completion through
+    — exit 0 and one prompt — and every lease step on the fallback store is a no-op lookup,
+    not a skip: before h3 each unresolvable step printed one "… skipped: no lane state
+    anchor" stderr line (three per run); now the run resolves the user-level store (HOME
+    pinned to `tmp_path` by `base_env()`), prints exactly one fallback advisory, and records
+    the reply. A run whose store genuinely cannot resolve still prints the skip lines —
+    pinned by injecting the raise at the seam in `test_herdr_lease_store.py`.
     """
     scratch = tmp_path / "no-repo"
     scratch.mkdir()
@@ -1724,16 +1737,19 @@ def test_reply_is_delivered_when_no_lease_store_resolves(stub: StubHarness, tmp_
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert len(stub.prompts()) == 1
     assert "replied to orchestrator" in done.stdout
-    for step in ("lease correlation", "trajectory note", "lease release"):
-        assert f"{step} skipped" in done.stderr
-    assert done.stderr.count("no lane state anchor") == 3
+    assert "skipped" not in done.stderr, done.stderr
+    assert done.stderr.count("no lane state anchor") == 0
+    assert done.stderr.count("user-level lane store") == 1, done.stderr
 
 
-def test_reply_without_a_resolvable_store_drops_envelope_metadata_only(
+def test_reply_from_an_unanchored_pane_drops_envelope_metadata_only(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """F2: a skipped correlation loses `metadata.ticket_id`/`in_reply_to`, never the reply.
+    """F2, restated for #182 h3: a correlation that finds no lease loses
+    `metadata.ticket_id`/`in_reply_to`, never the reply.
 
+    The store now resolves — to the user-level fallback — so correlation RUNS and simply
+    finds nothing there: the scratch pane's lease lives in no store this call can name.
     Correlation is by pane/target (`agent prompt <target> <payload>`), so the caller still
     matches the reply to its outstanding request; only the envelope enrichment degrades.
     """
@@ -2591,10 +2607,17 @@ def test_reply_delivers_body_only_when_the_store_write_fails(
     assert "reply record skipped" in done.stderr
 
 
-def test_reply_delivers_body_only_when_no_anchor_resolves(
+def test_reply_records_to_the_user_level_store_when_no_anchor_resolves(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """Requirement 5, second setup: no `HERDR_LANE_DIR` and no git dir under the cwd."""
+    """Requirement 5, second setup, restated for #182 h3: no `HERDR_LANE_DIR`, no git dir.
+
+    This used to be the unresolvable-store setup; the fallback store (HOME pinned to
+    `tmp_path` by `base_env()`) now resolves there, so the reply is recorded, body intact,
+    and the pointer cites the record instead of `NOT RECORDED`. The genuine write-failure
+    delivery stays pinned above, where `HERDR_LANE_DIR` names a file and the record cannot
+    be written.
+    """
     scratch = tmp_path / "no-repo"
     scratch.mkdir()
     body = "COMPLETED\n\n## Evidence\n- ran the gate"
@@ -2605,7 +2628,10 @@ def test_reply_delivers_body_only_when_no_anchor_resolves(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(body)
-    assert "Payload: NOT RECORDED" in call[4]
+    assert "Payload: NOT RECORDED" not in call[4], call[4]
+    assert list((tmp_path / ".herdr" / "lane" / ".lane" / "replies").glob("*.yaml")), (
+        "the ad-hoc pane's reply belongs in the user-level store"
+    )
 
 
 # ── prompt text is never provenance (#231) ───────────────────────────────────────────

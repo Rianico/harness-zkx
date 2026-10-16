@@ -19,7 +19,8 @@ no state reads as no state: never as a valid one.
 
 The store base is resolved once per lane: an explicit `base_dir`, else `HERDR_LANE_DIR`,
 else the repository root that the git common directory sits in — resolved, so reads, writes,
-and records agree on one spelling. Store *identity* is still decided physically
+and records agree on one spelling; with none of those anchors it falls back to the one
+deterministic user-level store `fallback_lane_base()` names, with a single stderr advisory. Store *identity* is still decided physically
 (`os.path.samefile`), because resolving collapses symlinks but not case: on a case-insensitive
 volume two spellings are one file and two strings (#229). `PWD` and the process cwd are never
 anchors: they differ
@@ -64,7 +65,7 @@ from typing import Any
 
 import yaml
 from herdr_cli import UsageError, add_shared_argument, guard
-from herdr_worktree import resolve_lane_base_dir
+from herdr_worktree import LaneAnchorError, resolve_lane_base_dir
 
 # ── the task-status vocabulary (ADR-0020, #182 t3 A/B) ─────────────────────────────
 # A task record's `status`, and every trajectory event's `from_status`/`to_status`, name one
@@ -176,6 +177,47 @@ def _one_line(text: str, limit: int = 160) -> str:
     return " ".join(text.split())[:limit]
 
 
+# The one-time stderr advisory for the user-level fallback store (#182 a2a h3). Module-level
+# so it is shown at most once per process, not per resolution, and so tests can reset it.
+_fallback_advisory_shown = False
+
+
+def fallback_lane_base(env: Mapping[str, str] | None = None) -> Path:
+    """The user-level lane store: the deterministic last-layer base, computed without resolving.
+
+    `Path.home() / ".herdr" / "lane"`, resolved. Nothing else is consulted — never `PWD`,
+    never the process cwd, never `os.getcwd()` (#229) — so every pane that reaches this
+    layer, from any working directory, names one and the same path.
+
+    `Path.home()` follows `HOME` when it is set and falls back to the passwd entry otherwise;
+    when `env` carries a `HOME`, that value is the one honored here, so a test may pin `HOME`
+    to a tmp directory to keep the fallback inside its own sandbox. The guard in
+    `tests/herdr/conftest.py` compares against this exact function: a resolution that lands
+    on the fallback as named by the call-time environment, outside the test's own sandbox,
+    is refused instead of writing into the operator's real user-level store.
+
+    The directory is never created here — resolution and reads are side-effect-free; only
+    the first write (which already creates its parents) materializes the store.
+    """
+    env_map = os.environ if env is None else env
+    home = env_map.get("HOME")
+    base = Path(home) if home else Path.home()
+    return (base / ".herdr" / "lane").resolve()
+
+
+def _advise_fallback_lane_store(base: Path) -> None:
+    """One stderr line the first time this process resolves the fallback store (#182 h3)."""
+    global _fallback_advisory_shown
+    if _fallback_advisory_shown:
+        return
+    _fallback_advisory_shown = True
+    print(
+        f"herdr-lease: no repo lane anchor: using the user-level lane store {base}; "
+        "repo lanes and ad-hoc panes now write different stores",
+        file=sys.stderr,
+    )
+
+
 def resolve_base_dir(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
@@ -189,15 +231,29 @@ def resolve_base_dir(
     two such paths is decided physically at the comparison site (`os.path.samefile`), since
     resolution alone cannot collapse a case-variant spelling (#229).
 
-    `PWD` and the process cwd are never consulted: a dispatcher in one working directory
-    and a callee in another resolved different stores through them, so a lease written by
-    one was released — or not — by the other (#229). With neither anchor this raises
-    `herdr_worktree.LaneAnchorError` instead of guessing.
+    With neither lane anchor — an ad-hoc pane outside any git worktree with
+    `HERDR_LANE_DIR` unset — this falls back to `fallback_lane_base()`: the user-level
+    store, one deterministic absolute path derived from the user's home alone. It is
+    identical from every working directory because `PWD` and the process cwd are never
+    consulted — a fallback derived from cwd would re-open #229 exactly (a dispatcher in one
+    working directory and a callee in another resolving different stores) — and a cwd that
+    happens to sit inside a repository never reaches this layer at all, because the git
+    anchor above it wins. Taking this branch prints one stderr advisory naming the resolved
+    path, at most once per process, so a split between repo lanes and ad-hoc panes is never
+    silent; the directory itself is created only by the first write, never by resolving.
+    A caller that needs the refuse-instead-of-guessing contract — where no-anchor is a hard
+    error, not a degraded store — uses `herdr_worktree.resolve_lane_base_dir`, which still
+    raises `herdr_worktree.LaneAnchorError` with no anchor.
     """
     if base_dir is not None:
         return Path(base_dir).resolve()
     env_map = os.environ if env is None else env
-    return resolve_lane_base_dir(env_map)
+    try:
+        return resolve_lane_base_dir(env_map)
+    except LaneAnchorError:
+        base = fallback_lane_base(env_map)
+        _advise_fallback_lane_store(base)
+        return base
 
 
 def resolve_tasks_file(

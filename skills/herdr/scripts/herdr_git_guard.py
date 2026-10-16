@@ -15,8 +15,8 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import herdr_lease
 from herdr_cli import UsageError
-from herdr_lease import resolve_base_dir
 
 __all__ = [
     "SHA_SHAPED_BACKTICKED_RE",
@@ -159,7 +159,7 @@ def lane_git_dir(env: Mapping[str, str]) -> Path | None:
     anchor leaves this None, and the guard then falls back to where the helper itself was invoked.
     """
     try:
-        return resolve_base_dir(env=env)
+        return herdr_lease.resolve_base_dir(env=env)
     except Exception:
         return None
 

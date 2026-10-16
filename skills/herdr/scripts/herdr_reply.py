@@ -94,6 +94,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import herdr_lease
+
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_bootstrap import (
     DEFAULT_SETTLE_SECONDS,
@@ -227,7 +229,6 @@ from herdr_lease import (
     list_tasks,
     record_event,
     release_lease,
-    resolve_base_dir,
     save_verified_reply,
     state_is_readable,
     status_of,
@@ -1134,7 +1135,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                         f"--auto-start kind {kind!r} names no invariant flag in kinds.yaml; "
                         "refusing to revive a caller that would hold no lane contract"
                     )
-                invariant_file = lane_invariant_path(str(resolve_base_dir(env=env)), start_name)
+                invariant_file = lane_invariant_path(
+                    str(herdr_lease.resolve_base_dir(env=env)), start_name
+                )
                 if not options.dry_run:
                     try:
                         write_role_invariant(invariant_file, snippet)

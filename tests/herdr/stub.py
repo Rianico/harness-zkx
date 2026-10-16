@@ -319,11 +319,17 @@ class StubHarness:
         store with `PWD` now seat it with the explicit anchor. `PWD` stays for helpers
         that resolve a *working directory* (e.g. `herdr-pane --cwd`), which is a
         different question from where lane state lives.
+
+        `HOME` is pinned to `tmp_path` because since #182 h3 an unanchored run falls back
+        to a user-level lane store derived from the home directory: a run that loses
+        `HERDR_LANE_DIR` (tests pass `HERDR_LANE_DIR: None` to exercise exactly that) must
+        land inside this test's sandbox, never in the operator's real store.
         """
         return {
             "PATH": f"{self.bin_dir}:{os.environ.get('PATH', '')}",
             "HERDR_ENV": "1",
             "HERDR_LANE_DIR": str(self.tmp_path),
+            "HOME": str(self.tmp_path),
             "PWD": str(self.tmp_path),
             "STUB_HERDR_LOG": str(self.log_path),
             "STUB_HERDR_STATE": str(self.state_path),

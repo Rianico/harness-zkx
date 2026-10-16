@@ -114,12 +114,21 @@ def test_release_from_another_working_directory_lands_in_the_shared_store(
     assert second.returncode == herdr_cli.EXIT_OK, second.stderr
 
 
-# ── a missing anchor aborts loudly and writes nothing ────────────────────────────────
+# ── a missing anchor degrades gracefully to the user-level store ─────────────────────
 
 
-def test_dispatch_without_any_anchor_aborts_and_writes_no_store(
+def test_dispatch_without_any_anchor_falls_back_to_the_user_level_store(
     lane: Callable[[Path], StubHarness], tmp_path: Path
 ) -> None:
+    """#182 h3: an ad-hoc pane with no anchor records, it does not abort.
+
+    Before h3 this aborted with `LaneAnchorError` ("no lane state anchor") and wrote
+    nothing. Now `resolve_base_dir` falls back to the deterministic user-level store —
+    home-derived, and home is pinned to `tmp_path` by `base_env()`, so the write lands in
+    this test's sandbox — with one stderr advisory. The abort contract still belongs to
+    the primitive `herdr_worktree.resolve_lane_base_dir`, pinned in `test_herdr_lease.py`
+    and in the no-anchor probe of `test_herdr_store_guard.py`.
+    """
     dispatch = lane(DISPATCH)
     bare = tmp_path / "no-repo"
     bare.mkdir()
@@ -134,13 +143,13 @@ def test_dispatch_without_any_anchor_aborts_and_writes_no_store(
         cwd=bare,
     )
 
-    assert done.returncode == herdr_cli.EXIT_USAGE
-    assert "no lane state anchor" in done.stderr
-    assert LANE_DIR_ENV in done.stderr
-    assert "git common dir" in done.stderr
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(dispatch.prompts()) == 1
+    fallback = tmp_path / ".herdr" / "lane"
+    assert (fallback / STORE).is_file(), "the fallback store must hold the lease: " + done.stderr
+    assert done.stderr.count("user-level lane store") == 1, done.stderr
     assert not (bare / ".lane").exists()
     assert not (bare / ".herdr-lease.json").exists()
-    assert dispatch.prompts() == []
 
 
 # ── provisioning exports the anchor into the pane it creates ─────────────────────────
