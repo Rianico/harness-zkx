@@ -22,6 +22,10 @@ TIMESTAMP_RE = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
 
 STAMP = "2026-01-02T03:04:05.678Z"
 
+# The `id` a render with no task emits: `unlinked-` plus `STAMP` without its `-`/`:` separators.
+# Hard-coded rather than derived so a renderer that rewrites the stamp differently stays caught.
+UNLINKED_ID = "unlinked-20260102T030405678Z"
+
 # Captured before the fixture below replaces the module attribute, so the grammar test still
 # checks the real clock and not its own patch.
 REAL_UTC_STAMP = herdr_envelope.utc_stamp
@@ -113,7 +117,7 @@ def test_render_envelope_is_a_fenced_block_of_the_four_top_level_keys() -> None:
     rendered = herdr_envelope.render_envelope(sender(kind="pi"), receiver="impl-1")
     assert rendered.splitlines() == [
         "---",
-        "id: ''",
+        f"id: {UNLINKED_ID}",
         "context_id: ''",
         "status:",
         "  state: TASK_STATE_WORKING",
@@ -206,6 +210,89 @@ def test_render_envelope_recovery_metadata_appears_only_when_requested() -> None
 def test_render_envelope_state_defaults_to_working_and_takes_what_is_given() -> None:
     rendered = herdr_envelope.render_envelope(sender(), state=herdr_envelope.STATE_COMPLETED)
     assert frontmatter(rendered)["status"]["state"] == "TASK_STATE_COMPLETED"
+
+
+# ── render_envelope: `Task.id` is required, so it is never rendered empty (#182 h1) ────────────
+
+
+@pytest.mark.parametrize("task_id", [None, ""])
+def test_an_unlinked_render_replaces_the_empty_id_with_a_generated_one(
+    task_id: str | None,
+) -> None:
+    """A2A requires `Task.id`, so no falsy task id may reach the wire as `''`.
+
+    Pin -> mutant: restore `task_id or ""` and `id` renders `''` again, which a generic A2A
+    parser cannot tell from a malformed document.
+    """
+    rendered = herdr_envelope.render_envelope(sender(), task_id=task_id)
+    ident = frontmatter(rendered)["id"]
+    assert ident != ""
+    assert ident == UNLINKED_ID
+
+
+def test_the_generated_id_is_the_compact_stamp_with_no_separators() -> None:
+    """Exact shape under the frozen clock: `unlinked-` plus the stamp stripped of `-`, `:` and `.`."""
+    ident = frontmatter(herdr_envelope.render_envelope(sender()))["id"]
+    assert ident == "unlinked-20260102T030405678Z"
+    stamp_part = ident.removeprefix("unlinked-")
+    assert not any(ch in stamp_part for ch in "-:.")
+    assert re.fullmatch(r"\d{8}T\d{9}Z", stamp_part)
+
+
+def test_the_generated_id_is_built_through_the_module_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fallback reads `utc_stamp()`, so freezing that clock freezes the id and the stamp alike.
+
+    Pin -> mutant: build the fallback from `datetime.now()` directly and the id stops following
+    the patched clock, so this reads the real time where the fixture pinned the stamp — and every
+    line-for-line golden below drifts with it.
+    """
+    monkeypatch.setattr(herdr_envelope, "utc_stamp", lambda: "2026-12-31T23:59:59.001Z")
+    rendered = frontmatter(herdr_envelope.render_envelope(sender()))
+    assert rendered["id"] == "unlinked-20261231T235959001Z"
+    assert rendered["status"]["timestamp"] == "2026-12-31T23:59:59.001Z"
+
+
+def test_the_generated_id_matches_the_compact_grammar_on_the_real_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The unfrozen shape is still `unlinked-<compact stamp>`: the grammar holds for any clock."""
+    monkeypatch.setattr(herdr_envelope, "utc_stamp", REAL_UTC_STAMP)
+    ident = frontmatter(herdr_envelope.render_envelope(sender()))["id"]
+    assert re.fullmatch(r"unlinked-\d{8}T\d{9}Z", ident)
+
+
+def test_the_generated_id_never_reaches_the_correlation_metadata() -> None:
+    """`unlinked-…` rides the `id` slot alone: an unlinked reply carries neither correlation key.
+
+    Pin -> mutant: pass the generated id as `in_reply_to` (or `ticket_id`) as well and the
+    metadata block advertises a correlation that no task holds.
+    """
+    rendered = herdr_envelope.render_envelope(sender(), ticket_id=None, in_reply_to=None)
+    metadata = frontmatter(rendered)["metadata"]
+    assert "ticket_id" not in metadata
+    assert "in_reply_to" not in metadata
+    lines = rendered.splitlines()
+    metadata_block = "\n".join(lines[lines.index("metadata:") + 1 : -1])
+    assert UNLINKED_ID not in metadata_block
+
+
+def test_context_id_still_renders_empty_when_the_harness_knows_no_session() -> None:
+    """The `id` fix must not spill into `context_id`: a session never observed stays `''`.
+
+    Pin -> mutant: invent a session id alongside the task id and this positive blank fails.
+    """
+    rendered = frontmatter(herdr_envelope.render_envelope(sender()))
+    assert rendered["id"] != ""
+    assert rendered["context_id"] == ""
+
+
+def test_a_linked_render_keeps_its_task_id_and_leaves_no_generated_id_behind() -> None:
+    """A task that IS known renders verbatim: the fallback must not perturb a linked envelope."""
+    rendered = herdr_envelope.render_envelope(sender(), task_id="#182-a2a-hardening#h1")
+    assert frontmatter(rendered)["id"] == "#182-a2a-hardening#h1"
+    assert UNLINKED_ID not in rendered
 
 
 # ── stamping, quoting, and paging ──────────────────────────────────────────────────────────────
@@ -494,7 +581,7 @@ def test_envelope_metadata_lines_returns_the_block_without_fences_or_notice() ->
     assert not any(line.startswith("Herdr:") for line in lines)
     assert "  receiver: orchestrator" in lines
     assert "  sender: reviewer@w9:p1" in lines
-    assert lines[0] == "id: ''"
+    assert lines[0] == f"id: {UNLINKED_ID}"
 
 
 def test_envelope_metadata_lines_refuses_text_without_a_fenced_block() -> None:
@@ -514,7 +601,7 @@ def test_format_delivery_summary_leads_with_the_status_line_then_two_delimiters(
     assert rendered.splitlines() == [
         "[You: reviewer@w9:p1] prompted orchestrator",
         "---",
-        "id: ''",
+        f"id: {UNLINKED_ID}",
         "context_id: ''",
         "status:",
         "  state: TASK_STATE_WORKING",

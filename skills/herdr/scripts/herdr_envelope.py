@@ -143,12 +143,13 @@ def render_envelope(
 ) -> str:
     """Render the A2A frontmatter block: fenced top and bottom, an absent field renders no key.
 
-    The four top-level keys are always present — `id` and `context_id` render `''` when the
-    harness knows no task or session, so a reader never has to distinguish "absent" from "empty"
-    at the top level. `metadata` carries the A2A correlation fields plus the lane topology the
-    retired routing blocks used to hold: the `group` member list always, `cwd`/`resume` only when
-    `include_recovery` is set (the `--verbose` route), because recovery metadata is retrieved
-    just-in-time from `.lane/tasks.yaml` on the default path.
+    The four top-level keys are always present. `id` is never empty: it is either the linked task
+    id or a generated `unlinked-<compact utc stamp>` id, because A2A requires `Task.id` and a
+    generic parser cannot tell `''` from a malformed document. `context_id` renders `''` when the
+    harness knows no session — an honest blank, no session is invented. `metadata` carries the A2A
+    correlation fields plus the lane topology the retired routing blocks used to hold: the `group`
+    member list always, `cwd`/`resume` only when `include_recovery` is set (the `--verbose` route),
+    because recovery metadata is retrieved just-in-time from `.lane/tasks.yaml` on the default path.
     """
     metadata: dict[str, Any] = {}
     if ticket_id:
@@ -169,14 +170,28 @@ def render_envelope(
         if sender.resume_cmd:
             metadata["resume"] = sender.resume_cmd
 
+    # One stamp for both uses, so an unlinked id and its own `status.timestamp` cannot disagree.
+    stamp = utc_stamp()
     frontmatter: dict[str, Any] = {
-        "id": task_id or "",
+        # The fallback rides the `id` slot ONLY: `metadata.in_reply_to` stays absent on an
+        # unlinked reply, so a generated id never advertises a correlation the store denies.
+        "id": task_id or _unlinked_id(stamp),
         "context_id": sender.session_id or "",
-        "status": {"state": state, "timestamp": utc_stamp()},
+        "status": {"state": state, "timestamp": stamp},
         "metadata": metadata,
     }
     block = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True)
     return "\n".join([PAGING_DELIMITER, *block.rstrip().splitlines(), PAGING_DELIMITER])
+
+
+def _unlinked_id(stamp: str) -> str:
+    """A valid `Task.id` for a message that bound no task: `unlinked-` plus the compact stamp.
+
+    Compact means the ISO-8601 extended separators (`-`, `:`, the fractional-second `.`) are
+    dropped, so the id is one unquoted path-safe word. The stamp arrives through `utc_stamp()`,
+    the module's single clock indirection, so the frozen-clock tests pin it exactly.
+    """
+    return f"unlinked-{stamp.translate(str.maketrans('', '', '-:.'))}"
 
 
 def utc_stamp() -> str:

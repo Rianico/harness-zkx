@@ -391,7 +391,8 @@ def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
 def test_a_refused_ticket_binding_never_advertises_the_lease_task(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """Invariant: `envelope.id == record.task_id`, always — the lease is no envelope fallback.
+    """Invariant (#182 h1 restated): `envelope.id` is the linked task or a generated id, never the
+    refused lease's task and never `''` — the lease is no envelope fallback.
 
     A delivered message must not claim a correlation the store denies. When an explicit
     `--ticket` binding is REFUSED (here it names another sender's task) the resolver answers
@@ -433,9 +434,11 @@ def test_a_refused_ticket_binding_never_advertises_the_lease_task(
     assert envelope is not None
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
     assert record["task_id"] is None, "the refused binding records nothing to link"
-    assert (envelope.id or None) == record["task_id"], (
-        f"envelope.id {envelope.id!r} must equal record.task_id {record['task_id']!r}"
-    )
+    # `id` is required by A2A, so an unbound reply carries the generated id, not the blank it
+    # rendered before #182 h1. `metadata.in_reply_to` stays absent: the generated half is for
+    # `id` alone, so a refusal still cannot advertise a correlation the record denies.
+    assert envelope.id.startswith("unlinked-"), envelope.id
+    assert envelope.id != mine, "a refusal may not put the lease's task in the id slot"
     assert (envelope.in_reply_to or None) == record["task_id"], envelope.in_reply_to
     assert mine not in call[4], "the lease's task id never reaches the delivered message"
 
@@ -443,10 +446,11 @@ def test_a_refused_ticket_binding_never_advertises_the_lease_task(
 def test_a_refused_in_reply_to_binding_never_advertises_the_lease_task(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """The same invariant on the `--in-reply-to` refusal: an id the store cannot bind renders `''`.
+    """The same invariant on the `--in-reply-to` refusal: an id the store cannot bind is generated.
 
     `--in-reply-to <RECORD>` names no reply of this sender, so the resolver refuses, while the
-    sender's lease still holds a task. The envelope and the row must agree on "unlinked".
+    sender's lease still holds a task. The envelope and the row must agree on "unlinked": a
+    generated `id` plus no correlation key, never the lease's task.
 
     Pin -> mutant: restore the lease fallback and the refusal ships the lease task as `id`.
     """
@@ -469,7 +473,8 @@ def test_a_refused_in_reply_to_binding_never_advertises_the_lease_task(
     assert envelope is not None
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
     assert record["task_id"] is None
-    assert (envelope.id or None) == record["task_id"], envelope.id
+    assert envelope.id.startswith("unlinked-"), envelope.id
+    assert envelope.id != mine, "a refusal may not put the lease's task in the id slot"
     assert (envelope.in_reply_to or None) == record["task_id"], envelope.in_reply_to
     assert mine not in call[4]
 
@@ -478,10 +483,12 @@ def test_the_lease_still_names_the_envelope_task_when_nothing_was_bound(
     stub: StubHarness, tmp_path: Path
 ) -> None:
     """The fix must not lose the legacy lease path: with no explicit binding the resolver already
-    answers from the lease, so envelope and record agree on the lease's task.
+    answers from the lease, so envelope and record agree on the lease's task. A linked reply keeps
+    its real id — the generated `unlinked-…` fallback replaces only the blank `''` used to render.
 
     Pin -> mutant: drop the lease branch of `resolve_task_linkage` instead of the envelope
-    fallback, and the first reply renders `id: ''` while the record still carries the task.
+    fallback, and the first reply renders a generated `unlinked-…` id while the record still
+    carries the task.
     """
     mine = "#246#t5-lease-only"
     _ = herdr_lease.acquire_lease(
@@ -501,6 +508,79 @@ def test_the_lease_still_names_the_envelope_task_when_nothing_was_bound(
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
     assert envelope.id == mine == record["task_id"]
     assert envelope.in_reply_to == mine
+
+
+# ── #182 h1: A2A requires `Task.id`, so no reply path may render an empty one ─────
+
+
+@pytest.mark.parametrize(
+    ("path", "flags", "leased", "expect_task"),
+    [
+        ("linked", (), True, True),
+        ("unlinked", (), False, False),
+        ("refused", ("--ticket", "#999#h1-foreign"), True, False),
+        ("dry-run", ("--dry-run", "--json"), False, False),
+    ],
+    ids=("linked", "unlinked", "refused-binding", "dry-run"),
+)
+def test_every_reply_path_delivers_a_non_empty_task_id(
+    stub_factory: Callable[[Path], StubHarness],
+    tmp_path: Path,
+    path: str,
+    flags: tuple[str, ...],
+    leased: bool,
+    expect_task: bool,
+) -> None:
+    """A `Task` without an `id` is malformed to a generic A2A parser, so every route fills the slot.
+
+    Four states of the same delivery: linked (the lease's task), unlinked (nothing bound), refused
+    (an explicit binding the store denied), and a `--dry-run` preview. The last three must render
+    the generated `unlinked-…` id, and the refusal must still not name the lease's task.
+
+    Pin -> mutant: restore `task_id or ""` and the three unbound cases read `''` back off the wire.
+    """
+    stub = stub_factory(SCRIPT)
+    task = "#182-a2a-hardening#h1-task"
+    if path == "refused":
+        _ = herdr_lease.acquire_lease(
+            "someone-else",
+            "999.md",
+            "orchestrator",
+            base_dir=tmp_path,
+            ticket_id="#999",
+            task_id="#999#h1-foreign",
+        )
+    if leased:
+        _ = herdr_lease.acquire_lease(
+            "reviewer", "182.md", "orchestrator", base_dir=tmp_path, ticket_id="#182", task_id=task
+        )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        *flags,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    delivered = json.loads(done.stdout)[4] if path == "dry-run" else stub.prompts()[0][4]
+
+    envelope = herdr_prompt.parse_envelope(delivered)
+    assert envelope is not None
+    assert envelope.id != "", f"the {path} reply delivered an empty Task.id"
+    if expect_task:
+        assert envelope.id == task
+        return
+    assert envelope.id.startswith("unlinked-"), envelope.id
+    assert envelope.id != task, "the lease's task stays out of a reply that bound nothing"
+    if path in {"unlinked", "dry-run"}:
+        assert envelope.ticket_id == "" and envelope.in_reply_to == ""
+        assert "ticket_id:" not in delivered.split("metadata:")[1]
+        assert "in_reply_to:" not in delivered.split("metadata:")[1]
+        assert envelope.id not in delivered.split("metadata:")[1], (
+            "a generated id is never a correlation: it belongs to `id` alone"
+        )
+    if path == "refused":
+        assert "#999#h1-foreign" not in delivered
 
 
 def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
@@ -1855,6 +1935,11 @@ def test_a_dry_run_warns_about_a_refused_binding_the_live_send_warns_about(
     assert herdr_lease.list_replies(base_dir=tmp_path) == []
     # The preview renders the unlinked envelope the live send would render (#182 t5 2.1).
     assert mine not in done.stdout, done.stdout
+    # #182 h1: the preview's `id` is the generated one, never the blank the summary used to show.
+    # Matched on the line start so `context_id: ''` — which still ends in `id: ''` — cannot clash.
+    id_lines = [line for line in done.stdout.splitlines() if line.startswith("id: ")]
+    assert len(id_lines) == 1, done.stdout
+    assert re.fullmatch(r"id: unlinked-\d{8}T\d{9}Z", id_lines[0]), done.stdout
 
 
 def test_reply_without_sender_lease_omits_correlation_and_still_sends(

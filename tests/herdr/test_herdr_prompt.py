@@ -556,7 +556,8 @@ def test_scalar_quotes_only_when_yaml_would_mangle() -> None:
 def test_envelope_renders_sender_alone_when_nothing_else_is_known() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
     block = _frontmatter(herdr_prompt.render_envelope(sender))
-    assert block["id"] == ""
+    # `Task.id` is required by A2A, so a render that knows no task carries a generated one (#182 h1).
+    assert re.fullmatch(r"unlinked-\d{8}T\d{9}Z", block["id"]), block["id"]
     assert block["context_id"] == ""
     assert set(block) == {"id", "context_id", "status", "metadata"}
     assert block["status"]["state"] == "TASK_STATE_WORKING"
@@ -661,14 +662,19 @@ def test_sender_ref_only_ever_uses_the_agent_name_as_the_target_token() -> None:
     assert herdr_prompt.sender_ref(spare_label) == "impl-1@w1:p1 - label callee"
 
 
-def test_envelope_omits_unknown_fields_never_invents(
+def test_envelope_omits_unknown_fields_but_renders_a_required_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Nothing is invented except what A2A forces: `id` is required, so an unbound one is generated.
+
+    `context_id` stays `''` because no session was observed — the harness reports an honest blank
+    rather than inventing an identifier it never read.
+    """
     monkeypatch.setattr(herdr_envelope, "utc_stamp", lambda: "2026-01-02T03:04:05.678Z")
     sender = herdr_prompt.CallerContext(pane_id="w9:p1", agent="reviewer")
     assert herdr_prompt.render_envelope(sender).splitlines() == [
         "---",
-        "id: ''",
+        "id: unlinked-20260102T030405678Z",
         "context_id: ''",
         "status:",
         "  state: TASK_STATE_WORKING",
@@ -947,9 +953,10 @@ def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) 
     assert first[4].splitlines()[1:] != second[4].splitlines()[1:]
     body_first = first[4].replace("receiver: callee1", "receiver: X")
     body_second = second[4].replace("receiver: callee2", "receiver: X")
-    assert re.sub(r"timestamp: '[^']*'", "", body_first) == re.sub(
-        r"timestamp: '[^']*'", "", body_second
-    )
+    # Both clock-derived lines are per-render, not per-target: the stamp and, since #182 h1, the
+    # generated `id` of a dispatch that bound no task. Neither may make two targets differ.
+    clock_lines = re.compile(r"timestamp: '[^']*'|^id: unlinked-\d{8}T\d{9}Z$", re.MULTILINE)
+    assert clock_lines.sub("", body_first) == clock_lines.sub("", body_second)
 
 
 def test_dry_run_renders_caller_payload_without_prompting(
