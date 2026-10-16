@@ -16,12 +16,18 @@ What counts as an invocation (the pinned distinction):
 2. **Command statement only.** A candidate is examined when it sits in a command statement:
    (a) a line inside a fenced code block — except that a ```` ```mermaid ```` fence is a diagram,
    its `A->>B: herdr_reply.py …` messages are labels no agent copy-pastes, so they are excluded
-   by fence language, by rule and not by a filename list; (b) a backtick span that is the whole
-   trimmed line or the whole markdown table cell (the helper table's house form); or (c) a
-   rendered agent-facing string, whose every line is what a callee actually reads.
-   Prose that merely names a script — an inline backtick span inside a sentence, even with
-   placeholders like `herdr_dispatch.py <callee> --file <ticket>` — is a mention, not a command
-   statement, and is excluded by rule (b): the span is not the whole statement.
+   by fence language, by rule and not by a filename list; (b) a backtick span whose CONTENT BEGINS
+   with an optionally path- or `uv run`-qualified script name —
+   `(?:uv run\\s+)?(?:[\\w$.@{}/-]*/)?herdr_[a-z_]+\\.py` — and is argument-shaped after it; or (c)
+   a rendered agent-facing string, whose every line is what a callee actually reads.
+
+   Rule (b) is what makes a command mid-sentence count: `herdr_dispatch.py <callee> --file <ticket>`
+   sits inside a prose sentence and an agent still copy-pastes it, so the sentence it lives in is
+   irrelevant — only the span's own shape decides. A span is a command only when the command is
+   what the span CONTAINS: a span whose content is just the name is a mention, so the
+   `herdr_cli.py` adapter (imported, never run) and the `herdr_reply.py`, `herdr_dispatch.py`
+   enumeration stay out. Raw prose outside any span is never scanned for the script family at all,
+   which is why a name in running text stays a mention.
 3. **`uv run` placement.** An examined invocation must have `uv run` somewhere before the script
    token on the same line (this tolerates `printf … | uv run …` and `$(uv run …)`). A documented
    CLI occurrence must NOT have `uv run` glued directly in front of it (`uv run herdr agent …`).
@@ -33,20 +39,21 @@ real `CallerContext` and ticket id, `herdr_bootstrap.INVARIANT_RULES` formatted 
 helper path, `herdr_reply.format_reply_recovery_diagnostic` (the JIT recovery block), and each
 script's argparse `epilog` taken from `build_parser()` — never grepped from the source literal.
 
-Measured at authoring (after the single omission fix): 106 harness-script invocations across the
-docs (95 in fenced blocks, 11 in whole-cell spans of the SKILL.md helper table) and 3 more in the
-rendered strings — 109 examined total, every one `uv run`-prefixed. 80 herdr CLI occurrences;
-every skill doc contains at least one. GLOSSARY.md contains zero commands of either family (its
-`herdr` hits are ticket-id prose), so the per-doc CLI floor binds the twelve skill docs and
-GLOSSARY.md is pinned to contribute nothing but is still scanned. A scanner that matched nothing
-would pass the per-invocation loop vacuously, hence the floors below.
+Measured at authoring (after the omission fixes): 117 harness-script invocations across the docs —
+95 in fenced blocks and 22 in command-shaped inline-code spans (the 11 helper-table cells of
+SKILL.md plus 11 copy-paste commands living mid-sentence) — and 3 more in the rendered strings:
+120 examined total, every one `uv run`-prefixed. 80 herdr CLI occurrences; every skill doc contains
+at least one. GLOSSARY.md contains zero commands of either family (its `herdr` hits are ticket-id
+prose), so the per-doc CLI floor binds the twelve skill docs and GLOSSARY.md is pinned to contribute
+nothing but is still scanned. A scanner that matched nothing would pass the per-invocation loop
+vacuously, hence the floors below. They pin rule (b) from the other side too: narrow the span
+branch back to whole-line/whole-cell spans only and the scan examines 109, under the floor.
 """
 
 from __future__ import annotations
 
 import importlib
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,7 +86,7 @@ UV_RUN_ON_CLI = re.compile(r"\buv\s+run\s+herdr\s+(?:pane|agent|workspace|tab|wo
 
 # Floors chosen from the measured counts above with room to spare; a scanner that matches
 # nothing fails here even though its per-invocation loop would pass vacuously.
-INVOCATION_FLOOR = 99
+INVOCATION_FLOOR = 110
 RENDERED_INVOCATION_FLOOR = 3
 CLI_OCCURRENCE_FLOOR = 60
 
@@ -99,8 +106,13 @@ EPILOG_MODULES: tuple[str, ...] = (
     "herdr_worktree",
 )
 
-_WHOLE_LINE_SPAN = re.compile(r"[-*>+\s]*`[^`]+`")
 _FENCE_LINE = re.compile(r"```(\S*)")
+# One inline-code span: the unit rule (b) decides on, never the surrounding prose.
+_BACKTICK_SPAN = re.compile(r"`([^`]+)`")
+# A span is a COMMAND when its content BEGINS with a script name, optionally preceded by
+# `uv run` and/or a path or variable-qualified directory; nothing before that shape is scanned.
+# A span holding only the bare name (no leading path, no arguments) is a mention of the file.
+_SPAN_COMMAND = re.compile(r"(?:uv run\s+)?(?:[\w$.@{}/-]*/)?(?P<name>herdr_[a-z_]+\.py)")
 
 
 def _is_argument_shaped(text: str, at: int) -> bool:
@@ -143,45 +155,64 @@ class InvariantReport:
         return sum(self.cli_by_surface.values())
 
 
-def _scan_text(
-    where: str, lines: list[str], *, statement_of: Callable[[int], bool]
-) -> tuple[list[Found], int, list[str]]:
-    """Shared core: examine one surface's lines; return invocations, CLI count, violations.
+def _found(where: str, line_no: int, line: str, at: int) -> Found:
+    """One examined invocation whose script-name token starts at offset `at` on this line."""
+    return Found(
+        where=where,
+        line_no=line_no,
+        text=line.strip(),
+        uv_run_before="uv run" in line[:at],
+    )
 
-    `statement_of(idx)` decides command-statement membership for the script family; the
-    CLI family is counted and prefix-checked on every line (a `uv run herdr …` prefix is wrong
-    in prose too), so the distinction pin is never vacuous.
+
+def _scan_cli(where: str, lines: list[str]) -> tuple[int, list[str]]:
+    """Count the CLI family and flag a `uv run` glued in front of it, on EVERY line.
+
+    A `uv run herdr …` prefix is wrong in prose too, so the distinction branch never depends on
+    the command-statement rule and can never pass by matching nothing.
+    """
+    count = 0
+    bad: list[str] = []
+    for idx, line in enumerate(lines):
+        count += len(CLI_INVOCATION.findall(line))
+        if UV_RUN_ON_CLI.search(line):
+            bad.append(f"{where}:{idx + 1}: herdr CLI glued to 'uv run': {line.strip()[:120]}")
+    return count, bad
+
+
+def _line_invocations(where: str, idx: int, line: str) -> list[Found]:
+    """Rule (a)/(c): every argument-shaped script name on a command-statement line."""
+    return [
+        _found(where, idx + 1, line, match.start())
+        for match in SCRIPT_NAME.finditer(line)
+        if _is_argument_shaped(line, match.end())
+    ]
+
+
+def _span_invocations(where: str, idx: int, line: str) -> list[Found]:
+    """Rule (b): every inline-code span that BEGINS with an argument-shaped script command.
+
+    Only the span's own content decides, so a copy-paste command survives mid-sentence while a
+    span holding nothing but a file name, and raw prose outside any span, stay mentions.
     """
     found: list[Found] = []
-    cli_count = 0
-    cli_bad: list[str] = []
-    for idx, line in enumerate(lines):
-        cli_count += len(CLI_INVOCATION.findall(line))
-        if UV_RUN_ON_CLI.search(line):
-            cli_bad.append(f"{where}:{idx + 1}: herdr CLI glued to 'uv run': {line.strip()[:120]}")
-        if not statement_of(idx):
+    for span in _BACKTICK_SPAN.finditer(line):
+        content = span.group(1)
+        lead = _SPAN_COMMAND.match(content)
+        if lead is None or not _is_argument_shaped(content, lead.end()):
             continue
-        for m in SCRIPT_NAME.finditer(line):
-            if not _is_argument_shaped(line, m.end()):
-                continue
-            found.append(
-                Found(
-                    where=where,
-                    line_no=idx + 1,
-                    text=line.strip(),
-                    uv_run_before="uv run" in line[: m.start()],
-                )
-            )
-    return found, cli_count, cli_bad
+        found.append(_found(where, idx + 1, line, span.start(1) + lead.start("name")))
+    return found
 
 
 def _scan_doc(path: Path) -> tuple[list[Found], int, list[str]]:
     """Scan one markdown surface with fence tracking; ```mermaid fences are diagram labels."""
     lines = path.read_text(encoding="utf-8").splitlines()
+    where = str(path.relative_to(REPO_ROOT))
+    found: list[Found] = []
     in_fence = False
     fence_lang = ""
-    statement: list[bool] = []
-    for line in lines:
+    for idx, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("```"):
             if not in_fence:
@@ -191,16 +222,14 @@ def _scan_doc(path: Path) -> tuple[list[Found], int, list[str]]:
             else:
                 in_fence = False
                 fence_lang = ""
-            statement.append(False)
             continue
-        in_command_fence = in_fence and fence_lang != "mermaid"
-        whole_span = bool(_WHOLE_LINE_SPAN.fullmatch(stripped))
-        in_cell = "|" in line and any(
-            _WHOLE_LINE_SPAN.fullmatch(cell.strip()) for cell in line.split("|") if cell.strip()
-        )
-        statement.append(in_command_fence or whole_span or in_cell)
-    where = str(path.relative_to(REPO_ROOT))
-    return _scan_text(where, lines, statement_of=lambda idx: statement[idx])
+        if in_fence:
+            if fence_lang != "mermaid":
+                found.extend(_line_invocations(where, idx, line))
+            continue
+        found.extend(_span_invocations(where, idx, line))
+    cli_count, cli_bad = _scan_cli(where, lines)
+    return found, cli_count, cli_bad
 
 
 def rendered_surfaces() -> tuple[tuple[str, str], ...]:
@@ -237,7 +266,10 @@ def rendered_surfaces() -> tuple[tuple[str, str], ...]:
 
 def _scan_rendered(name: str, text: str) -> tuple[list[Found], int, list[str]]:
     """A rendered string is what the callee reads verbatim: every line is a command statement."""
-    return _scan_text(name, text.splitlines(), statement_of=lambda idx: True)
+    lines = text.splitlines()
+    found = [inv for idx, line in enumerate(lines) for inv in _line_invocations(name, idx, line)]
+    cli_count, cli_bad = _scan_cli(name, lines)
+    return found, cli_count, cli_bad
 
 
 def scan_invariant() -> InvariantReport:
