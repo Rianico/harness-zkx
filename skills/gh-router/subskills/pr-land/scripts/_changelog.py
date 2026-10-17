@@ -102,29 +102,29 @@ def _push_stranded_stamp(head_ref: str, pr_num: str, cwd: Path | None = None) ->
     in sync or the push failed (warning on stderr, the same soft failure as the
     stamp's own push). Never commits, never rewrites CHANGELOG.md, never force-pushes.
     """
-    remote = repo_remote_for_ref(head_ref, cwd=cwd)
     try:
+        remote = repo_remote_for_ref(head_ref, cwd=cwd)
         if not _remote_branch_exists(head_ref, cwd=cwd, remote=remote):
             needs_push = True
         else:
             ahead, _ = _ahead_behind(head_ref, remote, cwd=cwd)
             needs_push = ahead > 0
+        if not needs_push:
+            return False
+        push_res = _github.run_command(["git", "push", remote, head_ref], cwd=cwd)
+        if push_res.returncode != 0:
+            print(
+                f"warning: git push to {remote} {head_ref} failed: {push_res.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return False
+        print(
+            f"recovered stranded stamp for #{pr_num}: pushed to {remote}/{head_ref}",
+            file=sys.stderr,
+        )
     except PrError as e:
         print(f"warning: changelog stamp recovery skipped: {e}", file=sys.stderr)
         return False
-    if not needs_push:
-        return False
-    push_res = _github.run_command(["git", "push", remote, head_ref], cwd=cwd)
-    if push_res.returncode != 0:
-        print(
-            f"warning: git push to {remote} {head_ref} failed: {push_res.stderr.strip()}",
-            file=sys.stderr,
-        )
-        return False
-    print(
-        f"recovered stranded stamp for #{pr_num}: pushed to {remote}/{head_ref}",
-        file=sys.stderr,
-    )
     return True
 
 

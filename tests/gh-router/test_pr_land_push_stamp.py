@@ -24,6 +24,7 @@ PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
+import _changelog as changelog_mod  # noqa: E402
 import _github as github_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
 from pr import PrError, RefusalError, create_or_reuse_pr, stamp_changelog  # noqa: E402
@@ -45,12 +46,16 @@ class _PushFake:
         ahead: int = 0,
         behind: int = 0,
         push_rc: int = 0,
+        remote: str = "origin",
+        push_err: str = "rejected: push failed\n",
     ) -> None:
         self.calls: list[list[str]] = []
         self.remote_exists = remote_exists
         self.ahead = ahead
         self.behind = behind
         self.push_rc = push_rc
+        self.remote = remote
+        self.push_err = push_err
 
     def __call__(self, cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(cmd))
@@ -58,9 +63,12 @@ class _PushFake:
         out, err, rc = "", "", 0
         if cmd[:2] == ["git", "push"]:
             rc = self.push_rc
-            err = "rejected: fetch first\n" if rc != 0 else ""
+            err = self.push_err if rc != 0 else ""
         elif "config --get branch." in joined:
-            rc = 1
+            if ".pushRemote" in joined or ".pushDefault" in joined:
+                rc = 1
+            else:
+                out = f"{self.remote}\n"
         elif "remote get-url" in joined:
             out = "https://github.com/test/repo.git\n"
         elif "rev-parse --verify" in joined:
@@ -431,3 +439,98 @@ def test_stamp_recovery_stays_noop_when_in_sync(
 
     assert stamp_changelog("feat-x", "7", cwd=repo) is False
     assert [c for c in calls if c[:2] == ["git", "push"]] == []
+
+
+def test_creation_push_failure_from_stale_ref_refuses_as_divergence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A push rejected as non-fast-forward refuses as divergence with the remediation."""
+    monkeypatch.chdir(tmp_path)
+    fake = _PushFake(
+        remote_exists=True,
+        ahead=1,
+        behind=0,
+        push_rc=1,
+        push_err="! [rejected] feat-x -> feat-x (fetch first)\n",
+    )
+    monkeypatch.setattr(github_mod, "run_command", fake)
+
+    with pytest.raises(RefusalError):
+        create_or_reuse_pr(**_create_kwargs())  # type: ignore[arg-type]
+
+    assert _push_calls(fake) == [["git", "push", "origin", "feat-x"]]
+    assert _post_calls(fake) == []
+    err = capsys.readouterr().err
+    assert "remediation:" in err
+    assert "force" in err.lower()
+
+
+def test_creation_push_uses_resolved_non_origin_remote(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The push argv and the existence check both use the resolved remote."""
+    monkeypatch.chdir(tmp_path)
+    fake = _PushFake(remote_exists=False, remote="upstream")
+    monkeypatch.setattr(github_mod, "run_command", fake)
+
+    num, _, _, created = create_or_reuse_pr(**_create_kwargs())  # type: ignore[arg-type]
+
+    assert (num, created) == ("7", True)
+    verify_calls = [c for c in fake.calls if "rev-parse --verify" in " ".join(c)]
+    assert verify_calls == [["git", "rev-parse", "--verify", "-q", "refs/remotes/upstream/feat-x"]]
+    assert _push_calls(fake) == [["git", "push", "upstream", "feat-x"]]
+
+
+def test_stamp_recovery_stays_soft_when_remote_unresolvable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A PrError resolving the remote warns and returns False instead of escaping."""
+    repo, _ = _make_stamp_repo(tmp_path)
+    env = git_env()
+    _ = (repo / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** entry (#7)\n",
+        encoding="utf-8",
+    )
+    _ = subprocess.run(
+        ["git", "-C", str(repo), "add", "CHANGELOG.md"],
+        check=True,
+        capture_output=True,
+        env=env,
+    )
+    _ = subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "chore(changelog): attribute #7"],
+        check=True,
+        capture_output=True,
+        env=env,
+    )
+
+    def _boom(head_ref: str, cwd: Path | None = None) -> str:
+        raise PrError("git config timed out after 120s")
+
+    monkeypatch.setattr(changelog_mod, "repo_remote_for_ref", _boom)
+
+    assert stamp_changelog("feat-x", "7", cwd=repo) is False
+    assert "warning" in capsys.readouterr().err
+
+
+def test_stamp_recovery_stays_soft_when_push_times_out(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A PrError from the recovery push warns and returns False instead of escaping."""
+    _ = (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** entry (#7)\n",
+        encoding="utf-8",
+    )
+
+    def _fake(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:2] == ["git", "push"]:
+            raise PrError("git push timed out after 120s")
+        joined = " ".join(cmd)
+        if "config --get branch." in joined:
+            return subprocess.CompletedProcess(cmd, 1, "", "")
+        return subprocess.CompletedProcess(cmd, 1, "", "unknown revision\n")
+
+    monkeypatch.setattr(github_mod, "run_command", _fake)
+
+    assert stamp_changelog("feat-x", "7", cwd=tmp_path) is False
+    assert "warning" in capsys.readouterr().err

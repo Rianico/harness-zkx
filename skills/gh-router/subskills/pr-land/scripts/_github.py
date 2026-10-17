@@ -331,8 +331,9 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
     Creation-path precondition only: the caller (create_or_reuse_pr) runs this before
     opening a PR so the API call sees the real head. Read-only paths never call it.
     Resolves the remote through repo_remote_for_ref, never hardcodes it. Refuses
-    (RefusalError, no mutation) when the remote is ahead — divergent history is never
-    force-pushed — and raises PrError when the push itself fails.
+    (RefusalError, no mutation) when the remote is ahead — detected from the
+    tracking ref or revealed by a rejected push — and raises PrError when the push
+    itself fails. Divergent history is never force-pushed.
     """
     remote = repo_remote_for_ref(head_ref, cwd=cwd)
     if not _remote_branch_exists(head_ref, cwd=cwd, remote=remote):
@@ -361,9 +362,22 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
         return
     push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
     if push_res.returncode != 0:
-        raise PrError(
-            f"failed to push {head_ref} to {remote}: {push_res.stderr.strip() or 'git push failed'}"
+        stderr = push_res.stderr.strip() or "git push failed"
+        # No fetch here: the compare stays network-free, so a stale tracking ref can
+        # hide a teammate's push (behind == 0, ahead > 0) until git rejects the push.
+        # Treat a rejection as the divergence it reveals, with the same remediation.
+        print(
+            f"refusing to push {head_ref}: remote {remote}/{head_ref} rejected the push",
+            file=sys.stderr,
         )
+        print(
+            f"remediation: reconcile first (e.g. git pull --rebase {remote} {head_ref}), "
+            "then re-run; pr-land never force-pushes",
+            file=sys.stderr,
+        )
+        if "non-fast-forward" in stderr or "fetch first" in stderr:
+            raise RefusalError(f"remote {remote}/{head_ref} is ahead of local {head_ref}")
+        raise PrError(f"failed to push {head_ref} to {remote}: {stderr}")
     print(f"pushed {head_ref} to {remote} ({ahead} commit(s))", file=sys.stderr)
 
 
