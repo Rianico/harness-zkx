@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -446,3 +448,121 @@ def test_status_text_mode_names_mutations(tmp_path: Path) -> None:
     assert "mutates: remote" in r.stdout
     assert "mutates: local" in r.stdout
     assert "refusals:" in r.stdout
+
+
+@pytest.mark.parametrize(
+    "argv_prefix",
+    [
+        ["git", "rev-parse", "HEAD"],
+        ["git", "--no-optional-locks", "status", "--porcelain"],
+        ["gh", "pr", "checks"],
+    ],
+)
+def test_status_survives_read_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    argv_prefix: list[str],
+) -> None:
+    """R1: every derived read degrades — a raising read never escapes `--status`."""
+    import _github
+    from _options import PrOptions
+    from _status import run_status
+
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    env = _gh_env(tmp_path, PR_NUMBER="7", PR_STATE="open", CHECKS_TSV="a\tpass")
+    _status_env(monkeypatch, env)
+    real = _github.run_command
+
+    def boom(cmd: list[str], **kwargs: object) -> object:
+        if cmd[: len(argv_prefix)] == argv_prefix:
+            raise _github.PrError(f"command failed: {cmd[0]}: boom")
+        return real(cmd, **kwargs)
+
+    monkeypatch.setattr(_github, "run_command", boom)
+    assert run_status(PrOptions(head="feat-status", json_output=True), cwd=repo) == 0
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert payload["schema"] == "gh-router/pr-land/status@1"
+
+
+def _status_env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
+    for key, value in env.items():
+        if key == "PATH" or key.startswith(
+            ("GH_", "PR_", "POST_", "CHECKS_", "MERGE_", "COMMITS_")
+        ):
+            monkeypatch.setenv(key, value)
+
+
+def test_git_failure_is_not_labelled_gh() -> None:
+    """R3: a `git` failure is `command_failed` at site `git`, never `gh_offline`."""
+    from _errors import PrError
+    from _status import pr_error_to_refusal
+
+    entry = pr_error_to_refusal(PrError("command timed out after 30.0s: git rev-parse HEAD"))
+    assert entry is not None
+    assert entry["code"] == "command_failed"
+    assert entry["site"] == "git"
+    assert "github is unreachable" not in entry["reason"]
+
+
+def test_author_substring_is_not_unauthenticated() -> None:
+    """R3: the auth markers match real auth failures but not `author`."""
+    from _errors import PrError
+    from _status import pr_error_to_refusal
+
+    assert pr_error_to_refusal(PrError("could not list commit authors"), tool="gh") is None
+    entry = pr_error_to_refusal(PrError("authentication failed for gh"), tool="gh")
+    assert entry is not None
+    assert entry["code"] == "gh_unauthenticated"
+
+
+def test_head_slug_is_injective_and_path_safe() -> None:
+    """R2: `feat/x`, `feat-x` and `feat.x` map to three distinct safe leaves."""
+    from _status import head_slug
+
+    slashed, dashed, dotted = head_slug("feat/x"), head_slug("feat-x"), head_slug("feat.x")
+    assert len({slashed, dashed, dotted}) == 3, (slashed, dashed, dotted)
+    assert dashed == "feat-x"
+    assert dotted == "feat.x"
+    assert "/" not in slashed
+    assert slashed == "feat%2Fx"
+    assert head_slug("100%25") == "100%2525"
+
+
+def test_status_prints_no_refusal_prose(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """R4: the advisory preview swallows its prose — stderr stays empty at exit 0."""
+    from _options import PrOptions
+    from _status import run_status
+
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    _status_env(monkeypatch, _gh_env(tmp_path))
+    assert run_status(PrOptions(head="feat-status"), cwd=repo) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+@pytest.mark.parametrize("dirty_kind", ["unstaged", "untracked"])
+def test_status_reports_dirty_worktree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    dirty_kind: str,
+) -> None:
+    """R6: `worktree_clean` is False for unstaged and untracked changes alike."""
+    from _options import PrOptions
+    from _status import run_status
+
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    _status_env(monkeypatch, _gh_env(tmp_path))
+    if dirty_kind == "unstaged":
+        _ = (repo / "one.txt").write_text("edited\n", encoding="utf-8")
+    else:
+        _ = (repo / "scratch.txt").write_text("scratch\n", encoding="utf-8")
+    assert run_status(PrOptions(head="feat-status", json_output=True), cwd=repo) == 0
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert payload["predicates"]["worktree_clean"] is False

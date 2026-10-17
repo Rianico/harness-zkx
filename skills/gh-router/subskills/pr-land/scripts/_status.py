@@ -8,8 +8,9 @@ intercepts. `gh` or git failures become advisory `refusals[]` entries, never a
 traceback, and `--status` always exits 0.
 """
 
+import contextlib
+import io
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -151,9 +152,20 @@ def make_transition(command: str, preconditions: list[str], mutation: str) -> di
 
 
 def head_slug(head_ref: str) -> str:
-    """Branch-scoped scaffold leaf stem: every non-alphanumeric run becomes `-`."""
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", head_ref).strip("-")
-    return slug or "head"
+    """Branch-scoped scaffold leaf stem, injective over head refs.
+
+    ASCII alphanumerics plus `._-` stay literal; every other character (including
+    `/` and a literal `%`) becomes `%XX` uppercase hex over its UTF-8 bytes, so
+    distinct branches never share a leaf and the stem stays filename-safe and
+    directory-safe (a single path component).
+    """
+    parts: list[str] = []
+    for char in head_ref:
+        if char.isascii() and (char.isalnum() or char in "._-"):
+            parts.append(char)
+        else:
+            parts.extend(f"%{byte:02X}" for byte in char.encode("utf-8"))
+    return "".join(parts) or "head"
 
 
 def resolve_artifact_path(
@@ -229,14 +241,38 @@ def parse_checks(payload: str) -> dict[str, object]:
     return {"state": state, "ok": ok, "total": total}
 
 
-def pr_error_to_refusal(exc: BaseException) -> dict[str, str] | None:
+def _failing_tool(message: str) -> str:
+    """Tool name from a `run_command` failure message, or empty when unknown."""
+    marker = "command not found or not executable: "
+    if marker in message:
+        return message.split(marker, 1)[1].split(":")[0].strip().split(" ")[0]
+    marker = "command timed out after "
+    if marker in message:
+        _span, sep, cmd = message.split(marker, 1)[1].partition(":")
+        if sep:
+            argv = cmd.strip().split(" ")
+            return argv[0] if argv else ""
+    return ""
+
+
+def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str] | None:
     """Map a `gh`/git failure to a structured refusal entry, or None when generic.
 
     `gh` missing, unauthenticated, or offline becomes data with a remedy instead
-    of a traceback; anything else stays a plain error.
+    of a traceback; anything else stays a plain error. `gh`-only markers apply
+    solely when the failing command was `gh` — a `git` failure is never
+    reported as a `github is unreachable` refusal.
     """
     message = str(exc)
     lowered = message.lower()
+    resolved = tool or _failing_tool(message)
+    if resolved and resolved != "gh":
+        return make_refusal(
+            "command_failed",
+            message,
+            f"re-run once {resolved} answers; if it persists, run the failing command by hand",
+            resolved,
+        )
     if "command not found or not executable: gh" in message:
         return make_refusal(
             "gh_unavailable",
@@ -244,14 +280,21 @@ def pr_error_to_refusal(exc: BaseException) -> dict[str, str] | None:
             "install gh (https://cli.github.com) and authenticate with `gh auth login`, then re-run",
             "gh",
         )
-    if "timed out" in lowered and "gh" in lowered:
+    if "timed out" in lowered and ("gh" in lowered or resolved == "gh"):
         return make_refusal(
             "gh_offline",
             f"gh did not answer in time: {message}",
             "check the network / GH_TOKEN scopes and re-run",
             "gh",
         )
-    auth_markers = ("auth", "authentication", "401", "403", "bad credentials")
+    auth_markers = (
+        "authenticate",
+        "authenticated",
+        "authentication",
+        "401",
+        "403",
+        "bad credentials",
+    )
     if any(marker in lowered for marker in auth_markers):
         return make_refusal(
             "gh_unauthenticated",
@@ -339,12 +382,18 @@ def preflight_title(title: str, *, derived: bool) -> None:
 
 
 def _head_sha(cwd: Path | None = None) -> str:
-    res = _github.run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
+    try:
+        res = _github.run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
+    except PrError, OSError:
+        return ""
     return res.stdout.strip() if res.returncode == 0 else ""
 
 
 def _worktree_clean(cwd: Path | None = None) -> bool:
-    res = _github.run_command(["git", "--no-optional-locks", "status", "--porcelain"], cwd=cwd)
+    try:
+        res = _github.run_command(["git", "--no-optional-locks", "status", "--porcelain"], cwd=cwd)
+    except PrError, OSError:
+        return True
     if res.returncode != 0:
         return True
     return not any(line.strip() for line in res.stdout.splitlines())
@@ -495,7 +544,7 @@ def collect_status(
 
     def note_gh(exc: BaseException, what: str) -> None:
         nonlocal gh_broken
-        entry = pr_error_to_refusal(exc)
+        entry = pr_error_to_refusal(exc, tool="gh")
         if entry is None:
             entry = make_refusal(
                 "gh_query_failed",
@@ -582,24 +631,28 @@ def collect_status(
 
     checks: dict[str, object] = {"state": "none", "ok": 0, "total": 0}
     if pr_state == "open" and pr_number is not None:
-        checks_res = _github.run_command(
-            [
-                "gh",
-                "pr",
-                "checks",
-                pr_number,
-                "--repo",
-                repo,
-                "--json",
-                "name,bucket",
-                "--jq",
-                ".[] | [.name,.bucket] | @tsv",
-            ],
-            cwd=cwd,
-        )
-        if checks_res.returncode == 0:
+        try:
+            checks_res = _github.run_command(
+                [
+                    "gh",
+                    "pr",
+                    "checks",
+                    pr_number,
+                    "--repo",
+                    repo,
+                    "--json",
+                    "name,bucket",
+                    "--jq",
+                    ".[] | [.name,.bucket] | @tsv",
+                ],
+                cwd=cwd,
+            )
+        except (PrError, OSError) as exc:
+            note_gh(exc, f"read checks for PR #{pr_number}")
+            checks_res = None
+        if checks_res is not None and checks_res.returncode == 0:
             checks = parse_checks(checks_res.stdout)
-        else:
+        elif checks_res is not None:
             note_gh(
                 PrError(
                     "failed to read checks for PR #{}: {}".format(
@@ -713,18 +766,18 @@ def collect_status(
             )
         )
 
-    try:
-        preview = resolve_squash_message(
-            active_body,
-            explicit=squash_override,
-            supplied=squash_supplied,
-            template_path=template_for_classify,
-        )
-    except RefusalError:
-        preview = ""
-    except Exception:  # noqa: BLE001 — advisory preview must never break --status
-        preview = ""
-
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            preview = resolve_squash_message(
+                active_body,
+                explicit=squash_override,
+                supplied=squash_supplied,
+                template_path=template_for_classify,
+            )
+        except RefusalError:
+            preview = ""
+        except Exception:  # noqa: BLE001 — advisory preview must never break --status
+            preview = ""
     title_text = title
     transitions = build_transitions(
         head_ref=head_ref,

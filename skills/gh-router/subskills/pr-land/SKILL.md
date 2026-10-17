@@ -61,7 +61,7 @@ A with-body `--check` prints `commits: N`, `trailers: N`, the title facts (`deri
 `--status` is the machine-readable landing state: predicates (`branch_pushed`, `pr_state`, `body_state`, `checks`, `mergeable`, …), failure states (`diverged`, `head_stale`, `stamp_failed`), the artifact path plus `stale`, title facts, the squash preview, advisory `refusals[]`, and the legal `transitions[]` (each with its command, preconditions, and `mutation`). It never refuses and always exits 0.
 Curate the scaffold leaf before passing it to the create phase as `--body-file`, in the repo's installed PR template shape (Summary · Root Cause for fixes · Blast Radius & Safety · Evidence · Checklist). It keeps the authored body as supplied or fetched, including human-facing Mermaid diagrams and `<details>` blocks; a merge appends `Co-authored-by` trailers itself.
 
-Author prose from the git-diff-digest brief with `pr-enhance`. The PR body is the reviewer's artifact, not the commit message. Author the squash overview as a separate file (at most 5 bullets and 15 lines). Pass that file to `--merge` with `--squash-message-file`. The merge operation never falls back to the PR body. A message that reproduces `pr_body.md` is refused.
+Author prose from the git-diff-digest brief with `pr-enhance`. The PR body is the reviewer's artifact, not the commit message. Author the squash overview as a separate file (at most 5 bullets and 15 lines). Pass that file to `--merge` with `--squash-message-file`. The merge operation never falls back to the PR body. A message that reproduces the scaffold leaf (`.lsz/gh-router/<slug>.md`) is refused.
 
 Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or no body supplied while no PR exists for the head.
 

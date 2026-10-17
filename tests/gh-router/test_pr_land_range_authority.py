@@ -25,6 +25,7 @@ if str(PR_SCRIPTS) not in sys.path:
 if str(LIB_DIR) not in sys.path:
     sys.path.insert(0, str(LIB_DIR))
 
+from _squash import pr_co_author_trailers as pr_co_author_trailers  # noqa: E402
 from pr import RefusalError, resolve_base  # noqa: E402
 from range_authority import resolve_range  # noqa: E402
 
@@ -257,7 +258,16 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
     )
     assert res.returncode == 0, res.stderr
     assert "trailers: 2" in res.stdout, res.stdout
-    assert len(expected) == 2, "the digest commit set drives the trailer count"
+    # Trailer identity, not just the count: the same digest rows rendered through
+    # the real trailer builder must equal the digest commit set exactly (the gh
+    # login column is a gh-only datum and plays no part in the trailer text).
+    rows = []
+    for line in sorted(expected):
+        name_email = line.split(": ", 1)[1]
+        name, _, email = name_email.rpartition(" <")
+        rows.append(f"\t{name}\t{email.rstrip('>')}")
+    digest_tsv = "\n".join(rows)
+    assert set(pr_co_author_trailers(digest_tsv).splitlines()) == expected
     # stdout stays small: the trailer lines live behind the gate, never on the console.
     assert "Co-authored-by" not in res.stdout
 

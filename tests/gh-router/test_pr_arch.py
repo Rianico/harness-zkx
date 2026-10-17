@@ -175,7 +175,7 @@ def test_no_test_imports_run_command_from_pr() -> None:
 
 
 def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
-    """`dir(pr)` must stay a superset of the pinned 171-name surface.
+    """`dir(pr)` must stay a superset of the pinned 170-name surface.
 
     The split moved names out of `pr.py`, so anything that enumerated the pre-split module (a
     shell completion, a `dir()`-driven smoke check, a downstream caller) must still find every
@@ -184,7 +184,8 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
     `__conditional_annotations__`, and the pristine module had one. Drop the annotation and
     `dir(pr)` loses those two names. The literal below is the frozen pristine `dir(pr)`
     (captured pre-split in /tmp/golden/dir_pr.txt, minus the four names ADR-0021 retired:
-    `DRAFT_OUT_DIR`, `DRAFT_SCHEMA`, `build_draft_payload`, `resolve_out_dir`.)
+    `DRAFT_OUT_DIR`, `DRAFT_SCHEMA`, `build_draft_payload`, `resolve_out_dir`, plus
+    `_draft_dirty`, dropped uncalled by the T2 rework follow-up.)
     """
     pristine = (
         "AFTER_MARKERS",
@@ -272,7 +273,6 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
         "_copy_tokens",
         "_count_squash_bullets",
         "_digest_range_spec",
-        "_draft_dirty",
         "_draft_range",
         "_evidence_marker_text",
         "_fenced_line_mask",
@@ -359,7 +359,7 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
         "unreleased_attributes_pr",
         "watch_checks",
     )
-    assert len(pristine) == 171, "the pinned surface must list all 171 names"
+    assert len(pristine) == 170, "the pinned surface must list all 170 names"
     present = set(dir(pr_mod))
     missing = sorted(name for name in pristine if name not in present)
     assert not missing, f"dir(pr) lost pre-split names: {', '.join(missing)}"
@@ -374,10 +374,17 @@ def test_retired_draft_surface_stays_gone() -> None:
         "is_untouched_scaffold",
         "build_draft_payload",
         "resolve_out_dir",
+        "_draft_dirty",
     ):
         assert not hasattr(pr_mod, name), f"retired name still on pr: {name}"
         assert not hasattr(_draft, name), f"retired name still on _draft: {name}"
     texts = _module_texts()
-    for name in ("draft.json", "is_untouched_scaffold", "SCAFFOLD_SIGNATURE", "--out-dir"):
+    for name in (
+        "draft.json",
+        "is_untouched_scaffold",
+        "SCAFFOLD_SIGNATURE",
+        "--out-dir",
+        "_draft_dirty",
+    ):
         offenders = [mod for mod, text in texts.items() if name in text]
         assert not offenders, f"{name!r} still referenced in: {', '.join(offenders)}"

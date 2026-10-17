@@ -53,7 +53,6 @@ from range_authority import (
 __all__ = [
     "DRAFT_BODY_MAX_LINES",
     "DRAFT_BODY_PLACEHOLDER",
-    "_draft_dirty",
     "_draft_range",
     "build_scaffold",
     "cap_draft_body",
@@ -69,7 +68,7 @@ DRAFT_BODY_PLACEHOLDER = (
 )
 
 
-# The candidate pr_body.md scaffold: template shape + mechanical facts + sentinels.
+# The scaffold leaf (.lsz/gh-router/<slug>.md): template shape + mechanical facts + sentinels.
 # The generator writes no subjective prose. The marker names the head commit the
 # scaffold was generated from, so a later run reports staleness without deciding
 # anything from the artifact's bytes.
@@ -233,7 +232,7 @@ def build_scaffold(
     cwd: Path | None = None,
     head_sha: str = "",
 ) -> str:
-    """The candidate pr_body.md: template shape + mechanical facts + unfilled sentinels.
+    """The scaffold leaf (.lsz/gh-router/<slug>.md): template shape + mechanical facts + unfilled sentinels.
 
     The generator writes no subjective prose. Over the installed template (or the
     placeholder skeleton when absent) it swaps the unchosen Door literal for a `<FILL:>`
@@ -292,37 +291,6 @@ def _scaffold_template_text(template_path: Path | None, cwd: Path | None) -> str
 def _emit_check_json(payload: dict[str, object]) -> None:
     """Print the machine-readable `--check` report on stdout."""
     print(json.dumps(payload, indent=2))
-
-
-def _draft_dirty(cwd: Path | None = None) -> dict[str, list[str]]:
-    """Advisory working-tree reading; empty lists when clean or unreadable."""
-    empty: dict[str, list[str]] = {"porcelain": [], "diff_stat": []}
-    try:
-        root = find_repo_root(cwd or Path.cwd())
-    except RuntimeError:
-        root = (cwd or Path.cwd()).resolve()
-    try:
-        porcelain = [
-            line
-            for line in _github.run_command(
-                ["git", "--no-optional-locks", "status", "--porcelain"],
-                cwd=root,
-            ).stdout.splitlines()
-            if line.strip()
-        ]
-        if not porcelain:
-            return empty
-        diff_stat = [
-            line
-            for line in _github.run_command(
-                ["git", "--no-optional-locks", "diff", "HEAD", "--stat", "--", "."],
-                cwd=root,
-            ).stdout.splitlines()
-            if line.strip()
-        ]
-    except PrError, OSError, RuntimeError:
-        return empty
-    return {"porcelain": porcelain[:20], "diff_stat": diff_stat[-8:]}
 
 
 def _emit_gate_facts(

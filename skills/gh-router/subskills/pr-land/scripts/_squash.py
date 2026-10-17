@@ -199,7 +199,7 @@ AFTER_MARKERS = ("after", "now", "new")
 LABEL_ONLY_RE = re.compile(r":[ \t]*(?:[*_`]+[ \t]*)*$")
 CODE_AUTHORS_TOKEN = "CODE_AUTHORS"
 DEFAULT_TEMPLATE_PATH = Path(".github/pull_request_template.md")
-# Scaffold sentinels: an unfilled slot the candidate pr_body.md leaves for the author.
+# Scaffold sentinels: an unfilled slot the scaffold leaf leaves for the author.
 FILL_SENTINEL_RE = re.compile(r"<FILL:[^>\n]*>")
 # The installed template's unchosen Door literal is an unfilled slot too: an author who
 # pastes the template verbatim never picked a door. The shipped bold puts the colon
@@ -821,7 +821,7 @@ def refuse_unfilled_sentinels(text: str) -> None:
         file=sys.stderr,
     )
     print(
-        "remediation: edit the candidate pr_body.md — replace every <FILL: …> sentinel, "
+        "remediation: edit the scaffold leaf (.lsz/gh-router/<slug>.md) — replace every <FILL: …> sentinel, "
         "pick one Door value, fill or delete the Closes slot — then re-run with --body-file",
         file=sys.stderr,
     )

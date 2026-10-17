@@ -2205,9 +2205,9 @@ def test_baseline_entry_stamp_is_noop_and_advisory_silent(
     assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
 
 
-# --- candidate pr_body.md scaffold (#260) ---------------------------------------------
+# --- scaffold leaf (.lsz/gh-router/<slug>.md) ---------------------------------------------
 #
-# The body-less `--check` writes a signed scaffold instead of the bare placeholder:
+# The body-less `--check` writes a marked scaffold instead of the bare placeholder:
 # template shape + mechanical facts (range diff, detected closes) + `<FILL: …>` sentinels,
 # never subjective prose. The signature (sha256 of everything below the top line) tells a
 # later run untouched from hand-edited, so an authored file is preserved byte-for-byte.

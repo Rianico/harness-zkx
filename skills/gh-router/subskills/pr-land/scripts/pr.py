@@ -63,7 +63,6 @@ from _check import check_trailers as check_trailers
 from _check import check_trailers_report as check_trailers_report
 from _draft import DRAFT_BODY_MAX_LINES as DRAFT_BODY_MAX_LINES
 from _draft import DRAFT_BODY_PLACEHOLDER as DRAFT_BODY_PLACEHOLDER
-from _draft import _draft_dirty as _draft_dirty
 from _draft import _draft_range as _draft_range
 from _draft import build_scaffold as build_scaffold
 from _draft import cap_draft_body as cap_draft_body
@@ -626,13 +625,15 @@ def main(argv: list[str] | None = None) -> int:
                 # below stay soft (T1): only a failed wanted stamp refuses.
                 raise RefusalError(
                     f"changelog stamp failed for PR #{num} ({url}); "
-                    f"the ## [Unreleased] ledger carries no (#{num}) entry",
+                    f"the stamp did not complete (see the warning above); "
+                    f"the (#{num}) entry must exist and be pushed",
                     refusals=[
                         make_refusal(
                             "stamp_failed",
                             f"changelog stamp failed for PR #{num} ({url}); "
-                            f"the ## [Unreleased] ledger carries no (#{num}) entry",
-                            f"add an entry ending in (#{num}) under ## [Unreleased], "
+                            f"the stamp did not complete (see the warning above); "
+                            f"the (#{num}) entry must exist and be pushed",
+                            f"make sure an entry ending in (#{num}) exists under ## [Unreleased], "
                             f"commit it to {head}, push, then re-run",
                             "CHANGELOG.md",
                         )
