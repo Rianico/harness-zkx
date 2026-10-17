@@ -7,6 +7,8 @@ Date: 2026-05-25
 Accepted
 Amends [ADR-0007](0007-mission-manifest-schema-and-update-contract.md)
 
+Amended by [21. pr-land derives state and emits facts instead of persisting artifacts](0021-pr-land-derives-state-and-emits-facts-instead-of-persisting-artifacts.md)
+
 ## Context
 
 Implementation remediation often happens multiple times. Storing all artifacts for a phase in a single directory leads to file collisions and a "rough" directory tree (e.g., `tdd-remediation/`). We need a consistent, scalable way to organize artifacts that preserves the full history of every attempt.

@@ -1,0 +1,15 @@
+id: 20261017T110439289001Z-seam-reviewer-f25c05fd
+recorded_at: '2026-10-17T11:04:39.289Z'
+sender: seam-reviewer
+caller: w11:p1N
+ticket_id: '#266-seam-design-review-2'
+task_id: '#266-seam-design-review-2'
+in_reply_to: '#266-seam-design-review-2'
+status: completed
+shape: complete
+evidence: checks
+sha: null
+digest: f25c05fda45bfcb898a1485f2a7bb9b6dabb12430dffe29771d77ff2d2c8a020
+bytes: 6760
+artifacts: 19
+payload: .lane/replies/20261017T110439289001Z-seam-reviewer-f25c05fd.md
