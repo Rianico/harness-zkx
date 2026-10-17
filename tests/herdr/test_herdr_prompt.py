@@ -9,8 +9,9 @@ import os
 import re
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any, cast
 
 import herdr_agent
 import herdr_bootstrap
@@ -19,10 +20,14 @@ import herdr_envelope
 import herdr_prompt
 import herdr_wait
 import pytest
+import yaml
 
-from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness
+from tests.herdr.stub import DEFAULT_STATE, SCRIPTS_DIR, StubHarness, flag_value
 
 SCRIPT = SCRIPTS_DIR / "herdr_prompt.py"
+
+# The delivered envelope's `status.timestamp` grammar: bare ISO-8601 UTC, no brackets.
+TIMESTAMP_RE = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
 
 METACHARS = """Do NOT expand: $HOME `whoami` "$(date)" 'single' \\backslash
 line2 → unicode ✓
@@ -402,7 +407,7 @@ def test_pep723_metadata_precedes_docstring() -> None:
     assert header.startswith("#!/usr/bin/env python3\n")
     assert "# /// script" in header
     assert 'requires-python = ">=3.14"' in header
-    assert "dependencies = []" in header
+    assert 'dependencies = ["pyyaml"]' in header
     assert header.rstrip().endswith("# ///")
 
 
@@ -550,14 +555,13 @@ def test_scalar_quotes_only_when_yaml_would_mangle() -> None:
 
 def test_envelope_renders_sender_alone_when_nothing_else_is_known() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
-    assert herdr_prompt.render_envelope(sender) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    block = _frontmatter(herdr_prompt.render_envelope(sender))
+    # `Task.id` is required by A2A, so a render that knows no task carries a generated one (#182 h1).
+    assert re.fullmatch(r"unlinked-\d{8}T\d{9}Z", block["id"]), block["id"]
+    assert block["context_id"] == ""
+    assert set(block) == {"id", "context_id", "status", "metadata"}
+    assert block["status"]["state"] == "TASK_STATE_WORKING"
+    assert block["metadata"] == {"sender": "orchestrator@w1:p1"}
 
 
 def test_envelope_renders_position_receiver_and_group() -> None:
@@ -574,21 +578,16 @@ def test_envelope_renders_position_receiver_and_group() -> None:
         receiver="impl-1",
         group_members=["orchestrator@w1:p1", "impl-1@w1:p3"],
     )
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1 - kind pi",
-            "  Group: [orchestrator@w1:p1, impl-1@w1:p3]",
-            "  Receiver: impl-1",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
-    assert "Runtime:" not in rendered
-    assert "Resume:" not in rendered
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.sender == "orchestrator@w1:p1"
+    assert envelope.receiver == "impl-1"
+    assert envelope.group == ("orchestrator@w1:p1", "impl-1@w1:p3")
+    assert envelope.context_id == "/tmp/session.jsonl"
+    assert not envelope.cwd and not envelope.resume
 
 
-def test_envelope_renders_runtime_block_only_when_recovery_included() -> None:
+def test_envelope_renders_recovery_metadata_only_when_included() -> None:
     sender = herdr_prompt.CallerContext(
         pane_id="w1:p1",
         label="orchestrator",
@@ -598,37 +597,30 @@ def test_envelope_renders_runtime_block_only_when_recovery_included() -> None:
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --session /tmp/session.jsonl",
     )
-    rendered = herdr_prompt.render_envelope(sender, include_recovery=True)
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1 - kind pi",
-            "Runtime:",
-            '  Cwd: "/path/to/my project"',
-            '  Resume: "pi --session /tmp/session.jsonl"',
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
+    envelope = herdr_prompt.parse_envelope(
+        herdr_prompt.render_envelope(sender, include_recovery=True)
     )
+    assert envelope is not None
+    assert envelope.cwd == "/path/to/my project"
+    assert envelope.resume == "pi --session /tmp/session.jsonl"
+    trimmed = herdr_prompt.parse_envelope(herdr_prompt.render_envelope(sender))
+    assert trimmed is not None
+    assert not trimmed.cwd and not trimmed.resume
 
 
-def test_envelope_renders_a_resolved_receiver_as_a_position_ref() -> None:
+def test_envelope_renders_a_resolved_receiver_as_an_address() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="orchestrator", agent="orchestrator")
     receiver = herdr_prompt.CallerContext(
         pane_id="w1:p3", label="impl-1", agent="impl-1", kind="agy", tab_id="w1:t1"
     )
-    assert herdr_prompt.render_envelope(sender, receiver=receiver) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1",
-            "  Receiver: impl-1@w1:p3 - tab w1:t1 - kind agy",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    envelope = herdr_prompt.parse_envelope(herdr_prompt.render_envelope(sender, receiver=receiver))
+    assert envelope is not None
+    assert envelope.sender == "orchestrator@w1:p1"
+    assert envelope.receiver == "impl-1@w1:p3"
+    assert "tab w1:t1" not in herdr_prompt.render_envelope(sender, receiver=receiver)
 
 
-def test_envelope_omits_tab_cwd_and_resume_by_default() -> None:
+def test_envelope_omits_cwd_and_resume_by_default() -> None:
     sender = herdr_prompt.CallerContext(
         pane_id="w1:p1",
         label="orchestrator",
@@ -639,18 +631,13 @@ def test_envelope_omits_tab_cwd_and_resume_by_default() -> None:
         session_id="/tmp/session.jsonl",
         resume_cmd="pi --session /tmp/session.jsonl",
     )
-    rendered = herdr_prompt.render_envelope(sender)
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1 - tab w1:t1 - kind pi",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
-    assert "Runtime:" not in rendered
+    rendered = herdr_prompt.render_envelope(sender, tab_id=sender.tab_id)
     assert "Cwd:" not in rendered
     assert "Resume:" not in rendered
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.task_group == "w1:t1"
+    assert not envelope.cwd and not envelope.resume
 
 
 def test_envelope_keeps_a_label_that_differs_from_the_agent_name() -> None:
@@ -662,14 +649,9 @@ def test_envelope_keeps_a_label_that_differs_from_the_agent_name() -> None:
         resume_cmd="qodercli resume",
     )
     rendered = herdr_prompt.render_envelope(sender)
-    assert rendered == "\n".join(
-        [
-            "Routing:",
-            "  Sender: t7-impl@w1:p2 - label callee - kind qodercli",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.sender == "t7-impl@w1:p2"
     assert "Runtime:" not in rendered
 
 
@@ -680,85 +662,105 @@ def test_sender_ref_only_ever_uses_the_agent_name_as_the_target_token() -> None:
     assert herdr_prompt.sender_ref(spare_label) == "impl-1@w1:p1 - label callee"
 
 
-def test_envelope_omits_unknown_fields_never_invents() -> None:
+def test_envelope_omits_unknown_fields_but_renders_a_required_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nothing is invented except what A2A forces: `id` is required, so an unbound one is generated.
+
+    `context_id` stays `''` because no session was observed — the harness reports an honest blank
+    rather than inventing an identifier it never read.
+    """
+    monkeypatch.setattr(herdr_envelope, "utc_stamp", lambda: "2026-01-02T03:04:05.678Z")
     sender = herdr_prompt.CallerContext(pane_id="w9:p1", agent="reviewer")
-    assert herdr_prompt.render_envelope(sender) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: reviewer@w9:p1",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
-    )
+    assert herdr_prompt.render_envelope(sender).splitlines() == [
+        "---",
+        "id: unlinked-20260102T030405678Z",
+        "context_id: ''",
+        "status:",
+        "  state: TASK_STATE_WORKING",
+        "  timestamp: '2026-01-02T03:04:05.678Z'",
+        "metadata:",
+        "  sender: reviewer@w9:p1",
+        "---",
+    ]
 
 
-def test_envelope_renders_hierarchy_block_from_correlation_params() -> None:
+def test_envelope_renders_correlation_metadata_from_the_params() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
-    assert herdr_prompt.render_envelope(
+    rendered = herdr_prompt.render_envelope(
         sender,
         ticket_id="#182-herdr-msg-enhance",
         task_id="#182-herdr-msg-enhance#full-stack",
         task_group="full-stack",
         tab_id="w1:t2",
-    ) == "\n".join(
-        [
-            "Routing:",
-            "  Sender: orchestrator@w1:p1",
-            "Hierarchy:",
-            "  Task-Group: full-stack (w1:t2)",
-            "  Ticket-ID: #182-herdr-msg-enhance",
-            "  Task-ID: #182-herdr-msg-enhance#full-stack",
-            "Protocol:",
-            f"  {herdr_prompt.SKILL_NOTICE}",
-        ]
     )
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.id == "#182-herdr-msg-enhance#full-stack"
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.task_group == "full-stack@w1:t2"
+    assert rendered.splitlines()[0] == "---"
 
 
 def test_envelope_renders_task_group_alone_or_tab_alone() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
-    only_group = herdr_prompt.render_envelope(sender, task_group="full-stack")
-    assert "  Task-Group: full-stack" in only_group
-    assert "(" not in only_group.splitlines()[3]
-    only_tab = herdr_prompt.render_envelope(sender, tab_id="w1:t2")
-    assert "  Task-Group: w1:t2" in only_tab
+    only_group = herdr_prompt.parse_envelope(
+        herdr_prompt.render_envelope(sender, task_group="full-stack")
+    )
+    assert only_group is not None
+    assert only_group.task_group == "full-stack"
+    only_tab = herdr_prompt.parse_envelope(herdr_prompt.render_envelope(sender, tab_id="w1:t2"))
+    assert only_tab is not None
+    assert only_tab.task_group == "w1:t2"
 
 
 def test_envelope_renders_in_reply_to() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
     rendered = herdr_prompt.render_envelope(sender, in_reply_to="#182-herdr-msg-enhance#full-stack")
-    assert "Hierarchy:" in rendered
-    assert "  In-Reply-To: #182-herdr-msg-enhance#full-stack" in rendered
-
-
-def test_envelope_omits_hierarchy_and_runtime_blocks_when_params_absent() -> None:
-    sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
-    rendered = herdr_prompt.render_envelope(sender, include_recovery=False)
     assert "Hierarchy:" not in rendered
-    assert "Runtime:" not in rendered
-    assert "Ticket-ID:" not in rendered
-    assert "Task-ID:" not in rendered
-    assert "In-Reply-To:" not in rendered
+    envelope = herdr_prompt.parse_envelope(rendered)
+    assert envelope is not None
+    assert envelope.in_reply_to == "#182-herdr-msg-enhance#full-stack"
 
 
-def test_envelope_group_uses_bracket_form() -> None:
+def test_envelope_omits_correlation_and_recovery_metadata_when_params_absent() -> None:
+    sender = herdr_prompt.CallerContext(
+        pane_id="w1:p1", agent="orchestrator", cwd="/tmp/work", resume_cmd="pi --resume"
+    )
+    block = _frontmatter(herdr_prompt.render_envelope(sender, include_recovery=False))
+    assert block["metadata"] == {"sender": "orchestrator@w1:p1"}
+    assert "Ticket-ID:" not in str(block)
+    assert "In-Reply-To:" not in str(block)
+
+
+def _frontmatter(block: str) -> dict[str, Any]:
+    """Read the fenced frontmatter with a generic YAML reader — the ADR's compatibility promise."""
+    lines = block.splitlines()
+    assert lines[0] == "---" and lines[-1] == "---", lines
+    parsed = yaml.safe_load("\n".join(lines[1:-1]))
+    assert isinstance(parsed, dict)
+    return cast("dict[str, Any]", parsed)
+
+
+def test_envelope_group_renders_as_a_yaml_sequence() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", agent="orchestrator")
     rendered = herdr_prompt.render_envelope(
         sender, group_members=["orchestrator@w1:p1", "impl-1@w1:p3"]
     )
-    assert "  Group: [orchestrator@w1:p1, impl-1@w1:p3]" in rendered
+    block = _frontmatter(rendered)
+    assert block["metadata"]["group"] == ["orchestrator@w1:p1", "impl-1@w1:p3"]
 
 
-def test_envelope_sanitizes_label_to_single_line() -> None:
+def test_envelope_addresses_the_sender_and_never_leaks_the_label() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="review\npane\tX", agent="reviewer")
-    assert (
-        herdr_prompt.render_envelope(sender).splitlines()[1]
-        == '  Sender: reviewer@w1:p1 - label "review pane X"'
-    )
+    assert herdr_prompt.sender_ref(sender) == 'reviewer@w1:p1 - label "review pane X"'
+    block = _frontmatter(herdr_prompt.render_envelope(sender))
+    assert block["metadata"] == {"sender": "reviewer@w1:p1"}
 
 
 def test_envelope_drops_a_blank_label() -> None:
     sender = herdr_prompt.CallerContext(pane_id="w1:p1", label="   ", agent="reviewer")
-    assert herdr_prompt.render_envelope(sender).splitlines()[1] == "  Sender: reviewer@w1:p1"
+    assert herdr_prompt.sender_ref(sender) == "reviewer@w1:p1"
 
 
 def test_reply_contract_without_agent_is_unaddressable() -> None:
@@ -839,29 +841,34 @@ def test_reply_contract_documents_the_sha_guard_waiver_with_a_quoted_example() -
         assert "<TOKEN>" not in contract
 
 
+def delivered_envelope(text: str) -> tuple[herdr_prompt.Envelope, str]:
+    """The A2A envelope of a delivered payload plus its body, read through `herdr_prompt`."""
+    envelope, body = herdr_prompt.split_envelope_and_body(text)
+    assert envelope is not None, text
+    assert body is not None, text
+    return envelope, body
+
+
 def test_caller_context_prepended_by_default(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run("reviewer", "--file", str(payload_file(tmp_path, "hi")))
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
     lines = text.splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
+    assert lines[0] == "---"
+    assert not any(re.match(r"^\[\d{4}-", line) for line in lines)
+    envelope, body = delivered_envelope(text)
+    assert envelope.state == "TASK_STATE_WORKING"
+    assert re.match(TIMESTAMP_RE, envelope.timestamp)
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert envelope.task_group == "w9:t1"
+    assert body.startswith("hi\n\n")
     assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
     assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
-    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
-    assert "Group: [reviewer@w9:p1]" in text
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in text
-    assert "\n---\n\nhi\n\n" in text
+    assert herdr_prompt.SKILL_NOTICE in lines
+    assert f"\n---\n{herdr_prompt.SKILL_NOTICE}\n\nhi\n\n" in text
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
     assert Path(reply.group(1)).is_file(), reply.group(1)
@@ -890,18 +897,11 @@ def test_resolve_caller_extracts_kind_without_a_runtime_block(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
-    lines = text.splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
+    assert text.splitlines()[0] == "---"
+    envelope, _body = delivered_envelope(text)
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.context_id == "/tmp/session.jsonl"
+    assert not envelope.cwd and not envelope.resume
     assert "Runtime:" not in text
     assert "Resume:" not in text
 
@@ -912,18 +912,13 @@ def test_herdr_pane_id_selects_the_caller(stub: StubHarness, tmp_path: Path) -> 
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
-    lines = prompt_call[4].splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        '  Sender: w9:p2 - label "scratch pad" - tab w9:t1',
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
+    text = prompt_call[4]
+    assert text.splitlines()[0] == "---"
+    envelope, _body = delivered_envelope(text)
+    assert envelope.sender == "w9:p2"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.task_group == "w9:t1"
     assert "cannot be addressed" in prompt_call[4]
 
 
@@ -935,7 +930,9 @@ def test_no_caller_context_sends_verbatim_without_lookups(
     (prompt_call,) = stub.prompts()
     assert prompt_call[4] == "hi"
     kinds = [call[1:3] for call in stub.calls()]
-    assert kinds == [["agent", "get"], ["agent", "prompt"]]
+    # The one-shot screen read (#252) rides between the status claim and the injection:
+    # settled `agent get`, one `agent read`, then `agent prompt`. No caller-context lookups.
+    assert kinds == [["agent", "get"], ["agent", "read"], ["agent", "prompt"]]
     assert "--no-caller-context drops the Sender/Receiver envelope" in done.stderr
 
 
@@ -945,26 +942,23 @@ def test_broadcast_renders_per_target_callee(stub: StubHarness, tmp_path: Path) 
     (first, second) = stub.prompts()
     assert (first[3], second[3]) == ("callee1", "callee2")
     first_lines = first[4].splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", first_lines[0])
-    assert first_lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: callee1",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
-    assert "Group: [reviewer@w9:p1]" in first[4]
-    assert "Group: [reviewer@w9:p1]" in second[4]
+    assert first_lines[0] == "---"
+    assert not any(re.match(r"^\[\d{4}-", line) for line in first_lines)
+    first_env, _first_body = delivered_envelope(first[4])
+    assert first_env.sender == "reviewer@w9:p1"
+    assert first_env.receiver == "callee1"
+    assert first_env.group == ("reviewer@w9:p1",)
+    assert first_env.task_group == "w9:t1"
     assert first[4] != second[4]
-    assert "Receiver: callee1" in first[4]
-    assert "Receiver: callee2" in second[4]
+    assert "receiver: callee1" in first[4]
+    assert "receiver: callee2" in second[4]
     assert first[4].splitlines()[1:] != second[4].splitlines()[1:]
-    body_first = "\n".join(first[4].splitlines()[1:]).replace("Receiver: callee1", "Receiver: X")
-    body_second = "\n".join(second[4].splitlines()[1:]).replace("Receiver: callee2", "Receiver: X")
-    assert body_first == body_second
+    body_first = first[4].replace("receiver: callee1", "receiver: X")
+    body_second = second[4].replace("receiver: callee2", "receiver: X")
+    # Both clock-derived lines are per-render, not per-target: the stamp and, since #182 h1, the
+    # generated `id` of a dispatch that bound no task. Neither may make two targets differ.
+    clock_lines = re.compile(r"timestamp: '[^']*'|^id: unlinked-\d{8}T\d{9}Z$", re.MULTILINE)
+    assert clock_lines.sub("", body_first) == clock_lines.sub("", body_second)
 
 
 def test_dry_run_renders_caller_payload_without_prompting(
@@ -976,18 +970,14 @@ def test_dry_run_renders_caller_payload_without_prompting(
     argv: list[str] = json.loads(done.stdout)
     assert argv[3] == "reviewer"
     lines = argv[4].splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:9] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in argv[4]
+    assert lines[0] == "---"
+    assert not any(re.match(r"^\[\d{4}-", line) for line in lines)
+    envelope, _body = delivered_envelope(argv[4])
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert envelope.task_group == "w9:t1"
+    assert "receiver: reviewer@w9:p1" in argv[4]
     assert "${herdr_skill}" in argv[4]
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', argv[4])
     assert reply, argv[4]
@@ -1018,11 +1008,11 @@ def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
     """#259: a caller-side dry run echoes metadata + a body preview, never the serialized argv.
 
     #259 anchor addendum: the status line carries the `[You: …]` self-anchor in the colon form.
-    #260: the delivered envelope carries a plain `Receiver:` — no `(You)` anywhere, in the
+    #260: the delivered envelope carries a plain `receiver:` address — no `(You)` anywhere, in the
     callee payload or the caller copy.
 
     Pin -> mutant: printing `json.dumps(argv)` (the pre-#259 dry run) — this output is not one
-    JSON line and carries no `Protocol:` notice, so a raw-argv render fails it.
+    JSON line and carries no `Herdr:` notice, so a raw-argv render fails it.
     """
     ticket = payload_file(tmp_path, "do the thing")
     done = stub.run("reviewer", "--file", str(ticket), "--dry-run")
@@ -1032,10 +1022,10 @@ def test_dry_run_prints_a_trimmed_summary_not_the_raw_argv(
     lines = out.splitlines()
     assert lines[0] == "[You: reviewer@w9:p1] dry-run: would prompt reviewer (w9:p1)"
     assert lines[1] == "---"
-    assert "Routing:" in out and "Hierarchy:" in out
-    assert "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in out
+    assert "metadata:" in out and "status:" in out
+    assert "  receiver: reviewer@w9:p1" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    assert "Routing:" not in out and "Protocol:" not in out
     assert herdr_prompt.SKILL_NOTICE not in out
     assert lines.count("---") == 2
     assert f"File: {ticket}" in out
@@ -1049,7 +1039,8 @@ def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
     """#259: `--json` keeps the machine render, and the callee payload is untouched by the trim.
 
     Pin -> mutant: shrinking the DELIVERED payload rather than only the caller echo — the argv
-    element [4] must still carry the full `Protocol:` notice and reply contract.
+    element [4] must still carry the full frontmatter block, the `Herdr:` notice and the reply
+    contract.
     """
     ticket = payload_file(tmp_path, "do the thing")
     done = stub.run("reviewer", "--file", str(ticket), "--dry-run", "--json")
@@ -1057,7 +1048,7 @@ def test_dry_run_json_still_prints_the_full_wrapped_callee_payload(
     argv: list[str] = json.loads(done.stdout)
     delivered = argv[4]
     assert herdr_prompt.SKILL_NOTICE in delivered
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in delivered
+    assert "receiver: reviewer@w9:p1" in delivered
     assert "On completion, reply to the sender" in delivered
 
 
@@ -1071,10 +1062,10 @@ def test_live_prompt_prints_status_then_trimmed_summary(stub: StubHarness, tmp_p
     assert lines[0].startswith("[You: reviewer@w9:p1] prompted reviewer")
     assert "bytes=" in lines[0]
     assert lines[1] == "---"
-    assert "Routing:" in out and "Hierarchy:" in out
-    assert "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in out
+    assert "metadata:" in out and "status:" in out
+    assert "  receiver: reviewer@w9:p1" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    assert "Routing:" not in out and "Protocol:" not in out
     assert f"File: {ticket}" in out
     assert "do the thing" in out
 
@@ -1144,8 +1135,10 @@ def test_group_members_listed_in_caller_context(stub: StubHarness, tmp_path: Pat
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     text = prompt_call[4]
-    assert "Group: [reviewer@w9:p1, t7-impl@w9:p2]" in text
-    assert "Receiver: t7-impl@w9:p2 - label callee - tab w9:t1 - kind qodercli" in text
+    envelope, _body = delivered_envelope(text)
+    assert envelope.group == ("reviewer@w9:p1", "t7-impl@w9:p2")
+    assert envelope.receiver == "t7-impl@w9:p2"
+    assert "label callee" not in text
 
 
 def test_constant_nonzero_revision_accepted_without_retry(
@@ -1194,7 +1187,7 @@ def _session_caller_state() -> dict[str, object]:
     }
 
 
-def test_default_envelope_omits_runtime_cwd_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+def test_default_envelope_omits_recovery_metadata(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run(
         "reviewer", "--file", str(payload_file(tmp_path, "hi")), state=_session_caller_state()
     )
@@ -1203,10 +1196,12 @@ def test_default_envelope_omits_runtime_cwd_and_resume(stub: StubHarness, tmp_pa
     text = prompt_call[4]
     assert "Runtime:" not in text
     assert "Cwd:" not in text
-    assert "Resume:" not in text
+    envelope, _body = delivered_envelope(text)
+    assert envelope.context_id == "/tmp/session.jsonl"
+    assert not envelope.cwd and not envelope.resume
 
 
-def test_verbose_flag_restores_runtime_cwd_and_resume(stub: StubHarness, tmp_path: Path) -> None:
+def test_verbose_flag_adds_cwd_and_resume_metadata(stub: StubHarness, tmp_path: Path) -> None:
     done = stub.run(
         "reviewer",
         "--file",
@@ -1217,9 +1212,11 @@ def test_verbose_flag_restores_runtime_cwd_and_resume(stub: StubHarness, tmp_pat
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (prompt_call,) = stub.prompts()
     lines = prompt_call[4].splitlines()
-    assert "Runtime:" in lines
-    assert "  Cwd: /tmp/harness" in lines
-    assert '  Resume: "pi --session /tmp/session.jsonl"' in lines
+    assert "  cwd: /tmp/harness" in lines
+    assert "  resume: pi --session /tmp/session.jsonl" in lines
+    envelope, _body = delivered_envelope(prompt_call[4])
+    assert envelope.cwd == "/tmp/harness"
+    assert envelope.resume == "pi --session /tmp/session.jsonl"
 
 
 def test_resolve_caller_captures_session_and_resume() -> None:
@@ -1803,3 +1800,899 @@ def test_unconfirmed_warning_renders_the_neutral_advice_for_a_bridgeless_static_
     assert "acceptance was not confirmed" in err
     assert NEUTRAL_SURFACE in err
     assert "bridge" not in err, "a bridge-less kind must not be told to read a bridge"
+
+
+# ── #252: the screen-aware readiness gate (one-shot, never polled) ──────────────────
+
+# Fake screens for the gate. The trust selector lines are verbatim from
+# `skills/herdr/references/agents/qodercli.md` ("Folder Trust"), which documents the
+# readiness lie this gate closes: `agent start` reports `idle`/`interactive_ready: true`
+# while the pane is blocked on the trust selector.
+
+TRUST_SELECTOR_SCREEN = (
+    "◇ Qoder CLI CN\n"
+    "\n"
+    " Do you trust the files in this folder?\n"
+    " /private/tmp/example-worktree\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+    " ↑/↓ navigate · Enter select · Esc back\n"
+)
+
+# The trust selector's option block with the question line scrolled off: the complete
+# adjacent pair ("1. Trust folder" immediately followed by "2. Don't trust and exit") is the
+# dialog even with no question and no cursor on screen.
+TRUST_OPTIONS_SCREEN = "…\n  ❯ 1. Trust folder\n    2. Don't trust and exit\n"
+
+# A live trust selector whose option rows scrolled away, leaving the question as the LAST
+# rendered line: a dialog is the final thing the pane drew, so this refuses too.
+TRUST_QUESTION_ONLY_SCREEN = "◇ Qoder CLI CN\n\n Do you trust the files in this folder?\n"
+
+# A tool-permission dialog: the question form AND the compact numbered Yes/No selector row
+# these dialogs render, together as the last block on screen.
+PERMISSION_DIALOG_SCREEN = (
+    "⏺ Bash(git status)\nDo you want to allow Bash to run this command?\n❯ 1. Yes  2. No\n"
+)
+
+# A settled, unblocked pane: prompt line and status footer, no dialog anywhere.
+CLEAN_IDLE_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\n"
+    "*   Type your message or @path/to/file\n"
+    " Model · 200K context · ~/repo\n"
+)
+
+# ── benign screens: agent PROSE that renders dialog-shaped text (#182 h2, P2-1) ─────────
+# A false positive here blocks a legitimate prompt, which is worse than the bug the gate
+# fixes. Each screen below is settled AND shows dialog-looking text, and each must DELIVER.
+# The four were reproduced against the shipped patterns: all four were refused.
+
+# The self-inflicted case in THIS repo: an agent that just reviewed
+# `references/agents/qodercli.md` prints the trust block it documents. The block is itself
+# contiguous question+options, so contiguity alone cannot save it — the pane's idle UI below
+# it is what proves the block is transcript, not a live dialog.
+QODERCLI_QUOTE_SCREEN = (
+    "◎ main · ◎ h2-reviewer 42s\n"
+    "The reference documents the selector verbatim:\n"
+    " Do you trust the files in this folder?\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+    "*   Type your message or @path/to/file\n"
+    " Model · 200K context · ~/repo\n"
+)
+
+# Prose that STARTS like the trust option row, measured to settle which rule saves it: it
+# delivers because `_block_dialog_kind` finds NO dialog STRUCTURE here — no question row and no
+# adjacent `1`/`2` trust pair — not because of the label shape. Even if `SELECTOR_ROW` were
+# loosened to accept this line, a lone numbered row with no paired question is not a dialog. The
+# whole-line rule is a second, redundant guard: `is the first menu entry.` ends on a period the
+# label class still rejects. The shipped comment claimed the whole-line rule alone saved it; that
+# was never measured and this screen proves it was not the operative reason.
+PROSE_TRUST_OPTION_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\n"
+    "The selector has two rows:\n"
+    "1. Trust folder is the first menu entry.\n"
+)
+
+# Prose in the permission question's own form, with no selector row anywhere near it. The
+# shipped pattern needed only the literal prefix, so this alone was refused.
+PROSE_PERMISSION_QUESTION_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\nDo you want to allow network access?\n"
+)
+
+# The same question addressed to the agent itself. The shipped comment claimed the missing
+# subject ("allow me to") kept that pattern dialog-specific; the regex never checked it.
+PROSE_PERMISSION_SELF_SCREEN = (
+    "◎ main · ◎ h2-writer 191s\nDo you want to allow me to rewrite the fixture?\n"
+)
+
+# ── h2c: the input box is the discriminator — the P1 table, judged as a pure function ──────
+# `_screen_modal_block` is pure and takes one snapshot, so the reviewer's seven live-dialog
+# panes are pinned against it directly, not stub-plumbed one case at a time. All seven
+# returned None (the prompt delivered into the dialog) on f6f1d978: the shipped tail rule
+# was defeated by ANY trailing chrome row.
+
+H2C_TRUST_ROWS = (
+    " Do you trust the files in this folder?\n"
+    " /private/tmp/example-worktree\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+)
+H2C_PERMISSION_ROWS = (
+    "⭯ Bash(rm -rf build)\nDo you want to allow Bash to run this command?\n  ❯ 1. Yes  2. No\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("screen", "kind", "quoted"),
+    [
+        pytest.param(
+            H2C_TRUST_ROWS + " ⏵⏵ bypass permissions on\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "Do you trust the files in this folder?",
+            id="trust-plus-mode-badge",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + "\n◎ main · ◎ w11:p1Q 191s\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "1. Trust folder",
+            id="trust-blank-statusbar",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + " Model · 200K context · ~/repo\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "Do you trust the files in this folder?",
+            id="trust-plus-footer",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + " └────╯\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "1. Trust folder",
+            id="trust-plus-box-border",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS + " Esc to cancel\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "Do you trust the files in this folder?",
+            id="trust-plus-esc-cancel",
+        ),
+        pytest.param(
+            H2C_PERMISSION_ROWS + " ✻ Waiting…\n",
+            herdr_prompt.PERMISSION_DIALOG_KIND,
+            "Do you want to allow Bash to run this command?",
+            id="permission-plus-spinner",
+        ),
+        pytest.param(
+            H2C_TRUST_ROWS
+            + " ↑/↓ navigate · Enter select · Esc back\n Model · 200K context · ~/repo\n",
+            herdr_prompt.TRUST_DIALOG_KIND,
+            "2. Don't trust and exit",
+            id="trust-hint-and-footer",
+        ),
+    ],
+)
+def test_trailing_chrome_below_a_live_dialog_still_refuses(
+    screen: str, kind: str, quoted: str
+) -> None:
+    """P1: trailing chrome is not an input box and never vetoes the dialog verdict.
+
+    A live modal replaces the pane's input box (`references/agents/qodercli.md:44-50`: the
+    selector "loads nothing else"), so a mode badge, blank line plus status bar, model
+    footer, box border, `Esc to cancel`, spinner, or hint row below the dialog says nothing
+    about an idle pane: every pane here must refuse. Mutants killed: the shipped tail rule
+    (all seven delivered); counting the ` Model · …` footer as the idle-input veto marker
+    (`trust-plus-footer` and `trust-hint-and-footer` deliver).
+    """
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, f"{screen!r} shows a live dialog and must refuse"
+    observed_kind, quote = verdict
+    assert observed_kind == kind
+    assert quoted in quote
+
+
+def test_dialog_with_the_idle_input_row_above_it_still_refuses_because_the_veto_is_below() -> None:
+    """The marker's POSITION is load-bearing: only a row BELOW the block can veto it.
+
+    A live modal replaces the input box, so an idle prompt row rendered ABOVE the dialog
+    (transcript scrolled above a fresh modal) is not evidence of an idle pane: this pane
+    must refuse. Disclosure: with the loose veto witness present this refusal is enforced by
+    BOTH guards, and a mutation that drops only the `last_dialog + 1` start bound (letting the
+    veto scan from row 0) is EQUIVALENT — every dialog row is itself loose dialog-shaped, so a
+    marker above the block always has dialog-shaped text beneath it and the loose check blocks
+    the veto anyway. `test_loose_veto_…` is the test that pins the operative guard; this one
+    pins the direction (a marker below the block, with nothing dialog-shaped under it, does
+    veto) and stays green whatever the start bound is.
+    """
+    screen = "*   Type your message or @path/to/file\n\n" + H2C_TRUST_ROWS
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_real_permission_render_refuses_with_a_multiline_label_and_a_proceed_question() -> None:
+    """P2-1: real renders ask `Do you want to proceed?` with `1. Yes, and don't ask again`
+    labels; the shipped one-word selector row and literal `allow` question could never fire.
+    Widening keeps the WHOLE-LINE rule: a label is words, commas, apostrophes and dashes,
+    never a sentence ending in `.`. Mutants killed: the shipped one-word SELECTOR_ROW or the
+    `allow`-only PERMISSION_QUESTION_ROW (this pane then delivers).
+    """
+    screen = (
+        "⭯ Bash(rm -rf build)\n"
+        "Do you want to proceed?\n"
+        "  ❯ 1. Yes, and don't ask again for rm commands\n"
+        "    2. No\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None
+    kind, quote = verdict
+    assert kind == herdr_prompt.PERMISSION_DIALOG_KIND
+    assert "Do you want to proceed?" in quote
+    assert "1. Yes, and don't ask again for rm commands" in quote
+
+
+def test_blank_line_separation_keeps_a_transcript_question_from_pairing_with_a_later_selector() -> (
+    None
+):
+    """P3: the block extent is the non-blank run — pairing must NOT span blank lines.
+
+    A permission question in a transcript block, a blank line, then `❯ 1. Yes` as the next
+    block's tail: no single block holds question and selector together, so the pane delivers.
+    Mutant killed: pair question and options across the whole snapshot (ignore the
+    blank-line blocks) — that mutant refuses here while `trust-options`, `permission` and
+    every P1 refusal still pass, so nothing else pinned the block extent.
+    """
+    screen = "Do you want to allow Bash to run this command?\n\n  ❯ 1. Yes\n"
+    assert herdr_prompt._screen_modal_block(screen) is None
+
+
+# ── h2d: ground truth, the substring marker, the position-sensitive veto, CRLF ──────────────
+# These pins read the captured idle bottom of the screen back out of
+# `skills/herdr/references/agents/qodercli.md`, so the veto pattern and the doc that evidences
+# it cannot drift apart, and they pin the two hardening fixes (substring marker, veto position)
+# and the CRLF normalisation the source now performs.
+
+QODERCLI_DOC = Path(__file__).resolve().parents[2] / "skills/herdr/references/agents/qodercli.md"
+
+
+def _captured_idle_block() -> list[str]:
+    """The lines of the fenced ```text capture of the idle bottom of the screen in qodercli.md."""
+    block: list[str] = []
+    collected: list[str] = []
+    inside = False
+    for line in QODERCLI_DOC.read_text(encoding="utf-8").splitlines():
+        if line.strip() == "```text":
+            inside, block = True, []
+            continue
+        if inside and line.strip() == "```":
+            if any(herdr_prompt.IDLE_INPUT_ROW.search(entry) for entry in block):
+                collected = block
+                break
+            inside = False
+            continue
+        if inside:
+            block.append(line)
+    assert collected, "qodercli.md must carry the fenced idle-bottom capture"
+    return collected
+
+
+def test_captured_idle_ui_is_the_ground_truth_for_the_veto_marker() -> None:
+    """Requirement 0: the marker's ONLY verbatim evidence is the captured idle bottom of the
+    screen; pin the pattern against that capture, not against a hand-written string.
+
+    (a) exactly one captured row matches `IDLE_INPUT_ROW` — the `Type your message` prompt;
+    (b) the ` Model · …` footer row does NOT, so a footer can never stand in for the box;
+    (c) a snapshot whose bottom is the captured UI delivers (no dialog at all), while the same
+    UI with a live trust block overlaid above the `? for shortcuts` hint and the input row gone
+    (a modal replaced it) refuses. This is the shape the veto relies on: placeholder present
+    means an idle pane, footer without placeholder does not.
+    """
+    block = _captured_idle_block()
+    markers = [row for row in block if herdr_prompt.IDLE_INPUT_ROW.search(row)]
+    assert len(markers) == 1, f"exactly the prompt row may match, saw {markers!r}"
+    footers = [row for row in block if "Model" in row and "context" in row]
+    assert footers, "the capture must include the Model footer"
+    assert not any(herdr_prompt.IDLE_INPUT_ROW.search(row) for row in footers)
+
+    assert herdr_prompt._screen_modal_block("\n".join(block) + "\n") is None
+    chrome = [row for row in block if not herdr_prompt.IDLE_INPUT_ROW.search(row)]
+    overlay = H2C_TRUST_ROWS + "\n".join(chrome) + "\n"
+    verdict = herdr_prompt._screen_modal_block(overlay)
+    assert verdict is not None, "a live trust block with only footer chrome below must refuse"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_decorated_idle_input_row_still_vetoes_the_transcript_quote() -> None:
+    """P2-1: the veto is a substring search, so chrome around the placeholder cannot silence
+    it. A trailing `? for shortcuts` hint (an alphanumeric after `file`) and a leading `[i]`
+    bracket (an alphanumeric before `Type`) each defeated the old whole-line fullmatch with its
+    `[^A-Za-z0-9]*` classes, which left every decorated transcript quote refused. Measured
+    BEFORE (92dfb394): both refuse. AFTER: both deliver. Mutant killed: revert `IDLE_INPUT_ROW`
+    to the fullmatch-with-trailing-class form.
+    """
+    trailing = (
+        H2C_TRUST_ROWS
+        + "\n*   Type your message or @path/to/file? for shortcuts\n"
+        + " Model · 200K context · ~/repo\n"
+    )
+    leading = (
+        H2C_TRUST_ROWS
+        + "\n[i] Type your message or @path/to/file\n"
+        + " Model · 200K context · ~/repo\n"
+    )
+    assert herdr_prompt._screen_modal_block(trailing) is None
+    assert herdr_prompt._screen_modal_block(leading) is None
+
+
+@pytest.mark.parametrize(
+    "idle_row",
+    [
+        pytest.param(" *   Type your message or @path/to/file", id="full-row"),
+        pytest.param(" *   Type your message or @path/to/file? for shortcuts", id="tail-hint"),
+        pytest.param("│ *   Type your message or @path/to/file", id="box-glyph-head"),
+        pytest.param(" *   Type your message or @path/to/fi", id="clipped-tail"),
+        pytest.param(" *   Type your message or @path", id="clipped-deeper"),
+        pytest.param(" *   Type your message or @pat", id="clipped-mid"),
+    ],
+)
+def test_a_clipped_idle_input_row_still_vetoes_because_the_marker_is_the_leading_phrase(
+    idle_row: str,
+) -> None:
+    """Truncation pin: a narrow pane clips the idle row's RIGHT side, so the gate may only rely
+    on the row's own beginning. The marker core is the leading phrase `Type your message`;
+    decoration (a trailing `? for shortcuts`, a leading `│ ` box glyph) and any clip into the
+    placeholder's tail (`…@path/to/fi`, `…@path`, `…@pat`) must all still veto and deliver.
+    Measured BEFORE (full-placeholder substring at 92dfb394): the three clipped forms REFUSED —
+    the ticket's failure mode. AFTER: all six deliver. Mutant killed: revert `IDLE_INPUT_ROW`
+    to the full placeholder string (the three clipped params then refuse).
+    """
+    screen = H2C_TRUST_ROWS + "\n" + idle_row + "\n Model · 200K context · ~/repo\n"
+    assert herdr_prompt._screen_modal_block(screen) is None, f"{idle_row!r} is a clipped idle row"
+
+
+def test_prose_echoing_the_marker_core_needs_the_loose_witness_and_refuses() -> None:
+    """The accepted cost of the short core, bounded by the second witness: an agent's own prose
+    row containing only the words `Type your message` matches `IDLE_INPUT_ROW`, so the core
+    alone cannot tell it from the live box. The veto still refuses here because dialog-shaped
+    text (the live numbered option row) sits BELOW the echoed row — `_loose_dialog_shape` is
+    what does the bounding. If this screen delivers, the loose witness is not doing its job.
+    Mutant killed: drop the loose veto scan — the prose row then vetoes and this pane delivers.
+    """
+    screen = H2C_TRUST_ROWS + "\nType your message\n\n" + "  ❯ 1. Yes  2. No\n"
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "dialog-shaped text below an echoed marker must block the veto"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_prose_holding_the_bare_word_type_does_not_widen_the_marker() -> None:
+    """Marker-core guard: the veto marker is the captured leading phrase, not the word `type`.
+    An agent's prose row `Just type a reply and press Enter.` sits below the quoted trust block
+    with nothing dialog-shaped beneath it, so a shorter core than `Type your message` would find
+    a veto there and deliver into the dialog. Measured: with the deliberately over-broad mutant
+    `(?i)Type` this pane delivered (no shipped pin caught it before this one existed); with the
+    shipped core it refuses. Mutant killed: any widening of `IDLE_INPUT_ROW` below the leading
+    phrase.
+    """
+    screen = H2C_TRUST_ROWS + "\nJust type a reply and press Enter.\n"
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "the bare word `type` in prose is not the idle input row"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def test_widened_selector_label_recognizes_the_live_esc_permission_render() -> None:
+    """P2-2(1): the real selector ends `… (esc)` with a comma and parentheses, which the old
+    narrow label class rejected, so the question paired with nothing and the pane delivered
+    into a live dialog. The widened label admits interior punctuation but still rejects a
+    sentence-final period (see `test_loose_veto_…`). Mutant killed: revert `_SELECTOR_LABEL` to
+    its word/comma/apostrophe/dash class — this bottom-of-screen permission render then delivers.
+    """
+    screen = (
+        "⭯ Bash(rm -rf build)\n"
+        "Do you want to proceed?\n"
+        "  ❯ 1. Yes  2. No, and tell Claude what to do differently (esc)\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None
+    assert verdict[0] == herdr_prompt.PERMISSION_DIALOG_KIND
+    assert "No, and tell Claude what to do differently (esc)" in verdict[1]
+
+
+def test_quoted_trust_above_an_idle_row_with_a_live_permission_below_refuses() -> None:
+    """P2-2 named counterexample — the exact false delivery. A transcript quotes the trust
+    block, the pane's idle input row sits beneath it, and a live permission dialog renders
+    below that row. The old veto returned at the first idle row under the quote and injected
+    into the live dialog. The position-sensitive veto forbids a marker that has dialog-shaped
+    text beneath it, and the widened label promotes the tail to the permission verdict. Measured
+    BEFORE (92dfb394): None (delivered). Measured AFTER: refuses, naming the permission dialog.
+    """
+    screen = (
+        H2C_TRUST_ROWS
+        + "\n*   Type your message or @path/to/file\n\n"
+        + "⭯ Bash(rm -rf build)\nDo you want to proceed?\n"
+        + "  ❯ 1. Yes  2. No, and tell Claude what to do differently (esc)\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "a live permission dialog below the idle row must refuse"
+    assert verdict[0] == herdr_prompt.PERMISSION_DIALOG_KIND
+    assert "Do you want to proceed?" in verdict[1]
+
+
+def test_loose_veto_refuses_a_quote_whose_idle_row_has_a_numbered_period_tail_below() -> None:
+    """P2-2(2): position sensitivity stands alone, independent of the label widening. The
+    transcript quotes the trust block; the idle row below is the only veto candidate; a live
+    tail `  ❯ 2. No, and ask what to do differently.` sits under that row. Two facts make this
+    the LOOSE-witness case: the row ends in a period, so the strict selector label still rejects
+    it and it is not a recognised dialog; and it carries the selector cursor `❯`, which is now
+    what the loose numbered witness keys on (see `_LOOSE_NUMBERED_ROW`) — without the cursor this
+    same tail would be a bare `2. …` numbered line and, as chrome below the box, would NOT block
+    the veto. With the glyph present, only the LOOSE veto test (`_loose_dialog_shape`) sees it as
+    dialog-shaped and blocks the veto. Measured BEFORE (92dfb394): None. AFTER: refuses, naming
+    the trust prompt. Mutant killed: drop the loose veto — the idle row then vetoes and this pane
+    delivers.
+    """
+    screen = (
+        H2C_TRUST_ROWS
+        + "\n*   Type your message or @path/to/file\n\n"
+        + "  ❯ 2. No, and ask what to do differently.\n"
+    )
+    verdict = herdr_prompt._screen_modal_block(screen)
+    assert verdict is not None, "a cursor-bearing numbered tail below the idle row blocks the veto"
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+@pytest.mark.parametrize(
+    "chrome",
+    [
+        pytest.param("1. Fix the parser  2. Ship it", id="todo-widget-one-line"),
+        pytest.param("2. pending dispatch", id="numbered-status-bar"),
+        pytest.param("    12. something", id="indented-numbered-line"),
+        pytest.param("1. step one\n2. step two\n3. step three", id="markdown-numbered-list"),
+    ],
+)
+def test_numbered_chrome_below_an_idle_row_does_not_block_the_veto_and_delivers(
+    chrome: str,
+) -> None:
+    """False-refusal direction (#182 h5): benign numbered chrome below the live input row must
+    DELIVER. A transcript quotes the trust block, the pane's idle `Type your message` row sits
+    below it, and the pane's own chrome — a one-line numbered todo widget (`1. Fix the parser
+    2. Ship it`), a numbered status bar (`2. pending dispatch`), an indented `    12. something`,
+    or a markdown numbered list — renders under that row. None of these carries the selector
+    cursor, so `_loose_dialog_shape` does not read them as dialog-shaped, the idle row stays the
+    live box, and the veto fires. Measured BEFORE (the optional-cursor `❯?` witness): all four
+    REFUSED — the ticket's false-refusal defect (the direction this gate treats as worse than the
+    miss). AFTER requiring the cursor: all four deliver. Mutant killed: revert `_LOOSE_NUMBERED_ROW`
+    to the optional `❯?` — a bare `N.` line then matches the loose witness, blocks the veto, and
+    every case here refuses.
+    """
+    screen = H2C_TRUST_ROWS + "\n*   Type your message or @path/to/file\n\n" + chrome + "\n"
+    assert herdr_prompt._screen_modal_block(screen) is None, f"{chrome!r} is chrome, not a dialog"
+
+
+def test_crlf_trust_dialog_refuses_after_line_ending_normalisation() -> None:
+    """P3a: every row pattern ends in a space/tab class, so a carriage return left by a CRLF
+    snapshot breaks each whole-line match and a live trust dialog delivered. `_screen_modal_block`
+    normalises CRLF and lone CR at the top (defensive — whether `herdr agent read` emits CRLF is
+    UNKNOWN, not evidence). Measured BEFORE (no normalisation): None. AFTER: refuses. Mutant
+    killed: drop the normalisation.
+    """
+    crlf = H2C_TRUST_ROWS.replace("\n", "\r\n")
+    verdict = herdr_prompt._screen_modal_block(crlf)
+    assert verdict is not None
+    assert verdict[0] == herdr_prompt.TRUST_DIALOG_KIND
+
+
+def _screen_reads(stub: StubHarness) -> list[list[str]]:
+    """Every `herdr agent read` the stub recorded: the gate's observable screen reads."""
+    return [call for call in stub.calls() if call[1:3] == ["agent", "read"]]
+
+
+@pytest.mark.parametrize(
+    ("screen", "matched"),
+    [
+        pytest.param(
+            TRUST_SELECTOR_SCREEN, "Do you trust the files in this folder?", id="startup-modal"
+        ),
+        pytest.param(TRUST_OPTIONS_SCREEN, "1. Trust folder", id="trust-options"),
+        pytest.param(
+            TRUST_QUESTION_ONLY_SCREEN,
+            "Do you trust the files in this folder?",
+            id="trust-question-only",
+        ),
+        pytest.param(
+            PERMISSION_DIALOG_SCREEN,
+            "Do you want to allow Bash to run this command?",
+            id="permission",
+        ),
+    ],
+)
+def test_modal_screen_with_settled_status_refuses_delivery(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    screen: str,
+    matched: str,
+) -> None:
+    """Core pin (#252 points 3/4): settled status + interactive_ready true + modal on screen.
+
+    The prompt must NOT be injected, the refusal quotes the observed line, and the screen
+    is confirmed exactly once — never re-read after the refusal.
+
+    Mutant killed: remove the screen check (the prompt is delivered and these asserts fail);
+    let a detected modal fall through to injection (`stub.prompts() == []` fails).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": screen,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == [], "bytes must never be injected into a modal"
+    err = capsys.readouterr().err
+    assert "refusing to inject the prompt into the dialog" in err
+    assert matched in err, "the refusal quotes the line the screen actually showed"
+    assert "reviewer" in err
+    assert len(_screen_reads(stub)) == 1, "one confirm, no re-read after the refusal"
+
+
+@pytest.mark.parametrize(
+    "screen",
+    [
+        pytest.param(PROSE_TRUST_OPTION_SCREEN, id="prose-trust-option-row"),
+        pytest.param(PROSE_PERMISSION_QUESTION_SCREEN, id="prose-permission-question"),
+        pytest.param(PROSE_PERMISSION_SELF_SCREEN, id="prose-permission-self-addressed"),
+        pytest.param(QODERCLI_QUOTE_SCREEN, id="quoted-qodercli-trust-block"),
+    ],
+)
+def test_dialog_shaped_prose_delivers_rather_than_refusing_the_prompt(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    screen: str,
+) -> None:
+    """P2-1 (#182 h2): structure, not a literal, is what makes a screen modal.
+
+    Each screen shows dialog text inside an agent's own prose while reporting settled +
+    interactive_ready, and the shipped patterns refused every one of them. A refusal here
+    blocks a legitimate prompt, which is worse than the readiness lie the gate closes.
+
+    Mutants killed: a bare numbered-option or bare question pattern (the refusal then fires
+    and `EXIT_OK`/`prompts()` fail); a matcher that drops the whole-line row rule or the
+    screen-tail rule (the quoted block and the prose sentence then refuse too).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": screen,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK, capsys.readouterr().err
+    assert len(stub.prompts()) == 1
+    assert "refusing to inject" not in capsys.readouterr().err
+
+
+def test_qodercli_quote_in_a_transcript_delivers_because_the_footer_follows(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The input-row veto specifically (#182 h2c): the same block is a dialog only with no idle row below it.
+
+    The quoted block is contiguous question+options, so no contiguity window can separate it
+    from a live selector. What separates them is the pane's input box: a live modal replaces
+    it, while here the agent's documented idle row `Type your message or @path/to/file`
+    (references/agents/qodercli.md:82-84) follows the block, so the block is transcript and
+    the veto delivers. Mutant killed: drop the idle-input veto entirely — this run then
+    refuses; `test_dialog_with_the_idle_input_row_above_it_still_refuses_because_the_veto_is_below`
+    pins the veto's direction.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": QODERCLI_QUOTE_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+
+
+def test_live_trust_block_still_refuses_with_only_a_hint_line_below(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The tail rule's other half: one selector-hint row may follow a live dialog.
+
+    `↑/↓ navigate · Enter select · Esc back` is part of the selector chrome, verbatim from
+    `references/agents/qodercli.md:49`, so it does not demote the block to transcript.
+    Mutant killed: treat ANY line below the block as disqualifying content — the shipped
+    `TRUST_SELECTOR_SCREEN` refusal then delivers and this pin plus `startup-modal` fail.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": TRUST_SELECTOR_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert "Do you trust the files in this folder?" in capsys.readouterr().err
+
+
+def test_one_screen_read_across_a_full_delivery(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The real invariant: ONE screen read per readiness DETERMINATION, whole delivery.
+
+    What is counted is the total `herdr agent read` traffic of a delivered prompt, so every
+    path that re-reads readiness is inside the pin: the pre-injection confirm in
+    `wait_for_ready`, the `herdr agent prompt` itself, then `--no-wait`'s post-injection
+    probe — `fetch_agent_revision` before the prompt, the up-to-50 `verify_prompt_accepted`
+    readiness re-probes, and the trailing revision read. The pinned `revision` never moves
+    and the status never leaves `idle`, so the handshake runs all 50 attempts and reports
+    "acceptance was not confirmed": the re-probe path demonstrably ran, and still exactly one
+    screen read was issued.
+
+    Mutant killed: move the screen read into `agent_readiness` (or into the post-injection
+    probe) — the delivery below then issues ~53 reads and the count fails. That mutant passes
+    the never-settles case, which is why this pins the total instead.
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {
+                "reviewer": {"agent_status": "idle", "interactive_ready": True, "revision": "r1"}
+            },
+            "agent_read_text": CLEAN_IDLE_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-wait"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK, capsys.readouterr().err
+    assert len(stub.prompts()) == 1
+    assert "acceptance was not confirmed" in capsys.readouterr().err
+    assert len(slept) == 49, "the post-injection probe ran its full handshake"
+    assert len(_screen_reads(stub)) == 1
+
+
+def test_skip_screen_check_delivers_to_a_modal_screen_without_reading_it(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The escape hatch (#182 h2): a false-positive refusal must not be a dead end.
+
+    A modal screen plus `--skip-screen-check` delivers, no refusal fires, and the screen is
+    read ZERO times — the flag skips the confirm rather than re-running it and ignoring the
+    verdict. Mutants killed: make the flag a no-op (exit 2, no prompt); re-check the screen
+    after the skip (the read count then fails).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": TRUST_SELECTOR_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--skip-screen-check"],
+        env=stub.base_env(),
+    )
+    err = capsys.readouterr().err
+    assert code == herdr_cli.EXIT_OK, err
+    assert len(stub.prompts()) == 1
+    assert "refusing to inject" not in err
+    assert _screen_reads(stub) == []
+
+
+def test_modal_refusal_names_the_skip_screen_check_escape_hatch(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The operator reading the refusal has to be told how to get past it.
+
+    Mutant killed: drop the flag from the remedy sentence — a false positive then leaves the
+    operator with an instruction that cannot work (clear a dialog that is not there).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get": {"reviewer": {"agent_status": "idle", "interactive_ready": True}},
+            "agent_read_text": TRUST_SELECTOR_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    err = capsys.readouterr().err
+    assert "--skip-screen-check" in err
+    assert "clear the dialog" in err
+
+
+def test_dry_run_reads_no_screen_even_on_a_modal_screen(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--dry-run` returns before the readiness gate, so it never consults the screen."""
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE, "agent_read_text": TRUST_SELECTOR_SCREEN})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--dry-run"],
+        env=stub.base_env(),
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert _screen_reads(stub) == []
+    assert stub.prompts() == []
+
+
+def test_clean_screen_still_delivers_with_exactly_one_screen_read(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Existing behaviour, unchanged: a settled idle pane with a clean screen is ready.
+
+    The wait takes three probes (working, working, idle) but the screen is consulted once,
+    at the claim, with the pinned source. Mutants killed: an unconditional per-attempt read
+    (3 reads here) and any screen-driven refusal on a clean pane (exit code here).
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "agent_get_seq": {"reviewer": ["working", "working", "idle"]},
+            "agent_read_text": CLEAN_IDLE_SCREEN,
+        }
+    )
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    assert slept == [herdr_prompt.READY_INTERVAL_SECONDS, herdr_prompt.READY_INTERVAL_SECONDS]
+    (read,) = _screen_reads(stub)
+    assert flag_value(read, "--source") == "visible"
+
+
+def test_zero_screen_reads_while_the_target_never_settles(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The count pin that catches a re-introduced poll (SKILL.md: never loop `agent read`).
+
+    A pane held `working` for the full timeout times out with ZERO screen reads: the read
+    rides only the moment a status probe claims ready.
+
+    Mutant killed: move the screen read into the per-attempt loop — this run then records ~50
+    reads and the empty assertion fails. It does NOT kill a read moved into
+    `agent_readiness`'s READY branch: a target held `working` never takes that branch, so the
+    mutant records zero reads here and this case passes. `test_one_screen_read_across_a_full_
+    delivery` pins that branch, because a delivery does reach it and re-reaches it through the
+    post-injection probe.
+    """
+    slept, fake_sleep = _sleep_recorder()
+    monkeypatch.setattr(herdr_prompt, "_sleep", fake_sleep)
+    stub.write_state({**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_USAGE
+    assert len(slept) == 49
+    assert _screen_reads(stub) == []
+
+
+def test_unreadable_screen_falls_back_to_the_status_signal(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Best effort (#252 requirement 6): a failed screen read is not modal evidence.
+
+    Mutant killed: treat an unreadable screen as a refusal (the clean/ready delivery here
+    turns into exit 2 and `EXIT_OK`/`prompts` fail).
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE, "agent_read_error": {"code": "pane_unavailable"}})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    err = capsys.readouterr().err
+    assert "trusting the status feed" in err
+    assert len(_screen_reads(stub)) == 1, "a refused read is not retried either"
+
+
+def test_empty_screen_output_is_not_modal_evidence(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An empty snapshot is unreadable, not a modal: one stderr line, delivery proceeds."""
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE, "agent_read_text": ""})
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    err = capsys.readouterr().err
+    assert "no screen rows" in err
+    assert "trusting the status feed" in err
+
+
+def test_screen_read_that_raises_is_reported_not_propagated(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A subprocess raise at the screen read must never crash the dispatch (requirement 6)."""
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE})
+    real_run = herdr_prompt.run_herdr
+
+    def flaky(argv: list[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[1:3] == ["agent", "read"]:
+            raise herdr_cli.HerdrError("cannot run herdr: boom")
+        return real_run(argv, env)
+
+    monkeypatch.setattr(herdr_prompt, "run_herdr", flaky)
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 1
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    assert "trusting the status feed" in err
+
+
+def test_broadcast_confirms_each_targets_screen_once(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One screen read per readiness DETERMINATION: two settled targets get two reads, one each.
+
+    Mutant killed: a per-run (not per-target) confirm — the second target then ships
+    unconfirmed and the per-target read counts here fail.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "callee1", "agent": "pi", "agent_status": "idle"},
+            {"pane_id": "w9:p2", "name": "callee2", "agent": "pi", "agent_status": "idle"},
+        ],
+        "agent_get": {
+            "callee1": {"agent_status": "idle"},
+            "callee2": {"agent_status": "idle"},
+        },
+        "agent_read_text": CLEAN_IDLE_SCREEN,
+    }
+    stub.write_state(state)
+    code = herdr_prompt.main(
+        ["callee1", "callee2", "--file", str(payload_file(tmp_path, "hi"))], env=stub.base_env()
+    )
+    assert code == herdr_cli.EXIT_OK
+    assert len(stub.prompts()) == 2
+    reads = _screen_reads(stub)
+    assert [call[3] for call in reads] == ["callee1", "callee2"]

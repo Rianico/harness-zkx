@@ -73,10 +73,20 @@ INHERITED_FAMILIES = (
     "--until",
     "--timeout",
     "--no-caller-context",
+    "--skip-screen-check",
     "--verbose",
 )
 INHERITED_DESTS = frozenset(
-    {"json", "wait", "no_wait", "until", "timeout", "no_caller_context", "verbose"}
+    {
+        "json",
+        "wait",
+        "no_wait",
+        "until",
+        "timeout",
+        "no_caller_context",
+        "skip_screen_check",
+        "verbose",
+    }
 )
 
 

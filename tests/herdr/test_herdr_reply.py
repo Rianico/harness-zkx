@@ -23,6 +23,7 @@ from typing import Any
 
 import herdr_bootstrap
 import herdr_cli
+import herdr_label
 import herdr_lease
 import herdr_prompt
 import herdr_reply
@@ -63,16 +64,21 @@ def test_positional_message_is_delivered_verbatim(stub: StubHarness) -> None:
     (call,) = stub.prompts()
     assert call[1:4] == ["agent", "prompt", "orchestrator"]
     assert call[4].endswith(METACHARS)
-    envelope = call[4].splitlines()
-    assert envelope[1] == "Routing:"
-    assert envelope[2] == "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi"
-    assert envelope[3] == "  Receiver: orchestrator"
-    assert envelope[4] == "Hierarchy:"
-    assert envelope[5] == "  Task-Group: w9:t1"
-    assert envelope[6] == "Protocol:"
-    assert envelope[7] == f"  {herdr_prompt.SKILL_NOTICE}"
-    assert "Cwd:" not in call[4], "a reply stays short: no resumption fields"
-    assert "reply to the sender" not in call[4]
+    text = call[4]
+    envelope, _body = herdr_prompt.split_envelope_and_body(text)
+    assert envelope is not None
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "orchestrator"
+    assert envelope.task_group == "w9:t1"
+    assert envelope.state == "TASK_STATE_COMPLETED"
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", envelope.timestamp)
+    assert text.startswith("---\n")
+    assert f"\n---\n{herdr_prompt.SKILL_NOTICE}\n\n" in text
+    assert not any(line.startswith("[") for line in text.splitlines())
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in text
+    assert "cwd:" not in text, "a reply stays short: no resumption fields"
+    assert "reply to the sender" not in text
     assert "replied to orchestrator" in done.stdout
 
 
@@ -82,7 +88,9 @@ def test_file_payload_is_delivered_verbatim(stub: StubHarness, tmp_path: Path) -
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(METACHARS)
-    assert "Receiver: orchestrator" in call[4]
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    assert envelope.receiver == "orchestrator"
 
 
 def test_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
@@ -90,7 +98,9 @@ def test_stdin_payload_is_delivered_verbatim(stub: StubHarness) -> None:
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(METACHARS)
-    assert "Receiver: orchestrator" in call[4]
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    assert envelope.receiver == "orchestrator"
 
 
 def test_missing_target_is_rejected(stub: StubHarness) -> None:
@@ -180,7 +190,7 @@ def test_a_refused_reply_keeps_the_lease_so_the_corrected_reply_advances(
 
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "completed"
+    assert task["status"] == herdr_lease.STATE_COMPLETED
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
@@ -224,7 +234,7 @@ def test_a_correction_for_a_lease_expired_ticket_binds_the_rendered_task(
         "the first reply consumed the lease; only the rendered --ticket can bind the next"
     )
     first_task = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert first_task is not None and first_task["status"] == "blocked"
+    assert first_task is not None and first_task["status"] == herdr_lease.STATE_INPUT_REQUIRED
 
     corrected = reply.run(
         "orchestrator",
@@ -238,7 +248,7 @@ def test_a_correction_for_a_lease_expired_ticket_binds_the_rendered_task(
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
     assert record["task_id"] == rendered_ticket, "the rendered --ticket names the correct task"
     advanced = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert advanced is not None and advanced["status"] == "completed"
+    assert advanced is not None and advanced["status"] == herdr_lease.STATE_COMPLETED
     assert [event for event in advanced["trajectory"] if event["event"] == "completed"], (
         "the correction must advance the correct task"
     )
@@ -292,8 +302,8 @@ def test_a_second_reply_with_an_ambiguous_ticket_is_recorded_unlinked_and_warns(
     assert len([line for line in ambiguous.stderr.splitlines() if "task linkage" in line]) == 1
     first_state = herdr_lease.get_task(first_task, base_dir=tmp_path)
     second_state = herdr_lease.get_task(second_task, base_dir=tmp_path)
-    assert first_state is not None and first_state["status"] == "dispatched"
-    assert second_state is not None and second_state["status"] == "blocked"
+    assert first_state is not None and first_state["status"] == herdr_lease.STATE_SUBMITTED
+    assert second_state is not None and second_state["status"] == herdr_lease.STATE_INPUT_REQUIRED
 
 
 def test_explicit_ticket_flag_binds_a_reply_the_lease_cannot(
@@ -326,8 +336,8 @@ def test_explicit_ticket_flag_binds_a_reply_the_lease_cannot(
     assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] == named
     named_state = herdr_lease.get_task(named, base_dir=tmp_path)
     other_state = herdr_lease.get_task(other, base_dir=tmp_path)
-    assert named_state is not None and named_state["status"] == "completed"
-    assert other_state is not None and other_state["status"] == "dispatched"
+    assert named_state is not None and named_state["status"] == herdr_lease.STATE_COMPLETED
+    assert other_state is not None and other_state["status"] == herdr_lease.STATE_SUBMITTED
 
 
 def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
@@ -371,8 +381,206 @@ def test_explicit_ticket_flag_naming_a_foreign_task_is_unlinked_and_warns(
     assert herdr_reply.UNLINKED_UNREADABLE_MARKER not in warnings[0], warnings[0]
     foreign_state = herdr_lease.get_task(foreign, base_dir=tmp_path)
     mine_state = herdr_lease.get_task(mine, base_dir=tmp_path)
-    assert foreign_state is not None and foreign_state["status"] == "dispatched"
-    assert mine_state is not None and mine_state["status"] == "dispatched"
+    assert foreign_state is not None and foreign_state["status"] == herdr_lease.STATE_SUBMITTED
+    assert mine_state is not None and mine_state["status"] == herdr_lease.STATE_SUBMITTED
+
+
+# ── #182 t5 2.1: the envelope may not advertise a correlation the record denies ─────
+
+
+def test_a_refused_ticket_binding_never_advertises_the_lease_task(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Invariant (#182 h1 restated): `envelope.id` is the linked task or a generated id, never the
+    refused lease's task and never `''` — the lease is no envelope fallback.
+
+    A delivered message must not claim a correlation the store denies. When an explicit
+    `--ticket` binding is REFUSED (here it names another sender's task) the resolver answers
+    `(None, warning)` while the sender's live lease still names a task, so the old
+    `linked_task_id or in_reply_to` fallback rendered `id: '<lease task>'` and
+    `metadata.in_reply_to: '<lease task>'` above a row written with `task_id: null`. Only
+    stderr knew; the callee read a task id off the wire that no record carries, and any
+    advance gate keyed on it would have hunted the wrong row.
+
+    Pin -> mutant: restore the lease fallback (`linked_task_id or in_reply_to`) and `id` names
+    `#246#t5-mine` while the record names nothing. The same mutant leaves every other pin green:
+    no test pinned the fallback, which is why this invariant had no detector.
+    """
+    foreign = "#999#t5-foreign"
+    mine = "#246#t5-mine"
+    _ = herdr_lease.acquire_lease(
+        "someone-else",
+        "999.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#999",
+        task_id=foreign,
+    )
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=mine
+    )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 4 passed\n",
+        "--ticket",
+        foreign,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    (call,) = stub.prompts()
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] is None, "the refused binding records nothing to link"
+    # `id` is required by A2A, so an unbound reply carries the generated id, not the blank it
+    # rendered before #182 h1. `metadata.in_reply_to` stays absent: the generated half is for
+    # `id` alone, so a refusal still cannot advertise a correlation the record denies.
+    assert envelope.id.startswith("unlinked-"), envelope.id
+    assert envelope.id != mine, "a refusal may not put the lease's task in the id slot"
+    assert (envelope.in_reply_to or None) == record["task_id"], envelope.in_reply_to
+    assert mine not in call[4], "the lease's task id never reaches the delivered message"
+
+
+def test_a_refused_in_reply_to_binding_never_advertises_the_lease_task(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The same invariant on the `--in-reply-to` refusal: an id the store cannot bind is generated.
+
+    `--in-reply-to <RECORD>` names no reply of this sender, so the resolver refuses, while the
+    sender's lease still holds a task. The envelope and the row must agree on "unlinked": a
+    generated `id` plus no correlation key, never the lease's task.
+
+    Pin -> mutant: restore the lease fallback and the refusal ships the lease task as `id`.
+    """
+    mine = "#246#t5-mine-irt"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=mine
+    )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 4 passed\n",
+        "--in-reply-to",
+        "no-such-record",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    (call,) = stub.prompts()
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["task_id"] is None
+    assert envelope.id.startswith("unlinked-"), envelope.id
+    assert envelope.id != mine, "a refusal may not put the lease's task in the id slot"
+    assert (envelope.in_reply_to or None) == record["task_id"], envelope.in_reply_to
+    assert mine not in call[4]
+
+
+def test_the_lease_still_names_the_envelope_task_when_nothing_was_bound(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The fix must not lose the legacy lease path: with no explicit binding the resolver already
+    answers from the lease, so envelope and record agree on the lease's task. A linked reply keeps
+    its real id — the generated `unlinked-…` fallback replaces only the blank `''` used to render.
+
+    Pin -> mutant: drop the lease branch of `resolve_task_linkage` instead of the envelope
+    fallback, and the first reply renders a generated `unlinked-…` id while the record still
+    carries the task.
+    """
+    mine = "#246#t5-lease-only"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=mine
+    )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    (call,) = stub.prompts()
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert envelope.id == mine == record["task_id"]
+    assert envelope.in_reply_to == mine
+
+
+# ── #182 h1: A2A requires `Task.id`, so no reply path may render an empty one ─────
+
+
+@pytest.mark.parametrize(
+    ("path", "flags", "leased", "expect_task"),
+    [
+        ("linked", (), True, True),
+        ("unlinked", (), False, False),
+        ("refused", ("--ticket", "#999#h1-foreign"), True, False),
+        ("dry-run", ("--dry-run", "--json"), False, False),
+    ],
+    ids=("linked", "unlinked", "refused-binding", "dry-run"),
+)
+def test_every_reply_path_delivers_a_non_empty_task_id(
+    stub_factory: Callable[[Path], StubHarness],
+    tmp_path: Path,
+    path: str,
+    flags: tuple[str, ...],
+    leased: bool,
+    expect_task: bool,
+) -> None:
+    """A `Task` without an `id` is malformed to a generic A2A parser, so every route fills the slot.
+
+    Four states of the same delivery: linked (the lease's task), unlinked (nothing bound), refused
+    (an explicit binding the store denied), and a `--dry-run` preview. The last three must render
+    the generated `unlinked-…` id, and the refusal must still not name the lease's task.
+
+    Pin -> mutant: restore `task_id or ""` and the three unbound cases read `''` back off the wire.
+    """
+    stub = stub_factory(SCRIPT)
+    task = "#182-a2a-hardening#h1-task"
+    if path == "refused":
+        _ = herdr_lease.acquire_lease(
+            "someone-else",
+            "999.md",
+            "orchestrator",
+            base_dir=tmp_path,
+            ticket_id="#999",
+            task_id="#999#h1-foreign",
+        )
+    if leased:
+        _ = herdr_lease.acquire_lease(
+            "reviewer", "182.md", "orchestrator", base_dir=tmp_path, ticket_id="#182", task_id=task
+        )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        *flags,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    delivered = json.loads(done.stdout)[4] if path == "dry-run" else stub.prompts()[0][4]
+
+    envelope = herdr_prompt.parse_envelope(delivered)
+    assert envelope is not None
+    assert envelope.id != "", f"the {path} reply delivered an empty Task.id"
+    if expect_task:
+        assert envelope.id == task
+        return
+    assert envelope.id.startswith("unlinked-"), envelope.id
+    assert envelope.id != task, "the lease's task stays out of a reply that bound nothing"
+    if path in {"unlinked", "dry-run"}:
+        assert envelope.ticket_id == "" and envelope.in_reply_to == ""
+        assert "ticket_id:" not in delivered.split("metadata:")[1]
+        assert "in_reply_to:" not in delivered.split("metadata:")[1]
+        assert envelope.id not in delivered.split("metadata:")[1], (
+            "a generated id is never a correlation: it belongs to `id` alone"
+        )
+    if path == "refused":
+        assert "#999#h1-foreign" not in delivered
 
 
 def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
@@ -427,7 +635,7 @@ def test_a_reply_using_the_rendered_contract_binds_with_no_lease(
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
     assert record["task_id"] == rendered_ticket, "the rendered --ticket names the task to advance"
     task = herdr_lease.get_task(rendered_ticket, base_dir=tmp_path)
-    assert task is not None and task["status"] == "completed"
+    assert task is not None and task["status"] == herdr_lease.STATE_COMPLETED
 
 
 def test_the_rendered_ticket_resolves_to_a_distinct_task_id(
@@ -482,7 +690,7 @@ def test_the_rendered_ticket_resolves_to_a_distinct_task_id(
         "the rendered ticket id must resolve to the DISTINCT task id, not the ticket id"
     )
     task = herdr_lease.get_task(distinct_task, base_dir=tmp_path)
-    assert task is not None and task["status"] == "completed"
+    assert task is not None and task["status"] == herdr_lease.STATE_COMPLETED
     assert "task linkage" not in done.stderr, done.stderr
 
 
@@ -530,8 +738,8 @@ def test_in_reply_to_record_rebinds_a_followup_without_restating_the_ticket(
     assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["task_id"] == second_task
     second_state = herdr_lease.get_task(second_task, base_dir=tmp_path)
     first_state = herdr_lease.get_task(first_task, base_dir=tmp_path)
-    assert second_state is not None and second_state["status"] == "completed"
-    assert first_state is not None and first_state["status"] == "dispatched"
+    assert second_state is not None and second_state["status"] == herdr_lease.STATE_COMPLETED
+    assert first_state is not None and first_state["status"] == herdr_lease.STATE_SUBMITTED
 
 
 def test_a_reply_whose_open_task_cannot_be_named_is_still_unlinked_and_never_guessed(
@@ -768,18 +976,22 @@ def test_the_flag_path_markers_are_pinned_at_the_resolver(
     assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warning, warning
 
 
-def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
+def test_a_missing_lane_anchor_falls_back_records_and_warns_once(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """#246 D1.5 F1/F2: with no lane anchor the warning names the real outcome, and no record.
+    """#182 h3 rewrite of the #246 D1.5 F1 pin: no anchor is no longer unreadable — it falls back.
 
-    `resolve_base_dir` raises `LaneAnchorError` before the store is read or written, so the
-    run records nothing and the delivered prompt carries the `NOT RECORDED` pointer. The
-    warning used to end with "; recording the reply unlinked" anyway — one run, two
-    contradictory statements about what happened. The record claim is caller-side now.
+    Before h3 `resolve_base_dir` raised `LaneAnchorError` here, the run recorded nothing,
+    and the delivered pointer said `NOT RECORDED`; the pin was that the warning never
+    claimed a record the resolver never saw written. Now an unanchored pane resolves the
+    user-level store (`HOME` pinned to `tmp_path` by `base_env()`), the store takes the
+    record, and the record claim is the truth: the linkage warning names the nothing-to-link
+    severity and the pointer cites the recorded id. The resolver-level pins that refuse a
+    record claim when nothing was written stay in
+    `test_the_flag_path_markers_are_pinned_at_the_resolver` and its neighbours above.
 
-    Mutant killed: append the recording clause inside `_unlinked` again and this pin fails on
-    the warning claiming a record the pointer delivered in the same run says was not written.
+    Mutant killed: remove the fallback from `resolve_base_dir` and the run is back to the
+    abort-plus-`NOT RECORDED` shape this test no longer accepts.
     """
     nongit = tmp_path / "nongit"
     nongit.mkdir()
@@ -791,17 +1003,20 @@ def test_a_missing_lane_anchor_warns_once_and_never_claims_a_record(
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
+    assert done.stderr.count("user-level lane store") == 1, done.stderr
     warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
     assert len(warnings) == 1, done.stderr
-    assert "could not be read" in warnings[0], warnings[0]
-    assert herdr_reply.UNLINKED_UNREADABLE_MARKER in warnings[0], warnings[0]
-    assert herdr_reply.RECORDED_CLAUSE not in warnings[0], warnings[0]
-    assert warnings[0].endswith(herdr_reply.NOT_RECORDED_CLAUSE), warnings[0]
-    assert len([line for line in done.stderr.splitlines() if "could not be read" in line]) == 1
+    assert herdr_reply.UNLINKED_NOTHING_MARKER in warnings[0], warnings[0]
 
     (call,) = stub.prompts()
-    assert "Payload: NOT RECORDED" in call[4], call[4]
-    assert not (nongit / ".lane").exists(), "no store was written: the anchor never resolved"
+    assert "Payload: NOT RECORDED" not in call[4], call[4]
+    fallback_store = tmp_path / ".herdr" / "lane"
+    assert list((fallback_store / ".lane" / "replies").glob("*.yaml")), (
+        "the fallback store must hold the reply record"
+    )
+    assert not (nongit / ".lane").exists(), (
+        "the fallback store is home-derived, not cwd-derived (#229)"
+    )
 
 
 def test_a_flagless_reply_with_one_open_task_is_unlinked_and_mutates_nothing(
@@ -827,7 +1042,7 @@ def test_a_flagless_reply_with_one_open_task_is_unlinked_and_mutates_nothing(
         "no lease: nothing may bind this reply"
     )
     before = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert before is not None and before["status"] == "dispatched"
+    assert before is not None and before["status"] == herdr_lease.STATE_SUBMITTED
 
     done = stub.run(
         "orchestrator",
@@ -842,7 +1057,7 @@ def test_a_flagless_reply_with_one_open_task_is_unlinked_and_mutates_nothing(
     assert len(warnings) == 1, done.stderr
     assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
     after = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert after is not None and after["status"] == "dispatched", "no task may move"
+    assert after is not None and after["status"] == herdr_lease.STATE_SUBMITTED, "no task may move"
     assert not [event for event in after["trajectory"] if event["event"] == "completed"], (
         "the flagless reply must not append a completed event to any task"
     )
@@ -888,7 +1103,7 @@ def test_a_reply_about_another_ticket_never_flips_the_unrelated_open_task(
     assert len(warnings) == 1, done.stderr
     assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
     after = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert after is not None and after["status"] == "dispatched", (
+    assert after is not None and after["status"] == herdr_lease.STATE_SUBMITTED, (
         "#247#probe-unrelated must not have been flipped"
     )
     assert not [event for event in after["trajectory"] if event["event"] == "completed"], (
@@ -932,7 +1147,7 @@ def test_a_flagless_reply_with_one_open_task_says_no_ticket_was_inferred(
     assert "no ticket was inferred" in warnings[0], warnings[0]
     assert "--ticket" in warnings[0], warnings[0]
     after = herdr_lease.get_task(task_id, base_dir=tmp_path)
-    assert after is not None and after["status"] == "dispatched", "no task may move"
+    assert after is not None and after["status"] == herdr_lease.STATE_SUBMITTED, "no task may move"
 
 
 def test_explicit_linkage_bindings_stay_silent(stub: StubHarness, tmp_path: Path) -> None:
@@ -1012,17 +1227,30 @@ def test_the_open_and_terminal_status_partition_covers_every_canonical_status() 
     hardcoded the singleton {"completed"}, any status added later would silently count as open.
     The partition is now enumerated and pinned total and disjoint against the store's
     `CANONICAL_STATUSES`, so a new status forces a decision instead of defaulting.
+
+    #182 t3 widens the *read* side, not the partition: the store now spells states as
+    `TASK_STATE_*` and still accepts the historical tokens written by worktrees that have not
+    cut over. So the totals are re-pinned over both vocabularies, and a token that names no
+    state is pinned to read as neither open nor advanceable.
     """
     open_statuses = herdr_reply.OPEN_TASK_STATUSES
     terminal_statuses = herdr_reply.TERMINAL_TASK_STATUSES
     assert open_statuses | terminal_statuses == frozenset(herdr_lease.CANONICAL_STATUSES)
     assert open_statuses.isdisjoint(terminal_statuses)
-    assert terminal_statuses == frozenset({"completed"})
+    assert terminal_statuses == frozenset({herdr_lease.STATE_COMPLETED})
     for status in herdr_lease.CANONICAL_STATUSES:
         assert herdr_reply._is_open_task({"status": status}) is (status in open_statuses), status
     assert [status for status in herdr_lease.CANONICAL_STATUSES if status not in open_statuses] == [
-        "completed"
+        herdr_lease.STATE_COMPLETED
     ]
+    # Every historical token lands on exactly the side its canonical alias does.
+    for token in herdr_lease.HISTORICAL_STATUSES:
+        canonical = herdr_lease.normalize_status(token)
+        assert canonical is not None, token
+        assert herdr_reply._is_open_task({"status": token}) is (canonical in open_statuses), token
+    # A status that names no state is neither open nor a completion: it may not be advanced.
+    for unknown in ("", "working", "COMPLETED", "task_state_completed", "unassigned-ish"):
+        assert herdr_reply._is_open_task({"status": unknown}) is False, unknown
 
 
 def test_a_corrupt_store_reads_as_unreadable_not_as_a_missing_open_task(
@@ -1152,8 +1380,8 @@ def test_reply_dry_run_prints_a_trimmed_summary_not_the_raw_argv(stub: StubHarne
     """#259: a reply dry run echoes metadata + a body preview, never the serialized argv.
 
     #259 anchor addendum: the status line is `[You: …] dry-run: would reply to <target>`.
-    #260: the delivered reply carries a plain `Receiver:` — the `(You)` form is gone everywhere,
-    and only the legacy header still parses.
+    #260: the caller echo carries the A2A frontmatter metadata lines — bare `receiver:`, no
+    `(You)` form, no fences or `Herdr:` notice — between the two `---` page breaks.
     """
     done = stub.run("orchestrator", "COMPLETED", "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
@@ -1162,11 +1390,15 @@ def test_reply_dry_run_prints_a_trimmed_summary_not_the_raw_argv(stub: StubHarne
     lines = out.splitlines()
     assert lines[0] == "[You: reviewer@w9:p1] dry-run: would reply to orchestrator"
     assert lines[1] == "---"
-    assert "Routing:" in out
-    assert "  Receiver:" in out
+    assert "metadata:" in out
+    assert "  receiver: orchestrator" in out
+    assert "  sender: reviewer@w9:p1" in out
+    assert "  state: TASK_STATE_COMPLETED" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in out
     assert herdr_prompt.SKILL_NOTICE not in out
+    assert not any(line.startswith("[") for line in lines[2:])
     assert lines.count("---") == 2
     assert "Payload: inline (9 bytes)" in out
     assert "COMPLETED" in out
@@ -1177,7 +1409,7 @@ def test_reply_dry_run_json_prints_the_full_wrapped_callee_payload(stub: StubHar
     """#259: `--json` keeps the machine render with the full callee payload.
 
     Pin -> mutant: trimming the DELIVERED reply rather than only the caller echo — element [4]
-    still carries the `Protocol:` notice the callee reads.
+    still carries the fenced frontmatter and the `Herdr:` skill notice the callee reads.
     """
     done = stub.run("orchestrator", "COMPLETED", "--dry-run", "--json")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
@@ -1194,10 +1426,14 @@ def test_live_reply_prints_status_then_trimmed_summary(stub: StubHarness) -> Non
     assert lines[0].startswith("[You: reviewer@w9:p1] replied to orchestrator")
     assert "bytes=" in lines[0]
     assert lines[1] == "---"
-    assert "Routing:" in out
-    assert "  Receiver:" in out
+    assert "metadata:" in out
+    assert "  receiver: orchestrator" in out
+    assert "  sender: reviewer@w9:p1" in out
+    assert "  state: TASK_STATE_COMPLETED" in out
     assert "(You)" not in out
-    assert "Protocol:" not in out
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in out
+    assert not any(line.startswith("[") for line in lines[2:])
     assert "Payload: inline (9 bytes)" in out
     assert "COMPLETED" in out
 
@@ -1478,12 +1714,18 @@ def test_reply_releases_lease_for_current_agent(stub: StubHarness, tmp_path: Pat
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
-def test_reply_is_delivered_when_no_lease_store_resolves(stub: StubHarness, tmp_path: Path) -> None:
-    """B1: delivery is not a function of store resolution (#229).
+def test_reply_is_delivered_and_recorded_when_no_lane_anchor_resolves(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """B1 (#229), restated for #182 h3: delivery is not a function of store resolution.
 
-    A callee in a scratch directory no anchor covers still gets its completion through —
-    exit 0 and one prompt — and every lease step it could not run says so on stderr
-    (correlation, trajectory note, release) instead of aborting the reply or vanishing.
+    A callee in a scratch directory no repo anchor covers still gets its completion through
+    — exit 0 and one prompt — and every lease step on the fallback store is a no-op lookup,
+    not a skip: before h3 each unresolvable step printed one "… skipped: no lane state
+    anchor" stderr line (three per run); now the run resolves the user-level store (HOME
+    pinned to `tmp_path` by `base_env()`), prints exactly one fallback advisory, and records
+    the reply. A run whose store genuinely cannot resolve still prints the skip lines —
+    pinned by injecting the raise at the seam in `test_herdr_lease_store.py`.
     """
     scratch = tmp_path / "no-repo"
     scratch.mkdir()
@@ -1495,16 +1737,19 @@ def test_reply_is_delivered_when_no_lease_store_resolves(stub: StubHarness, tmp_
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert len(stub.prompts()) == 1
     assert "replied to orchestrator" in done.stdout
-    for step in ("lease correlation", "trajectory note", "lease release"):
-        assert f"{step} skipped" in done.stderr
-    assert done.stderr.count("no lane state anchor") == 3
+    assert "skipped" not in done.stderr, done.stderr
+    assert done.stderr.count("no lane state anchor") == 0
+    assert done.stderr.count("user-level lane store") == 1, done.stderr
 
 
-def test_reply_without_a_resolvable_store_drops_envelope_metadata_only(
+def test_reply_from_an_unanchored_pane_drops_envelope_metadata_only(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """F2: a skipped correlation loses `Ticket-ID`/`In-Reply-To`, never the reply.
+    """F2, restated for #182 h3: a correlation that finds no lease loses
+    `metadata.ticket_id`/`in_reply_to`, never the reply.
 
+    The store now resolves — to the user-level fallback — so correlation RUNS and simply
+    finds nothing there: the scratch pane's lease lives in no store this call can name.
     Correlation is by pane/target (`agent prompt <target> <payload>`), so the caller still
     matches the reply to its outstanding request; only the envelope enrichment degrades.
     """
@@ -1517,8 +1762,8 @@ def test_reply_without_a_resolvable_store_drops_envelope_metadata_only(
 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
-    assert "Ticket-ID:" not in call[4]
-    assert "In-Reply-To:" not in call[4]
+    assert "ticket_id:" not in call[4]
+    assert "in_reply_to:" not in call[4]
     assert "COMPLETED" in call[4]
 
 
@@ -1552,9 +1797,165 @@ def test_reply_populates_correlation_from_sender_lease_and_releases(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     text = call[4]
-    assert "  Ticket-ID: #182-herdr-msg-enhance" in text
-    assert "  In-Reply-To: #182-herdr-msg-enhance#full-stack" in text
+    envelope = herdr_prompt.parse_envelope(text)
+    assert envelope is not None
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.id == "#182-herdr-msg-enhance#full-stack"
+    assert envelope.in_reply_to == "#182-herdr-msg-enhance#full-stack"
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_second_reply_after_lease_release_keeps_the_envelope_correlation(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """dispatch -> reply 1 -> reply 2: every delivered envelope carries the A2A correlation.
+
+    The first reply releases the sender's lease and the second reply re-resolves the task from
+    the store through `--ticket`. The envelope must describe that resolved task on BOTH
+    deliveries: `id`, `metadata.ticket_id` and `metadata.in_reply_to` populated with the exact
+    expected values, never the blanks the lease-only seeding rendered once the lease was gone
+    (#246 D1.2 reached the store record but not the envelope).
+    """
+    ticket = "#182-a2a-envelope"
+    task = "#182-a2a-envelope#t1-cutover"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "182.md", "orchestrator", base_dir=tmp_path, ticket_id=ticket, task_id=task
+    )
+
+    first = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+    second = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        task,
+        env={"PWD": str(tmp_path)},
+    )
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+
+    deliveries = stub.prompts()
+    assert len(deliveries) == 2
+    for call in deliveries:
+        envelope = herdr_prompt.parse_envelope(call[4])
+        assert envelope is not None
+        assert envelope.id == task
+        assert envelope.ticket_id == ticket
+        assert envelope.in_reply_to == task
+    records = herdr_lease.list_replies(base_dir=tmp_path)
+    assert [record.get("task_id") for record in records] == [task, task]
+
+
+def test_reply_dry_run_previews_the_correlation_the_real_send_carries(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Decision pin: `--dry-run` resolves the linkage read-only (option (a)) and writes nothing.
+
+    The preview carries the same correlation the live send carries — here the store-backed
+    `--ticket` linkage after the first reply released the lease — while the store is untouched:
+    no extra prompt is submitted, no extra record is written, and the lease the preview reads is
+    STILL the lease it reads afterwards. A preview that omitted the correlation would mislead the
+    caller about what the real send delivers.
+
+    #182 t5 2.5: the non-release pin used to assert `get_lease(...) is None`, which the FIRST
+    live reply already satisfied — a vacuous pin that stayed green however many leases a dry run
+    released. The lease is therefore re-acquired so it is LIVE when the preview runs, and the pin
+    asserts presence. Mutant: let the dry-run branch reach `release_active_lease` and this fails
+    on a missing lease, where the old assertion passed.
+    """
+    ticket = "#182-a2a-envelope"
+    task = "#182-a2a-envelope#t1-cutover"
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "182.md", "orchestrator", base_dir=tmp_path, ticket_id=ticket, task_id=task
+    )
+    first = stub.run("orchestrator", "BLOCKED waiting on human input\n", env={"PWD": str(tmp_path)})
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+    # A lease LIVE at preview time: the only state in which "a dry run releases nothing" can fail.
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "182.md", "orchestrator", base_dir=tmp_path, ticket_id=ticket, task_id=task
+    )
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is not None
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 1 passed\n",
+        "--ticket",
+        task,
+        "--dry-run",
+        "--json",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    argv: list[str] = json.loads(done.stdout)
+    envelope = herdr_prompt.parse_envelope(argv[4])
+    assert envelope is not None
+    assert envelope.id == task
+    assert envelope.ticket_id == ticket
+    assert envelope.in_reply_to == task
+
+    assert len(stub.prompts()) == 1
+    assert len(herdr_lease.list_replies(base_dir=tmp_path)) == 1
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is not None, (
+        "a preview that released the live lease consumed the sender's one shot at the task"
+    )
+
+
+def test_a_dry_run_warns_about_a_refused_binding_the_live_send_warns_about(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#182 t5 2.5: the linkage warning is a resolver outcome, not a recording outcome.
+
+    The refusal fires long before the store is touched, so a `--dry-run` that stayed silent hid
+    the one thing the preview cannot deliver: the real send warns, the plan says nothing, and the
+    operator learns about the refused binding only by shipping it. The severity marker is the
+    live line's; the record clause is NOT — a preview attempts no record, so it can state neither
+    that one was written nor that a store refused to write one.
+
+    Pin -> mutant: print the warning inside the non-dry branch only (the old shape) and this sees
+    no line; append a record clause to the preview line and this sees a clause about a store the
+    run never asked.
+    """
+    foreign = "#999#t5-dry-foreign"
+    mine = "#246#t5-dry-mine"
+    _ = herdr_lease.acquire_lease(
+        "someone-else",
+        "999.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#999",
+        task_id=foreign,
+    )
+    _ = herdr_lease.acquire_lease(
+        "reviewer", "246.md", "orchestrator", base_dir=tmp_path, ticket_id="#246", task_id=mine
+    )
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED deadbeef\n\n## Evidence\n- 4 passed\n",
+        "--ticket",
+        foreign,
+        "--dry-run",
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    warnings = [line for line in done.stderr.splitlines() if "task linkage" in line]
+    assert len(warnings) == 1, done.stderr
+    assert warnings[0].startswith("herdr-reply: "), warnings[0]
+    assert herdr_reply.UNLINKED_REFUSED_MARKER in warnings[0], warnings[0]
+    assert herdr_reply.RECORDED_CLAUSE not in warnings[0], warnings[0]
+    assert herdr_reply.NOT_RECORDED_CLAUSE not in warnings[0], warnings[0]
+    assert stub.prompts() == []
+    assert herdr_lease.list_replies(base_dir=tmp_path) == []
+    # The preview renders the unlinked envelope the live send would render (#182 t5 2.1).
+    assert mine not in done.stdout, done.stdout
+    # #182 h1: the preview's `id` is the generated one, never the blank the summary used to show.
+    # Matched on the line start so `context_id: ''` — which still ends in `id: ''` — cannot clash.
+    id_lines = [line for line in done.stdout.splitlines() if line.startswith("id: ")]
+    assert len(id_lines) == 1, done.stdout
+    assert re.fullmatch(r"id: unlinked-\d{8}T\d{9}Z", id_lines[0]), done.stdout
 
 
 def test_reply_without_sender_lease_omits_correlation_and_still_sends(
@@ -1563,8 +1964,8 @@ def test_reply_without_sender_lease_omits_correlation_and_still_sends(
     done = stub.run("orchestrator", "COMPLETED", env={"PWD": str(tmp_path)})
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
-    assert "Ticket-ID:" not in call[4]
-    assert "In-Reply-To:" not in call[4]
+    assert "ticket_id:" not in call[4]
+    assert "in_reply_to:" not in call[4]
 
 
 def _shell_target_state() -> dict[str, object]:
@@ -1623,11 +2024,13 @@ def test_reply_records_completion_event_with_sha(stub: StubHarness, tmp_path: Pa
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "completed"
+    # The event label is the payload's own verdict token; the state column it writes is
+    # the canonical name that token aliases to (#182 t3 B).
+    assert task["status"] == herdr_lease.STATE_COMPLETED
     completed = [event for event in task["trajectory"] if event["event"] == "completed"]
     assert len(completed) == 1
     assert completed[-1]["sha"] == "deadbeef"
-    assert completed[-1]["to_status"] == "completed"
+    assert completed[-1]["to_status"] == herdr_lease.STATE_COMPLETED
     # The trajectory note is metadata only (#231 F3): the mapped token and the validated sha,
     # never the raw status line. `deadbeef` is a hex token, so it is the recorded sha.
     assert completed[-1]["note"] == "completed deadbeef"
@@ -1656,7 +2059,9 @@ def test_reply_maps_blocked_and_rejected_statuses(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == expected
+    # The verdict token names a state; the state is persisted canonically, while the
+    # trajectory event keeps the token the payload spoke.
+    assert task["status"] == herdr_lease.normalize_status(expected)
     assert task["trajectory"][-1]["event"] == expected
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
@@ -2202,10 +2607,17 @@ def test_reply_delivers_body_only_when_the_store_write_fails(
     assert "reply record skipped" in done.stderr
 
 
-def test_reply_delivers_body_only_when_no_anchor_resolves(
+def test_reply_records_to_the_user_level_store_when_no_anchor_resolves(
     stub: StubHarness, tmp_path: Path
 ) -> None:
-    """Requirement 5, second setup: no `HERDR_LANE_DIR` and no git dir under the cwd."""
+    """Requirement 5, second setup, restated for #182 h3: no `HERDR_LANE_DIR`, no git dir.
+
+    This used to be the unresolvable-store setup; the fallback store (HOME pinned to
+    `tmp_path` by `base_env()`) now resolves there, so the reply is recorded, body intact,
+    and the pointer cites the record instead of `NOT RECORDED`. The genuine write-failure
+    delivery stays pinned above, where `HERDR_LANE_DIR` names a file and the record cannot
+    be written.
+    """
     scratch = tmp_path / "no-repo"
     scratch.mkdir()
     body = "COMPLETED\n\n## Evidence\n- ran the gate"
@@ -2216,7 +2628,10 @@ def test_reply_delivers_body_only_when_no_anchor_resolves(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     (call,) = stub.prompts()
     assert call[4].endswith(body)
-    assert "Payload: NOT RECORDED" in call[4]
+    assert "Payload: NOT RECORDED" not in call[4], call[4]
+    assert list((tmp_path / ".herdr" / "lane" / ".lane" / "replies").glob("*.yaml")), (
+        "the ad-hoc pane's reply belongs in the user-level store"
+    )
 
 
 # ── prompt text is never provenance (#231) ───────────────────────────────────────────
@@ -2240,7 +2655,7 @@ def test_incomplete_completed_reply_does_not_advance_the_leased_task(
 
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "dispatched"
+    assert task["status"] == herdr_lease.STATE_SUBMITTED
     assert [event for event in task["trajectory"] if event["event"] == "completed"] == []
 
     # The verdict rides on the ledger record, not on a fabricated canonical status.
@@ -2268,7 +2683,7 @@ def test_complete_completed_reply_records_the_completed_event(
 
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "completed"
+    assert task["status"] == herdr_lease.STATE_COMPLETED
     completed = [event for event in task["trajectory"] if event["event"] == "completed"]
     assert len(completed) == 1
     assert completed[-1]["sha"] == "deadbeef"
@@ -2291,7 +2706,7 @@ def test_record_sender_status_is_silent_without_a_store_record(
     def still_dispatched() -> None:
         task = herdr_lease.get_task(task_id, base_dir=tmp_path)
         assert task is not None
-        assert task["status"] == "dispatched"
+        assert task["status"] == herdr_lease.STATE_SUBMITTED
         assert task["trajectory"][-1]["event"] == "dispatched"
 
     # No record id: an unpersisted reply advances nothing.
@@ -2332,6 +2747,31 @@ def test_record_sender_status_is_silent_without_a_store_record(
         shape="incomplete",
     )
     still_dispatched()
+
+
+def test_reply_record_id_slugs_underscore_and_dot_senders() -> None:
+    r"""hrg-t4: the record id binds the slug's character class (#264).
+
+    `_slug` held a shared regex until hrg-t1 gave it a private copy; `[^a-z0-9]+` is now
+    refutable only through the id itself. `_` and `.` must both collapse to `-`, so the
+    plausible one-class variants (`[^a-z0-9_]+`, `[^a-z0-9.]+`, `[^a-z0-9_-]+`, `\W+`)
+    fail this assertion. Driven through the public `build_reply_entry`, not `_slug`.
+    """
+    entry = herdr_reply.build_reply_entry(
+        "COMPLETED deadbeef",
+        sender="Impl_1.two",
+        caller="orchestrator",
+        ticket_id="#264",
+        task_id=None,
+        in_reply_to=None,
+        mapped="completed",
+        sha="deadbeef",
+        shape="complete",
+        evidence=None,
+    )
+    stamp, *slug_parts, digest = str(entry["id"]).split("-")
+    assert slug_parts == ["impl", "1", "two"]
+    assert stamp and len(digest) == 8
 
 
 # ── the store under concurrency and failure (#231 F1/F2/F-C1/F-C2) ───────────────────
@@ -2420,7 +2860,7 @@ def test_lease_event_note_keeps_a_canary_out_of_the_store(
 
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "completed"
+    assert task["status"] == herdr_lease.STATE_COMPLETED
     event = task["trajectory"][-1]
     assert event["event"] == "completed"
     assert event["note"] == "completed"
@@ -2624,7 +3064,7 @@ def test_the_advance_gate_refuses_a_row_bound_to_another_lease(
     def still_dispatched() -> None:
         task = herdr_lease.get_task(task_id, base_dir=tmp_path)
         assert task is not None
-        assert task["status"] == "dispatched"
+        assert task["status"] == herdr_lease.STATE_SUBMITTED
         assert task["trajectory"][-1]["event"] == "dispatched"
 
     def stored(record_id: str, *, sender: str, record_task_id: str) -> str:
@@ -2672,7 +3112,7 @@ def test_the_advance_gate_refuses_a_row_bound_to_another_lease(
     )
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "completed"
+    assert task["status"] == herdr_lease.STATE_COMPLETED
 
 
 # ── #238: settle the revived caller before delivering the reply ─────────────────────
@@ -3421,3 +3861,349 @@ def test_space_form_dash_ticket_value_is_refused_with_equals_form_guidance(
     assert bound.returncode == herdr_cli.EXIT_OK, bound.stderr
     record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
     assert record["task_id"] == "-rf", "the equals form binds a dash-led value"
+
+
+# ── #182 t2: active ID-anchored reconciliation at reply (ADR-0020) ──────────────────
+
+
+def reply_renames(harness: StubHarness) -> list[list[str]]:
+    """Every rename the reply issued (or attempted), minus the herdr argv head."""
+    return [call[1:] for call in harness.calls() if call[2] == "rename"]
+
+
+REPLY_OK = "COMPLETED artifacts=[a.py] issues=[]\n\n## Evidence\n- 1 passed\n"
+
+REPLY_LANE_PANES: list[dict[str, object]] = [
+    {
+        "pane_id": "w9:p1",
+        "tab_id": "w9:t1",
+        "workspace_id": "w9",
+        "agent": "pi",
+        "agent_status": "working",
+        "cwd": "/tmp/harness",
+    },
+    {
+        "pane_id": "w9:p3",
+        "tab_id": "w9:t1",
+        "workspace_id": "w9",
+        "agent": "pi",
+        "agent_status": "idle",
+        "cwd": "/tmp/work",
+        "label": "worker-1",
+    },
+]
+LANE_TAB_CORRECT = {"tab_id": "w9:t1", "workspace_id": "w9", "label": "harness"}
+LANE_TAB_GENERIC = {"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}
+
+
+def test_reply_reconciles_a_drifted_tab_from_the_task_record(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """`herdr-reply` has no `--task-group`; the slug is read back from the task record and the
+    drifted title is renamed on its physical tab id — worker repair and delivery both stand.
+
+    Pin -> mutant: rename to the bare tab id or a guessed slug, so the argv tail mismatches.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#t2",
+        task_group="harness",
+    )
+    state = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB_GENERIC],
+        "panes": REPLY_LANE_PANES,
+    }
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reply_renames(stub) == [["tab", "rename", "w9:t1", "harness"]]
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_without_a_recorded_task_group_skips_with_one_line(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A lane whose records carry no slug says so ONCE and still heals worker names (case 1).
+
+    Pin -> mutant: fall back to the tab id as the slug, so a `tab rename` reaches herdr with
+    `w9:t1` as the title and this sees two renames instead of the worker pair alone.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#n",
+    )
+    state = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB_GENERIC],
+        "panes": REPLY_LANE_PANES,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ],
+    }
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stderr.count("no task group recorded for this lane") == 1
+    assert stub.tab_renames() == []
+    assert reply_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+    ]
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_rename_failure_still_delivers_the_payload(stub: StubHarness, tmp_path: Path) -> None:
+    """Scenario 4 at the reply seam: a refused rename is one skip line, never a lost reply.
+
+    Pin -> mutant: let `HerdrError` escape the reconciliation pass, so the reply exits non-zero
+    and the caller never gets the payload.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#f",
+        task_group="harness",
+    )
+    state = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB_GENERIC],
+        "panes": REPLY_LANE_PANES,
+        "tab_rename_error": "rename refused",
+    }
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stderr.count("herdr-reply: rename skipped:") == 1
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_renames_nothing_over_an_already_correct_lane(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The no-op invariant at the reply seam: a healed fleet earns zero renames.
+
+    Pin -> mutant: unconditional rename at reply, so this logs a tab rename anyway.
+    """
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#ok",
+        task_group="harness",
+    )
+    state = {**DEFAULT_STATE, "tabs": [LANE_TAB_CORRECT], "panes": REPLY_LANE_PANES[:1]}
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reply_renames(stub) == []
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_delivers_when_the_reconciliation_planner_raises(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#182 t5 2.3: the planner runs INSIDE the best-effort guard, so it cannot cost a reply.
+
+    `reconcile_lane` promises that every failure is one line on stderr and never an exit status.
+    For the planner that promise was incidental rather than structural: the `try` covered only
+    the inventory reads, the planner ran outside it, and its result was unguarded at both call
+    sites — so a raising planner propagated through `reply_caller` into `guard`, and the caller
+    got exit 1 with no payload. Best-effort bookkeeping must never suppress delivery, so the
+    guard has to own the planner, not the callers.
+
+    Pin -> mutant: move `reconciliation_argv` back outside the `try` and this exits 1 with a
+    traceback in stderr and zero prompts.
+    """
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise TypeError("planner boom")
+
+    _ = monkeypatch.setattr(herdr_label, "reconciliation_argv", boom)
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "182.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id="#182#t5",
+        task_group="harness",
+    )
+    state = {**DEFAULT_STATE, "tabs": [LANE_TAB_GENERIC], "panes": REPLY_LANE_PANES}
+    done = stub.run("orchestrator", REPLY_OK, state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "Traceback" not in done.stderr, done.stderr
+    assert done.stderr.count("herdr-reply: reconciliation skipped:") == 1, done.stderr
+    assert len(stub.prompts()) == 1
+
+
+# ── #182 t3 C: dispatch persists the slug, so reply-side reconciliation actually fires ──
+
+
+def test_a_dispatched_task_group_lets_a_later_reply_rename_the_drifted_tab(
+    stub_factory: Callable[[Path], StubHarness], tmp_path: Path
+) -> None:
+    """The acceptance the T2 review named, run through BOTH scripts' real code paths.
+
+    Reply-side cases 2-3 were unreachable not because the planner was wrong but because no
+    producer wrote the evidence they read: `herdr-dispatch` had the `--task-group` value in hand
+    and never handed it to the store. So this is not a planner unit test — a dispatcher runs the
+    dispatch script, a worker runs the reply script, and the only thing in between is the lane
+    store both of them resolve.
+
+    Pin -> mutant: drop `task_group=` (or `tab_id=`/`pane_id=`) at the dispatch call site, and the
+    reply finds nothing to rename on: zero `tab rename` and the "no task group recorded" line.
+    A mutant that *guessed* a slug from the drifted label instead of reading the record renames to
+    `3`, which is a different argv.
+    """
+    dispatcher = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
+    replier = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
+    ticket = tmp_path / "182.md"
+    _ = ticket.write_text("## Task\n\nShip the envelope.\n", encoding="utf-8")
+
+    lane: dict[str, object] = {
+        **DEFAULT_STATE,
+        "panes": REPLY_LANE_PANES,
+        "tabs": [LANE_TAB_CORRECT],
+    }
+    dispatched = dispatcher.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        "--ticket-id",
+        "#182",
+        "--task-id",
+        "#182#t3",
+        state=lane,
+        env={"PWD": str(tmp_path)},
+    )
+    assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
+
+    # The slug survives the dispatch that was given it, on both records, beside the physical
+    # anchors of the pane it was delivered to.
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert lease["task_group"] == "harness", "dispatch must persist the slug it was handed"
+    assert lease["pane_id"] == "w9:p1"
+    assert lease["tab_id"] == "w9:t1"
+    task = herdr_lease.get_task("#182#t3", base_dir=tmp_path)
+    assert task is not None and task["task_group"] == "harness"
+
+    # The tab drifts back to a generic title after dispatch healed it — the state the repair is
+    # for — and the reply runs with no `--task-group` flag anywhere in its argv.
+    calls_before = len(replier.calls())
+    replied = replier.run(
+        "orchestrator",
+        REPLY_OK,
+        state={**lane, "tabs": [LANE_TAB_GENERIC]},
+        env={"PWD": str(tmp_path)},
+    )
+    assert replied.returncode == herdr_cli.EXIT_OK, replied.stderr
+    assert "no task group recorded" not in replied.stderr, replied.stderr
+
+    renames = [call[1:] for call in replier.calls()[calls_before:] if call[2] == "rename"]
+    assert ["tab", "rename", "w9:t1", "harness"] in renames, renames
+
+
+def test_a_redispatch_without_task_group_keeps_the_recorded_slug_on_the_row(
+    stub_factory: Callable[[Path], StubHarness], tmp_path: Path
+) -> None:
+    """The re-dispatch that observes nothing leaves the last recorded slug standing (#182 t3 P2).
+
+    The single-dispatch acceptance above cannot refute the null-overwrite: it never runs the second
+    dispatch. This is the four-step scenario — dispatch WITH `--task-group`, reply (which consumes
+    and releases the lease), re-dispatch the SAME task-id WITHOUT `--task-group`, reply again. The
+    fresh lease carries no slug by contract, so only the durable task row can name it; an
+    unconditional row write nulls the exact evidence section C exists to provide, and the second
+    reply silently skips the rename.
+
+    Pin -> mutant: write `task["task_group"] = None` over the row on the re-dispatch, and this
+    sees the row lose `harness`, the "no task group recorded" line, and no tab rename.
+    """
+    dispatcher = stub_factory(SCRIPTS_DIR / "herdr_dispatch.py")
+    replier = stub_factory(SCRIPTS_DIR / "herdr_reply.py")
+    ticket = tmp_path / "182.md"
+    _ = ticket.write_text("## Task\n\nShip the envelope.\n", encoding="utf-8")
+
+    lane: dict[str, object] = {
+        **DEFAULT_STATE,
+        "panes": REPLY_LANE_PANES,
+        "tabs": [LANE_TAB_CORRECT],
+    }
+    drifted = {**DEFAULT_STATE, "panes": REPLY_LANE_PANES, "tabs": [LANE_TAB_GENERIC]}
+
+    # Step 1: dispatch WITH the slug; both records hold it.
+    dispatched = dispatcher.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        "--ticket-id",
+        "#182",
+        "--task-id",
+        "#182#t3",
+        state=lane,
+        env={"PWD": str(tmp_path)},
+    )
+    assert dispatched.returncode == herdr_cli.EXIT_OK, dispatched.stderr
+
+    # Step 2: the worker's reply consumes and releases the lease.
+    replied = replier.run(
+        "orchestrator",
+        REPLY_OK,
+        state=drifted,
+        env={"PWD": str(tmp_path)},
+    )
+    assert replied.returncode == herdr_cli.EXIT_OK, replied.stderr
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+    # Step 3: re-dispatch the SAME task-id WITHOUT `--task-group`: the fresh lease names no
+    # slug, and the durable row must still carry the one it was given.
+    redispatched = dispatcher.run(
+        "reviewer",
+        "--file",
+        str(ticket),
+        "--no-wait",
+        "--ticket-id",
+        "#182",
+        "--task-id",
+        "#182#t3",
+        state=drifted,
+        env={"PWD": str(tmp_path)},
+    )
+    assert redispatched.returncode == herdr_cli.EXIT_OK, redispatched.stderr
+
+    task = herdr_lease.get_task("#182#t3", base_dir=tmp_path)
+    assert task is not None
+    assert task.get("task_group") == "harness", (
+        "a re-dispatch that observes nothing must not write null over the last recorded slug"
+    )
+
+    # Step 4: the next reply resolves the slug from the row and still renames the drifted tab.
+    calls_before = len(replier.calls())
+    second = replier.run(
+        "orchestrator",
+        REPLY_OK,
+        state=drifted,
+        env={"PWD": str(tmp_path)},
+    )
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    assert "no task group recorded" not in second.stderr, second.stderr
+
+    renames = [call[1:] for call in replier.calls()[calls_before:] if call[2] == "rename"]
+    assert ["tab", "rename", "w9:t1", "harness"] in renames, renames

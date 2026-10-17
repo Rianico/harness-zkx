@@ -13,6 +13,12 @@ pane reads or wait barriers (dispatcher-side, never callee-observed),
 `dispatched` -> `completed` run with no working transition (no consumption
 observed), and tasks whose trajectory holds no `dispatched` event (no dispatch
 timestamp to be after). A pane that never transitions writes nothing.
+
+Since #182 t3 the *persisted* spelling of a status is the canonical A2A name, so a transition to
+`in_progress` stores `TASK_STATE_WORKING`: the caller may pass either vocabulary and the status
+columns read canonical. The trajectory `event` label keeps the caller's own token when the caller
+names an action — dispatch writes `dispatched` — and only falls back to the canonical state when
+no label was supplied, because that fallback labels the event with the state that was written.
 """
 
 from __future__ import annotations
@@ -43,17 +49,21 @@ def test_first_working_transition_marks_delivered(tmp_path: Path) -> None:
 
     marked = herdr_lease.transition(task_id, "in_progress", base_dir=tmp_path)
 
-    assert marked["status"] == "in_progress"
+    # The caller passed the historical token; the record persists the canonical state name.
+    assert marked["status"] == herdr_lease.STATE_WORKING
     delivered = marked.get("delivered")
     assert isinstance(delivered, dict)
     assert delivered["event"] == "delivered"
     assert delivered["task_id"] == task_id
     assert delivered["ticket_id"] == "#228"
     assert isinstance(delivered.get("timestamp"), str) and delivered["timestamp"]
-    # The trajectory pins are untouched: the mark rides beside them, not in them.
+    # The mark rides beside the events, never in them: the trajectory is exactly what
+    # the two transitions would have written without any delivered bookkeeping.
+    # Dispatch supplies its own action label; the transition carries no explicit
+    # label, so its event names the canonical state it wrote.
     assert [event["event"] for event in marked["trajectory"]] == [
         "dispatched",
-        "in_progress",
+        herdr_lease.STATE_WORKING,
     ]
 
 
@@ -83,7 +93,7 @@ def test_non_working_transitions_leave_no_mark(tmp_path: Path) -> None:
 
         moved = herdr_lease.transition(task_id, status, base_dir=lane)
 
-        assert moved["status"] == status
+        assert moved["status"] == herdr_lease.normalize_status(status)
         assert "delivered" not in moved
 
 
@@ -143,11 +153,13 @@ def test_second_working_transition_adds_no_second_mark(tmp_path: Path) -> None:
     second = herdr_lease.transition(task_id, "in_progress", base_dir=tmp_path)
 
     assert second["delivered"] == first["delivered"]
+    # Four store transitions, four events: the second working transition marks
+    # nothing extra, not even a trajectory entry.
     assert [event["event"] for event in second["trajectory"]] == [
         "dispatched",
-        "in_progress",
-        "rework",
-        "in_progress",
+        herdr_lease.STATE_WORKING,
+        herdr_lease.STATE_FAILED,
+        herdr_lease.STATE_WORKING,
     ]
 
 
@@ -163,7 +175,7 @@ def test_task_without_dispatch_event_gets_no_mark(tmp_path: Path) -> None:
 
     moved = herdr_lease.transition(task_id, "in_progress", base_dir=tmp_path)
 
-    assert moved["status"] == "in_progress"
+    assert moved["status"] == herdr_lease.STATE_WORKING
     assert "delivered" not in moved
 
 

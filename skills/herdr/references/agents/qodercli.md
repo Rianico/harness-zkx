@@ -76,12 +76,39 @@ Enter loses the text and leaves the folder untrusted (verified end to end under 
 herdr agent send-keys q-impl enter          # the extra CR
 sleep 2
 herdr pane read "$PANE_ID" --source visible --lines 16   # expect the YOLO status line
-herdr_prompt.py q-impl --file ticket.md --no-wait
+uv run skills/herdr/scripts/herdr_prompt.py q-impl --file ticket.md --no-wait
 ```
 
 Confirm the main UI before prompting. The ready markers are the `YOLO` badge, the
 `Type your message or @path/to/file` prompt, and the `Model · <cwd>` footer; the trust
 selector means the CR has not landed yet.
+
+The bottom of the screen is the one blank-line-separated block the readiness gate reads as a
+clean idle pane, so its idle input row is the veto marker. Captured 2026-10-16 through the
+harness's own read path (`--source visible` returns the on-screen rows) from a live idle
+`qodercli` pane; point the same command at any idle pane to reproduce it:
+
+```bash
+uv run skills/herdr/scripts/herdr_transcript.py w11:p1Q --source visible --lines 30
+```
+
+The captured idle bottom of the screen, verbatim (`?` hint on its own line above the box, the
+input row ending at `file`, and the `Model · …` footer rendered on a DIFFERENT row BELOW it):
+
+```text
+                                              ? for shortcuts
+────────────────────────────────────────────────────────────────────
+ YOLO Shift+Tab to Auto Mode            1 AGENTS.md file · 1 MCP server · 63 skills
+────────────────────────────────────────────────────────────────────
+ *   Type your message or @path/to/file
+────────────────────────────────────────────────────────────────────
+ Qwen3.8-Flash Model · 200K context · ctx ▓▓▓▓▓░░░░░ 48% · ~/stowfiles/… · +9034 -1599
+```
+
+A live modal replaces the input row, so the `Model · …` footer is never the marker: with the
+footer present but no idle input row below a dialog, the pane is still blocked and must refuse.
+The gate matches that row's leading phrase (`Type your message`), so a row clipped at the pane's
+right edge is still recognised.
 
 ### Pre-trust instead of pressing CR
 

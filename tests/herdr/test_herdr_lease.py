@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -232,12 +233,15 @@ def test_acquire_writes_yaml_task_roundtrip(tmp_path: Path) -> None:
     assert task["task_id"] == "#183#a"
     assert task["ticket_path"] == "ticket.md"
     assert task["task_group"] == "tg"
-    assert task["status"] == "dispatched"
+    # Writes emit the canonical A2A spelling; dispatch is SUBMITTED ("handed over,
+    # not yet worked"). The trajectory `event` label is an action, so it stays the
+    # caller's own token.
+    assert task["status"] == herdr_lease.STATE_SUBMITTED
     assert task["assignee"] == "callee"
     assert task["caller"] == "orchestrator"
     assert len(task["trajectory"]) == 1
     assert task["trajectory"][0]["event"] == "dispatched"
-    assert task["trajectory"][0]["to_status"] == "dispatched"
+    assert task["trajectory"][0]["to_status"] == herdr_lease.STATE_SUBMITTED
 
     assert herdr_lease.get_lease("callee", base_dir=tmp_path) == lease
 
@@ -248,21 +252,23 @@ def test_transition_appends_trajectory(tmp_path: Path) -> None:
         "callee", "ticket.md", "orch", base_dir=tmp_path, ticket_id="#183", task_id=task_id
     )
 
+    # The callers below pass historical tokens; `transition` accepts them and the
+    # store persists the canonical state name.
     second = herdr_lease.transition(task_id, "in_progress", base_dir=tmp_path)
-    assert second["status"] == "in_progress"
+    assert second["status"] == herdr_lease.STATE_WORKING
 
     third = herdr_lease.transition(task_id, "completed", note="all green", base_dir=tmp_path)
     trajectory = third["trajectory"]
     assert [event["seq"] for event in trajectory] == [1, 2, 3]
     assert [event["to_status"] for event in trajectory] == [
-        "dispatched",
-        "in_progress",
-        "completed",
+        herdr_lease.STATE_SUBMITTED,
+        herdr_lease.STATE_WORKING,
+        herdr_lease.STATE_COMPLETED,
     ]
-    assert trajectory[1]["from_status"] == "dispatched"
-    assert trajectory[2]["from_status"] == "in_progress"
+    assert trajectory[1]["from_status"] == herdr_lease.STATE_SUBMITTED
+    assert trajectory[2]["from_status"] == herdr_lease.STATE_WORKING
     assert trajectory[2]["note"] == "all green"
-    assert third["status"] == "completed"
+    assert third["status"] == herdr_lease.STATE_COMPLETED
     assert herdr_lease.get_task(task_id, base_dir=tmp_path) == third
 
 
@@ -278,7 +284,7 @@ def test_release_lease_is_soft_completion(tmp_path: Path) -> None:
 
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "in_progress"
+    assert task["status"] == herdr_lease.STATE_WORKING
     assert len(task["trajectory"]) == 2
 
 
@@ -344,7 +350,7 @@ def test_cli_show_yaml_prints_canonical_state(
     assert isinstance(rendered, dict)
     assert set(rendered) == {"active_leases", "tasks"}
     assert rendered["active_leases"]["callee"]["task_id"] == "#183#a"
-    assert rendered["tasks"]["#183#a"]["status"] == "dispatched"
+    assert rendered["tasks"]["#183#a"]["status"] == herdr_lease.STATE_SUBMITTED
 
 
 def test_cli_show_empty_state_prints_summary(
@@ -383,9 +389,299 @@ def test_cli_transition_appends_event(tmp_path: Path, capsys: pytest.CaptureFixt
     assert code == 0
 
     captured = capsys.readouterr()
-    assert "task #183#a: dispatched -> in_progress (started)" in captured.out
+    # The line reports the persisted states, which are canonical spellings even
+    # though the caller passed the historical token `in_progress`.
+    assert (
+        f"task #183#a: {herdr_lease.STATE_SUBMITTED} -> {herdr_lease.STATE_WORKING} (started)"
+    ) in captured.out
 
     task = herdr_lease.get_task(task_id, base_dir=tmp_path)
     assert task is not None
-    assert task["status"] == "in_progress"
+    assert task["status"] == herdr_lease.STATE_WORKING
     assert task["trajectory"][-1]["note"] == "started"
+
+
+# ── #182 t3: the A2A state vocabulary, persisted identity, resolver-only stores ──────
+
+
+TASK_ID = "#182#a2a"
+
+
+def test_a_write_emits_the_canonical_state_and_reads_as_completed(tmp_path: Path) -> None:
+    """A record this module writes spells its state with the A2A enum and reads back as it.
+
+    Pin -> mutant: a write path that re-renders the enum into a historical token, or a reader
+    that knows only the historical spelling and so answers None for a record written here.
+    """
+    _ = herdr_lease.acquire_lease(
+        "callee", "182.md", "orch", base_dir=tmp_path, ticket_id="#182", task_id=TASK_ID
+    )
+
+    done = herdr_lease.transition(TASK_ID, herdr_lease.STATE_COMPLETED, base_dir=tmp_path)
+
+    # The literal spelling is pinned, not only the constant: the enum name must reach the file.
+    raw = yaml.safe_load((tmp_path / ".lane" / "tasks.yaml").read_text(encoding="utf-8"))
+    assert raw["tasks"][TASK_ID]["status"] == "TASK_STATE_COMPLETED"
+    assert done["status"] == herdr_lease.STATE_COMPLETED
+    reread = herdr_lease.get_task(TASK_ID, base_dir=tmp_path)
+    assert herdr_lease.status_of(reread) == herdr_lease.STATE_COMPLETED
+
+
+LEGACY_STORE = """\
+active_leases: {}
+tasks:
+  "#182#old":
+    ticket_id: "#182"
+    task_id: "#182#old"
+    ticket_path: 182.md
+    task_group: harness
+    status: completed
+    assignee: callee
+    caller: orchestrator
+    trajectory:
+    - seq: 1
+      event: dispatched
+      from_status: dispatched
+      to_status: dispatched
+    - seq: 2
+      event: completed
+      from_status: dispatched
+      to_status: completed
+  "#182#open":
+    ticket_id: "#182"
+    task_id: "#182#open"
+    ticket_path: 182.md
+    status: in_progress
+    assignee: worker
+    caller: orchestrator
+    trajectory:
+    - seq: 1
+      event: dispatched
+      from_status: unassigned
+      to_status: dispatched
+"""
+
+
+def test_a_record_from_a_pre_cutover_worktree_still_reads(tmp_path: Path) -> None:
+    """The alias table is the shared-store regression guard, and reads migrate nothing.
+
+    The store below is written BY HAND in exactly the shape another worktree's older code
+    writes it: `status: completed`, `status: in_progress`, trajectory endpoints spelled the old
+    way. Deleting `STATUS_ALIASES` makes every one of those read as NO state, so this fails on
+    that mutant — which is the regression the live `.lane/tasks.yaml` would otherwise suffer in
+    silence, since worktrees cannot be upgraded in lockstep.
+    """
+    lane = tmp_path / ".lane"
+    lane.mkdir()
+    store = lane / "tasks.yaml"
+    _ = store.write_text(LEGACY_STORE, encoding="utf-8")
+    before = store.read_bytes()
+
+    done = herdr_lease.get_task("#182#old", base_dir=tmp_path)
+    working = herdr_lease.get_task("#182#open", base_dir=tmp_path)
+    assert herdr_lease.status_of(done) == herdr_lease.STATE_COMPLETED
+    assert herdr_lease.status_of(working) == herdr_lease.STATE_WORKING
+    assert store.read_bytes() == before, "a read must not rewrite a historical record"
+
+    # A write advances the one record it was asked to, canonically, and leaves the other row's
+    # historical spelling exactly as it found it: no background migration, ever.
+    moved = herdr_lease.transition("#182#open", herdr_lease.STATE_INPUT_REQUIRED, base_dir=tmp_path)
+    assert moved["status"] == "TASK_STATE_INPUT_REQUIRED"
+    after = yaml.safe_load(store.read_text(encoding="utf-8"))
+    assert after["tasks"]["#182#open"]["status"] == "TASK_STATE_INPUT_REQUIRED"
+    assert after["tasks"]["#182#old"]["status"] == "completed"
+
+
+@pytest.mark.parametrize("token", herdr_lease.HISTORICAL_STATUSES)
+def test_every_historical_token_names_a_defined_state(token: str) -> None:
+    """The alias table is total: each token the live store holds maps onto exactly one state.
+
+    Pin -> mutant: a table that drops a spelling (the token then reads as unknown) or maps one
+    onto a name that is not a state.
+    """
+    canonical = herdr_lease.STATUS_ALIASES[token]
+    assert canonical in herdr_lease.CANONICAL_STATUSES, token
+    assert herdr_lease.normalize_status(token) == canonical, token
+    assert herdr_lease.status_of({"status": token}) == canonical, token
+    # An alias is stable: reading the name it points at answers the same name.
+    assert herdr_lease.normalize_status(canonical) == canonical, token
+
+
+def test_the_alias_table_covers_exactly_the_vocabularies_it_documents() -> None:
+    """Domain and range are the two documented spellings, and every state is reachable."""
+    assert set(herdr_lease.STATUS_ALIASES) == set(herdr_lease.CANONICAL_STATUSES) | set(
+        herdr_lease.HISTORICAL_STATUSES
+    )
+    assert set(herdr_lease.STATUS_ALIASES.values()) == set(herdr_lease.CANONICAL_STATUSES)
+    # The table is a read aid, not a write vocabulary: it never hands out a historical name.
+    for canonical in herdr_lease.CANONICAL_STATUSES:
+        assert canonical not in herdr_lease.HISTORICAL_STATUSES, canonical
+
+
+@pytest.mark.parametrize(
+    "unknown",
+    ["", " unknown", "Completed", "task_state_completed", "TASK_STATE_DONE", None, 7, True],
+)
+def test_a_status_that_names_no_state_reads_as_no_state(unknown: object) -> None:
+    """Totality has a second half: an unreadable spelling is never quietly a valid one."""
+    assert herdr_lease.normalize_status(unknown) is None
+    assert herdr_lease.status_of({"status": unknown}) is None
+    assert herdr_lease.status_of(None) is None
+
+
+def test_transition_refuses_a_status_that_names_no_state(tmp_path: Path) -> None:
+    """The refusal is a usage error, not a silent write of the caller's own word."""
+    _ = herdr_lease.acquire_lease(
+        "callee", "182.md", "orch", base_dir=tmp_path, ticket_id="#182", task_id=TASK_ID
+    )
+
+    with pytest.raises(herdr_lease.UsageError):
+        _ = herdr_lease.transition(TASK_ID, "prancing", base_dir=tmp_path)
+
+    task = herdr_lease.get_task(TASK_ID, base_dir=tmp_path)
+    assert task is not None and task["status"] == herdr_lease.STATE_SUBMITTED
+
+
+def test_record_event_refuses_a_status_that_names_no_state(tmp_path: Path) -> None:
+    """Both write entry points refuse an unknown token alike (#182 t3b P3): `record_event`
+    persists no caller word `transition` would reject. The raise is the same `UsageError` the
+    reply call site already wraps, so lease bookkeeping stays one stderr skip line — never an
+    exit status (pinned at the reply seam by the best-effort suite in test_herdr_reply.py).
+
+    Pin -> mutant: let `record_event` write `"prancing"` verbatim, and this row carries a
+    status no reader can name while the refusal never fires.
+    """
+    _ = herdr_lease.acquire_lease(
+        "callee", "182.md", "orch", base_dir=tmp_path, ticket_id="#182", task_id=TASK_ID
+    )
+
+    with pytest.raises(herdr_lease.UsageError):
+        _ = herdr_lease.record_event(TASK_ID, "prancing", base_dir=tmp_path)
+
+    task = herdr_lease.get_task(TASK_ID, base_dir=tmp_path)
+    assert task is not None and task["status"] == herdr_lease.STATE_SUBMITTED
+    assert [entry["event"] for entry in task["trajectory"]] == ["dispatched"]
+
+
+def test_runtime_identity_survives_a_write_read_round_trip(tmp_path: Path) -> None:
+    """Section A: the anchors ride on BOTH records and come back byte-identical.
+
+    Pin -> mutant: identity written on the lease only, or a read that re-derives it from the
+    live fleet instead of the durable row.
+    """
+    lease = herdr_lease.acquire_lease(
+        "callee",
+        "182.md",
+        "orchestrator",
+        pane_id="w9:p3",
+        base_dir=tmp_path,
+        ticket_id="#182",
+        task_id=TASK_ID,
+        task_group="harness",
+        tab_id="w9:t1",
+        context_id="01J4X9K7-session",
+    )
+
+    reread = herdr_lease.get_lease("callee", base_dir=tmp_path)
+    task = herdr_lease.get_task(TASK_ID, base_dir=tmp_path)
+    assert reread == lease
+    assert task is not None
+
+    for record in (lease, reread, task):
+        assert record["pane_id"] == "w9:p3"
+        assert record["tab_id"] == "w9:t1"
+        assert record["context_id"] == "01J4X9K7-session"
+        assert record["task_group"] == "harness"
+
+    raw = yaml.safe_load((tmp_path / ".lane" / "tasks.yaml").read_text(encoding="utf-8"))
+    assert raw["tasks"][TASK_ID]["context_id"] == "01J4X9K7-session"
+    assert raw["active_leases"]["callee"]["tab_id"] == "w9:t1"
+
+
+def test_an_unobserved_anchor_is_omitted_never_guessed(tmp_path: Path) -> None:
+    """Section C's posture at the store seam: identity nobody observed is written as absent.
+
+    The slug joins the anchored ids: the row omits `task_group` entirely rather than holding a
+    null that a later guarded re-dispatch could not tell apart from never-recorded evidence
+    (#182 t3b P2 — absence, not null, is what "not observed" writes).
+    """
+    lease = herdr_lease.acquire_lease(
+        "callee", "182.md", "orch", base_dir=tmp_path, ticket_id="#182", task_id=TASK_ID
+    )
+
+    task = herdr_lease.get_task(TASK_ID, base_dir=tmp_path)
+    assert task is not None
+    for record in (lease, task):
+        for key in ("pane_id", "tab_id", "context_id", "task_group"):
+            assert key not in record, f"{key} in {record}"
+
+
+def test_the_store_and_the_envelope_spell_shared_states_identically() -> None:
+    """One A2A vocabulary, written by two modules that must not drift apart.
+
+    The store deliberately does not import `herdr_envelope` (a lane must stay readable without
+    the wire layer), so the four names the two share are spelled twice. This pin is what keeps
+    the duplication honest: a rename on one side fails here instead of emitting two dialects.
+    """
+    import herdr_envelope
+
+    for name in (
+        "STATE_WORKING",
+        "STATE_COMPLETED",
+        "STATE_INPUT_REQUIRED",
+        "STATE_FAILED",
+    ):
+        assert getattr(herdr_lease, name) == getattr(herdr_envelope, name), name
+
+
+def test_new_writes_reach_the_store_only_through_the_resolver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ticket's own invariant: never address a store by path, always resolve it.
+
+    A fake per-worktree root is the cwd here, standing in for the stale `.lane/tasks.yaml` a
+    worktree leaves behind. Every resolution must land on the anchored lane, the lease must
+    record that same anchor, and nothing may be created under the cwd.
+
+    Pin -> mutant: `Path.cwd()`/`PWD`/`__file__`-relative store path in any of the new code.
+    """
+    lane = tmp_path / "lane"
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    monkeypatch.chdir(worktree)
+
+    resolved: list[Path] = []
+    real = herdr_lease.resolve_base_dir
+
+    def spy(base_dir: Path | str | None = None, env: Mapping[str, str] | None = None) -> Path:
+        root = real(base_dir, env=env)
+        _ = resolved.append(root)
+        return root
+
+    _ = monkeypatch.setattr(herdr_lease, "resolve_base_dir", spy)
+    env = {"HERDR_LANE_DIR": str(lane), "PWD": str(worktree)}
+
+    lease = herdr_lease.acquire_lease(
+        "callee",
+        "182.md",
+        "orchestrator",
+        pane_id="w9:p3",
+        env=env,
+        ticket_id="#182",
+        task_id=TASK_ID,
+        task_group="harness",
+        tab_id="w9:t1",
+        context_id="01J4X9K7-session",
+    )
+    _ = herdr_lease.transition(TASK_ID, "in_progress", env=env)
+    _ = herdr_lease.record_event(TASK_ID, "completed", env=env)
+    _ = herdr_lease.get_task(TASK_ID, env=env)
+    _ = herdr_lease.get_lease("callee", env=env)
+    assert herdr_lease.release_lease("callee", env=env) is True
+
+    assert resolved, "not one store access went through the resolver"
+    assert set(resolved) == {lane.resolve()}, resolved
+    assert lease["store"] == str(lane.resolve())
+    assert (lane / ".lane" / "tasks.yaml").is_file()
+    assert not (worktree / ".lane").exists(), "a per-worktree store was created"
+    assert not (worktree / ".herdr-lease.json").exists()

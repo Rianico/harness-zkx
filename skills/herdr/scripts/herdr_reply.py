@@ -6,10 +6,11 @@
 """herdr-reply — send a completion reply callback to a caller agent without shell mangling.
 
 Delivers `<STATUS> <artifacts> <issues>` or a result payload to the caller's agent
-name, wrapped in the same timestamped `Routing:`/`Hierarchy:`/`Protocol:` envelope
-`herdr-prompt` uses, so the party reading a reply always knows who reported and to
-whom. When the sender holds an active lease, its `Ticket-ID`/`Task-ID` ride along as
-`Ticket-ID:` and `In-Reply-To:` correlation lines. The envelope is script-rendered,
+name, wrapped in the same A2A Markdown frontmatter envelope `herdr-prompt` uses — its
+`status.state` carries the lifecycle state the reply's first token names — so the party
+reading a reply always knows who reported and to
+whom. When the sender holds an active lease, its task and ticket ride along as the
+envelope's `id`, `metadata.ticket_id`, and `metadata.in_reply_to` fields. The envelope is script-rendered,
 never model-authored, so it cannot be forgotten.
 
 The record's task linkage is resolved from the whole store, not just the lease (#246 D1.2):
@@ -87,13 +88,13 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
+
+import herdr_lease
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_bootstrap import (
@@ -143,18 +144,94 @@ from herdr_envelope import (
     format_delivery_summary,
     render_envelope,
     render_prelude,
+    reply_state,
 )
+
+# Re-exported: the evidence extraction must not move an attribute a test or caller pins.
+from herdr_evidence import (
+    ARTIFACT_LIMIT as ARTIFACT_LIMIT,
+)
+from herdr_evidence import (
+    CANONICAL_EVIDENCE_HEADS as CANONICAL_EVIDENCE_HEADS,
+)
+from herdr_evidence import (
+    EVIDENCE_KEYWORDS as EVIDENCE_KEYWORDS,
+)
+from herdr_evidence import (
+    EVIDENCE_LABEL_LIMIT as EVIDENCE_LABEL_LIMIT,
+)
+from herdr_evidence import (
+    EVIDENCE_LABEL_WORDS as EVIDENCE_LABEL_WORDS,
+)
+from herdr_evidence import (
+    EVIDENCE_STEMS as EVIDENCE_STEMS,
+)
+from herdr_evidence import (
+    FENCE_MARKER as FENCE_MARKER,
+)
+from herdr_evidence import (
+    NOT_EVIDENCE_HEADS as NOT_EVIDENCE_HEADS,
+)
+from herdr_evidence import (
+    STATUS_MAP as STATUS_MAP,
+)
+from herdr_evidence import (
+    evidence_label,
+    extract_artifacts,
+    parse_status_line,
+    payload_shape,
+)
+from herdr_evidence import (
+    evidence_section as evidence_section,
+)
+
+# Re-exported: the SHA-guard extraction must not move an attribute a test pins.
+from herdr_git_guard import (
+    ALLOW_UNRESOLVABLE_SHA,
+    lane_git_dir,
+    require_resolvable_shas,
+)
+from herdr_git_guard import (
+    GIT_LOCATION_REDIRECT_VARS as GIT_LOCATION_REDIRECT_VARS,
+)
+from herdr_git_guard import (
+    GIT_VERDICT_NEUTRAL_LOCATION_VARS as GIT_VERDICT_NEUTRAL_LOCATION_VARS,
+)
+from herdr_git_guard import (
+    SHA_SHAPED_BACKTICKED_RE as SHA_SHAPED_BACKTICKED_RE,
+)
+from herdr_git_guard import (
+    backticked_sha_tokens as backticked_sha_tokens,
+)
+from herdr_git_guard import (
+    git_can_resolve_commits as git_can_resolve_commits,
+)
+from herdr_git_guard import (
+    git_location_redirect as git_location_redirect,
+)
+from herdr_git_guard import (
+    names_a_commit as names_a_commit,
+)
+from herdr_git_guard import (
+    unresolvable_sha_tokens as unresolvable_sha_tokens,
+)
+from herdr_label import reconcile_lane
 from herdr_lease import (
     REPLIES_DIR_LANE,
+    STATE_COMPLETED,
+    STATE_FAILED,
+    STATE_INPUT_REQUIRED,
+    STATE_SUBMITTED,
+    STATE_WORKING,
     get_lease,
     get_reply,
     get_task,
     list_tasks,
     record_event,
     release_lease,
-    resolve_base_dir,
     save_verified_reply,
     state_is_readable,
+    status_of,
 )
 from herdr_prompt import (
     resolve_caller,
@@ -199,8 +276,8 @@ def build_parser() -> argparse.ArgumentParser:
             "3 target needs human input, 4 reply delivered but wait timed out\n\n"
             "lease bookkeeping is best-effort and never blocks delivery: an unresolvable lease\n"
             "store is reported on stderr, skipping the correlation lookup, trajectory note, or\n"
-            "release. A skipped correlation drops Ticket-ID/In-Reply-To from the envelope; the\n"
-            "reply still correlates by pane/target\n\n" + METHOD_CONSTRAINT_EPILOG
+            "release. A skipped correlation drops metadata.ticket_id/in_reply_to from the\n"
+            "envelope; the reply still correlates by pane/target\n\n" + METHOD_CONSTRAINT_EPILOG
         ),
     )
     _ = parser.add_argument("target", metavar="TARGET", help="caller agent name or pane id")
@@ -251,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_argument(
         parser,
         "verbose",
-        help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
+        help="include cwd/resume recovery metadata in the envelope metadata (default trimmed)",
     )
     _ = parser.add_argument(
         "--ticket",
@@ -285,522 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-STATUS_MAP: dict[str, str] = {
-    "COMPLETED": "completed",
-    "BLOCKED": "blocked",
-    "REJECTED": "rework",
-}
-
-
-def parse_status_line(payload: str) -> tuple[str | None, str | None, str | None]:
-    """Map the payload's first non-empty line onto (status, sha, status_line).
-
-    The first token is upper-cased with a trailing `:` stripped: COMPLETED/BLOCKED/
-    REJECTED map to completed/blocked/rework; anything else maps to None. For COMPLETED,
-    the second token is treated as the commit SHA when present.
-    """
-    for raw_line in payload.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        tokens = line.split()
-        token = tokens[0].rstrip(":").upper()
-        mapped = STATUS_MAP.get(token)
-        sha = tokens[1] if mapped == "completed" and len(tokens) > 1 else None
-        return mapped, sha, line
-    return None, None, None
-
-
-# ── payload shape (#231): a COMPLETED reply must cite evidence ───────────────────────
-
-# The exact singular/plural forms that always match, kept from the original floor: every one
-# of them also starts with a stem below, so nothing that matched before stops matching.
-EVIDENCE_KEYWORDS = frozenset(
-    {
-        "evidence",
-        "verification",
-        "verified",
-        "verify",
-        "gate",
-        "gates",
-        "proof",
-        "witness",
-        "reproduction",
-        "repro",
-        "artifact",
-        "artifacts",
-        "test",
-        "tests",
-        "pytest",
-        "check",
-        "checks",
-        "log",
-        "logs",
-    }
-)
-
-# `#231` F4: a heading word matches evidence vocabulary when it *starts with* one of these
-# stems (or is exactly `ci`). The floor was an exact list, so `Validation`, `Validation
-# output`, `Results`, `Reproduced`, `Commands run`, `Diff`, `Benchmark results` and friends
-# were false negatives that stalled an honest completion; near-misses here are lexical, not
-# conceptual. `evidence_section` documents the precedence the classes below rank by.
-EVIDENCE_STEMS = (
-    "evidenc",
-    "verif",
-    "validat",
-    "gate",
-    "proof",
-    "witness",
-    "reproduc",
-    "repro",
-    "artifact",
-    "test",
-    "pytest",
-    "check",
-    "log",
-    "result",
-    "benchmark",
-    "coverag",
-    "report",
-    "command",
-    "output",
-    "diff",
-    "run",
-    "status",
-    "outcome",
-    "accept",
-)
-# Longest stem first, so `reproduced` resolves through `reproduc`, not `repro`.
-_STEMS_LONGEST_FIRST = tuple(sorted(EVIDENCE_STEMS, key=len, reverse=True))
-
-# `#231` F3: the ledger's `evidence` label is drawn from this closed vocabulary. A heading's
-# words are mapped onto canonical evidence words and everything else is dropped, so no
-# arbitrary heading text — and therefore no secret — can reach an index file. The label a
-# word maps to is fixed: `Validation output` records `validation output`, not the heading.
-_STEM_LABELS: dict[str, str] = {
-    "evidenc": "evidence",
-    "verif": "verification",
-    "validat": "validation",
-    "gate": "gate",
-    "proof": "proof",
-    "witness": "witness",
-    "reproduc": "reproduction",
-    "repro": "repro",
-    "artifact": "artifacts",
-    "test": "tests",
-    "pytest": "pytest",
-    "check": "checks",
-    "log": "logs",
-    "result": "results",
-    "benchmark": "benchmark",
-    "coverag": "coverage",
-    "report": "report",
-    "command": "commands",
-    "output": "output",
-    "diff": "diff",
-    "run": "run",
-    "status": "status",
-    "outcome": "outcome",
-    "accept": "acceptance",
-}
-_KEYWORD_LABELS: dict[str, str] = {
-    "evidence": "evidence",
-    "verification": "verification",
-    "verified": "verification",
-    "verify": "verification",
-    "gate": "gate",
-    "gates": "gate",
-    "proof": "proof",
-    "witness": "witness",
-    "reproduction": "reproduction",
-    "repro": "repro",
-    "artifact": "artifacts",
-    "artifacts": "artifacts",
-    "test": "tests",
-    "tests": "tests",
-    "pytest": "pytest",
-    "check": "checks",
-    "checks": "checks",
-    "log": "logs",
-    "logs": "logs",
-}
-# Every word `evidence_label` can emit.
-EVIDENCE_LABEL_WORDS = frozenset(
-    {*_STEM_LABELS.values(), *_KEYWORD_LABELS.values(), "fenced", "block", "section", "ci"}
-)
-# The canonical section names: a heading carrying one is the strongest match, so `## Evidence`
-# outranks `## Artifacts` even when `Artifacts` comes first (#231 F5).
-CANONICAL_EVIDENCE_HEADS = frozenset({"evidence", "verification"})
-# The floor's deny-list (#231 F4): a heading that matched no vocabulary word is still an
-# evidence section when it has a body — `## What I ran` is beyond any stem set — unless it
-# names a section that is plainly not evidence.
-NOT_EVIDENCE_HEADS = frozenset(
-    {"notes", "note", "next steps", "next", "todo", "tbd", "plan", "questions", "changelog"}
-)
-EVIDENCE_LABEL_LIMIT = 40
 _SHA_RE = re.compile(r"[0-9a-f]{7,40}")
-
-FENCE_MARKER = "```"
-ARTIFACT_LIMIT = 24
-_LABEL_MAX_LENGTH = 60
-_TRAILING_PUNCTUATION = ".,;:!?)]}'\">`"
-_MARKDOWN_DECORATION = "*_`~#>[]()"
-_FENCE_RE = re.compile(r"^```")
-_ATX_RE = re.compile(r"^(#{1,6})[ \t]+(\S.*)$")
-_BOLD_RE = re.compile(r"^\*\*[ \t]*(.*?)[ \t]*\*\*:?[ \t]*(.*)$")
-_LABEL_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*(?:[ \t]+[A-Za-z0-9_-]+)*)[ \t]*:[ \t]*(.*)$")
-_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
-_WORD_RE = re.compile(r"\w")
-# The shape table tests pin exactly these outcomes:
-#
-#   payload                                shape        evidence heading
-#   COMPLETED + "## Evidence" + body       complete     Evidence
-#   COMPLETED + "**Evidence:** 660 passed" complete     Evidence
-#   COMPLETED + "Gates:" + a command line  complete     Gates
-#   COMPLETED + "### Test output" + body   complete     Test output
-#   COMPLETED + a fence with a non-blank   complete     ```
-#   COMPLETED + "## Verification" + body   complete     Verification
-#   COMPLETED                              incomplete   None
-#   COMPLETED abc1234                      incomplete   None
-#   COMPLETED + "## Notes" + body          incomplete   None
-#   COMPLETED + "## Evidence" then heading incomplete   None   (empty body)
-#   COMPLETED + "## Next steps" + body     incomplete   None
-#   BLOCKED / REJECTED / no status line    n/a          None
-#
-# The widened floor (#231 F4) and the precedence between a canonical name, a vocabulary
-# heading, the deny-list floor and a fence are documented on `evidence_section` and pinned by
-# `tests/herdr/test_herdr_reply.py`: 18 realistic headings classify `complete`, while a bare
-# status line, a denied heading (`Notes`, `Next steps`, `Todo`, …) and a heading with no body
-# stay `incomplete`. There is deliberately no path-citation fallback — a cited path is not
-# evidence, so `## Notes` plus a path is still incomplete.
-#
-# This is a *shape* check, not a quality gate: it asks whether a COMPLETED payload cites
-# evidence, never whether that evidence is good. It runs only when the first line maps to
-# `completed`; a BLOCKED/REJECTED reply (or one with no status line) is `n/a` and its
-# behaviour is unchanged. A heading ATX form carries no inline text of its own, so `## Notes`
-# never counts by itself — only a following non-blank body line, a bold/label inline tail, or
-# a fence does.
-
-
-def _strip_title(text: str) -> str:
-    """The heading's identifying text: markdown decoration and a trailing colon removed."""
-    return text.strip().strip(_MARKDOWN_DECORATION).rstrip(":").strip()
-
-
-def _normalize(text: str) -> list[str]:
-    """Lowercase, drop markdown decoration, split on non-alphanumerics."""
-    cleaned = text.casefold()
-    for character in _MARKDOWN_DECORATION:
-        cleaned = cleaned.replace(character, " ")
-    return [word for word in _NON_ALNUM_RE.split(cleaned) if word]
-
-
-def _has_keyword(words: Sequence[str]) -> bool:
-    """Whether a heading carries one of the exact evidence keywords (the original floor)."""
-    return any(word in EVIDENCE_KEYWORDS for word in words)
-
-
-def _stem_for(word: str) -> str | None:
-    """The evidence stem one heading word starts with (`ci` counts), else None."""
-    for stem in _STEMS_LONGEST_FIRST:
-        if word.startswith(stem):
-            return stem
-    return "ci" if word == "ci" else None
-
-
-def _label_for(word: str) -> str | None:
-    """The ledger label for one heading word, or None when it is not evidence vocabulary."""
-    keyword = _KEYWORD_LABELS.get(word)
-    if keyword is not None:
-        return keyword
-    stem = _stem_for(word)
-    return None if stem is None else _STEM_LABELS.get(stem, stem)
-
-
-def _evidence_class(words: Sequence[str]) -> int | None:
-    """How strongly a heading names evidence: 1 canonical, 2 vocabulary, None otherwise."""
-    if any(word in CANONICAL_EVIDENCE_HEADS for word in words):
-        return 1
-    if _has_keyword(words) or any(_stem_for(word) is not None for word in words):
-        return 2
-    return None
-
-
-def evidence_label(heading: str | None) -> str | None:
-    """A ledger-safe label for a matched heading: closed vocabulary, capped at 40 (#231 F3).
-
-    `None` for no heading, `"fenced block"` for a matched fence. Otherwise the heading's
-    words are mapped onto the evidence vocabulary and the rest are dropped, so the stored
-    label is always composed of words `EVIDENCE_LABEL_WORDS` lists — a heading can never
-    smuggle text, and therefore never a secret, into an index file. A heading that matched
-    only through the deny-list floor carries no vocabulary word and is recorded as the
-    literal `"section"`.
-    """
-    if heading is None:
-        return None
-    if heading == FENCE_MARKER:
-        return "fenced block"
-    labels = [label for word in _normalize(heading) if (label := _label_for(word)) is not None]
-    if not labels:
-        return "section"
-    return " ".join(labels)[:EVIDENCE_LABEL_LIMIT]
-
-
-def _parse_heading(line: str) -> tuple[str, str, list[str]] | None:
-    """Return (title, inline text after the marker, normalized words) for a heading line.
-
-    A line is a heading when it is ATX (`## Title`), bold (`**Title**`, optional `:`), or a
-    `Word[Word …]:` label no longer than 60 characters. ATX headings carry no inline text:
-    the remainder of the line *is* the title, which is why `## Evidence` alone is not complete.
-    """
-    match = _ATX_RE.match(line)
-    if match:
-        title = _strip_title(match.group(2))
-        return title, "", _normalize(title)
-    match = _BOLD_RE.match(line)
-    if match:
-        title = _strip_title(match.group(1))
-        return title, match.group(2).strip(), _normalize(title)
-    match = _LABEL_RE.match(line)
-    if match:
-        label = match.group(1)
-        if len(label) <= _LABEL_MAX_LENGTH:
-            title = label.strip()
-            return title, match.group(2).strip(), _normalize(title)
-    return None
-
-
-def evidence_section(payload: str) -> str | None:
-    """The best evidence-shaped section's heading text, else None.
-
-    Precedence, highest first (#231 F4/F5), is a rank, not a document position: the same
-    heading form ranks the same whether it is ATX (`## Status`) or bold (`**Status:**`), and a
-    bold heading's inline tail counts as its body.
-
-    1. a heading naming the canonical section (`Evidence`, `Verification`);
-    2. a heading whose words match evidence vocabulary — an exact keyword or an evidence stem
-       (`Artifacts`, `Tests`, `Gates`, `Gate output`, `Validation`, `Validation output`,
-       `Results`, `Benchmark results`, `Reproduced`, `Commands run`, `CI`, `Diff`, …);
-    3. the deny-list floor: a recognized heading form with a non-blank body (or inline tail)
-       whose normalized label is not in `NOT_EVIDENCE_HEADS`, which is what admits
-       `## What I ran` beyond any stem set;
-    4. a fenced code block with at least one non-blank line (`FENCE_MARKER`).
-
-    Ties go to document order, and only a section that has content counts: a heading with
-    neither an inline tail nor a body before the next heading is skipped, which is why a bare
-    `## Evidence` is not evidence. A fenced block immediately under a heading is that heading's
-    body, not a separate section — `## Evidence` opening onto a fence still ranks class 1, and
-    the fence never discards the pending heading — so the canonical reply template in
-    `references/lane-coordination.md` records `Evidence` and not `Artifacts`: the canonical name
-    is class 1 and `Artifacts` is class 2, however early it appears.
-    """
-    best: tuple[int, str] | None = None
-    pending: tuple[int, str] | None = None
-    in_fence = False
-    fence_has_content = False
-    fence_seen = False
-
-    for raw_line in payload.splitlines():
-        line = raw_line.strip()
-        if _FENCE_RE.match(line):
-            if in_fence:
-                if fence_has_content:
-                    fence_seen = True
-                    # A fence directly under a heading is that heading's body: rank the
-                    # pending heading by its own class before the fence closes.
-                    if pending is not None:
-                        if best is None or pending[0] < best[0]:
-                            best = pending
-                        pending = None
-                in_fence = False
-                fence_has_content = False
-            else:
-                # Opening a fence keeps `pending`: the block below may be that heading's body,
-                # so it must survive until the fence proves it empty or carries content.
-                in_fence = True
-                fence_has_content = False
-            continue
-        if in_fence:
-            if line:
-                fence_has_content = True
-            continue
-        if not line:
-            continue
-        heading = _parse_heading(line)
-        if heading is not None:
-            title, inline, words = heading
-            pending = None
-            rank = _evidence_class(words)
-            if rank is None and " ".join(words) not in NOT_EVIDENCE_HEADS:
-                rank = 3
-            if rank is not None:
-                if inline:
-                    if best is None or rank < best[0]:
-                        best = (rank, title)
-                else:
-                    pending = (rank, title)
-            continue
-        if pending is not None:
-            if best is None or pending[0] < best[0]:
-                best = pending
-            pending = None
-    if in_fence and fence_has_content:
-        fence_seen = True
-        if pending is not None and (best is None or pending[0] < best[0]):
-            best = pending
-    if best is not None:
-        return best[1]
-    return FENCE_MARKER if fence_seen else None
-
-
-def payload_shape(payload: str) -> tuple[str, str | None]:
-    """(shape, evidence_heading) where shape is "complete", "incomplete" or "n/a".
-
-    The evidence requirement applies only when `parse_status_line` maps the first line to
-    `completed`; every other payload is `"n/a"` with no behaviour change. A shape check, not
-    a quality gate: it never inspects whether the cited evidence is any good, so the cheapest
-    `complete` is a heading named like evidence plus one non-blank line. `evidence_section`
-    documents which heading is returned when a payload has several (class 1 wins over class 2,
-    both win over the deny-list floor, and all three win over a fence).
-    """
-    mapped, _sha, _line = parse_status_line(payload)
-    if mapped != "completed":
-        return "n/a", None
-    heading = evidence_section(payload)
-    if heading is None:
-        return "incomplete", None
-    return "complete", heading
-
-
-# ── an outbound payload may not cite a SHA that resolves to nothing (#247 D2) ─────────────
-
-# A backticked 7-40 lowercase-hex token is an *instruction* — "do not rewrite `8d9fa742`" — and an
-# instruction that names no commit points at nothing. The rule is deliberately narrow: the pattern
-# matches a whole code span, so a bare hex word in prose stays prose. The measurement that chose it
-# (#247 D2) scanned 668 `.md` files (`.lane/tickets`, `skills/**`, `docs/**`, `.lane/reports`): 37
-# distinct non-resolving tokens appear bare, and reading those as instructions would have refused 6
-# innocent files whose backticked hex is a decimal (`1234567`), a binary literal (`0b00000011`) or an
-# 8-hex review-record id. The narrow rule still refuses 10 files — 4 tickets, 4 docs, and 2 stored
-# reply payloads — whose backticked tokens are review ids and mutant labels that no shape rule can
-# tell apart from an abbreviation, so a genuinely intentional non-resolving token is waived BY NAME
-# with `--allow-unresolvable-sha <TOKEN>`, reported on stderr, never a silent bypass.
-SHA_SHAPED_BACKTICKED_RE = re.compile(r"`([0-9a-f]{7,40})`")
-ALLOW_UNRESOLVABLE_SHA = "--allow-unresolvable-sha"
-
-# Git location overrides the guard inherits through `subprocess.run` that actually move the objects
-# `git rev-parse` reads, so a probe run with one set answers about another repository. `GIT_DIR` and
-# `GIT_COMMON_DIR` relocate the whole repository, `GIT_OBJECT_DIRECTORY` replaces its object store,
-# and `GIT_ALTERNATE_OBJECT_DIRECTORIES` adds foreign ones. Each outranks `cwd`, so the verdict is
-# unverifiable rather than a false negative. Measured, not assumed: with only `GIT_INDEX_FILE` or
-# `GIT_WORK_TREE` set the probe's verdict is byte-identical to a clean environment (#247
-# D2-rework-2), so those two are deliberately absent here — skipping on them would excuse a refusal
-# the probe can answer, a silent false pass the other way. They never skip for that reason alone:
-# neither name is read here, so a skip with one set can only come from the generic "no work tree"
-# path — a non-existent `GIT_WORK_TREE`, say, makes `git rev-parse --is-inside-work-tree` exit 128
-# and the check is reported unchecked, never passed. `herdr_bootstrap` refuses on them because its
-# question is tracked state, which the index and the work tree do decide (#238).
-GIT_LOCATION_REDIRECT_VARS: tuple[str, ...] = (
-    "GIT_DIR",
-    "GIT_COMMON_DIR",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-)
-# Git's remaining location overrides: they move the index or the work tree, which decide `git
-# status`, never which commit a SHA names. Together with the tuple above they are git's whole
-# location family, held to `tests/git_env.GIT_LOCATION_VARS` by a pin so neither list can drift
-# alone.
-GIT_VERDICT_NEUTRAL_LOCATION_VARS: tuple[str, ...] = ("GIT_INDEX_FILE", "GIT_WORK_TREE")
-
-
-def backticked_sha_tokens(payload: str) -> list[str]:
-    """Distinct backticked 7-40 lowercase-hex tokens, in first-appearance order."""
-    return list(dict.fromkeys(SHA_SHAPED_BACKTICKED_RE.findall(payload)))
-
-
-def git_location_redirect(env: Mapping[str, str]) -> str | None:
-    """The object-store override in `env`, or None when git would answer about `cwd`.
-
-    Same question as `herdr_bootstrap._git_location_is_redirected` asks (#238) — does the caller's
-    environment point git away from this lane? — but a deliberately different policy: bootstrap
-    refuses, because it guards an irreversible append to a possibly-tracked tree, while this guard
-    skips and delivers, because a dead-SHA advisory must not block a coordination message and the
-    override is caller-environment-only (no harness script exports it, `scripts/check.sh` unsets it,
-    `tests/` scrubs it, and no payload can force it). Answered with the offending variable's name so
-    the skip line can say why. Each name here makes `git_can_resolve_commits` and `names_a_commit`
-    answer about another repository's objects, so their verdict is unverifiable rather than a false
-    negative; the overrides that leave that verdict unchanged are not read here.
-    """
-    return next((name for name in GIT_LOCATION_REDIRECT_VARS if env.get(name)), None)
-
-
-def git_can_resolve_commits(cwd: Path) -> bool:
-    """Whether `git rev-parse` can answer about commits in `cwd` at all.
-
-    A missing git binary, or a directory outside every work tree, answers False. That answer is
-    "unverifiable", and it must never be read as "unresolvable".
-    """
-    try:
-        done = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return False
-    return done.returncode == 0
-
-
-def names_a_commit(token: str, cwd: Path) -> bool:
-    """`git rev-parse --verify <token>^{commit}`: whether the token names a commit in `cwd`."""
-    try:
-        done = subprocess.run(
-            ["git", "rev-parse", "--verify", f"{token}^{{commit}}"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return False
-    return done.returncode == 0
-
-
-def unresolvable_sha_tokens(
-    payload: str, *, cwd: Path, env: Mapping[str, str] | None = None
-) -> list[str] | None:
-    """Backticked SHA-shaped tokens in `payload` that name no commit; None when unverifiable.
-
-    `None` means git could not answer in `cwd` — no repository, no binary, or one of
-    `GIT_LOCATION_REDIRECT_VARS` in `env` (the process environment when `env` is omitted) pointing
-    the probe at another repository's objects — so the caller can report the check as skipped
-    instead of claiming every token in a payload is dead, or letting a token resolve in a repository
-    that is not this lane's.
-    `[]` means nothing to verify or every cited token resolves, which is why a payload with no such
-    token passes.
-    """
-    tokens = backticked_sha_tokens(payload)
-    if not tokens:
-        return []
-    if git_location_redirect(os.environ if env is None else env) is not None:
-        return None
-    if not git_can_resolve_commits(cwd):
-        return None
-    return [token for token in tokens if not names_a_commit(token, cwd)]
-
-
-def lane_git_dir(env: Mapping[str, str]) -> Path | None:
-    """The lane repository the guard resolves against, or None when no anchor resolves.
-
-    Deliberately the store anchor `herdr-lease` already resolves (#229) rather than the ambient
-    cwd: the same payload must get the same verdict from any working directory. Only a broken
-    anchor leaves this None, and the guard then falls back to where the helper itself was invoked.
-    """
-    try:
-        return resolve_base_dir(env=env)
-    except Exception:
-        return None
 
 
 def payload_origin(options: Options) -> str:
@@ -808,70 +370,6 @@ def payload_origin(options: Options) -> str:
     if options.file and options.file != STDIN:
         return options.file
     return "<message>" if options.message is not None else "<stdin>"
-
-
-def require_resolvable_shas(
-    payload: str,
-    *,
-    payload_path: str,
-    waived: Sequence[str] = (),
-    cwd: Path | None = None,
-    env: Mapping[str, str] | None = None,
-    origin: str = "herdr-reply",
-    refusal_action: str = "record or submit the reply",
-) -> None:
-    """Refuse a payload whose backticked SHA-shaped token names no commit (#247 D2).
-
-    Runs on the payload BODY `read_payload` returned, which is the only text it is ever handed:
-    the envelope and the pointer are composed later, and envelope fields are never backticked, so
-    a drifted copy in the ticket or in the envelope is not caught here. Runs before anything is
-    written, so a refused payload leaves no record and consumes no lease — the persist-first
-    ordering (#231) is untouched. Loud by construction: the refusal names every dead token and the
-    payload path; a token waived by `--allow-unresolvable-sha` is named on stderr; and a git that
-    cannot answer — no work tree, no binary, or one of `GIT_LOCATION_REDIRECT_VARS` pointing it at
-    another repository's objects — is reported as a skipped check, never as a pass.
-
-    Shared by the reply and dispatch paths: `origin` names the helper in the stderr lines and
-    `refusal_action` names what the refusal declines to do, so neither path reports under the
-    other's name.
-    """
-    tokens = backticked_sha_tokens(payload)
-    if not tokens:
-        return
-    directory = cwd if cwd is not None else Path.cwd()
-    environment = os.environ if env is None else env
-    verdict = unresolvable_sha_tokens(payload, cwd=directory, env=environment)
-    if verdict is None:
-        listed = ", ".join(f"`{token}`" for token in tokens)
-        redirect = git_location_redirect(environment)
-        reason = (
-            f"git's location is redirected by {redirect}, so a token could resolve in another "
-            "repository"
-            if redirect is not None
-            else f"git cannot resolve commits in {directory} (no work tree, or no git binary)"
-        )
-        print(
-            f"{origin}: SHA guard skipped for {payload_path}: {reason}; unchecked: {listed}",
-            file=sys.stderr,
-        )
-        return
-    vouched = set(waived)
-    for token in verdict:
-        if token in vouched:
-            print(
-                f"{origin}: SHA guard waived `{token}` ({ALLOW_UNRESOLVABLE_SHA}): it names "
-                "no commit in this lane",
-                file=sys.stderr,
-            )
-    dead = [token for token in verdict if token not in vouched]
-    if dead:
-        listed = ", ".join(f"`{token}`" for token in dead)
-        raise UsageError(
-            f"payload {payload_path} names a SHA-shaped token that resolves to no commit: "
-            f"{listed}. A backticked 7-40 hex token is an instruction, so correct it — or waive "
-            f"an intentional one with {ALLOW_UNRESOLVABLE_SHA} <TOKEN>. Refusing to "
-            f"{refusal_action}"
-        )
 
 
 # ── persist first, then poke (#231) ─────────────────────────────────────────────────
@@ -898,25 +396,17 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+# `herdr_evidence._NON_ALNUM_RE` moved with the evidence subsystem; `_slug` keeps its own
+# copy of the identical pattern instead of importing a private name across modules.
+_SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
+
+
 def _slug(value: str | None) -> str:
     """A filesystem-safe fragment for a record id; `unknown` when there is nothing to slug."""
     if not value:
         return "unknown"
-    cleaned = _NON_ALNUM_RE.sub("-", value.casefold()).strip("-")
+    cleaned = _SLUG_STRIP_RE.sub("-", value.casefold()).strip("-")
     return cleaned or "unknown"
-
-
-def extract_artifacts(payload: str) -> list[str]:
-    """Path-like tokens cited in the payload: deduped, sorted, capped at 24, no URLs."""
-    found: set[str] = set()
-    for token in payload.split():
-        if "://" in token:
-            continue
-        cleaned = token.rstrip(_TRAILING_PUNCTUATION)
-        if "/" not in cleaned or not _WORD_RE.search(cleaned):
-            continue
-        found.add(cleaned)
-    return sorted(found)[:ARTIFACT_LIMIT]
 
 
 def build_reply_entry(
@@ -1224,20 +714,63 @@ def release_active_lease(herdr: str, env: Mapping[str, str]) -> None:
         report_lease_trouble("lease release", exc)
 
 
+# ── lane task group for the ADR-0020 reconciliation pass (#182 t2) ──────────────────
+
+
+def resolve_lane_task_group(
+    lease: Mapping[str, Any] | None,
+    task_id: str | None,
+    env: Mapping[str, str],
+) -> str | None:
+    """The Task Group slug this lane was opened under, read back from the lane's own records.
+
+    `herdr-reply` has no `--task-group` flag, so the slug the reconciliation pass would write as
+    the tab title and as `<task_group>-orch` can only come from stored evidence: the sender's
+    lease, then the task record this reply advances. A record that carries none answers unknown,
+    and this returns None: the pass then leaves the tab title and the orchestrator name alone
+    with one stderr line instead of renaming to a bare tab id or to a slug guessed from a
+    visible label. Reading the store never decides delivery, so an unreadable record is swallowed
+    here — the lease steps around it already reported the store on stderr, and the contract is
+    one line per skipped step. `herdr-dispatch` writes the slug it was given with `--task-group`
+    into both records it creates (#182 t3 C), so a lane opened with a task group heals its own
+    tab title on the reply side; a lane opened without one still answers None and stays skipped.
+    """
+    records: list[Mapping[str, Any] | None] = [lease]
+    if task_id:
+        try:
+            records.append(get_task(task_id, env=env))
+        except Exception:
+            records.append(None)
+    for record in records:
+        if isinstance(record, Mapping):
+            value = record.get("task_group")
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
 # ── reply task linkage (#246 D1.2) ──────────────────────────────────────────────────
 
 # The open/terminal partition that decides which of the sender's tasks count as open work for
 # the linkage (#246 D1.4/F2). Both sets are enumerated and a test pins that they partition the
 # store's `CANONICAL_STATUSES`, so a status added there cannot silently default to open.
-# `completed` is the only status this store writes that ends the round;
-# `dispatched`/`in_progress`/`blocked`/`rework` all still await their assignee.
-OPEN_TASK_STATUSES = frozenset({"dispatched", "in_progress", "blocked", "rework"})
-TERMINAL_TASK_STATUSES = frozenset({"completed"})
+# `TASK_STATE_COMPLETED` is the only state this store writes that ends the round;
+# `TASK_STATE_SUBMITTED`/`TASK_STATE_WORKING`/`TASK_STATE_INPUT_REQUIRED`/`TASK_STATE_FAILED`
+# all still await their assignee. `_is_open_task` normalizes through `herdr_lease.STATUS_ALIASES`
+# before comparing, so a record written by a pre-cutover worktree (`status: dispatched`) lands on
+# the same side of the partition as one written here (`status: TASK_STATE_SUBMITTED`) — the shared
+# live store cannot be upgraded in lockstep. A status that names no state reads as neither.
+OPEN_TASK_STATUSES = frozenset({STATE_SUBMITTED, STATE_WORKING, STATE_INPUT_REQUIRED, STATE_FAILED})
+TERMINAL_TASK_STATUSES = frozenset({STATE_COMPLETED})
 
 
 def _is_open_task(task: Mapping[str, Any]) -> bool:
-    """Whether a task still awaits its assignee: its status is one of the open ones."""
-    return task.get("status") in OPEN_TASK_STATUSES
+    """Whether a task still awaits its assignee: its state is one of the open ones.
+
+    Both vocabularies read alike, and an unknown or absent state is NOT open: a record nobody can
+    read must not be reported as the sender's open work.
+    """
+    return status_of(task) in OPEN_TASK_STATUSES
 
 
 # ── unlinked-warning severity markers (#246 D1.5 R2) ─────────────────────────────────
@@ -1602,7 +1135,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                         f"--auto-start kind {kind!r} names no invariant flag in kinds.yaml; "
                         "refusing to revive a caller that would hold no lane contract"
                     )
-                invariant_file = lane_invariant_path(str(resolve_base_dir(env=env)), start_name)
+                invariant_file = lane_invariant_path(
+                    str(herdr_lease.resolve_base_dir(env=env)), start_name
+                )
                 if not options.dry_run:
                     try:
                         write_role_invariant(invariant_file, snippet)
@@ -1707,40 +1242,82 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         else:
             lease = stored if isinstance(stored, dict) else None
     ticket_id: str | None = None
-    in_reply_to: str | None = None
     if isinstance(lease, dict):
         lease_ticket = lease.get("ticket_id")
         if isinstance(lease_ticket, str):
             ticket_id = lease_ticket
-        lease_task = lease.get("task_id")
-        if isinstance(lease_task, str):
-            in_reply_to = lease_task
     # #246 D1.2: the lease is consumed by the first reply, so the task this reply advances is
     # resolved from the whole store — the explicit flag, else the lease — and an unresolvable
     # answer is recorded unlinked with one warning line. No step infers (#246 E1.2): the
-    # rendered contract carries `--ticket`, so a reply that names nothing mutates nothing. A dry
-    # run records nothing, so it resolves nothing.
-    linked_task_id: str | None = None
-    linkage_warning: str | None = None
-    if not options.dry_run:
-        linked_task_id, linkage_warning = resolve_task_linkage(
-            sender=sender,
-            lease=lease,
-            explicit_ticket=options.ticket,
-            in_reply_to_record=options.in_reply_to_record,
-            env=env,
-        )
+    # rendered contract carries `--ticket`, so a reply that names nothing mutates nothing. The
+    # resolution only ever reads the store, so `--dry-run` runs it too: the preview carries the
+    # correlation the real send carries, while recording nothing.
+    linked_task_id, linkage_warning = resolve_task_linkage(
+        sender=sender,
+        lease=lease,
+        explicit_ticket=options.ticket,
+        in_reply_to_record=options.in_reply_to_record,
+        env=env,
+    )
+    # The envelope names the task this reply ADVANCES: `envelope.id` is either that linked task
+    # id, matching the store row below, or a generated `unlinked-…` id when nothing was bound —
+    # A2A requires a non-empty `Task.id`, so `''` is never rendered. The resolver already carries
+    # the whole precedence — the `--in-reply-to` record, then `--ticket`, then the sender's lease
+    # when neither was supplied (#246 D1.2) — so its answer needs no fallback. `or in_reply_to`
+    # was one, and it was a wrong one: when an EXPLICIT binding was refused the resolver returns
+    # `None` while the lease half of the pair still named a task, so the envelope advertised a
+    # task the reply deliberately refused to bind, and a reader of `id`/`metadata.in_reply_to`
+    # drew a linkage the store row contradicts. A refused binding now renders the generated
+    # `unlinked-…` id, never the lease's task, and drops both correlation keys, exactly as the
+    # unlinked record does.
+    # `ticket_id` prefers the lease's ticket, else the resolved task record's ticket, read back
+    # through `get_task`. `status.state` is the status the payload's first token stated, mapped
+    # above (a payload with no status is refused before this line renders anything).
+    envelope_task_id = linked_task_id
+    envelope_ticket_id = ticket_id
+    if envelope_ticket_id is None and envelope_task_id is not None:
+        try:
+            task_record = get_task(envelope_task_id, env=env)
+        except Exception:
+            task_record = None
+        if isinstance(task_record, dict):
+            record_ticket = task_record.get("ticket_id")
+            if isinstance(record_ticket, str) and record_ticket:
+                envelope_ticket_id = record_ticket
     panes, agents = fetch_inventory(herdr, env)
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     receiver = resolve_receiver(panes, agents, target)
+    # ADR-0020 active reconciliation (#182 t2), anchored on the physical ids this snapshot
+    # already resolved: `caller_ctx.pane_id` names the orchestrator pane, `caller_ctx.tab_id`
+    # names the lane's tab, and each worker is keyed by its own `pane_id`. Task-group source:
+    # no `--task-group` flag exists here, so the slug is read back from the lane's records (see
+    # `resolve_lane_task_group`); with none recorded the tab title and the orchestrator name are
+    # skipped with one stderr line, and the worker-name half still runs. Best-effort by contract:
+    # no rename below can change this exit status or delay the delivery after it.
+    _ = reconcile_lane(
+        herdr,
+        env,
+        task_group=resolve_lane_task_group(lease, envelope_task_id, env),
+        marker="herdr-reply",
+        dry_run=options.dry_run,
+        missing_note=(
+            "no task group recorded for this lane, so the tab title and the orchestrator "
+            "name were left alone"
+        ),
+        pane_id=caller_ctx.pane_id,
+        tab_id=caller_ctx.tab_id,
+        inventory=(panes, agents),
+    )
     anchor = f"[You: {caller_anchor(caller_ctx)}]"
     reply_envelope = render_envelope(
         caller_ctx,
         receiver=receiver or target,
         include_recovery=options.verbose,
-        ticket_id=ticket_id,
-        in_reply_to=in_reply_to,
+        ticket_id=envelope_ticket_id,
+        task_id=envelope_task_id,
+        in_reply_to=envelope_task_id,
         tab_id=caller_ctx.tab_id,
+        state=reply_state(mapped),
     )
     shape, heading = payload_shape(payload)
     # The pointer and the index row carry the same bounded label, never the heading text.
@@ -1748,7 +1325,13 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     prelude = render_prelude(reply_envelope)
     record_id: str | None = None
     if options.dry_run:
-        # A dry run submits nothing, so it records nothing: the payload stays pointer-free.
+        # A dry run submits nothing, so it records nothing: the payload stays pointer-free. What it
+        # DOES resolve is the task linkage, and a refused binding is a fact about the correlation
+        # the preview is about to print — silent here, the preview would show a clean
+        # `unlinked-…` id where the live send says why nothing was bound (#182 t5 2.5a). No record
+        # clause: a preview attempts no record, so it can only claim the refusal.
+        if linkage_warning:
+            print(f"herdr-reply: {linkage_warning}", file=sys.stderr)
         delivered = f"{prelude}{payload}"
     else:
         stored: dict[str, Any] | None

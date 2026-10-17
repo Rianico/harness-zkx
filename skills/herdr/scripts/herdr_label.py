@@ -42,9 +42,11 @@ Local addition to the absorbed upstream Herdr skill; not part of ``herdrdev/herd
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -262,6 +264,320 @@ def stale_labels(
     return stale
 
 
+# ── rename argv builders: the one place a rename is spelled ─────────────────────────
+
+
+def pane_rename_argv(herdr: str, pane_id: str, label: str) -> list[str]:
+    """The argv that sets a pane's visible label, anchored on its physical pane id."""
+    return [herdr, "pane", "rename", pane_id, label]
+
+
+def agent_rename_argv(herdr: str, pane_id: str, name: str) -> list[str]:
+    """The argv that names the agent hosting a pane, anchored on its physical pane id."""
+    return [herdr, "agent", "rename", pane_id, name]
+
+
+def tab_rename_argv(herdr: str, tab_id: str, title: str) -> list[str]:
+    """The argv that sets a Task Group (tab) title, anchored on its physical tab id."""
+    return [herdr, "tab", "rename", tab_id, title]
+
+
+# ── #182 t2: ID-anchored self-healing reconciliation (ADR-0020) ─────────────────────
+
+# The orchestrator half of a lane's name: `<task_group>` titles the tab, `<task_group>-orch`
+# names the sending pane. Five characters, so a 32-char slug cannot compose a valid agent name.
+ORCHESTRATOR_SUFFIX = "-orch"
+
+
+def _derive_agent_name_max() -> int:
+    """The grammar's length cap, read off `AGENT_NAME_PATTERN` itself (one char plus `{0,N}`).
+
+    Derived, not typed: a pattern change moves the cap with it, where a hard-coded 32 would
+    rot silently. The quantifier-less shape raises rather than guessing (#182 h1).
+    """
+    quantifier = re.search(r"\{0,(\d+)\}", AGENT_NAME_PATTERN)
+    if quantifier is None:
+        raise RuntimeError(f"cannot derive the agent-name length cap from {AGENT_NAME_PATTERN!r}")
+    return 1 + int(quantifier.group(1))
+
+
+AGENT_NAME_MAX = _derive_agent_name_max()
+
+# The slug budget the composed `<slug>-orch` leaves inside the cap (#182 h1).
+ORCHESTRATOR_SLUG_BUDGET = AGENT_NAME_MAX - len(ORCHESTRATOR_SUFFIX)
+# A tab title carries no suffix, so it gets the whole cap. Keeping one budget for both halves
+# would truncate a legal 28-32 char slug's title to 27 (#182 h1 review).
+TAB_TITLE_BUDGET = AGENT_NAME_MAX
+
+
+def fit_slug(slug: str, budget: int) -> str:
+    """Fit a slug to `budget`: truncate the prefix, stamping a short digest when it truncates.
+
+    A short-enough slug comes back byte-identical, so every existing lane renders unchanged.
+    An over-long slug keeps its human-readable stem and gains a 4-hex digest of the FULL slug,
+    so two lanes sharing a ≥27-char prefix no longer fit to the same `<27 chars>-orch` name
+    while `conflict_with` refuses the second one forever. The digest is deterministic — no
+    time, no random — so a lane keeps its fitted name between dispatches. A slug whose
+    characters the grammar forbids stays forbidden — the caller still validates against
+    `AGENT_NAME`.
+    """
+    if len(slug) <= budget:
+        return slug
+    digest = hashlib.sha256(slug.encode("utf-8")).hexdigest()[:4]
+    return f"{slug[: budget - len(digest) - 1]}-{digest}"
+
+
+def _one_line(text: str, limit: int = 160) -> str:
+    """Collapse a message onto one line, so one skipped step prints exactly one line."""
+    return " ".join(text.split())[:limit]
+
+
+def tab_id_by_pane(panes: Sequence[Mapping[str, object]]) -> dict[str, str]:
+    """Pane id -> tab id, read from the pane inventory: the physical anchor of a lane."""
+    rows: dict[str, str] = {}
+    for entry in panes:
+        pane = entry_optional_text(entry, "pane_id")
+        tab = entry_optional_text(entry, "tab_id")
+        if pane and tab:
+            _ = rows.setdefault(pane, tab)
+    return rows
+
+
+def agent_name_by_pane(agents: Sequence[Mapping[str, object]]) -> dict[str, str | None]:
+    """Pane id -> live agent name, with None for an agent that dropped its name."""
+    rows: dict[str, str | None] = {}
+    for entry in agents:
+        pane = entry_optional_text(entry, "pane_id")
+        if pane:
+            _ = rows.setdefault(pane, entry_optional_text(entry, "name"))
+    return rows
+
+
+def tab_titles(herdr: str, env: Mapping[str, str]) -> dict[str, str | None]:
+    """Task Group (tab) titles keyed by tab id; `pane list` never carries the title."""
+    titles: dict[str, str | None] = {}
+    for entry in entries(run_herdr_checked([herdr, "tab", "list"], env), "result", "tabs"):
+        tab = entry_optional_text(entry, "tab_id")
+        if tab:
+            titles[tab] = entry_optional_text(entry, "label")
+    return titles
+
+
+def reconciliation_argv(
+    herdr: str,
+    panes: Sequence[Mapping[str, object]],
+    agents: Sequence[Mapping[str, object]],
+    tabs: Mapping[str, str | None],
+    *,
+    lane_tab_id: str | None,
+    orchestrator_pane_id: str | None,
+    task_group: str | None,
+) -> tuple[list[list[str]], list[str]]:
+    """Plan one active reconciliation pass as (rename argv, one note per skipped step).
+
+    ADR-0020: physical ids (`pane_id`, `tab_id`) are the anchors and the source of truth, so
+    every row here is keyed on an id and matched against what the inventory says that id should
+    carry. A visible label is never a target: it is only ever the value being written.
+
+    Three cases, all no-ops when already correct — the central invariant is that a correct lane
+    yields ZERO argv, so a caller may run this on every dispatch and reply:
+
+    1. A worker in this lane whose live agent dropped its name takes the surviving pane label
+       back, as `agent rename` AND `pane rename` (ADR-0020 names both — docs/adr/0020:41, so the
+       second rename is issued even when the pane already carries that label; see the loop).
+       Matching the worker to THIS lane is a `tab_id` question, so a snapshot that answers no lane
+       tab id cannot repair any worker: that skip prints a note too, rather than passing for the
+       healthy lane's silence.
+    2. The lane's tab title differs from the slug fitted to the name cap -> `tab rename`.
+    3. The sending orchestrator pane hosts a live agent with no name -> `agent rename` to
+       the slug fitted to the name cap minus `-orch`, plus `-orch`. Case 1 skips that pane, so
+       the orchestrator is named by its lane, never by a stale label, and never renamed twice.
+
+    `task_group` None asks for neither case 2 nor case 3, so it is silent: the caller that
+    derived nothing says so itself (see `reconcile_lane`). A slug longer than the grammar
+    allows is FITTED: `fit_slug` truncates the prefix to each half's own budget —
+    `TAB_TITLE_BUDGET` for the title, `ORCHESTRATOR_SLUG_BUDGET` for the name — and stamps a
+    stable 4-hex digest of the full slug when it truncates, so two lanes sharing a long
+    prefix fit to DISTINCT names instead of colliding on one `-orch` forever (#182 h1).
+    What reaches herdr lands inside `[a-z][a-z0-9_-]{0,31}` and the rename is issued with no
+    note. A slug whose characters the grammar forbids stays invalid after fitting and is
+    SKIPPED with a note, never reaching herdr. Notes carry no marker prefix: the
+    caller owns its own stderr prefix.
+
+    The tab half distinguishes two absences, and only one of them is evidence (#182 t5 2.5e). A
+    `lane_tab_id` that is not a key of `tabs` means `tab list` never reported that tab at all, so
+    there is no row to compare and the tab is left alone with a note; a row that IS reported with
+    an empty label is a title that positively differs from the fitted slug, so it takes the rename
+    and no note. Behaviour is unchanged here — this is the inventory of what each note means.
+    """
+    argv: list[list[str]] = []
+    notes: list[str] = []
+    pane_tabs = tab_id_by_pane(panes)
+    names = agent_name_by_pane(agents)
+    # Fit the slug FIRST (#182 h1), per half: the tab title takes the whole cap, the composed
+    # name the cap minus its suffix, so a legal 28-32 char slug keeps its full title while an
+    # over-long one lands inside the grammar carrying a digest that separates co-prefixed
+    # lanes. `fit_slug` shortens and stamps a digest, never rewrites characters; the
+    # character-class gate below stays exactly as strict.
+    tab_title = fit_slug(task_group, TAB_TITLE_BUDGET) if task_group else ""
+    name_slug = fit_slug(task_group, ORCHESTRATOR_SLUG_BUDGET) if task_group else ""
+    # len(name_slug) <= ORCHESTRATOR_SLUG_BUDGET by construction, so a grammatical `name_slug`
+    # composes a grammatical `composed`: the name half needs no second length check.
+    composed = f"{name_slug}{ORCHESTRATOR_SUFFIX}" if name_slug else ""
+    orchestrator_regained = bool(
+        orchestrator_pane_id
+        and composed
+        and AGENT_NAME.match(composed)
+        and names.get(orchestrator_pane_id) is None
+        and orchestrator_pane_id in names
+        and conflict_with(agents, composed, orchestrator_pane_id) is None
+    )
+
+    restorable = restorable_agents(panes, agents)
+    # Case 1 can only prove a nameless worker belongs to THIS lane through `tab_id`, so a snapshot
+    # that answers none heals nothing — and silence there looked exactly like the healthy lane's
+    # own empty plan (#182 t5 2.5d). Say it once, and only while a candidate actually waits on the
+    # anchor: the pane case 3 is about to name is not a worker left behind, and a pane on another
+    # tab was never this lane's to heal.
+    unanchorable = [
+        pane
+        for pane, _label in restorable
+        if pane != orchestrator_pane_id or not orchestrator_regained
+    ]
+    if lane_tab_id is None and unanchorable:
+        notes.append(
+            f"{len(unanchorable)} nameless worker pane(s) wait on a lane tab id this snapshot "
+            "does not answer; left their names alone"
+        )
+
+    for pane, label in restorable:
+        if pane == orchestrator_pane_id and orchestrator_regained:
+            continue
+        if lane_tab_id is None or pane_tabs.get(pane) != lane_tab_id:
+            continue
+        # ADR-0020 names BOTH commands for this case (docs/adr/0020:41), so the pane re-mark is
+        # issued even though the label being written is the one the pane already carries: the pair
+        # is the contract, and a pane that kept its label while its agent lost its name is only
+        # provably back in service once both renames answer. Dropping the second rename is the
+        # mutant `test_a_dropped_agent_name_takes_the_agent_rename_and_the_pane_rename` catches.
+        argv.append(agent_rename_argv(herdr, pane, label))
+        argv.append(pane_rename_argv(herdr, pane, label))
+
+    if task_group is None:
+        return argv, notes
+
+    if not AGENT_NAME.match(tab_title):
+        # Truncate first, validate after (#182 h1): fitting repairs length — and its digest
+        # only adds grammar-legal hex chars — so an over-long slug no longer takes this
+        # return; only characters the grammar forbids can survive fitting, since a forbidden
+        # head is kept by the stem. `tab_title` is the longer fitted value, so checking it
+        # covers everything the name half issues too. One ungrammatical slug still poisons
+        # both halves — the tab title and the composed `<slug>-orch` share it — so it is one
+        # skipped decision and one note, not two.
+        notes.append(
+            f"task group {task_group!r} is not a valid name (want {AGENT_NAME_PATTERN} "
+            "(max 32 chars)); left the tab title and the orchestrator name alone"
+        )
+        return argv, notes
+    if lane_tab_id is None:
+        notes.append("cannot anchor a tab id on the calling pane; left the tab title alone")
+    elif lane_tab_id not in tabs:
+        notes.append(f"tab {lane_tab_id!r} carries no title to compare; left it alone")
+    elif tabs[lane_tab_id] != tab_title:
+        # Compare and rename against the same fitted value: a lane renamed to `tab_title` but
+        # compared to the full slug never converges, and this pass would re-issue the rename
+        # on every dispatch and reply (#182 h1).
+        argv.append(tab_rename_argv(herdr, lane_tab_id, tab_title))
+
+    if orchestrator_pane_id is None:
+        notes.append("cannot anchor a pane id for the sending orchestrator; left it alone")
+    elif names.get(orchestrator_pane_id) is None and orchestrator_pane_id in names:
+        # A live agent on that pane that dropped its name: the only state worth a rename.
+        taken = conflict_with(agents, composed, orchestrator_pane_id)
+        if taken is not None:
+            notes.append(
+                f"agent name {composed!r} is already used by pane {taken}; "
+                "left the orchestrator name alone"
+            )
+        else:
+            argv.append(agent_rename_argv(herdr, orchestrator_pane_id, composed))
+    return argv, notes
+
+
+def reconcile_lane(
+    herdr: str,
+    env: Mapping[str, str],
+    *,
+    task_group: str | None,
+    marker: str,
+    dry_run: bool = False,
+    missing_note: str | None = None,
+    pane_id: str | None = None,
+    tab_id: str | None = None,
+    inventory: tuple[Sequence[Mapping[str, object]], Sequence[Mapping[str, object]]] | None = None,
+) -> list[list[str]]:
+    """Run the active ID-anchored reconciliation pass; best-effort, never fatal (ADR-0020).
+
+    `herdr-dispatch` and `herdr-reply` call this on their own path, so a lane self-heals without
+    an operator pass: it renames only what the inventories prove has drifted (see
+    `reconciliation_argv`), which makes an already-correct lane issue zero calls.
+
+    Every failure is a line on stderr, never an exit status: an unreadable inventory prints
+    `{marker}: reconciliation skipped: ...`, each refused rename prints one
+    `{marker}: rename skipped: ...`, and the caller delivers whatever it was going to deliver.
+    `marker` is the calling script's own stderr marker, so the line stays in the register the
+    lease bookkeeping already uses. `missing_note` is the caller's sentence for a task group it
+    could not derive from its own records; when absent the pass stays silent about it.
+
+    `dry_run` prints the planned argv as JSON and renames nothing, including when the caller has
+    nothing to reconcile (then it prints nothing at all). Returns the argv actually issued.
+    """
+    try:
+        panes, agents = fetch_inventory(herdr, env) if inventory is None else inventory
+        caller = pane_id or env.get("HERDR_PANE_ID") or current_pane_id(herdr, env)
+        lane_tab = tab_id or tab_id_by_pane(panes).get(caller)
+        tabs = tab_titles(herdr, env) if task_group is not None else {}
+        # The planner is part of the guarded read, not of the verdict it hands back (#182 t5 2.3):
+        # it consumes the snapshot above, so a row shape it cannot plan over raises here, where
+        # one skipped pass is the answer. Left outside the `try` it propagated into
+        # `herdr-dispatch` before `resolve_targets` and into `herdr-reply` before the delivery —
+        # two callers whose whole contract for this pass is that it annotates, never aborts.
+        argv, notes = reconciliation_argv(
+            herdr,
+            panes,
+            agents,
+            tabs,
+            lane_tab_id=lane_tab,
+            orchestrator_pane_id=caller,
+            task_group=task_group,
+        )
+    except Exception as exc:
+        print(f"{marker}: reconciliation skipped: {_one_line(str(exc))}", file=sys.stderr)
+        return []
+
+    # Both sentences are the pass's own answer, so neither is printed over a pass that never
+    # reached an answer.
+    if task_group is None and missing_note is not None:
+        print(f"{marker}: {missing_note}", file=sys.stderr)
+    for note in notes:
+        print(f"{marker}: {note}", file=sys.stderr)
+    if not argv:
+        return []
+    if dry_run:
+        print(json.dumps(argv))
+        return argv
+
+    issued: list[list[str]] = []
+    for step in argv:
+        try:
+            _ = run_herdr_checked(step, env)
+        except Exception as exc:
+            print(f"{marker}: rename skipped: {_one_line(str(exc))}", file=sys.stderr)
+            continue
+        issued.append(step)
+    return issued
+
+
 def check_pairs(options: Options, env: Mapping[str, str]) -> int:
     """Verify or converge the pane-label/agent-name pair, which a rename cannot hold together.
 
@@ -282,8 +598,8 @@ def check_pairs(options: Options, env: Mapping[str, str]) -> int:
     restorable = restorable_agents(panes, agents, options.pane)
 
     if options.sync:
-        label_argv = [[herdr, "pane", "rename", pane, agent] for pane, _, agent in mismatches]
-        name_argv = [[herdr, "agent", "rename", pane, label] for pane, label in restorable]
+        label_argv = [pane_rename_argv(herdr, pane, agent) for pane, _, agent in mismatches]
+        name_argv = [agent_rename_argv(herdr, pane, label) for pane, label in restorable]
         if options.dry_run:
             print(json.dumps(label_argv + name_argv))
             return EXIT_OK
@@ -385,7 +701,7 @@ def rename_tab(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
     tab_id = resolve_tab_id(herdr, options, env)
-    argv = [herdr, "tab", "rename", tab_id, name]
+    argv = tab_rename_argv(herdr, tab_id, name)
     if options.dry_run:
         print(json.dumps([argv]))
         return EXIT_OK
@@ -429,9 +745,10 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
         if taken:
             raise UsageError(f"agent name {name!r} is already used by pane {taken}")
 
-    suffix = ["--clear"] if options.clear else [name]
-    pane_argv = [herdr, "pane", "rename", pane_id, *suffix]
-    agent_argv = [herdr, "agent", "rename", pane_id, *suffix]
+    # `--clear` is the one argv argument that drops both names; the builders stay string-typed.
+    stated = "--clear" if options.clear else name
+    pane_argv = pane_rename_argv(herdr, pane_id, stated)
+    agent_argv = agent_rename_argv(herdr, pane_id, stated)
     if options.dry_run:
         print(json.dumps([pane_argv] + ([agent_argv] if rename_agent else [])))
         return EXIT_OK

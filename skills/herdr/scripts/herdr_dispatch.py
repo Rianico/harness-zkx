@@ -55,7 +55,9 @@ from herdr_cli import (
     require_herdr_env,
     run_herdr_checked,
 )
-from herdr_label import stale_labels
+from herdr_envelope import sender_ref, utc_stamp
+from herdr_git_guard import lane_git_dir, require_resolvable_shas
+from herdr_label import reconcile_lane, stale_labels, tab_id_by_pane
 from herdr_lease import acquire_lease, get_lease, release_lease
 from herdr_prompt import (
     EXIT_WAIT_TIMEOUT,
@@ -147,9 +149,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_argument(
         parser,
         "no_caller_context",
+        help=("send payload verbatim without the A2A envelope and reply contract (warns loudly)"),
+    )
+    add_shared_argument(
+        parser,
+        "skip_screen_check",
         help=(
-            "send payload verbatim without the Sender/Receiver envelope and reply contract "
-            "(warns loudly)"
+            "dispatch without confirming a settled readiness claim against the callee's "
+            "screen; use it only when the reported dialog is not on the pane"
         ),
     )
     _ = parser.add_argument(
@@ -208,8 +215,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ID",
         default=None,
         help=(
-            "Ticket-ID for correlation (e.g. '#182-herdr-msg-enhance'); derived from the ticket "
-            "filename when omitted (see epilog for the derivation rule)"
+            "Ticket-ID for correlation (the envelope's metadata.ticket_id; e.g. "
+            "'#182-herdr-msg-enhance'); derived from the ticket filename when omitted "
+            "(see epilog for the derivation rule)"
         ),
     )
     _ = parser.add_argument(
@@ -217,20 +225,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ID",
         default=None,
         help=(
-            "Task-ID for correlation (e.g. '#182-herdr-msg-enhance#full-stack'); defaults to the "
-            "Ticket-ID when omitted"
+            "Task-ID for correlation (the envelope's id; e.g. "
+            "'#182-herdr-msg-enhance#full-stack'); defaults to the Ticket-ID when omitted"
         ),
     )
     add_shared_argument(
         parser,
         "task_group",
         metavar="NAME",
-        help="Task Group (Herdr Tab) label for the Hierarchy block; omitted when not given",
+        help="Task Group (Herdr Tab) label for the envelope metadata task_group; omitted when not given",
     )
     add_shared_argument(
         parser,
         "verbose",
-        help="restore the Runtime: Cwd/Resume block in the rendered envelope (default trimmed)",
+        help="include cwd/resume recovery metadata in the envelope metadata (default trimmed)",
     )
     return parser
 
@@ -269,6 +277,21 @@ def live_pane_ids(herdr: str, env: Mapping[str, str]) -> set[str] | None:
     ids = {entry_optional_text(pane, "pane_id") for pane in panes}
     live = {pane_id for pane_id in ids if pane_id}
     return live or None
+
+
+def lane_tab_ids(herdr: str, env: Mapping[str, str]) -> dict[str, str]:
+    """Pane id -> tab id from one `pane list`: the physical anchors a lease records (#182 t3 A).
+
+    Best-effort like the rest of the lease bookkeeping — an inventory that cannot answer returns
+    an empty mapping, and the record then omits `tab_id` rather than guessing one from a visible
+    label or a tab title. It changes no target and no exit status. The empty answer is not silent:
+    the caller that writes the lease prints one advisory line for it (#182 t5 2.2).
+    """
+    try:
+        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    except Exception:
+        return {}
+    return tab_id_by_pane(panes)
 
 
 def lease_pane_is_gone(lease: Mapping[str, object], herdr: str, env: Mapping[str, str]) -> bool:
@@ -382,7 +405,6 @@ def validate_ticket(ticket: str) -> None:
 
 def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, str]) -> str:
     """Render a ticket skeleton; routing comes from live state, sections stay empty for the model."""
-    from herdr_envelope import sender_ref, utc_stamp
     from herdr_prompt import resolve_caller
 
     sender = resolve_caller(herdr, env)
@@ -637,6 +659,20 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
     report_stale_labels(herdr, env)
+    # ADR-0020 active reconciliation (#182 t2): IDs are the anchors, so a worker whose agent
+    # process exited and came back nameless takes its surviving label back before any target is
+    # resolved, and a drifted lane title is set straight. Task-group source: `--task-group`, the
+    # operator's own opt-in — absent it, there is nothing to reconcile for the tab and the
+    # orchestrator, and the pass stays silent rather than printing on every dispatch. The pass
+    # is best-effort: a refused rename prints one line and changes neither this exit status nor
+    # the delivery below.
+    _ = reconcile_lane(
+        herdr,
+        env,
+        task_group=options.task_group,
+        marker="herdr-dispatch",
+        dry_run=options.dry_run,
+    )
     kind = normalize_auto_start_kind(options.auto_start)
     try:
         targets = resolve_targets(options, herdr, env)
@@ -685,8 +721,6 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
         # same guard as the reply path refuses it here, before any lease is acquired, and
         # the stdin (`-`) stream stays unchecked: it is read once and verbatim downstream,
         # and reading it here as well would consume it and starve that read.
-        from herdr_reply import lane_git_dir, require_resolvable_shas
-
         require_resolvable_shas(
             ticket,
             payload_path=ticket_path,
@@ -721,7 +755,28 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
 
     caller_name = "caller"
     caller_recovery: dict[str, str] | None = None
+    # The runtime identity persisted on the lease and task records (#182 t3 A): the leased pane's
+    # physical tab, and the dispatching agent's session id — the same value the envelope renders
+    # as `context_id`, so the store and the wire agree on one spelling. An inventory that cannot
+    # answer leaves either as None, and `acquire_lease` then omits the key instead of guessing.
+    lane_tabs: Mapping[str, str] = {}
+    caller_context_id: str | None = None
     if not options.dry_run:
+        lane_tabs = lane_tab_ids(herdr, env)
+        if not lane_tabs:
+            # #182 t5 2.2: the reply side prints one line when it cannot anchor a tab title, while
+            # this call used to lose the same anchor in total silence — `lane_tab_ids` returns `{}`
+            # both when `pane list` raises and when its rows carry no `tab_id`, and `acquire_lease`
+            # then omits `tab_id` rather than guessing one. The anchor is not cosmetic: it is what
+            # a later reconciliation matches a worker pane against, so the silent version left the
+            # next reply unable to heal this lane with nobody telling it why. Advisory only, in the
+            # register the lease bookkeeping already uses: no exit status, no stdout, no skipped
+            # prompt, and no lease field that the inventory DID answer.
+            print(
+                "herdr-dispatch: the pane inventory answers no tab id, so this lease is written "
+                "without tab_id and a later reply has no tab anchor to reconcile on",
+                file=sys.stderr,
+            )
         try:
             caller_ctx = resolve_caller(herdr, env)
             caller_name = caller_ctx.agent or caller_ctx.label or caller_ctx.pane_id
@@ -734,6 +789,7 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
             }
             filtered = {key: value for key, value in subset.items() if value}
             caller_recovery = filtered or None
+            caller_context_id = caller_ctx.session_id or None
         except Exception:
             caller_recovery = None
 
@@ -746,9 +802,12 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
                 ticket_path,
                 caller_name,
                 pane_id=pane,
+                tab_id=lane_tabs.get(pane) if pane else None,
+                context_id=caller_context_id,
                 env=env,
                 ticket_id=ticket_id,
                 task_id=task_id,
+                task_group=options.task_group,
                 caller_recovery=caller_recovery,
             )
             acquired_targets.append(canonical)

@@ -22,4 +22,4 @@ Reference for running Antigravity (agy) agent under Herdr.
 - Weakly recognized: stays at revision 0, reports `idle` while background subagents run.
 - `herdr-wait` barrier fails fast with exit 2 on revision 0.
 - Dispatch & Yield (`herdr-dispatch` / `herdr-reply`) is required; never barrier-wait agy panes.
-- Install OSC 0 lifecycle hooks using `herdr_agy_bridge.py --install`.
+- Install OSC 0 lifecycle hooks using `uv run skills/herdr/scripts/herdr_agy_bridge.py --install`.

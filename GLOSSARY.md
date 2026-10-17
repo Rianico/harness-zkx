@@ -97,11 +97,11 @@ A Herdr Tab that hosts one coordinated lane. The tab title mirrors the group nam
 _Avoid_: Workspace group, pane cluster.
 
 **Ticket-ID**:
-The stable identity of a dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). It names the work across every task in the lane and travels on every envelope.
+The stable identity of a dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). It names the work across every task in the lane and travels on every envelope as `metadata.ticket_id`.
 _Avoid_: ticket number, issue key.
 
 **Task-ID**:
-The identity of one task within a ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). A reply carries it as `In-Reply-To: <Task-ID>`.
+The identity of one task within a ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). It rides a dispatch as the envelope's `id`; a linked reply carries it again as `id` and `metadata.in_reply_to`.
 _Avoid_: subtask id, job id.
 
 **Dispatch**:
@@ -109,11 +109,11 @@ The forward handoff that opens a task: it carries the ticket payload, binds the 
 _Avoid_: send, submission.
 
 **Delivery Summary**:
-The trimmed echo a dispatch or reply prints on the **caller's** stdout: an anchored status line (`[You: <agent>@<pane>]` — who is speaking, so the caller never reads itself as the receiver), a `---` delimiter, the envelope's `Routing:`/`Hierarchy:` metadata (the delivered header carries a plain `Receiver:` since #260; the `Protocol:` notice is dropped), another `---`, a source line, and a bounded body preview. The callee always receives the full envelope; `--json` restores the caller's raw machine render.
+The trimmed echo a dispatch or reply prints on the **caller's** stdout: an anchored status line (`[You: <agent>@<pane>]` — who is speaking, so the caller never reads itself as the receiver), a `---` delimiter, the delivered envelope's frontmatter key lines (the `---` fences and the repeated `Herdr:` notice line are cut; the timestamp stays), another `---`, a source line, and a bounded body preview. The callee always receives the full envelope; `--json` restores the caller's raw machine render.
 _Avoid_: message body echo, argv dump.
 
 **Reply**:
-The callee's completion callback: a status triad plus `resp-format.md` evidence, keyed `In-Reply-To: <Task-ID>`, which appends the mapped status event to the task trajectory and soft-completes the sender's lease (dropping the lock, keeping the record).
+The callee's completion callback: a status triad plus `resp-format.md` evidence, keyed by the envelope's `id` and `metadata.in_reply_to` (the Task-ID answered), which appends the mapped status event to the task trajectory and soft-completes the sender's lease (dropping the lock, keeping the record).
 _Avoid_: response, answer.
 
 **Scoped Runtime Name**:

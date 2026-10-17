@@ -280,6 +280,47 @@ DEFAULT_STATE = {
 }
 
 
+def _require_sandboxed_home(home_value: str | None, tmp_path: Path) -> None:
+    """Refuse a harness call whose `HOME` resolves outside this test's own sandbox.
+
+    Since #182 h3 an unanchored run derives the user-level fallback lane store from
+    `HOME` (`herdr_lease.fallback_lane_base` → `<HOME>/.herdr/lane`), and the first
+    write materializes it — during h3's mutation work a mutant's injected `mkdir` ran
+    inside that resolution and created the store in the operator's real home. Pinning
+    `HOME` to `tmp_path` was the convention holding that shut, and a convention is
+    what failed; this is the check.
+
+    It raises at call time — before the state file is written and before the script
+    starts — so a refusal writes nothing and starts no subprocess. `RuntimeError`, not
+    `pytest.fail`: this harness is imported by non-pytest callers too and must not
+    depend on pytest's exception graph, and a plain raise still lands in the offending
+    test. The refusal is the pre-call complement of the store-isolation guard in
+    `tests/herdr/conftest.py`: that one fails a test whose in-process call already
+    resolved a live or fallback store; this one never lets a sandboxed run point at a
+    home it does not own.
+    """
+    if home_value:
+        home = Path(home_value).resolve()
+        sandbox = tmp_path.resolve()
+        if home == sandbox or sandbox in home.parents:
+            return
+        # Both spellings of the operator's home, so a relocated ambient `HOME` cannot
+        # make the real one look like just another directory outside the sandbox.
+        real = {Path.home().resolve()}
+        ambient = os.environ.get("HOME")
+        if ambient:
+            real.add(Path(ambient).resolve())
+        why = "is the operator's real home" if home in real else "is outside the harness tmp_path"
+    else:
+        why = "is absent or empty, so resolution falls through to the operator's passwd home"
+    raise RuntimeError(
+        f"stub harness: call refused — HOME={home_value!r} {why}; an unanchored run derives "
+        f"the user-level fallback lane store <HOME>/.herdr/lane from it, so the only safe "
+        f"home is tmp_path ({tmp_path}) or a directory under it; a `HOME: None` override "
+        f"drops the `base_env()` pin"
+    )
+
+
 @dataclass(frozen=True)
 class StubHarness:
     """A temp PATH containing a fake `herdr`, plus the run/log helpers around it."""
@@ -319,15 +360,25 @@ class StubHarness:
         store with `PWD` now seat it with the explicit anchor. `PWD` stays for helpers
         that resolve a *working directory* (e.g. `herdr-pane --cwd`), which is a
         different question from where lane state lives.
+
+        `HOME` is pinned to `tmp_path` because since #182 h3 an unanchored run falls back
+        to a user-level lane store derived from the home directory: a run that loses
+        `HERDR_LANE_DIR` (tests pass `HERDR_LANE_DIR: None` to exercise exactly that) must
+        land inside this test's sandbox, never in the operator's real store. The pin is
+        no longer a convention: `_require_sandboxed_home` checks the value this returns
+        and the value `run` assembles after caller overrides.
         """
-        return {
+        env = {
             "PATH": f"{self.bin_dir}:{os.environ.get('PATH', '')}",
             "HERDR_ENV": "1",
             "HERDR_LANE_DIR": str(self.tmp_path),
+            "HOME": str(self.tmp_path),
             "PWD": str(self.tmp_path),
             "STUB_HERDR_LOG": str(self.log_path),
             "STUB_HERDR_STATE": str(self.state_path),
         }
+        _require_sandboxed_home(env["HOME"], self.tmp_path)
+        return env
 
     def write_state(self, state: Mapping[str, object]) -> None:
         """Seed `state.json` for an in-process run; `run` writes it per invocation itself."""
@@ -350,14 +401,19 @@ class StubHarness:
         pointers, `HERDR_ENV`, and nothing else ambient. `cwd` is the process
         working directory the helper resolves *git* layout against (the store
         anchor falls back to the repository's common directory, #229).
+
+        A caller that rewrites or deletes `HOME` is refused at call time, before the
+        state file is written and before the script starts, by
+        `_require_sandboxed_home`.
         """
-        self.write_state(dict(state if state is not None else DEFAULT_STATE))
         full_env = self.base_env()
         for key, value in (env or {}).items():
             if value is None:
                 _ = full_env.pop(key, None)
             else:
                 full_env[key] = value
+        _require_sandboxed_home(full_env.get("HOME"), self.tmp_path)
+        self.write_state(dict(state if state is not None else DEFAULT_STATE))
         argv = [sys.executable, str(self.script), *args]
         return run_script_in_process(argv, env=full_env, stdin=stdin, cwd=cwd)
 

@@ -10,9 +10,17 @@ State lives in `.lane/tasks.yaml`: an `active_leases` map of mutual-exclusion lo
 Reads fall back to legacy `.lane/lease.yaml`, `.lane/lease.json`, and `.herdr-lease.json`
 so older lanes never break during rollout.
 
+Task status is spelled with the canonical A2A `TASK_STATE_*` names (`docs/adr/0020`), which
+every new write emits. Because this file is a *shared live database* — other worktrees still run
+pre-cutover code and write `dispatched` or `completed` into the same store — reads accept both
+spellings through the one documented table, `STATUS_ALIASES`. That is a database read path, not
+an envelope wire shim, and `ADR-0020`'s zero-shim clause does not reach it. A status that names
+no state reads as no state: never as a valid one.
+
 The store base is resolved once per lane: an explicit `base_dir`, else `HERDR_LANE_DIR`,
 else the repository root that the git common directory sits in — resolved, so reads, writes,
-and records agree on one spelling. Store *identity* is still decided physically
+and records agree on one spelling; with none of those anchors it falls back to the one
+deterministic user-level store `fallback_lane_base()` names, with a single stderr advisory. Store *identity* is still decided physically
 (`os.path.samefile`), because resolving collapses symlinks but not case: on a case-insensitive
 volume two spellings are one file and two strings (#229). `PWD` and the process cwd are never
 anchors: they differ
@@ -52,13 +60,96 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import yaml
 from herdr_cli import UsageError, add_shared_argument, guard
-from herdr_worktree import resolve_lane_base_dir
+from herdr_worktree import LaneAnchorError, resolve_lane_base_dir
 
-CANONICAL_STATUSES = ("dispatched", "in_progress", "blocked", "completed", "rework")
+# ── the task-status vocabulary (ADR-0020, #182 t3 A/B) ─────────────────────────────
+# A task record's `status`, and every trajectory event's `from_status`/`to_status`, name one
+# of the five canonical A2A `TaskState` values below. Every NEW or UPDATED write emits these
+# names. `herdr_envelope` already renders four of them on the wire (`STATE_WORKING`,
+# `STATE_COMPLETED`, `STATE_INPUT_REQUIRED`, `STATE_FAILED`); a test pins the shared spelling,
+# so store and envelope cannot drift. `TASK_STATE_SUBMITTED` is the store's name for a task
+# handed to a worker that has not started working it yet.
+STATE_SUBMITTED = "TASK_STATE_SUBMITTED"
+STATE_WORKING = "TASK_STATE_WORKING"
+STATE_INPUT_REQUIRED = "TASK_STATE_INPUT_REQUIRED"
+STATE_FAILED = "TASK_STATE_FAILED"
+STATE_COMPLETED = "TASK_STATE_COMPLETED"
+
+CANONICAL_STATUSES = (
+    STATE_SUBMITTED,
+    STATE_WORKING,
+    STATE_INPUT_REQUIRED,
+    STATE_FAILED,
+    STATE_COMPLETED,
+)
+
+# The tokens this store wrote before the A2A cutover, in the order a reader meets them.
+HISTORICAL_STATUSES = (
+    "unassigned",
+    "dispatched",
+    "in_progress",
+    "blocked",
+    "rework",
+    "completed",
+)
+
+# THE alias table: the one place the two vocabularies meet, and the only reason a reader
+# accepts a historical token. It exists because `.lane/tasks.yaml` is a SHARED LIVE DATABASE:
+# worktrees running pre-cutover code keep writing `dispatched` and `completed` into the same
+# file this process reads, and a read that accepted only `TASK_STATE_*` would report their
+# open work as unknown. It is total — every token this store has ever written has exactly one
+# canonical image, and every canonical name aliases to itself. `unassigned` and `dispatched`
+# share `TASK_STATE_SUBMITTED`: six historical tokens cannot map injectively onto five A2A
+# states, and both spellings mean "handed over, not yet worked". Writes never consult this
+# table: they emit canonical names. ADR-0020's zero-shim clause governs the envelope WIRE
+# format, not a database that processes which cannot be upgraded in lockstep share.
+STATUS_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        **{name: name for name in CANONICAL_STATUSES},
+        "unassigned": STATE_SUBMITTED,
+        "dispatched": STATE_SUBMITTED,
+        "in_progress": STATE_WORKING,
+        "blocked": STATE_INPUT_REQUIRED,
+        "rework": STATE_FAILED,
+        "completed": STATE_COMPLETED,
+    }
+)
+
+
+def normalize_status(value: object) -> str | None:
+    """The canonical state a status token names, through `STATUS_ALIASES`; None names none.
+
+    Reads stay total: an absent, non-string, empty, or unknown token answers `None` rather than
+    a valid state, so a caller must handle the unknown branch instead of defaulting a damaged
+    record onto open or terminal work.
+    """
+    if isinstance(value, str):
+        return STATUS_ALIASES.get(value)
+    return None
+
+
+def _status_for_write(value: str | None) -> str | None:
+    """The spelling to persist: canonical when the token names a state, verbatim when it does not.
+
+    An unknown token is preserved rather than coerced into a valid state, so a damaged record
+    stays unreadable to the status predicates instead of being laundered into a real one.
+    """
+    canonical = normalize_status(value)
+    return value if canonical is None else canonical
+
+
+def status_of(record: Mapping[str, Any] | None) -> str | None:
+    """One record's normalized `status`, or None when there is no record or no known state."""
+    if not isinstance(record, Mapping):
+        return None
+    return normalize_status(record.get("status"))
+
+
 STATE_FILE_LANE = ".lane/tasks.yaml"
 STATE_FILE_LEGACY_YAML = ".lane/lease.yaml"
 STATE_FILE_LEGACY_JSON = ".lane/lease.json"
@@ -86,6 +177,47 @@ def _one_line(text: str, limit: int = 160) -> str:
     return " ".join(text.split())[:limit]
 
 
+# The one-time stderr advisory for the user-level fallback store (#182 a2a h3). Module-level
+# so it is shown at most once per process, not per resolution, and so tests can reset it.
+_fallback_advisory_shown = False
+
+
+def fallback_lane_base(env: Mapping[str, str] | None = None) -> Path:
+    """The user-level lane store: the deterministic last-layer base, computed without resolving.
+
+    `Path.home() / ".herdr" / "lane"`, resolved. Nothing else is consulted — never `PWD`,
+    never the process cwd, never `os.getcwd()` (#229) — so every pane that reaches this
+    layer, from any working directory, names one and the same path.
+
+    `Path.home()` follows `HOME` when it is set and falls back to the passwd entry otherwise;
+    when `env` carries a `HOME`, that value is the one honored here, so a test may pin `HOME`
+    to a tmp directory to keep the fallback inside its own sandbox. The guard in
+    `tests/herdr/conftest.py` compares against this exact function: a resolution that lands
+    on the fallback as named by the call-time environment, outside the test's own sandbox,
+    is refused instead of writing into the operator's real user-level store.
+
+    The directory is never created here — resolution and reads are side-effect-free; only
+    the first write (which already creates its parents) materializes the store.
+    """
+    env_map = os.environ if env is None else env
+    home = env_map.get("HOME")
+    base = Path(home) if home else Path.home()
+    return (base / ".herdr" / "lane").resolve()
+
+
+def _advise_fallback_lane_store(base: Path) -> None:
+    """One stderr line the first time this process resolves the fallback store (#182 h3)."""
+    global _fallback_advisory_shown
+    if _fallback_advisory_shown:
+        return
+    _fallback_advisory_shown = True
+    print(
+        f"herdr-lease: no repo lane anchor: using the user-level lane store {base}; "
+        "repo lanes and ad-hoc panes now write different stores",
+        file=sys.stderr,
+    )
+
+
 def resolve_base_dir(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
@@ -99,15 +231,29 @@ def resolve_base_dir(
     two such paths is decided physically at the comparison site (`os.path.samefile`), since
     resolution alone cannot collapse a case-variant spelling (#229).
 
-    `PWD` and the process cwd are never consulted: a dispatcher in one working directory
-    and a callee in another resolved different stores through them, so a lease written by
-    one was released — or not — by the other (#229). With neither anchor this raises
-    `herdr_worktree.LaneAnchorError` instead of guessing.
+    With neither lane anchor — an ad-hoc pane outside any git worktree with
+    `HERDR_LANE_DIR` unset — this falls back to `fallback_lane_base()`: the user-level
+    store, one deterministic absolute path derived from the user's home alone. It is
+    identical from every working directory because `PWD` and the process cwd are never
+    consulted — a fallback derived from cwd would re-open #229 exactly (a dispatcher in one
+    working directory and a callee in another resolving different stores) — and a cwd that
+    happens to sit inside a repository never reaches this layer at all, because the git
+    anchor above it wins. Taking this branch prints one stderr advisory naming the resolved
+    path, at most once per process, so a split between repo lanes and ad-hoc panes is never
+    silent; the directory itself is created only by the first write, never by resolving.
+    A caller that needs the refuse-instead-of-guessing contract — where no-anchor is a hard
+    error, not a degraded store — uses `herdr_worktree.resolve_lane_base_dir`, which still
+    raises `herdr_worktree.LaneAnchorError` with no anchor.
     """
     if base_dir is not None:
         return Path(base_dir).resolve()
     env_map = os.environ if env is None else env
-    return resolve_lane_base_dir(env_map)
+    try:
+        return resolve_lane_base_dir(env_map)
+    except LaneAnchorError:
+        base = fallback_lane_base(env_map)
+        _advise_fallback_lane_store(base)
+        return base
 
 
 def resolve_tasks_file(
@@ -314,6 +460,8 @@ def acquire_lease(
     task_group: str | None = None,
     role: str | None = None,
     caller_recovery: Mapping[str, Any] | None = None,
+    tab_id: str | None = None,
+    context_id: str | None = None,
 ) -> dict[str, Any]:
     """Record an active ticket lease for target, storing target and pane_id.
 
@@ -322,6 +470,18 @@ def acquire_lease(
     is given, a task record is created or updated and a `dispatched` event appended.
     A truthy `caller_recovery` mapping is stored on the task (empty fields omitted,
     never fabricated) and replaces any prior mapping for the same task.
+
+    The runtime identity rides on BOTH records: `pane_id`/`tab_id` are the physical multiplexer
+    anchors of the leased target (ADR-0020: ids, never labels, are the source of truth), and
+    `context_id` is the dispatching agent's session id — the same value the envelope's
+    `context_id` renders from, so store and wire agree on one spelling (#182 t3 A). `task_group`
+    rides on both for the same reason (#182 t3 C): `herdr-reply` has no `--task-group` flag, so a
+    lane's slug has to be readable from stored evidence, and the sender's own lease is the record
+    a reply can always name even when the task row cannot be resolved. Each of these is omitted
+    when the caller could not observe it and never guessed; a re-dispatch that observes
+    nothing leaves the last recorded anchor standing on the durable task row rather than writing
+    null over it, because the fresh lease dict — not the durable task row — is the authority on
+    the live anchors.
     """
     store = resolve_base_dir(base_dir, env=env)
     state = _load_state(_state_read_path_in(store))
@@ -350,10 +510,16 @@ def acquire_lease(
     }
     if pane_id:
         lease["pane_id"] = pane_id
+    if tab_id:
+        lease["tab_id"] = tab_id
+    if context_id:
+        lease["context_id"] = context_id
     if ticket_id is not None:
         lease["ticket_id"] = ticket_id
     if task_id is not None:
         lease["task_id"] = task_id
+    if task_group:
+        lease["task_group"] = task_group
     leases[target] = lease
 
     if task_id is not None:
@@ -366,10 +532,17 @@ def acquire_lease(
         task["ticket_id"] = ticket_id
         task["task_id"] = task_id
         task["ticket_path"] = ticket_path
-        task["task_group"] = task_group
-        task["status"] = "dispatched"
+        if task_group:
+            task["task_group"] = task_group
+        task["status"] = STATE_SUBMITTED
         task["assignee"] = target
         task["caller"] = caller
+        if pane_id:
+            task["pane_id"] = pane_id
+        if tab_id:
+            task["tab_id"] = tab_id
+        if context_id:
+            task["context_id"] = context_id
         if caller_recovery is not None:
             filtered = {key: value for key, value in dict(caller_recovery).items() if value}
             if filtered:
@@ -385,8 +558,8 @@ def acquire_lease(
                 "event": "dispatched",
                 "actor": caller,
                 "role": role or caller,
-                "from_status": previous_status or "unassigned",
-                "to_status": "dispatched",
+                "from_status": _status_for_write(previous_status) or STATE_SUBMITTED,
+                "to_status": STATE_SUBMITTED,
                 "note": "Dispatched ticket via herdr-dispatch",
             }
         )
@@ -843,7 +1016,8 @@ def list_replies(
 
 
 # Callee-observed delivery (herdr228-delivered): the assignee marks its own observed
-# consumption. The first working (`in_progress`) transition of a dispatched task also
+# consumption. The first working (`TASK_STATE_WORKING`, alias `in_progress`) transition of a
+# dispatched task also
 # records one `delivered` binding on the task, inside the same atomic store write as
 # the transition itself. Consumption, minimally: only that first working transition
 # counts. What does NOT count, explicitly: output events after dispatch (no cheap
@@ -858,7 +1032,7 @@ def list_replies(
 # transition already performs, so no new failure mode, exit code, or trajectory
 # shape, and the dispatch path never waits on it.
 DELIVERED_EVENT = "delivered"
-WORKING_STATUS = "in_progress"
+WORKING_STATUS = STATE_WORKING
 DISPATCHED_EVENT = "dispatched"
 
 
@@ -883,7 +1057,22 @@ def record_event(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, Any] | None:
-    """Append a trajectory event and advance the task status; None if no such task."""
+    """Append a trajectory event and advance the task status; None if no such task.
+
+    `to_status` accepts either vocabulary — a canonical `TASK_STATE_*` name or a historical
+    token — and the persisted `status`, `from_status` and `to_status` always read canonical
+    (see `STATUS_ALIASES`). A token that names no state is refused with `UsageError`, the same
+    refusal `transition` makes, so the store's two write entry points agree on what is writable.
+    The trajectory's `event` label is the caller's own token when the caller names an action;
+    with no explicit label it falls back to the canonical state, the only spelling this function
+    is allowed to write.
+    """
+    requested = normalize_status(to_status)
+    if requested is None:
+        raise UsageError(
+            f"unknown status {to_status!r}; expected one of {', '.join(CANONICAL_STATUSES)} "
+            f"(historical spellings {', '.join(HISTORICAL_STATUSES)} are also accepted)"
+        )
     state = _load_state(resolve_state_read_path(base_dir, env=env))
     task = state["tasks"].get(task_id)
     if not isinstance(task, dict):
@@ -894,8 +1083,9 @@ def record_event(
         trajectory = []
         task["trajectory"] = trajectory
 
-    from_status = task.get("status")
-    if to_status == WORKING_STATUS and _needs_delivered_mark(task, trajectory):
+    written_status = requested
+    from_status = _status_for_write(task.get("status"))
+    if written_status == WORKING_STATUS and _needs_delivered_mark(task, trajectory):
         task["delivered"] = {
             "event": DELIVERED_EVENT,
             "task_id": task_id,
@@ -910,14 +1100,14 @@ def record_event(
         "actor": actor,
         "role": role or actor,
         "from_status": from_status,
-        "to_status": to_status,
+        "to_status": written_status,
     }
     if note is not None:
         entry["note"] = note
     if sha is not None:
         entry["sha"] = sha
     trajectory.append(entry)
-    task["status"] = to_status
+    task["status"] = written_status
 
     _write_state(state, base_dir=base_dir, env=env)
     return task
@@ -933,11 +1123,18 @@ def transition(
     actor: str | None = None,
     role: str | None = None,
 ) -> dict[str, Any]:
-    """Move a task to `status`, resolving a task id or an active-lease target first."""
-    if status not in CANONICAL_STATUSES:
+    """Move a task to `status`, resolving a task id or an active-lease target first.
+
+    `status` accepts either vocabulary — a canonical `TASK_STATE_*` name or a historical token —
+    and the record is written with the canonical one; a token that names no state is refused.
+    """
+    requested = normalize_status(status)
+    if requested is None:
         raise UsageError(
-            f"unknown status {status!r}; expected one of {', '.join(CANONICAL_STATUSES)}"
+            f"unknown status {status!r}; expected one of {', '.join(CANONICAL_STATUSES)} "
+            f"(historical spellings {', '.join(HISTORICAL_STATUSES)} are also accepted)"
         )
+    status = requested
 
     state = _load_state(resolve_state_read_path(base_dir, env=env))
     tasks = state["tasks"]

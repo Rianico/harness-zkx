@@ -17,6 +17,7 @@ from pathlib import Path
 import herdr_bootstrap
 import herdr_cli
 import herdr_dispatch
+import herdr_label
 import herdr_lease
 import herdr_prompt
 import herdr_reply
@@ -122,7 +123,7 @@ def test_derive_ticket_id_returns_none_for_stdin() -> None:
     assert herdr_dispatch.derive_ticket_id("-") is None
 
 
-def test_dispatch_persists_derived_ids_and_renders_hierarchy(
+def test_dispatch_persists_derived_ids_and_renders_envelope(
     stub: StubHarness, tmp_path: Path
 ) -> None:
     import herdr_lease
@@ -137,8 +138,10 @@ def test_dispatch_persists_derived_ids_and_renders_hierarchy(
     assert lease["task_id"] == "#182-herdr-msg-enhance"
     (call,) = stub.prompts()
     text = call[4]
-    assert "  Ticket-ID: #182-herdr-msg-enhance" in text
-    assert "  Task-ID: #182-herdr-msg-enhance" in text
+    envelope = herdr_prompt.parse_envelope(text)
+    assert envelope is not None
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.id == "#182-herdr-msg-enhance"
 
 
 def test_dispatch_explicit_ids_override_derivation(stub: StubHarness, tmp_path: Path) -> None:
@@ -162,8 +165,10 @@ def test_dispatch_explicit_ids_override_derivation(stub: StubHarness, tmp_path: 
     assert lease["ticket_id"] == "#182-herdr-msg-enhance"
     assert lease["task_id"] == "#182-herdr-msg-enhance#full-stack"
     (call,) = stub.prompts()
-    assert "  Ticket-ID: #182-herdr-msg-enhance" in call[4]
-    assert "  Task-ID: #182-herdr-msg-enhance#full-stack" in call[4]
+    envelope = herdr_prompt.parse_envelope(call[4])
+    assert envelope is not None
+    assert envelope.ticket_id == "#182-herdr-msg-enhance"
+    assert envelope.id == "#182-herdr-msg-enhance#full-stack"
 
 
 def test_dispatch_injects_caller_context_and_reply_contract(
@@ -175,27 +180,26 @@ def test_dispatch_injects_caller_context_and_reply_contract(
     assert call[1:4] == ["agent", "prompt", "reviewer"]
     text = call[4]
     lines = text.splitlines()
-    assert re.match(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$", lines[0])
-    assert lines[1:11] == [
-        "Routing:",
-        "  Sender: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "  Group: [reviewer@w9:p1]",
-        "  Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi",
-        "Hierarchy:",
-        "  Task-Group: w9:t1",
-        "  Ticket-ID: ticket",
-        "  Task-ID: ticket",
-        "Protocol:",
-        f"  {herdr_prompt.SKILL_NOTICE}",
-    ]
-    assert "Runtime:" not in text
-    assert "Cwd:" not in text
-    assert "Group: [reviewer@w9:p1]" in text
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in text
+    assert lines[0] == "---"
+    assert not re.match(r"^\[\d{4}-\d{2}-\d{2}T", text)
+    envelope, body = herdr_prompt.split_envelope_and_body(text)
+    assert envelope is not None
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.task_group == "w9:t1"
+    assert envelope.ticket_id == "ticket"
+    assert envelope.id == "ticket"
+    assert envelope.state == "TASK_STATE_WORKING"
+    assert envelope.group == ("reviewer@w9:p1",)
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", envelope.timestamp)
+    for legacy in ("Routing:", "Hierarchy:", "Protocol:", "Runtime:"):
+        assert legacy not in text
+    assert "cwd:" not in text
+    assert "resume:" not in text
     assert "${herdr_skill}" in herdr_prompt.SKILL_NOTICE
     assert "~/.agents" not in herdr_prompt.SKILL_NOTICE
-    assert f"  {herdr_prompt.SKILL_NOTICE}" in text
-    assert "\n\ndo this\n\n" in text
+    assert f"\n---\n{herdr_prompt.SKILL_NOTICE}\n\ndo this\n\n" in text
+    assert body is not None and body.startswith("do this")
     reply = re.search(r'  uv run "([^"]+)" reviewer "<STATUS> <artifacts> <issues>"', text)
     assert reply, text
     assert Path(reply.group(1)).is_file(), reply.group(1)
@@ -744,7 +748,7 @@ def test_dispatch_multi_hop_same_task_id_preserves_trajectory(
     trajectory = task["trajectory"]
     assert [event["seq"] for event in trajectory] == [1, 2]
     assert [event["event"] for event in trajectory] == ["dispatched", "dispatched"]
-    assert task["status"] == "dispatched"
+    assert task["status"] == herdr_lease.STATE_SUBMITTED
     assert task["assignee"] == "callee2"
     assert task["caller_recovery"] == {"pane_id": "w9:p2", "cwd": "/tmp/scratch"}
 
@@ -770,8 +774,11 @@ def test_dispatch_dry_run_prints_argv(stub: StubHarness, tmp_path: Path) -> None
     parsed = cast(object, json.loads(done.stdout))
     assert isinstance(parsed, list)
     assert parsed[3] == "reviewer"
-    assert "Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
-    assert "Receiver: reviewer@w9:p1 - tab w9:t1 - kind pi" in str(parsed[4])
+    envelope = herdr_prompt.parse_envelope(str(parsed[4]))
+    assert envelope is not None
+    assert envelope.sender == "reviewer@w9:p1"
+    assert envelope.receiver == "reviewer@w9:p1"
+    assert envelope.state == "TASK_STATE_WORKING"
 
 
 def test_dispatch_rolls_back_lease_on_blocked_outcome(stub: StubHarness, tmp_path: Path) -> None:
@@ -862,13 +869,15 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
     assert "usage: herdr-dispatch" in done.stdout
 
 
-def test_dispatch_draft_prints_skeleton_with_prefilled_routing(stub: StubHarness) -> None:
+def test_dispatch_draft_prints_skeleton_with_prefilled_addresses(stub: StubHarness) -> None:
     done = stub.run("callee", "--draft")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert stub.prompts() == []
     assert "- Sender: reviewer@w9:p1 - tab w9:t1 - kind pi" in done.stdout
     assert "- Receiver: callee" in done.stdout
-    assert re.search(r"^- Drafted: \[\d{4}-\d{2}-\d{2}T", done.stdout, re.MULTILINE)
+    assert re.search(
+        r"^- Drafted: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", done.stdout, re.MULTILINE
+    )
     assert "## Task" in done.stdout
     assert "## Context" in done.stdout
     assert "## Acceptance criteria" in done.stdout
@@ -1023,6 +1032,365 @@ def test_dispatch_accepts_filled_skeleton_dry_run(stub: StubHarness, tmp_path: P
     )
     done = stub.run("callee", "--file", str(ticket), "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+
+# ── #182 t2: active ID-anchored reconciliation at dispatch (ADR-0020) ──────────────
+
+
+def reconcile_renames(stub: StubHarness) -> list[list[str]]:
+    """Every rename this dispatch issued (or attempted), minus the herdr argv head."""
+    return [call[1:] for call in stub.calls() if call[2] == "rename"]
+
+
+LANE_TAB = {"tab_id": "w9:t1", "workspace_id": "w9", "label": "harness"}
+
+
+def lane_state(**overrides: object) -> dict[str, object]:
+    """DEFAULT_STATE (tab titled `harness`, orchestrator pane w9:p1 hosts the live, named
+    `reviewer`) with the lane rows spelled out, so each drift below is one mutated row."""
+    state: dict[str, object] = {
+        **DEFAULT_STATE,
+        "tabs": [LANE_TAB],
+        "agents": [
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+            },
+            {
+                "pane_id": "w9:p3",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/work",
+                "label": "worker-1",
+            },
+        ],
+    }
+    return {**state, **overrides}
+
+
+def dispatch_into_lane(
+    stub: StubHarness, tmp_path: Path, state: dict[str, object], *extra: str
+) -> subprocess.CompletedProcess[str]:
+    return stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        *extra,
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+
+
+def test_dispatch_renames_a_generic_tab_title_on_its_physical_id(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 1: tab `w9:t1` titled `3` is set back to `<task_group>` by `tab_id`.
+
+    Pin -> mutant: anchor the rename on the visible title instead of `tab_id`, so the argv
+    row mismatches and this fails.
+    """
+    state = lane_state(tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}])
+    done = dispatch_into_lane(stub, tmp_path, state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == [["tab", "rename", "w9:t1", "harness"]]
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_renames_nothing_when_the_lane_is_already_correct(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 2: the no-op invariant — a correct lane earns zero renames.
+
+    Pin -> mutant: rename unconditionally at dispatch, so this logs a tab rename anyway.
+    """
+    done = dispatch_into_lane(stub, tmp_path, lane_state())
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == []
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_restores_a_dropped_agent_name_with_both_renames(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 3: ADR-0020 names BOTH commands; each is anchored on the worker's `pane_id`.
+
+    Pin -> mutant: issue only `agent rename` (or only `pane rename`), so the pair comes back
+    half-healed and this sees one argv where it asserts two.
+    """
+    state = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ]
+    )
+    done = dispatch_into_lane(stub, tmp_path, state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+    ]
+
+
+def test_dispatch_rename_failure_delivers_anything(stub: StubHarness, tmp_path: Path) -> None:
+    """Scenario 4: a refused rename is one stderr line — the exit status and the delivery stand.
+
+    Pin -> mutant: let `HerdrError` propagate out of the pass (or exit on it), so this
+    dispatch turns EXIT_OK into EXIT_HERDR or never prompts.
+    """
+    state = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ],
+        pane_rename_error_for=["w9:p3"],
+    )
+    done = dispatch_into_lane(stub, tmp_path, state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert done.stderr.count("herdr-dispatch: rename skipped:") == 1
+    assert len(stub.prompts()) == 1
+    assert reconcile_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+    ]
+
+
+def test_dispatch_renames_a_dropped_orchestrator_to_the_composed_lane_name(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 5: the sending pane's agent lost its name -> re-registered `<task_group>-orch`.
+
+    The orchestrator pane carries the agent-shaped label `old-reviewer`, so case 1's worker
+    restoration WOULD claim it; pin -> mutant: let case 1 do so, and this sees a rename to
+    `old-reviewer` instead of exactly one rename to `harness-orch`.
+    """
+    state = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi", "agent_status": "idle"},
+        ],
+        panes=[
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+                "label": "old-reviewer",
+            },
+            {
+                "pane_id": "w9:p3",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/work",
+                "label": "worker-1",
+            },
+        ],
+    )
+    done = stub.run(
+        "worker-1",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == [["agent", "rename", "w9:p1", "harness-orch"]]
+
+
+def test_dispatch_second_run_over_a_corrected_lane_renames_nothing(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 6: idempotence — after the first pass heals the drift, the next pass is silent.
+
+    Pin -> mutant: rename from the dispatch's OWN intent rather than from the inventory
+    comparison, so the second run over the corrected fleet still issues renames.
+    """
+    drifted = lane_state(
+        tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}],
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "agent": "pi", "agent_status": "idle"},
+        ],
+    )
+    first = dispatch_into_lane(stub, tmp_path, drifted)
+    assert first.returncode == herdr_cli.EXIT_OK, first.stderr
+    assert reconcile_renames(stub) == [
+        ["agent", "rename", "w9:p3", "worker-1"],
+        ["pane", "rename", "w9:p3", "worker-1"],
+        ["tab", "rename", "w9:t1", "harness"],
+    ]
+    # The fleet as the two healed rows leave it: worker holds its name, tab holds the slug.
+    corrected = lane_state(
+        agents=[
+            {"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "name": "worker-1", "agent": "pi", "agent_status": "idle"},
+        ]
+    )
+    before = len(stub.calls())
+    second = dispatch_into_lane(stub, tmp_path, corrected, "--force")
+    assert second.returncode == herdr_cli.EXIT_OK, second.stderr
+    assert [call[1:] for call in stub.calls()[before:] if call[2] == "rename"] == []
+
+
+def test_dispatch_dry_run_prints_the_reconciliation_and_renames_nothing(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 7: `--dry-run` prints the planned argv, issues no rename, mutates nothing."""
+    state = lane_state(tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}])
+    done = dispatch_into_lane(stub, tmp_path, state, "--dry-run")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (planned,) = json.loads(done.stdout.splitlines()[0])
+    assert planned[1:] == ["tab", "rename", "w9:t1", "harness"]
+    assert reconcile_renames(stub) == []
+    assert stub.prompts() == []
+
+
+def test_dispatch_advises_when_the_pane_inventory_gives_no_tab_anchor(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """#182 t5 2.2: a `pane list` that answers no tab id costs the lease its anchor — say so.
+
+    `lane_tab_ids` returns `{}` both when the inventory raises (its `except` swallows every
+    failure) and when the rows simply carry no `tab_id`, so the lease then records no `tab_id`
+    and a later reply loses the anchor its reconciliation case 2 needs — while the reply side
+    DOES print a skip line for the same class of loss. One advisory makes the two sides
+    symmetric, and it is advisory only: same exit status, same delivery, and a delivery summary
+    whose shape is untouched apart from the fields a missing anchor legitimately changes (see
+    `_summary_shape`).
+
+    Pin -> mutants: return `{}` without printing, and no line matches; print onto stdout, and
+    the summary-shape comparison fails; print on the healthy path too, and the first dispatch's
+    stderr catches it; crash or skip the prompt, and those asserts fail.
+    """
+    healthy = dispatch_into_lane(stub, tmp_path, lane_state())
+    assert healthy.returncode == herdr_cli.EXIT_OK, healthy.stderr
+    assert "no tab" not in healthy.stderr, healthy.stderr
+    prompts_before = len(stub.prompts())
+    # The inventory answers, but neither row carries the physical tab anchor.
+    anchorless = [
+        {
+            "pane_id": "w9:p1",
+            "workspace_id": "w9",
+            "agent": "pi",
+            "agent_status": "working",
+            "cwd": "/tmp/harness",
+        },
+        {
+            "pane_id": "w9:p3",
+            "workspace_id": "w9",
+            "agent": "pi",
+            "agent_status": "idle",
+            "cwd": "/tmp/work",
+            "label": "worker-1",
+        },
+    ]
+    done = dispatch_into_lane(stub, tmp_path, lane_state(panes=anchorless), "--force")
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    advisories = [line for line in done.stderr.splitlines() if "no tab" in line]
+    assert len(advisories) == 1, done.stderr
+    assert advisories[0].startswith("herdr-dispatch: "), advisories[0]
+    assert "no tab" not in done.stdout, "the advisory is stderr-only"
+    # The anchor the advisory names is missing from the delivered envelope too, and that IS the
+    # loss: the slug survives, its `@<tab>` half does not. Asserted here so `_summary_shape`
+    # filtering the line cannot hide it.
+    assert "  task_group: harness@w9:t1\n" in healthy.stdout, healthy.stdout
+    assert "  task_group: harness\n" in done.stdout, done.stdout
+    assert _summary_shape(done.stdout) == _summary_shape(healthy.stdout), (
+        f"stdout drifted: {done.stdout!r} vs {healthy.stdout!r}"
+    )
+    assert len(stub.prompts()) == prompts_before + 1, "the advisory never costs the delivery"
+    lease = herdr_lease.get_lease("reviewer", base_dir=tmp_path)
+    assert lease is not None
+    assert "tab_id" not in lease, "the anchor is absent, exactly as the advisory says"
+
+
+def _summary_shape(stdout: str) -> list[str]:
+    """The delivery-summary lines a dispatch advisory may not disturb, across two runs.
+
+    Three fields legitimately differ between one dispatch whose panes carry a tab id and one whose
+    panes do not, and the first two are the anchor under test rather than noise: the envelope's
+    `metadata.task_group` loses its `@<tab>` half (asserted directly, in the test below, never
+    quietly filtered away), the delivered prompt therefore shrinks, and the status line echoes
+    that size as `bytes=`; `revision=` is the stub's per-pane counter, which moves with each
+    delivery. The wall-clock `timestamp:` line varies between any two runs. Everything else — the
+    anchored target, both `---` delimiters, the ticket_id, the state, the source line and the body
+    preview — is deterministic under the stub, so a line added to stdout, or the summary changing
+    shape, still fails the comparison.
+    """
+    shape: list[str] = []
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if "timestamp:" in stripped or stripped.startswith("task_group:"):
+            continue
+        shape.append(re.sub(r"bytes=\d+  revision=\S+", "bytes=<n>  revision=<r>", line))
+    return shape
+
+
+def test_dispatch_delivers_when_the_reconciliation_planner_raises(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#182 t5 2.3: the planner is inside the guard, so a raise costs one line and no dispatch.
+
+    The same structural hole as the reply seam: `reconciliation_argv` ran outside `reconcile_lane`'s
+    `try`, and `herdr-dispatch` consumed its result unguarded before `resolve_targets`, so a
+    planner exception aborted the dispatch it promised only to annotate.
+
+    Pin -> mutant: move the planner call back outside the `try` and this exits 1 with a traceback
+    and zero prompts.
+    """
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise TypeError("planner boom")
+
+    _ = monkeypatch.setattr(herdr_label, "reconciliation_argv", boom)
+    done = dispatch_into_lane(stub, tmp_path, lane_state())
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "Traceback" not in done.stderr, done.stderr
+    assert done.stderr.count("herdr-dispatch: reconciliation skipped:") == 1, done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_skips_an_ungrammatical_task_group_with_one_line(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Scenario 8: a violating slug is SKIPPED — one stderr line, and it never reaches herdr.
+
+    Pin -> mutant: validate the slug but still forward it, or crash on it, so this either
+    logs a tab rename or loses the delivery.
+    """
+    state = lane_state(tabs=[{"tab_id": "w9:t1", "workspace_id": "w9", "label": "3"}])
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--task-group",
+        "Bad Slug",
+        state=state,
+        env={"PWD": str(tmp_path)},
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert reconcile_renames(stub) == []
+    assert done.stderr.count("left the tab title and the orchestrator name alone") == 1
+    assert len(stub.prompts()) == 1
 
 
 # ── pin: the dispatch ticket payload goes through the shared reader ────────────────
@@ -1803,3 +2171,122 @@ def test_dispatch_auto_start_dry_run_forwards_the_settle(stub: StubHarness, tmp_
     plan = json.loads(done.stdout.splitlines()[0])
     assert plan["settle"] == 2.5
     assert stub.starts() == []
+
+
+# ── #252: the screen gate rides dispatch's delivery path too ────────────────────────
+
+# Screens mirror `tests/herdr/test_herdr_prompt.py` (trust selector verbatim from
+# `references/agents/qodercli.md`); kept local so the dispatch pins do not couple to
+# the prompt module, mirroring the `sha_repo` convention.
+DISPATCH_TRUST_SCREEN = (
+    "◇ Qoder CLI CN\n"
+    "\n"
+    " Do you trust the files in this folder?\n"
+    " /private/tmp/example-worktree\n"
+    "  ❯ 1. Trust folder\n"
+    "    2. Don't trust and exit\n"
+)
+DISPATCH_CLEAN_SCREEN = "◎ main · ◎ h2-writer 191s\n*   Type your message or @path/to/file\n"
+
+
+def _dispatch_reads(stub: StubHarness) -> list[list[str]]:
+    """Every `herdr agent read` the stub recorded: the gate's screen reads."""
+    return [call for call in stub.calls() if call[1:3] == ["agent", "read"]]
+
+
+def test_dispatch_refuses_a_modal_screen_before_injection(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Both entry points: dispatch routes through `prompt_agents` -> `wait_for_ready`.
+
+    Mutant killed: remove the screen check — the prompt is injected into the selector and
+    both `EXIT_USAGE` and `prompts() == []` fail.
+    """
+    state = {**DEFAULT_STATE, "agent_read_text": DISPATCH_TRUST_SCREEN}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "refusing to inject the prompt into the dialog" in done.stderr
+    assert "Do you trust the files in this folder?" in done.stderr
+    assert stub.prompts() == [], "bytes must not be injected into a modal"
+    assert len(_dispatch_reads(stub)) == 1, "one confirm, no re-read"
+
+
+def test_dispatch_clean_screen_delivers_with_one_read(stub: StubHarness, tmp_path: Path) -> None:
+    """Mutant killed: make the screen check unconditional or screen-driven — a clean
+    settled pane then never delivers and this fails.
+    """
+    state = {**DEFAULT_STATE, "agent_read_text": DISPATCH_CLEAN_SCREEN}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    assert len(_dispatch_reads(stub)) == 1
+
+
+def test_dispatch_never_reads_the_screen_while_waiting(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The waiting path stays screen-free under dispatch too (SKILL.md: no `agent read` poll).
+
+    Mutant killed: move the screen read into the per-attempt loop — this run then records ~50
+    reads. It does NOT kill a read inside `agent_readiness`'s READY branch: a target held
+    `working` never takes that branch, so that mutant records zero reads here; dispatch's
+    delivered case `test_dispatch_clean_screen_delivers_with_one_read` pins it. `_sleep` is
+    patched on the shared `herdr_prompt` module, which the in-process dispatch body imports
+    from `sys.modules`, so the 50 probes cost no real time.
+    """
+    monkeypatch.setattr(herdr_prompt, "_sleep", _no_settle)
+    state = {**DEFAULT_STATE, "agent_get_seq": {"reviewer": ["working"]}}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert "did not settle for prompt delivery" in done.stderr
+    assert stub.prompts() == []
+    assert _dispatch_reads(stub) == []
+
+
+def test_dispatch_skip_screen_check_delivers_to_a_modal_screen(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The escape hatch on the dispatch entry point (`--skip-screen-check` is inherited).
+
+    Mutants killed: make the flag a no-op in dispatch's parser (exit 2, no prompt); declare
+    it on `herdr-prompt` only (argparse refuses the unknown flag here).
+    """
+    state = {**DEFAULT_STATE, "agent_read_text": DISPATCH_TRUST_SCREEN}
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path)),
+        "--no-wait",
+        "--skip-screen-check",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    assert "refusing to inject" not in done.stderr
+    assert _dispatch_reads(stub) == []
+
+
+def test_dispatch_delivers_past_a_quoted_dialog_in_the_callee_transcript(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """P2-1 through dispatch: prose that QUOTES the trust block is not a modal (#182 h2c).
+
+    A callee summarising `references/agents/qodercli.md` prints the block, and the shipped
+    patterns refused that dispatch. The screen's LAST line is the documented idle input row
+    `Type your message or @path/to/file` — that row, below the quoted block, is the veto that
+    makes this deliver. Mutant killed: drop the idle-input veto — the quote then refuses and
+    this dispatch exits 2.
+    """
+    screen = (
+        "◎ main · ◎ h2-reviewer 42s\n"
+        "The reference documents the selector verbatim:\n"
+        " Do you trust the files in this folder?\n"
+        "  ❯ 1. Trust folder\n"
+        "    2. Don't trust and exit\n"
+        "*   Type your message or @path/to/file\n"
+    )
+    state = {**DEFAULT_STATE, "agent_read_text": screen}
+    done = stub.run("reviewer", "--file", str(payload_file(tmp_path)), "--no-wait", state=state)
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+    assert len(_dispatch_reads(stub)) == 1

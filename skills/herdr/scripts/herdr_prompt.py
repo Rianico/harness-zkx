@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.14"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """herdr-prompt — deliver one prompt payload to a Herdr agent without shell mangling.
 
@@ -29,15 +29,14 @@ timed out first — the agent is working asynchronously: yield turn and await re
 callback, or resume with ``herdr-wait`` instead of resubmitting.
 
 Sender context is prepended by default (see `resolve_caller`): the payload opens
-with the Style 2 nested envelope — `Routing:` (Sender, Group, and the
-`Receiver` position field), `Hierarchy:` (Task-Group, Ticket-ID, Task-ID,
-and In-Reply-To correlation), and `Protocol:` (the Herdr skill notice) — and
-closes with the completion-reply contract via `herdr-reply`, so a callee can
+with the A2A Markdown frontmatter envelope (ADR 0020) — fenced by `---` and carrying
+`id`, `context_id`, `status` (state plus timestamp) and `metadata` (`ticket_id`,
+`sender`, `receiver`, `task_group`, `in_reply_to`) — then the Herdr skill notice on
+its own line, and closes with the completion-reply contract via `herdr-reply`, so a callee can
 answer the sender by name using the helper script without shell mangling. The
-default envelope is strictly Routing/Hierarchy/Protocol; recovery metadata
-(`cwd`, session, resume command) is never in the default envelope and is
-retrieved just-in-time from `.lane/tasks.yaml`. Pass `--verbose` to restore the
-`Runtime:` (Cwd/Resume) block for debugging. The envelope is script-rendered,
+default envelope carries no recovery metadata (`cwd`, session, resume command); it is
+retrieved just-in-time from `.lane/tasks.yaml`. Pass `--verbose` to add the
+`cwd`/`resume` fields under `metadata` for debugging. The envelope is script-rendered,
 never model-authored, so it cannot be forgotten. The callee always receives the full envelope
 and reply contract; only the caller's own stdout shrinks. `--dry-run` prints a trimmed delivery
 summary (envelope metadata, the `---` delimiter, and a body preview) without submitting, and
@@ -52,6 +51,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -121,7 +121,22 @@ from herdr_envelope import (
     SKILL_NOTICE as SKILL_NOTICE,
 )
 from herdr_envelope import (
+    STATE_COMPLETED as STATE_COMPLETED,
+)
+from herdr_envelope import (
+    STATE_FAILED as STATE_FAILED,
+)
+from herdr_envelope import (
+    STATE_INPUT_REQUIRED as STATE_INPUT_REQUIRED,
+)
+from herdr_envelope import (
+    STATE_WORKING as STATE_WORKING,
+)
+from herdr_envelope import (
     CallerContext as CallerContext,
+)
+from herdr_envelope import (
+    Envelope as Envelope,
 )
 from herdr_envelope import (
     _scalar as _scalar,  # pyright: ignore[reportPrivateUsage]
@@ -139,9 +154,6 @@ from herdr_envelope import (
     parse_envelope as parse_envelope,
 )
 from herdr_envelope import (
-    receiver_ref as receiver_ref,
-)
-from herdr_envelope import (
     render_envelope as render_envelope,
 )
 from herdr_envelope import (
@@ -149,6 +161,9 @@ from herdr_envelope import (
 )
 from herdr_envelope import (
     render_reply_contract as render_reply_contract,
+)
+from herdr_envelope import (
+    reply_state as reply_state,
 )
 from herdr_envelope import (
     sender_ref as sender_ref,
@@ -162,6 +177,7 @@ from herdr_envelope import (
 from herdr_envelope import (
     wrap_with_envelope as wrap_with_envelope,
 )
+from herdr_transcript import build_agent_read_argv
 
 BLOCKED = "blocked"
 BLOCKED_CODE = "agent_blocked"
@@ -201,6 +217,7 @@ class Options:
     json: bool = False
     dry_run: bool = False
     no_caller_context: bool = False
+    skip_screen_check: bool = False
     ticket_id: str | None = None
     task_id: str | None = None
     task_group: str | None = None
@@ -261,14 +278,22 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_argument(
         parser,
         "no_caller_context",
-        help="send the payload verbatim without the Sender/Receiver envelope and reply contract",
+        help="send the payload verbatim without the A2A envelope and reply contract",
+    )
+    add_shared_argument(
+        parser,
+        "skip_screen_check",
+        help=(
+            "deliver without confirming a settled readiness claim against the screen; "
+            "use it only when the reported dialog is not on the pane (a false positive)"
+        ),
     )
     add_shared_argument(
         parser,
         "verbose",
         help=(
-            "include Runtime: Cwd/Resume recovery metadata; "
-            "default envelope is Routing/Hierarchy/Protocol only"
+            "include cwd/resume recovery metadata under the envelope metadata; "
+            "the default envelope carries recovery metadata nowhere"
         ),
     )
     return parser
@@ -686,6 +711,286 @@ def _read_interactive_ready(herdr: str, target: str, env: Mapping[str, str]) -> 
     return read_interactive_ready(herdr, target, env)
 
 
+# #252 audit points 3/4: a pane sitting at a startup modal, permission dialog, or trust
+# prompt can report a settled status with `interactive_ready: true` (verified for qodercli
+# in `references/agents/qodercli.md`: the trust selector blocks while the feed says ready).
+# The screen is consulted exactly ONCE, at the moment `wait_for_ready` first sees the status
+# feed claim ready — never from `agent_readiness` and never per attempt, so the waiting path
+# issues zero screen reads (SKILL.md: never loop `herdr agent read` to poll).
+SCREEN_SOURCE = "visible"
+SCREEN_READ_LINES = 60
+
+TRUST_DIALOG_KIND = "startup folder-trust prompt"
+PERMISSION_DIALOG_KIND = "permission dialog"
+
+# Detection demands dialog STRUCTURE inside one block, never one literal anywhere in the
+# snapshot. A false positive blocks a legitimate prompt, which is worse than the readiness
+# lie the gate closes, and agent prose quotes these dialogs: an agent that just read
+# `references/agents/qodercli.md` prints the trust block it documents, and bare-literal
+# patterns then refused that pane. Two structural facts separate a live dialog from a quote:
+#
+#   * an option row matches the WHOLE line, so prose that merely starts like one
+#     ("1. Trust folder is the first menu entry.") is not a row, and a question pairs with
+#     its option rows only inside the same blank-line-separated block, so a transcript
+#     question and a later selector tail never combine; and
+#   * the discriminator is the pane's INPUT BOX, not the snapshot tail. A live modal
+#     replaces the input box — `references/agents/qodercli.md:44-50` records that the trust
+#     selector "loads nothing else" while it is up — so no idle prompt row exists below it.
+#     A dialog quoted in a transcript sits ABOVE the pane's idle input row: the same
+#     reference documents the idle main UI at :82-84 (`YOLO` badge, the
+#     `Type your message or @path/to/file` prompt, the `Model · <cwd>` footer). Only the
+#     documented idle input row (`IDLE_INPUT_ROW`) vetoes a match; trailing chrome rows
+#     (mode badge, footer, hint row, box border, `Esc to cancel`, spinner, status bar) are
+#     not evidence of an idle pane and are not enumerated — they are simply irrelevant once
+#     the input-row veto exists.
+#
+# Wording: the trust question and both option rows are verbatim from
+# `references/agents/qodercli.md:45-49`, the only dialog this repository documents verbatim.
+# The permission class is STRUCTURE-BASED and NOT sourced from a verbatim transcript:
+# `references/agents/cline.md:11` and `references/agents/copilot.md:11` record only that those
+# kinds prompt for permission or confirmation, never the wording they use. So a permission
+# refusal requires the question row AND a numbered selector row in the same block —
+# never the question phrase alone. English-and-structure only: no language heuristic.
+
+# `references/agents/qodercli.md:45`.
+TRUST_QUESTION_ROW = re.compile(r"(?i)[ \t]*do you trust (?:the files in )?this folder\?[ \t]*")
+
+# `references/agents/qodercli.md:47-48`, whole line, cursor optional: the option list renders
+# only while the blocking selector is on screen, and the complete adjacent pair identifies the
+# dialog even when the question line has scrolled off the top.
+TRUST_OPTION_ROW = re.compile(
+    r"(?i)[ \t]*(?:❯[ \t]*)?([12])[.][ \t]+(?:trust folder|don'?t trust and exit)[ \t]*"
+)
+
+# A numbered option row — `❯ 1. Yes`, `2. No`, `❯ 1. Yes  2. No` on one line, or the
+# real-render long label `❯ 1. Yes, and don't ask again for rm commands`, or a trailing
+# `2. No, and tell Claude what to do differently (esc)` — where the WHOLE line is the row:
+# `❯? <n>. <label>`. The label admits the punctuation real options use — commas, apostrophes,
+# hyphens, parentheses, slashes, colons, semicolons, quotes, underscores, tildes and dots INSIDE
+# it — but the WHOLE-LINE rule still rejects prose: a label must start on an alphanumeric and end
+# on an alphanumeric or a closing paren, so it can never end on a sentence-final `.`, `?` or `!`.
+# That sentence-final rejection is the ONLY thing the old narrow class protected ("1. Trust folder
+# is the first menu entry." is a sentence, not a row); a punctuation-free markdown list item that
+# happens to end in a word still matches, so it is the paired question row that makes a dialog,
+# never the label shape (see `_block_dialog_kind`).
+_SELECTOR_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9_,'\-():;/~\". \t]*[A-Za-z0-9)])?"
+SELECTOR_ROW = re.compile(
+    rf"(?i)[ \t]*(?:❯[ \t]*)?\d+[.][ \t]+{_SELECTOR_LABEL}(?:[ \t]+\d+[.][ \t]+{_SELECTOR_LABEL})*[ \t]*"
+)
+
+# The question forms reported for permission dialogs — `do you want to allow …?` and
+# `do you want to proceed …?` (forms only, no quoted source — see above).
+PERMISSION_QUESTION_ROW = re.compile(
+    r"(?i)[ \t]*do you want to (?:allow|proceed)\b.{0,120}\?[ \t]*"
+)
+
+# The qodercli idle input placeholder, from the captured bottom of the screen in
+# `references/agents/qodercli.md` (the fenced render taken 2026-10-16 with
+# `herdr_transcript.py <pane> --source visible`). This is verbatim evidence, not prose. The
+# matched core is the row's LEADING PHRASE `Type your message` — a case-insensitive substring
+# SEARCH, not a whole-line match (the old `fullmatch` with leading and trailing
+# `[^A-Za-z0-9]*` classes let ANY decoration around the row — a leading glyph/bracket or a
+# trailing hint, cursor, or clipped box — leave the veto inert, so every trust-shaped block
+# quoted in a transcript refused), and NOT anchored to the line start, and the rest of the
+# placeholder is not required.
+# Why the leading phrase, in this order:
+#   1. The captured render in `references/agents/qodercli.md` (added in this ticket) shows the
+#      full row, but a terminal clips a row's right side, so the longest tail the gate can
+#      rely on is the row's own beginning. Matching the leading phrase is what actually
+#      delivers this ticket's truncation requirement: the previous full-placeholder substring
+#      form failed a clip into its own tail (`…@path/to/fi`, `…@path`, `…@pat`).
+#   2. Accepted cost, stated honestly: a shorter core can be echoed by an agent's own prose
+#      (a row merely saying "Type your message"). That is why the veto keeps its second
+#      witness — the existing `_loose_dialog_shape` rule (a placeholder row vetoes only when
+#      NO dialog-shaped row sits below it) — which is what bounds the false-delivery risk.
+#      The directions of error differ: the short core errs toward DELIVERY (a bare prose echo
+#      with nothing dialog-shaped under it can silence the veto); the loose witness keys on
+#      structure, not any digit. A row below the placeholder blocks the veto only when it
+#      itself carries the selector cursor (`❯ n. …`) or is a whole-line trust/permission
+#      question, so benign chrome below the live box — a numbered todo widget, status bar,
+#      indented list item, or a markdown numbered list — never blocks it and never turns an
+#      idle pane into a false refusal.
+#   3. Residuals that stay: when the operator has typed anything the placeholder is absent
+#      entirely and the veto cannot fire; a pane narrower than the matched core clips below
+#      `Type your message`. Both leave that pane unguarded, and `--skip-screen-check` is the
+#      remedy.
+# The core stays distinctive enough that its substring never collides with the `Model · …`
+# footer, which is deliberately NOT a marker: a live modal replaces the input box, so a footer
+# with no input row below the dialog still refuses.
+IDLE_INPUT_ROW = re.compile(r"(?i)Type your message")
+
+# The veto's second witness, deliberately LOOSER than `_SELECTOR_LABEL` in the LABEL but STRICTER
+# than it in the GLYPH: the row must carry the selector cursor `❯` before the number. So the
+# numbered witness matches `❯ n. <anything>` — even a label the strict rule cannot name because it
+# ends on sentence punctuation — but never a bare `n. <anything>`. A known question row still
+# matches unchanged. Rationale: the cursor is structural evidence of a RENDERED selector. Every
+# documented live render carries one (`references/agents/qodercli.md:47` `❯ 1. Trust folder`, and
+# the real permission renders in the tests), while benign chrome below the box — a one-line numbered
+# todo widget (`1. Fix the parser  2. Ship it`), a numbered status bar (`2. pending dispatch`), an
+# indented `    12. something`, or an agent message's markdown numbered list — never does. Without
+# the cursor requirement any such row under the live placeholder was read as dialog-shaped, blocked
+# the veto, and refused an IDLE pane: a false refusal, the direction this gate treats as worse than
+# the miss (see above). Requiring the cursor keys the witness on what a rendered selector actually
+# shows, so dialog-shaped text below a placeholder row still means that row is NOT the pane's live
+# input box (a live modal replaces the box) and the veto must not fire from it.
+_LOOSE_NUMBERED_ROW = re.compile(r"\s*❯\s*\d+[.]\s+\S")
+
+
+def _loose_dialog_shape(line: str) -> bool:
+    """Whether one line looks like dialog content under the deliberately loose veto test."""
+    return bool(
+        _LOOSE_NUMBERED_ROW.match(line)
+        or TRUST_QUESTION_ROW.fullmatch(line)
+        or PERMISSION_QUESTION_ROW.fullmatch(line)
+    )
+
+
+def _trust_row_option(line: str) -> str | None:
+    """Which trust-selector option a whole line is ("1" or "2"); None for anything else."""
+    match = TRUST_OPTION_ROW.fullmatch(line)
+    return match.group(1) if match else None
+
+
+def _is_dialog_line(line: str) -> bool:
+    """Whether one line is dialog content: a question row or an option row."""
+    return bool(
+        TRUST_QUESTION_ROW.fullmatch(line)
+        or PERMISSION_QUESTION_ROW.fullmatch(line)
+        or _trust_row_option(line)
+        or SELECTOR_ROW.fullmatch(line)
+    )
+
+
+def _quoted_dialog(block: Sequence[str]) -> str:
+    """The block's dialog lines in screen order, so the refusal quotes what it matched."""
+    lines = [line.strip() for line in block if _is_dialog_line(line)][:6]
+    return " | ".join(lines)
+
+
+def _block_dialog_kind(block: Sequence[str]) -> str | None:
+    """Which dialog class one non-blank block shows, judged over the WHOLE block; else None.
+
+    (a) a trust question row; (b) trust option rows with the question present or the
+    adjacent `1`/`2` pair present (the pair covers options whose question scrolled off);
+    (c) a permission question row AND a numbered selector row in the same block — a bare
+    question is never a dialog. The dialog verdict is the LAST block that matches.
+    """
+    if any(TRUST_QUESTION_ROW.fullmatch(line) for line in block):
+        return TRUST_DIALOG_KIND
+    options = [_trust_row_option(line) for line in block]
+    if any(options[index] == "1" and options[index + 1] == "2" for index in range(len(block) - 1)):
+        return TRUST_DIALOG_KIND
+    if any(PERMISSION_QUESTION_ROW.fullmatch(line) for line in block) and any(
+        SELECTOR_ROW.fullmatch(line) for line in block
+    ):
+        return PERMISSION_DIALOG_KIND
+    return None
+
+
+def _screen_modal_block(snapshot: str) -> tuple[str, str] | None:
+    """Judge one pane snapshot; return (kind, quoted lines) only for a LIVE modal.
+
+    Pure — one snapshot in, one verdict out — which is what keeps it callable exactly once per
+    readiness determination. The screen splits at blank lines into blocks (a block is a
+    maximal run of non-blank lines); that extent is what pairs a question with its option
+    rows, and pairing never spans the whole snapshot. Structural rules run over the WHOLE
+    block, not its tail (see `_block_dialog_kind`), and the verdict is the LAST matching
+    block.
+
+    The discriminator against a quote is the pane's live input box. A placeholder row matching
+    IDLE_INPUT_ROW (the row's leading phrase, unanchored, so chrome AND a right-edge clip of the
+    row cannot silence it) strictly BELOW the last dialog line means the box is present, so the
+    block is transcript and the prompt delivers — but
+    only when that placeholder is the LIVE box: the veto may not fire from a placeholder row that
+    has dialog-shaped text below it (see `_loose_dialog_shape`), because a live modal replaces the
+    input box and leaves no placeholder under a dialog. A row below the box is dialog-shaped only
+    when it itself carries the selector cursor (`❯ n. …`) or is a whole-line trust/permission
+    question; chrome below the block (mode badge, `Model · …` footer, hint row, box border, `Esc to
+    cancel`, spinner, status bar, a numbered todo widget or markdown list) is not, so it never
+    vetoes and never turns an idle pane into a false refusal. A dialog-shaped block with no
+    placeholder row below it still refuses — even a quote on a pane whose idle row this repo does
+    not document, and a pane whose operator has typed (the placeholder is then absent):
+    `--skip-screen-check` is that false positive's remedy.
+    """
+    # Normalise line endings defensively so every row rule sees one shape. Whether `herdr agent
+    # read` can emit CRLF is UNKNOWN — this is defensive, not evidence of a live pane shape.
+    snapshot = snapshot.replace("\r\n", "\n").replace("\r", "\n")
+    lines = snapshot.split("\n")
+    verdict: tuple[str, Sequence[str], int] | None = None
+    index = 0
+    while index < len(lines):
+        if not lines[index].strip():
+            index += 1
+            continue
+        start = index
+        while index < len(lines) and lines[index].strip():
+            index += 1
+        block = lines[start:index]
+        kind = _block_dialog_kind(block)
+        if kind is None:
+            continue
+        last_dialog = start + max(
+            offset for offset, line in enumerate(block) if _is_dialog_line(line)
+        )
+        verdict = (kind, block, last_dialog)
+    if verdict is None:
+        return None
+    kind, block, last_dialog = verdict
+    for index in range(last_dialog + 1, len(lines)):
+        if not IDLE_INPUT_ROW.search(lines[index]):
+            continue
+        # A placeholder row below the dialog vetoes the verdict, but only when it is the pane's
+        # live input box: if dialog-shaped text sits BELOW this placeholder, the placeholder is a
+        # transcript prompt and a live modal renders under it, so this row cannot veto. Keep
+        # scanning for a lower placeholder with nothing dialog-shaped beneath it.
+        if any(_loose_dialog_shape(later) for later in lines[index + 1 :]):
+            continue
+        return None
+    return (kind, _quoted_dialog(block))
+
+
+def _screen_modal(
+    herdr: str, target: str, env: Mapping[str, str], *, skip_screen_check: bool
+) -> tuple[str, str] | None:
+    """Confirm one settled readiness claim against the live screen; return (kind, quote) or None.
+
+    Called once per readiness determination — at the moment the status probe first claims
+    ready — and never from `agent_readiness`, so the wait loop reads no screen. An
+    unreadable screen (non-zero exit, empty output, a raised subprocess) is not evidence of
+    a modal: one line goes to stderr and the status signal still decides.
+    `--skip-screen-check` skips the confirm entirely, on the operator's authority: a modal
+    screen then delivers and no refusal fires. The read still happens zero times when the
+    screen is never consulted, and never more than once when it is.
+    """
+    if skip_screen_check:
+        return None
+    argv = build_agent_read_argv(herdr, target, source=SCREEN_SOURCE, lines=SCREEN_READ_LINES)
+    try:
+        done = run_herdr(argv, env)
+    except HerdrError as exc:
+        print(
+            f"herdr-prompt: screen check for {target!r} could not run ({exc}); "
+            "trusting the status feed",
+            file=sys.stderr,
+        )
+        return None
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
+        print(
+            f"herdr-prompt: screen check for {target!r} failed ({detail}); trusting the status feed",
+            file=sys.stderr,
+        )
+        return None
+    if not done.stdout.strip():
+        print(
+            f"herdr-prompt: screen check for {target!r} returned no screen rows; "
+            "trusting the status feed",
+            file=sys.stderr,
+        )
+        return None
+    return _screen_modal_block(done.stdout)
+
+
 def wait_for_ready(
     herdr: str,
     target: str,
@@ -693,11 +998,16 @@ def wait_for_ready(
     *,
     timeout: float = READY_TIMEOUT_SECONDS,
     interval: float = READY_INTERVAL_SECONDS,
+    skip_screen_check: bool = False,
 ) -> str | None:
     """Block until the target settles, else fail reporting the observed status.
 
     The loop is attempt-counted (never wall-clocked) so a monkeypatched `_sleep`
     runs it instantly; the immediate first probe means a settled agent never sleeps.
+    A settled claim is confirmed against the live screen exactly once, before delivery
+    (see `_screen_modal`): a blocking dialog on screen aborts the wait, and the
+    screen is never re-read and never polled while waiting. `skip_screen_check` (the
+    `--skip-screen-check` flag) drops that confirm on the operator's authority.
     The refusal names what the readiness read observed — never a hypothesized cause.
     """
     attempts = max(1, math.ceil(timeout / interval))
@@ -706,6 +1016,15 @@ def wait_for_ready(
         ready, status, _ = agent_readiness(herdr, target, env)
         last_status = status
         if ready:
+            modal = _screen_modal(herdr, target, env, skip_screen_check=skip_screen_check)
+            if modal is not None:
+                kind, block = modal
+                raise UsageError(
+                    f"target {target!r} reported status={status!r} but its screen shows a "
+                    f"{kind}: {block!r}; refusing to inject the prompt into the dialog — "
+                    "clear the dialog and retry, or pass --skip-screen-check if there is "
+                    "no dialog"
+                )
             return status
         if attempt < attempts - 1:
             _sleep(interval)
@@ -834,7 +1153,7 @@ def prompt_one(
             print(format_delivery_summary(status, payload, body, source))
         return Dispatch(target)
 
-    _ = wait_for_ready(herdr, target, env)
+    _ = wait_for_ready(herdr, target, env, skip_screen_check=options.skip_screen_check)
 
     pre_revision: str | None = None
     if options.no_wait:

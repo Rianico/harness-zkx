@@ -28,4 +28,4 @@ Reference for running Pi coding agent under Herdr.
 
 ## Known Quirks & Failure Modes
 - Background completions settle to `done`, not `idle`. Waiting with `--until idle` alone hangs.
-- Extract clean assistant text from session files with `herdr_transcript.py <target> --last`.
+- Extract clean assistant text from session files with `uv run skills/herdr/scripts/herdr_transcript.py <target> --last`.
