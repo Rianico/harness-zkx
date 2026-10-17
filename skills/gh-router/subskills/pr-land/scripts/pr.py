@@ -4,13 +4,13 @@
 # ///
 """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
 
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
-  --check : preflight + draft phase — run the merge gates, write <out-dir>/draft.json and
-    <out-dir>/pr_body.md, and print only counts, the two paths, and one curation hint (no PR created)
-  --out-dir DIR : directory for the --check draft files (default <repo-root>/.lsz/tmp); parents are created
-  --force-scaffold : with a body-less --check, regenerate pr_body.md over a hand-edited scaffold (default: an edited file is preserved byte-for-byte)
+  --check : preflight + draft phase — run the merge gates and print counts, title facts, the squash preview, and one curation hint (no PR created; refusals carry reason/remedy/site on stderr)
+  --status : read-only landing state — predicates, failure states, artifact, title facts, squash preview, refusals[] and transitions[] (never refuses, always exit 0; --json for the pinned schema)
+  --out LEAF : scaffold leaf under <repo-root>/.lsz/gh-router/ (default <head-slug>.md); a body-less --check writes it only when absent
+  --force-scaffold : with a body-less --check, regenerate the scaffold leaf over an existing file (default: write nothing, report path + stale)
   --draft : leave the PR a draft after stamping (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens
     (the caller owns the changelog) — the head was not stamped, so expect a red changelog gate
@@ -31,7 +31,7 @@ from the body, and an empty or template-only body there without an explicit mess
 Opening a PR requires a description: an empty body or the unfilled repo template is refused pre-create.
 Commit title is one Conventional Commit line `type(scope): subject (#NUM)` <= 100 chars; a fix
 body states Root, and the body stays at most 5 bullets.
-Env: GH_TOKEN via gh auth. PR URL on stdout (draft paths on --check), progress on stderr. Fails loud, no secrets in logs.
+Env: GH_TOKEN via gh auth. PR URL on stdout (facts on --check/--status), progress on stderr. Fails loud, no secrets in logs.
 Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref → default slim; --verbose dumps the logs
 """
 
@@ -56,23 +56,18 @@ from _changelog import _UNRELEASED_VERSION_END_RE as _UNRELEASED_VERSION_END_RE
 from _changelog import _read_unreleased_block as _read_unreleased_block
 from _changelog import _unreleased_attribution_re as _unreleased_attribution_re
 from _changelog import stamp_changelog as stamp_changelog
+from _changelog import stamp_needed as stamp_needed
 from _changelog import unreleased_attributes_pr as unreleased_attributes_pr
 from _check import CheckReport as CheckReport
 from _check import check_trailers as check_trailers
 from _check import check_trailers_report as check_trailers_report
 from _draft import DRAFT_BODY_MAX_LINES as DRAFT_BODY_MAX_LINES
 from _draft import DRAFT_BODY_PLACEHOLDER as DRAFT_BODY_PLACEHOLDER
-from _draft import DRAFT_OUT_DIR as DRAFT_OUT_DIR
-from _draft import DRAFT_SCHEMA as DRAFT_SCHEMA
-from _draft import SCAFFOLD_SIGNATURE_PREFIX as SCAFFOLD_SIGNATURE_PREFIX
 from _draft import _draft_dirty as _draft_dirty
 from _draft import _draft_range as _draft_range
-from _draft import build_draft_payload as build_draft_payload
 from _draft import build_scaffold as build_scaffold
 from _draft import cap_draft_body as cap_draft_body
 from _draft import draft_commits as draft_commits
-from _draft import is_untouched_scaffold as is_untouched_scaffold
-from _draft import resolve_out_dir as resolve_out_dir
 from _draft import run_draft_phase as run_draft_phase
 from _errors import CheckFailureError as CheckFailureError
 from _errors import PrError as PrError
@@ -198,6 +193,13 @@ from _squash import resolve_squash_message as resolve_squash_message
 from _squash import split_squash_sections as split_squash_sections
 from _squash import squash_message as squash_message
 from _squash import trailer_email_key as trailer_email_key
+from _status import collect_status as collect_status
+from _status import degraded_report as degraded_report
+from _status import make_refusal as make_refusal
+from _status import make_transition as make_transition
+from _status import pr_error_to_refusal as pr_error_to_refusal
+from _status import preflight_title as preflight_title
+from _status import render_text as render_text
 
 # Annotated on purpose: a module-level variable annotation is what makes CPython 3.14 build
 # the module's PEP 649 `__annotate__`/`__conditional_annotations__`. The pristine pr.py had
@@ -216,10 +218,12 @@ from range_authority import resolve_range as resolve_range
 
 def print_usage() -> None:
     usage = """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--out-dir DIR] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
-  --check : preflight + draft phase — write <out-dir>/draft.json + <out-dir>/pr_body.md, print counts, both paths, one curation hint (no PR created; --out-dir DIR defaults to <repo-root>/.lsz/tmp, parents created; body-less runs write a signed candidate scaffold, --force-scaffold regenerates over a hand-edited one)
+  --check : preflight + draft phase — run the merge gates, print counts, title facts, the squash preview, one curation hint (no PR created; body-less runs write the scaffold leaf only when absent, --force-scaffold regenerates)
+  --status : read-only landing state, always exit 0 (--json for the pinned schema)
+  --out LEAF : scaffold leaf under <repo-root>/.lsz/gh-router/ (default <head-slug>.md)
   --draft : leave the PR a draft (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens (caller owns the changelog) — head unstamped, expect a red changelog gate
   --body/--body-file : required to open a PR; the caller drafts the description (pr-enhance workflow). An empty body or the unfilled repo template is refused.
@@ -240,12 +244,14 @@ def parse_args(args: list[str]) -> PrOptions:
     body: str | None = None
     body_supplied = False
     body_file: Path | None = None
-    out_dir: Path | None = None
+    out: Path | None = None
     squash_message: str | None = None
     squash_message_file: Path | None = None
     squash_message_supplied = False
     watch = False
     merge = False
+    status = False
+    json_output = False
     check = False
     draft = False
     no_stamp = False
@@ -283,10 +289,10 @@ def parse_args(args: list[str]) -> PrOptions:
             body_file = Path(args[i + 1])
             body_supplied = True
             i += 2
-        elif arg == "--out-dir":
+        elif arg == "--out":
             if i + 1 >= len(args):
-                raise UsageError("missing argument for --out-dir")
-            out_dir = Path(args[i + 1])
+                raise UsageError("missing argument for --out")
+            out = Path(args[i + 1])
             i += 2
         elif arg == "--squash-message":
             if i + 1 >= len(args):
@@ -311,6 +317,18 @@ def parse_args(args: list[str]) -> PrOptions:
             i += 1
         elif arg == "--no-merge":
             merge = False
+            i += 1
+        elif arg == "--status":
+            status = True
+            i += 1
+        elif arg == "--no-status":
+            status = False
+            i += 1
+        elif arg == "--json":
+            json_output = True
+            i += 1
+        elif arg == "--no-json":
+            json_output = False
             i += 1
         elif arg == "--check":
             check = True
@@ -351,10 +369,12 @@ def parse_args(args: list[str]) -> PrOptions:
         title=title,
         body=body,
         body_file=body_file,
-        out_dir=out_dir,
+        out=out,
         watch=watch,
         merge=merge,
         check=check,
+        status=status,
+        json_output=json_output,
         draft=draft,
         no_stamp=no_stamp,
         verbose=verbose,
@@ -367,57 +387,8 @@ def parse_args(args: list[str]) -> PrOptions:
     )
 
 
-def resolve_squash_override(options: PrOptions, cwd: Path | None = None) -> tuple[str | None, bool]:
-    explicit = options.squash_message
-    if options.squash_message_file:
-        mf = (
-            options.squash_message_file
-            if options.squash_message_file.is_absolute()
-            else ((cwd or Path.cwd()) / options.squash_message_file)
-        )
-        if not mf.is_file():
-            raise UsageError(
-                f"squash message file not found or not readable: {options.squash_message_file}"
-            )
-        try:
-            # utf-8-sig drops a BOM so `\ufeff## Summary` never rides in as prose (F11).
-            explicit = mf.read_text(encoding="utf-8-sig")
-        except OSError:
-            raise UsageError(
-                f"squash message file not found or not readable: {options.squash_message_file}"
-            ) from None
-    return explicit, options.squash_message_supplied
-
-
-def finalize_squash_message(repo: str, num: str, msg: str, cwd: Path | None = None) -> str:
-    merger_res = _github.run_command(
-        ["gh", "api", "user", "--jq", ".login"],
-        cwd=cwd,
-    )
-    if merger_res.returncode != 0:
-        print(
-            f"refusing squash message: could not resolve current user login via gh api user: {merger_res.stderr.strip()}",
-            file=sys.stderr,
-        )
-        raise RefusalError("could not resolve current user login")
-    merger = merger_res.stdout.strip()
-    tsv_res = _github.run_command(
-        [
-            "gh",
-            "api",
-            f"repos/{repo}/pulls/{num}/commits",
-            "--jq",
-            '.[] | [(.author.login // ""), (.commit.author.name // ""), (.commit.author.email // "")] | @tsv',
-        ],
-        cwd=cwd,
-    )
-    if tsv_res.returncode != 0:
-        print(
-            f"refusing squash message: could not enumerate PR #{num} commit authors (check network / GH_TOKEN scopes); re-run rather than merge without attribution",
-            file=sys.stderr,
-        )
-        raise RefusalError(f"could not enumerate PR #{num} commit authors")
-    return build_squash_message(msg, merger, tsv_res.stdout).rstrip("\n")
+from _github import finalize_squash_message as finalize_squash_message  # noqa: E402
+from _options import resolve_squash_override as resolve_squash_override  # noqa: E402
 
 
 def create_or_reuse_pr(
@@ -477,7 +448,25 @@ def create_or_reuse_pr(
                 f"remediation: PR #{num} is still a draft; run manually: gh pr ready {num} --repo {repo}",
                 file=sys.stderr,
             )
-            raise RefusalError(f"reused PR #{num} is still a draft")
+            raise RefusalError(
+                f"reused PR #{num} is still a draft",
+                refusals=[
+                    make_refusal(
+                        "pr_draft",
+                        f"reused PR #{num} is still a draft and --draft was not passed; "
+                        "reuse never mutates draft state, so CI never ran",
+                        f"run manually: gh pr ready {num} --repo {repo}",
+                        f"PR #{num}",
+                    )
+                ],
+                transitions=[
+                    make_transition(
+                        f"gh pr ready {num} --repo {repo}",
+                        ["changelog_stamped"],
+                        "remote",
+                    )
+                ],
+            )
         patch_args: list[str] = []
         updated_fields: list[str] = []
         final_title = title
@@ -566,74 +555,8 @@ def create_or_reuse_pr(
     return num, title, final_body, True
 
 
-def merge_pr(
-    repo: str,
-    num: str,
-    base: str,
-    title: str,
-    body: str,
-    template_path: Path | None = None,
-    cwd: Path | None = None,
-    squash_message_override: str | None = None,
-    squash_message_supplied: bool = False,
-) -> bool:
-    if title.strip():
-        check_squash_title(title, num)
-    else:
-        check_title_length(title, num)
-    obs = resolve_merge_state(
-        repo,
-        num,
-        fetch=fetch_merge_state,
-        unknown_tries=MERGE_STATE_TRIES,
-        unknown_interval=MERGE_STATE_INTERVAL,
-        cwd=cwd,
-    )
-    if obs.verdict != "clean":
-        if obs.verdict in ("conflicting", "unknown"):
-            report_merge_refusal(obs, repo, num, cwd=cwd)
-        print(f"refusing to merge: mergeable_state={obs.state} (not clean)", file=sys.stderr)
-        return False
-    header = f"{title} (#{num})"
-    merge_args: list[str] = [
-        "-f",
-        "merge_method=squash",
-        "-f",
-        f"commit_title={header}",
-    ]
-    try:
-        msg = resolve_squash_message(
-            body,
-            explicit=squash_message_override,
-            supplied=squash_message_supplied,
-            template_path=template_path,
-            require_explicit=True,
-        )
-    except RefusalError:
-        return False
-    try:
-        check_squash_body(
-            msg,
-            title=title,
-            pr_link=f"https://github.com/{repo}/pull/{num}",
-        )
-    except RefusalError:
-        return False
-    try:
-        msg = finalize_squash_message(repo, num, msg, cwd=cwd)
-    except RefusalError:
-        return False
-    merge_args.extend(["-f", f"commit_message={msg}"])
-
-    m_res = _github.run_command(
-        ["gh", "api", f"repos/{repo}/pulls/{num}/merge", "-X", "PUT", *merge_args],
-        cwd=cwd,
-    )
-    if m_res.returncode != 0:
-        print(f"merge failed: {m_res.stderr.strip() or 'gh api failed'}", file=sys.stderr)
-        return False
-    print(f"merged #{num} (squash) to {base}", file=sys.stderr)
-    return True
+from _github import merge_pr as merge_pr  # noqa: E402
+from _status import run_status as run_status  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -641,6 +564,10 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
     try:
         options = parse_args(argv)
+        if options.status:
+            # Read-only orientation first: derived state, advisory facts, always
+            # exit 0 — even when the head ref or repo slug cannot be resolved.
+            return run_status(options)
         head = resolve_head(options.head)
         title, body, title_supplied, body_supplied = resolve_title_and_body(options)
         squash_override, squash_supplied = resolve_squash_override(options)
@@ -658,6 +585,10 @@ def main(argv: list[str] | None = None) -> int:
             check_explicit_squash_message(squash_override or "")
             if not clean_squash_body(squash_override or "").strip():
                 raise UsageError("--squash-message is empty")
+            # The title gate runs before create_or_reuse_pr: a bad title refuses
+            # here (exit 1, facts attached) instead of after watch/merge work.
+            # merge_pr keeps its authoritative check against the real PR number.
+            preflight_title(title, derived=not title_supplied)
         repo = resolve_repo(head)
 
         if options.check:
@@ -689,7 +620,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"PR {url}")
 
         if not options.no_stamp:
-            _ = stamp_changelog(head, num)
+            if created and stamp_needed(num) and not stamp_changelog(head, num):
+                # The stamp had an entry to attribute and failed: hard-fail with
+                # the PR url and the remedy. The no-op and stranded-recovery paths
+                # below stay soft (T1): only a failed wanted stamp refuses.
+                raise RefusalError(
+                    f"changelog stamp failed for PR #{num} ({url}); "
+                    f"the ## [Unreleased] ledger carries no (#{num}) entry",
+                    refusals=[
+                        make_refusal(
+                            "stamp_failed",
+                            f"changelog stamp failed for PR #{num} ({url}); "
+                            f"the ## [Unreleased] ledger carries no (#{num}) entry",
+                            f"add an entry ending in (#{num}) under ## [Unreleased], "
+                            f"commit it to {head}, push, then re-run",
+                            "CHANGELOG.md",
+                        )
+                    ],
+                )
+            elif not created or not stamp_needed(num):
+                _ = stamp_changelog(head, num)
             if created and not unreleased_attributes_pr(num):
                 if _read_unreleased_block() is None:
                     print(
@@ -773,11 +723,22 @@ def main(argv: list[str] | None = None) -> int:
     except UsageError as e:
         print(f"{e}", file=sys.stderr)
         return 2
-    except RefusalError:
+    except RefusalError as exc:
+        if exc.refusals or exc.transitions:
+            print(
+                json.dumps(
+                    {"refusals": exc.refusals, "transitions": exc.transitions},
+                    indent=2,
+                ),
+                file=sys.stderr,
+            )
         return 1
     except CheckFailureError:
         return 1
     except PrError as e:
+        entry = pr_error_to_refusal(e)
+        if entry is not None:
+            print(json.dumps({"refusals": [entry], "transitions": []}, indent=2), file=sys.stderr)
         print(f"pr error: {e}", file=sys.stderr)
         return 1
 

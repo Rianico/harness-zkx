@@ -25,6 +25,7 @@ from _squash import (
     pr_co_author_trailers,
     resolve_squash_message,
 )
+from _status import title_gate as title_gate
 
 _LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
 if _LIB_DIR not in sys.path:
@@ -54,6 +55,7 @@ class CheckReport:
     body: str = ""
     authored_body: str = ""
     note: str = ""
+    reason: str = ""
 
 
 def check_trailers_report(
@@ -66,6 +68,7 @@ def check_trailers_report(
     cwd: Path | None = None,
     squash_message_override: str | None = None,
     squash_message_supplied: bool = False,
+    title_supplied: bool = False,
 ) -> CheckReport:
     """Run the --check merge gates and report the trailers a merge would append.
 
@@ -92,13 +95,23 @@ def check_trailers_report(
     if not found or found == "null":
         if not body_supplied:
             print(f"no open PR for head {head_ref}", file=sys.stderr)
-            return CheckReport(exit_code=2, note=f"no open PR for head {head_ref}")
+            return CheckReport(
+                exit_code=2,
+                note=f"no open PR for head {head_ref}",
+                reason=f"no open PR for head {head_ref}",
+            )
 
         if title:
-            try:
-                check_squash_title(title, 9999)
-            except RefusalError:
-                return CheckReport(exit_code=1, body=body, authored_body=body)
+            title_entry = title_gate(title, None, derived=not title_supplied)
+            if title_entry is not None:
+                print(f"refusing --check: {title_entry['reason']}", file=sys.stderr)
+                print(f"remediation: {title_entry['remedy']}", file=sys.stderr)
+                return CheckReport(
+                    exit_code=1,
+                    body=body,
+                    authored_body=body,
+                    reason=title_entry["reason"],
+                )
 
         try:
             resolved_msg = resolve_squash_message(
@@ -107,20 +120,20 @@ def check_trailers_report(
                 supplied=squash_message_supplied,
                 template_path=template_path,
             )
-        except RefusalError:
-            return CheckReport(exit_code=1, body=body, authored_body=body)
+        except RefusalError as exc:
+            return CheckReport(exit_code=1, body=body, authored_body=body, reason=str(exc))
 
         try:
             check_squash_body(resolved_msg, title=title)
-        except RefusalError:
-            return CheckReport(exit_code=1, body=resolved_msg, authored_body=body)
+        except RefusalError as exc:
+            return CheckReport(exit_code=1, body=resolved_msg, authored_body=body, reason=str(exc))
 
         try:
             base = resolve_base(None, repo, cwd=cwd)
             digest_range = _digest_range_spec(base, head_ref, cwd=cwd)
         except RefusalError as exc:
             print(f"{exc}", file=sys.stderr)
-            return CheckReport(exit_code=1, body=body, authored_body=body)
+            return CheckReport(exit_code=1, body=body, authored_body=body, reason=str(exc))
         except RangeRefusal:
             digest_range = None
         log_res: subprocess.CompletedProcess[str] | None = None
@@ -163,8 +176,10 @@ def check_trailers_report(
             check_squash_title(title, num)
         else:
             check_title_length(title, num)
-    except RefusalError:
-        return CheckReport(exit_code=1, pr_number=num, pr_url=url, authored_body=body)
+    except RefusalError as exc:
+        return CheckReport(
+            exit_code=1, pr_number=num, pr_url=url, authored_body=body, reason=str(exc)
+        )
 
     if not body_supplied:
         body_res = _github.run_command(
@@ -184,8 +199,15 @@ def check_trailers_report(
             supplied=squash_message_supplied,
             template_path=template_path,
         )
-    except RefusalError:
-        return CheckReport(exit_code=1, pr_number=num, pr_url=url, body=body, authored_body=body)
+    except RefusalError as exc:
+        return CheckReport(
+            exit_code=1,
+            pr_number=num,
+            pr_url=url,
+            body=body,
+            authored_body=body,
+            reason=str(exc),
+        )
 
     try:
         check_squash_body(
@@ -193,9 +215,14 @@ def check_trailers_report(
             title=title,
             pr_link=f"https://github.com/{repo}/pull/{num}",
         )
-    except RefusalError:
+    except RefusalError as exc:
         return CheckReport(
-            exit_code=1, pr_number=num, pr_url=url, body=resolved_msg, authored_body=body
+            exit_code=1,
+            pr_number=num,
+            pr_url=url,
+            body=resolved_msg,
+            authored_body=body,
+            reason=str(exc),
         )
 
     merger_res = _github.run_command(
@@ -224,15 +251,25 @@ def check_trailers_report(
             file=sys.stderr,
         )
         return CheckReport(
-            exit_code=1, pr_number=num, pr_url=url, body=resolved_msg, authored_body=body
+            exit_code=1,
+            pr_number=num,
+            pr_url=url,
+            body=resolved_msg,
+            authored_body=body,
+            reason=f"could not enumerate PR #{num} commit authors (check network / GH_TOKEN scopes)",
         )
     tsv = tsv_res.stdout
 
     try:
         _ = build_squash_message(resolved_msg, merger, tsv)
-    except RefusalError:
+    except RefusalError as exc:
         return CheckReport(
-            exit_code=1, pr_number=num, pr_url=url, body=resolved_msg, authored_body=body
+            exit_code=1,
+            pr_number=num,
+            pr_url=url,
+            body=resolved_msg,
+            authored_body=body,
+            reason=str(exc),
         )
 
     new_trailers = pr_co_author_trailers(tsv, merger=merger, body=resolved_msg)
@@ -258,6 +295,7 @@ def check_trailers(
     cwd: Path | None = None,
     squash_message_override: str | None = None,
     squash_message_supplied: bool = False,
+    title_supplied: bool = False,
 ) -> int:
     """Backward-compatible --check gate: report the result, print trailers to stdout."""
     report = check_trailers_report(
@@ -270,6 +308,7 @@ def check_trailers(
         cwd=cwd,
         squash_message_override=squash_message_override,
         squash_message_supplied=squash_message_supplied,
+        title_supplied=title_supplied,
     )
     if report.exit_code == 0:
         if report.trailers.strip():

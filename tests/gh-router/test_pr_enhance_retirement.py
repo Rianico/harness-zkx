@@ -115,32 +115,33 @@ def test_no_analyser_as_change_fact_source_in_docs() -> None:
     assert not offenders, "\n".join(offenders)
 
 
-def _draft_out_dir() -> str:
-    """`pr.py --check`'s default `--out-dir` (the draft phase's write path), read from source.
+def _artifact_prefix() -> str:
+    """`pr.py --check`'s tool-owned scaffold prefix, read from the `_status` sibling.
 
-    The constant lives in the `_draft` sibling module, not in the entry script, since the
-    pr-land split. Reading `pr.py` for it would find nothing, so the assignment is asserted
-    to exist (`assert found`) rather than silently falling through as `None`.
+    ADR-0021 moved the scaffold leaf under `.lsz/gh-router/` with the head-ref
+    slug as the default leaf; pr-enhance drafts into the same prefix.
     """
-    source = DRAFT_MODULE.read_text(encoding="utf-8")
+    source = (PR_LAND_SCRIPTS / "_status.py").read_text(encoding="utf-8")
     found = False
     value: ast.expr | None = None
     for node in ast.parse(source).body:
         if not (isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)):
             continue
-        if node.targets[0].id != "DRAFT_OUT_DIR":
+        if node.targets[0].id != "ARTIFACT_PREFIX":
             continue
         value = node.value
         found = True
-    assert found, f"{DRAFT_MODULE.name} no longer defines DRAFT_OUT_DIR"
+    assert found, "_status.py no longer defines ARTIFACT_PREFIX"
     assert isinstance(value, ast.BinOp) and isinstance(value.op, ast.Div)
     assert isinstance(value.left, ast.Call)
     return f"{ast.literal_eval(value.left.args[0])}/{ast.literal_eval(value.right)}"
 
 
 def test_pr_enhance_drafts_the_body_where_pr_check_writes_it() -> None:
-    """The drafted body and `pr.py --check`'s output are one file, not two same-named ones."""
-    drafted = f"{_draft_out_dir()}/pr_body.md"
+    """The drafted body and `pr.py --check`'s scaffold leaf share the tool-owned prefix."""
+    prefix = _artifact_prefix()
+    assert prefix == ".lsz/gh-router"
     text = PR_ENHANCE_SKILL.read_text(encoding="utf-8")
-    assert drafted in text, f"pr-enhance must draft into {drafted}"
-    assert "`tmp/pr_body.md`" not in text, "a bare tmp/pr_body.md names the file nobody reads"
+    assert f"`{prefix}/<slug>.md`" in text, "pr-enhance must draft into the scaffold prefix"
+    assert "`.lsz/tmp/pr_body.md`" not in text, "the fixed tmp path names the file nobody reads"
+    assert "--out-dir" not in text

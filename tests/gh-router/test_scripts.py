@@ -43,7 +43,7 @@ def test_help_is_brief_and_does_not_need_the_network() -> None:
         result = subprocess.run(["bash", str(script), "--help"], capture_output=True, text=True)
         assert result.returncode == 0, f"{script} --help failed: {result.stderr}"
         assert "Usage:" in result.stdout, f"{script} --help does not print a Usage line"
-        assert len(result.stdout.splitlines()) <= 14, f"{script} --help is not brief"
+        assert len(result.stdout.splitlines()) <= 16, f"{script} --help is not brief"
 
 
 def test_changelog_sync_dry_run_decides_without_mutating() -> None:

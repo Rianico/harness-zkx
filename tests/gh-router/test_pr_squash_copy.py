@@ -72,7 +72,7 @@ def _template_shaped_body() -> str:
         ),
         "**Breaking changes:**": "**Breaking changes:** none; the two flags stay additive",
         "**Data / state invariants:**": (
-            "**Data / state invariants:** draft.json keeps its published shape"
+            "**Data / state invariants:** `--status` derives landing state; nothing is stored"
         ),
         "**Rollback / containment:**": ("**Rollback / containment:** revert the squash commit"),
         "**Before (command + output):**": "**Before (command + output):** 3 failed -> 0 passed",
@@ -460,8 +460,9 @@ def _refusals(stderr: str) -> list[str]:
     return [line for line in stderr.splitlines() if line.startswith("refusing squash message:")]
 
 
-def _draft(repo: Path) -> dict[str, Any]:
-    return json.loads((repo / ".lsz" / "tmp" / "draft.json").read_text(encoding="utf-8"))
+def _preview_payload(stdout: str) -> dict[str, Any]:
+    """Parse a `--check --json` report."""
+    return json.loads(stdout)
 
 
 def test_check_gates_inline_and_file_on_the_copy_refusal(tmp_path: Path) -> None:
@@ -487,7 +488,8 @@ def test_check_gates_inline_and_file_on_the_copy_refusal(tmp_path: Path) -> None
     assert from_file.returncode == 1, from_file.stderr
     assert "mechanic copy" in inline.stderr
     assert _refusals(inline.stderr) == _refusals(from_file.stderr)
-    assert _draft(repo)["status"] == "refused"
+    assert '"code": "gate_refused"' in inline.stderr
+    assert '"code": "gate_refused"' in from_file.stderr
 
 
 def test_check_gates_inline_and_file_on_the_shape_refusal(tmp_path: Path) -> None:
@@ -539,12 +541,11 @@ def test_check_preview_path_still_strips_mermaid_and_checkboxes(tmp_path: Path) 
     r = _run_check(repo, env, "--body-file", str(body_file))
 
     assert r.returncode == 0, r.stderr
-    assert len(r.stdout.splitlines()) == 5, r.stdout
-    squash_body = str(_draft(repo)["squash_body"])
-    assert "mermaid" not in squash_body
-    assert "flowchart" not in squash_body
-    assert "[x]" not in squash_body
-    assert "real change" in squash_body
+    assert "squash_body_preview:" in r.stdout
+    assert "mermaid" not in r.stdout
+    assert "flowchart" not in r.stdout
+    assert "[x]" not in r.stdout
+    assert "real change" in r.stdout
 
 
 def test_merge_path_refuses_a_body_copied_into_the_squash_slot(
@@ -787,9 +788,14 @@ def test_squash_message_file_bom_is_stripped(tmp_path: Path) -> None:
     r = _run_check(repo, env, "--body-file", str(body_file), "--squash-message-file", str(msg_file))
 
     assert r.returncode == 0, r.stderr
-    squash = str(_draft(repo)["squash_body"])
+    probe = _run_check(
+        repo, env, "--body-file", str(body_file), "--squash-message-file", str(msg_file), "--json"
+    )
+    assert probe.returncode == 0, probe.stderr
+    squash = str(_preview_payload(probe.stdout)["squash_body_preview"])
     assert squash.startswith("## Summary")
     assert "\ufeff" not in squash
+    assert "\ufeff" not in r.stdout
 
 
 def test_merge_main_guard_refuses_copy_before_any_gh_call(tmp_path: Path) -> None:
@@ -833,8 +839,7 @@ def test_check_preview_end_to_end_strips_a_tilde_mermaid_fence(tmp_path: Path) -
     r = _run_check(repo, env, "--body-file", str(body_file))
 
     assert r.returncode == 0, r.stderr
-    assert len(r.stdout.splitlines()) == 5
-    squash = str(_draft(repo)["squash_body"])
-    assert "mermaid" not in squash
-    assert "graph TD" not in squash
-    assert "real change" in squash
+    assert "squash_body_preview:" in r.stdout
+    assert "mermaid" not in r.stdout
+    assert "graph TD" not in r.stdout
+    assert "real change" in r.stdout

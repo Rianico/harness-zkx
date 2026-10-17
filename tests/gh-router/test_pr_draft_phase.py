@@ -1,16 +1,16 @@
-"""Draft phase of `pr.py --check`: draft.json + pr_body.md, small stdout.
+"""`pr.py --check`: gates plus facts on stdout, scaffold leaf only when apt.
 
-The range authority is the fact source: the draft carries one capped row per
-landed commit (15 lines plus a full SHA pointer), the pre-PR fields stay null,
-and the full text lives on disk only. Every --check run emits both files, even a
-refused one, and stdout stays down to counts, the two paths, and one hint.
+State is derived, never stored: a with-body `--check` writes nothing and
+reports counts, title facts, and the squash preview; a body-less `--check`
+writes the scaffold leaf under `.lsz/gh-router/` only when absent (present
+means write nothing and report path + `stale`; `--force-scaffold` overwrites;
+`--out` names another leaf). `draft.json` is never written on any path.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -89,7 +89,11 @@ def _run_check(repo: Path, env: dict[str, str], *extra: str) -> subprocess.Compl
     )
 
 
-def test_default_out_dir_emits_capped_commits_and_null_pr_fields(tmp_path: Path) -> None:
+def _leaf(repo: Path) -> Path:
+    return repo / ".lsz" / "gh-router" / "feat-draft.md"
+
+
+def test_check_with_body_reports_facts_and_writes_nothing(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
@@ -99,49 +103,17 @@ def test_default_out_dir_emits_capped_commits_and_null_pr_fields(tmp_path: Path)
     r = _run_check(repo, env, "--body-file", str(body_file))
 
     assert r.returncode == 0, r.stderr
-    draft_path = repo / ".lsz" / "tmp" / "draft.json"
-    body_path = repo / ".lsz" / "tmp" / "pr_body.md"
-    assert draft_path.is_file(), "the default out-dir is <repo-root>/.lsz/tmp"
-    assert body_path.is_file()
-
-    draft: dict[str, Any] = json.loads(draft_path.read_text(encoding="utf-8"))
-    assert draft["pr_number"] is None
-    assert draft["pr_url"] is None
-    assert draft["base"] == "main"
-    assert draft["counts"]["commits"] == 2
-
-    commits = draft["commits"]
-    assert [commit["subject"] for commit in commits] == ["feat: one", "feat: two"]
-    for commit in commits:
-        assert re.fullmatch(r"[0-9a-f]{40}", commit["sha"]), commit["sha"]
-        assert commit["sha"].startswith(commit["short_sha"])
-        assert commit["body_lines"] <= 15
-
-    long_commit = commits[1]
-    assert long_commit["body_lines"] == 15
-    assert long_commit["body_omitted_lines"] == LONG_BODY_LINES - 15
-    assert "body-line-15" in long_commit["body"]
-    assert "body-line-16" not in long_commit["body"]
-
-    body_text = body_path.read_text(encoding="utf-8")
-    assert "curated landing body" in body_text
-    assert "Co-authored-by: Draft Synthetic <draft@x.io>" in body_text
-
-    # stdout stays small: counts, the two paths, one hint — never the full text.
+    assert not (repo / ".lsz").exists(), "a with-body --check persists nothing"
     assert "commits: 2" in r.stdout
     assert "trailers: 1" in r.stdout
-    assert str(draft_path) in r.stdout
-    assert str(body_path) in r.stdout
-    assert r.stdout.count("hint:") == 1
-    assert "body-line-" not in r.stdout
-    assert "curated landing body" not in r.stdout
-    assert "Co-authored-by" not in r.stdout
+    assert "title (derived): 'feat: two' 9/100 chars" in r.stdout
+    assert "squash_body_preview:" in r.stdout
+    assert "curated landing body" in r.stdout
+    assert "hint:" in r.stdout
 
 
-def test_pr_body_keeps_the_authored_rendering_while_squash_body_is_cleaned(
-    tmp_path: Path,
-) -> None:
-    """`pr_body.md` is the authored description; `draft.json` carries the cleaned squash text."""
+def test_check_preview_strips_mermaid_and_details(tmp_path: Path) -> None:
+    """The stdout preview is the cleaned squash text, not the authored rendering."""
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
@@ -156,38 +128,14 @@ def test_pr_body_keeps_the_authored_rendering_while_squash_body_is_cleaned(
     r = _run_check(repo, env, "--body-file", str(body_file))
 
     assert r.returncode == 0, r.stderr
-    draft: dict[str, Any] = json.loads(
-        (repo / ".lsz" / "tmp" / "draft.json").read_text(encoding="utf-8")
-    )
-    squash_body = str(draft["squash_body"])
-    assert "mermaid" not in squash_body
-    assert "flowchart" not in squash_body
-    assert "<details>" not in squash_body
-
-    body_text = (repo / ".lsz" / "tmp" / "pr_body.md").read_text(encoding="utf-8")
-    assert "```mermaid" in body_text
-    assert "flowchart LR" in body_text
-    assert "<details>" in body_text
-    assert "real change" in body_text
-
-
-def test_out_dir_creates_parents_and_leaves_the_default_untouched(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    _make_repo(repo)
-    env = _gh_env(tmp_path)
-    out_dir = tmp_path / "nested" / "deep" / "drafts"
-    assert not out_dir.exists()
-
-    r = _run_check(repo, env, "--body", "## Summary\nbody\n", "--out-dir", str(out_dir))
-
-    assert r.returncode == 0, r.stderr
-    assert (out_dir / "draft.json").is_file()
-    assert (out_dir / "pr_body.md").is_file()
     assert not (repo / ".lsz").exists()
-    assert str(out_dir / "draft.json") in r.stdout
+    assert "```mermaid" not in r.stdout
+    assert "flowchart LR" not in r.stdout
+    assert "<details>" not in r.stdout
+    assert "real change" in r.stdout
 
 
-def test_pre_pr_without_body_still_emits_files_and_refuses(tmp_path: Path) -> None:
+def test_body_less_check_writes_scaffold_leaf_when_absent(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
@@ -195,25 +143,84 @@ def test_pre_pr_without_body_still_emits_files_and_refuses(tmp_path: Path) -> No
     r = _run_check(repo, env)
 
     assert r.returncode == 2
-    assert "no open PR for head feat-draft" in r.stderr
-    draft_path = repo / ".lsz" / "tmp" / "draft.json"
-    assert draft_path.is_file()
-    assert (repo / ".lsz" / "tmp" / "pr_body.md").is_file()
-    draft: dict[str, Any] = json.loads(draft_path.read_text(encoding="utf-8"))
-    assert draft["pr_number"] is None
-    assert draft["pr_url"] is None
-    assert draft["status"] == "refused"
-    assert draft["exit_code"] == 2
-    assert draft["commits"], "range facts are emitted even without an authored body"
+    leaf = _leaf(repo)
+    assert leaf.is_file(), "the default leaf is branch-scoped under .lsz/gh-router/"
+    assert not (repo / ".lsz" / "gh-router" / "draft.json").exists()
+    assert list((repo / ".lsz").rglob("draft.json")) == []
+    text = leaf.read_text(encoding="utf-8")
+    assert text.startswith("<!-- pr-land scaffold: head=")
+    assert "<FILL:" in text
+    # Facts on stdout: counts, the path, the hint, and the scaffold payload.
+    assert "commits: 2" in r.stdout
+    assert f"body: {leaf.relative_to(repo)}" in r.stdout
+    assert "hint:" in r.stdout
+    assert "<FILL:" in r.stdout
 
 
-def test_missing_out_dir_argument_is_a_usage_error(tmp_path: Path) -> None:
+def test_body_less_check_present_leaf_writes_nothing_and_reports_stale(
+    tmp_path: Path,
+) -> None:
+    """Absent leaf writes; present leaf is untouched with `stale` reported."""
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    first = _run_check(repo, env)
+    assert first.returncode == 2
+    leaf = _leaf(repo)
+    written = leaf.read_text(encoding="utf-8")
+
+    second = _run_check(repo, env)
+
+    assert second.returncode == 2
+    assert leaf.read_text(encoding="utf-8") == written, "a present leaf is never rewritten"
+    assert "stale: false" in second.stdout, "marker matches HEAD, so the leaf is fresh"
+    assert f"body: {leaf.relative_to(repo)}" in second.stdout
+
+    _ = leaf.write_text("## Summary\nhand-authored, no marker\n", encoding="utf-8")
+    third = _run_check(repo, env)
+
+    assert third.returncode == 2
+    assert leaf.read_text(encoding="utf-8") == "## Summary\nhand-authored, no marker\n"
+    assert "stale: true" in third.stdout
+
+
+def test_force_scaffold_overwrites_present_leaf(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    leaf = _leaf(repo)
+    _ = leaf.parent.mkdir(parents=True, exist_ok=True)
+    _ = leaf.write_text("## Summary\nhand-authored\n", encoding="utf-8")
+
+    r = _run_check(repo, env, "--force-scaffold")
+
+    assert r.returncode == 2
+    text = leaf.read_text(encoding="utf-8")
+    assert text.startswith("<!-- pr-land scaffold: head=")
+    assert "<FILL:" in text
+
+
+def test_out_names_leaf_under_tool_prefix(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+
+    r = _run_check(repo, env, "--out", "custom/leaf.md")
+
+    assert r.returncode == 2
+    target = repo / ".lsz" / "gh-router" / "custom" / "leaf.md"
+    assert target.is_file(), "missing parents are created under the prefix"
+    assert not _leaf(repo).exists(), "the default leaf stays untouched"
+    assert f"body: {target.relative_to(repo)}" in r.stdout
+
+
+def test_missing_out_argument_is_a_usage_error(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
 
     r = subprocess.run(
-        [sys.executable, str(PR_PY), "--check", "--out-dir"],
+        [sys.executable, str(PR_PY), "--check", "--out"],
         capture_output=True,
         text=True,
         env=env,
@@ -221,7 +228,25 @@ def test_missing_out_dir_argument_is_a_usage_error(tmp_path: Path) -> None:
     )
 
     assert r.returncode == 2
-    assert "missing argument for --out-dir" in r.stderr
+    assert "missing argument for --out" in r.stderr
+
+
+def test_out_dir_flag_is_rejected(tmp_path: Path) -> None:
+    """`--out-dir` died with `draft.json`: the CLI refuses it as unknown."""
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+
+    r = subprocess.run(
+        [sys.executable, str(PR_PY), "--check", "--out-dir", "tmp/drafts"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+    )
+
+    assert r.returncode == 2
+    assert "unknown arg: --out-dir" in r.stderr
 
 
 def test_title_follows_head_not_cwd(tmp_path: Path) -> None:
@@ -233,13 +258,13 @@ def test_title_follows_head_not_cwd(tmp_path: Path) -> None:
     body_file = tmp_path / "pr_body.md"
     _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
 
-    r = _run_check(repo, env, "--body-file", str(body_file))
+    r = _run_check(repo, env, "--body-file", str(body_file), "--json")
 
     assert r.returncode == 0, r.stderr
-    draft: dict[str, Any] = json.loads(
-        (repo / ".lsz" / "tmp" / "draft.json").read_text(encoding="utf-8")
-    )
-    assert draft["title"] == "feat: two"
+    payload: dict[str, Any] = json.loads(r.stdout)
+    assert payload["title"]["text"] == "feat: two"
+    assert payload["title"]["derived"] is True
+    assert payload["title"]["budget"] == 100
 
 
 def test_empty_range_warns_the_title_is_a_guess(tmp_path: Path) -> None:
@@ -254,35 +279,6 @@ def test_empty_range_warns_the_title_is_a_guess(tmp_path: Path) -> None:
     r = _run_check(repo, env, "--body-file", str(body_file), "--head", "empty")
     assert "no unique commits" in r.stderr
     assert "--title" in r.stderr
-
-
-def test_dirty_block_reports_uncommitted_work(tmp_path: Path) -> None:
-    """draft.json names working-tree dirt; the fingerprint stays commit-only."""
-    repo = tmp_path / "repo"
-    _make_repo(repo)
-    env = _gh_env(tmp_path)
-    body_file = tmp_path / "pr_body.md"
-    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
-
-    r = _run_check(repo, env, "--body-file", str(body_file))
-    assert r.returncode == 0, r.stderr
-    clean: dict[str, Any] = json.loads(
-        (repo / ".lsz" / "tmp" / "draft.json").read_text(encoding="utf-8")
-    )
-    assert clean["dirty"] == {"porcelain": [], "diff_stat": []}
-    assert clean["counts"]["dirty_files"] == 0
-
-    _ = (repo / "one.txt").write_text("one edited\n", encoding="utf-8")
-    _ = (repo / "untracked.txt").write_text("new\n", encoding="utf-8")
-    r = _run_check(repo, env, "--body-file", str(body_file))
-    assert r.returncode == 0, r.stderr
-    draft: dict[str, Any] = json.loads(
-        (repo / ".lsz" / "tmp" / "draft.json").read_text(encoding="utf-8")
-    )
-    porcelain = draft["dirty"]["porcelain"]
-    assert any("one.txt" in row for row in porcelain)
-    assert any("untracked.txt" in row for row in porcelain)
-    assert draft["counts"]["dirty_files"] == len(porcelain)
 
 
 def test_hint_carries_the_curation_spec(tmp_path: Path) -> None:
@@ -325,14 +321,12 @@ def test_hint_splits_body_template_duty_from_squash_overview(tmp_path: Path) -> 
     assert "curate pr_body.md to <=5 bullets" not in r.stdout
 
 
-def test_check_merge_writes_the_draft_instead_of_refusing(
-    tmp_path: Path,
-) -> None:
-    """`--check --merge` keeps the read-only draft preflight: both files land and it exits 0
+def test_check_merge_keeps_read_only_preflight(tmp_path: Path) -> None:
+    """`--check --merge` keeps the read-only preflight: nothing lands and it exits 0
     without requiring --squash-message (the `--check` gate wins over the merge-only gate).
 
     Mutation: restore the guard `options.merge and not squash_supplied` (drop `not options.check`)
-    -> exit 1, both files absent (asserts fail).
+    -> exit 1 (asserts fail).
     """
     repo = tmp_path / "repo"
     _make_repo(repo)
@@ -343,10 +337,42 @@ def test_check_merge_writes_the_draft_instead_of_refusing(
     r = _run_check(repo, env, "--body-file", str(body_file), "--merge")
 
     assert r.returncode == 0, r.stderr
-    assert (repo / ".lsz" / "tmp" / "draft.json").is_file()
-    assert (repo / ".lsz" / "tmp" / "pr_body.md").is_file()
+    assert not (repo / ".lsz").exists(), "--check persists nothing, even with --merge"
     assert "hint:" in r.stdout
     assert "requires an explicit squash commit message" not in r.stderr
+
+
+def test_check_json_carries_refusals_and_title_facts(tmp_path: Path) -> None:
+    """Body-less `--check --json`: exit 2 with the `body_missing` refusal as data."""
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+
+    r = _run_check(repo, env, "--json")
+
+    assert r.returncode == 2
+    payload: dict[str, Any] = json.loads(r.stdout)
+    assert payload["schema"] == "gh-router/pr-land/check@1"
+    assert payload["exit_code"] == 2
+    assert payload["title"]["derived"] is True
+    assert payload["artifact"]["path"] == ".lsz/gh-router/feat-draft.md"
+    assert payload["refusals"][0]["code"] == "body_missing"
+    assert payload["refusals"][0]["site"] == ".lsz/gh-router/feat-draft.md"
+    assert payload["scaffold_written"] is True
+    assert "<FILL:" in payload["scaffold"]
+
+
+def test_no_draft_json_on_any_path(tmp_path: Path) -> None:
+    """Deletion proof at the CLI surface: neither gate outcome writes `draft.json`."""
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+
+    assert _run_check(repo, env, "--body-file", str(body_file)).returncode == 0
+    assert _run_check(repo, env).returncode == 2
+    assert list((repo).rglob("draft.json")) == []
 
 
 def test_merge_empty_squash_message_file_exits_2_before_any_gh_call(tmp_path: Path) -> None:

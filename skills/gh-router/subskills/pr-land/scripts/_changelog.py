@@ -24,6 +24,7 @@ __all__ = [
     "_read_unreleased_block",
     "_unreleased_attribution_re",
     "stamp_changelog",
+    "stamp_needed",
     "unreleased_attributes_pr",
 ]
 
@@ -95,9 +96,54 @@ def unreleased_attributes_pr(pr_num: str, cwd: Path | None = None) -> bool:
     return False
 
 
+def stamp_needed(pr_num: str, cwd: Path | None = None) -> bool:
+    """True when the ledger holds an entry the stamp would attribute to this PR.
+
+    The stamp's fail/hard-fail contract needs want-vs-outcome: a stamp that had
+    nothing to attribute is a no-op (soft), while a stamp that tried and failed
+    hard-fails after PR creation. Mirrors `stamp_changelog`'s bullet walk — an
+    already-attributed block and baseline entries never count — without writing.
+    """
+    block = _read_unreleased_block(cwd)
+    if block is None or f"(#{pr_num})" in block:
+        return False
+    root = cwd or Path.cwd()
+    baseline_path = root / ".config" / "changelog-unattributed-baseline.txt"
+    baseline: set[str] = set()
+    if baseline_path.is_file():
+        try:
+            baseline = {
+                line.strip()
+                for line in baseline_path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")
+            }
+        except OSError:
+            baseline = set()
+    any_attribution_re = re.compile(r"\(#\d+\)(?:\s*\(BREAKING CHANGE\))?\s*$")
+    bullet_re = re.compile(r"^([*+-]\s+)(.+)$")
+    for line in block.splitlines():
+        raw_line = line.rstrip("\r\n")
+        matched = bullet_re.match(raw_line)
+        if not matched:
+            continue
+        if any_attribution_re.search(matched.group(2)):
+            continue
+        identity = raw_line.strip()
+        if identity[:1] in "*+-":
+            identity = identity[1:].strip()
+        while True:
+            trimmed = re.sub(r"\s*\(#\d+\)\s*$|\s*\(BREAKING CHANGE\)\s*$", "", identity).rstrip()
+            if trimmed == identity:
+                break
+            identity = trimmed
+        if identity in baseline:
+            continue
+        return True
+    return False
+
+
 def _push_stranded_stamp(head_ref: str, pr_num: str, cwd: Path | None = None) -> bool:
     """Push the stranded stamp commit for an already-attributed entry.
-
     Returns True when a push repaired the remote, False when the branch is already
     in sync or the push failed (warning on stderr, the same soft failure as the
     stamp's own push). Never commits, never rewrites CHANGELOG.md, never force-pushes.

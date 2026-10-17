@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import subprocess
 import sys
@@ -23,6 +22,7 @@ if str(PR_SCRIPTS) not in sys.path:
 
 import _draft as _draft_mod  # noqa: E402
 import _github as github_mod  # noqa: E402
+import _status as _status_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
 
 # From `_github`, not `pr`: the `pr` re-export is early-bound, so patching the seam would not
@@ -1344,7 +1344,8 @@ sys.exit(rc)
         cwd=repo,
     )
     assert res4.returncode == 1
-    assert "commit title exceeds 100 chars" in res4.stderr
+    assert "exceeds the 100-char budget" in res4.stderr
+    assert "shorten the PR title" in res4.stderr
 
     # Case 5: no base candidates at all -> loud refusal, exit 1, never a lone author.
     bare = tmp_path / "no-base-repo"
@@ -1896,6 +1897,11 @@ def test_ready_flip_warns_when_unreleased_carries_no_entry_for_pr(
         return False
 
     monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp)
+
+    def _nothing_to_stamp(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_needed", _nothing_to_stamp)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -1947,6 +1953,11 @@ def test_draft_flag_prints_milder_note_when_unattributed(
         return False
 
     monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp_draft)
+
+    def _nothing_to_stamp(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_needed", _nothing_to_stamp)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args("--draft"))
@@ -2084,6 +2095,11 @@ def test_loose_bullet_without_section_is_unattributed(
         return False
 
     monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp)
+
+    def _nothing_to_stamp(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_needed", _nothing_to_stamp)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -2145,6 +2161,11 @@ def test_absent_unreleased_block_warns_naming_missing_section(
         return False
 
     monkeypatch.setattr(pr_mod, "stamp_changelog", _no_stamp)
+
+    def _nothing_to_stamp(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(pr_mod, "stamp_needed", _nothing_to_stamp)
     monkeypatch.chdir(tmp_path)
 
     rc = pr_mod.main(_main_args())
@@ -2273,15 +2294,24 @@ def _run_scaffold_check(
 
 
 def _scaffold_body_path(repo: Path) -> Path:
-    return repo / ".lsz" / "tmp" / "pr_body.md"
+    return repo / ".lsz" / "gh-router" / "feat-draft.md"
 
 
-def _assert_valid_signature(text: str) -> None:
-    first, sep, rest = text.partition("\n")
-    assert sep, "the scaffold top line must end in a newline"
-    assert first.startswith("<!-- draft: scaffold sha256="), first
-    digest = first[len("<!-- draft: scaffold sha256=") : -len(" -->")]
-    assert digest == hashlib.sha256(rest.encode("utf-8")).hexdigest()
+def _head_sha(repo: Path) -> str:
+    out = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=git_env(),
+    )
+    return out.stdout.strip()
+
+
+def _assert_scaffold_marker(text: str, head_sha: str) -> None:
+    first, sep, _ = text.partition("\n")
+    assert sep, "the scaffold marker line must end in a newline"
+    assert first == f"<!-- pr-land scaffold: head={head_sha} -->", first
 
 
 def test_scaffold_written_with_valid_hash_and_facts_on_bodyless_check(tmp_path: Path) -> None:
@@ -2294,7 +2324,7 @@ def test_scaffold_written_with_valid_hash_and_facts_on_bodyless_check(tmp_path: 
 
     assert r.returncode == 2, r.stderr
     text = _scaffold_body_path(repo).read_text(encoding="utf-8")
-    _assert_valid_signature(text)
+    _assert_scaffold_marker(text, _head_sha(repo))
     assert "<!-- Range: 2 commits, +3/-0 across 2 files -->" in text
     assert "**Door:** <FILL: one-way | two-way>" in text
     assert "**Door:** one-way / two-way" not in text
@@ -2303,13 +2333,13 @@ def test_scaffold_written_with_valid_hash_and_facts_on_bodyless_check(tmp_path: 
     assert "Root Cause: keep only for a fix" in text
     assert "scaffold:" in r.stderr
 
-    mutation_text = text.replace("Closes #12", "Closes #13")
-    assert not pr_mod.is_untouched_scaffold(mutation_text)
+    assert not _status_mod.artifact_stale(_scaffold_body_path(repo), _head_sha(repo))
+    assert _status_mod.artifact_stale(_scaffold_body_path(repo), "0" * 40)
 
 
 def test_scaffold_preserved_byte_for_byte_after_hand_edit(tmp_path: Path) -> None:
-    """(2) A second --check must not clobber an edited scaffold: the signature mismatch means
-    the author owns the file now, and it round-trips verbatim."""
+    """(2) A second --check writes nothing over a present leaf: the file round-trips
+    verbatim and `stale` is reported against the head commit."""
     repo = _make_scaffold_repo(tmp_path)
     env = _scaffold_env(tmp_path)
     _ = _run_scaffold_check(repo, env)
@@ -2323,11 +2353,12 @@ def test_scaffold_preserved_byte_for_byte_after_hand_edit(tmp_path: Path) -> Non
 
     assert r.returncode == 2, r.stderr
     assert body.read_text(encoding="utf-8") == edited
+    assert "stale: false" in r.stdout, "the marker survives a Door-only edit, so the leaf is fresh"
     assert "scaffold:" not in r.stderr, "the advisory prints only when a scaffold is written"
 
 
 def test_force_scaffold_regenerates_over_hand_edit(tmp_path: Path) -> None:
-    """(3) --force-scaffold overwrites even an edited file, re-signing the fresh scaffold."""
+    """(3) --force-scaffold overwrites even an edited file with a freshly marked scaffold."""
     repo = _make_scaffold_repo(tmp_path)
     env = _scaffold_env(tmp_path)
     _ = _run_scaffold_check(repo, env)
@@ -2338,7 +2369,7 @@ def test_force_scaffold_regenerates_over_hand_edit(tmp_path: Path) -> None:
 
     assert r.returncode == 2, r.stderr
     text = body.read_text(encoding="utf-8")
-    _assert_valid_signature(text)
+    _assert_scaffold_marker(text, _head_sha(repo))
     assert "hand written" not in text
 
 
@@ -2421,9 +2452,9 @@ def test_scaffold_sentinel_explicit_squash_message_is_refused() -> None:
     assert "**Door:** two-way" in ok
 
 
-def test_scaffold_closes_detection_and_signature_roundtrip() -> None:
-    """(6) Pure units: closes prefers commit trailers then the branch number; the signature
-    round-trips and any byte change (or its absence) is detected; a template-less scaffold
+def test_scaffold_closes_detection_and_signature_roundtrip(tmp_path: Path) -> None:
+    """(6) Pure units: closes prefers commit trailers then the branch number; the marker
+    names the head commit and `stale` flips on mismatch; a template-less scaffold
     still places the FILL door under Blast Radius."""
     assert _draft_mod._scaffold_closes("feat/260-x", [{"body": ""}]) == ["Closes #260"]
     assert _draft_mod._scaffold_closes("feat-draft", [{"body": "Closes #12"}]) == ["Closes #12"]
@@ -2435,10 +2466,13 @@ def test_scaffold_closes_detection_and_signature_roundtrip() -> None:
         commits=[],
         range_resolution=None,
         template_text=_draft_mod.DRAFT_BODY_PLACEHOLDER,
+        head_sha="abc123",
     )
-    assert _draft_mod.is_untouched_scaffold(scaffold)
-    assert not _draft_mod.is_untouched_scaffold(scaffold + "extra\n")
-    assert not _draft_mod.is_untouched_scaffold("## Summary\nno signature\n")
+    assert scaffold.startswith("<!-- pr-land scaffold: head=abc123 -->\n")
+    probe = tmp_path / "probe.md"
+    _ = probe.write_text(scaffold, encoding="utf-8")
+    assert not _status_mod.artifact_stale(probe, "abc123")
+    assert _status_mod.artifact_stale(probe, "0" * 40)
     assert "**Door:** <FILL: one-way | two-way>" in scaffold
     assert "<!-- Closes #<FILL: issue number or delete> -->" in scaffold
 

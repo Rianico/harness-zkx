@@ -501,10 +501,10 @@ def test_verbose_flag_is_off_by_default_and_parsed() -> None:
 def test_help_stays_within_the_line_budget_and_names_verbose(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Adding `--verbose` must not push `--help` past its 14-line budget."""
+    """`--help` stays brief: 16 lines covering the flag surface (ADR-0021 added --status/--out)."""
     pr_mod.print_usage()
     lines = capsys.readouterr().out.splitlines()
-    assert len(lines) <= 14
+    assert len(lines) <= 16
     assert any("--verbose" in line for line in lines)
 
 

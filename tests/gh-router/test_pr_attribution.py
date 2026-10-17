@@ -7,14 +7,12 @@ PUT's commit_message to $CAPTURE. Pure functions are driven via pr.py directly.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import stat
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -406,8 +404,6 @@ def run_check(
             "feat-x",
             "--title",
             "feat(gh-router): draft phase",
-            "--out-dir",
-            env["OUT_DIR"],
             *extra_args,
         ],
         capture_output=True,
@@ -417,17 +413,15 @@ def run_check(
     )
 
 
-def draft_files(env: dict[str, str]) -> tuple[Path, Path]:
-    out = Path(env["OUT_DIR"])
-    return out / "draft.json", out / "pr_body.md"
+def assert_no_check_artifact() -> None:
+    """A with-body `--check` persists nothing: no scaffold leaf may appear."""
+    prefix = REPO_ROOT / ".lsz" / "gh-router"
+    assert not (prefix / "feat-x.md").exists()
+    if prefix.exists():
+        assert list(prefix.rglob("draft.json")) == []
 
 
-def load_draft(env: dict[str, str]) -> dict[str, Any]:
-    draft_path, _ = draft_files(env)
-    return json.loads(draft_path.read_text(encoding="utf-8"))
-
-
-def test_check_writes_draft_and_body_instead_of_printing_trailers(tmp_path: Path) -> None:
+def test_check_gates_pr_body_and_previews_facts_on_stdout(tmp_path: Path) -> None:
     env = make_gh_mock(
         tmp_path,
         COMMITS_TSV="ghuser\tWf Zyx\twf@x.io\nme\tMe\tme@x.io",
@@ -435,36 +429,25 @@ def test_check_writes_draft_and_body_instead_of_printing_trailers(tmp_path: Path
     )
     r = run_check(env)
     assert r.returncode == 0
-    draft_path, body_path = draft_files(env)
-    assert draft_path.is_file()
-    assert body_path.is_file()
+    assert_no_check_artifact()
     assert "Co-authored-by" not in r.stdout
-    assert str(draft_path) in r.stdout
-    assert str(body_path) in r.stdout
+    assert "trailers: 1" in r.stdout
+    assert "squash_body_preview:" in r.stdout
+    assert "Summary." in r.stdout
     assert "pulls/7/merge" not in open(env["GH_LOG"]).read()
 
-    draft = load_draft(env)
-    assert draft["pr_number"] == NUM
-    assert str(draft["pr_url"]).endswith(f"/pull/{NUM}")
-    assert draft["status"] == "ok"
-    assert draft["trailers"] == "Co-authored-by: Wf Zyx <wf@x.io>\n"
-    body_text = body_path.read_text(encoding="utf-8")
-    assert "Summary." in body_text
-    assert "Co-authored-by: Wf Zyx <wf@x.io>" in body_text
 
-
-def test_check_draft_reports_no_trailers_without_printing_the_body(tmp_path: Path) -> None:
+def test_check_reports_no_trailers_and_previews_the_body(tmp_path: Path) -> None:
     env = make_gh_mock(tmp_path, COMMITS_TSV="me\tMe\tme@x.io", PR_BODY="Solo.\n")
     r = run_check(env)
     assert r.returncode == 0
+    assert_no_check_artifact()
     assert "no co-author trailers" in r.stderr
-    assert "Solo." not in r.stdout
-    draft = load_draft(env)
-    assert draft["counts"]["trailers"] == 0
-    assert draft["squash_body"] == "Solo."
+    assert "Solo." in r.stdout, "the preview carries the cleaned body text"
+    assert "trailers: 0" in r.stdout
 
 
-def test_check_template_body_refuses_and_still_emits_both_files(tmp_path: Path) -> None:
+def test_check_template_body_refuses_without_writing(tmp_path: Path) -> None:
     """Fail-closed squash gate: a template body without --squash-message refuses --check with exit 1."""
     template = open(os.path.join(REPO_ROOT, ".github", "pull_request_template.md")).read()
     env = make_gh_mock(tmp_path, COMMITS_TSV="ghuser\tWf Zyx\twf@x.io", PR_BODY=template)
@@ -472,12 +455,8 @@ def test_check_template_body_refuses_and_still_emits_both_files(tmp_path: Path) 
     assert r.returncode == 1
     assert "--squash-message" in r.stderr
     assert "Co-authored-by" not in r.stdout
-    draft_path, body_path = draft_files(env)
-    assert draft_path.is_file()
-    assert body_path.is_file()
-    draft = load_draft(env)
-    assert draft["status"] == "refused"
-    assert draft["trailers"] == ""
+    assert_no_check_artifact()
+    assert '"code": "gate_refused"' in r.stderr
 
 
 def test_check_long_line_body_passes(tmp_path: Path) -> None:
@@ -490,7 +469,7 @@ def test_check_long_line_body_passes(tmp_path: Path) -> None:
     r = run_check(env)
     assert r.returncode == 0
     assert "Co-authored-by" not in r.stdout
-    assert load_draft(env)["counts"]["trailers"] == 1
+    assert "trailers: 1" in r.stdout
 
 
 def test_check_refuses_raw_token_body(tmp_path: Path) -> None:
@@ -513,11 +492,10 @@ def test_check_evaluates_local_body_file(tmp_path: Path) -> None:
     r = run_check(env, "--body-file", str(local_file))
     assert r.returncode == 0
     assert "Remote body should not overwrite" not in r.stdout
-    _, body_path = draft_files(env)
-    body_text = body_path.read_text(encoding="utf-8")
-    assert "Local authored body." in body_text
-    assert "Co-authored-by: Wf Zyx <wf@x.io>" in body_text
-    assert "Remote body should not overwrite" not in body_text
+    assert_no_check_artifact()
+    assert "Local authored body." in r.stdout
+    assert "trailers: 1" in r.stdout
+    assert "Remote body should not overwrite" not in r.stdout
 
 
 def test_check_evaluates_local_body_file_rejects_raw_token(tmp_path: Path) -> None:
@@ -535,7 +513,7 @@ def test_check_evaluates_local_body_file_rejects_raw_token(tmp_path: Path) -> No
 
 
 def test_check_pr_sh_wrapper_matches_pr_py(tmp_path: Path) -> None:
-    """pr.sh wrapper must work for --check and emit the same draft bytes as pr.py."""
+    """pr.sh wrapper must work for --check and print the same facts as pr.py."""
     env = make_gh_mock(
         tmp_path,
         COMMITS_TSV="ghuser\tWf Zyx\twf@x.io\nme\tMe\tme@x.io",
@@ -543,14 +521,9 @@ def test_check_pr_sh_wrapper_matches_pr_py(tmp_path: Path) -> None:
     )
     r_py = run_check(env)
     assert r_py.returncode == 0
-    draft_path, body_path = draft_files(env)
-    py_draft = draft_path.read_text(encoding="utf-8")
-    py_body = body_path.read_text(encoding="utf-8")
-
     r_sh = run_check(env, use_sh=True)
     assert r_sh.returncode == 0
-    assert draft_path.read_text(encoding="utf-8") == py_draft
-    assert body_path.read_text(encoding="utf-8") == py_body
+    assert r_sh.stdout == r_py.stdout
 
 
 # --- pr-refine script ---
