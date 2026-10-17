@@ -49,6 +49,7 @@ __all__ = [
     "SLUG_PATTERN",
     "UNKNOWN_INTERVAL",
     "UNKNOWN_TRIES",
+    "_ahead_behind",
     "_authority_resolve",
     "_digest_range_spec",
     "_local_base_from_authority",
@@ -58,6 +59,7 @@ __all__ = [
     "conflicting_files",
     "default_branch",
     "dump_failure_logs",
+    "ensure_branch_pushed",
     "failing_run_ids",
     "fetch_merge_state",
     "fetch_mergeability",
@@ -287,13 +289,82 @@ def _authority_resolve(spec: str, mode: str, cwd: Path | None = None) -> RangeRe
         os.chdir(previous)
 
 
-def _remote_branch_exists(name: str, cwd: Path | None = None) -> bool:
-    """True when refs/remotes/origin/<name> resolves locally (no network)."""
+def _remote_branch_exists(name: str, cwd: Path | None = None, remote: str = "origin") -> bool:
+    """True when refs/remotes/<remote>/<name> resolves locally (no network)."""
     res = run_command(
-        ["git", "rev-parse", "--verify", "-q", f"refs/remotes/origin/{name}"],
+        ["git", "rev-parse", "--verify", "-q", f"refs/remotes/{remote}/{name}"],
         cwd=cwd,
     )
     return res.returncode == 0
+
+
+def _ahead_behind(head_ref: str, remote: str, cwd: Path | None = None) -> tuple[int, int]:
+    """(ahead, behind) commit counts of local head_ref vs refs/remotes/<remote>/<head_ref>.
+
+    ahead counts the local-only commits (a push carries them); behind counts the
+    remote-only commits (a push must never overwrite them). Raises PrError when the
+    comparison cannot be computed — the caller refuses rather than guessing.
+    """
+    remote_ref = f"refs/remotes/{remote}/{head_ref}"
+    res = run_command(
+        ["git", "rev-list", "--left-right", "--count", f"{remote_ref}...{head_ref}", "--"],
+        cwd=cwd,
+    )
+    if res.returncode != 0:
+        raise PrError(
+            f"cannot compare {head_ref} against {remote_ref}: "
+            f"{res.stderr.strip() or 'git rev-list failed'}"
+        )
+    try:
+        left, right = res.stdout.strip().split()
+        return int(right), int(left)
+    except ValueError:
+        raise PrError(
+            f"cannot compare {head_ref} against {remote_ref}: "
+            f"unexpected rev-list output {res.stdout.strip()!r}"
+        ) from None
+
+
+def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
+    """Push head_ref to its configured remote when the remote is missing or behind.
+
+    Creation-path precondition only: the caller (create_or_reuse_pr) runs this before
+    opening a PR so the API call sees the real head. Read-only paths never call it.
+    Resolves the remote through repo_remote_for_ref, never hardcodes it. Refuses
+    (RefusalError, no mutation) when the remote is ahead — divergent history is never
+    force-pushed — and raises PrError when the push itself fails.
+    """
+    remote = repo_remote_for_ref(head_ref, cwd=cwd)
+    if not _remote_branch_exists(head_ref, cwd=cwd, remote=remote):
+        push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
+        if push_res.returncode != 0:
+            raise PrError(
+                f"failed to push {head_ref} to {remote}: "
+                f"{push_res.stderr.strip() or 'git push failed'}"
+            )
+        print(f"pushed {head_ref} to {remote} (remote ref was missing)", file=sys.stderr)
+        return
+    ahead, behind = _ahead_behind(head_ref, remote, cwd=cwd)
+    if behind > 0:
+        print(
+            f"refusing to push {head_ref}: remote {remote}/{head_ref} is ahead "
+            f"({behind} remote-only commit(s))",
+            file=sys.stderr,
+        )
+        print(
+            f"remediation: reconcile first (e.g. git pull --rebase {remote} {head_ref}), "
+            "then re-run; pr-land never force-pushes",
+            file=sys.stderr,
+        )
+        raise RefusalError(f"remote {remote}/{head_ref} is ahead of local {head_ref}")
+    if ahead == 0:
+        return
+    push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
+    if push_res.returncode != 0:
+        raise PrError(
+            f"failed to push {head_ref} to {remote}: {push_res.stderr.strip() or 'git push failed'}"
+        )
+    print(f"pushed {head_ref} to {remote} ({ahead} commit(s))", file=sys.stderr)
 
 
 def _local_base_from_authority(cwd: Path | None = None) -> str:

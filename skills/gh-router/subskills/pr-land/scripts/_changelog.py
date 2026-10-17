@@ -14,7 +14,7 @@ from pathlib import Path
 
 import _github
 from _errors import PrError
-from _github import repo_remote_for_ref
+from _github import _ahead_behind, _remote_branch_exists, repo_remote_for_ref
 
 __all__ = [
     "_UNRELEASED_ATTR_RES",
@@ -95,6 +95,39 @@ def unreleased_attributes_pr(pr_num: str, cwd: Path | None = None) -> bool:
     return False
 
 
+def _push_stranded_stamp(head_ref: str, pr_num: str, cwd: Path | None = None) -> bool:
+    """Push the stranded stamp commit for an already-attributed entry.
+
+    Returns True when a push repaired the remote, False when the branch is already
+    in sync or the push failed (warning on stderr, the same soft failure as the
+    stamp's own push). Never commits, never rewrites CHANGELOG.md, never force-pushes.
+    """
+    remote = repo_remote_for_ref(head_ref, cwd=cwd)
+    try:
+        if not _remote_branch_exists(head_ref, cwd=cwd, remote=remote):
+            needs_push = True
+        else:
+            ahead, _ = _ahead_behind(head_ref, remote, cwd=cwd)
+            needs_push = ahead > 0
+    except PrError as e:
+        print(f"warning: changelog stamp recovery skipped: {e}", file=sys.stderr)
+        return False
+    if not needs_push:
+        return False
+    push_res = _github.run_command(["git", "push", remote, head_ref], cwd=cwd)
+    if push_res.returncode != 0:
+        print(
+            f"warning: git push to {remote} {head_ref} failed: {push_res.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return False
+    print(
+        f"recovered stranded stamp for #{pr_num}: pushed to {remote}/{head_ref}",
+        file=sys.stderr,
+    )
+    return True
+
+
 def stamp_changelog(
     head_ref: str,
     pr_num: str,
@@ -123,8 +156,10 @@ def stamp_changelog(
         after_unreleased = ""
 
     if f"(#{pr_num})" in unreleased_block:
-        return False
-
+        # Recovery: a previous run stamped and committed but its push failed, leaving
+        # the commit stranded. Repair the remote instead of returning early; when the
+        # branch is already in sync this stays a no-op.
+        return _push_stranded_stamp(head_ref, pr_num, cwd=cwd)
     baseline_path = root / ".config" / "changelog-unattributed-baseline.txt"
     baseline: set[str] = set()
     if baseline_path.is_file():
