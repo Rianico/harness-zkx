@@ -1640,6 +1640,12 @@ class _FakeRun:
         out, err, rc = "", "", 0
         if "rev-parse --abbrev-ref" in joined:
             out = "feat-x\n"
+        elif "rev-parse --verify" in joined:
+            # No remote tracking ref in these fixtures: the creation path pushes first.
+            rc = 1
+            err = "unknown revision\n"
+        elif "rev-list --left-right --count" in joined:
+            out = "0\t0\n"
         elif "config --get branch." in joined:
             rc = 1
         elif "remote get-url" in joined:
@@ -1678,6 +1684,12 @@ class _MergeRun:
         out, err, rc = "", "", 0
         if "rev-parse --abbrev-ref" in joined:
             out = "feat-x\n"
+        elif "rev-parse --verify" in joined:
+            # No remote tracking ref in these fixtures: the creation path pushes first.
+            rc = 1
+            err = "unknown revision\n"
+        elif "rev-list --left-right --count" in joined:
+            out = "0\t0\n"
         elif "config --get branch." in joined:
             rc = 1
         elif "remote get-url" in joined:
@@ -1889,11 +1901,11 @@ def test_ready_flip_warns_when_unreleased_carries_no_entry_for_pr(
     rc = pr_mod.main(_main_args())
     assert rc == 0, fake.calls
     # The `stamp_changelog` patch must be load-bearing: were it inert, the real stamp would
-    # commit and push through this fake. Assert no stamp-shaped call ever reached the seam.
-    stamp_calls = [
-        c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"], ["git", "push"])
-    ]
+    # commit through this fake. Assert no stamp-shaped commit call ever reached the seam;
+    # the one creation-path precondition push is intended and asserted separately.
+    stamp_calls = [c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"])]
     assert not stamp_calls, f"the real stamp must not run behind the patch: {stamp_calls}"
+    assert fake.calls.count(["git", "push", "origin", "feat-x"]) == 1
 
     err = capsys.readouterr().err
     assert "warning: no ## [Unreleased] entry carries (#7)" in err
@@ -1940,11 +1952,11 @@ def test_draft_flag_prints_milder_note_when_unattributed(
     rc = pr_mod.main(_main_args("--draft"))
     assert rc == 0, fake.calls
     # The `stamp_changelog` patch must be load-bearing: were it inert, the real stamp would
-    # commit and push through this fake. Assert no stamp-shaped call ever reached the seam.
-    stamp_calls = [
-        c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"], ["git", "push"])
-    ]
+    # commit through this fake. Assert no stamp-shaped commit call ever reached the seam;
+    # the one creation-path precondition push is intended and asserted separately.
+    stamp_calls = [c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"])]
     assert not stamp_calls, f"the real stamp must not run behind the patch: {stamp_calls}"
+    assert fake.calls.count(["git", "push", "origin", "feat-x"]) == 1
 
     err = capsys.readouterr().err
     assert "note: no ## [Unreleased] entry carries (#7)" in err

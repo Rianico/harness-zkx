@@ -437,7 +437,8 @@ def create_or_reuse_pr(
     stamping via ready_pr, honoring the retained draft flag at the flip, not here. An
     existing open PR is reused untouched: its draft state is never changed. A reused draft
     PR without --draft is a silent no-op hole: it now refuses (exit 1) with the verbatim
-    manual remediation instead of returning success on a draft that never runs CI.
+    manual remediation instead of returning success. On the fresh-create path the branch
+    is pushed to its configured remote first, so the PR opens against the real head.
     """
     template_path = (cwd / DEFAULT_TEMPLATE_PATH) if cwd else DEFAULT_TEMPLATE_PATH
     if body_supplied and is_unfilled_body(body, template_path=template_path):
@@ -533,6 +534,8 @@ def create_or_reuse_pr(
             file=sys.stderr,
         )
         raise RefusalError("no PR body supplied")
+
+    _github.ensure_branch_pushed(head_ref, cwd=cwd)
 
     create_res = _github.run_command(
         [
