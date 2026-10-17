@@ -40,18 +40,23 @@ and persists nothing about its own phase.
    entries, and the `refusals[]` entries are contract; the acceptance spec pins their schema before
    implementation starts.
 2. **One artifact, tool-owned prefix.** The draft scaffold is written to `.lsz/gh-router/`. The leaf
-   defaults to the head-ref slug, so the default path is branch-scoped and two branches cannot
-   collide; a caller may name another leaf with `--out`. A body-less `--check` writes it only when
-   the leaf is absent; when it exists the tool writes nothing and reports the path, a deterministic
-   `stale` flag computed against the head commit, and the legal transitions (`--force-scaffold` to
-   regenerate, `--out` another leaf, or reuse it as-is).
-   The tool never reads an existing artifact to decide anything, so byte-for-byte preservation, body
-   provenance, and the scaffold signature are removed.
-3. **Refusals are data.** A refusal is reported as `severity` plus `refusals[]` entries carrying
-   reason, remedy, and site, in the report and on stderr. Mechanical impossibility (branch has no
-   remote, remote diverged, base unresolvable, `gh` missing or unauthenticated) and contract
-   violations (missing squash message, unfilled body, raw `CODE_AUTHORS`) refuse on mutating
-   commands. Read-only commands never refuse: `--status` reports the same predicates and exits 0.
+   defaults to an **injective** head-ref slug — `feat/x`, `feat-x` and `feat.x` must not share a
+   leaf — so the default path is branch-scoped; a caller may name another leaf with `--out`. A
+   body-less `--check` writes it only when the leaf is absent; when it exists the tool writes
+   nothing and reports the path, a deterministic `stale` flag computed against the head commit, and
+   the legal transitions (`--force-scaffold` to regenerate, `--out` another leaf, or reuse it
+   as-is).
+   The tool never reads an existing artifact to *decide* anything — no preservation rule, no
+   overwrite guess, no provenance check — so byte-for-byte preservation, body provenance, and the
+   scaffold signature are removed. `--status` does read the leaf, but only to report `body_state`
+   and the preview: reporting is not deciding.
+3. **Refusals are data.** A refusal is carried by `refusals[]` entries — reason, remedy, and site —
+   in the report and on stderr. An empty array means there is nothing to report; a read-only report
+   with entries still exits 0, while a mutating command with entries exits 1.
+   Mechanical impossibility (branch has no remote, remote diverged, base unresolvable, `gh` missing
+   or unauthenticated) and contract violations (missing squash message, unfilled body, raw
+   `CODE_AUTHORS`) refuse on mutating commands. Read-only commands never refuse: `--status` reports
+   the same predicates and exits 0.
    Judgment calls (body wording, scaffold reuse, an open draft PR) emit the state, remedies, and the
    transition list, including the ready-flip command; on a mutating command the transition that
    cannot proceed still refuses, with those facts attached. `site` names the caller's input or
