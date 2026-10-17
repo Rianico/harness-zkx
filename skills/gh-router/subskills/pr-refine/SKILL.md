@@ -22,7 +22,7 @@ Goal: turn someone else's PR into a landable one without rewriting their history
 ```bash
 uv run $SKILL_DIR/scripts/refine.sh observe 157   # which flow?
 uv run $SKILL_DIR/scripts/refine.sh checkout 157  # head intact, locally
-uv run $SKILL_DIR/scripts/refine.sh lint-body --body-file .lsz/tmp/pr_body.md
+uv run $SKILL_DIR/scripts/refine.sh lint-body --body-file .lsz/gh-router/<slug>.md
 ```
 
 ## Flow

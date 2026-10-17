@@ -17,6 +17,7 @@ metadata:
 
 Goal: route GitHub work — diagnose, reconcile, land, release. Run one script per operation. Read its brief output instead of re-deriving it with `gh pr view`, `gh run list`, or `gh api …/jobs`.
 
+Boundary: `scripts/state.sh` is human-facing orientation (its `gh pr view` query); `pr-land --status` is the machine-readable landing state and is authoritative for landing decisions.
 ## Common operations
 
 | Phase & Goal | Run | Output |
@@ -32,7 +33,7 @@ Goal: route GitHub work — diagnose, reconcile, land, release. Run one script p
 | Triage unmerged conflicts | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py` | `repo: <root>` · `conflicted files: N` · one row per path: path, conflict type, stages, hunk count |
 | Inspect one conflict | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py --file <path>` | `operation:`, `author intent:` (ours/theirs sha, author, subject), compact hunks |
 | **3: Landing & CI** | | |
-| Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --watch --merge --body-file .lsz/tmp/pr_body.md --squash-message-file .lsz/tmp/squash_message.md` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
+| Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --watch --merge --body-file .lsz/gh-router/<slug>.md --squash-message-file .lsz/gh-router/squash_message.md` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
 | Watch a workflow | `$SKILL_DIR/scripts/ci.sh watch <run-id>` | quiet poll → `✔ run <id> completed: success`, else `✘ run <id> <conclusion>` exit 1 |
 | Recent runs and step costs | `$SKILL_DIR/scripts/ci.sh runs [--branch B] [--limit N]` | one line per run (`#<id> <name> <conclusion> <dur>s`) plus its slowest steps (`Run all tests=15s`) |
 | Why did a run fail | `$SKILL_DIR/scripts/ci.sh why <run-id>` | `▸ <job> › <step>` per failing step, then a 20-line log tail (exit 1). A green run reports `✔ run <conclusion> — nothing to explain` (exit 0) |
