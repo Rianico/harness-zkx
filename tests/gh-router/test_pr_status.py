@@ -456,6 +456,9 @@ def test_status_text_mode_names_mutations(tmp_path: Path) -> None:
         ["git", "rev-parse", "HEAD"],
         ["git", "--no-optional-locks", "status", "--porcelain"],
         ["gh", "pr", "checks"],
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        ["git", "log", "-1", "--pretty=%s"],
+        ["git", "config"],
     ],
 )
 def test_status_survives_read_failures(
@@ -464,7 +467,7 @@ def test_status_survives_read_failures(
     capsys: pytest.CaptureFixture[str],
     argv_prefix: list[str],
 ) -> None:
-    """R1: every derived read degrades — a raising read never escapes `--status`."""
+    """R1/R9: every derived read degrades — a raising read never escapes `--status`."""
     import _github
     from _options import PrOptions
     from _status import run_status
@@ -481,7 +484,7 @@ def test_status_survives_read_failures(
         return real(cmd, **kwargs)
 
     monkeypatch.setattr(_github, "run_command", boom)
-    assert run_status(PrOptions(head="feat-status", json_output=True), cwd=repo) == 0
+    assert run_status(PrOptions(head=None, json_output=True), cwd=repo) == 0
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert payload["schema"] == "gh-router/pr-land/status@1"
 
@@ -492,6 +495,80 @@ def _status_env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
             ("GH_", "PR_", "POST_", "CHECKS_", "MERGE_", "COMMITS_")
         ):
             monkeypatch.setenv(key, value)
+
+
+def test_push_auth_failure_is_not_gh_labelled() -> None:
+    """R11: a git push auth failure routes to `command_failed`, never `gh_*`."""
+    from _errors import PrError
+    from _status import pr_error_to_refusal
+
+    entry = pr_error_to_refusal(
+        PrError(
+            "failed to push feat-x to origin: fatal: Authentication failed for 'https://github.com/t/r.git'"
+        )
+    )
+    assert entry is not None
+    assert entry["code"] == "command_failed"
+    assert entry["site"] == "git"
+
+
+def test_bare_unresolvable_host_is_not_gh_labelled() -> None:
+    """R11: network failures without a layer fingerprint stay generic."""
+    from _errors import PrError
+    from _status import pr_error_to_refusal
+
+    entry = pr_error_to_refusal(PrError("Could not resolve host github.com"))
+    assert entry is not None
+    assert entry["code"] == "command_failed"
+    assert not entry["code"].startswith("gh_")
+    bare = pr_error_to_refusal(PrError("Could not resolve host"))
+    assert bare is not None
+    assert bare["code"] == "command_failed"
+
+
+def test_genuine_gh_failures_still_route_gh() -> None:
+    """R11: the gh mapping survives for real gh failures (missing + gh-side auth)."""
+    from _errors import PrError
+    from _status import pr_error_to_refusal
+
+    missing = pr_error_to_refusal(PrError("command not found or not executable: gh: [Errno 2]"))
+    assert missing is not None
+    assert missing["code"] == "gh_unavailable"
+    assert missing["site"] == "gh"
+    auth = pr_error_to_refusal(PrError("failed to query PRs for head feat-x: Bad credentials"))
+    assert auth is not None
+    assert auth["code"] == "gh_unauthenticated"
+
+
+def test_failed_compare_asserts_no_push_facts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """R10: a failed compare forces push flags False and records the refusal."""
+    import _github
+    from _options import PrOptions
+    from _status import run_status
+
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    _ = _run(["git", "-C", str(repo), "push", "origin", "feat-status"], cwd=None)
+    _status_env(monkeypatch, _gh_env(tmp_path))
+    real = _github.run_command
+
+    def boom(cmd: list[str], **kwargs: object) -> object:
+        if cmd[:2] == ["git", "rev-list"]:
+            raise _github.PrError("command failed: git rev-list: boom")
+        return real(cmd, **kwargs)
+
+    monkeypatch.setattr(_github, "run_command", boom)
+    assert run_status(PrOptions(head="feat-status", json_output=True), cwd=repo) == 0
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert payload["predicates"]["branch_pushed"] is False
+    assert payload["predicates"]["head_pushed"] is False
+    assert payload["predicates"]["ahead"] == 0
+    assert payload["predicates"]["behind"] == 0
+    compare = [entry for entry in payload["refusals"] if "compare" in entry["reason"]]
+    assert len(compare) == 1
+    assert "origin/feat-status" in compare[0]["reason"]
 
 
 def test_git_failure_is_not_labelled_gh() -> None:
@@ -528,6 +605,20 @@ def test_head_slug_is_injective_and_path_safe() -> None:
     assert "/" not in slashed
     assert slashed == "feat%2Fx"
     assert head_slug("100%25") == "100%2525"
+
+
+def test_head_slug_stays_within_name_max_and_distinct() -> None:
+    """R13: expanded refs cap to a digest-suffixed stem within `NAME_MAX`."""
+    from _status import head_slug
+
+    long_unicode = head_slug("\u00fc" * 86)
+    slashed = head_slug("a/" * 100)
+    assert long_unicode != slashed
+    for slug in (long_unicode, slashed):
+        raw = slug.encode("utf-8")
+        assert len(raw) <= 255, len(raw)
+        assert "/" not in slug
+        assert len(slug.split("-")) >= 2, "the full-ref digest rides the capped stem"
 
 
 def test_status_prints_no_refusal_prose(

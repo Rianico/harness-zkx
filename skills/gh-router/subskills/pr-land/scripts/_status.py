@@ -9,8 +9,10 @@ traceback, and `--status` always exits 0.
 """
 
 import contextlib
+import hashlib
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -56,6 +58,7 @@ __all__ = [
     "classify_body",
     "collect_status",
     "degraded_report",
+    "failing_tool",
     "first_sentinel_line",
     "head_slug",
     "make_refusal",
@@ -151,13 +154,18 @@ def make_transition(command: str, preconditions: list[str], mutation: str) -> di
     return {"command": command, "preconditions": list(preconditions), "mutation": mutation}
 
 
+_SLUG_MAX_BYTES = 200
+
+
 def head_slug(head_ref: str) -> str:
     """Branch-scoped scaffold leaf stem, injective over head refs.
 
     ASCII alphanumerics plus `._-` stay literal; every other character (including
     `/` and a literal `%`) becomes `%XX` uppercase hex over its UTF-8 bytes, so
     distinct branches never share a leaf and the stem stays filename-safe and
-    directory-safe (a single path component).
+    directory-safe (a single path component). Stems longer than 200 bytes are
+    capped to a readable prefix plus a 16-hex digest of the full ref, which keeps
+    the mapping injective and every leaf within `NAME_MAX`.
     """
     parts: list[str] = []
     for char in head_ref:
@@ -165,7 +173,11 @@ def head_slug(head_ref: str) -> str:
             parts.append(char)
         else:
             parts.extend(f"%{byte:02X}" for byte in char.encode("utf-8"))
-    return "".join(parts) or "head"
+    slug = "".join(parts) or "head"
+    if len(slug.encode("utf-8")) > _SLUG_MAX_BYTES:
+        digest = hashlib.sha256(head_ref.encode("utf-8")).hexdigest()[:16]
+        slug = f"{slug[:120]}-{digest}"
+    return slug
 
 
 def resolve_artifact_path(
@@ -241,7 +253,7 @@ def parse_checks(payload: str) -> dict[str, object]:
     return {"state": state, "ok": ok, "total": total}
 
 
-def _failing_tool(message: str) -> str:
+def failing_tool(message: str) -> str:
     """Tool name from a `run_command` failure message, or empty when unknown."""
     marker = "command not found or not executable: "
     if marker in message:
@@ -255,38 +267,61 @@ def _failing_tool(message: str) -> str:
     return ""
 
 
+def _infer_tool(message: str) -> str:
+    """Guess the failing layer from message fingerprints, or empty when unknown.
+
+    `gh`-side fingerprints win over `git`-side ones: a `gh api` failure quoting a
+    `github.com` URL is still a `gh` failure, while a bare push/fetch-shaped
+    message is `git`. Anything unrecognized stays empty and generic.
+    """
+    lowered = message.lower()
+    if re.search(r"\bgh\b|gh api|pulls|mergeable|\bprs?\b|checks", lowered):
+        return "gh"
+    if any(
+        marker in lowered
+        for marker in (
+            "github.com",
+            "git ",
+            "git:",
+            "push",
+            "fetch",
+            "rev-list",
+            "merge-base",
+            "rebase",
+            "origin/",
+        )
+    ):
+        return "git"
+    return ""
+
+
 def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str] | None:
     """Map a `gh`/git failure to a structured refusal entry, or None when generic.
 
     `gh` missing, unauthenticated, or offline becomes data with a remedy instead
     of a traceback; anything else stays a plain error. `gh`-only markers apply
-    solely when the failing command was `gh` — a `git` failure is never
-    reported as a `github is unreachable` refusal.
+    solely when the failing layer resolved to `gh` — anything else (including
+    an unrecognized layer) returns the generic `command_failed` entry, never a
+    `gh_*` label for a `git` failure.
     """
     message = str(exc)
     lowered = message.lower()
-    resolved = tool or _failing_tool(message)
-    if resolved and resolved != "gh":
-        return make_refusal(
-            "command_failed",
-            message,
-            f"re-run once {resolved} answers; if it persists, run the failing command by hand",
-            resolved,
-        )
-    if "command not found or not executable: gh" in message:
-        return make_refusal(
-            "gh_unavailable",
-            f"gh CLI is not installed or not executable: {message}",
-            "install gh (https://cli.github.com) and authenticate with `gh auth login`, then re-run",
-            "gh",
-        )
-    if "timed out" in lowered and ("gh" in lowered or resolved == "gh"):
-        return make_refusal(
-            "gh_offline",
-            f"gh did not answer in time: {message}",
-            "check the network / GH_TOKEN scopes and re-run",
-            "gh",
-        )
+    resolved = tool or failing_tool(message) or _infer_tool(message)
+    if resolved == "gh":
+        if "command not found or not executable: gh" in message:
+            return make_refusal(
+                "gh_unavailable",
+                f"gh CLI is not installed or not executable: {message}",
+                "install gh (https://cli.github.com) and authenticate with `gh auth login`, then re-run",
+                "gh",
+            )
+        if "timed out" in lowered:
+            return make_refusal(
+                "gh_offline",
+                f"gh did not answer in time: {message}",
+                "check the network / GH_TOKEN scopes and re-run",
+                "gh",
+            )
     auth_markers = (
         "authenticate",
         "authenticated",
@@ -295,7 +330,7 @@ def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str]
         "403",
         "bad credentials",
     )
-    if any(marker in lowered for marker in auth_markers):
+    if resolved == "gh" and any(marker in lowered for marker in auth_markers):
         return make_refusal(
             "gh_unauthenticated",
             f"gh cannot authenticate: {message}",
@@ -310,12 +345,26 @@ def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str]
         "connection refused",
         "timed out",
     )
-    if any(marker in lowered for marker in offline_markers):
+    if resolved == "gh" and any(marker in lowered for marker in offline_markers):
         return make_refusal(
             "gh_offline",
             f"github is unreachable: {message}",
             "check the network connection and re-run",
             "gh",
+        )
+    if resolved and resolved != "gh":
+        return make_refusal(
+            "command_failed",
+            message,
+            f"re-run once {resolved} answers; if it persists, run the failing command by hand",
+            resolved,
+        )
+    if not resolved:
+        return make_refusal(
+            "command_failed",
+            message,
+            "re-run; if the failure persists, run the failing command by hand to see the tool involved",
+            "unknown",
         )
     return None
 
@@ -565,12 +614,29 @@ def collect_status(
     except PrError, OSError:
         branch_exists = False
     ahead = behind = 0
+    compare_failed = False
     if branch_exists:
         try:
             ahead, behind = _github._ahead_behind(head_ref, remote, cwd=cwd)
-        except PrError, OSError:
+        except (PrError, OSError) as exc:
+            # Never assert a push fact from a failed read: a failed compare must
+            # not report branch_pushed/head_pushed, so record the failure here and
+            # force both flags False below.
+            compare_failed = True
             ahead, behind = 0, 0
-    branch_pushed = branch_exists and behind == 0
+            base_entry = pr_error_to_refusal(exc, tool="git") or make_refusal(
+                "compare_failed",
+                f"could not compare {head_ref} against {remote}/{head_ref}: {exc}",
+                f"fetch {remote} and re-run",
+                f"{remote}/{head_ref}",
+            )
+            refusals.append(
+                {
+                    **base_entry,
+                    "reason": f"could not compare {head_ref} against {remote}/{head_ref}: {base_entry['reason']}",
+                }
+            )
+    branch_pushed = branch_exists and behind == 0 and not compare_failed
 
     sha = _head_sha(cwd)
     clean = _worktree_clean(cwd)
@@ -627,7 +693,7 @@ def collect_status(
         body_state = "none"
 
     changelog_stamped = pr_number is not None and unreleased_attributes_pr(pr_number, cwd=cwd)
-    head_pushed = branch_exists and ahead == 0 and behind == 0
+    head_pushed = branch_exists and ahead == 0 and behind == 0 and not compare_failed
 
     checks: dict[str, object] = {"state": "none", "ok": 0, "total": 0}
     if pr_state == "open" and pr_number is not None:
@@ -917,21 +983,30 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
     advisory refusals attached; body/squash file failures degrade the same way
     while the rest of the state still derives.
     """
+    head_ref = ""
+    head_entry: dict[str, str] | None = None
     try:
         head_ref = _github.resolve_head(options.head)
     except UsageError as exc:
+        head_entry = make_refusal(
+            "unusable_head",
+            str(exc),
+            "pass --head <branch> for a real head ref, then re-run",
+            "--head",
+        )
+    except (PrError, OSError) as exc:
+        head_entry = pr_error_to_refusal(exc, tool="git") or make_refusal(
+            "command_failed",
+            str(exc),
+            "re-run once git answers; if it persists, run the failing command by hand",
+            "git",
+        )
+    if head_entry is not None:
         return _emit_status(
             degraded_report(
                 options.head or "",
                 "",
-                [
-                    make_refusal(
-                        "unusable_head",
-                        str(exc),
-                        "pass --head <branch> for a real head ref, then re-run",
-                        "--head",
-                    )
-                ],
+                [head_entry],
             ),
             options,
         )
@@ -948,6 +1023,16 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
                 f"--body-file {options.body_file}",
             )
         )
+    except (PrError, OSError) as exc:
+        extra.append(
+            pr_error_to_refusal(exc, tool="git")
+            or make_refusal(
+                "command_failed",
+                str(exc),
+                "re-run once git answers; if it persists, run the failing command by hand",
+                "git",
+            )
+        )
     squash_override, squash_supplied = None, False
     try:
         squash_override, squash_supplied = resolve_squash_override(options)
@@ -960,24 +1045,41 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
                 "--squash-message-file",
             )
         )
+    repo = ""
+    repo_error: BaseException | None = None
+    repo_usage = False
     try:
         repo = _github.resolve_repo(head_ref)
     except UsageError as exc:
+        repo_error = exc
+        repo_usage = True
+    except (PrError, OSError) as exc:
+        repo_error = exc
+    if repo_error is not None:
         try:
             remote = _github.repo_remote_for_ref(head_ref)
         except PrError, OSError:
             remote = "origin"
+        if repo_usage:
+            repo_entry = make_refusal(
+                "repo_unresolvable",
+                str(repo_error),
+                "configure a GitHub remote for the branch, then re-run",
+                remote,
+            )
+        else:
+            repo_entry = pr_error_to_refusal(repo_error, tool="git") or make_refusal(
+                "command_failed",
+                str(repo_error),
+                "re-run once git answers; if it persists, run the failing command by hand",
+                "git",
+            )
         return _emit_status(
             degraded_report(
                 head_ref,
                 "",
                 [
-                    make_refusal(
-                        "repo_unresolvable",
-                        str(exc),
-                        "configure a GitHub remote for the branch, then re-run",
-                        remote,
-                    ),
+                    repo_entry,
                     *extra,
                 ],
             ),

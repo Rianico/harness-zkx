@@ -9,6 +9,7 @@ chain degraded to when no main ref exists.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -121,6 +122,21 @@ exit 1
     return bindir
 
 
+def _wrap_git(bindir: Path, git_log: Path) -> None:
+    """Shadow `git` with an argv-logging shim that delegates to the real binary."""
+    real_git = shutil.which("git")
+    assert real_git is not None
+    git = bindir / "git"
+    _ = git.write_text(
+        f"""#!/usr/bin/env bash
+echo "$@" >> "{git_log}"
+exec "{real_git}" "$@"
+""",
+        encoding="utf-8",
+    )
+    git.chmod(0o755)
+
+
 def _make_master_only_repo(repo: Path) -> None:
     """Synthetic repo: only refs/remotes/origin/master, no origin/HEAD."""
     _ = subprocess.run(["git", "init", "-b", "master", str(repo)], capture_output=True, check=True)
@@ -219,6 +235,9 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
     bindir = _make_gh_mock(tmp_path / "bin")
     log = tmp_path / "gh.log"
     _ = log.write_text("", encoding="utf-8")
+    git_log = tmp_path / "git.log"
+    _ = git_log.write_text("", encoding="utf-8")
+    _wrap_git(bindir, git_log)
 
     monkeypatch.chdir(repo)
     resolution = resolve_range("feature", "..")
@@ -268,6 +287,15 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
         rows.append(f"\t{name}\t{email.rstrip('>')}")
     digest_tsv = "\n".join(rows)
     assert set(pr_co_author_trailers(digest_tsv).splitlines()) == expected
+    # CLI-level tie: the subprocess itself must have asked git log for a range
+    # headed by the feature branch. A `-1`-fallback CLI (or one deriving trailers
+    # from a rangeless query) logs no such argv, so this fails without the tie.
+    logged = git_log.read_text(encoding="utf-8").splitlines()
+    assert any(
+        "log" in line.split()
+        and any(".." in token and token.endswith("feature") for token in line.split())
+        for line in logged
+    ), "\n".join(logged)
     # stdout stays small: the trailer lines live behind the gate, never on the console.
     assert "Co-authored-by" not in res.stdout
 

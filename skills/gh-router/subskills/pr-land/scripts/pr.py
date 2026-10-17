@@ -194,6 +194,7 @@ from _squash import squash_message as squash_message
 from _squash import trailer_email_key as trailer_email_key
 from _status import collect_status as collect_status
 from _status import degraded_report as degraded_report
+from _status import failing_tool as failing_tool
 from _status import make_refusal as make_refusal
 from _status import make_transition as make_transition
 from _status import pr_error_to_refusal as pr_error_to_refusal
@@ -737,7 +738,7 @@ def main(argv: list[str] | None = None) -> int:
     except CheckFailureError:
         return 1
     except PrError as e:
-        entry = pr_error_to_refusal(e)
+        entry = pr_error_to_refusal(e, tool=failing_tool(str(e)))
         if entry is not None:
             print(json.dumps({"refusals": [entry], "transitions": []}, indent=2), file=sys.stderr)
         print(f"pr error: {e}", file=sys.stderr)
