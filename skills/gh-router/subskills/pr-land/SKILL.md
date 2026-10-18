@@ -45,7 +45,7 @@ uv run $SKILL_DIR/scripts/pr.py --title '…' --watch --merge --body-file .lsz/g
 
 ## Draft Phase
 
-`--check` is the preflight and drafting pass. It runs the Title Budget, Title Shape, Squash Shape, Body Required, Fail-Closed Squash Message, and Raw Token gates. Facts go to stdout — counts, title facts, the squash preview, and one curation hint (`--json` for machine reading) — commentary goes to stderr, and nothing is persisted except the body-less scaffold below. Run it before creating a PR, and again after each description edit. Before a PR exists, no PR number is known, so the title length check runs against the bare title (never a placeholder number). Re-run `--check` after creating the PR to validate any declared Links section against the known PR link.
+`--check` is the preflight and drafting pass. It runs the Title Budget, Title Shape, Squash Shape, Body Required, Fail-Closed Squash Message, and Raw Token gates. Facts go to stdout — counts, title facts, the squash preview, and one curation hint (`--json` for machine reading) — commentary goes to stderr, and nothing is persisted except the body-less scaffold below. Run it before creating a PR, and again after each description edit. Before a PR exists, no PR number is known, so the title length check runs against the worst case — the title plus a five-digit ` (#99999)` suffix — and refuses when that exceeds the budget; both lengths are always reported. Re-run `--check` after creating the PR to validate any declared Links section against the known PR link.
 
 ```bash
 uv run $SKILL_DIR/scripts/pr.py --check --body-file .lsz/gh-router/feat-x.md
@@ -69,7 +69,7 @@ Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or 
 
 | Gate | Observable refusal (stderr) | Exit |
 | --- | --- | --- |
-| Title Budget | `… exceeds the 100-char budget …` (`--check`, bare title, no placeholder number) · `refusing squash merge: commit title exceeds 100 chars (NNN): <title> (#N)` (merge, real number) | 1 |
+| Title Budget | `… exceeds the 100-char budget in the worst case (NN chars bare, MMM chars as … (#99999))` (`--check`, worst case with five-digit suffix) · `refusing squash merge: commit title exceeds 100 chars (NNN): <title> (#N)` (merge, real number) | 1 |
 | Title Shape | `… is not a Conventional Commit \`type(scope): subject\` line: …` (`--check`, names `--title` vs `HEAD` derivation) · `refusing squash merge: commit title is not a Conventional Commit "type(scope): subject": <title> (#N)` (merge, real number) | 1 |
 | Squash Shape | `refusing squash merge: squash body carries no Core section` · `… a fix squash body carries no Root section` · `… the Blast Radius section carries neither a \`Door:\` line nor the template's \`Rollback / containment:\` line` · `… the Blast Radius section states no rollback` · `… the Evidence section states no before -> after` · `… the Links section carries no PR link` · `… closing-keyword line is not one issue` · `… squash body carries N bullets (max 5)` | 1 |
 | Body Required | `refusing to open PR: no --body/--body-file supplied` · `refusing PR: no description supplied` | 1 |

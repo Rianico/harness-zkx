@@ -112,6 +112,24 @@ def test_check_with_body_reports_facts_and_writes_nothing(tmp_path: Path) -> Non
     assert "hint:" in r.stdout
 
 
+def test_check_refuses_title_whose_worst_case_exceeds_budget(tmp_path: Path) -> None:
+    """A 93-char bare title refuses pre-PR: worst case is 102 chars."""
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+    title_93 = "feat: " + "x" * 87
+    assert len(title_93) == 93
+
+    r = _run_check(repo, env, "--body-file", str(body_file), "--title", title_93)
+
+    assert r.returncode == 1, r.stdout
+    assert "exceeds the 100-char budget in the worst case" in r.stderr
+    assert "(93 chars bare, 102 chars as" in r.stderr
+    assert '"code": "gate_refused"' in r.stderr
+
+
 def test_check_preview_strips_mermaid_and_details(tmp_path: Path) -> None:
     """The stdout preview is the cleaned squash text, not the authored rendering."""
     repo = tmp_path / "repo"
@@ -264,6 +282,7 @@ def test_title_follows_head_not_cwd(tmp_path: Path) -> None:
     payload: dict[str, Any] = json.loads(r.stdout)
     assert payload["title"]["text"] == "feat: two"
     assert payload["title"]["derived"] is True
+    assert payload["title"]["worst_case_chars"] == 18
     assert payload["title"]["budget"] == 100
 
 

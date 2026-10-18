@@ -1344,7 +1344,8 @@ sys.exit(rc)
         cwd=repo,
     )
     assert res4.returncode == 1
-    assert "exceeds the 100-char budget" in res4.stderr
+    assert "exceeds the 100-char budget in the worst case" in res4.stderr
+    assert "(101 chars bare, 110 chars as" in res4.stderr
     assert "shorten the PR title" in res4.stderr
 
     # Case 5: no base candidates at all -> loud refusal, exit 1, never a lone author.

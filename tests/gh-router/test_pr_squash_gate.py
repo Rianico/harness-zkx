@@ -97,6 +97,15 @@ def test_squash_title_accepts_conventional_shape(title: str) -> None:
     check_squash_title(title, 7)
 
 
+def test_squash_title_uses_the_real_number_not_the_bare_title() -> None:
+    """Merge path: the budget applies to the exact `title (#N)` header."""
+    title_95 = "feat: " + "a" * 89
+    assert len(title_95) == 95
+    check_squash_title(title_95, 7)
+    with pytest.raises(RefusalError, match=r"exceeds 100 chars: feat: a+ \(#12345\)"):
+        check_squash_title(title_95, 12345)
+
+
 @pytest.mark.parametrize(
     "title",
     [

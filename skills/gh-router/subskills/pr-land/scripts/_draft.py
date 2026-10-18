@@ -34,6 +34,7 @@ from _squash import (
 from _status import CHECK_SCHEMA as CHECK_SCHEMA
 from _status import SCAFFOLD_MARKER_PREFIX as SCAFFOLD_MARKER_PREFIX
 from _status import TITLE_BUDGET as TITLE_BUDGET
+from _status import TITLE_WORST_CASE_SUFFIX as TITLE_WORST_CASE_SUFFIX
 from _status import artifact_stale as artifact_stale
 from _status import body_site_with_line as body_site_with_line
 from _status import make_refusal as make_refusal
@@ -361,7 +362,8 @@ def _emit_gate_facts(
         print(f"trailers: {trailer_count}")
         print(
             f"title ({'derived' if derived else 'from --title'}): "
-            f"{title!r} {len(title)}/{TITLE_BUDGET} chars"
+            f"{title!r} {len(title)}/{TITLE_BUDGET} chars "
+            f"(worst case {title_facts['worst_case_chars']}/{TITLE_BUDGET} with ` (#99999)`)"
         )
         if preview.strip():
             print("squash_body_preview:")
@@ -408,6 +410,7 @@ def run_draft_phase(
     title_facts: dict[str, object] = {
         "text": title,
         "chars": len(title),
+        "worst_case_chars": len(f"{title}{TITLE_WORST_CASE_SUFFIX}"),
         "budget": TITLE_BUDGET,
         "derived": derived_title,
     }

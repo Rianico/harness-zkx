@@ -52,6 +52,7 @@ __all__ = [
     "SCAFFOLD_MARKER_PREFIX",
     "STATUS_SCHEMA",
     "TITLE_BUDGET",
+    "TITLE_WORST_CASE_SUFFIX",
     "artifact_stale",
     "body_site_with_line",
     "build_transitions",
@@ -76,6 +77,7 @@ __all__ = [
 STATUS_SCHEMA = "gh-router/pr-land/status@1"
 CHECK_SCHEMA = "gh-router/pr-land/check@1"
 TITLE_BUDGET = SQUASH_TITLE_MAX
+TITLE_WORST_CASE_SUFFIX = " (#99999)"
 
 PR_STATES = ("none", "open", "merged", "closed")
 BODY_STATES = ("none", "scaffold", "unfilled", "ready")
@@ -130,7 +132,13 @@ def degraded_report(head: str, repo: str, refusals: list[dict[str, str]]) -> dic
         },
         "failure_states": [],
         "artifact": {"path": "", "stale": False},
-        "title": {"text": "", "chars": 0, "budget": TITLE_BUDGET, "derived": True},
+        "title": {
+            "text": "",
+            "chars": 0,
+            "worst_case_chars": len(TITLE_WORST_CASE_SUFFIX),
+            "budget": TITLE_BUDGET,
+            "derived": True,
+        },
         "squash_body_preview": "",
         "refusals": refusals,
         "transitions": [],
@@ -372,10 +380,12 @@ def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str]
 def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] | None:
     """Advisory title check: None when the title holds, else the refusal entry.
 
-    Without a PR number the length check runs against the bare title (an
-    approximation the reason says out loud) — never a placeholder number, so the
-    `--check`, create, and merge evaluations share one information state. The
-    refusal names the derivation: `--title` when supplied, `HEAD` when derived.
+    Without a PR number the length check runs against the worst case — the title
+    plus a five-digit ` (#99999)` suffix — and refuses when that exceeds the
+    budget, so a title that passes `--check` cannot abort at merge once the real
+    `(#N)` lands. The refusal reports both lengths. With a PR number the check
+    uses the exact `title (#N)` header. The refusal names the derivation:
+    `--title` when supplied, `HEAD` when derived.
     """
     site = "--title" if not derived else "HEAD"
     provenance = (
@@ -398,14 +408,16 @@ def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] 
                 "shorten the PR title, then re-run",
                 site,
             )
-    elif len(title) > TITLE_BUDGET:
-        return make_refusal(
-            "title_budget",
-            f"{provenance} already exceeds the {TITLE_BUDGET}-char budget "
-            f"({len(title)} chars, before the ` (#N)` suffix a PR number adds)",
-            "shorten the PR title, then re-run",
-            site,
-        )
+    else:
+        worst_case = f"{title}{TITLE_WORST_CASE_SUFFIX}"
+        if len(worst_case) > TITLE_BUDGET:
+            return make_refusal(
+                "title_budget",
+                f"{provenance} exceeds the {TITLE_BUDGET}-char budget in the worst case "
+                f"({len(title)} chars bare, {len(worst_case)} chars as {worst_case!r})",
+                "shorten the PR title, then re-run",
+                site,
+            )
     match = SQUASH_TITLE_RE.match(title.strip())
     if match is None or match.group("type").casefold() not in CONVENTIONAL_TYPES:
         return make_refusal(
@@ -884,6 +896,7 @@ def collect_status(
         "title": {
             "text": title_text,
             "chars": len(title_text),
+            "worst_case_chars": len(f"{title_text}{TITLE_WORST_CASE_SUFFIX}"),
             "budget": TITLE_BUDGET,
             "derived": not title_supplied,
         },
@@ -928,7 +941,8 @@ def render_text(report: dict[str, object]) -> str:
         f"failure_states: {', '.join(str(f) for f in failures) if failures else 'none'}",
         f"artifact: {artifact['path']} stale={str(artifact['stale']).lower()}",
         f"title ({'derived' if title['derived'] else 'from --title'}): "
-        f"{title['text']!r} {title['chars']}/{title['budget']} chars",
+        f"{title['text']!r} {title['chars']}/{title['budget']} chars "
+        f"(worst case {title['worst_case_chars']}/{title['budget']})",
     ]
     preview = str(report["squash_body_preview"])
     if preview.strip():

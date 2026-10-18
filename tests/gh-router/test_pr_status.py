@@ -164,6 +164,7 @@ def test_status_json_matches_pinned_schema(tmp_path: Path) -> None:
     assert payload["artifact"] == {"path": ".lsz/gh-router/feat-status.md", "stale": False}
     assert payload["title"]["text"] == "feat: two"
     assert payload["title"]["chars"] == 9
+    assert payload["title"]["worst_case_chars"] == 18
     assert payload["title"]["budget"] == 100
     assert payload["title"]["derived"] is True
     assert payload["squash_body_preview"] == ""
@@ -657,3 +658,46 @@ def test_status_reports_dirty_worktree(
     assert run_status(PrOptions(head="feat-status", json_output=True), cwd=repo) == 0
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert payload["predicates"]["worktree_clean"] is False
+
+
+def test_pre_pr_title_refuses_on_worst_case_with_both_numbers() -> None:
+    """A 93-char bare title refuses: 93 fits, but 102 worst-case exceeds 100."""
+    from _status import title_gate
+
+    title_93 = "feat: " + "x" * 87
+    assert len(title_93) == 93
+    entry = title_gate(title_93, None, derived=False)
+    assert entry is not None
+    assert entry["code"] == "title_budget"
+    assert "(93 chars bare, 102 chars as" in entry["reason"]
+    assert entry["site"] == "--title"
+
+
+def test_pre_pr_title_passes_when_worst_case_fits() -> None:
+    """A 91-char bare title passes: worst case is exactly 100."""
+    from _status import title_gate
+
+    title_91 = "feat: " + "z" * 85
+    assert len(title_91) == 91
+    assert title_gate(title_91, None, derived=False) is None
+
+
+def test_status_reports_both_title_lengths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--status --json` reports `chars` and `worst_case_chars` side by side."""
+    from _options import PrOptions
+    from _status import run_status
+
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    _status_env(monkeypatch, _gh_env(tmp_path))
+    title_91 = "feat: " + "z" * 85
+    assert (
+        run_status(PrOptions(head="feat-status", title=title_91, json_output=True), cwd=repo) == 0
+    )
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert payload["title"]["chars"] == 91
+    assert payload["title"]["worst_case_chars"] == 100
+    assert payload["title"]["budget"] == 100
+    assert not [e for e in payload["refusals"] if e["code"] == "title_budget"]
