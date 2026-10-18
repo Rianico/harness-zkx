@@ -14,6 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.gh_helpers import run_git
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 SCRIPT_PATH = (
@@ -22,37 +24,28 @@ SCRIPT_PATH = (
 GOLDEN_PATH = FIXTURES_DIR / "conflict_extractor_golden.json"
 
 
-def _git(repo: Path, *args: str) -> None:
-    _ = subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-
 def _build_conflict_repo(repo: Path) -> None:
-    _git(repo, "init")
-    _git(repo, "config", "user.name", "Tester Author")
-    _git(repo, "config", "user.email", "tester@example.com")
-    _git(repo, "config", "commit.gpgsign", "false")
+    run_git(repo, "init")
+    run_git(repo, "config", "user.name", "Tester Author")
+    run_git(repo, "config", "user.email", "tester@example.com")
+    run_git(repo, "config", "commit.gpgsign", "false")
     _ = (repo / "common.txt").write_text("base line\n", encoding="utf-8")
-    _git(repo, "add", ".")
-    _git(repo, "commit", "-m", "chore: base commit")
+    run_git(repo, "add", ".")
+    run_git(repo, "commit", "-m", "chore: base commit")
     base = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"],
         check=True,
         capture_output=True,
         text=True,
     ).stdout.strip()
-    _git(repo, "checkout", "-b", "feat/calc")
+    run_git(repo, "checkout", "-b", "feat/calc")
     _ = (repo / "app.py").write_text("def calc(): return 'feature'\n", encoding="utf-8")
-    _git(repo, "add", ".")
-    _git(repo, "commit", "-m", "feat(calc): implement feature calc")
-    _git(repo, "checkout", base)
+    run_git(repo, "add", ".")
+    run_git(repo, "commit", "-m", "feat(calc): implement feature calc")
+    run_git(repo, "checkout", base)
     _ = (repo / "app.py").write_text("def calc(): return 'main'\n", encoding="utf-8")
-    _git(repo, "add", ".")
-    _git(repo, "commit", "-m", "fix(calc): hotfix main calc")
+    run_git(repo, "add", ".")
+    run_git(repo, "commit", "-m", "fix(calc): hotfix main calc")
     merged = subprocess.run(
         ["git", "-C", str(repo), "merge", "feat/calc"],
         capture_output=True,

@@ -18,10 +18,6 @@ LIB_DIR = REPO_ROOT / "skills/gh-router/lib"
 PR_SH = PR_SCRIPTS / "pr.sh"
 PR_TEMPLATE = REPO_ROOT / ".github/pull_request_template.md"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
-if str(LIB_DIR) not in sys.path:
-    sys.path.insert(0, str(LIB_DIR))
 
 import _draft as _draft_mod  # noqa: E402
 import _github as github_mod  # noqa: E402

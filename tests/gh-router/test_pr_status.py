@@ -19,14 +19,13 @@ from typing import Any
 
 import pytest
 
+from tests.gh_helpers import run_git
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS_DIR = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS_DIR / "pr.py"
 
-if str(PR_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS_DIR))
 
 GH_STUB = """#!/usr/bin/env bash
 echo "$@" >> "$GH_LOG"
@@ -65,10 +64,6 @@ def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProces
     return subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=git_env(), check=True)
 
 
-def _git(repo: Path, *args: str) -> None:
-    _ = _run(["git", "-C", str(repo), *args])
-
-
 def _make_repo(repo: Path) -> Path:
     """Synthetic repo with a LOCAL bare origin: pushes succeed when attempted."""
     repo.mkdir(parents=True)
@@ -82,19 +77,19 @@ def _make_repo(repo: Path) -> Path:
     ):
         _ = _run(["git", "-C", str(repo), "config", key, value])
     _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _git(repo, "add", "base.txt")
-    _git(repo, "commit", "-m", "chore: base")
-    _git(repo, "remote", "add", "origin", str(bare))
-    _git(repo, "push", "origin", "main")
-    _git(repo, "update-ref", "refs/remotes/origin/main", "refs/heads/main")
-    _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-    _git(repo, "checkout", "-b", "feat-status")
+    run_git(repo, "add", "base.txt")
+    run_git(repo, "commit", "-m", "chore: base")
+    run_git(repo, "remote", "add", "origin", str(bare))
+    run_git(repo, "push", "origin", "main")
+    run_git(repo, "update-ref", "refs/remotes/origin/main", "refs/heads/main")
+    run_git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    run_git(repo, "checkout", "-b", "feat-status")
     _ = (repo / "one.txt").write_text("one\n", encoding="utf-8")
-    _git(repo, "add", "one.txt")
-    _git(repo, "commit", "-m", "feat: one")
+    run_git(repo, "add", "one.txt")
+    run_git(repo, "commit", "-m", "feat: one")
     _ = (repo / "two.txt").write_text("two\n", encoding="utf-8")
-    _git(repo, "add", "two.txt")
-    _git(repo, "commit", "-m", "feat: two")
+    run_git(repo, "add", "two.txt")
+    run_git(repo, "commit", "-m", "feat: two")
     return bare
 
 
@@ -257,11 +252,11 @@ def test_status_diverged_is_mechanical_data(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _ = _make_repo(repo)
     env = _gh_env(tmp_path)
-    _git(repo, "checkout", "-qb", "scratch", "main")
-    _git(repo, "commit", "--allow-empty", "-m", "teammate work")
+    run_git(repo, "checkout", "-qb", "scratch", "main")
+    run_git(repo, "commit", "--allow-empty", "-m", "teammate work")
     other = _run(["git", "-C", str(repo), "rev-parse", "HEAD"]).stdout.strip()
-    _git(repo, "checkout", "feat-status")
-    _git(repo, "update-ref", "refs/remotes/origin/feat-status", other)
+    run_git(repo, "checkout", "feat-status")
+    run_git(repo, "update-ref", "refs/remotes/origin/feat-status", other)
 
     payload = _payload(_run_status(repo, env, "--json"))
 

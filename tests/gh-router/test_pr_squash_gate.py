@@ -10,6 +10,7 @@ with the model; every refusal here is a shape fact a machine can decide.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import subprocess
@@ -18,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.gh_helpers import make_repo
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -25,8 +27,6 @@ PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS / "pr.py"
 TEMPLATE_PATH = REPO_ROOT / ".github" / "pull_request_template.md"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
 from _errors import RefusalError  # noqa: E402
 from _squash import (
@@ -656,33 +656,13 @@ exit 0
 """
 
 
-def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=git_env(), check=True)
-
-
-def _git(repo: Path, *args: str) -> None:
-    _ = _run(["git", "-C", str(repo), *args])
-
-
-def _make_repo(repo: Path) -> None:
-    repo.mkdir(parents=True)
-    _ = _run(["git", "init", "-b", "main", str(repo)])
-    for key, value in (
-        ("user.name", "Gate Synthetic"),
-        ("user.email", "gate@x.io"),
-        ("commit.gpgsign", "false"),
-    ):
-        _ = _run(["git", "-C", str(repo), "config", key, value])
-    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _git(repo, "add", "base.txt")
-    _git(repo, "commit", "-m", "chore: base")
-    _git(repo, "remote", "add", "origin", "https://github.com/test/gate.git")
-    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-    _git(repo, "checkout", "-b", "feat-gate")
-    _ = (repo / "one.txt").write_text("one\n", encoding="utf-8")
-    _git(repo, "add", "one.txt")
-    _git(repo, "commit", "-m", "feat: one")
+_make_repo = functools.partial(
+    make_repo,
+    slug="gate",
+    branch="feat-gate",
+    user_name="Gate Synthetic",
+    user_email="gate@x.io",
+)
 
 
 def _gh_env(tmp_path: Path) -> dict[str, str]:

@@ -24,10 +24,6 @@ PR_SH = PR_SCRIPTS / "pr.sh"
 REFINE_SH = REPO_ROOT / "skills/gh-router/subskills/pr-refine/scripts/refine.sh"
 NUM = "7"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
-if str(LIB_DIR) not in sys.path:
-    sys.path.insert(0, str(LIB_DIR))
 
 from _errors import RefusalError  # noqa: E402
 from _squash import (
@@ -40,6 +36,8 @@ from _squash import (
     refuse_raw_token,  # noqa: E402
 )
 
+from tests.gh_helpers import write_gh_stub  # noqa: E402
+
 
 def run_bash(
     script: str, env_extra: dict[str, str] | None = None, cwd: Path = REPO_ROOT
@@ -50,9 +48,9 @@ def run_bash(
 
 def make_gh_mock(tmp_path: Path, **env_extra: str) -> dict[str, str]:
     bindir = tmp_path / "bin"
-    bindir.mkdir(exist_ok=True)
     gh = bindir / "gh"
-    _ = gh.write_text(
+    _ = write_gh_stub(
+        bindir,
         """#!/usr/bin/env bash
 echo "$@" >> "$GH_LOG"
 if [[ "${1:-}" == "pr" ]]; then
@@ -82,7 +80,7 @@ for arg in "$@"; do
 done
 echo "unexpected gh call: $*" >&2
 exit 3
-"""
+""",
     )
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     env = {

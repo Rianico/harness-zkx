@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import ast
 import inspect
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -44,8 +43,6 @@ SIBLING_MODULES = [
     "_changelog.py",
 ]
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
 import _draft  # noqa: E402
 import pr as pr_mod  # noqa: E402
@@ -162,7 +159,8 @@ def test_pr_py_exposes_only_the_cli_surface() -> None:
     imports it yet. The `hasattr` pins name the entry surface plus a sample of retired
     domain names that `pr.py` no longer binds at all (`check_conflicts`, `run_command`,
     `check_trailers`, `build_squash_message`, `finalize_squash_message`,
-    `dump_failure_logs`, `watch_checks`, `checks_verdict`).
+    `dump_failure_logs`, `checks_verdict`; `watch_checks` is deliberately absent —
+    it is a genuine use-import: `main` calls it, so `pr.py` binds it on purpose).
     """
     tree = ast.parse(PR_PY.read_text(encoding="utf-8"), filename="pr.py")
     aliases = sorted(
@@ -188,6 +186,32 @@ def test_pr_py_exposes_only_the_cli_surface() -> None:
         "checks_verdict",
     ):
         assert not hasattr(pr_mod, name), f"pr.py re-exports retired name: {name}"
+
+
+def test_only_pr_py_installs_a_sys_path_shim() -> None:
+    """One import path: only the CLI entry may mutate `sys.path`.
+
+    T3c collapsed the five per-module `sys.path` shims into the `pr.py` entry shim
+    (plus `tests/gh-router/conftest.py` for pytest). A re-added sibling shim would
+    silently re-fork the import path, so the AST scan fails on any `sys.path`
+    mutation in a sibling module — mirroring `test_only_github_module_spawns_subprocesses`.
+    """
+    offenders = sorted(
+        f"{name}:{node.lineno}"
+        for name, text in _module_texts().items()
+        if name != "pr.py"
+        for node in ast.walk(ast.parse(text, filename=name))
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("insert", "append", "extend")
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "path"
+            and isinstance(node.func.value.value, ast.Name)
+            and node.func.value.value.id == "sys"
+        )
+    )
+    assert not offenders, f"sibling re-added a sys.path shim: {', '.join(offenders)}"
 
 
 def test_retired_draft_surface_stays_gone() -> None:

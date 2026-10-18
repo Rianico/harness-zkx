@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.gh_helpers import init_git_repo
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT_PATH = (
     REPO_ROOT
@@ -30,43 +32,8 @@ from extract_conflict_context import (
 )
 
 
-def _init_git_repo(repo: Path) -> str:
-    _ = subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "config", "user.name", "Tester Author"],
-        check=True,
-        capture_output=True,
-    )
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "config", "user.email", "tester@example.com"],
-        check=True,
-        capture_output=True,
-    )
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "config", "commit.gpgsign", "false"],
-        check=True,
-        capture_output=True,
-    )
-    initial_file = repo / "common.txt"
-    _ = initial_file.write_text("base line\n", encoding="utf-8")
-    _ = subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "commit", "-m", "chore: base commit\n\nInitial repo setup."],
-        check=True,
-        capture_output=True,
-    )
-    # Detect branch name (master or main)
-    res = subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return res.stdout.strip()
-
-
 def test_detect_git_operation_clean(tmp_path: Path) -> None:
-    _ = _init_git_repo(tmp_path)
+    _ = init_git_repo(tmp_path)
     op, ours_ref, theirs_ref = detect_git_operation(tmp_path)
     assert op == "unknown"
     assert ours_ref is None
@@ -74,7 +41,7 @@ def test_detect_git_operation_clean(tmp_path: Path) -> None:
 
 
 def test_detect_git_operation_merge(tmp_path: Path) -> None:
-    base_branch = _init_git_repo(tmp_path)
+    base_branch = init_git_repo(tmp_path)
     f = tmp_path / "conflicted.txt"
 
     # Commit on feature branch
@@ -120,7 +87,7 @@ def test_detect_git_operation_merge(tmp_path: Path) -> None:
 
 
 def test_detect_git_operation_rebase(tmp_path: Path) -> None:
-    base_branch = _init_git_repo(tmp_path)
+    base_branch = init_git_repo(tmp_path)
     f = tmp_path / "rebase_file.txt"
 
     # Commit on feature branch
@@ -171,7 +138,7 @@ def test_detect_git_operation_rebase(tmp_path: Path) -> None:
 
 
 def test_detect_git_operation_cherry_pick(tmp_path: Path) -> None:
-    base_branch = _init_git_repo(tmp_path)
+    base_branch = init_git_repo(tmp_path)
     f = tmp_path / "cp_file.txt"
 
     # Commit on feature branch
@@ -217,7 +184,7 @@ def test_detect_git_operation_cherry_pick(tmp_path: Path) -> None:
 
 
 def test_get_commit_summary(tmp_path: Path) -> None:
-    _ = _init_git_repo(tmp_path)
+    _ = init_git_repo(tmp_path)
     summary = get_commit_summary(tmp_path, "HEAD", "common.txt")
     assert summary is not None
     assert summary["author"] == "Tester Author"
@@ -255,7 +222,7 @@ def test_format_operation_description() -> None:
 
 
 def test_extract_conflict_context_cli_execution(tmp_path: Path) -> None:
-    base_branch = _init_git_repo(tmp_path)
+    base_branch = init_git_repo(tmp_path)
     f = tmp_path / "app.py"
 
     _ = subprocess.run(
@@ -350,7 +317,7 @@ def test_extract_conflict_context_cli_execution(tmp_path: Path) -> None:
 
 
 def test_extract_conflict_context_clean_cli(tmp_path: Path) -> None:
-    _ = _init_git_repo(tmp_path)
+    _ = init_git_repo(tmp_path)
 
     # Clean text mode
     res = subprocess.run(

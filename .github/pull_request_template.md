@@ -45,7 +45,7 @@
 - [ ] Conventional Commits (`commitlint` + `husky`) — `npx commitlint --from=origin/main --to=HEAD`
 - [ ] `CHANGELOG.md` `## [Unreleased]` updated (if user-facing)
 - [ ] Docs / `docs/adr/` updated when seams or contracts change
-- [ ] No generated artifacts committed outside `.lsz/tmp`
+- [ ] No generated artifacts committed outside `.lsz/` (transient scratch in `.lsz/tmp`, pr-land scaffold leaves in `.lsz/gh-router/`)
 - [ ] Linked issue with `Closes #NN` (if applicable)
 
 ---

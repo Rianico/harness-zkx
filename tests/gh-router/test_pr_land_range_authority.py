@@ -21,36 +21,24 @@ PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS / "pr.py"
 LIB_DIR = REPO_ROOT / "skills/gh-router/lib"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
-if str(LIB_DIR) not in sys.path:
-    sys.path.insert(0, str(LIB_DIR))
 
 from _errors import RefusalError  # noqa: E402
 from _github import resolve_base  # noqa: E402
 from _squash import pr_co_author_trailers  # noqa: E402
 from range_authority import resolve_range  # noqa: E402
 
-
-def _git(repo: Path, *args: str) -> str:
-    res = subprocess.run(
-        ["git", "-C", str(repo), *args],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return res.stdout
+from tests.gh_helpers import run_git, write_gh_stub  # noqa: E402
 
 
 def _make_trunk_repo(repo: Path) -> None:
     """Synthetic repo: default branch trunk, origin/trunk refs, no main refs."""
     _ = subprocess.run(["git", "init", "-b", "trunk", str(repo)], capture_output=True, check=True)
-    _ = _git(repo, "config", "user.name", "Trunk Synthetic")
-    _ = _git(repo, "config", "user.email", "synthetic@x.io")
-    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = run_git(repo, "config", "user.name", "Trunk Synthetic")
+    _ = run_git(repo, "config", "user.email", "synthetic@x.io")
+    _ = run_git(repo, "config", "commit.gpgsign", "false")
     _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _ = _git(repo, "add", "base.txt")
-    _ = _git(
+    _ = run_git(repo, "add", "base.txt")
+    _ = run_git(
         repo,
         "-c",
         "user.name=Base Bau",
@@ -60,13 +48,13 @@ def _make_trunk_repo(repo: Path) -> None:
         "-m",
         "chore: trunk base",
     )
-    trunk_sha = _git(repo, "rev-parse", "HEAD").strip()
-    _ = _git(repo, "update-ref", "refs/remotes/origin/trunk", trunk_sha)
-    _ = _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
-    _ = _git(repo, "checkout", "-b", "feature")
+    trunk_sha = run_git(repo, "rev-parse", "HEAD").strip()
+    _ = run_git(repo, "update-ref", "refs/remotes/origin/trunk", trunk_sha)
+    _ = run_git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+    _ = run_git(repo, "checkout", "-b", "feature")
     _ = (repo / "ada.txt").write_text("ada\n", encoding="utf-8")
-    _ = _git(repo, "add", "ada.txt")
-    _ = _git(
+    _ = run_git(repo, "add", "ada.txt")
+    _ = run_git(
         repo,
         "-c",
         "user.name=Ada",
@@ -77,8 +65,8 @@ def _make_trunk_repo(repo: Path) -> None:
         "feat: ada work",
     )
     _ = (repo / "bo.txt").write_text("bo\n", encoding="utf-8")
-    _ = _git(repo, "add", "bo.txt")
-    _ = _git(
+    _ = run_git(repo, "add", "bo.txt")
+    _ = run_git(
         repo,
         "-c",
         "user.name=Bo",
@@ -102,9 +90,8 @@ def _no_main_refs(repo: Path) -> None:
 
 
 def _make_gh_mock(bindir: Path) -> Path:
-    bindir.mkdir(exist_ok=True)
-    gh = bindir / "gh"
-    _ = gh.write_text(
+    _ = write_gh_stub(
+        bindir,
         """#!/usr/bin/env bash
 echo "$@" >> "$GH_LOG"
 args="$*"
@@ -117,13 +104,11 @@ esac
 echo "unexpected gh call: $*" >&2
 exit 1
 """,
-        encoding="utf-8",
     )
-    gh.chmod(0o755)
     return bindir
 
 
-def _wrap_git(bindir: Path, git_log: Path) -> None:
+def _wraprun_git(bindir: Path, git_log: Path) -> None:
     """Shadow `git` with an argv-logging shim that delegates to the real binary."""
     real_git = shutil.which("git")
     assert real_git is not None
@@ -141,12 +126,12 @@ exec "{real_git}" "$@"
 def _make_master_only_repo(repo: Path) -> None:
     """Synthetic repo: only refs/remotes/origin/master, no origin/HEAD."""
     _ = subprocess.run(["git", "init", "-b", "master", str(repo)], capture_output=True, check=True)
-    _ = _git(repo, "config", "user.name", "Master Synthetic")
-    _ = _git(repo, "config", "user.email", "synthetic@x.io")
-    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = run_git(repo, "config", "user.name", "Master Synthetic")
+    _ = run_git(repo, "config", "user.email", "synthetic@x.io")
+    _ = run_git(repo, "config", "commit.gpgsign", "false")
     _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _ = _git(repo, "add", "base.txt")
-    _ = _git(
+    _ = run_git(repo, "add", "base.txt")
+    _ = run_git(
         repo,
         "-c",
         "user.name=Base Bau",
@@ -156,12 +141,12 @@ def _make_master_only_repo(repo: Path) -> None:
         "-m",
         "chore: master base",
     )
-    master_sha = _git(repo, "rev-parse", "HEAD").strip()
-    _ = _git(repo, "update-ref", "refs/remotes/origin/master", master_sha)
-    _ = _git(repo, "checkout", "-b", "feature")
+    master_sha = run_git(repo, "rev-parse", "HEAD").strip()
+    _ = run_git(repo, "update-ref", "refs/remotes/origin/master", master_sha)
+    _ = run_git(repo, "checkout", "-b", "feature")
     _ = (repo / "work.txt").write_text("work\n", encoding="utf-8")
-    _ = _git(repo, "add", "work.txt")
-    _ = _git(
+    _ = run_git(repo, "add", "work.txt")
+    _ = run_git(
         repo,
         "-c",
         "user.name=Wren",
@@ -176,12 +161,12 @@ def _make_master_only_repo(repo: Path) -> None:
 def _make_no_candidate_repo(repo: Path) -> None:
     """Synthetic repo: no origin/HEAD, no origin/main, no origin/master."""
     _ = subprocess.run(["git", "init", "-b", "trunk", str(repo)], capture_output=True, check=True)
-    _ = _git(repo, "config", "user.name", "No Candidate")
-    _ = _git(repo, "config", "user.email", "synthetic@x.io")
-    _ = _git(repo, "config", "commit.gpgsign", "false")
+    _ = run_git(repo, "config", "user.name", "No Candidate")
+    _ = run_git(repo, "config", "user.email", "synthetic@x.io")
+    _ = run_git(repo, "config", "commit.gpgsign", "false")
     _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _ = _git(repo, "add", "base.txt")
-    _ = _git(
+    _ = run_git(repo, "add", "base.txt")
+    _ = run_git(
         repo,
         "-c",
         "user.name=Base Bau",
@@ -191,10 +176,10 @@ def _make_no_candidate_repo(repo: Path) -> None:
         "-m",
         "chore: trunk base",
     )
-    _ = _git(repo, "checkout", "-b", "feature")
+    _ = run_git(repo, "checkout", "-b", "feature")
     _ = (repo / "solo.txt").write_text("solo\n", encoding="utf-8")
-    _ = _git(repo, "add", "solo.txt")
-    _ = _git(
+    _ = run_git(repo, "add", "solo.txt")
+    _ = run_git(
         repo,
         "-c",
         "user.name=Solo",
@@ -238,7 +223,7 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
     _ = log.write_text("", encoding="utf-8")
     git_log = tmp_path / "git.log"
     _ = git_log.write_text("", encoding="utf-8")
-    _wrap_git(bindir, git_log)
+    _wraprun_git(bindir, git_log)
 
     monkeypatch.chdir(repo)
     resolution = resolve_range("feature", "..")
@@ -246,7 +231,7 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
     assert len(resolution.commits) == 2
     expected: set[str] = set()
     for sha in resolution.commits:
-        out = _git(repo, "show", "-s", "--format=%an%x00%ae", sha).strip()
+        out = run_git(repo, "show", "-s", "--format=%an%x00%ae", sha).strip()
         name, email = out.split("\x00")
         expected.add(f"Co-authored-by: {name} <{email}>")
     assert expected == {
@@ -370,7 +355,7 @@ def test_dangling_origin_head_falls_through_to_origin_main(
     """origin/HEAD naming a missing branch is treated as absent."""
     repo = tmp_path / "dangling-repo"
     _make_trunk_repo(repo)
-    _ = _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    _ = _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
+    _ = run_git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _ = run_git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
     _ = _mocked_env(tmp_path, monkeypatch, repo)
     assert resolve_base(None, "test/repo", cwd=repo) == "main"

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ast
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -17,8 +16,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
 import _changelog as changelog_mod  # noqa: E402
 import _github as github_mod  # noqa: E402
