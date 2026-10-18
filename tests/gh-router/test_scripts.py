@@ -105,10 +105,11 @@ def test_no_script_sources_the_retired_common_helper() -> None:
 def test_pure_libs_install_no_trap_and_log_nothing() -> None:
     """A script that only needs a fact must be able to source it without side effects.
 
-    repo.sh/checks.sh are consumed through command substitution, so an ERR trap or a logging
-    call in them would put diagnostics on a channel callers parse as a value.
+    repo.sh is consumed through command substitution, so an ERR trap or a logging
+    call in it would put diagnostics on a channel callers parse as a value.
+    (checks.sh is deleted — the check verdict lives only in `_github.checks_verdict`.)
     """
-    for name in ("repo.sh", "checks.sh"):
+    for name in ("repo.sh",):
         text = (LIBS / name).read_text()
         # Match statements, not prose: these modules document that they install no trap.
         assert not re.search(r"^\s*trap\s", text, re.MULTILINE), f"lib/{name} installs a trap"
