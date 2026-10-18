@@ -574,17 +574,18 @@ def test_merge_path_refuses_a_body_copied_into_the_squash_slot(
 
     monkeypatch.setattr(github_mod, "run_command", fake_run)
 
-    merged = merge_pr(
-        "test/repo",
-        "7",
-        "main",
-        "feat: x",
-        LONG_BODY,
-        squash_message_override=LONG_BODY,
-        squash_message_supplied=True,
-    )
-
-    assert merged is False
+    with pytest.raises(RefusalError) as exc_info:
+        merge_pr(
+            "test/repo",
+            "7",
+            "main",
+            "feat: x",
+            LONG_BODY,
+            squash_message_override=LONG_BODY,
+            squash_message_supplied=True,
+        )
+    assert exc_info.value.refusals[0]["code"] == "gate_refused"
+    assert not [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
     assert "mechanic copy" in capsys.readouterr().err
     assert not [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
 
@@ -816,7 +817,12 @@ def test_merge_main_guard_refuses_copy_before_any_gh_call(tmp_path: Path) -> Non
     r = _run_merge(repo, env, "--body-file", str(body_file), "--squash-message-file", str(msg_file))
 
     assert r.returncode == 1, r.stderr
-    assert r.stderr.count("mechanic copy") == 1
+    assert r.stderr.count("mechanic copy") >= 1, "gate prose plus the human refusal line"
+    payload: dict[str, Any] = json.loads(r.stdout)
+    assert payload["schema"] == "gh-router/pr-land/refusal@1"
+    assert len(payload["refusals"]) == 1
+    assert payload["refusals"][0]["code"] == "gate_refused"
+    assert "mechanic copy" in payload["refusals"][0]["reason"]
     assert "PR http" not in r.stdout
     gh_log = tmp_path / "gh.log"
     assert not gh_log.exists() or gh_log.read_text(encoding="utf-8") == ""

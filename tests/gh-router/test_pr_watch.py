@@ -459,8 +459,9 @@ def test_merge_pr_fails_fast_on_dirty_through_the_conflict_report(
     gh = FakeGh([("false", "dirty")], files="a.py")
     gh.install(monkeypatch)
 
-    assert pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body") is False
-
+    with pytest.raises(pr_mod.RefusalError) as exc_info:
+        pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
+    assert exc_info.value.refusals[0]["code"] == "merge_conflict"
     state_polls = [c for c in gh.calls if c[-1] == ".mergeable_state"]
     assert len(state_polls) == DIRTY_STRIKES
     assert gh.sleeps == [DIRTY_INTERVAL]
@@ -479,8 +480,9 @@ def test_merge_pr_refuses_a_state_that_never_settles(
     gh = FakeGh([("null", "unstable")])
     gh.install(monkeypatch)
 
-    assert pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body") is False
-
+    with pytest.raises(pr_mod.RefusalError) as exc_info:
+        pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
+    assert exc_info.value.refusals[0]["code"] == "mergeability_unknown"
     state_polls = [c for c in gh.calls if c[-1] == ".mergeable_state"]
     assert len(state_polls) == UNKNOWN_TRIES
     err = capsys.readouterr().err

@@ -68,10 +68,12 @@ from _draft import build_scaffold as build_scaffold
 from _draft import cap_draft_body as cap_draft_body
 from _draft import draft_commits as draft_commits
 from _draft import run_draft_phase as run_draft_phase
+from _errors import REFUSAL_SCHEMA as REFUSAL_SCHEMA
 from _errors import CheckFailureError as CheckFailureError
 from _errors import PrError as PrError
 from _errors import RefusalError as RefusalError
 from _errors import UsageError as UsageError
+from _errors import failing_tool as failing_tool
 from _github import CONFLICT_FILES_MAX as CONFLICT_FILES_MAX
 from _github import CONFLICT_HELPER as CONFLICT_HELPER
 from _github import DEFAULT_TIMEOUT as DEFAULT_TIMEOUT
@@ -194,7 +196,6 @@ from _squash import squash_message as squash_message
 from _squash import trailer_email_key as trailer_email_key
 from _status import collect_status as collect_status
 from _status import degraded_report as degraded_report
-from _status import failing_tool as failing_tool
 from _status import make_refusal as make_refusal
 from _status import make_transition as make_transition
 from _status import pr_error_to_refusal as pr_error_to_refusal
@@ -522,7 +523,17 @@ def create_or_reuse_pr(
             "(skills/gh-router/subskills/git-diff-digest), then re-run with --body-file",
             file=sys.stderr,
         )
-        raise RefusalError("no PR body supplied")
+        raise RefusalError(
+            "no PR body supplied",
+            refusals=[
+                make_refusal(
+                    "body_missing",
+                    "no PR body supplied; opening a PR requires a description",
+                    "draft the description from the git-diff-digest surface (skills/gh-router/subskills/git-diff-digest), then re-run with --body-file",
+                    "--body-file",
+                )
+            ],
+        )
 
     _github.ensure_branch_pushed(head_ref, cwd=cwd)
 
@@ -565,6 +576,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         options = parse_args(argv)
         if options.status:
+            if options.merge or options.watch:
+                raise UsageError(
+                    "--status combined with --merge/--watch: --status is read-only and merges nothing; drop the mutating flag"
+                )
             # Read-only orientation first: derived state, advisory facts, always
             # exit 0 — even when the head ref or repo slug cannot be resolved.
             return run_status(options)
@@ -710,7 +725,7 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
             # Advisory-only: warn on a Closes #N already closed, then merge regardless.
             _ = warn_closed_issues(repo, final_body, squash_override or "")
-            if not merge_pr(
+            _ = merge_pr(
                 repo=repo,
                 num=num,
                 base=base,
@@ -718,20 +733,26 @@ def main(argv: list[str] | None = None) -> int:
                 body=final_body,
                 squash_message_override=squash_override,
                 squash_message_supplied=squash_supplied,
-            ):
-                return 1
+            )
         return 0
 
     except UsageError as e:
         print(f"{e}", file=sys.stderr)
         return 2
     except RefusalError as exc:
-        if exc.refusals or exc.transitions:
+        print(f"refused: {exc}", file=sys.stderr)
+        refusals = exc.refusals or [
+            make_refusal(
+                "refused",
+                str(exc) or "refused",
+                "see the stderr line above and re-run",
+                "unknown",
+            )
+        ]
+        print(json.dumps({"schema": REFUSAL_SCHEMA, "refusals": refusals}, indent=2))
+        if exc.transitions:
             print(
-                json.dumps(
-                    {"refusals": exc.refusals, "transitions": exc.transitions},
-                    indent=2,
-                ),
+                json.dumps({"transitions": exc.transitions}, indent=2),
                 file=sys.stderr,
             )
         return 1

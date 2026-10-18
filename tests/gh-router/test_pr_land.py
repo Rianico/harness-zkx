@@ -284,7 +284,10 @@ def test_merge_pr_never_omits_commit_message(
     assert "Closes #12" in msg_fields[0]
 
     calls.clear()
-    assert merge_pr("test/repo", "7", "main", "feat: x", body) is False
+    with pytest.raises(RefusalError) as exc_info:
+        merge_pr("test/repo", "7", "main", "feat: x", body)
+    assert exc_info.value.refusals[0]["code"] == "squash_message_missing"
+    assert exc_info.value.refusals[0]["site"] == "--squash-message-file"
     assert not [c for c in calls if len(c) > 2 and c[1] == "api" and "/merge" in c[2]]
     err = capsys.readouterr().err
     assert "--merge requires an explicit squash commit message" in err

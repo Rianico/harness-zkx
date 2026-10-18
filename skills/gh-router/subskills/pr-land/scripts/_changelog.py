@@ -280,7 +280,13 @@ def stamp_changelog(
         return False
 
     try:
-        _ = _github.run_command(["git", "add", "CHANGELOG.md"], cwd=cwd, check=True)
+        add_res = _github.run_command(["git", "add", "CHANGELOG.md"], cwd=cwd)
+        if add_res.returncode != 0:
+            print(
+                f"warning: git add failed during changelog stamp: {add_res.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return False
         commit_res = _github.run_command(
             ["git", "commit", "-m", f"chore(changelog): attribute #{pr_num} in unreleased ledger"],
             cwd=cwd,

@@ -282,8 +282,12 @@ def run_merge(
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import merge_pr
-ok = merge_pr("t/r", "{NUM}", "main", os.environ.get("T", ""), os.environ.get("B", ""){explicit_args})
+from pr import RefusalError, merge_pr
+try:
+    ok = merge_pr("t/r", "{NUM}", "main", os.environ.get("T", ""), os.environ.get("B", ""){explicit_args})
+except RefusalError as e:
+    print(f"refused: {{e}}", file=sys.stderr)
+    sys.exit(1)
 sys.exit(0 if ok else 1)
 """
     return subprocess.run(

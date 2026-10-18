@@ -356,6 +356,16 @@ def _make_stamp_repo(base: Path) -> tuple[Path, Path]:
     return repo, remote
 
 
+def test_stamp_git_add_failure_warns_and_returns_false(tmp_path: Path) -> None:
+    """A1: a failing `git add` surfaces as a soft warning + False, never a traceback."""
+    plain = tmp_path / "plain"
+    plain.mkdir(parents=True)
+    _ = (plain / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n* entry\n", encoding="utf-8"
+    )
+    assert changelog_mod.stamp_changelog("feat-x", "7", cwd=plain) is False
+
+
 def test_stamp_recovery_pushes_stranded_commit(tmp_path: Path) -> None:
     """An attributed entry with a stranded local commit pushes on re-run, then is a no-op."""
     repo, _ = _make_stamp_repo(tmp_path)

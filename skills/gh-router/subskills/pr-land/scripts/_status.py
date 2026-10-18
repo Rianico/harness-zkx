@@ -12,7 +12,6 @@ import contextlib
 import hashlib
 import io
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -22,6 +21,10 @@ from _changelog import unreleased_attributes_pr as unreleased_attributes_pr
 from _errors import PrError as PrError
 from _errors import RefusalError as RefusalError
 from _errors import UsageError as UsageError
+from _errors import failing_tool as failing_tool
+from _errors import infer_tool as infer_tool
+from _errors import make_refusal as make_refusal
+from _errors import make_transition as make_transition
 from _github import checks_verdict as checks_verdict
 from _github import fetch_mergeability as fetch_mergeability
 from _options import PrOptions as PrOptions
@@ -83,7 +86,7 @@ PR_STATES = ("none", "open", "merged", "closed")
 BODY_STATES = ("none", "scaffold", "unfilled", "ready")
 CHECK_STATES = ("none", "pending", "green", "red")
 MERGEABLE_STATES = ("unknown", "mergeable", "conflicting")
-FAILURE_STATES = ("diverged", "head_stale", "stamp_failed")
+FAILURE_STATES = ("diverged", "head_stale", "stamp_failed", "base_unresolvable")
 MUTATIONS = ("none", "local", "remote")
 
 ARTIFACT_PREFIX = Path(".lsz") / "gh-router"
@@ -143,23 +146,6 @@ def degraded_report(head: str, repo: str, refusals: list[dict[str, str]]) -> dic
         "refusals": refusals,
         "transitions": [],
     }
-
-
-def make_refusal(code: str, reason: str, remedy: str, site: str) -> dict[str, str]:
-    """One `refusals[]` entry. `site` names the caller's input or artifact.
-
-    `site` is a flag (`--title`), a caller file (`pr_body.md:12`), a caller ref
-    (`origin/feat-x`), or the `gh` dependency — never a pr-land source location,
-    which stays behind `--verbose`.
-    """
-    return {"code": code, "reason": reason, "remedy": remedy, "site": site}
-
-
-def make_transition(command: str, preconditions: list[str], mutation: str) -> dict[str, object]:
-    """One legal `transitions[]` entry: the command, what it needs, what it mutates."""
-    if mutation not in MUTATIONS:
-        raise ValueError(f"unknown mutation {mutation!r}")
-    return {"command": command, "preconditions": list(preconditions), "mutation": mutation}
 
 
 _SLUG_MAX_BYTES = 200
@@ -261,48 +247,6 @@ def parse_checks(payload: str) -> dict[str, object]:
     return {"state": state, "ok": ok, "total": total}
 
 
-def failing_tool(message: str) -> str:
-    """Tool name from a `run_command` failure message, or empty when unknown."""
-    marker = "command not found or not executable: "
-    if marker in message:
-        return message.split(marker, 1)[1].split(":")[0].strip().split(" ")[0]
-    marker = "command timed out after "
-    if marker in message:
-        _span, sep, cmd = message.split(marker, 1)[1].partition(":")
-        if sep:
-            argv = cmd.strip().split(" ")
-            return argv[0] if argv else ""
-    return ""
-
-
-def _infer_tool(message: str) -> str:
-    """Guess the failing layer from message fingerprints, or empty when unknown.
-
-    `gh`-side fingerprints win over `git`-side ones: a `gh api` failure quoting a
-    `github.com` URL is still a `gh` failure, while a bare push/fetch-shaped
-    message is `git`. Anything unrecognized stays empty and generic.
-    """
-    lowered = message.lower()
-    if re.search(r"\bgh\b|gh api|pulls|mergeable|\bprs?\b|checks", lowered):
-        return "gh"
-    if any(
-        marker in lowered
-        for marker in (
-            "github.com",
-            "git ",
-            "git:",
-            "push",
-            "fetch",
-            "rev-list",
-            "merge-base",
-            "rebase",
-            "origin/",
-        )
-    ):
-        return "git"
-    return ""
-
-
 def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str] | None:
     """Map a `gh`/git failure to a structured refusal entry, or None when generic.
 
@@ -314,7 +258,7 @@ def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str]
     """
     message = str(exc)
     lowered = message.lower()
-    resolved = tool or failing_tool(message) or _infer_tool(message)
+    resolved = tool or failing_tool(message) or infer_tool(message)
     if resolved == "gh":
         if "command not found or not executable: gh" in message:
             return make_refusal(
@@ -653,10 +597,20 @@ def collect_status(
     sha = _head_sha(cwd)
     clean = _worktree_clean(cwd)
 
+    base_failed = False
     try:
         base: str | None = _github.resolve_base(None, repo, cwd=cwd)
-    except PrError, OSError:
+    except (PrError, OSError) as exc:
+        base_failed = True
         base = None
+        refusals.append(
+            make_refusal(
+                "base_unresolvable",
+                f"could not resolve the merge base: {exc}",
+                "pass an explicit --base, then re-run",
+                "--base",
+            )
+        )
     try:
         default_base = _github.default_branch(repo, cwd=cwd)
     except PrError, OSError:
@@ -776,6 +730,8 @@ def collect_status(
         and not changelog_stamped
     ):
         failure_states.append("stamp_failed")
+    if base_failed:
+        failure_states.append("base_unresolvable")
 
     if not body_supplied and body_state == "none":
         refusals.append(

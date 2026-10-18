@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from _errors import RefusalError, UsageError
+from _errors import make_refusal as make_refusal
 
 __all__ = [
     "_count_squash_bullets",
@@ -369,7 +370,17 @@ def refuse_raw_token(text: str, token: str = CODE_AUTHORS_TOKEN) -> None:
             "remediation: replace the token with Co-authored-by lines for outside contributors (or delete the block), then re-run",
             file=sys.stderr,
         )
-        raise RefusalError(f"raw {token} token still present")
+        raise RefusalError(
+            f"raw {token} token still present",
+            refusals=[
+                make_refusal(
+                    "raw_token",
+                    f"raw {token} token still present",
+                    "replace the token with Co-authored-by lines for outside contributors (or delete the block), then re-run",
+                    "PR body",
+                )
+            ],
+        )
 
 
 def check_title_length(title: str, num: str | int) -> None:
@@ -380,13 +391,29 @@ def check_title_length(title: str, num: str | int) -> None:
             file=sys.stderr,
         )
         print("remediation: shorten the PR title, then re-run", file=sys.stderr)
-        raise RefusalError(f"commit title exceeds {SQUASH_TITLE_MAX} chars: {header}")
+        raise RefusalError(
+            f"commit title exceeds {SQUASH_TITLE_MAX} chars: {header}",
+            refusals=[
+                make_refusal(
+                    "title_budget",
+                    f"commit title exceeds {SQUASH_TITLE_MAX} chars: {header}",
+                    "shorten the PR title, then re-run",
+                    "--title",
+                )
+            ],
+        )
 
 
-def _refuse_squash(message: str, remediation: str) -> NoReturn:
+def _refuse_squash(
+    message: str,
+    remediation: str,
+    *,
+    code: str = "gate_refused",
+    site: str = "PR body",
+) -> NoReturn:
     print(f"refusing squash merge: {message}", file=sys.stderr)
     print(f"remediation: {remediation}", file=sys.stderr)
-    raise RefusalError(message)
+    raise RefusalError(message, refusals=[make_refusal(code, message, remediation, site)])
 
 
 def check_squash_title(title: str, num: str | int) -> None:
@@ -403,6 +430,8 @@ def check_squash_title(title: str, num: str | int) -> None:
             f'commit title is not a Conventional Commit "type(scope): subject": {title} (#{num})',
             "rename the PR title to `type(scope): subject` "
             "(feat, fix, docs, refactor, test, ...), then re-run",
+            code="title_shape",
+            site="--title",
         )
 
 
@@ -799,7 +828,17 @@ def refuse_unfilled_body(body: str) -> None:
         "(skills/gh-router/subskills/git-diff-digest), then pass it with --body-file",
         file=sys.stderr,
     )
-    raise RefusalError("PR body is empty or an unfilled template")
+    raise RefusalError(
+        "PR body is empty or an unfilled template",
+        refusals=[
+            make_refusal(
+                "body_unfilled",
+                "PR body is empty or an unfilled template",
+                "draft the description from the git-diff-digest surface (skills/gh-router/subskills/git-diff-digest), then pass it with --body-file",
+                "PR body",
+            )
+        ],
+    )
 
 
 def has_unfilled_sentinels(text: str) -> bool:
@@ -825,7 +864,17 @@ def refuse_unfilled_sentinels(text: str) -> None:
         "pick one Door value, fill or delete the Closes slot — then re-run with --body-file",
         file=sys.stderr,
     )
-    raise RefusalError("unfilled placeholders remain in the PR body")
+    raise RefusalError(
+        "unfilled placeholders remain in the PR body",
+        refusals=[
+            make_refusal(
+                "body_unfilled",
+                "unfilled placeholders remain in the PR body",
+                "edit the scaffold leaf (.lsz/gh-router/<slug>.md) — replace every <FILL: …> sentinel, pick one Door value, fill or delete the Closes slot — then re-run with --body-file",
+                "PR body",
+            )
+        ],
+    )
 
 
 SQUASH_MESSAGE_SPEC = (
@@ -910,10 +959,16 @@ def copy_body_coverage(message: str, body: str) -> float:
     return len(message_shingles & body_shingles) / len(body_shingles)
 
 
-def _refuse_explicit(message: str, remediation: str) -> NoReturn:
+def _refuse_explicit(
+    message: str,
+    remediation: str,
+    *,
+    code: str = "gate_refused",
+    site: str = "--squash-message-file",
+) -> NoReturn:
     print(f"refusing squash message: {message}", file=sys.stderr)
     print(f"remediation: {remediation}", file=sys.stderr)
-    raise RefusalError(message)
+    raise RefusalError(message, refusals=[make_refusal(code, message, remediation, site)])
 
 
 def refuse_mechanic_copy(message: str, body: str) -> None:
@@ -1042,7 +1097,17 @@ def resolve_squash_message(
     supplied = supplied or explicit is not None
     if require_explicit and not supplied:
         print_squash_message_required()
-        raise RefusalError("squash message required: --merge takes no PR-body fallback")
+        raise RefusalError(
+            "squash message required: --merge takes no PR-body fallback",
+            refusals=[
+                make_refusal(
+                    "squash_message_missing",
+                    "squash message required: --merge takes no PR-body fallback",
+                    "pass an explicit message with --squash-message (or --squash-message-file)",
+                    "--squash-message-file",
+                )
+            ],
+        )
 
     if supplied:
         refuse_mechanic_copy(explicit or "", body)
@@ -1064,7 +1129,17 @@ def resolve_squash_message(
             "message with --squash-message (or --squash-message-file)",
             file=sys.stderr,
         )
-        raise RefusalError("squash message refused: body is empty or the repo template")
+        raise RefusalError(
+            "squash message refused: body is empty or the repo template",
+            refusals=[
+                make_refusal(
+                    "body_unfilled",
+                    "squash message refused: body is empty or the repo template",
+                    "draft the description from the git-diff-digest surface (skills/gh-router/subskills/git-diff-digest), then pass an explicit message with --squash-message (or --squash-message-file)",
+                    "PR body",
+                )
+            ],
+        )
     return derived
 
 

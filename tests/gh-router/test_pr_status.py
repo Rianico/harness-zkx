@@ -300,13 +300,18 @@ def test_reused_draft_refuses_watch_with_facts_attached(tmp_path: Path) -> None:
 
     assert r.returncode == 1, r.stderr
     assert "reused PR #7 is still a draft" in r.stderr
+    assert "refused: reused PR #7 is still a draft" in r.stderr
     assert "gh pr ready 7 --repo test/repo" in r.stderr
-    lines = r.stderr.splitlines()
-    facts = json.loads("\n".join(lines[lines.index("{") :]))
+    facts: dict[str, Any] = json.loads(r.stdout[r.stdout.index("{") :])
+    assert facts["schema"] == "gh-router/pr-land/refusal@1"
     assert facts["refusals"][0]["code"] == "pr_draft"
     assert facts["refusals"][0]["site"] == "PR #7"
-    assert facts["transitions"][0]["command"] == "gh pr ready 7 --repo test/repo"
-    assert facts["transitions"][0]["mutation"] == "remote"
+    transitions_start = next(
+        i for i, line in enumerate(r.stderr.splitlines()) if '"transitions"' in line
+    )
+    transitions = json.loads("\n".join(r.stderr.splitlines()[transitions_start - 1 :]))
+    assert transitions["transitions"][0]["command"] == "gh pr ready 7 --repo test/repo"
+    assert transitions["transitions"][0]["mutation"] == "remote"
 
 
 def test_no_ready_flag_exists(tmp_path: Path) -> None:
@@ -358,8 +363,10 @@ def test_merge_title_gate_runs_before_any_gh_mutation(tmp_path: Path) -> None:
 
     assert r.returncode == 1, r.stderr
     assert not Path(env["GH_LOG"]).exists(), "no gh call precedes the title preflight"
-    assert '"code": "title_shape"' in r.stderr
-    assert '"site": "--title"' in r.stderr
+    payload: dict[str, Any] = json.loads(r.stdout)
+    assert payload["schema"] == "gh-router/pr-land/refusal@1"
+    assert payload["refusals"][0]["code"] == "title_shape"
+    assert payload["refusals"][0]["site"] == "--title"
 
 
 def test_derived_title_refusal_names_the_derivation() -> None:
@@ -409,10 +416,12 @@ def test_stamp_failure_hard_fails_with_url_and_remedy(tmp_path: Path) -> None:
 
     assert r.returncode == 1, r.stderr
     assert "PR https://github.com/test/repo/pull/7" in r.stdout
-    assert '"code": "stamp_failed"' in r.stderr
-    assert "(#7)" in r.stderr
-    assert '"site": "CHANGELOG.md"' in r.stderr
-    assert "commit it to feat-status" in r.stderr
+    payload: dict[str, Any] = json.loads(r.stdout[r.stdout.index("{") :])
+    assert payload["schema"] == "gh-router/pr-land/refusal@1"
+    assert payload["refusals"][0]["code"] == "stamp_failed"
+    assert payload["refusals"][0]["site"] == "CHANGELOG.md"
+    assert "(#7)" in payload["refusals"][0]["reason"]
+    assert "commit it to feat-status" in payload["refusals"][0]["remedy"]
 
 
 def test_gh_failure_is_a_structured_refusal_not_a_traceback(tmp_path: Path) -> None:
@@ -701,3 +710,84 @@ def test_status_reports_both_title_lengths(
     assert payload["title"]["worst_case_chars"] == 100
     assert payload["title"]["budget"] == 100
     assert not [e for e in payload["refusals"] if e["code"] == "title_budget"]
+
+
+def test_mutating_refusal_emits_json_object_on_stdout(tmp_path: Path) -> None:
+    """A2: a mutating refusal prints the human line on stderr and one JSON object on stdout, exit 1."""
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    env = _gh_env(tmp_path)
+
+    r = subprocess.run(
+        [sys.executable, str(PR_PY), "--head", "feat-status", "--title", "feat: x"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+    )
+
+    assert r.returncode == 1
+    assert "refused: no PR body supplied" in r.stderr
+    payload: dict[str, Any] = json.loads(r.stdout)
+    assert payload["schema"] == "gh-router/pr-land/refusal@1"
+    assert payload["refusals"][0]["code"] == "body_missing"
+    assert set(payload["refusals"][0]) == {"code", "reason", "remedy", "site"}
+
+
+def test_merge_pr_raises_instead_of_returning_false() -> None:
+    """A2: merge_pr raises RefusalError carrying refusals (title gate fires before any gh)."""
+    import _github
+
+    with pytest.raises(_github.RefusalError) as exc_info:
+        _github.merge_pr("test/repo", "7", "main", "not a title", "## Summary\nReal.\n")
+    assert exc_info.value.refusals[0]["code"] == "title_shape"
+    assert exc_info.value.refusals[0]["site"] == "--title"
+
+
+def test_base_failure_reports_base_unresolvable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A3: an unresolvable base yields base_unresolvable in failure_states plus a matching refusal."""
+    import io
+    from contextlib import redirect_stdout
+
+    import _github
+    from _options import PrOptions
+    from _status import run_status
+
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    _status_env(monkeypatch, _gh_env(tmp_path))
+
+    def boom(*args: object, **kwargs: object) -> str:
+        raise _github.PrError("command failed: git: boom")
+
+    monkeypatch.setattr(_github, "resolve_base", boom)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = run_status(PrOptions(head="feat-status", json_output=True), cwd=repo)
+    payload: dict[str, Any] = json.loads(buf.getvalue())
+    assert rc == 0
+    assert "base_unresolvable" in payload["failure_states"]
+    entries = [e for e in payload["refusals"] if e["code"] == "base_unresolvable"]
+    assert len(entries) == 1
+    assert entries[0]["site"] == "--base"
+
+
+def test_status_with_mutating_flag_is_usage_error(tmp_path: Path) -> None:
+    """A4: `--status --merge` exits 2 naming the conflict, merging nothing."""
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    env = _gh_env(tmp_path)
+
+    for extra in (["--merge"], ["--watch"]):
+        r = subprocess.run(
+            [sys.executable, str(PR_PY), "--status", *extra, "--head", "feat-status"],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=repo,
+        )
+        assert r.returncode == 2, extra
+        assert "--status" in r.stderr and ("--merge" in r.stderr or "--watch" in r.stderr)
+        assert "read-only" in r.stderr

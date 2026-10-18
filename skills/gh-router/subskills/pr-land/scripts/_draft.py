@@ -267,7 +267,6 @@ def build_scaffold(
     out.append("")
     out.extend(closes if closes else [_SCAFFOLD_CLOSES_COMMENT])
     body = "\n".join(out) + "\n"
-    body = "\n".join(out) + "\n"
     return f"{_scaffold_marker(head_sha)}\n{body}"
 
 

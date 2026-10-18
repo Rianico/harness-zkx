@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from _errors import PrError, RefusalError, UsageError
+from _errors import make_refusal as make_refusal
 from _options import PrOptions
 from _squash import extract_closes_numbers
 
@@ -361,7 +362,17 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
             "then re-run; pr-land never force-pushes",
             file=sys.stderr,
         )
-        raise RefusalError(f"remote {remote}/{head_ref} is ahead of local {head_ref}")
+        raise RefusalError(
+            f"remote {remote}/{head_ref} is ahead of local {head_ref}",
+            refusals=[
+                make_refusal(
+                    "diverged",
+                    f"remote {remote}/{head_ref} is ahead ({behind} remote-only commit(s)); a push would be refused",
+                    f"reconcile first (e.g. git pull --rebase {remote} {head_ref}), then re-run; pr-land never force-pushes",
+                    f"{remote}/{head_ref}",
+                )
+            ],
+        )
     if ahead == 0:
         return
     push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
@@ -380,7 +391,17 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
             file=sys.stderr,
         )
         if "non-fast-forward" in stderr or "fetch first" in stderr:
-            raise RefusalError(f"remote {remote}/{head_ref} is ahead of local {head_ref}")
+            raise RefusalError(
+                f"remote {remote}/{head_ref} is ahead of local {head_ref}",
+                refusals=[
+                    make_refusal(
+                        "diverged",
+                        f"remote {remote}/{head_ref} rejected the push ({behind} remote-only commit(s) known)",
+                        f"reconcile first (e.g. git pull --rebase {remote} {head_ref}), then re-run; pr-land never force-pushes",
+                        f"{remote}/{head_ref}",
+                    )
+                ],
+            )
         raise PrError(f"failed to push {head_ref} to {remote}: {stderr}")
     print(f"pushed {head_ref} to {remote} ({ahead} commit(s))", file=sys.stderr)
 
@@ -411,7 +432,16 @@ def _local_base_from_authority(cwd: Path | None = None) -> str:
                     return fallback
         raise RefusalError(
             "cannot resolve PR base: the git-diff-digest range authority "
-            "resolved origin/HEAD but it names no branch"
+            "resolved origin/HEAD but it names no branch",
+            refusals=[
+                make_refusal(
+                    "base_unresolvable",
+                    "cannot resolve PR base: the git-diff-digest range authority "
+                    "resolved origin/HEAD but it names no branch",
+                    "pass an explicit --base, then re-run",
+                    "--base",
+                )
+            ],
         )
     if base_ref.startswith("origin/"):
         return base_ref.removeprefix("origin/")
@@ -454,7 +484,16 @@ def resolve_base(base: str | None, repo: str, cwd: Path | None = None) -> str:
         raise RefusalError(
             "cannot resolve PR base: no explicit --base, no GitHub default_branch, "
             "and the git-diff-digest range authority found no local base "
-            f"({exc})"
+            f"({exc})",
+            refusals=[
+                make_refusal(
+                    "base_unresolvable",
+                    "cannot resolve PR base: no explicit --base, no GitHub default_branch, "
+                    f"and the git-diff-digest range authority found no local base ({exc})",
+                    "pass an explicit --base, then re-run",
+                    "--base",
+                )
+            ],
         ) from exc
 
 
@@ -993,7 +1032,18 @@ def finalize_squash_message(repo: str, num: str, msg: str, cwd: Path | None = No
             f"refusing squash message: could not resolve current user login via gh api user: {merger_res.stderr.strip()}",
             file=sys.stderr,
         )
-        raise RefusalError("could not resolve current user login")
+        raise RefusalError(
+            "could not resolve current user login",
+            refusals=[
+                make_refusal(
+                    "gh_query_failed",
+                    "could not resolve current user login via gh api user: "
+                    f"{merger_res.stderr.strip() or 'gh api failed'}",
+                    "check the network / GH_TOKEN scopes and re-run",
+                    "gh",
+                )
+            ],
+        )
     merger = merger_res.stdout.strip()
     tsv_res = run_command(
         [
@@ -1010,7 +1060,17 @@ def finalize_squash_message(repo: str, num: str, msg: str, cwd: Path | None = No
             f"refusing squash message: could not enumerate PR #{num} commit authors (check network / GH_TOKEN scopes); re-run rather than merge without attribution",
             file=sys.stderr,
         )
-        raise RefusalError(f"could not enumerate PR #{num} commit authors")
+        raise RefusalError(
+            f"could not enumerate PR #{num} commit authors",
+            refusals=[
+                make_refusal(
+                    "gh_query_failed",
+                    f"could not enumerate PR #{num} commit authors (check network / GH_TOKEN scopes)",
+                    "re-run rather than merge without attribution",
+                    f"PR #{num}",
+                )
+            ],
+        )
     return _build_squash_message(msg, merger, tsv_res.stdout).rstrip("\n")
 
 
@@ -1025,7 +1085,7 @@ def merge_pr(
     squash_message_override: str | None = None,
     squash_message_supplied: bool = False,
 ) -> bool:
-    """Squash-merge the PR after the clean-state and message gates. False refuses."""
+    """Squash-merge the PR after the clean-state and message gates. Raises on refusal."""
     from _squash import check_squash_body as _check_squash_body
     from _squash import check_squash_title as _check_squash_title
     from _squash import check_title_length as _check_title_length
@@ -1047,7 +1107,23 @@ def merge_pr(
         if obs.verdict in ("conflicting", "unknown"):
             report_merge_refusal(obs, repo, num, cwd=cwd)
         print(f"refusing to merge: mergeable_state={obs.state} (not clean)", file=sys.stderr)
-        return False
+        if obs.verdict == "conflicting":
+            code = "merge_conflict"
+        elif obs.verdict == "unknown":
+            code = "mergeability_unknown"
+        else:
+            code = "head_stale"
+        raise RefusalError(
+            f"refusing to merge: mergeable_state={obs.state} (not clean)",
+            refusals=[
+                make_refusal(
+                    code,
+                    f"refusing to merge: mergeable_state={obs.state} (not clean)",
+                    "reconcile the branch (or wait for GitHub to compute mergeability), then re-run",
+                    f"PR #{num}",
+                )
+            ],
+        )
     header = f"{title} (#{num})"
     merge_args: list[str] = [
         "-f",
@@ -1055,28 +1131,19 @@ def merge_pr(
         "-f",
         f"commit_title={header}",
     ]
-    try:
-        msg = _resolve_squash_message(
-            body,
-            explicit=squash_message_override,
-            supplied=squash_message_supplied,
-            template_path=template_path,
-            require_explicit=True,
-        )
-    except RefusalError:
-        return False
-    try:
-        _check_squash_body(
-            msg,
-            title=title,
-            pr_link=f"https://github.com/{repo}/pull/{num}",
-        )
-    except RefusalError:
-        return False
-    try:
-        msg = finalize_squash_message(repo, num, msg, cwd=cwd)
-    except RefusalError:
-        return False
+    msg = _resolve_squash_message(
+        body,
+        explicit=squash_message_override,
+        supplied=squash_message_supplied,
+        template_path=template_path,
+        require_explicit=True,
+    )
+    _check_squash_body(
+        msg,
+        title=title,
+        pr_link=f"https://github.com/{repo}/pull/{num}",
+    )
+    msg = finalize_squash_message(repo, num, msg, cwd=cwd)
     merge_args.extend(["-f", f"commit_message={msg}"])
     m_res = run_command(
         ["gh", "api", f"repos/{repo}/pulls/{num}/merge", "-X", "PUT", *merge_args],
@@ -1084,6 +1151,16 @@ def merge_pr(
     )
     if m_res.returncode != 0:
         print(f"merge failed: {m_res.stderr.strip() or 'gh api failed'}", file=sys.stderr)
-        return False
+        raise RefusalError(
+            f"merge failed: {m_res.stderr.strip() or 'gh api failed'}",
+            refusals=[
+                make_refusal(
+                    "merge_failed",
+                    f"merge failed: {m_res.stderr.strip() or 'gh api failed'}",
+                    "check the error, fix the cause, then re-run",
+                    f"PR #{num}",
+                )
+            ],
+        )
     print(f"merged #{num} (squash) to {base}", file=sys.stderr)
     return True
