@@ -23,10 +23,6 @@ from _squash import (
     resolve_squash_message,
 )
 from _status import title_gate as title_gate
-
-_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
-if _LIB_DIR not in sys.path:
-    sys.path.insert(0, _LIB_DIR)
 from range_authority import RangeRefusal
 
 __all__ = [

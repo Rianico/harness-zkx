@@ -37,10 +37,6 @@ from _squash import SQUASH_TITLE_RE as SQUASH_TITLE_RE
 from _squash import has_unfilled_sentinels as has_unfilled_sentinels
 from _squash import is_unfilled_body as is_unfilled_body
 from _squash import resolve_squash_message as resolve_squash_message
-
-_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
-if _LIB_DIR not in sys.path:
-    sys.path.insert(0, _LIB_DIR)
 from range_authority import find_repo_root as find_repo_root
 
 __all__ = [

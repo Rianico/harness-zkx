@@ -3,8 +3,8 @@
 The squash commit message is the durable artifact of a landing, so its lifecycle lives here: the
 trailer helpers that keep commit attribution, the sanitiser that refuses unresolved template
 tokens, the section/bullet/rollback gates, and the assembly that derives a message from the PR
-body. `pr.py` (the CLI entry point) re-exports this surface, so the historical
-`from pr import <name>` imports keep working; the two entry adapters that consume the CLI's
+body. Import the gate helpers from here directly; `pr.py` keeps only the CLI entry
+(`parse_args`/`create_or_reuse_pr`/`main`), not a re-export of this surface.
 `PrOptions` and its process runner stay in `pr.py` to keep this module free of import cycles.
 
 On the explicit `--squash-message` / `--squash-message-file` path the strict shape gate REFUSES
@@ -74,7 +74,6 @@ __all__ = [
     "has_unfilled_sentinels",
     "insert_trailers",
     "is_closing_line",
-    "is_fallback_body",
     "is_trailer_line",
     "is_unfilled_body",
     "LABEL_ONLY_RE",
@@ -404,6 +403,25 @@ def check_title_length(title: str, num: str | int) -> None:
         )
 
 
+def _refuse_gate(
+    message: str,
+    remediation: str,
+    *,
+    prefix: str,
+    code: str = "gate_refused",
+    site: str,
+) -> NoReturn:
+    """Shared refusal printer: only the prefix and default site differ per gate.
+
+    `_refuse_squash` ("refusing squash merge", site "PR body") and `_refuse_explicit`
+    ("refusing squash message", site "--squash-message-file") keep their exact
+    strings and sites — this helper only removes the duplicated print/raise body.
+    """
+    print(f"{prefix}: {message}", file=sys.stderr)
+    print(f"remediation: {remediation}", file=sys.stderr)
+    raise RefusalError(message, refusals=[make_refusal(code, message, remediation, site)])
+
+
 def _refuse_squash(
     message: str,
     remediation: str,
@@ -411,9 +429,7 @@ def _refuse_squash(
     code: str = "gate_refused",
     site: str = "PR body",
 ) -> NoReturn:
-    print(f"refusing squash merge: {message}", file=sys.stderr)
-    print(f"remediation: {remediation}", file=sys.stderr)
-    raise RefusalError(message, refusals=[make_refusal(code, message, remediation, site)])
+    _refuse_gate(message, remediation, prefix="refusing squash merge", code=code, site=site)
 
 
 def check_squash_title(title: str, num: str | int) -> None:
@@ -808,13 +824,9 @@ def squash_message(body: str, template_path: Path | None = None) -> str:
     return clean_squash_body(body)
 
 
-def is_fallback_body(body: str, template_path: Path | None = None) -> bool:
-    return squash_message(body, template_path=template_path) == ""
-
-
 def is_unfilled_body(body: str, template_path: Path | None = None) -> bool:
     """True when *body* carries no authored description: empty, or the repo template verbatim."""
-    return is_fallback_body(body, template_path=template_path)
+    return squash_message(body, template_path=template_path) == ""
 
 
 def refuse_unfilled_body(body: str) -> None:
@@ -966,9 +978,7 @@ def _refuse_explicit(
     code: str = "gate_refused",
     site: str = "--squash-message-file",
 ) -> NoReturn:
-    print(f"refusing squash message: {message}", file=sys.stderr)
-    print(f"remediation: {remediation}", file=sys.stderr)
-    raise RefusalError(message, refusals=[make_refusal(code, message, remediation, site)])
+    _refuse_gate(message, remediation, prefix="refusing squash message", code=code, site=site)
 
 
 def refuse_mechanic_copy(message: str, body: str) -> None:

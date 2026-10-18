@@ -18,6 +18,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
+LIB_DIR = REPO_ROOT / "skills/gh-router/lib"
 PR_PY = PR_SCRIPTS / "pr.py"
 PR_SH = PR_SCRIPTS / "pr.sh"
 REFINE_SH = REPO_ROOT / "skills/gh-router/subskills/pr-refine/scripts/refine.sh"
@@ -25,6 +26,8 @@ NUM = "7"
 
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
+if str(LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(LIB_DIR))
 
 from _errors import RefusalError  # noqa: E402
 from _squash import (
@@ -250,6 +253,7 @@ def run_finalize(env: dict[str, str], body: str) -> subprocess.CompletedProcess[
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
+sys.path.insert(0, "{LIB_DIR}")
 from _github import finalize_squash_message
 try:
     res = finalize_squash_message("t/r", "{NUM}", os.environ.get("B", ""))
@@ -282,6 +286,7 @@ def run_merge(
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
+sys.path.insert(0, "{LIB_DIR}")
 from _errors import RefusalError
 from _github import merge_pr
 try:

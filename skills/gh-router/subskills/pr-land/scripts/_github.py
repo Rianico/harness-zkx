@@ -16,8 +16,8 @@ A leaf below `_options`: this module imports nothing from `pr`, `_check`, `_draf
 `_changelog`.
 """
 
+import contextlib
 import json
-import os
 import re
 import subprocess
 import sys
@@ -26,6 +26,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+from unittest import mock
 
 from _errors import CommandFailed as CommandFailed
 from _errors import PrError, RefusalError, UsageError
@@ -33,10 +34,6 @@ from _errors import make_refusal as make_refusal
 from _options import PrOptions
 from _options import read_user_file as read_user_file
 from _squash import extract_closes_numbers
-
-_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
-if _LIB_DIR not in sys.path:
-    sys.path.insert(0, _LIB_DIR)
 from range_authority import RangeRefusal, RangeResolution, resolve_range
 
 __all__ = [
@@ -475,21 +472,32 @@ def warn_closed_issues(repo: str, *texts: str, cwd: Path | None = None) -> int:
     return warned
 
 
+@contextlib.contextmanager
+def _scoped_authority_cwd(target: Path):
+    """Bind `Path.cwd()` to *target* for one range-authority call (no `os.chdir`).
+
+    `resolve_range` discovers its repo through the single `Path.cwd()` call in
+    `lib/range_authority.py`; everything downstream runs `git -C` against the
+    discovered root, so nothing else reads the process cwd. Patching `Path.cwd`
+    for the call keeps the real cwd — and every relative syscall in other
+    threads — untouched, unlike the `os.chdir` save/restore this replaces.
+    """
+    with mock.patch.object(Path, "cwd", return_value=target):
+        yield
+
+
 def _authority_resolve(spec: str, mode: str, cwd: Path | None = None) -> RangeResolution:
     """Resolve *spec* through the shared range authority inside the target repo.
 
-    resolve_range discovers its repo from the process cwd, so temporarily
-    chdir when the caller targets another checkout. Restores cwd on return.
+    `resolve_range` discovers its repo from `Path.cwd()`, so scope discovery
+    to the caller's checkout with `_scoped_authority_cwd` when one is given.
     """
     if cwd is None:
         return resolve_range(spec, mode)
     previous = Path.cwd()
     target = cwd if cwd.is_absolute() else previous / cwd
-    os.chdir(target)
-    try:
+    with _scoped_authority_cwd(target):
         return resolve_range(spec, mode)
-    finally:
-        os.chdir(previous)
 
 
 def _remote_branch_exists(name: str, cwd: Path | None = None, remote: str = "origin") -> bool:

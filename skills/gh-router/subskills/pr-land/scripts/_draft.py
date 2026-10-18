@@ -43,10 +43,6 @@ from _status import body_site_with_line as body_site_with_line
 from _status import display_path as display_path
 from _status import make_refusal as make_refusal
 from _status import resolve_artifact_path as resolve_artifact_path
-
-_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
-if _LIB_DIR not in sys.path:
-    sys.path.insert(0, _LIB_DIR)
 from range_authority import (
     MalformedSpec,
     RangeRefusal,
