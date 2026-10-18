@@ -33,7 +33,7 @@ echo "$@" >> "$GH_LOG"
 for arg in "$@"; do
   case "$arg" in
     *'pulls?head='*)
-      if [[ -z "${PR_NUMBER:-}" ]]; then echo "null"; elif [[ " $* " == *".merged"* ]]; then printf '%s\\t%s\\t%s\\t%s\\n' "$PR_NUMBER" "${PR_STATE:-open}" "${PR_DRAFT:-false}" "${PR_MERGED:-false}"; elif [[ " $* " == *'.[0].number'* ]]; then printf '%s\\n' "$PR_NUMBER"; else printf '%s\\t%s\\n' "$PR_NUMBER" "${PR_DRAFT:-false}"; fi
+      if [[ -z "${PR_NUMBER:-}" ]]; then echo "null"; else printf '%s\\t%s\\t%s\\t%s\\n' "$PR_NUMBER" "${PR_STATE:-open}" "${PR_DRAFT:-false}" "${PR_MERGED:-false}"; fi
       exit 0 ;;
   esac
 done

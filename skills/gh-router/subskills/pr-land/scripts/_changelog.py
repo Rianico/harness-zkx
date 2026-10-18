@@ -10,6 +10,8 @@ coverage, outside it.
 import os
 import re
 import sys
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import _github
@@ -26,6 +28,7 @@ __all__ = [
     "stamp_changelog",
     "stamp_needed",
     "unreleased_attributes_pr",
+    "warn_ledger_gap",
 ]
 
 
@@ -50,6 +53,51 @@ def _unreleased_attribution_re(pr_num: str) -> re.Pattern[str]:
     return cached
 
 
+@dataclass(frozen=True)
+class LedgerEntry:
+    """One Unreleased-block line: the original line plus its bullet parse."""
+
+    line: str
+    raw: str
+    prefix: str
+    body: str
+    in_section: bool
+
+
+def _iter_ledger_entries(block: str) -> Iterator[LedgerEntry]:
+    """Yield every line of an Unreleased block with bullet parsing attached.
+
+    The single home for the ledger walk: section tracking, bullet detection,
+    and marker splitting live here so the three readers cannot drift.
+    Non-bullet lines yield with an empty prefix and body.
+    """
+    in_section = False
+    for line in block.splitlines(keepends=True):
+        raw = line.rstrip("\r\n")
+        if _UNRELEASED_SECTION_RE.match(raw):
+            in_section = True
+        matched = _UNRELEASED_BULLET_RE.match(raw)
+        if not matched:
+            yield LedgerEntry(line=line, raw=raw, prefix="", body="", in_section=in_section)
+            continue
+        marker = matched.group(0)
+        yield LedgerEntry(
+            line=line, raw=raw, prefix=marker, body=raw[len(marker) :], in_section=in_section
+        )
+
+
+def _entry_identity(raw_line: str) -> str:
+    """Ledger identity of a raw line: stripped of marker and attribution suffixes."""
+    identity = raw_line.strip()
+    if identity[:1] in "*+-":
+        identity = identity[1:].strip()
+    while True:
+        trimmed = re.sub(r"\s*\(#\d+\)\s*$|\s*\(BREAKING CHANGE\)\s*$", "", identity).rstrip()
+        if trimmed == identity:
+            return identity
+        identity = trimmed
+
+
 def _read_unreleased_block(cwd: Path | None = None) -> str | None:
     """Return the ## [Unreleased] block body, or None when absent or unreadable.
 
@@ -59,7 +107,9 @@ def _read_unreleased_block(cwd: Path | None = None) -> str | None:
     root = cwd or Path.cwd()
     try:
         content = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-    except OSError, UnicodeDecodeError:
+    except OSError:
+        return None
+    except UnicodeDecodeError:
         return None
     if "## [Unreleased]" not in content:
         return None
@@ -82,16 +132,10 @@ def unreleased_attributes_pr(pr_num: str, cwd: Path | None = None) -> bool:
     if block is None:
         return False
     attribution_re = _unreleased_attribution_re(pr_num)
-    in_section = False
-    for line in block.splitlines():
-        if _UNRELEASED_SECTION_RE.match(line):
-            in_section = True
+    for entry in _iter_ledger_entries(block):
+        if not entry.prefix or not entry.in_section:
             continue
-        if not _UNRELEASED_BULLET_RE.match(line):
-            continue
-        if not in_section:
-            continue
-        if attribution_re.search(line.rstrip()):
+        if attribution_re.search(entry.raw.rstrip()):
             return True
     return False
 
@@ -120,23 +164,12 @@ def stamp_needed(pr_num: str, cwd: Path | None = None) -> bool:
         except OSError:
             baseline = set()
     any_attribution_re = re.compile(r"\(#\d+\)(?:\s*\(BREAKING CHANGE\))?\s*$")
-    bullet_re = re.compile(r"^([*+-]\s+)(.+)$")
-    for line in block.splitlines():
-        raw_line = line.rstrip("\r\n")
-        matched = bullet_re.match(raw_line)
-        if not matched:
+    for entry in _iter_ledger_entries(block):
+        if not entry.prefix:
             continue
-        if any_attribution_re.search(matched.group(2)):
+        if any_attribution_re.search(entry.body):
             continue
-        identity = raw_line.strip()
-        if identity[:1] in "*+-":
-            identity = identity[1:].strip()
-        while True:
-            trimmed = re.sub(r"\s*\(#\d+\)\s*$|\s*\(BREAKING CHANGE\)\s*$", "", identity).rstrip()
-            if trimmed == identity:
-                break
-            identity = trimmed
-        if identity in baseline:
+        if _entry_identity(entry.raw) in baseline:
             continue
         return True
     return False
@@ -220,44 +253,28 @@ def stamp_changelog(
 
     attribution_re = re.compile(r"\(#\d+\)(?:\s*\(BREAKING CHANGE\))?\s*$")
     breaking_re = re.compile(r"\s*\(BREAKING CHANGE\)\s*$")
-    bullet_re = re.compile(r"^([*+-]\s+)(.+)$")
-
-    def entry_identity(text: str) -> str:
-        s = text.strip()
-        if s[:1] in "*+-":
-            s = s[1:].strip()
-        while True:
-            trimmed = re.sub(r"\s*\(#\d+\)\s*$|\s*\(BREAKING CHANGE\)\s*$", "", s).rstrip()
-            if trimmed == s:
-                return s
-            s = trimmed
-
     new_lines: list[str] = []
     modified = False
 
-    for line in unreleased_block.splitlines(keepends=True):
-        raw_line = line.rstrip("\r\n")
-        m = bullet_re.match(raw_line)
-        if not m:
-            new_lines.append(line)
+    for entry in _iter_ledger_entries(unreleased_block):
+        if not entry.prefix:
+            new_lines.append(entry.line)
             continue
-
-        prefix, body = m.group(1), m.group(2)
+        prefix, body, raw_line = entry.prefix, entry.body, entry.raw
         if attribution_re.search(body):
-            new_lines.append(line)
+            new_lines.append(entry.line)
             continue
 
-        identity = entry_identity(raw_line)
+        identity = _entry_identity(raw_line)
         if identity in baseline:
-            new_lines.append(line)
+            new_lines.append(entry.line)
             continue
 
         ending = ""
-        if line.endswith("\r\n"):
+        if entry.line.endswith("\r\n"):
             ending = "\r\n"
-        elif line.endswith("\n"):
+        elif entry.line.endswith("\n"):
             ending = "\n"
-
         if breaking_re.search(body):
             body_without_breaking = breaking_re.sub("", body).rstrip()
             stamped_body = f"{body_without_breaking} (#{pr_num}) (BREAKING CHANGE)"
@@ -317,3 +334,56 @@ def stamp_changelog(
     except PrError as e:
         print(f"warning: changelog auto-stamp failed: {e}", file=sys.stderr)
         return False
+
+
+def warn_ledger_gap(num: str, draft: bool, no_stamp: bool) -> None:
+    """Advise when no ## [Unreleased] entry carries `(#num)` after a create-or-reuse.
+
+    The single home for the ledger advisory: the no-section, draft, and ready
+    wordings live here once instead of once per stamp-mode branch in `pr.py`.
+    Pure commentary on stderr; never refuses, never mutates.
+    """
+    if _read_unreleased_block() is None:
+        print(
+            "warning: no ## [Unreleased] section in CHANGELOG.md; "
+            "the Ledger floor gate requires one before this PR can land. "
+            f"Add the section with an entry ending in (#{num}).",
+            file=sys.stderr,
+        )
+    elif draft:
+        if no_stamp:
+            print(
+                f"note: --no-stamp: head was not stamped for PR #{num} — "
+                f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
+                "(changelog gate) rejects this PR once it goes ready. "
+                f"Add an entry ending in (#{num}) before you flip it ready.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"note: no ## [Unreleased] entry carries (#{num}); "
+                "the Ledger floor gate rejects this PR once it goes ready. "
+                f"Add an entry ending in (#{num}) before you flip it ready "
+                "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
+                file=sys.stderr,
+            )
+    elif no_stamp:
+        print(
+            f"warning: --no-stamp: head was not stamped for PR #{num} — "
+            f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
+            f'("#{num} carries no entries in ## [Unreleased]") will reject this PR '
+            "and the changelog gate stays red "
+            "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR). "
+            f"Add an entry ending in (#{num}) and push it, or re-run without --no-stamp.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"warning: no ## [Unreleased] entry carries (#{num}); "
+            "the Ledger floor gate\n"
+            f'("#{num} carries no entries in ## [Unreleased]") will reject this PR on the\n'
+            f"ready flip. Add an entry ending in (#{num}), commit it to this branch, or\n"
+            "leave the PR draft until the entry lands "
+            "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
+            file=sys.stderr,
+        )

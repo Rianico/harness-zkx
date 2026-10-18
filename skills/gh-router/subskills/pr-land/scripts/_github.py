@@ -31,6 +31,7 @@ from _errors import CommandFailed as CommandFailed
 from _errors import PrError, RefusalError, UsageError
 from _errors import make_refusal as make_refusal
 from _options import PrOptions
+from _options import read_user_file as read_user_file
 from _squash import extract_closes_numbers
 
 _LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
@@ -276,6 +277,58 @@ def run_command(
             cmd[0] if cmd else "unknown", list(cmd), result.returncode, result.stderr
         )
     return result
+
+
+def head_sha(cwd: Path | None = None) -> str:
+    """Current HEAD commit sha, or empty when unresolvable (marker-only use)."""
+    try:
+        res = run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
+    except PrError:
+        return ""
+    return res.stdout.strip() if res.returncode == 0 else ""
+
+
+@dataclass(frozen=True)
+class PrRef:
+    """One open-PR lookup result: number, state, draft flag, merged flag."""
+
+    number: str
+    state: str
+    is_draft: bool
+    merged: bool
+
+
+def lookup_pr(
+    repo: str, head_ref: str, *, state: str = "open", cwd: Path | None = None
+) -> PrRef | None:
+    """The single home for the open-PR lookup (`gh api .../pulls?head=`).
+
+    Queries the full field set once; callers use what they need. Returns None
+    when no PR matches. Never raises on an empty result.
+    """
+    owner = repo.split("/")[0]
+    res = run_command(
+        [
+            "gh",
+            "api",
+            f"repos/{repo}/pulls?head={owner}:{head_ref}&state={state}",
+            "--jq",
+            r'.[0] | "\(.number)\t\(.state)\t\(.isDraft)\t\(.merged)"',
+        ],
+        cwd=cwd,
+        required=True,
+    )
+    line = res.stdout.strip()
+    if not line or line == "null":
+        return None
+    fields = line.split("\t")
+    number = fields[0].strip() or None
+    if number is None or number == "null":
+        return None
+    state_value = fields[1].strip() if len(fields) > 1 else ""
+    is_draft = len(fields) > 2 and fields[2].strip().lower() == "true"
+    merged = len(fields) > 3 and fields[3].strip().lower() == "true"
+    return PrRef(number=number, state=state_value, is_draft=is_draft, merged=merged)
 
 
 def resolve_head(head_ref: str | None = None, cwd: Path | None = None) -> str:
@@ -667,12 +720,7 @@ def resolve_title_and_body(
             if options.body_file.is_absolute()
             else ((cwd or Path.cwd()) / options.body_file)
         )
-        if not bf.is_file():
-            raise UsageError(f"body file not found or not readable: {options.body_file}")
-        try:
-            body = bf.read_text(encoding="utf-8")
-        except OSError:
-            raise UsageError(f"body file not found or not readable: {options.body_file}") from None
+        body = read_user_file(bf, kind="body", display=str(options.body_file))
         body_supplied = True
 
     return title, body, title_supplied, body_supplied
@@ -715,7 +763,38 @@ def checks_verdict(payload: str) -> str:
     return "success"
 
 
+def parse_checks(payload: str) -> tuple[str, int, int]:
+    """Parse `gh pr checks` TSV into `(predicate-state, ok, total)` in one pass.
+
+    The single home for counting check buckets; the word maps the shared
+    `checks_verdict` vocabulary (`success`/`failure`/`pending`) onto the
+    predicate vocabulary (`green`/`red`/`pending`).
+    """
+    verdict = checks_verdict(payload)
+    state = {"success": "green", "failure": "red", "pending": "pending"}.get(verdict, "pending")
+    ok = total = 0
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        total += 1
+        parts = line.split("\t")
+        bucket = parts[1].strip() if len(parts) >= 2 else line.split()[-1]
+        if bucket == "pass":
+            ok += 1
+    if total == 0:
+        return "none", 0, 0
+    return state, ok, total
+
+
 def pr_conflict_verdict(mergeable: str | None, state: str | None) -> str:
+    """Verdict from the (mergeable, state) pair; kept separate from `merge_state_verdict`.
+
+    `merge_state_verdict` judges a bare state and treats unknown states as
+    refusals; this judges the pair, so a computable-but-unlisted state with a
+    usable `mergeable` still reads `clean` (and vice versa for null `mergeable`).
+    Merging them would flip verdicts for states like `blocked`; the two homes
+    are intentional.
+    """
     m = (mergeable or "").strip()
     s = (state or "").strip()
     if m in ("false", "CONFLICTING"):
@@ -966,7 +1045,11 @@ def failing_run_ids(repo: str, num: str, cwd: Path | None = None) -> list[str]:
                                 rid = m.group(1)
                                 if rid not in run_ids:
                                     run_ids.append(rid)
-        except ValueError, TypeError, KeyError:
+        except ValueError:
+            pass
+        except TypeError:
+            pass
+        except KeyError:
             pass
 
     if not run_ids:
@@ -1210,7 +1293,8 @@ def finalize_squash_message(repo: str, num: str, msg: str, cwd: Path | None = No
                 )
             ],
         )
-    return _build_squash_message(msg, merger, tsv_res.stdout).rstrip("\n")
+    final, _ = _build_squash_message(msg, merger, tsv_res.stdout)
+    return final.rstrip("\n")
 
 
 def merge_pr(
@@ -1230,6 +1314,11 @@ def merge_pr(
     from _squash import check_title_length as _check_title_length
     from _squash import resolve_squash_message as _resolve_squash_message
 
+    # Authoritative merge-time title gate: calls _squash directly (raising
+    # RefusalError with the exact `title (#N)` header wording) rather than
+    # routing through _status.title_gate. _github cannot import _status (cycle:
+    # _status imports _github), and title_gate is the advisory dict-returning
+    # twin for preflight paths (--check, --status), not the merge authority.
     if title.strip():
         _check_squash_title(title, num)
     else:

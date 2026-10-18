@@ -1143,7 +1143,12 @@ def resolve_squash_message(
     return derived
 
 
-def build_squash_message(msg: str, merger: str, tsv: str) -> str:
+def build_squash_message(msg: str, merger: str, tsv: str) -> tuple[str, str]:
+    """Clean the squash message and append one Co-authored-by line per author.
+
+    Returns the `(message, trailers)` pair so callers never recompute the
+    trailer block from the same inputs.
+    """
     cleaned = clean_squash_body(msg)
     new_trailers = pr_co_author_trailers(tsv, merger=merger, body=cleaned)
     final = insert_trailers(cleaned, new_trailers)
@@ -1151,4 +1156,4 @@ def build_squash_message(msg: str, merger: str, tsv: str) -> str:
     if new_trailers.strip():
         print("appended trailers:", file=sys.stderr)
         print(new_trailers, end="", file=sys.stderr)
-    return final
+    return final, new_trailers

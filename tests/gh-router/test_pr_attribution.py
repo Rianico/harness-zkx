@@ -228,7 +228,7 @@ def test_body_with_long_lines_passes_build_squash_message() -> None:
     long_line = "x" * 150
     body = f"Summary line.\n\n{long_line}\n\nCloses #12\n"
     tsv = "ghuser\tWf Zyx\twf@x.io\nme\tMe\tme@x.io"
-    res = build_squash_message(body, merger="me", tsv=tsv)
+    res, _ = build_squash_message(body, merger="me", tsv=tsv)
     assert long_line in res
     assert "Co-authored-by: Wf Zyx <wf@x.io>" in res
 

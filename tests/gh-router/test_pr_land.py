@@ -417,7 +417,7 @@ def test_check_trailers_refuses_fallback_without_explicit(
 
     monkeypatch.setattr(github_mod, "run_command", fake_run)
 
-    rc = check_trailers("test/repo", "feat-branch", "", body_supplied=True)
+    rc = check_trailers("test/repo", "feat-branch", "", body_supplied=True, title="feat: x")
     assert rc == 1
     err = capsys.readouterr().err
     assert "--squash-message" in err
@@ -986,7 +986,7 @@ import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
 from pr import check_trailers, PrError
 try:
-    check_trailers("test/repo", "feat-branch", "", body_supplied=False)
+    check_trailers("test/repo", "feat-branch", "", body_supplied=False, title="feat: x")
     print("FAILED_SILENTLY")
     sys.exit(0)
 except PrError as e:
@@ -1278,7 +1278,7 @@ exit 0
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
 from pr import check_trailers
-rc = check_trailers("test/repo", "feat-branch", "", body_supplied=False)
+rc = check_trailers("test/repo", "feat-branch", "", body_supplied=False, title="feat: x")
 sys.exit(rc)
 """
     res1 = subprocess.run(
@@ -1658,7 +1658,7 @@ class _FakeRun:
                 out = "null\n"
             else:
                 draft_flag = "true" if self.reuse_draft else "false"
-                out = f"{self.existing_pr}\t{draft_flag}\n"
+                out = f"{self.existing_pr}\topen\t{draft_flag}\tfalse\n"
         elif "pulls -X POST" in joined:
             out = "7\n"
         elif "html_url" in joined:

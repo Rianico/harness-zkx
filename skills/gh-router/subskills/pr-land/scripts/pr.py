@@ -58,6 +58,7 @@ from _changelog import _unreleased_attribution_re as _unreleased_attribution_re
 from _changelog import stamp_changelog as stamp_changelog
 from _changelog import stamp_needed as stamp_needed
 from _changelog import unreleased_attributes_pr as unreleased_attributes_pr
+from _changelog import warn_ledger_gap as warn_ledger_gap
 from _check import CheckReport as CheckReport
 from _check import check_trailers as check_trailers
 from _check import check_trailers_report as check_trailers_report
@@ -417,23 +418,10 @@ def create_or_reuse_pr(
     if body_supplied:
         refuse_unfilled_sentinels(body)
 
-    owner = repo.split("/")[0]
-    res = _github.run_command(
-        [
-            "gh",
-            "api",
-            f"repos/{repo}/pulls?head={owner}:{head_ref}&state=open",
-            "--jq",
-            r'.[0] // empty | "\(.number)\t\(.isDraft)"',
-        ],
-        cwd=cwd,
-        required=True,
-    )
-    existing = res.stdout.strip()
-    if existing and existing != "null":
-        fields = existing.split("\t")
-        num = fields[0].strip()
-        is_draft = len(fields) > 1 and fields[1].strip().lower() == "true"
+    ref = _github.lookup_pr(repo, head_ref, state="open", cwd=cwd)
+    if ref is not None:
+        num = ref.number
+        is_draft = ref.is_draft
         print(f"found existing PR #{num}", file=sys.stderr)
         if is_draft and not draft:
             print(
@@ -643,60 +631,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             elif not created or not stamp_needed(num):
                 _ = stamp_changelog(head, num)
-            if created and not unreleased_attributes_pr(num):
-                if _read_unreleased_block() is None:
-                    print(
-                        "warning: no ## [Unreleased] section in CHANGELOG.md; "
-                        "the Ledger floor gate requires one before this PR can land. "
-                        f"Add the section with an entry ending in (#{num}).",
-                        file=sys.stderr,
-                    )
-                elif options.draft:
-                    print(
-                        f"note: no ## [Unreleased] entry carries (#{num}); "
-                        "the Ledger floor gate rejects this PR once it goes ready. "
-                        f"Add an entry ending in (#{num}) before you flip it ready "
-                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
-                        file=sys.stderr,
-                    )
-                else:
-                    print(
-                        f"warning: no ## [Unreleased] entry carries (#{num}); "
-                        "the Ledger floor gate\n"
-                        f'("#{num} carries no entries in ## [Unreleased]") will reject this PR on the\n'
-                        f"ready flip. Add an entry ending in (#{num}), commit it to this branch, or\n"
-                        "leave the PR draft until the entry lands "
-                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
-                        file=sys.stderr,
-                    )
-        elif created:
-            if not unreleased_attributes_pr(num):
-                if _read_unreleased_block() is None:
-                    print(
-                        "warning: no ## [Unreleased] section in CHANGELOG.md; "
-                        "the Ledger floor gate requires one before this PR can land. "
-                        f"Add the section with an entry ending in (#{num}).",
-                        file=sys.stderr,
-                    )
-                elif options.draft:
-                    print(
-                        f"note: --no-stamp: head was not stamped for PR #{num} — "
-                        f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
-                        "(changelog gate) rejects this PR once it goes ready. "
-                        f"Add an entry ending in (#{num}) before you flip it ready.",
-                        file=sys.stderr,
-                    )
-                else:
-                    print(
-                        f"warning: --no-stamp: head was not stamped for PR #{num} — "
-                        f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
-                        f'("#{num} carries no entries in ## [Unreleased]") will reject this PR '
-                        "and the changelog gate stays red "
-                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR). "
-                        f"Add an entry ending in (#{num}) and push it, or re-run without --no-stamp.",
-                        file=sys.stderr,
-                    )
-
+        if created and not unreleased_attributes_pr(num):
+            warn_ledger_gap(num, options.draft, options.no_stamp)
         if created and not options.draft:
             if not ready_pr(repo, num):
                 return 1

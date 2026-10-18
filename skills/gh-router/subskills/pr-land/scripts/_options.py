@@ -35,6 +35,27 @@ class PrOptions:
     force_scaffold: bool = False
 
 
+def read_user_file(
+    path: Path,
+    *,
+    kind: str,
+    display: str,
+    encoding: str = "utf-8",
+) -> str:
+    """Read a caller-supplied file or raise UsageError naming it.
+
+    One home for the `--squash-message-file` / `--body-file` reads. `kind`
+    names the flag for the error; `encoding` stays caller-chosen because the
+    squash message needs BOM-stripping (`utf-8-sig`, F11) while bodies do not.
+    """
+    if not path.is_file():
+        raise UsageError(f"{kind} file not found or not readable: {display}")
+    try:
+        return path.read_text(encoding=encoding)
+    except OSError as exc:
+        raise UsageError(f"{kind} file not found or not readable: {display}") from exc
+
+
 def resolve_squash_override(options: PrOptions, cwd: Path | None = None) -> tuple[str | None, bool]:
     """Read the explicit squash message: flag text or `--squash-message-file`."""
     explicit = options.squash_message
@@ -44,15 +65,11 @@ def resolve_squash_override(options: PrOptions, cwd: Path | None = None) -> tupl
             if options.squash_message_file.is_absolute()
             else ((cwd or Path.cwd()) / options.squash_message_file)
         )
-        if not mf.is_file():
-            raise UsageError(
-                f"squash message file not found or not readable: {options.squash_message_file}"
-            )
-        try:
-            # utf-8-sig drops a BOM so `\ufeff## Summary` never rides in as prose (F11).
-            explicit = mf.read_text(encoding="utf-8-sig")
-        except OSError:
-            raise UsageError(
-                f"squash message file not found or not readable: {options.squash_message_file}"
-            ) from None
+        # utf-8-sig drops a BOM so `\ufeff## Summary` never rides in as prose (F11).
+        explicit = read_user_file(
+            mf,
+            kind="squash message",
+            display=str(options.squash_message_file),
+            encoding="utf-8-sig",
+        )
     return explicit, options.squash_message_supplied

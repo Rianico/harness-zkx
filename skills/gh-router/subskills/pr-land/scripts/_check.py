@@ -20,9 +20,6 @@ from _github import _digest_range_spec, resolve_base
 from _squash import (
     build_squash_message,
     check_squash_body,
-    check_squash_title,
-    check_title_length,
-    pr_co_author_trailers,
     resolve_squash_message,
 )
 from _status import title_gate as title_gate
@@ -46,6 +43,8 @@ class CheckReport:
     ``body`` is the cleaned squash text a merge would commit; ``authored_body`` is
     the description exactly as supplied or fetched, so the draft can write the
     human-facing `pr_body.md` (Mermaid and `<details>` included) from it.
+    Distinct from `_draft.CheckPayload`: this is the gate outcome the draft
+    branches on; `CheckPayload` is the `--json` wire rendering built from it.
     """
 
     exit_code: int
@@ -77,20 +76,8 @@ def check_trailers_report(
     but the trailers and the resolved body come back in the report so the draft
     phase can write them to disk instead of stdout. Exit codes are unchanged.
     """
-    owner = repo.split("/")[0]
-    res = _github.run_command(
-        [
-            "gh",
-            "api",
-            f"repos/{repo}/pulls?head={owner}:{head_ref}&state=open",
-            "--jq",
-            ".[0].number",
-        ],
-        cwd=cwd,
-        required=True,
-    )
-    found = res.stdout.strip()
-    if not found or found == "null":
+    ref = _github.lookup_pr(repo, head_ref, state="open", cwd=cwd)
+    if ref is None:
         if not body_supplied:
             print(f"no open PR for head {head_ref}", file=sys.stderr)
             return CheckReport(
@@ -157,7 +144,7 @@ def check_trailers_report(
             if cfg_res.returncode == 0:
                 merger = cfg_res.stdout.strip()
 
-        new_trailers = pr_co_author_trailers(tsv, merger=merger, body=resolved_msg)
+        _, new_trailers = build_squash_message(resolved_msg, merger, tsv)
         note = (
             ""
             if new_trailers.strip()
@@ -167,14 +154,15 @@ def check_trailers_report(
             exit_code=0, trailers=new_trailers, body=resolved_msg, authored_body=body, note=note
         )
 
-    num = found
+    num = ref.number
     url = f"https://github.com/{repo}/pull/{num}"
 
     try:
-        if title.strip():
-            check_squash_title(title, num)
-        else:
-            check_title_length(title, num)
+        title_entry = title_gate(title, num, derived=not title_supplied)
+        if title_entry is not None:
+            print(f"refusing squash merge: {title_entry['reason']}", file=sys.stderr)
+            print(f"remediation: {title_entry['remedy']}", file=sys.stderr)
+            raise RefusalError(title_entry["reason"], refusals=[title_entry])
     except RefusalError as exc:
         title_site = "--title" if title_supplied else "HEAD"
         return CheckReport(
@@ -259,19 +247,8 @@ def check_trailers_report(
         )
     tsv = tsv_res.stdout
 
-    try:
-        _ = build_squash_message(resolved_msg, merger, tsv)
-    except RefusalError as exc:
-        return CheckReport(
-            exit_code=1,
-            pr_number=num,
-            pr_url=url,
-            body=resolved_msg,
-            authored_body=body,
-            reason=str(exc),
-        )
+    _, new_trailers = build_squash_message(resolved_msg, merger, tsv)
 
-    new_trailers = pr_co_author_trailers(tsv, merger=merger, body=resolved_msg)
     note = "" if new_trailers.strip() else f"no co-author trailers would be appended for #{num}"
     return CheckReport(
         exit_code=0,
