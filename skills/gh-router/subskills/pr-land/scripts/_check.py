@@ -37,8 +37,8 @@ class CheckReport:
     """Outcome of the --check preflight: gate code, trailers, and the PR it evaluated.
 
     ``body`` is the cleaned squash text a merge would commit; ``authored_body`` is
-    the description exactly as supplied or fetched, so the draft can write the
-    human-facing `pr_body.md` (Mermaid and `<details>` included) from it.
+    the description exactly as supplied or fetched, so the draft can persist it into
+    the scaffold leaf (`.lsz/gh-router/<head-slug>.md`, Mermaid and `<details>` included).
     Distinct from `_draft.CheckPayload`: this is the gate outcome the draft
     branches on; `CheckPayload` is the `--json` wire rendering built from it.
     """
