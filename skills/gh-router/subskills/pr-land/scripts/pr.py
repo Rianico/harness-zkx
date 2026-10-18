@@ -73,7 +73,6 @@ from _errors import CheckFailureError as CheckFailureError
 from _errors import PrError as PrError
 from _errors import RefusalError as RefusalError
 from _errors import UsageError as UsageError
-from _errors import failing_tool as failing_tool
 from _github import CONFLICT_FILES_MAX as CONFLICT_FILES_MAX
 from _github import CONFLICT_HELPER as CONFLICT_HELPER
 from _github import DEFAULT_TIMEOUT as DEFAULT_TIMEOUT
@@ -95,6 +94,7 @@ from _github import _local_base_from_authority as _local_base_from_authority
 from _github import _remote_branch_exists as _remote_branch_exists
 from _github import check_conflicts as check_conflicts
 from _github import checks_verdict as checks_verdict
+from _github import classify_failure as classify_failure
 from _github import conflicting_files as conflicting_files
 from _github import default_branch as default_branch
 from _github import dump_failure_logs as dump_failure_logs
@@ -198,7 +198,6 @@ from _status import collect_status as collect_status
 from _status import degraded_report as degraded_report
 from _status import make_refusal as make_refusal
 from _status import make_transition as make_transition
-from _status import pr_error_to_refusal as pr_error_to_refusal
 from _status import preflight_title as preflight_title
 from _status import render_text as render_text
 
@@ -428,11 +427,8 @@ def create_or_reuse_pr(
             r'.[0] // empty | "\(.number)\t\(.isDraft)"',
         ],
         cwd=cwd,
+        required=True,
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to query open PR for head {head_ref}: {res.stderr.strip() or 'gh api failed'}"
-        )
     existing = res.stdout.strip()
     if existing and existing != "null":
         fields = existing.split("\t")
@@ -480,11 +476,8 @@ def create_or_reuse_pr(
             t_res = _github.run_command(
                 ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".title // empty"],
                 cwd=cwd,
+                required=True,
             )
-            if t_res.returncode != 0:
-                raise PrError(
-                    f"failed to fetch title for PR #{num}: {t_res.stderr.strip() or 'gh api failed'}"
-                )
             if t_res.stdout.strip():
                 final_title = t_res.stdout.strip()
 
@@ -495,22 +488,16 @@ def create_or_reuse_pr(
             b_res = _github.run_command(
                 ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", '.body // ""'],
                 cwd=cwd,
+                required=True,
             )
-            if b_res.returncode != 0:
-                raise PrError(
-                    f"failed to fetch body for PR #{num}: {b_res.stderr.strip() or 'gh api failed'}"
-                )
             final_body = b_res.stdout
 
         if patch_args:
-            patch_res = _github.run_command(
+            _ = _github.run_command(
                 ["gh", "api", f"repos/{repo}/pulls/{num}", "-X", "PATCH", *patch_args],
                 cwd=cwd,
+                required=True,
             )
-            if patch_res.returncode != 0:
-                raise PrError(
-                    f"failed to update PR #{num}: {patch_res.stderr.strip() or 'gh api failed'}"
-                )
             fields_str = ", ".join(updated_fields)
             print(f"updating PR #{num}: {fields_str}", file=sys.stderr)
         return num, final_title, final_body, False
@@ -558,9 +545,8 @@ def create_or_reuse_pr(
             ".number",
         ],
         cwd=cwd,
+        required=True,
     )
-    if create_res.returncode != 0:
-        raise PrError(f"failed to create PR: {create_res.stderr.strip() or 'gh api failed'}")
     num = create_res.stdout.strip()
     print(f"created PR #{num} (draft)", file=sys.stderr)
     return num, title, final_body, True
@@ -759,9 +745,9 @@ def main(argv: list[str] | None = None) -> int:
     except CheckFailureError:
         return 1
     except PrError as e:
-        entry = pr_error_to_refusal(e, tool=failing_tool(str(e)))
-        if entry is not None:
-            print(json.dumps({"refusals": [entry], "transitions": []}, indent=2), file=sys.stderr)
+        failure = classify_failure(e)
+        entry = make_refusal(failure.code, str(e), failure.remedy, failure.tool)
+        print(json.dumps({"refusals": [entry], "transitions": []}, indent=2), file=sys.stderr)
         print(f"pr error: {e}", file=sys.stderr)
         return 1
 

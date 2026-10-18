@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import _github
-from _errors import PrError, RefusalError
+from _errors import RefusalError as RefusalError
 from _github import _digest_range_spec, resolve_base
 from _squash import (
     build_squash_message,
@@ -56,6 +56,7 @@ class CheckReport:
     authored_body: str = ""
     note: str = ""
     reason: str = ""
+    site: str = ""
 
 
 def check_trailers_report(
@@ -86,11 +87,8 @@ def check_trailers_report(
             ".[0].number",
         ],
         cwd=cwd,
+        required=True,
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to query open PR for head {head_ref}: {res.stderr.strip() or 'gh api failed'}"
-        )
     found = res.stdout.strip()
     if not found or found == "null":
         if not body_supplied:
@@ -111,6 +109,7 @@ def check_trailers_report(
                     body=body,
                     authored_body=body,
                     reason=title_entry["reason"],
+                    site=title_entry["site"],
                 )
 
         try:
@@ -177,19 +176,22 @@ def check_trailers_report(
         else:
             check_title_length(title, num)
     except RefusalError as exc:
+        title_site = "--title" if title_supplied else "HEAD"
         return CheckReport(
-            exit_code=1, pr_number=num, pr_url=url, authored_body=body, reason=str(exc)
+            exit_code=1,
+            pr_number=num,
+            pr_url=url,
+            authored_body=body,
+            reason=str(exc),
+            site=title_site,
         )
 
     if not body_supplied:
         body_res = _github.run_command(
             ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", '.body // ""'],
             cwd=cwd,
+            required=True,
         )
-        if body_res.returncode != 0:
-            raise PrError(
-                f"failed to fetch body for PR #{num}: {body_res.stderr.strip() or 'gh api failed'}"
-            )
         body = body_res.stdout
 
     try:
@@ -228,11 +230,8 @@ def check_trailers_report(
     merger_res = _github.run_command(
         ["gh", "api", "user", "--jq", ".login"],
         cwd=cwd,
+        required=True,
     )
-    if merger_res.returncode != 0:
-        raise PrError(
-            f"failed to resolve current user login via gh api user: {merger_res.stderr.strip() or 'gh api user failed'}"
-        )
     merger = merger_res.stdout.strip()
 
     tsv_res = _github.run_command(

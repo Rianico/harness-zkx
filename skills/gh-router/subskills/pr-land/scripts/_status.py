@@ -21,11 +21,10 @@ from _changelog import unreleased_attributes_pr as unreleased_attributes_pr
 from _errors import PrError as PrError
 from _errors import RefusalError as RefusalError
 from _errors import UsageError as UsageError
-from _errors import failing_tool as failing_tool
-from _errors import infer_tool as infer_tool
 from _errors import make_refusal as make_refusal
 from _errors import make_transition as make_transition
 from _github import checks_verdict as checks_verdict
+from _github import classify_failure as classify_failure
 from _github import fetch_mergeability as fetch_mergeability
 from _options import PrOptions as PrOptions
 from _options import resolve_squash_override as resolve_squash_override
@@ -62,13 +61,11 @@ __all__ = [
     "classify_body",
     "collect_status",
     "degraded_report",
-    "failing_tool",
     "first_sentinel_line",
     "head_slug",
     "make_refusal",
     "make_transition",
     "parse_checks",
-    "pr_error_to_refusal",
     "preflight_title",
     "render_text",
     "resolve_artifact_path",
@@ -247,78 +244,10 @@ def parse_checks(payload: str) -> dict[str, object]:
     return {"state": state, "ok": ok, "total": total}
 
 
-def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str] | None:
-    """Map a `gh`/git failure to a structured refusal entry, or None when generic.
-
-    `gh` missing, unauthenticated, or offline becomes data with a remedy instead
-    of a traceback; anything else stays a plain error. `gh`-only markers apply
-    solely when the failing layer resolved to `gh` — anything else (including
-    an unrecognized layer) returns the generic `command_failed` entry, never a
-    `gh_*` label for a `git` failure.
-    """
-    message = str(exc)
-    lowered = message.lower()
-    resolved = tool or failing_tool(message) or infer_tool(message)
-    if resolved == "gh":
-        if "command not found or not executable: gh" in message:
-            return make_refusal(
-                "gh_unavailable",
-                f"gh CLI is not installed or not executable: {message}",
-                "install gh (https://cli.github.com) and authenticate with `gh auth login`, then re-run",
-                "gh",
-            )
-        if "timed out" in lowered:
-            return make_refusal(
-                "gh_offline",
-                f"gh did not answer in time: {message}",
-                "check the network / GH_TOKEN scopes and re-run",
-                "gh",
-            )
-    auth_markers = (
-        "authenticate",
-        "authenticated",
-        "authentication",
-        "401",
-        "403",
-        "bad credentials",
-    )
-    if resolved == "gh" and any(marker in lowered for marker in auth_markers):
-        return make_refusal(
-            "gh_unauthenticated",
-            f"gh cannot authenticate: {message}",
-            "run `gh auth login` (or export a fresh GH_TOKEN) and re-run",
-            "gh",
-        )
-    offline_markers = (
-        "could not resolve",
-        "failed to connect",
-        "network",
-        "offline",
-        "connection refused",
-        "timed out",
-    )
-    if resolved == "gh" and any(marker in lowered for marker in offline_markers):
-        return make_refusal(
-            "gh_offline",
-            f"github is unreachable: {message}",
-            "check the network connection and re-run",
-            "gh",
-        )
-    if resolved and resolved != "gh":
-        return make_refusal(
-            "command_failed",
-            message,
-            f"re-run once {resolved} answers; if it persists, run the failing command by hand",
-            resolved,
-        )
-    if not resolved:
-        return make_refusal(
-            "command_failed",
-            message,
-            "re-run; if the failure persists, run the failing command by hand to see the tool involved",
-            "unknown",
-        )
-    return None
+def _refusal_from_failure(exc: BaseException, *, tool: str, reason: str) -> dict[str, str]:
+    """Build a `refusals[]` entry from a classified failure plus the caller context."""
+    failure = classify_failure(exc, tool=tool)
+    return make_refusal(failure.code, reason, failure.remedy, failure.tool)
 
 
 def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] | None:
@@ -389,7 +318,7 @@ def preflight_title(title: str, *, derived: bool) -> None:
 def _head_sha(cwd: Path | None = None) -> str:
     try:
         res = _github.run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
-    except PrError, OSError:
+    except PrError:
         return ""
     return res.stdout.strip() if res.returncode == 0 else ""
 
@@ -397,7 +326,7 @@ def _head_sha(cwd: Path | None = None) -> str:
 def _worktree_clean(cwd: Path | None = None) -> bool:
     try:
         res = _github.run_command(["git", "--no-optional-locks", "status", "--porcelain"], cwd=cwd)
-    except PrError, OSError:
+    except PrError:
         return True
     if res.returncode != 0:
         return True
@@ -416,11 +345,8 @@ def _query_pr(repo: str, head_ref: str, cwd: Path | None = None) -> tuple[str, s
             r'.[0] | "\(.number)\t\(.state)\t\(.isDraft)\t\(.merged)"',
         ],
         cwd=cwd,
+        required=True,
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to query PRs for head {head_ref}: {res.stderr.strip() or 'gh api failed'}"
-        )
     line = res.stdout.strip()
     if not line or line == "null":
         return ("none", None, False)
@@ -440,12 +366,8 @@ def _query_pr(repo: str, head_ref: str, cwd: Path | None = None) -> tuple[str, s
 
 def _pr_body(repo: str, num: str, cwd: Path | None = None) -> str:
     res = _github.run_command(
-        ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", '.body // ""'], cwd=cwd
+        ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", '.body // ""'], cwd=cwd, required=True
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to fetch body for PR #{num}: {res.stderr.strip() or 'gh api failed'}"
-        )
     return res.stdout
 
 
@@ -549,48 +471,37 @@ def collect_status(
 
     def note_gh(exc: BaseException, what: str) -> None:
         nonlocal gh_broken
-        entry = pr_error_to_refusal(exc, tool="gh")
-        if entry is None:
-            entry = make_refusal(
-                "gh_query_failed",
-                f"could not {what}: {exc}",
-                "check the network / GH_TOKEN scopes and re-run",
-                "gh",
-            )
+        failure = classify_failure(exc, tool="gh")
+        entry = make_refusal(failure.code, f"could not {what}: {exc}", failure.remedy, "gh")
         if not gh_broken:
             refusals.append(entry)
             gh_broken = True
 
     try:
         remote = _github.repo_remote_for_ref(head_ref, cwd=cwd)
-    except PrError, OSError:
+    except PrError:
         remote = "origin"
     try:
         branch_exists = _github._remote_branch_exists(head_ref, cwd=cwd, remote=remote)
-    except PrError, OSError:
+    except PrError:
         branch_exists = False
     ahead = behind = 0
     compare_failed = False
     if branch_exists:
         try:
             ahead, behind = _github._ahead_behind(head_ref, remote, cwd=cwd)
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             # Never assert a push fact from a failed read: a failed compare must
             # not report branch_pushed/head_pushed, so record the failure here and
             # force both flags False below.
             compare_failed = True
             ahead, behind = 0, 0
-            base_entry = pr_error_to_refusal(exc, tool="git") or make_refusal(
-                "compare_failed",
-                f"could not compare {head_ref} against {remote}/{head_ref}: {exc}",
-                f"fetch {remote} and re-run",
-                f"{remote}/{head_ref}",
-            )
             refusals.append(
-                {
-                    **base_entry,
-                    "reason": f"could not compare {head_ref} against {remote}/{head_ref}: {base_entry['reason']}",
-                }
+                _refusal_from_failure(
+                    exc,
+                    tool="git",
+                    reason=f"could not compare {head_ref} against {remote}/{head_ref}: {exc}",
+                )
             )
     branch_pushed = branch_exists and behind == 0 and not compare_failed
 
@@ -600,7 +511,7 @@ def collect_status(
     base_failed = False
     try:
         base: str | None = _github.resolve_base(None, repo, cwd=cwd)
-    except (PrError, OSError) as exc:
+    except PrError as exc:
         base_failed = True
         base = None
         refusals.append(
@@ -613,7 +524,7 @@ def collect_status(
         )
     try:
         default_base = _github.default_branch(repo, cwd=cwd)
-    except PrError, OSError:
+    except PrError:
         default_base = None
     base_name = base or default_base or "main"
 
@@ -622,13 +533,17 @@ def collect_status(
     pr_draft = False
     try:
         pr_state, pr_number, pr_draft = _query_pr(repo, head_ref, cwd)
-    except (PrError, OSError) as exc:
+    except PrError as exc:
         note_gh(exc, f"query PRs for head {head_ref}")
 
     artifact_path = resolve_artifact_path(out_leaf, head_ref, cwd)
     try:
         display_path = str(artifact_path.relative_to(find_repo_root(cwd or Path.cwd())))
-    except RuntimeError, ValueError, OSError:
+    except RuntimeError:
+        display_path = str(artifact_path)
+    except ValueError:
+        display_path = str(artifact_path)
+    except OSError:
         display_path = str(artifact_path)
     stale = artifact_stale(artifact_path, sha)
     if not body_site:
@@ -638,7 +553,7 @@ def collect_status(
     if pr_state == "open" and pr_number is not None and not body_supplied:
         try:
             pr_text = _pr_body(repo, pr_number, cwd)
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             note_gh(exc, f"fetch body for PR #{pr_number}")
     artifact_text = ""
     if not body_supplied and not pr_text and artifact_path.is_file():
@@ -679,7 +594,7 @@ def collect_status(
                 ],
                 cwd=cwd,
             )
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             note_gh(exc, f"read checks for PR #{pr_number}")
             checks_res = None
         if checks_res is not None and checks_res.returncode == 0:
@@ -705,7 +620,7 @@ def collect_status(
                 mergeable = "mergeable"
             elif obs.verdict == "conflicting":
                 mergeable = "conflicting"
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             note_gh(exc, f"read mergeability for PR #{pr_number}")
 
     failure_states: list[str] = []
@@ -964,13 +879,8 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
             "pass --head <branch> for a real head ref, then re-run",
             "--head",
         )
-    except (PrError, OSError) as exc:
-        head_entry = pr_error_to_refusal(exc, tool="git") or make_refusal(
-            "command_failed",
-            str(exc),
-            "re-run once git answers; if it persists, run the failing command by hand",
-            "git",
-        )
+    except PrError as exc:
+        head_entry = _refusal_from_failure(exc, tool="git", reason=str(exc))
     if head_entry is not None:
         return _emit_status(
             degraded_report(
@@ -993,16 +903,8 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
                 f"--body-file {options.body_file}",
             )
         )
-    except (PrError, OSError) as exc:
-        extra.append(
-            pr_error_to_refusal(exc, tool="git")
-            or make_refusal(
-                "command_failed",
-                str(exc),
-                "re-run once git answers; if it persists, run the failing command by hand",
-                "git",
-            )
-        )
+    except PrError as exc:
+        extra.append(_refusal_from_failure(exc, tool="git", reason=str(exc)))
     squash_override, squash_supplied = None, False
     try:
         squash_override, squash_supplied = resolve_squash_override(options)
@@ -1023,12 +925,12 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
     except UsageError as exc:
         repo_error = exc
         repo_usage = True
-    except (PrError, OSError) as exc:
+    except PrError as exc:
         repo_error = exc
     if repo_error is not None:
         try:
             remote = _github.repo_remote_for_ref(head_ref)
-        except PrError, OSError:
+        except PrError:
             remote = "origin"
         if repo_usage:
             repo_entry = make_refusal(
@@ -1038,12 +940,7 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
                 remote,
             )
         else:
-            repo_entry = pr_error_to_refusal(repo_error, tool="git") or make_refusal(
-                "command_failed",
-                str(repo_error),
-                "re-run once git answers; if it persists, run the failing command by hand",
-                "git",
-            )
+            repo_entry = _refusal_from_failure(repo_error, tool="git", reason=str(repo_error))
         return _emit_status(
             degraded_report(
                 head_ref,

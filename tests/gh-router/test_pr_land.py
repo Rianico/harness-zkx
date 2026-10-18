@@ -954,9 +954,7 @@ except PrError as e:
         cwd=REPO_ROOT,
     )
     assert res.returncode == 42
-    assert (
-        "CAUGHT_PR_ERROR: failed to check PR #123 mergeable state: api rate limited" in res.stdout
-    )
+    assert "CAUGHT_PR_ERROR: api rate limited" in res.stdout
 
 
 def test_check_trailers_fails_loud_on_body_fetch_error(tmp_path: Path) -> None:
@@ -1003,9 +1001,7 @@ except PrError as e:
         cwd=REPO_ROOT,
     )
     assert res.returncode == 42
-    assert (
-        "CAUGHT_PR_ERROR: failed to fetch body for PR #123: 500 internal server error" in res.stdout
-    )
+    assert "CAUGHT_PR_ERROR: 500 internal server error" in res.stdout
 
 
 def test_dump_failure_logs_survives_view_timeout(tmp_path: Path) -> None:

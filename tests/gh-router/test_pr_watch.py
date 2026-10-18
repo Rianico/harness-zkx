@@ -86,8 +86,9 @@ class FakeGh:
         text: bool = True,
         check: bool = False,
         env: dict[str, str] | None = None,
+        required: bool = False,
     ) -> subprocess.CompletedProcess[str]:
-        _ = (timeout, cwd, capture_output, text, check, env)
+        _ = (timeout, cwd, capture_output, text, check, env, required)
         self.calls.append(list(cmd))
         if (
             cmd[:3] == ["gh", "api", f"repos/test/repo/pulls/{NUM}"]

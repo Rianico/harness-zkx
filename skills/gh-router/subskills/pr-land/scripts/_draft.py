@@ -176,7 +176,7 @@ def _diff_facts(range_resolution: RangeResolution | None, cwd: Path | None) -> t
             ],
             cwd=root,
         ).stdout
-    except PrError, OSError, RuntimeError:
+    except PrError:
         return (0, 0, 0)
     additions = deletions = files = 0
     for line in out.splitlines():
@@ -274,7 +274,11 @@ def _display_path(path: Path, cwd: Path | None = None) -> str:
     """Repo-relative artifact display path, absolute when the root is unknown."""
     try:
         return str(path.relative_to(find_repo_root(cwd or Path.cwd())))
-    except RuntimeError, ValueError, OSError:
+    except RuntimeError:
+        return str(path)
+    except ValueError:
+        return str(path)
+    except OSError:
         return str(path)
 
 
@@ -323,10 +327,7 @@ def _emit_gate_facts(
     refusals: list[dict[str, str]] = []
     if report.exit_code != 0:
         reason = report.reason or "one or more merge gates refused"
-        if "title" in reason.lower():
-            site = "--title" if options.title_supplied else "HEAD"
-        else:
-            site = body_site_with_line(body_site, body)
+        site = report.site or body_site_with_line(body_site, body)
         refusals = [
             make_refusal(
                 "body_missing" if report.exit_code == 2 else "gate_refused",

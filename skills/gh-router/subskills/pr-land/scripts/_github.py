@@ -25,7 +25,9 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
+from _errors import CommandFailed as CommandFailed
 from _errors import PrError, RefusalError, UsageError
 from _errors import make_refusal as make_refusal
 from _options import PrOptions
@@ -108,6 +110,131 @@ DEFAULT_TIMEOUT = 30.0
 LOG_TIMEOUT = 60.0
 
 
+@dataclass(frozen=True)
+class Failure:
+    """A classified failure: the failing layer, a stable code, and a remedy."""
+
+    tool: str
+    code: str
+    remedy: str
+
+
+@dataclass(frozen=True)
+class PushOutcome:
+    """The push precondition result: reconciled, diverged, or failed.
+
+    `detail` carries the raw stderr for prose only — the state decision never
+    reads it.
+    """
+
+    state: Literal["diverged", "failed"]
+    behind: int = 0
+    detail: str = ""
+
+
+def _push_state(returncode: int | None) -> Literal["diverged", "failed"]:
+    """Classify a push exit status without reading stderr.
+
+    A rejected fast-forward push exits 1 (the remote moved); transport and
+    local failures use other codes. The mapping is structural, never a
+    substring of the tool's stderr.
+    """
+    return "diverged" if returncode == 1 else "failed"
+
+
+def _push_branch(remote: str, head_ref: str, cwd: Path | None = None) -> PushOutcome | None:
+    """Push `head_ref`; None when it landed, otherwise why it did not.
+
+    Reads the typed wire result (`CommandFailed`) and, for in-process fakes
+    that return `CompletedProcess` objects instead of raising, the returncode
+    directly. Never inspects stderr to decide.
+    """
+    try:
+        res = run_command(["git", "push", remote, head_ref], cwd=cwd, required=True)
+    except CommandFailed as exc:
+        return PushOutcome(state=_push_state(exc.returncode), behind=0, detail=exc.stderr.strip())
+    if res.returncode != 0:
+        return PushOutcome(
+            state=_push_state(res.returncode),
+            behind=0,
+            detail=res.stderr.strip(),
+        )
+    return None
+
+
+def _seam_tool(message: str) -> str:
+    """Tool name from the seam's own envelope, or empty when unrecognized.
+
+    Parses only `run_command`'s message formats (`command failed: <tool> …`,
+    `command timed out after Ns: <tool> …`, `command not found …: <tool>: …`);
+    never tool stderr.
+    """
+    marker = "command not found or not executable: "
+    if marker in message:
+        return message.split(marker, 1)[1].split(":")[0].strip().split(" ")[0]
+    marker = "command timed out after "
+    if marker in message:
+        _span, sep, cmd = message.split(marker, 1)[1].partition(":")
+        if sep:
+            argv = cmd.strip().split(" ")
+            return argv[0] if argv else ""
+    return ""
+
+
+def _seam_kind(message: str) -> str:
+    """Classify the seam's own envelope: never-ran, timed-out, or failed.
+
+    Inspects only prefixes `run_command` itself emits — never tool stderr.
+    Returns one of `"unavailable"`, `"timeout"`, `"failed"`.
+    """
+    if message.startswith("command not found or not executable: "):
+        return "unavailable"
+    if message.startswith("command timed out after "):
+        return "timeout"
+    return "failed"
+
+
+def classify_failure(exc: BaseException, *, tool: str = "") -> Failure:
+    """Map a failure to (tool, code, remedy) without sniffing tool stderr.
+
+    `tool` wins when the caller knows its layer; otherwise `CommandFailed`
+    carries it structurally and the seam's own envelope is parsed as a last
+    resort. `gh` maps to `gh_unavailable` (never ran), `gh_offline` (timed
+    out) or `gh_query_failed`; anything else maps to `command_failed`.
+    """
+    message = str(exc)
+    resolved = tool
+    kind = "failed"
+    if isinstance(exc, CommandFailed):
+        resolved = resolved or exc.tool
+        if exc.returncode is None:
+            kind = _seam_kind(exc.stderr)
+    else:
+        resolved = resolved or _seam_tool(message)
+        kind = _seam_kind(message)
+    if resolved == "gh":
+        if kind == "unavailable":
+            return Failure(
+                "gh",
+                "gh_unavailable",
+                "install gh (https://cli.github.com) and authenticate with `gh auth login`, then re-run",
+            )
+        if kind == "timeout":
+            return Failure("gh", "gh_offline", "check the network / GH_TOKEN scopes and re-run")
+        return Failure("gh", "gh_query_failed", "check the network / GH_TOKEN scopes and re-run")
+    if resolved:
+        return Failure(
+            resolved,
+            "command_failed",
+            f"re-run once {resolved} answers; if it persists, run the failing command by hand",
+        )
+    return Failure(
+        "unknown",
+        "command_failed",
+        "re-run; if the failure persists, run the failing command by hand to see the tool involved",
+    )
+
+
 def run_command(
     cmd: list[str],
     *,
@@ -117,9 +244,10 @@ def run_command(
     text: bool = True,
     check: bool = False,
     env: dict[str, str] | None = None,
+    required: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(
+        result = subprocess.run(
             cmd,
             capture_output=capture_output,
             text=text,
@@ -130,9 +258,24 @@ def run_command(
         )
     except subprocess.TimeoutExpired as e:
         cmd_str = " ".join(cmd)
-        raise PrError(f"command timed out after {timeout}s: {cmd_str}") from e
+        raise CommandFailed(
+            cmd[0] if cmd else "unknown",
+            list(cmd),
+            None,
+            f"command timed out after {timeout}s: {cmd_str}",
+        ) from e
     except OSError as e:
-        raise PrError(f"command not found or not executable: {cmd[0] if cmd else ''}: {e}") from e
+        raise CommandFailed(
+            cmd[0] if cmd else "unknown",
+            list(cmd),
+            None,
+            f"command not found or not executable: {cmd[0] if cmd else ''}: {e}",
+        ) from e
+    if required and result.returncode != 0:
+        raise CommandFailed(
+            cmd[0] if cmd else "unknown", list(cmd), result.returncode, result.stderr
+        )
+    return result
 
 
 def resolve_head(head_ref: str | None = None, cwd: Path | None = None) -> str:
@@ -244,7 +387,9 @@ def issue_state(repo: str, num: str, cwd: Path | None = None) -> tuple[str, str]
         return None
     try:
         data = json.loads(res.stdout)
-    except ValueError, TypeError:
+    except ValueError:
+        return None
+    except TypeError:
         return None
     if not isinstance(data, dict):
         return None
@@ -314,12 +459,8 @@ def _ahead_behind(head_ref: str, remote: str, cwd: Path | None = None) -> tuple[
     res = run_command(
         ["git", "rev-list", "--left-right", "--count", f"{remote_ref}...{head_ref}", "--"],
         cwd=cwd,
+        required=True,
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"cannot compare {head_ref} against {remote_ref}: "
-            f"{res.stderr.strip() or 'git rev-list failed'}"
-        )
     try:
         left, right = res.stdout.strip().split()
         return int(right), int(left)
@@ -342,11 +483,10 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
     """
     remote = repo_remote_for_ref(head_ref, cwd=cwd)
     if not _remote_branch_exists(head_ref, cwd=cwd, remote=remote):
-        push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
-        if push_res.returncode != 0:
+        outcome = _push_branch(remote, head_ref, cwd=cwd)
+        if outcome is not None:
             raise PrError(
-                f"failed to push {head_ref} to {remote}: "
-                f"{push_res.stderr.strip() or 'git push failed'}"
+                f"failed to push {head_ref} to {remote}: {outcome.detail or 'git push failed'}"
             )
         print(f"pushed {head_ref} to {remote} (remote ref was missing)", file=sys.stderr)
         return
@@ -375,35 +515,37 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
         )
     if ahead == 0:
         return
-    push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
-    if push_res.returncode != 0:
-        stderr = push_res.stderr.strip() or "git push failed"
-        # No fetch here: the compare stays network-free, so a stale tracking ref can
-        # hide a teammate's push (behind == 0, ahead > 0) until git rejects the push.
-        # Treat a rejection as the divergence it reveals, with the same remediation.
-        print(
-            f"refusing to push {head_ref}: remote {remote}/{head_ref} rejected the push",
-            file=sys.stderr,
+    outcome = _push_branch(remote, head_ref, cwd=cwd)
+    if outcome is None:
+        print(f"pushed {head_ref} to {remote} ({ahead} commit(s))", file=sys.stderr)
+        return
+    stderr = outcome.detail or "git push failed"
+    # No fetch here: the compare stays network-free, so a stale tracking ref can
+    # hide a teammate's push (behind == 0, ahead > 0) until git rejects the push.
+    # Treat a rejection as the divergence it reveals, with the same remediation.
+    print(
+        f"refusing to push {head_ref}: remote {remote}/{head_ref} rejected the push",
+        file=sys.stderr,
+    )
+    print(
+        f"remediation: reconcile first (e.g. git pull --rebase {remote} {head_ref}), ",
+        "then re-run; pr-land never force-pushes",
+        file=sys.stderr,
+    )
+    if outcome.state == "diverged":
+        raise RefusalError(
+            f"remote {remote}/{head_ref} is ahead of local {head_ref}",
+            refusals=[
+                make_refusal(
+                    "diverged",
+                    f"remote {remote}/{head_ref} rejected the push ({behind} remote-only commit(s) known)",
+                    f"reconcile first (e.g. git pull --rebase {remote} {head_ref}), then re-run; pr-land never force-pushes",
+                    f"{remote}/{head_ref}",
+                )
+            ],
         )
-        print(
-            f"remediation: reconcile first (e.g. git pull --rebase {remote} {head_ref}), "
-            "then re-run; pr-land never force-pushes",
-            file=sys.stderr,
-        )
-        if "non-fast-forward" in stderr or "fetch first" in stderr:
-            raise RefusalError(
-                f"remote {remote}/{head_ref} is ahead of local {head_ref}",
-                refusals=[
-                    make_refusal(
-                        "diverged",
-                        f"remote {remote}/{head_ref} rejected the push ({behind} remote-only commit(s) known)",
-                        f"reconcile first (e.g. git pull --rebase {remote} {head_ref}), then re-run; pr-land never force-pushes",
-                        f"{remote}/{head_ref}",
-                    )
-                ],
-            )
+    else:
         raise PrError(f"failed to push {head_ref} to {remote}: {stderr}")
-    print(f"pushed {head_ref} to {remote} ({ahead} commit(s))", file=sys.stderr)
 
 
 def _local_base_from_authority(cwd: Path | None = None) -> str:
@@ -623,11 +765,8 @@ def fetch_mergeability(repo: str, num: str, cwd: Path | None = None) -> MergeObs
             '[(if .mergeable == null then "null" else (.mergeable|tostring) end), (.mergeable_state // "unknown"), (.html_url // "")] | @tsv',
         ],
         cwd=cwd,
+        required=True,
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to check PR #{num} mergeable state: {res.stderr.strip() or 'gh api failed'}"
-        )
     line = res.stdout.strip()
     if not line:
         raise PrError(f"failed to check PR #{num} mergeable state: empty response from gh api")

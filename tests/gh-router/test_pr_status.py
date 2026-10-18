@@ -508,46 +508,61 @@ def _status_env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
 
 
 def test_push_auth_failure_is_not_gh_labelled() -> None:
-    """R11: a git push auth failure routes to `command_failed`, never `gh_*`."""
-    from _errors import PrError
-    from _status import pr_error_to_refusal
+    """B2: codes never derive from stderr — even an auth-flavoured push maps generic."""
+    from _errors import CommandFailed
+    from _github import classify_failure
 
-    entry = pr_error_to_refusal(
-        PrError(
-            "failed to push feat-x to origin: fatal: Authentication failed for 'https://github.com/t/r.git'"
+    failure = classify_failure(
+        CommandFailed(
+            "git",
+            ["git", "push", "origin", "feat-x"],
+            128,
+            "failed to push feat-x to origin: fatal: Authentication failed for 'https://github.com/t/r.git'",
         )
     )
-    assert entry is not None
-    assert entry["code"] == "command_failed"
-    assert entry["site"] == "git"
+    assert failure.code == "command_failed"
+    assert failure.tool == "git"
 
 
 def test_bare_unresolvable_host_is_not_gh_labelled() -> None:
-    """R11: network failures without a layer fingerprint stay generic."""
+    """B2: without a layer fingerprint the failure stays generic, never `gh_*`."""
     from _errors import PrError
-    from _status import pr_error_to_refusal
+    from _github import classify_failure
 
-    entry = pr_error_to_refusal(PrError("Could not resolve host github.com"))
-    assert entry is not None
-    assert entry["code"] == "command_failed"
-    assert not entry["code"].startswith("gh_")
-    bare = pr_error_to_refusal(PrError("Could not resolve host"))
-    assert bare is not None
-    assert bare["code"] == "command_failed"
+    failure = classify_failure(PrError("Could not resolve host github.com"))
+    assert failure.code == "command_failed"
+    assert not failure.code.startswith("gh_")
+    bare = classify_failure(PrError("Could not resolve host"))
+    assert bare.code == "command_failed"
 
 
 def test_genuine_gh_failures_still_route_gh() -> None:
-    """R11: the gh mapping survives for real gh failures (missing + gh-side auth)."""
-    from _errors import PrError
-    from _status import pr_error_to_refusal
+    """B2: the gh mapping is structural — it never reads the stderr text."""
+    from _errors import CommandFailed
+    from _github import classify_failure
 
-    missing = pr_error_to_refusal(PrError("command not found or not executable: gh: [Errno 2]"))
-    assert missing is not None
-    assert missing["code"] == "gh_unavailable"
-    assert missing["site"] == "gh"
-    auth = pr_error_to_refusal(PrError("failed to query PRs for head feat-x: Bad credentials"))
-    assert auth is not None
-    assert auth["code"] == "gh_unauthenticated"
+    missing = classify_failure(
+        CommandFailed(
+            "gh",
+            ["gh", "api", "user"],
+            None,
+            "command not found or not executable: gh: [Errno 2] No such file or directory",
+        )
+    )
+    assert missing.code == "gh_unavailable"
+    assert missing.tool == "gh"
+    timed_out = classify_failure(
+        CommandFailed(
+            "gh", ["gh", "api", "user"], None, "command timed out after 30.0s: gh api user"
+        )
+    )
+    assert timed_out.code == "gh_offline"
+    query_failed = classify_failure(
+        CommandFailed(
+            "gh", ["gh", "api", "repos/x"], 1, "Bad credentials: not really an auth check"
+        )
+    )
+    assert query_failed.code == "gh_query_failed"
 
 
 def test_failed_compare_asserts_no_push_facts(
@@ -582,26 +597,32 @@ def test_failed_compare_asserts_no_push_facts(
 
 
 def test_git_failure_is_not_labelled_gh() -> None:
-    """R3: a `git` failure is `command_failed` at site `git`, never `gh_offline`."""
+    """A git timeout maps to `command_failed` at site `git`, never `gh_offline`."""
     from _errors import PrError
-    from _status import pr_error_to_refusal
+    from _github import classify_failure
+    from _status import _refusal_from_failure
 
-    entry = pr_error_to_refusal(PrError("command timed out after 30.0s: git rev-parse HEAD"))
-    assert entry is not None
+    failure = classify_failure(PrError("command timed out after 30.0s: git rev-parse HEAD"))
+    assert failure.code == "command_failed"
+    assert failure.tool == "git"
+    entry = _refusal_from_failure(
+        PrError("command timed out after 30.0s: git rev-parse HEAD"),
+        tool="git",
+        reason="timed out",
+    )
     assert entry["code"] == "command_failed"
     assert entry["site"] == "git"
     assert "github is unreachable" not in entry["reason"]
 
 
-def test_author_substring_is_not_unauthenticated() -> None:
-    """R3: the auth markers match real auth failures but not `author`."""
+def test_explicit_tool_overrides_message_content() -> None:
+    """An explicit tool wins over message text: no keyword sniffing anywhere."""
     from _errors import PrError
-    from _status import pr_error_to_refusal
+    from _github import classify_failure
 
-    assert pr_error_to_refusal(PrError("could not list commit authors"), tool="gh") is None
-    entry = pr_error_to_refusal(PrError("authentication failed for gh"), tool="gh")
-    assert entry is not None
-    assert entry["code"] == "gh_unauthenticated"
+    failure = classify_failure(PrError("could not list commit authors"), tool="gh")
+    assert failure.code == "gh_query_failed"
+    assert failure.tool == "gh"
 
 
 def test_head_slug_is_injective_and_path_safe() -> None:
