@@ -27,7 +27,12 @@ if str(PR_SCRIPTS) not in sys.path:
 import _changelog as changelog_mod  # noqa: E402
 import _github as github_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
-from pr import PrError, RefusalError, create_or_reuse_pr, stamp_changelog  # noqa: E402
+from _changelog import stamp_changelog  # noqa: E402
+from _errors import (
+    PrError,  # noqa: E402
+    RefusalError,  # noqa: E402
+)
+from pr import create_or_reuse_pr  # noqa: E402
 
 
 class _PushFake:

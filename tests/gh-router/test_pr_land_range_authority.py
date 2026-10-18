@@ -26,8 +26,9 @@ if str(PR_SCRIPTS) not in sys.path:
 if str(LIB_DIR) not in sys.path:
     sys.path.insert(0, str(LIB_DIR))
 
-from _squash import pr_co_author_trailers as pr_co_author_trailers  # noqa: E402
-from pr import RefusalError, resolve_base  # noqa: E402
+from _errors import RefusalError  # noqa: E402
+from _github import resolve_base  # noqa: E402
+from _squash import pr_co_author_trailers  # noqa: E402
 from range_authority import resolve_range  # noqa: E402
 
 

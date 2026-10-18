@@ -21,6 +21,7 @@ if str(PR_SCRIPTS) not in sys.path:
 
 import _github as github_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
+from _errors import RefusalError  # noqa: E402
 
 NUM = "999"
 URL = "https://github.com/test/repo/pull/999"
@@ -62,7 +63,7 @@ class FakeGh:
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(github_mod, "run_command", self.run)
-        monkeypatch.setattr(pr_mod.time, "sleep", self.sleep)
+        monkeypatch.setattr(github_mod.time, "sleep", self.sleep)
 
     def sleep(self, seconds: float) -> None:
         self.sleeps.append(seconds)
@@ -149,7 +150,7 @@ def test_dirty_is_confirmed_twice_before_the_gate_refuses(
     gh = FakeGh([("false", "dirty")], files="a.py b.py")
     gh.install(monkeypatch)
 
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is False
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is False
 
     assert gh.poll_count == DIRTY_STRIKES
     assert gh.sleeps == [DIRTY_INTERVAL]
@@ -171,7 +172,7 @@ def test_non_dirty_reading_resets_the_dirty_strikes(
     gh = FakeGh([("true", "dirty"), ("true", "clean")], files="a.py b.py")
     gh.install(monkeypatch)
 
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is True
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is True
 
     assert gh.poll_count == 2
     assert gh.sleeps == [DIRTY_INTERVAL]
@@ -190,7 +191,7 @@ def test_dirty_strikes_reset_through_an_unknown_reading(
     gh = FakeGh([("true", "dirty"), ("null", "unknown"), ("true", "dirty"), ("true", "clean")])
     gh.install(monkeypatch)
 
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is True
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is True
 
     assert gh.poll_count == 4
     assert gh.sleeps == [DIRTY_INTERVAL, UNKNOWN_INTERVAL, DIRTY_INTERVAL]
@@ -210,7 +211,7 @@ def test_unknown_mergeability_retries_then_fails_fast(
     gh = FakeGh([("null", "unknown")], files="a.py b.py")
     gh.install(monkeypatch)
 
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is False
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is False
 
     assert gh.poll_count == UNKNOWN_TRIES
     assert gh.sleeps == [UNKNOWN_INTERVAL] * (UNKNOWN_TRIES - 1)
@@ -228,7 +229,7 @@ def test_unknown_that_recovers_is_not_refused(
     gh = FakeGh([("null", "unknown"), ("true", "clean")])
     gh.install(monkeypatch)
 
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is True
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is True
 
     assert gh.poll_count == 2
     assert gh.sleeps == [UNKNOWN_INTERVAL]
@@ -246,7 +247,7 @@ def test_conflict_report_caps_files_at_ten_with_a_more_marker(
     gh = FakeGh([("false", "dirty")], files=twelve)
     gh.install(monkeypatch)
 
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is False
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is False
     err = capsys.readouterr().err
     files_line = next(line for line in err.splitlines() if line.startswith("touched files: "))
     assert files_line.endswith(" (+2 more)")
@@ -256,7 +257,7 @@ def test_conflict_report_caps_files_at_ten_with_a_more_marker(
 
     gh = FakeGh([("false", "dirty")], files="a.py b.py")
     gh.install(monkeypatch)
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is False
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is False
     err = capsys.readouterr().err
     assert "touched files: a.py b.py" in err
     assert "more)" not in err
@@ -269,7 +270,7 @@ def test_report_line_names_the_verdict_word_the_url_and_the_helper(
     gh = FakeGh([("false", "dirty")], files="a.py")
     gh.install(monkeypatch)
 
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is False
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is False
     lines = capsys.readouterr().err.splitlines()
     assert lines[0] == f"PR {URL}"
     assert lines[1].startswith("conflicting: ")
@@ -288,13 +289,13 @@ def test_conflict_report_prints_none_resolved_when_files_are_empty(
     """
     gh = FakeGh([("false", "dirty")], files="")
     gh.install(monkeypatch)
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is False
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is False
     lines = capsys.readouterr().err.splitlines()
     assert lines[2] == "touched files: (none resolved)"
 
     gh = FakeGh([("false", "dirty")], files="boom", files_rc=1)
     gh.install(monkeypatch)
-    assert pr_mod.check_conflicts("test/repo", NUM, "main") is False
+    assert github_mod.check_conflicts("test/repo", NUM, "main") is False
     lines = capsys.readouterr().err.splitlines()
     assert lines[2] == "touched files: (none resolved)"
 
@@ -318,7 +319,7 @@ def test_watch_prints_one_poll_line_with_state_and_verdict(
     """Each poll is a single line carrying both `mergeable_state` and the checks verdict."""
     _ = pending_then_timeout(monkeypatch)
 
-    assert pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=3, poll_interval=0) is False
+    assert github_mod.watch_checks("test/repo", NUM, "main", poll_tries=3, poll_interval=0) is False
 
     polls = [line for line in capsys.readouterr().err.splitlines() if "mergeable_state=" in line]
     assert len(polls) == 3
@@ -337,7 +338,7 @@ def test_watch_folds_a_behind_head_into_the_poll_line(
     gh = FakeGh([("true", "behind")], checks_payload="")
     gh.install(monkeypatch)
 
-    assert pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=3, poll_interval=0) is False
+    assert github_mod.watch_checks("test/repo", NUM, "main", poll_tries=3, poll_interval=0) is False
 
     lines = capsys.readouterr().err.splitlines()
     polls = [line for line in lines if "mergeable_state=" in line]
@@ -353,7 +354,7 @@ def test_watch_timeout_is_slim_without_verbose(
     """Default (slim): the timeout line alone — no `gh pr checks` tail dump."""
     gh = pending_then_timeout(monkeypatch)
 
-    assert pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=2, poll_interval=0) is False
+    assert github_mod.watch_checks("test/repo", NUM, "main", poll_tries=2, poll_interval=0) is False
 
     err = capsys.readouterr().err
     assert "checks timeout after 0s — no green verdict" in err
@@ -368,7 +369,9 @@ def test_watch_timeout_dumps_the_checks_tail_with_verbose(
     _ = pending_then_timeout(monkeypatch)
 
     assert (
-        pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=2, poll_interval=0, verbose=True)
+        github_mod.watch_checks(
+            "test/repo", NUM, "main", poll_tries=2, poll_interval=0, verbose=True
+        )
         is False
     )
 
@@ -394,7 +397,7 @@ def test_watch_failure_is_slim_by_default(
     """Slim failure: the run id(s) plus the one-line pointer, never the log body."""
     gh = failing_fixture(monkeypatch)
 
-    assert pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=2, poll_interval=0) is False
+    assert github_mod.watch_checks("test/repo", NUM, "main", poll_tries=2, poll_interval=0) is False
 
     err = capsys.readouterr().err
     assert "checks failure (mergeable_state=clean, 1/2)" in err
@@ -411,7 +414,9 @@ def test_watch_failure_dumps_logs_with_verbose(
     gh = failing_fixture(monkeypatch)
 
     assert (
-        pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=2, poll_interval=0, verbose=True)
+        github_mod.watch_checks(
+            "test/repo", NUM, "main", poll_tries=2, poll_interval=0, verbose=True
+        )
         is False
     )
 
@@ -427,7 +432,9 @@ def test_watch_fails_fast_on_dirty_with_the_conflict_report(
     gh = FakeGh([("false", "dirty")], files="a.py")
     gh.install(monkeypatch)
 
-    assert pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=60, poll_interval=10) is False
+    assert (
+        github_mod.watch_checks("test/repo", NUM, "main", poll_tries=60, poll_interval=10) is False
+    )
 
     assert gh.poll_count == DIRTY_STRIKES
     assert gh.sleeps == [DIRTY_INTERVAL]
@@ -443,7 +450,9 @@ def test_watch_does_not_poll_checks_when_mergeability_is_unresolved(
     gh = FakeGh([("null", "unknown")])
     gh.install(monkeypatch)
 
-    assert pr_mod.watch_checks("test/repo", NUM, "main", poll_tries=60, poll_interval=10) is False
+    assert (
+        github_mod.watch_checks("test/repo", NUM, "main", poll_tries=60, poll_interval=10) is False
+    )
 
     assert gh.poll_count == UNKNOWN_TRIES
     assert not [c for c in gh.calls if c[:3] == ["gh", "pr", "checks"]]
@@ -460,8 +469,8 @@ def test_merge_pr_fails_fast_on_dirty_through_the_conflict_report(
     gh = FakeGh([("false", "dirty")], files="a.py")
     gh.install(monkeypatch)
 
-    with pytest.raises(pr_mod.RefusalError) as exc_info:
-        pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
+    with pytest.raises(RefusalError) as exc_info:
+        github_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
     assert exc_info.value.refusals[0]["code"] == "merge_conflict"
     state_polls = [c for c in gh.calls if c[-1] == ".mergeable_state"]
     assert len(state_polls) == DIRTY_STRIKES
@@ -481,8 +490,8 @@ def test_merge_pr_refuses_a_state_that_never_settles(
     gh = FakeGh([("null", "unstable")])
     gh.install(monkeypatch)
 
-    with pytest.raises(pr_mod.RefusalError) as exc_info:
-        pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
+    with pytest.raises(RefusalError) as exc_info:
+        github_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
     assert exc_info.value.refusals[0]["code"] == "mergeability_unknown"
     state_polls = [c for c in gh.calls if c[-1] == ".mergeable_state"]
     assert len(state_polls) == UNKNOWN_TRIES

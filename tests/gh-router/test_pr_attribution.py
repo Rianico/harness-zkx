@@ -26,15 +26,15 @@ NUM = "7"
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
-from pr import (  # noqa: E402
-    RefusalError,
-    build_squash_message,
-    check_raw_token,
-    check_title_length,
-    insert_trailers,
-    is_closing_line,
-    pr_co_author_trailers,
-    refuse_raw_token,
+from _errors import RefusalError  # noqa: E402
+from _squash import (
+    build_squash_message,  # noqa: E402
+    check_raw_token,  # noqa: E402
+    check_title_length,  # noqa: E402
+    insert_trailers,  # noqa: E402
+    is_closing_line,  # noqa: E402
+    pr_co_author_trailers,  # noqa: E402
+    refuse_raw_token,  # noqa: E402
 )
 
 
@@ -250,7 +250,7 @@ def run_finalize(env: dict[str, str], body: str) -> subprocess.CompletedProcess[
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import finalize_squash_message
+from _github import finalize_squash_message
 try:
     res = finalize_squash_message("t/r", "{NUM}", os.environ.get("B", ""))
     print(res, end="")
@@ -282,7 +282,8 @@ def run_merge(
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import RefusalError, merge_pr
+from _errors import RefusalError
+from _github import merge_pr
 try:
     ok = merge_pr("t/r", "{NUM}", "main", os.environ.get("T", ""), os.environ.get("B", ""){explicit_args})
 except RefusalError as e:

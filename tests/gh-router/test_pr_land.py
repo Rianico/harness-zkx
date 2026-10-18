@@ -24,26 +24,32 @@ import _draft as _draft_mod  # noqa: E402
 import _github as github_mod  # noqa: E402
 import _status as _status_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
+from _changelog import (
+    stamp_changelog,  # noqa: E402
+    unreleased_attributes_pr,  # noqa: E402
+)
+from _check import check_trailers  # noqa: E402
+from _errors import (
+    PrError,  # noqa: E402
+    RefusalError,  # noqa: E402
+    UsageError,  # noqa: E402
+)
 
 # From `_github`, not `pr`: the `pr` re-export is early-bound, so patching the seam would not
 # reach it (test_pr_arch guards this). This is the real function and its real timeout.
-from _github import run_command  # noqa: E402
-from pr import (  # noqa: E402
-    PrError,
-    RefusalError,
-    UsageError,
-    check_trailers,
-    checks_verdict,
-    clean_squash_body,
-    is_unfilled_body,
-    merge_pr,
-    parse_args,
-    pr_conflict_verdict,
-    resolve_squash_message,
-    squash_message,
-    stamp_changelog,
-    unreleased_attributes_pr,
+from _github import (
+    checks_verdict,  # noqa: E402
+    merge_pr,  # noqa: E402
+    pr_conflict_verdict,  # noqa: E402
+    run_command,  # noqa: E402
 )
+from _squash import (
+    clean_squash_body,  # noqa: E402
+    is_unfilled_body,  # noqa: E402
+    resolve_squash_message,  # noqa: E402
+    squash_message,  # noqa: E402
+)
+from pr import parse_args  # noqa: E402
 
 
 def test_missing_body_file_exits_2() -> None:
@@ -851,7 +857,7 @@ exit 0
     test_conflicting = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts
+from _github import check_conflicts
 ok = check_conflicts("test/repo", "999", "main")
 sys.exit(0 if ok else 1)
 """
@@ -875,7 +881,7 @@ sys.exit(0 if ok else 1)
     test_clean = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts
+from _github import check_conflicts
 ok = check_conflicts("test/repo", "888", "main")
 sys.exit(0 if ok else 1)
 """
@@ -893,7 +899,7 @@ sys.exit(0 if ok else 1)
     test_behind = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts
+from _github import check_conflicts
 ok = check_conflicts("test/repo", "777", "main")
 sys.exit(0 if ok else 1)
 """
@@ -937,7 +943,8 @@ import sys
 import time
 time.sleep = lambda _s: None  # retry-now semantics are the contract; wall-clock waits are not
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts, PrError
+from _errors import PrError
+from _github import check_conflicts
 try:
     check_conflicts("test/repo", "123", "main")
     print("FAILED_SILENTLY")
@@ -984,7 +991,8 @@ exit 0
     test_script = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers, PrError
+from _check import check_trailers
+from _errors import PrError
 try:
     check_trailers("test/repo", "feat-branch", "", body_supplied=False, title="feat: x")
     print("FAILED_SILENTLY")
@@ -1038,9 +1046,9 @@ exit 0
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
 import _github
-import pr
+from _github import dump_failure_logs
 _github.LOG_TIMEOUT = 0.2  # `dump_failure_logs` reads the timeout where it is defined
-pr.dump_failure_logs("test/repo", "123")
+dump_failure_logs("test/repo", "123")
 """
     res = subprocess.run(
         [sys.executable, "-c", test_script],
@@ -1180,7 +1188,7 @@ exit 0
     test_script = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import dump_failure_logs
+from _github import dump_failure_logs
 dump_failure_logs("test/repo", "123")
 """
     res = subprocess.run(
@@ -1277,7 +1285,7 @@ exit 0
     test_no_body = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
+from _check import check_trailers
 rc = check_trailers("test/repo", "feat-branch", "", body_supplied=False, title="feat: x")
 sys.exit(rc)
 """
@@ -1295,7 +1303,7 @@ sys.exit(rc)
     test_valid = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
+from _check import check_trailers
 rc = check_trailers("test/repo", "feat-branch", "feat: short description", body_supplied=True, title="feat: short title")
 sys.exit(rc)
 """
@@ -1312,7 +1320,7 @@ sys.exit(rc)
     test_raw_token = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
+from _check import check_trailers
 rc = check_trailers("test/repo", "feat-branch", "feat: body <!-- CODE_AUTHORS -->", body_supplied=True)
 sys.exit(rc)
 """
@@ -1331,7 +1339,7 @@ sys.exit(rc)
     test_long_title = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
+from _check import check_trailers
 rc = check_trailers("test/repo", "feat-branch", "feat: body", body_supplied=True, title="{long_title}")
 sys.exit(rc)
 """
@@ -1587,7 +1595,8 @@ def test_create_or_reuse_refuses_missing_or_template_body(tmp_path: Path) -> Non
 import sys
 from pathlib import Path
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import PrError, create_or_reuse_pr
+from _errors import PrError
+from pr import create_or_reuse_pr
 body = {body_expr}
 try:
     create_or_reuse_pr(

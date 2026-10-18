@@ -28,11 +28,11 @@ TEMPLATE_PATH = REPO_ROOT / ".github" / "pull_request_template.md"
 if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
-from pr import (  # noqa: E402
-    RefusalError,
-    check_squash_body,
-    check_squash_title,
-    clean_squash_body,
+from _errors import RefusalError  # noqa: E402
+from _squash import (
+    check_squash_body,  # noqa: E402
+    check_squash_title,  # noqa: E402
+    clean_squash_body,  # noqa: E402
 )
 
 

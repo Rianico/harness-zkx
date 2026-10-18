@@ -27,12 +27,8 @@ PR_SH = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.sh"
 SCRIPTS_DIR = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
-from pr import (
-    checks_verdict as py_checks_verdict,
-)
-from pr import (
-    squash_message,
-)
+from _github import checks_verdict as py_checks_verdict
+from _squash import squash_message
 
 CASES = [
     ("a single passing check is green", ["tests\tpass"], "success"),

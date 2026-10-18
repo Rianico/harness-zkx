@@ -35,21 +35,21 @@ if str(PR_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PR_SCRIPTS))
 
 import _github as github_mod  # noqa: E402
-from pr import (  # noqa: E402
-    COPY_OVERLAP_THRESHOLD,
-    COPY_TOKEN_FLOOR,
-    SQUASH_MESSAGE_MAX_LINES,
-    RefusalError,
-    _copy_tokens,
-    _fenced_line_mask,
-    check_explicit_squash_message,
-    check_squash_body,
-    clean_squash_body,
-    copy_body_coverage,
-    copy_overlap,
-    merge_pr,
-    refuse_mechanic_copy,
-    resolve_squash_message,
+from _errors import RefusalError  # noqa: E402
+from _github import merge_pr  # noqa: E402
+from _squash import (
+    COPY_OVERLAP_THRESHOLD,  # noqa: E402
+    COPY_TOKEN_FLOOR,  # noqa: E402
+    SQUASH_MESSAGE_MAX_LINES,  # noqa: E402
+    _copy_tokens,  # noqa: E402
+    _fenced_line_mask,  # noqa: E402
+    check_explicit_squash_message,  # noqa: E402
+    check_squash_body,  # noqa: E402
+    clean_squash_body,  # noqa: E402
+    copy_body_coverage,  # noqa: E402
+    copy_overlap,  # noqa: E402
+    refuse_mechanic_copy,  # noqa: E402
+    resolve_squash_message,  # noqa: E402
 )
 
 # --- fixtures ---
