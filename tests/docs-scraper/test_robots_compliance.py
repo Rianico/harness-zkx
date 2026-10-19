@@ -4,7 +4,7 @@ Test IDs: RT-01 through RT-07
 """
 
 from typing import override
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import requests.exceptions
@@ -223,9 +223,8 @@ class TestRobotsCompliance:
         # Should succeed even with robots.txt network failure (fail-open)
         assert result is not None
 
-    def test_rt_05_crawl_delay_directive(self, temp_output_dir, temp_cache_dir):
+    def test_rt_05_crawl_delay_directive(self, temp_output_dir, temp_cache_dir, fake_clock):
         """RT-05: Crawl-delay directive.
-
         'Crawl-delay: 2' in robots.txt should use max(request_delay, crawl_delay).
         """
         from base import DocumentationScraper
@@ -275,18 +274,11 @@ class TestRobotsCompliance:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        sleep_times = []
-
-        def capture_sleep(duration):
-            sleep_times.append(duration)
-
-        with patch("time.sleep", side_effect=capture_sleep):
-            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test1.html")
-            _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test2.html")
-
+        _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test1.html")
+        _ = scraper.fetch_page(TEST_PAGE_URL, cache_file="test2.html")
         # Crawl-delay of 2s should override default 1s delay
-        assert len(sleep_times) == 1
-        assert 1.8 <= sleep_times[0] <= 2.2
+        assert fake_clock.sleep_calls == [2.0]
+        assert fake_clock.sleep_calls[0] == 2.0
 
     def test_rt_06_user_agent_specific_rules(self, temp_output_dir, temp_cache_dir):
         """RT-06: User-agent specific rules.

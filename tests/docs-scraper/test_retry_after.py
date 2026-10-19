@@ -3,9 +3,9 @@
 Test IDs: RA-01 through RA-05
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import override
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import requests.exceptions
 from fixtures import TEST_PAGE_URL
@@ -14,7 +14,7 @@ from fixtures import TEST_PAGE_URL
 class TestRetryAfter:
     """Test suite for Retry-After header handling."""
 
-    def test_ra_01_retry_after_seconds(self, temp_output_dir, temp_cache_dir):
+    def test_ra_01_retry_after_seconds(self, temp_output_dir, temp_cache_dir, fake_clock):
         """RA-01: 429 with Retry-After (seconds).
 
         Status 429 with header 'Retry-After: 5' should wait 5s, then retry.
@@ -66,20 +66,13 @@ class TestRetryAfter:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        sleep_times = []
-
-        def capture_sleep(duration):
-            sleep_times.append(duration)
-
-        with patch("time.sleep", side_effect=capture_sleep):
-            result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         assert result is not None
-        assert len(sleep_times) == 1
-        # Should have waited approximately 5 seconds
-        assert 4.5 <= sleep_times[0] <= 5.5
+        assert fake_clock.sleep_calls == [5.0]
+        assert fake_clock.sleep_calls[0] == 5.0
 
-    def test_ra_02_retry_after_http_date(self, temp_output_dir, temp_cache_dir):
+    def test_ra_02_retry_after_http_date(self, temp_output_dir, temp_cache_dir, fake_clock):
         """RA-02: 429 with Retry-After (HTTP date).
 
         Status 429 with HTTP date header should wait until specified time.
@@ -101,8 +94,9 @@ class TestRetryAfter:
             respect_robots_txt=False,  # Disable to avoid extra calls
         )
 
-        # Create a future date 5 seconds from now (more buffer for timing)
-        future_time = datetime.now(UTC) + timedelta(seconds=5)
+        # Build the HTTP-date header from the same fake clock used for patching,
+        # so both sides of the Retry-After subtraction agree. Never patch datetime.
+        future_time = datetime.fromtimestamp(fake_clock.now + 5, tz=UTC)
         http_date = future_time.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
         mock_session = MagicMock()
@@ -135,20 +129,15 @@ class TestRetryAfter:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        sleep_times = []
-
-        def capture_sleep(duration):
-            sleep_times.append(duration)
-
-        with patch("time.sleep", side_effect=capture_sleep):
-            result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         assert result is not None
-        assert len(sleep_times) == 1
-        # Should have waited approximately 5 seconds (with wide tolerance for timing)
-        assert 3.5 <= sleep_times[0] <= 6.0
+        assert fake_clock.sleep_calls == [5.0]
+        assert fake_clock.sleep_calls[0] == 5.0
 
-    def test_ra_03_retry_after_missing_uses_backoff(self, temp_output_dir, temp_cache_dir):
+    def test_ra_03_retry_after_missing_uses_backoff(
+        self, temp_output_dir, temp_cache_dir, fake_clock
+    ):
         """RA-03: 429 without Retry-After.
 
         Status 429 without header should use exponential backoff as fallback.
@@ -200,20 +189,13 @@ class TestRetryAfter:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        sleep_times = []
-
-        def capture_sleep(duration):
-            sleep_times.append(duration)
-
-        with patch("time.sleep", side_effect=capture_sleep):
-            result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         assert result is not None
-        assert len(sleep_times) == 1
-        # Should have used exponential backoff (~1s for first retry)
-        assert 0.8 <= sleep_times[0] <= 1.5
+        assert fake_clock.sleep_calls == [1.0]
+        assert fake_clock.sleep_calls[0] == 1.0
 
-    def test_ra_04_503_with_retry_after(self, temp_output_dir, temp_cache_dir):
+    def test_ra_04_503_with_retry_after(self, temp_output_dir, temp_cache_dir, fake_clock):
         """RA-04: 503 with Retry-After.
 
         Status 503 with header 'Retry-After: 3' should wait 3s, then retry.
@@ -265,20 +247,13 @@ class TestRetryAfter:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        sleep_times = []
-
-        def capture_sleep(duration):
-            sleep_times.append(duration)
-
-        with patch("time.sleep", side_effect=capture_sleep):
-            result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         assert result is not None
-        assert len(sleep_times) == 1
-        # Should have waited approximately 3 seconds
-        assert 2.5 <= sleep_times[0] <= 3.5
+        assert fake_clock.sleep_calls == [3.0]
+        assert fake_clock.sleep_calls[0] == 3.0
 
-    def test_ra_05_retry_after_capped(self, temp_output_dir, temp_cache_dir):
+    def test_ra_05_retry_after_capped(self, temp_output_dir, temp_cache_dir, fake_clock):
         """RA-05: Retry-After caps at reasonable max.
 
         Header 'Retry-After: 3600' should cap delay to prevent excessive wait.
@@ -330,15 +305,9 @@ class TestRetryAfter:
         mock_session.headers = {}
         scraper.session = mock_session
 
-        sleep_times = []
-
-        def capture_sleep(duration):
-            sleep_times.append(duration)
-
-        with patch("time.sleep", side_effect=capture_sleep):
-            result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
+        result = scraper.fetch_page(TEST_PAGE_URL, cache_file="test.html")
 
         assert result is not None
-        assert len(sleep_times) == 1
+        assert len(fake_clock.sleep_calls) == 1
         # Should have capped the delay to MAX_RETRY_AFTER (60s by default)
-        assert sleep_times[0] <= 60
+        assert fake_clock.sleep_calls[0] <= 60
