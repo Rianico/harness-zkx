@@ -45,6 +45,36 @@ def temp_output_dir(tmp_path):
 
 
 @pytest.fixture
+def fake_clock(monkeypatch):
+    """Deterministic clock for timing-sensitive scraper tests.
+
+    Patches ``time.time`` and ``time.sleep`` in the namespace the scraper
+    resolves them through (``base.time``), so the sleep argument is computed
+    from the fake clock, not measured from the wall clock. ``sleep`` records
+    its argument and advances the fake clock, mirroring real elapsed time.
+    Build HTTP-date headers from ``fake_clock.now`` so both sides of the
+    Retry-After subtraction agree. Never patch ``datetime``.
+    """
+
+    class FakeClock:
+        def __init__(self) -> None:
+            self.now = 1_700_000_000.0
+            self.sleep_calls: list[float] = []
+
+        def time(self) -> float:
+            return self.now
+
+        def sleep(self, seconds: float) -> None:
+            self.sleep_calls.append(seconds)
+            self.now += seconds
+
+    clock = FakeClock()
+    monkeypatch.setattr("base.time.time", clock.time)
+    monkeypatch.setattr("base.time.sleep", clock.sleep)
+    return clock
+
+
+@pytest.fixture
 def temp_cache_dir(tmp_path):
     """Create a temporary cache directory for testing."""
     cache_dir = tmp_path / "cache"
