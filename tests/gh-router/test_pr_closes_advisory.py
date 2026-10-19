@@ -10,6 +10,7 @@ refuses. Unit tests patch the `_github.run_command` seam; the end-to-end tests d
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import subprocess
@@ -18,14 +19,13 @@ from pathlib import Path
 
 import pytest
 
+from tests.gh_helpers import make_repo
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS / "pr.py"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
 import _github as github_mod  # noqa: E402
 from _github import issue_state, warn_closed_issues  # noqa: E402
@@ -155,52 +155,13 @@ exit 0
 """
 
 
-def _make_repo(repo: Path) -> None:
-    repo.mkdir(parents=True)
-    _ = subprocess.run(["git", "init", "-b", "main", str(repo)], env=git_env(), check=True)
-    for key, value in (
-        ("user.name", "Advisory Synthetic"),
-        ("user.email", "advisory@x.io"),
-        ("commit.gpgsign", "false"),
-    ):
-        _ = subprocess.run(
-            ["git", "-C", str(repo), "config", key, value], env=git_env(), check=True
-        )
-    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _ = subprocess.run(["git", "-C", str(repo), "add", "base.txt"], env=git_env(), check=True)
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "commit", "-m", "chore: base"], env=git_env(), check=True
-    )
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/test/advisory.git"],
-        env=git_env(),
-        check=True,
-    )
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
-        env=git_env(),
-        check=True,
-    )
-    _ = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo),
-            "symbolic-ref",
-            "refs/remotes/origin/HEAD",
-            "refs/remotes/origin/main",
-        ],
-        env=git_env(),
-        check=True,
-    )
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "checkout", "-b", "feat-advisory"], env=git_env(), check=True
-    )
-    _ = (repo / "one.txt").write_text("one\n", encoding="utf-8")
-    _ = subprocess.run(["git", "-C", str(repo), "add", "one.txt"], env=git_env(), check=True)
-    _ = subprocess.run(
-        ["git", "-C", str(repo), "commit", "-m", "feat: one"], env=git_env(), check=True
-    )
+_make_repo = functools.partial(
+    make_repo,
+    slug="advisory",
+    branch="feat-advisory",
+    user_name="Advisory Synthetic",
+    user_email="advisory@x.io",
+)
 
 
 def _gh_env(tmp_path: Path, **issue: str) -> dict[str, str]:

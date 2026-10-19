@@ -17,7 +17,7 @@ Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head 
 
 ## Script
 
-Run `$SKILL_DIR/scripts/pr.py` with `uv run` (Python >=3.14, `GH_TOKEN` via `gh auth`). The `$SKILL_DIR/scripts/pr.sh` shim execs it. Shared modules resolve repository identity (`$SKILL_DIR/../../lib/repo.sh`, push remote first) and check verdicts (`$SKILL_DIR/../../lib/checks.sh`).
+Run `$SKILL_DIR/scripts/pr.py` with `uv run` (Python >=3.14, `GH_TOKEN` via `gh auth`). The `$SKILL_DIR/scripts/pr.sh` shim execs it. Shared Python modules resolve repository identity (`_github.repo_slug_from_url`, push remote first) and check verdicts (`_github.checks_verdict`).
 
 ```bash
 uv run $SKILL_DIR/scripts/pr.py --status --json

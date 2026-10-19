@@ -14,36 +14,41 @@ from tests.git_env import git_env
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS / "pr.py"
+LIB_DIR = REPO_ROOT / "skills/gh-router/lib"
 PR_SH = PR_SCRIPTS / "pr.sh"
 PR_TEMPLATE = REPO_ROOT / ".github/pull_request_template.md"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
 import _draft as _draft_mod  # noqa: E402
 import _github as github_mod  # noqa: E402
 import _status as _status_mod  # noqa: E402
 import pr as pr_mod  # noqa: E402
+from _changelog import (
+    stamp_changelog,  # noqa: E402
+    unreleased_attributes_pr,  # noqa: E402
+)
+from _check import check_trailers  # noqa: E402
+from _errors import (
+    PrError,  # noqa: E402
+    RefusalError,  # noqa: E402
+    UsageError,  # noqa: E402
+)
 
 # From `_github`, not `pr`: the `pr` re-export is early-bound, so patching the seam would not
 # reach it (test_pr_arch guards this). This is the real function and its real timeout.
-from _github import run_command  # noqa: E402
-from pr import (  # noqa: E402
-    PrError,
-    RefusalError,
-    UsageError,
-    check_trailers,
-    checks_verdict,
-    clean_squash_body,
-    is_unfilled_body,
-    merge_pr,
-    parse_args,
-    pr_conflict_verdict,
-    resolve_squash_message,
-    squash_message,
-    stamp_changelog,
-    unreleased_attributes_pr,
+from _github import (
+    checks_verdict,  # noqa: E402
+    merge_pr,  # noqa: E402
+    pr_conflict_verdict,  # noqa: E402
+    run_command,  # noqa: E402
 )
+from _squash import (
+    clean_squash_body,  # noqa: E402
+    is_unfilled_body,  # noqa: E402
+    resolve_squash_message,  # noqa: E402
+    squash_message,  # noqa: E402
+)
+from pr import parse_args  # noqa: E402
 
 
 def test_missing_body_file_exits_2() -> None:
@@ -417,7 +422,7 @@ def test_check_trailers_refuses_fallback_without_explicit(
 
     monkeypatch.setattr(github_mod, "run_command", fake_run)
 
-    rc = check_trailers("test/repo", "feat-branch", "", body_supplied=True)
+    rc = check_trailers("test/repo", "feat-branch", "", body_supplied=True, title="feat: x")
     assert rc == 1
     err = capsys.readouterr().err
     assert "--squash-message" in err
@@ -752,6 +757,7 @@ exit 0
     test_run_title = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
+sys.path.insert(0, "{LIB_DIR}")
 from pr import create_or_reuse_pr
 num, title, body, created = create_or_reuse_pr(
     repo="test/repo",
@@ -786,6 +792,7 @@ print(f"FINAL_BODY={{body}}")
     test_run_none = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
+sys.path.insert(0, "{LIB_DIR}")
 from pr import create_or_reuse_pr
 num, title, body, created = create_or_reuse_pr(
     repo="test/repo",
@@ -851,7 +858,8 @@ exit 0
     test_conflicting = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts
+sys.path.insert(0, "{LIB_DIR}")
+from _github import check_conflicts
 ok = check_conflicts("test/repo", "999", "main")
 sys.exit(0 if ok else 1)
 """
@@ -875,7 +883,8 @@ sys.exit(0 if ok else 1)
     test_clean = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts
+sys.path.insert(0, "{LIB_DIR}")
+from _github import check_conflicts
 ok = check_conflicts("test/repo", "888", "main")
 sys.exit(0 if ok else 1)
 """
@@ -893,7 +902,8 @@ sys.exit(0 if ok else 1)
     test_behind = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts
+sys.path.insert(0, "{LIB_DIR}")
+from _github import check_conflicts
 ok = check_conflicts("test/repo", "777", "main")
 sys.exit(0 if ok else 1)
 """
@@ -937,7 +947,9 @@ import sys
 import time
 time.sleep = lambda _s: None  # retry-now semantics are the contract; wall-clock waits are not
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_conflicts, PrError
+sys.path.insert(0, "{LIB_DIR}")
+from _errors import PrError
+from _github import check_conflicts
 try:
     check_conflicts("test/repo", "123", "main")
     print("FAILED_SILENTLY")
@@ -954,9 +966,7 @@ except PrError as e:
         cwd=REPO_ROOT,
     )
     assert res.returncode == 42
-    assert (
-        "CAUGHT_PR_ERROR: failed to check PR #123 mergeable state: api rate limited" in res.stdout
-    )
+    assert "CAUGHT_PR_ERROR: api rate limited" in res.stdout
 
 
 def test_check_trailers_fails_loud_on_body_fetch_error(tmp_path: Path) -> None:
@@ -986,9 +996,11 @@ exit 0
     test_script = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers, PrError
+sys.path.insert(0, "{LIB_DIR}")
+from _check import check_trailers
+from _errors import PrError
 try:
-    check_trailers("test/repo", "feat-branch", "", body_supplied=False)
+    check_trailers("test/repo", "feat-branch", "", body_supplied=False, title="feat: x")
     print("FAILED_SILENTLY")
     sys.exit(0)
 except PrError as e:
@@ -1003,9 +1015,7 @@ except PrError as e:
         cwd=REPO_ROOT,
     )
     assert res.returncode == 42
-    assert (
-        "CAUGHT_PR_ERROR: failed to fetch body for PR #123: 500 internal server error" in res.stdout
-    )
+    assert "CAUGHT_PR_ERROR: 500 internal server error" in res.stdout
 
 
 def test_dump_failure_logs_survives_view_timeout(tmp_path: Path) -> None:
@@ -1041,10 +1051,11 @@ exit 0
     test_script = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
+sys.path.insert(0, "{LIB_DIR}")
 import _github
-import pr
+from _github import dump_failure_logs
 _github.LOG_TIMEOUT = 0.2  # `dump_failure_logs` reads the timeout where it is defined
-pr.dump_failure_logs("test/repo", "123")
+dump_failure_logs("test/repo", "123")
 """
     res = subprocess.run(
         [sys.executable, "-c", test_script],
@@ -1184,7 +1195,8 @@ exit 0
     test_script = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import dump_failure_logs
+sys.path.insert(0, "{LIB_DIR}")
+from _github import dump_failure_logs
 dump_failure_logs("test/repo", "123")
 """
     res = subprocess.run(
@@ -1281,8 +1293,9 @@ exit 0
     test_no_body = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
-rc = check_trailers("test/repo", "feat-branch", "", body_supplied=False)
+sys.path.insert(0, "{LIB_DIR}")
+from _check import check_trailers
+rc = check_trailers("test/repo", "feat-branch", "", body_supplied=False, title="feat: x")
 sys.exit(rc)
 """
     res1 = subprocess.run(
@@ -1299,7 +1312,8 @@ sys.exit(rc)
     test_valid = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
+sys.path.insert(0, "{LIB_DIR}")
+from _check import check_trailers
 rc = check_trailers("test/repo", "feat-branch", "feat: short description", body_supplied=True, title="feat: short title")
 sys.exit(rc)
 """
@@ -1316,7 +1330,8 @@ sys.exit(rc)
     test_raw_token = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
+sys.path.insert(0, "{LIB_DIR}")
+from _check import check_trailers
 rc = check_trailers("test/repo", "feat-branch", "feat: body <!-- CODE_AUTHORS -->", body_supplied=True)
 sys.exit(rc)
 """
@@ -1335,7 +1350,8 @@ sys.exit(rc)
     test_long_title = f"""
 import sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import check_trailers
+sys.path.insert(0, "{LIB_DIR}")
+from _check import check_trailers
 rc = check_trailers("test/repo", "feat-branch", "feat: body", body_supplied=True, title="{long_title}")
 sys.exit(rc)
 """
@@ -1591,7 +1607,9 @@ def test_create_or_reuse_refuses_missing_or_template_body(tmp_path: Path) -> Non
 import sys
 from pathlib import Path
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import PrError, create_or_reuse_pr
+sys.path.insert(0, "{LIB_DIR}")
+from _errors import PrError
+from pr import create_or_reuse_pr
 body = {body_expr}
 try:
     create_or_reuse_pr(
@@ -1662,7 +1680,7 @@ class _FakeRun:
                 out = "null\n"
             else:
                 draft_flag = "true" if self.reuse_draft else "false"
-                out = f"{self.existing_pr}\t{draft_flag}\n"
+                out = f"{self.existing_pr}\topen\t{draft_flag}\tfalse\n"
         elif "pulls -X POST" in joined:
             out = "7\n"
         elif "html_url" in joined:

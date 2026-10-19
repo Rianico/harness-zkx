@@ -6,8 +6,9 @@
 #   * returns non-zero instead of printing a diagnostic, so no call can pollute stdout;
 #   * installs no ERR trap and changes no shell option — a pure fact module.
 #
-# Why this is its own module: "which repo" is one fact, and it had three derivations in this
-# skill (a helper, an inline copy in pr.sh, and bare `gh repo view`). In a multi-remote
+# Why this is its own module: "which repo" is one fact, and it had two derivations in this
+# skill (a helper and bare `gh repo view`); the pr-land entry point is a one-line exec shim
+# (`pr.sh` execs `pr.py`), so the shell never carried its own copy. In a multi-remote
 # checkout `gh repo view` resolves to the *upstream* project, so a run lookup 404s or a
 # `repository_dispatch` fires a release workflow at the wrong repo (#33).
 

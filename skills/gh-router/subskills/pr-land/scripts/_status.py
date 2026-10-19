@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import _github
@@ -21,12 +22,11 @@ from _changelog import unreleased_attributes_pr as unreleased_attributes_pr
 from _errors import PrError as PrError
 from _errors import RefusalError as RefusalError
 from _errors import UsageError as UsageError
-from _errors import failing_tool as failing_tool
-from _errors import infer_tool as infer_tool
 from _errors import make_refusal as make_refusal
 from _errors import make_transition as make_transition
-from _github import checks_verdict as checks_verdict
+from _github import classify_failure as classify_failure
 from _github import fetch_mergeability as fetch_mergeability
+from _github import parse_checks as parse_checks
 from _options import PrOptions as PrOptions
 from _options import resolve_squash_override as resolve_squash_override
 from _squash import CONVENTIONAL_TYPES as CONVENTIONAL_TYPES
@@ -37,10 +37,6 @@ from _squash import SQUASH_TITLE_RE as SQUASH_TITLE_RE
 from _squash import has_unfilled_sentinels as has_unfilled_sentinels
 from _squash import is_unfilled_body as is_unfilled_body
 from _squash import resolve_squash_message as resolve_squash_message
-
-_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
-if _LIB_DIR not in sys.path:
-    sys.path.insert(0, _LIB_DIR)
 from range_authority import find_repo_root as find_repo_root
 
 __all__ = [
@@ -48,12 +44,17 @@ __all__ = [
     "BODY_STATES",
     "CHECK_SCHEMA",
     "CHECK_STATES",
+    "ChecksState",
+    "ArtifactState",
     "FAILURE_STATES",
     "MERGEABLE_STATES",
     "MUTATIONS",
+    "Predicates",
     "PR_STATES",
     "SCAFFOLD_MARKER_PREFIX",
     "STATUS_SCHEMA",
+    "StatusReport",
+    "TitleFacts",
     "TITLE_BUDGET",
     "TITLE_WORST_CASE_SUFFIX",
     "artifact_stale",
@@ -62,15 +63,14 @@ __all__ = [
     "classify_body",
     "collect_status",
     "degraded_report",
-    "failing_tool",
     "first_sentinel_line",
     "head_slug",
     "make_refusal",
     "make_transition",
-    "parse_checks",
-    "pr_error_to_refusal",
     "preflight_title",
     "render_text",
+    "Transition",
+    "display_path",
     "resolve_artifact_path",
     "run_status",
     "title_gate",
@@ -93,6 +93,143 @@ ARTIFACT_PREFIX = Path(".lsz") / "gh-router"
 SCAFFOLD_MARKER_PREFIX = "<!-- pr-land scaffold: head="
 
 
+@dataclass
+class ChecksState:
+    """The `checks` predicate: CI state plus passing/total counts."""
+
+    state: str = "none"
+    ok: int = 0
+    total: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return {"state": self.state, "ok": self.ok, "total": self.total}
+
+
+@dataclass
+class Predicates:
+    """The derived landing predicates; `to_dict()` emits the pinned shape."""
+
+    branch_pushed: bool = False
+    remote: str = "origin"
+    ahead: int = 0
+    behind: int = 0
+    pr_state: str = "none"
+    pr_number: str | None = None
+    pr_draft: bool = False
+    body_state: str = "none"
+    worktree_clean: bool = True
+    changelog_stamped: bool = False
+    head_pushed: bool = False
+    checks: ChecksState = field(default_factory=ChecksState)
+    mergeable: str = "unknown"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "branch_pushed": self.branch_pushed,
+            "remote": self.remote,
+            "ahead": self.ahead,
+            "behind": self.behind,
+            "pr_state": self.pr_state,
+            "pr_number": self.pr_number,
+            "pr_draft": self.pr_draft,
+            "body_state": self.body_state,
+            "worktree_clean": self.worktree_clean,
+            "changelog_stamped": self.changelog_stamped,
+            "head_pushed": self.head_pushed,
+            "checks": self.checks.to_dict(),
+            "mergeable": self.mergeable,
+        }
+
+
+@dataclass
+class ArtifactState:
+    """The scaffold artifact path plus its staleness against the head commit."""
+
+    path: str = ""
+    stale: bool = False
+
+    def to_dict(self) -> dict[str, object]:
+        return {"path": self.path, "stale": self.stale}
+
+
+@dataclass
+class TitleFacts:
+    """Title text, budget, and provenance; lengths derive from the text."""
+
+    text: str = ""
+    budget: int = TITLE_BUDGET
+    derived: bool = True
+
+    @property
+    def chars(self) -> int:
+        return len(self.text)
+
+    @property
+    def worst_case_chars(self) -> int:
+        return len(f"{self.text}{TITLE_WORST_CASE_SUFFIX}")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "text": self.text,
+            "chars": self.chars,
+            "worst_case_chars": self.worst_case_chars,
+            "budget": self.budget,
+            "derived": self.derived,
+        }
+
+
+@dataclass
+class Transition:
+    """A legal transition: the command, what it needs, and what it mutates."""
+
+    command: str = ""
+    preconditions: list[str] = field(default_factory=list)
+    mutation: str = "none"
+
+    def __post_init__(self) -> None:
+        if self.mutation not in MUTATIONS:
+            raise ValueError(f"unknown mutation {self.mutation!r}")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "command": self.command,
+            "preconditions": list(self.preconditions),
+            "mutation": self.mutation,
+        }
+
+
+@dataclass
+class StatusReport:
+    """The derived landing state; `to_dict()` emits the pinned `--status` schema."""
+
+    schema: str = STATUS_SCHEMA
+    repo: str = ""
+    head: str = ""
+    base: str = "main"
+    predicates: Predicates = field(default_factory=Predicates)
+    failure_states: list[str] = field(default_factory=list)
+    artifact: ArtifactState = field(default_factory=ArtifactState)
+    title: TitleFacts = field(default_factory=TitleFacts)
+    squash_body_preview: str = ""
+    refusals: list[dict[str, str]] = field(default_factory=list)
+    transitions: list[Transition] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema": self.schema,
+            "repo": self.repo,
+            "head": self.head,
+            "base": self.base,
+            "predicates": self.predicates.to_dict(),
+            "failure_states": list(self.failure_states),
+            "artifact": self.artifact.to_dict(),
+            "title": self.title.to_dict(),
+            "squash_body_preview": self.squash_body_preview,
+            "refusals": [dict(entry) for entry in self.refusals],
+            "transitions": [entry.to_dict() for entry in self.transitions],
+        }
+
+
 def first_sentinel_line(text: str) -> int | None:
     """1-based line number of the first `<FILL:>` sentinel, or None."""
     for lineno, line in enumerate(text.splitlines(), start=1):
@@ -107,45 +244,13 @@ def body_site_with_line(site: str, text: str) -> str:
     return f"{site}:{lineno}" if lineno is not None else site
 
 
-def degraded_report(head: str, repo: str, refusals: list[dict[str, str]]) -> dict[str, object]:
+def degraded_report(head: str, repo: str, refusals: list[dict[str, str]]) -> StatusReport:
     """Minimal pinned-schema report when derivation itself is impossible.
 
     Used when the head ref or repo slug cannot be resolved: `--status` still
     exits 0 and reports what it knows plus the advisory `refusals[]`.
     """
-    return {
-        "schema": STATUS_SCHEMA,
-        "repo": repo,
-        "head": head,
-        "base": "main",
-        "predicates": {
-            "branch_pushed": False,
-            "remote": "origin",
-            "ahead": 0,
-            "behind": 0,
-            "pr_state": "none",
-            "pr_number": None,
-            "pr_draft": False,
-            "body_state": "none",
-            "worktree_clean": True,
-            "changelog_stamped": False,
-            "head_pushed": False,
-            "checks": {"state": "none", "ok": 0, "total": 0},
-            "mergeable": "unknown",
-        },
-        "failure_states": [],
-        "artifact": {"path": "", "stale": False},
-        "title": {
-            "text": "",
-            "chars": 0,
-            "worst_case_chars": len(TITLE_WORST_CASE_SUFFIX),
-            "budget": TITLE_BUDGET,
-            "derived": True,
-        },
-        "squash_body_preview": "",
-        "refusals": refusals,
-        "transitions": [],
-    }
+    return StatusReport(head=head, repo=repo, refusals=refusals)
 
 
 _SLUG_MAX_BYTES = 200
@@ -193,6 +298,18 @@ def resolve_artifact_path(
     return (root / ARTIFACT_PREFIX / leaf).resolve()
 
 
+def display_path(path: Path, cwd: Path | None = None) -> str:
+    """Repo-relative artifact display path, absolute when the root is unknown."""
+    try:
+        return str(path.relative_to(find_repo_root(cwd or Path.cwd())))
+    except RuntimeError:
+        return str(path)
+    except ValueError:
+        return str(path)
+    except OSError:
+        return str(path)
+
+
 def _marker_sha(text: str) -> str | None:
     for line in text.splitlines():
         stripped = line.strip()
@@ -230,95 +347,10 @@ def classify_body(text: str, template_path: Path | None = None) -> str:
     return "ready"
 
 
-def parse_checks(payload: str) -> dict[str, object]:
-    """`gh pr checks` TSV payload to the `checks` predicate: state plus ok/total."""
-    lines = [line for line in payload.splitlines() if line.strip()]
-    total = len(lines)
-    ok = 0
-    for line in lines:
-        parts = line.split("\t")
-        bucket = parts[1].strip() if len(parts) >= 2 else line.split()[-1]
-        if bucket == "pass":
-            ok += 1
-    if total == 0:
-        return {"state": "none", "ok": 0, "total": 0}
-    verdict = checks_verdict(payload)
-    state = {"success": "green", "failure": "red", "pending": "pending"}.get(verdict, "pending")
-    return {"state": state, "ok": ok, "total": total}
-
-
-def pr_error_to_refusal(exc: BaseException, *, tool: str = "") -> dict[str, str] | None:
-    """Map a `gh`/git failure to a structured refusal entry, or None when generic.
-
-    `gh` missing, unauthenticated, or offline becomes data with a remedy instead
-    of a traceback; anything else stays a plain error. `gh`-only markers apply
-    solely when the failing layer resolved to `gh` — anything else (including
-    an unrecognized layer) returns the generic `command_failed` entry, never a
-    `gh_*` label for a `git` failure.
-    """
-    message = str(exc)
-    lowered = message.lower()
-    resolved = tool or failing_tool(message) or infer_tool(message)
-    if resolved == "gh":
-        if "command not found or not executable: gh" in message:
-            return make_refusal(
-                "gh_unavailable",
-                f"gh CLI is not installed or not executable: {message}",
-                "install gh (https://cli.github.com) and authenticate with `gh auth login`, then re-run",
-                "gh",
-            )
-        if "timed out" in lowered:
-            return make_refusal(
-                "gh_offline",
-                f"gh did not answer in time: {message}",
-                "check the network / GH_TOKEN scopes and re-run",
-                "gh",
-            )
-    auth_markers = (
-        "authenticate",
-        "authenticated",
-        "authentication",
-        "401",
-        "403",
-        "bad credentials",
-    )
-    if resolved == "gh" and any(marker in lowered for marker in auth_markers):
-        return make_refusal(
-            "gh_unauthenticated",
-            f"gh cannot authenticate: {message}",
-            "run `gh auth login` (or export a fresh GH_TOKEN) and re-run",
-            "gh",
-        )
-    offline_markers = (
-        "could not resolve",
-        "failed to connect",
-        "network",
-        "offline",
-        "connection refused",
-        "timed out",
-    )
-    if resolved == "gh" and any(marker in lowered for marker in offline_markers):
-        return make_refusal(
-            "gh_offline",
-            f"github is unreachable: {message}",
-            "check the network connection and re-run",
-            "gh",
-        )
-    if resolved and resolved != "gh":
-        return make_refusal(
-            "command_failed",
-            message,
-            f"re-run once {resolved} answers; if it persists, run the failing command by hand",
-            resolved,
-        )
-    if not resolved:
-        return make_refusal(
-            "command_failed",
-            message,
-            "re-run; if the failure persists, run the failing command by hand to see the tool involved",
-            "unknown",
-        )
-    return None
+def _refusal_from_failure(exc: BaseException, *, tool: str, reason: str) -> dict[str, str]:
+    """Build a `refusals[]` entry from a classified failure plus the caller context."""
+    failure = classify_failure(exc, tool=tool)
+    return make_refusal(failure.code, reason, failure.remedy, failure.tool)
 
 
 def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] | None:
@@ -328,8 +360,8 @@ def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] 
     plus a five-digit ` (#99999)` suffix — and refuses when that exceeds the
     budget, so a title that passes `--check` cannot abort at merge once the real
     `(#N)` lands. The refusal reports both lengths. With a PR number the check
-    uses the exact `title (#N)` header. The refusal names the derivation:
-    `--title` when supplied, `HEAD` when derived.
+    uses the exact `title (#N)` header with the merge-time wording. The refusal
+    names the derivation: `--title` when supplied, `HEAD` when derived.
     """
     site = "--title" if not derived else "HEAD"
     provenance = (
@@ -347,8 +379,7 @@ def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] 
         if len(header) > TITLE_BUDGET:
             return make_refusal(
                 "title_budget",
-                f"{provenance} exceeds the {TITLE_BUDGET}-char budget "
-                f"({len(header)} chars as {header!r})",
+                f"commit title exceeds {TITLE_BUDGET} chars: {header}",
                 "shorten the PR title, then re-run",
                 site,
             )
@@ -364,9 +395,15 @@ def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] 
             )
     match = SQUASH_TITLE_RE.match(title.strip())
     if match is None or match.group("type").casefold() not in CONVENTIONAL_TYPES:
+        if num is not None:
+            reason = f'commit title is not a Conventional Commit "type(scope): subject": {title} (#{num})'
+        else:
+            reason = (
+                f"{provenance} is not a Conventional Commit `type(scope): subject` line: {title!r}"
+            )
         return make_refusal(
             "title_shape",
-            f"{provenance} is not a Conventional Commit `type(scope): subject` line: {title!r}",
+            reason,
             "rename the PR title to `type(scope): subject` "
             "(feat, fix, docs, refactor, test, ...), then re-run",
             site,
@@ -386,18 +423,10 @@ def preflight_title(title: str, *, derived: bool) -> None:
         raise RefusalError(entry["reason"], refusals=[entry])
 
 
-def _head_sha(cwd: Path | None = None) -> str:
-    try:
-        res = _github.run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
-    except PrError, OSError:
-        return ""
-    return res.stdout.strip() if res.returncode == 0 else ""
-
-
 def _worktree_clean(cwd: Path | None = None) -> bool:
     try:
         res = _github.run_command(["git", "--no-optional-locks", "status", "--porcelain"], cwd=cwd)
-    except PrError, OSError:
+    except PrError:
         return True
     if res.returncode != 0:
         return True
@@ -405,47 +434,25 @@ def _worktree_clean(cwd: Path | None = None) -> bool:
 
 
 def _query_pr(repo: str, head_ref: str, cwd: Path | None = None) -> tuple[str, str | None, bool]:
-    """(pr_state, pr_number, pr_draft) for the head branch; raises PrError on failure."""
-    owner = repo.split("/")[0]
-    res = _github.run_command(
-        [
-            "gh",
-            "api",
-            f"repos/{repo}/pulls?head={owner}:{head_ref}&state=all",
-            "--jq",
-            r'.[0] | "\(.number)\t\(.state)\t\(.isDraft)\t\(.merged)"',
-        ],
-        cwd=cwd,
-    )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to query PRs for head {head_ref}: {res.stderr.strip() or 'gh api failed'}"
-        )
-    line = res.stdout.strip()
-    if not line or line == "null":
+    """(pr_state, pr_number, pr_draft) for the head branch; raises PrError on failure.
+
+    Thin mapping over the single shared lookup: the gh call lives in
+    `_github.lookup_pr`, this keeps the open/merged/closed verdict.
+    """
+    ref = _github.lookup_pr(repo, head_ref, state="all", cwd=cwd)
+    if ref is None:
         return ("none", None, False)
-    fields = line.split("\t")
-    num = fields[0].strip() or None
-    if num is None:
-        return ("none", None, False)
-    state = fields[1].strip() if len(fields) > 1 else "open"
-    is_draft = len(fields) > 2 and fields[2].strip().lower() == "true"
-    merged = len(fields) > 3 and fields[3].strip().lower() == "true"
-    if state == "open":
-        return ("open", num, is_draft)
-    if merged:
-        return ("merged", num, False)
-    return ("closed", num, False)
+    if ref.state == "open":
+        return ("open", ref.number, ref.is_draft)
+    if ref.merged:
+        return ("merged", ref.number, False)
+    return ("closed", ref.number, False)
 
 
 def _pr_body(repo: str, num: str, cwd: Path | None = None) -> str:
     res = _github.run_command(
-        ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", '.body // ""'], cwd=cwd
+        ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", '.body // ""'], cwd=cwd, required=True
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to fetch body for PR #{num}: {res.stderr.strip() or 'gh api failed'}"
-        )
     return res.stdout
 
 
@@ -462,12 +469,12 @@ def build_transitions(
     branch_pushed: bool,
     failure_states: list[str],
     worktree_clean: bool,
-) -> list[dict[str, object]]:
+) -> list[Transition]:
     """Legal transitions for the current derived state, each with its mutation."""
-    transitions: list[dict[str, object]] = []
+    transitions: list[Transition] = []
     if "diverged" in failure_states:
         transitions.append(
-            make_transition(
+            Transition(
                 f"git pull --rebase {remote} {head_ref}",
                 ["worktree_clean"] if worktree_clean else ["stash or commit local work first"],
                 "local",
@@ -475,7 +482,7 @@ def build_transitions(
         )
     if body_state != "ready":
         transitions.append(
-            make_transition(
+            Transition(
                 f"pr.py --check --body-file {body_path}",
                 ["authored body: fill or delete every <FILL:> slot"],
                 "local",
@@ -484,14 +491,14 @@ def build_transitions(
     if pr_state == "none":
         if not branch_pushed:
             transitions.append(
-                make_transition(
+                Transition(
                     f"git push {remote} {head_ref}",
                     ["diverged resolved"] if "diverged" in failure_states else [],
                     "remote",
                 )
             )
         transitions.append(
-            make_transition(
+            Transition(
                 f"pr.py --body-file {body_path}",
                 ["branch_pushed", "body_state == ready", "title within budget"],
                 "remote",
@@ -499,16 +506,16 @@ def build_transitions(
         )
     if pr_state == "open" and pr_draft:
         transitions.append(
-            make_transition(
+            Transition(
                 f"gh pr ready {pr_number} --repo {repo}",
                 ["changelog_stamped"],
                 "remote",
             )
         )
     if pr_state == "open":
-        transitions.append(make_transition("pr.py --watch", ["pr_state == open"], "none"))
+        transitions.append(Transition("pr.py --watch", ["pr_state == open"], "none"))
         transitions.append(
-            make_transition(
+            Transition(
                 "pr.py --merge --squash-message-file <path>",
                 [
                     "checks green",
@@ -536,7 +543,7 @@ def collect_status(
     out_leaf: str | Path | None,
     template_path: Path | None = None,
     cwd: Path | None = None,
-) -> tuple[dict[str, object], list[str]]:
+) -> tuple[StatusReport, list[str]]:
     """Derive the pinned `--status --json` report plus stderr commentary notes.
 
     Read-only: pushes nothing, creates nothing, deletes nothing. Every refusal a
@@ -549,58 +556,47 @@ def collect_status(
 
     def note_gh(exc: BaseException, what: str) -> None:
         nonlocal gh_broken
-        entry = pr_error_to_refusal(exc, tool="gh")
-        if entry is None:
-            entry = make_refusal(
-                "gh_query_failed",
-                f"could not {what}: {exc}",
-                "check the network / GH_TOKEN scopes and re-run",
-                "gh",
-            )
+        failure = classify_failure(exc, tool="gh")
+        entry = make_refusal(failure.code, f"could not {what}: {exc}", failure.remedy, "gh")
         if not gh_broken:
             refusals.append(entry)
             gh_broken = True
 
     try:
         remote = _github.repo_remote_for_ref(head_ref, cwd=cwd)
-    except PrError, OSError:
+    except PrError:
         remote = "origin"
     try:
         branch_exists = _github._remote_branch_exists(head_ref, cwd=cwd, remote=remote)
-    except PrError, OSError:
+    except PrError:
         branch_exists = False
     ahead = behind = 0
     compare_failed = False
     if branch_exists:
         try:
             ahead, behind = _github._ahead_behind(head_ref, remote, cwd=cwd)
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             # Never assert a push fact from a failed read: a failed compare must
             # not report branch_pushed/head_pushed, so record the failure here and
             # force both flags False below.
             compare_failed = True
             ahead, behind = 0, 0
-            base_entry = pr_error_to_refusal(exc, tool="git") or make_refusal(
-                "compare_failed",
-                f"could not compare {head_ref} against {remote}/{head_ref}: {exc}",
-                f"fetch {remote} and re-run",
-                f"{remote}/{head_ref}",
-            )
             refusals.append(
-                {
-                    **base_entry,
-                    "reason": f"could not compare {head_ref} against {remote}/{head_ref}: {base_entry['reason']}",
-                }
+                _refusal_from_failure(
+                    exc,
+                    tool="git",
+                    reason=f"could not compare {head_ref} against {remote}/{head_ref}: {exc}",
+                )
             )
     branch_pushed = branch_exists and behind == 0 and not compare_failed
 
-    sha = _head_sha(cwd)
+    sha = _github.head_sha(cwd)
     clean = _worktree_clean(cwd)
 
     base_failed = False
     try:
         base: str | None = _github.resolve_base(None, repo, cwd=cwd)
-    except (PrError, OSError) as exc:
+    except PrError as exc:
         base_failed = True
         base = None
         refusals.append(
@@ -613,7 +609,7 @@ def collect_status(
         )
     try:
         default_base = _github.default_branch(repo, cwd=cwd)
-    except PrError, OSError:
+    except PrError:
         default_base = None
     base_name = base or default_base or "main"
 
@@ -622,23 +618,20 @@ def collect_status(
     pr_draft = False
     try:
         pr_state, pr_number, pr_draft = _query_pr(repo, head_ref, cwd)
-    except (PrError, OSError) as exc:
+    except PrError as exc:
         note_gh(exc, f"query PRs for head {head_ref}")
 
     artifact_path = resolve_artifact_path(out_leaf, head_ref, cwd)
-    try:
-        display_path = str(artifact_path.relative_to(find_repo_root(cwd or Path.cwd())))
-    except RuntimeError, ValueError, OSError:
-        display_path = str(artifact_path)
+    display = display_path(artifact_path, cwd)
     stale = artifact_stale(artifact_path, sha)
     if not body_site:
-        body_site = display_path
+        body_site = display
 
     pr_text = ""
     if pr_state == "open" and pr_number is not None and not body_supplied:
         try:
             pr_text = _pr_body(repo, pr_number, cwd)
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             note_gh(exc, f"fetch body for PR #{pr_number}")
     artifact_text = ""
     if not body_supplied and not pr_text and artifact_path.is_file():
@@ -661,7 +654,7 @@ def collect_status(
     changelog_stamped = pr_number is not None and unreleased_attributes_pr(pr_number, cwd=cwd)
     head_pushed = branch_exists and ahead == 0 and behind == 0 and not compare_failed
 
-    checks: dict[str, object] = {"state": "none", "ok": 0, "total": 0}
+    checks = ChecksState()
     if pr_state == "open" and pr_number is not None:
         try:
             checks_res = _github.run_command(
@@ -679,11 +672,12 @@ def collect_status(
                 ],
                 cwd=cwd,
             )
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             note_gh(exc, f"read checks for PR #{pr_number}")
             checks_res = None
         if checks_res is not None and checks_res.returncode == 0:
-            checks = parse_checks(checks_res.stdout)
+            state, ok, total = parse_checks(checks_res.stdout)
+            checks = ChecksState(state=state, ok=ok, total=total)
         elif checks_res is not None:
             note_gh(
                 PrError(
@@ -705,7 +699,7 @@ def collect_status(
                 mergeable = "mergeable"
             elif obs.verdict == "conflicting":
                 mergeable = "conflicting"
-        except (PrError, OSError) as exc:
+        except PrError as exc:
             note_gh(exc, f"read mergeability for PR #{pr_number}")
 
     failure_states: list[str] = []
@@ -739,7 +733,7 @@ def collect_status(
                 "body_missing",
                 "no description supplied and no PR body or scaffold leaf found; "
                 "opening a PR requires a description",
-                f"author the description, then re-run with --body-file {display_path} "
+                f"author the description, then re-run with --body-file {display} "
                 "(or run body-less --check to write the scaffold leaf)",
                 body_site,
             )
@@ -769,12 +763,11 @@ def collect_status(
                 f"PR #{pr_number}",
             )
         )
-    if checks.get("state") == "red" and pr_number is not None:
+    if checks.state == "red" and pr_number is not None:
         refusals.append(
             make_refusal(
                 "checks_failing",
-                f"checks are red on PR #{pr_number} "
-                f"({checks.get('ok')}/{checks.get('total')} passing)",
+                f"checks are red on PR #{pr_number} ({checks.ok}/{checks.total} passing)",
                 "fix the failing checks, then re-run",
                 f"PR #{pr_number}",
             )
@@ -821,109 +814,88 @@ def collect_status(
         pr_state=pr_state,
         pr_draft=pr_draft,
         body_state=body_state,
-        body_path=display_path,
+        body_path=display,
         branch_pushed=branch_pushed,
         failure_states=failure_states,
         worktree_clean=clean,
     )
 
-    report: dict[str, object] = {
-        "schema": STATUS_SCHEMA,
-        "repo": repo,
-        "head": head_ref,
-        "base": base_name,
-        "predicates": {
-            "branch_pushed": branch_pushed,
-            "remote": remote,
-            "ahead": ahead,
-            "behind": behind,
-            "pr_state": pr_state,
-            "pr_number": pr_number,
-            "pr_draft": pr_draft,
-            "body_state": body_state,
-            "worktree_clean": clean,
-            "changelog_stamped": changelog_stamped,
-            "head_pushed": head_pushed,
-            "checks": checks,
-            "mergeable": mergeable,
-        },
-        "failure_states": failure_states,
-        "artifact": {"path": display_path, "stale": stale},
-        "title": {
-            "text": title_text,
-            "chars": len(title_text),
-            "worst_case_chars": len(f"{title_text}{TITLE_WORST_CASE_SUFFIX}"),
-            "budget": TITLE_BUDGET,
-            "derived": not title_supplied,
-        },
-        "squash_body_preview": preview,
-        "refusals": refusals,
-        "transitions": transitions,
-    }
+    report = StatusReport(
+        repo=repo,
+        head=head_ref,
+        base=base_name,
+        predicates=Predicates(
+            branch_pushed=branch_pushed,
+            remote=remote,
+            ahead=ahead,
+            behind=behind,
+            pr_state=pr_state,
+            pr_number=pr_number,
+            pr_draft=pr_draft,
+            body_state=body_state,
+            worktree_clean=clean,
+            changelog_stamped=changelog_stamped,
+            head_pushed=head_pushed,
+            checks=checks,
+            mergeable=mergeable,
+        ),
+        failure_states=failure_states,
+        artifact=ArtifactState(path=display, stale=stale),
+        title=TitleFacts(text=title_text, derived=not title_supplied),
+        squash_body_preview=preview,
+        refusals=refusals,
+        transitions=transitions,
+    )
     return report, notes
 
 
-def render_text(report: dict[str, object]) -> str:
+def render_text(report: StatusReport) -> str:
     """Human-readable `--status` facts for stdout (commentary stays on stderr)."""
-    predicates = report["predicates"]
-    assert isinstance(predicates, dict)
-    checks = predicates["checks"]
-    assert isinstance(checks, dict)
-    artifact = report["artifact"]
-    assert isinstance(artifact, dict)
-    title = report["title"]
-    assert isinstance(title, dict)
-    failures = report["failure_states"]
-    assert isinstance(failures, list)
-    refusals = report["refusals"]
-    assert isinstance(refusals, list)
-    transitions = report["transitions"]
-    assert isinstance(transitions, list)
+    predicates = report.predicates
+    checks = predicates.checks
+    artifact = report.artifact
+    title = report.title
     lines = [
-        f"repo: {report['repo']} head: {report['head']} base: {report['base']}",
+        f"repo: {report.repo} head: {report.head} base: {report.base}",
         "predicates: "
-        f"branch_pushed={str(predicates['branch_pushed']).lower()} "
-        f"remote={predicates['remote']} "
-        f"ahead={predicates['ahead']} behind={predicates['behind']} "
-        f"pr={predicates['pr_state']}"
-        + (f" #{predicates['pr_number']}" if predicates["pr_number"] is not None else "")
-        + f" draft={str(predicates['pr_draft']).lower()} "
-        f"body={predicates['body_state']} "
-        f"clean={str(predicates['worktree_clean']).lower()} "
-        f"stamped={str(predicates['changelog_stamped']).lower()} "
-        f"head_pushed={str(predicates['head_pushed']).lower()} "
-        f"checks={checks['state']} {checks['ok']}/{checks['total']} "
-        f"mergeable={predicates['mergeable']}",
-        f"failure_states: {', '.join(str(f) for f in failures) if failures else 'none'}",
-        f"artifact: {artifact['path']} stale={str(artifact['stale']).lower()}",
-        f"title ({'derived' if title['derived'] else 'from --title'}): "
-        f"{title['text']!r} {title['chars']}/{title['budget']} chars "
-        f"(worst case {title['worst_case_chars']}/{title['budget']})",
+        f"branch_pushed={str(predicates.branch_pushed).lower()} "
+        f"remote={predicates.remote} "
+        f"ahead={predicates.ahead} behind={predicates.behind} "
+        f"pr={predicates.pr_state}"
+        + (f" #{predicates.pr_number}" if predicates.pr_number is not None else "")
+        + f" draft={str(predicates.pr_draft).lower()} "
+        f"body={predicates.body_state} "
+        f"clean={str(predicates.worktree_clean).lower()} "
+        f"stamped={str(predicates.changelog_stamped).lower()} "
+        f"head_pushed={str(predicates.head_pushed).lower()} "
+        f"checks={checks.state} {checks.ok}/{checks.total} "
+        f"mergeable={predicates.mergeable}",
+        f"failure_states: {', '.join(str(entry) for entry in report.failure_states) if report.failure_states else 'none'}",
+        f"artifact: {artifact.path} stale={str(artifact.stale).lower()}",
+        f"title ({'derived' if title.derived else 'from --title'}): "
+        f"{title.text!r} {title.chars}/{title.budget} chars "
+        f"(worst case {title.worst_case_chars}/{title.budget})",
     ]
-    preview = str(report["squash_body_preview"])
+    preview = report.squash_body_preview
     if preview.strip():
         lines.append("squash_body_preview:")
         lines.extend(preview.splitlines())
     else:
         lines.append("squash_body_preview: (none — no usable body)")
-    if refusals:
+    if report.refusals:
         lines.append("refusals:")
-        for entry in refusals:
-            assert isinstance(entry, dict)
+        for entry in report.refusals:
             lines.append(
                 f"  - {entry['code']}: {entry['reason']} "
                 f"[remedy: {entry['remedy']}] [site: {entry['site']}]"
             )
     else:
         lines.append("refusals: none")
-    if transitions:
+    if report.transitions:
         lines.append("transitions:")
-        for entry in transitions:
-            assert isinstance(entry, dict)
-            preconditions = ", ".join(str(p) for p in entry["preconditions"]) or "—"
-            lines.append(
-                f"  - {entry['command']} (needs: {preconditions}; mutates: {entry['mutation']})"
-            )
+        for entry in report.transitions:
+            preconditions = ", ".join(entry.preconditions) or "\u2014"
+            lines.append(f"  - {entry.command} (needs: {preconditions}; mutates: {entry.mutation})")
     else:
         lines.append("transitions: none")
     return "\n".join(lines) + "\n"
@@ -938,9 +910,9 @@ def _status_body_site(options: PrOptions) -> str:
     return ""
 
 
-def _emit_status(report: dict[str, object], options: PrOptions) -> int:
+def _emit_status(report: StatusReport, options: PrOptions) -> int:
     if options.json_output:
-        print(json.dumps(report, indent=2))
+        print(json.dumps(report.to_dict(), indent=2))
     else:
         print(render_text(report), end="")
     return 0
@@ -964,13 +936,8 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
             "pass --head <branch> for a real head ref, then re-run",
             "--head",
         )
-    except (PrError, OSError) as exc:
-        head_entry = pr_error_to_refusal(exc, tool="git") or make_refusal(
-            "command_failed",
-            str(exc),
-            "re-run once git answers; if it persists, run the failing command by hand",
-            "git",
-        )
+    except PrError as exc:
+        head_entry = _refusal_from_failure(exc, tool="git", reason=str(exc))
     if head_entry is not None:
         return _emit_status(
             degraded_report(
@@ -993,16 +960,8 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
                 f"--body-file {options.body_file}",
             )
         )
-    except (PrError, OSError) as exc:
-        extra.append(
-            pr_error_to_refusal(exc, tool="git")
-            or make_refusal(
-                "command_failed",
-                str(exc),
-                "re-run once git answers; if it persists, run the failing command by hand",
-                "git",
-            )
-        )
+    except PrError as exc:
+        extra.append(_refusal_from_failure(exc, tool="git", reason=str(exc)))
     squash_override, squash_supplied = None, False
     try:
         squash_override, squash_supplied = resolve_squash_override(options)
@@ -1023,12 +982,12 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
     except UsageError as exc:
         repo_error = exc
         repo_usage = True
-    except (PrError, OSError) as exc:
+    except PrError as exc:
         repo_error = exc
     if repo_error is not None:
         try:
             remote = _github.repo_remote_for_ref(head_ref)
-        except PrError, OSError:
+        except PrError:
             remote = "origin"
         if repo_usage:
             repo_entry = make_refusal(
@@ -1038,12 +997,7 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
                 remote,
             )
         else:
-            repo_entry = pr_error_to_refusal(repo_error, tool="git") or make_refusal(
-                "command_failed",
-                str(repo_error),
-                "re-run once git answers; if it persists, run the failing command by hand",
-                "git",
-            )
+            repo_entry = _refusal_from_failure(repo_error, tool="git", reason=str(repo_error))
         return _emit_status(
             degraded_report(
                 head_ref,
@@ -1068,9 +1022,7 @@ def run_status(options: PrOptions, cwd: Path | None = None) -> int:
         out_leaf=options.out,
         cwd=cwd,
     )
-    existing = report["refusals"]
-    assert isinstance(existing, list)
-    report["refusals"] = [*extra, *existing]
+    report.refusals = [*extra, *report.refusals]
     for note in notes:
         print(note, file=sys.stderr)
     return _emit_status(report, options)

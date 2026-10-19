@@ -3,7 +3,7 @@
 A leaf module: it imports nothing from the entry script.
 """
 
-import re
+from typing import override
 
 REFUSAL_SCHEMA = "gh-router/pr-land/refusal@1"
 
@@ -25,50 +25,40 @@ def make_transition(command: str, preconditions: list[str], mutation: str) -> di
     return {"command": command, "preconditions": list(preconditions), "mutation": mutation}
 
 
-def failing_tool(message: str) -> str:
-    """Tool name from a `run_command` failure message, or empty when unknown."""
-    marker = "command not found or not executable: "
-    if marker in message:
-        return message.split(marker, 1)[1].split(":")[0].strip().split(" ")[0]
-    marker = "command timed out after "
-    if marker in message:
-        _span, sep, cmd = message.split(marker, 1)[1].partition(":")
-        if sep:
-            argv = cmd.strip().split(" ")
-            return argv[0] if argv else ""
-    return ""
-
-
-def infer_tool(message: str) -> str:
-    """Guess the failing layer from message fingerprints, or empty when unknown.
-
-    `gh`-side fingerprints win over `git`-side ones: a `gh api` failure quoting a
-    `github.com` URL is still a `gh` failure, while a bare push/fetch-shaped
-    message is `git`. Anything unrecognized stays empty and generic.
-    """
-    lowered = message.lower()
-    if re.search(r"\bgh\b|gh api|pulls|mergeable|\bprs?\b|checks", lowered):
-        return "gh"
-    if any(
-        marker in lowered
-        for marker in (
-            "github.com",
-            "git ",
-            "git:",
-            "push",
-            "fetch",
-            "rev-list",
-            "merge-base",
-            "rebase",
-            "origin/",
-        )
-    ):
-        return "git"
-    return ""
-
-
 class PrError(Exception):
     """Base exception for pr module."""
+
+
+class CommandFailed(PrError):
+    """A subprocess that ran and failed (or never ran): the package wire format.
+
+    `tool` comes from `argv[0]` (`git` / `gh` / other) — structural, never
+    parsed from stderr. `returncode` is None when the command never produced an
+    exit status (timeout, missing binary). `str()` keeps the legacy message
+    shape so prose asserts keep passing.
+    """
+
+    tool: str
+    argv: list[str]
+    returncode: int | None
+    stderr: str
+
+    def __init__(
+        self,
+        tool: str,
+        argv: list[str],
+        returncode: int | None,
+        stderr: str,
+    ) -> None:
+        self.tool = tool
+        self.argv = list(argv)
+        self.returncode = returncode
+        self.stderr = stderr
+        super().__init__(stderr)
+
+    @override
+    def __str__(self) -> str:
+        return self.stderr
 
 
 class UsageError(PrError):

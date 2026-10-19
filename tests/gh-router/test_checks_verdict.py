@@ -1,9 +1,13 @@
-"""Regression tests for the check verdict (lib/checks.sh).
+"""Regression tests for the check verdict (`_github.checks_verdict`).
 
 The verdict used to be an inline jq allowlist naming `verify`, `check`, and `changelog-check`.
 This repo's check runs are named `check` and `tests`, so the allowlist matched changelog-check
 alone and reported success while the test suite was still running or failing — `--watch --merge`
 would have merged red on an unprotected default branch.
+
+The shell twin (`lib/checks.sh`) counted all-skipped runs as success; the Python gate
+returns `pending` for them (zero CI is not green). The shell copy is deleted — one
+implementation, one verdict — and the all-skipped case below pins the unified behavior.
 
 The verdict is a pure function (`name<TAB>bucket` lines in, one word out) precisely so these
 cases can be pinned without a network, a token, or a pull request.
@@ -12,27 +16,14 @@ cases can be pinned without a network, a token, or a pull request.
 from __future__ import annotations
 
 import ast
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-CHECKS_LIB = REPO_ROOT / "skills/gh-router/lib/checks.sh"
-PR_PY = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.py"
-PR_SH = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts/pr.sh"
-
 SCRIPTS_DIR = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-from pr import (
-    checks_verdict as py_checks_verdict,
-)
-from pr import (
-    squash_message,
-)
+from _github import checks_verdict as py_checks_verdict
+from _squash import squash_message
 
 CASES = [
     ("a single passing check is green", ["tests\tpass"], "success"),
@@ -46,32 +37,19 @@ CASES = [
     # The bug itself: a check whose name is absent from any allowlist must still count.
     ("a non-allowlisted check still counts", ["tests\tfail"], "failure"),
     ("an unknown bucket degrades to pending", ["x\tbrand-new-bucket"], "pending"),
+    ("all skipped is pending, zero CI is not green", ["a\tskipping"], "pending"),
+    ("all skipped across many checks is pending", ["a\tskipping", "b\tskipping"], "pending"),
 ]
-
-
-def _verdict(payload: str) -> str:
-    result = subprocess.run(
-        ["bash", "-c", f'source "{CHECKS_LIB}"\nprintf "%s" "$PAYLOAD" | checks_verdict'],
-        capture_output=True,
-        text=True,
-        env={**os.environ, "PAYLOAD": payload},
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout
 
 
 @pytest.mark.parametrize(("label", "lines", "expected"), CASES, ids=[c[0] for c in CASES])
 def test_checks_verdict(label: str, lines: list[str], expected: str) -> None:
-    # _verdict feeds the payload with `printf '%s'`, so no case has a trailing newline.
     payload = "\n".join(lines)
-    assert _verdict(payload) == expected, f"bash lib mismatch on: {label}"
-    assert py_checks_verdict(payload) == expected, f"pr.py mismatch on: {label}"
+    assert py_checks_verdict(payload) == expected, f"verdict mismatch on: {label}"
 
 
 def test_verdict_ignores_check_names_entirely() -> None:
     """Two arbitrary names failing must fail — the verdict never keys on a name."""
-    assert _verdict("some-future-check\tfail") == "failure"
-    assert _verdict("some-future-check\tpass\nanother-one\tpass") == "success"
     assert py_checks_verdict("some-future-check\tfail") == "failure"
     assert py_checks_verdict("some-future-check\tpass\nanother-one\tpass") == "success"
 

@@ -16,8 +16,8 @@ A leaf below `_options`: this module imports nothing from `pr`, `_check`, `_draf
 `_changelog`.
 """
 
+import contextlib
 import json
-import os
 import re
 import subprocess
 import sys
@@ -25,15 +25,15 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
+from unittest import mock
 
+from _errors import CommandFailed as CommandFailed
 from _errors import PrError, RefusalError, UsageError
 from _errors import make_refusal as make_refusal
 from _options import PrOptions
+from _options import read_user_file as read_user_file
 from _squash import extract_closes_numbers
-
-_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
-if _LIB_DIR not in sys.path:
-    sys.path.insert(0, _LIB_DIR)
 from range_authority import RangeRefusal, RangeResolution, resolve_range
 
 __all__ = [
@@ -108,6 +108,131 @@ DEFAULT_TIMEOUT = 30.0
 LOG_TIMEOUT = 60.0
 
 
+@dataclass(frozen=True)
+class Failure:
+    """A classified failure: the failing layer, a stable code, and a remedy."""
+
+    tool: str
+    code: str
+    remedy: str
+
+
+@dataclass(frozen=True)
+class PushOutcome:
+    """The push precondition result: reconciled, diverged, or failed.
+
+    `detail` carries the raw stderr for prose only — the state decision never
+    reads it.
+    """
+
+    state: Literal["diverged", "failed"]
+    behind: int = 0
+    detail: str = ""
+
+
+def _push_state(returncode: int | None) -> Literal["diverged", "failed"]:
+    """Classify a push exit status without reading stderr.
+
+    A rejected fast-forward push exits 1 (the remote moved); transport and
+    local failures use other codes. The mapping is structural, never a
+    substring of the tool's stderr.
+    """
+    return "diverged" if returncode == 1 else "failed"
+
+
+def _push_branch(remote: str, head_ref: str, cwd: Path | None = None) -> PushOutcome | None:
+    """Push `head_ref`; None when it landed, otherwise why it did not.
+
+    Reads the typed wire result (`CommandFailed`) and, for in-process fakes
+    that return `CompletedProcess` objects instead of raising, the returncode
+    directly. Never inspects stderr to decide.
+    """
+    try:
+        res = run_command(["git", "push", remote, head_ref], cwd=cwd, required=True)
+    except CommandFailed as exc:
+        return PushOutcome(state=_push_state(exc.returncode), behind=0, detail=exc.stderr.strip())
+    if res.returncode != 0:
+        return PushOutcome(
+            state=_push_state(res.returncode),
+            behind=0,
+            detail=res.stderr.strip(),
+        )
+    return None
+
+
+def _seam_tool(message: str) -> str:
+    """Tool name from the seam's own envelope, or empty when unrecognized.
+
+    Parses only `run_command`'s message formats (`command failed: <tool> …`,
+    `command timed out after Ns: <tool> …`, `command not found …: <tool>: …`);
+    never tool stderr.
+    """
+    marker = "command not found or not executable: "
+    if marker in message:
+        return message.split(marker, 1)[1].split(":")[0].strip().split(" ")[0]
+    marker = "command timed out after "
+    if marker in message:
+        _span, sep, cmd = message.split(marker, 1)[1].partition(":")
+        if sep:
+            argv = cmd.strip().split(" ")
+            return argv[0] if argv else ""
+    return ""
+
+
+def _seam_kind(message: str) -> str:
+    """Classify the seam's own envelope: never-ran, timed-out, or failed.
+
+    Inspects only prefixes `run_command` itself emits — never tool stderr.
+    Returns one of `"unavailable"`, `"timeout"`, `"failed"`.
+    """
+    if message.startswith("command not found or not executable: "):
+        return "unavailable"
+    if message.startswith("command timed out after "):
+        return "timeout"
+    return "failed"
+
+
+def classify_failure(exc: BaseException, *, tool: str = "") -> Failure:
+    """Map a failure to (tool, code, remedy) without sniffing tool stderr.
+
+    `tool` wins when the caller knows its layer; otherwise `CommandFailed`
+    carries it structurally and the seam's own envelope is parsed as a last
+    resort. `gh` maps to `gh_unavailable` (never ran), `gh_offline` (timed
+    out) or `gh_query_failed`; anything else maps to `command_failed`.
+    """
+    message = str(exc)
+    resolved = tool
+    kind = "failed"
+    if isinstance(exc, CommandFailed):
+        resolved = resolved or exc.tool
+        if exc.returncode is None:
+            kind = _seam_kind(exc.stderr)
+    else:
+        resolved = resolved or _seam_tool(message)
+        kind = _seam_kind(message)
+    if resolved == "gh":
+        if kind == "unavailable":
+            return Failure(
+                "gh",
+                "gh_unavailable",
+                "install gh (https://cli.github.com) and authenticate with `gh auth login`, then re-run",
+            )
+        if kind == "timeout":
+            return Failure("gh", "gh_offline", "check the network / GH_TOKEN scopes and re-run")
+        return Failure("gh", "gh_query_failed", "check the network / GH_TOKEN scopes and re-run")
+    if resolved:
+        return Failure(
+            resolved,
+            "command_failed",
+            f"re-run once {resolved} answers; if it persists, run the failing command by hand",
+        )
+    return Failure(
+        "unknown",
+        "command_failed",
+        "re-run; if the failure persists, run the failing command by hand to see the tool involved",
+    )
+
+
 def run_command(
     cmd: list[str],
     *,
@@ -117,9 +242,10 @@ def run_command(
     text: bool = True,
     check: bool = False,
     env: dict[str, str] | None = None,
+    required: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(
+        result = subprocess.run(
             cmd,
             capture_output=capture_output,
             text=text,
@@ -130,9 +256,76 @@ def run_command(
         )
     except subprocess.TimeoutExpired as e:
         cmd_str = " ".join(cmd)
-        raise PrError(f"command timed out after {timeout}s: {cmd_str}") from e
+        raise CommandFailed(
+            cmd[0] if cmd else "unknown",
+            list(cmd),
+            None,
+            f"command timed out after {timeout}s: {cmd_str}",
+        ) from e
     except OSError as e:
-        raise PrError(f"command not found or not executable: {cmd[0] if cmd else ''}: {e}") from e
+        raise CommandFailed(
+            cmd[0] if cmd else "unknown",
+            list(cmd),
+            None,
+            f"command not found or not executable: {cmd[0] if cmd else ''}: {e}",
+        ) from e
+    if required and result.returncode != 0:
+        raise CommandFailed(
+            cmd[0] if cmd else "unknown", list(cmd), result.returncode, result.stderr
+        )
+    return result
+
+
+def head_sha(cwd: Path | None = None) -> str:
+    """Current HEAD commit sha, or empty when unresolvable (marker-only use)."""
+    try:
+        res = run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
+    except PrError:
+        return ""
+    return res.stdout.strip() if res.returncode == 0 else ""
+
+
+@dataclass(frozen=True)
+class PrRef:
+    """One open-PR lookup result: number, state, draft flag, merged flag."""
+
+    number: str
+    state: str
+    is_draft: bool
+    merged: bool
+
+
+def lookup_pr(
+    repo: str, head_ref: str, *, state: str = "open", cwd: Path | None = None
+) -> PrRef | None:
+    """The single home for the open-PR lookup (`gh api .../pulls?head=`).
+
+    Queries the full field set once; callers use what they need. Returns None
+    when no PR matches. Never raises on an empty result.
+    """
+    owner = repo.split("/")[0]
+    res = run_command(
+        [
+            "gh",
+            "api",
+            f"repos/{repo}/pulls?head={owner}:{head_ref}&state={state}",
+            "--jq",
+            r'.[0] | "\(.number)\t\(.state)\t\(.isDraft)\t\(.merged)"',
+        ],
+        cwd=cwd,
+        required=True,
+    )
+    line = res.stdout.strip()
+    if not line or line == "null":
+        return None
+    fields = line.split("\t")
+    number = fields[0].strip() or None
+    if number is None or number == "null":
+        return None
+    state_value = fields[1].strip() if len(fields) > 1 else ""
+    is_draft = len(fields) > 2 and fields[2].strip().lower() == "true"
+    merged = len(fields) > 3 and fields[3].strip().lower() == "true"
+    return PrRef(number=number, state=state_value, is_draft=is_draft, merged=merged)
 
 
 def resolve_head(head_ref: str | None = None, cwd: Path | None = None) -> str:
@@ -244,7 +437,9 @@ def issue_state(repo: str, num: str, cwd: Path | None = None) -> tuple[str, str]
         return None
     try:
         data = json.loads(res.stdout)
-    except ValueError, TypeError:
+    except ValueError:
+        return None
+    except TypeError:
         return None
     if not isinstance(data, dict):
         return None
@@ -277,21 +472,32 @@ def warn_closed_issues(repo: str, *texts: str, cwd: Path | None = None) -> int:
     return warned
 
 
+@contextlib.contextmanager
+def _scoped_authority_cwd(target: Path):
+    """Bind `Path.cwd()` to *target* for one range-authority call (no `os.chdir`).
+
+    `resolve_range` discovers its repo through the single `Path.cwd()` call in
+    `lib/range_authority.py`; everything downstream runs `git -C` against the
+    discovered root, so nothing else reads the process cwd. Patching `Path.cwd`
+    for the call keeps the real cwd — and every relative syscall in other
+    threads — untouched, unlike the `os.chdir` save/restore this replaces.
+    """
+    with mock.patch.object(Path, "cwd", return_value=target):
+        yield
+
+
 def _authority_resolve(spec: str, mode: str, cwd: Path | None = None) -> RangeResolution:
     """Resolve *spec* through the shared range authority inside the target repo.
 
-    resolve_range discovers its repo from the process cwd, so temporarily
-    chdir when the caller targets another checkout. Restores cwd on return.
+    `resolve_range` discovers its repo from `Path.cwd()`, so scope discovery
+    to the caller's checkout with `_scoped_authority_cwd` when one is given.
     """
     if cwd is None:
         return resolve_range(spec, mode)
     previous = Path.cwd()
     target = cwd if cwd.is_absolute() else previous / cwd
-    os.chdir(target)
-    try:
+    with _scoped_authority_cwd(target):
         return resolve_range(spec, mode)
-    finally:
-        os.chdir(previous)
 
 
 def _remote_branch_exists(name: str, cwd: Path | None = None, remote: str = "origin") -> bool:
@@ -314,12 +520,8 @@ def _ahead_behind(head_ref: str, remote: str, cwd: Path | None = None) -> tuple[
     res = run_command(
         ["git", "rev-list", "--left-right", "--count", f"{remote_ref}...{head_ref}", "--"],
         cwd=cwd,
+        required=True,
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"cannot compare {head_ref} against {remote_ref}: "
-            f"{res.stderr.strip() or 'git rev-list failed'}"
-        )
     try:
         left, right = res.stdout.strip().split()
         return int(right), int(left)
@@ -342,11 +544,10 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
     """
     remote = repo_remote_for_ref(head_ref, cwd=cwd)
     if not _remote_branch_exists(head_ref, cwd=cwd, remote=remote):
-        push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
-        if push_res.returncode != 0:
+        outcome = _push_branch(remote, head_ref, cwd=cwd)
+        if outcome is not None:
             raise PrError(
-                f"failed to push {head_ref} to {remote}: "
-                f"{push_res.stderr.strip() or 'git push failed'}"
+                f"failed to push {head_ref} to {remote}: {outcome.detail or 'git push failed'}"
             )
         print(f"pushed {head_ref} to {remote} (remote ref was missing)", file=sys.stderr)
         return
@@ -375,35 +576,37 @@ def ensure_branch_pushed(head_ref: str, cwd: Path | None = None) -> None:
         )
     if ahead == 0:
         return
-    push_res = run_command(["git", "push", remote, head_ref], cwd=cwd)
-    if push_res.returncode != 0:
-        stderr = push_res.stderr.strip() or "git push failed"
-        # No fetch here: the compare stays network-free, so a stale tracking ref can
-        # hide a teammate's push (behind == 0, ahead > 0) until git rejects the push.
-        # Treat a rejection as the divergence it reveals, with the same remediation.
-        print(
-            f"refusing to push {head_ref}: remote {remote}/{head_ref} rejected the push",
-            file=sys.stderr,
+    outcome = _push_branch(remote, head_ref, cwd=cwd)
+    if outcome is None:
+        print(f"pushed {head_ref} to {remote} ({ahead} commit(s))", file=sys.stderr)
+        return
+    stderr = outcome.detail or "git push failed"
+    # No fetch here: the compare stays network-free, so a stale tracking ref can
+    # hide a teammate's push (behind == 0, ahead > 0) until git rejects the push.
+    # Treat a rejection as the divergence it reveals, with the same remediation.
+    print(
+        f"refusing to push {head_ref}: remote {remote}/{head_ref} rejected the push",
+        file=sys.stderr,
+    )
+    print(
+        f"remediation: reconcile first (e.g. git pull --rebase {remote} {head_ref}), ",
+        "then re-run; pr-land never force-pushes",
+        file=sys.stderr,
+    )
+    if outcome.state == "diverged":
+        raise RefusalError(
+            f"remote {remote}/{head_ref} is ahead of local {head_ref}",
+            refusals=[
+                make_refusal(
+                    "diverged",
+                    f"remote {remote}/{head_ref} rejected the push ({behind} remote-only commit(s) known)",
+                    f"reconcile first (e.g. git pull --rebase {remote} {head_ref}), then re-run; pr-land never force-pushes",
+                    f"{remote}/{head_ref}",
+                )
+            ],
         )
-        print(
-            f"remediation: reconcile first (e.g. git pull --rebase {remote} {head_ref}), "
-            "then re-run; pr-land never force-pushes",
-            file=sys.stderr,
-        )
-        if "non-fast-forward" in stderr or "fetch first" in stderr:
-            raise RefusalError(
-                f"remote {remote}/{head_ref} is ahead of local {head_ref}",
-                refusals=[
-                    make_refusal(
-                        "diverged",
-                        f"remote {remote}/{head_ref} rejected the push ({behind} remote-only commit(s) known)",
-                        f"reconcile first (e.g. git pull --rebase {remote} {head_ref}), then re-run; pr-land never force-pushes",
-                        f"{remote}/{head_ref}",
-                    )
-                ],
-            )
+    else:
         raise PrError(f"failed to push {head_ref} to {remote}: {stderr}")
-    print(f"pushed {head_ref} to {remote} ({ahead} commit(s))", file=sys.stderr)
 
 
 def _local_base_from_authority(cwd: Path | None = None) -> str:
@@ -525,12 +728,7 @@ def resolve_title_and_body(
             if options.body_file.is_absolute()
             else ((cwd or Path.cwd()) / options.body_file)
         )
-        if not bf.is_file():
-            raise UsageError(f"body file not found or not readable: {options.body_file}")
-        try:
-            body = bf.read_text(encoding="utf-8")
-        except OSError:
-            raise UsageError(f"body file not found or not readable: {options.body_file}") from None
+        body = read_user_file(bf, kind="body", display=str(options.body_file))
         body_supplied = True
 
     return title, body, title_supplied, body_supplied
@@ -573,7 +771,38 @@ def checks_verdict(payload: str) -> str:
     return "success"
 
 
+def parse_checks(payload: str) -> tuple[str, int, int]:
+    """Parse `gh pr checks` TSV into `(predicate-state, ok, total)` in one pass.
+
+    The single home for counting check buckets; the word maps the shared
+    `checks_verdict` vocabulary (`success`/`failure`/`pending`) onto the
+    predicate vocabulary (`green`/`red`/`pending`).
+    """
+    verdict = checks_verdict(payload)
+    state = {"success": "green", "failure": "red", "pending": "pending"}.get(verdict, "pending")
+    ok = total = 0
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        total += 1
+        parts = line.split("\t")
+        bucket = parts[1].strip() if len(parts) >= 2 else line.split()[-1]
+        if bucket == "pass":
+            ok += 1
+    if total == 0:
+        return "none", 0, 0
+    return state, ok, total
+
+
 def pr_conflict_verdict(mergeable: str | None, state: str | None) -> str:
+    """Verdict from the (mergeable, state) pair; kept separate from `merge_state_verdict`.
+
+    `merge_state_verdict` judges a bare state and treats unknown states as
+    refusals; this judges the pair, so a computable-but-unlisted state with a
+    usable `mergeable` still reads `clean` (and vice versa for null `mergeable`).
+    Merging them would flip verdicts for states like `blocked`; the two homes
+    are intentional.
+    """
     m = (mergeable or "").strip()
     s = (state or "").strip()
     if m in ("false", "CONFLICTING"):
@@ -623,11 +852,8 @@ def fetch_mergeability(repo: str, num: str, cwd: Path | None = None) -> MergeObs
             '[(if .mergeable == null then "null" else (.mergeable|tostring) end), (.mergeable_state // "unknown"), (.html_url // "")] | @tsv',
         ],
         cwd=cwd,
+        required=True,
     )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to check PR #{num} mergeable state: {res.stderr.strip() or 'gh api failed'}"
-        )
     line = res.stdout.strip()
     if not line:
         raise PrError(f"failed to check PR #{num} mergeable state: empty response from gh api")
@@ -827,7 +1053,11 @@ def failing_run_ids(repo: str, num: str, cwd: Path | None = None) -> list[str]:
                                 rid = m.group(1)
                                 if rid not in run_ids:
                                     run_ids.append(rid)
-        except ValueError, TypeError, KeyError:
+        except ValueError:
+            pass
+        except TypeError:
+            pass
+        except KeyError:
             pass
 
     if not run_ids:
@@ -1071,7 +1301,8 @@ def finalize_squash_message(repo: str, num: str, msg: str, cwd: Path | None = No
                 )
             ],
         )
-    return _build_squash_message(msg, merger, tsv_res.stdout).rstrip("\n")
+    final, _ = _build_squash_message(msg, merger, tsv_res.stdout)
+    return final.rstrip("\n")
 
 
 def merge_pr(
@@ -1091,6 +1322,11 @@ def merge_pr(
     from _squash import check_title_length as _check_title_length
     from _squash import resolve_squash_message as _resolve_squash_message
 
+    # Authoritative merge-time title gate: calls _squash directly (raising
+    # RefusalError with the exact `title (#N)` header wording) rather than
+    # routing through _status.title_gate. _github cannot import _status (cycle:
+    # _status imports _github), and title_gate is the advisory dict-returning
+    # twin for preflight paths (--check, --status), not the merge authority.
     if title.strip():
         _check_squash_title(title, num)
     else:

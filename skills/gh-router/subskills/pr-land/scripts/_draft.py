@@ -18,13 +18,14 @@ and no output-directory flag.
 import json
 import re
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import _github
 from _check import CheckReport, check_trailers_report
 from _errors import PrError, RefusalError
 from _github import _authority_resolve, resolve_base
-from _options import PrOptions
+from _options import PrOptions as PrOptions
 from _squash import (
     CLOSES_LINE_RE,
     DEFAULT_TEMPLATE_PATH,
@@ -35,14 +36,13 @@ from _status import CHECK_SCHEMA as CHECK_SCHEMA
 from _status import SCAFFOLD_MARKER_PREFIX as SCAFFOLD_MARKER_PREFIX
 from _status import TITLE_BUDGET as TITLE_BUDGET
 from _status import TITLE_WORST_CASE_SUFFIX as TITLE_WORST_CASE_SUFFIX
+from _status import ArtifactState as ArtifactState
+from _status import TitleFacts as TitleFacts
 from _status import artifact_stale as artifact_stale
 from _status import body_site_with_line as body_site_with_line
+from _status import display_path as display_path
 from _status import make_refusal as make_refusal
 from _status import resolve_artifact_path as resolve_artifact_path
-
-_LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
-if _LIB_DIR not in sys.path:
-    sys.path.insert(0, _LIB_DIR)
 from range_authority import (
     MalformedSpec,
     RangeRefusal,
@@ -94,12 +94,6 @@ _SCAFFOLD_TEMPLATE_DOOR_RE = re.compile(
 _BRANCH_ISSUE_RE = re.compile(r"(?:^|[/_.\-])(\d{1,6})(?:[/_.\-]|$)")
 
 
-def _head_sha(cwd: Path | None = None) -> str:
-    """Current HEAD commit sha, or empty when unresolvable (marker-only use)."""
-    res = _github.run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
-    return res.stdout.strip() if res.returncode == 0 else ""
-
-
 def cap_draft_body(text: str, max_lines: int = DRAFT_BODY_MAX_LINES) -> tuple[str, int]:
     """Cap a commit body at *max_lines*; return (capped text, omitted line count)."""
     lines = text.strip("\n").splitlines()
@@ -146,7 +140,9 @@ def _draft_range(
     for spec in specs:
         try:
             return _authority_resolve(spec, "..", cwd)
-        except RangeRefusal, MalformedSpec:
+        except RangeRefusal:
+            continue
+        except MalformedSpec:
             continue
     return None
 
@@ -176,7 +172,7 @@ def _diff_facts(range_resolution: RangeResolution | None, cwd: Path | None) -> t
             ],
             cwd=root,
         ).stdout
-    except PrError, OSError, RuntimeError:
+    except PrError:
         return (0, 0, 0)
     additions = deletions = files = 0
     for line in out.splitlines():
@@ -270,14 +266,6 @@ def build_scaffold(
     return f"{_scaffold_marker(head_sha)}\n{body}"
 
 
-def _display_path(path: Path, cwd: Path | None = None) -> str:
-    """Repo-relative artifact display path, absolute when the root is unknown."""
-    try:
-        return str(path.relative_to(find_repo_root(cwd or Path.cwd())))
-    except RuntimeError, ValueError, OSError:
-        return str(path)
-
-
 def _scaffold_template_text(template_path: Path | None, cwd: Path | None) -> str:
     path = template_path if template_path is not None else DEFAULT_TEMPLATE_PATH
     if cwd is not None and not path.is_absolute():
@@ -286,6 +274,52 @@ def _scaffold_template_text(template_path: Path | None, cwd: Path | None) -> str
         return path.read_text(encoding="utf-8")
     except OSError:
         return DRAFT_BODY_PLACEHOLDER
+
+
+@dataclass
+class CheckPayload:
+    """The machine-readable `--check` JSON wire payload; `to_dict()` emits the check schema.
+
+    Kept distinct from `_check.CheckReport` on purpose: `CheckReport` is the
+    gate outcome the draft phase branches on (exit code, trailers, body,
+    reason, site); this type is the `--json` rendering of that outcome plus
+    the invocation facts (schema, repo, head, base, title, artifact, commits).
+    `_emit_gate_facts` builds this payload from the report — builders set
+    fields, the renderer reads attributes, so no key can be missing at render.
+    """
+
+    schema: str = CHECK_SCHEMA
+    repo: str = ""
+    head: str = ""
+    base: str | None = None
+    exit_code: int = 0
+    title: TitleFacts = field(default_factory=TitleFacts)
+    body_site: str = ""
+    artifact: ArtifactState = field(default_factory=ArtifactState)
+    refusals: list[dict[str, str]] = field(default_factory=list)
+    squash_body_preview: str = ""
+    scaffold: str = ""
+    scaffold_written: bool = False
+    commits: int = 0
+    trailers: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema": self.schema,
+            "repo": self.repo,
+            "head": self.head,
+            "base": self.base,
+            "exit_code": self.exit_code,
+            "title": self.title.to_dict(),
+            "body_site": self.body_site,
+            "artifact": self.artifact.to_dict(),
+            "refusals": [dict(entry) for entry in self.refusals],
+            "squash_body_preview": self.squash_body_preview,
+            "scaffold": self.scaffold,
+            "scaffold_written": self.scaffold_written,
+            "commits": self.commits,
+            "trailers": self.trailers,
+        }
 
 
 def _emit_check_json(payload: dict[str, object]) -> None:
@@ -301,7 +335,7 @@ def _emit_gate_facts(
     head_ref: str,
     base: str | None,
     title: str,
-    title_facts: dict[str, object],
+    title_facts: TitleFacts,
     body_site: str,
     body: str,
     display: str,
@@ -323,10 +357,7 @@ def _emit_gate_facts(
     refusals: list[dict[str, str]] = []
     if report.exit_code != 0:
         reason = report.reason or "one or more merge gates refused"
-        if "title" in reason.lower():
-            site = "--title" if options.title_supplied else "HEAD"
-        else:
-            site = body_site_with_line(body_site, body)
+        site = report.site or body_site_with_line(body_site, body)
         refusals = [
             make_refusal(
                 "body_missing" if report.exit_code == 2 else "gate_refused",
@@ -338,22 +369,19 @@ def _emit_gate_facts(
         print(json.dumps({"refusals": refusals}, indent=2), file=sys.stderr)
     if options.json_output:
         _emit_check_json(
-            {
-                "schema": CHECK_SCHEMA,
-                "repo": repo,
-                "head": head_ref,
-                "base": base,
-                "exit_code": report.exit_code,
-                "title": title_facts,
-                "body_site": body_site,
-                "artifact": {"path": display, "stale": artifact_stale(artifact_path, sha)},
-                "refusals": refusals,
-                "squash_body_preview": preview,
-                "scaffold": "",
-                "scaffold_written": False,
-                "commits": len(commits),
-                "trailers": trailer_count,
-            }
+            CheckPayload(
+                repo=repo,
+                head=head_ref,
+                base=base,
+                exit_code=report.exit_code,
+                title=title_facts,
+                body_site=body_site,
+                artifact=ArtifactState(path=display, stale=artifact_stale(artifact_path, sha)),
+                refusals=refusals,
+                squash_body_preview=preview,
+                commits=len(commits),
+                trailers=trailer_count,
+            ).to_dict()
         )
     else:
         derived = not options.title_supplied
@@ -362,7 +390,7 @@ def _emit_gate_facts(
         print(
             f"title ({'derived' if derived else 'from --title'}): "
             f"{title!r} {len(title)}/{TITLE_BUDGET} chars "
-            f"(worst case {title_facts['worst_case_chars']}/{TITLE_BUDGET} with ` (#99999)`)"
+            f"(worst case {title_facts.worst_case_chars}/{TITLE_BUDGET} with ` (#99999)`)"
         )
         if preview.strip():
             print("squash_body_preview:")
@@ -398,7 +426,7 @@ def run_draft_phase(
     entry on stderr (exit 1 or 2) carries reason, remedy, and site.
     """
     artifact_path = resolve_artifact_path(options.out, head_ref, cwd)
-    display = _display_path(artifact_path, cwd)
+    display = display_path(artifact_path, cwd)
     if options.body_file is not None:
         body_site = f"--body-file {options.body_file}"
     elif options.body is not None:
@@ -406,13 +434,7 @@ def run_draft_phase(
     else:
         body_site = display
     derived_title = not options.title_supplied
-    title_facts: dict[str, object] = {
-        "text": title,
-        "chars": len(title),
-        "worst_case_chars": len(f"{title}{TITLE_WORST_CASE_SUFFIX}"),
-        "budget": TITLE_BUDGET,
-        "derived": derived_title,
-    }
+    title_facts = TitleFacts(text=title, derived=derived_title)
 
     try:
         base: str | None = resolve_base(options.base, repo, cwd=cwd)
@@ -427,7 +449,7 @@ def run_draft_phase(
             "-- pass --title explicitly",
             file=sys.stderr,
         )
-    sha = _head_sha(cwd)
+    sha = _github.head_sha(cwd)
     hint = (
         f"body: keep {artifact_path.name} in the repo's installed PR template shape "
         "(pr-enhance owns the prose); squash: author a separate overview in "
@@ -510,22 +532,19 @@ def run_draft_phase(
             print(json.dumps({"refusals": refusals}, indent=2), file=sys.stderr)
             if options.json_output:
                 _emit_check_json(
-                    {
-                        "schema": CHECK_SCHEMA,
-                        "repo": repo,
-                        "head": head_ref,
-                        "base": base,
-                        "exit_code": 2,
-                        "title": title_facts,
-                        "body_site": body_site,
-                        "artifact": {"path": display, "stale": False},
-                        "refusals": refusals,
-                        "squash_body_preview": "",
-                        "scaffold": scaffold,
-                        "scaffold_written": True,
-                        "commits": len(commits),
-                        "trailers": 0,
-                    }
+                    CheckPayload(
+                        repo=repo,
+                        head=head_ref,
+                        base=base,
+                        exit_code=2,
+                        title=title_facts,
+                        body_site=body_site,
+                        artifact=ArtifactState(path=display, stale=False),
+                        refusals=refusals,
+                        scaffold=scaffold,
+                        scaffold_written=True,
+                        commits=len(commits),
+                    ).to_dict()
                 )
             else:
                 print(f"commits: {len(commits)}")
@@ -542,22 +561,17 @@ def run_draft_phase(
         print(json.dumps({"refusals": refusals}, indent=2), file=sys.stderr)
         if options.json_output:
             _emit_check_json(
-                {
-                    "schema": CHECK_SCHEMA,
-                    "repo": repo,
-                    "head": head_ref,
-                    "base": base,
-                    "exit_code": 2,
-                    "title": title_facts,
-                    "body_site": body_site,
-                    "artifact": {"path": display, "stale": stale},
-                    "refusals": refusals,
-                    "squash_body_preview": "",
-                    "scaffold": "",
-                    "scaffold_written": False,
-                    "commits": len(commits),
-                    "trailers": 0,
-                }
+                CheckPayload(
+                    repo=repo,
+                    head=head_ref,
+                    base=base,
+                    exit_code=2,
+                    title=title_facts,
+                    body_site=body_site,
+                    artifact=ArtifactState(path=display, stale=stale),
+                    refusals=refusals,
+                    commits=len(commits),
+                ).to_dict()
             )
         else:
             print(f"commits: {len(commits)}")

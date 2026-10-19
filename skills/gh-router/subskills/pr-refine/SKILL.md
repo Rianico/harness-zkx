@@ -17,7 +17,7 @@ Goal: turn someone else's PR into a landable one without rewriting their history
 
 ## Script
 
-`$SKILL_DIR/scripts/refine.sh` (`set -euo pipefail`, `GH_TOKEN` via `gh auth`). Attribution gates are reused from `$SKILL_DIR/../../pr-land/scripts/pr.sh`, never re-derived.
+`$SKILL_DIR/scripts/refine.sh` (`set -euo pipefail`, `GH_TOKEN` via `gh auth`). Attribution gates are reused from `$SKILL_DIR/../../pr-land/scripts/pr.py` (via the `_github` gate helpers), never re-derived.
 
 ```bash
 uv run $SKILL_DIR/scripts/refine.sh observe 157   # which flow?

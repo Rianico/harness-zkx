@@ -18,24 +18,25 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
+LIB_DIR = REPO_ROOT / "skills/gh-router/lib"
 PR_PY = PR_SCRIPTS / "pr.py"
 PR_SH = PR_SCRIPTS / "pr.sh"
 REFINE_SH = REPO_ROOT / "skills/gh-router/subskills/pr-refine/scripts/refine.sh"
 NUM = "7"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
-from pr import (  # noqa: E402
-    RefusalError,
-    build_squash_message,
-    check_raw_token,
-    check_title_length,
-    insert_trailers,
-    is_closing_line,
-    pr_co_author_trailers,
-    refuse_raw_token,
+from _errors import RefusalError  # noqa: E402
+from _squash import (
+    build_squash_message,  # noqa: E402
+    check_raw_token,  # noqa: E402
+    check_title_length,  # noqa: E402
+    insert_trailers,  # noqa: E402
+    is_closing_line,  # noqa: E402
+    pr_co_author_trailers,  # noqa: E402
+    refuse_raw_token,  # noqa: E402
 )
+
+from tests.gh_helpers import write_gh_stub  # noqa: E402
 
 
 def run_bash(
@@ -47,9 +48,9 @@ def run_bash(
 
 def make_gh_mock(tmp_path: Path, **env_extra: str) -> dict[str, str]:
     bindir = tmp_path / "bin"
-    bindir.mkdir(exist_ok=True)
     gh = bindir / "gh"
-    _ = gh.write_text(
+    _ = write_gh_stub(
+        bindir,
         """#!/usr/bin/env bash
 echo "$@" >> "$GH_LOG"
 if [[ "${1:-}" == "pr" ]]; then
@@ -79,7 +80,7 @@ for arg in "$@"; do
 done
 echo "unexpected gh call: $*" >&2
 exit 3
-"""
+""",
     )
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     env = {
@@ -228,7 +229,7 @@ def test_body_with_long_lines_passes_build_squash_message() -> None:
     long_line = "x" * 150
     body = f"Summary line.\n\n{long_line}\n\nCloses #12\n"
     tsv = "ghuser\tWf Zyx\twf@x.io\nme\tMe\tme@x.io"
-    res = build_squash_message(body, merger="me", tsv=tsv)
+    res, _ = build_squash_message(body, merger="me", tsv=tsv)
     assert long_line in res
     assert "Co-authored-by: Wf Zyx <wf@x.io>" in res
 
@@ -250,7 +251,8 @@ def run_finalize(env: dict[str, str], body: str) -> subprocess.CompletedProcess[
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import finalize_squash_message
+sys.path.insert(0, "{LIB_DIR}")
+from _github import finalize_squash_message
 try:
     res = finalize_squash_message("t/r", "{NUM}", os.environ.get("B", ""))
     print(res, end="")
@@ -282,7 +284,9 @@ def run_merge(
     script = f"""
 import os, sys
 sys.path.insert(0, "{PR_SCRIPTS}")
-from pr import RefusalError, merge_pr
+sys.path.insert(0, "{LIB_DIR}")
+from _errors import RefusalError
+from _github import merge_pr
 try:
     ok = merge_pr("t/r", "{NUM}", "main", os.environ.get("T", ""), os.environ.get("B", ""){explicit_args})
 except RefusalError as e:

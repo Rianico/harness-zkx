@@ -14,6 +14,7 @@ Fixture: the repo's own shipped PR template, comments dropped and its slots fill
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -24,6 +25,7 @@ from typing import Any
 
 import pytest
 
+from tests.gh_helpers import make_repo
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -31,25 +33,23 @@ PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS / "pr.py"
 TEMPLATE = REPO_ROOT / ".github" / "pull_request_template.md"
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
 import _github as github_mod  # noqa: E402
-from pr import (  # noqa: E402
-    COPY_OVERLAP_THRESHOLD,
-    COPY_TOKEN_FLOOR,
-    SQUASH_MESSAGE_MAX_LINES,
-    RefusalError,
-    _copy_tokens,
-    _fenced_line_mask,
-    check_explicit_squash_message,
-    check_squash_body,
-    clean_squash_body,
-    copy_body_coverage,
-    copy_overlap,
-    merge_pr,
-    refuse_mechanic_copy,
-    resolve_squash_message,
+from _errors import RefusalError  # noqa: E402
+from _github import merge_pr  # noqa: E402
+from _squash import (
+    COPY_OVERLAP_THRESHOLD,  # noqa: E402
+    COPY_TOKEN_FLOOR,  # noqa: E402
+    SQUASH_MESSAGE_MAX_LINES,  # noqa: E402
+    _copy_tokens,  # noqa: E402
+    _fenced_line_mask,  # noqa: E402
+    check_explicit_squash_message,  # noqa: E402
+    check_squash_body,  # noqa: E402
+    clean_squash_body,  # noqa: E402
+    copy_body_coverage,  # noqa: E402
+    copy_overlap,  # noqa: E402
+    refuse_mechanic_copy,  # noqa: E402
+    resolve_squash_message,  # noqa: E402
 )
 
 # --- fixtures ---
@@ -378,33 +378,13 @@ exit 0
 """
 
 
-def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=git_env(), check=True)
-
-
-def _git(repo: Path, *args: str) -> None:
-    _ = _run(["git", "-C", str(repo), *args])
-
-
-def _make_repo(repo: Path) -> None:
-    repo.mkdir(parents=True)
-    _ = _run(["git", "init", "-b", "main", str(repo)])
-    for key, value in (
-        ("user.name", "Copy Synthetic"),
-        ("user.email", "copy@x.io"),
-        ("commit.gpgsign", "false"),
-    ):
-        _ = _run(["git", "-C", str(repo), "config", key, value])
-    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _git(repo, "add", "base.txt")
-    _git(repo, "commit", "-m", "chore: base")
-    _git(repo, "remote", "add", "origin", "https://github.com/test/copy.git")
-    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-    _git(repo, "checkout", "-b", "feat-copy")
-    _ = (repo / "one.txt").write_text("one\n", encoding="utf-8")
-    _git(repo, "add", "one.txt")
-    _git(repo, "commit", "-m", "feat: one")
+_make_repo = functools.partial(
+    make_repo,
+    slug="copy",
+    branch="feat-copy",
+    user_name="Copy Synthetic",
+    user_email="copy@x.io",
+)
 
 
 def _gh_env(tmp_path: Path) -> dict[str, str]:

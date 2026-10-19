@@ -35,186 +35,42 @@ Env: GH_TOKEN via gh auth. PR URL on stdout (facts on --check/--status), progres
 Exit: 0 ok | 1 checks failed, body refused, gh pr ready failed, or merge refused | 2 usage or unusable head ref → default slim; --verbose dumps the logs
 """
 
-import json as json
-import os as os
-import re as re
-import subprocess as subprocess  # kept: part of the pre-split public surface of `pr`
+import json
 import sys
-import time as time  # kept: test seam — test_pr_watch patches pr.time.sleep
-from collections.abc import (
-    Callable as Callable,  # kept: part of the pre-split public surface of `pr`
-)
-from dataclasses import dataclass as dataclass  # kept: part of the pre-split public surface of `pr`
 from pathlib import Path
-from typing import NoReturn as NoReturn  # kept: part of the pre-split public surface of `pr`
 
-import _github
-from _changelog import _UNRELEASED_ATTR_RES as _UNRELEASED_ATTR_RES
-from _changelog import _UNRELEASED_BULLET_RE as _UNRELEASED_BULLET_RE
-from _changelog import _UNRELEASED_SECTION_RE as _UNRELEASED_SECTION_RE
-from _changelog import _UNRELEASED_VERSION_END_RE as _UNRELEASED_VERSION_END_RE
-from _changelog import _read_unreleased_block as _read_unreleased_block
-from _changelog import _unreleased_attribution_re as _unreleased_attribution_re
-from _changelog import stamp_changelog as stamp_changelog
-from _changelog import stamp_needed as stamp_needed
-from _changelog import unreleased_attributes_pr as unreleased_attributes_pr
-from _check import CheckReport as CheckReport
-from _check import check_trailers as check_trailers
-from _check import check_trailers_report as check_trailers_report
-from _draft import DRAFT_BODY_MAX_LINES as DRAFT_BODY_MAX_LINES
-from _draft import DRAFT_BODY_PLACEHOLDER as DRAFT_BODY_PLACEHOLDER
-from _draft import _draft_range as _draft_range
-from _draft import build_scaffold as build_scaffold
-from _draft import cap_draft_body as cap_draft_body
-from _draft import draft_commits as draft_commits
-from _draft import run_draft_phase as run_draft_phase
-from _errors import REFUSAL_SCHEMA as REFUSAL_SCHEMA
-from _errors import CheckFailureError as CheckFailureError
-from _errors import PrError as PrError
-from _errors import RefusalError as RefusalError
-from _errors import UsageError as UsageError
-from _errors import failing_tool as failing_tool
-from _github import CONFLICT_FILES_MAX as CONFLICT_FILES_MAX
-from _github import CONFLICT_HELPER as CONFLICT_HELPER
-from _github import DEFAULT_TIMEOUT as DEFAULT_TIMEOUT
-from _github import DIRTY_INTERVAL as DIRTY_INTERVAL
-from _github import DIRTY_STRIKES as DIRTY_STRIKES
-from _github import LOG_TIMEOUT as LOG_TIMEOUT
-from _github import MERGE_STATE_INTERVAL as MERGE_STATE_INTERVAL
-from _github import MERGE_STATE_TRIES as MERGE_STATE_TRIES
-from _github import POLL_INTERVAL as POLL_INTERVAL
-from _github import POLL_TRIES as POLL_TRIES
-from _github import SLUG_PATTERN as SLUG_PATTERN
-from _github import UNKNOWN_INTERVAL as UNKNOWN_INTERVAL
-from _github import UNKNOWN_TRIES as UNKNOWN_TRIES
-from _github import MergeFetch as MergeFetch
-from _github import MergeObservation as MergeObservation
-from _github import _authority_resolve as _authority_resolve
-from _github import _digest_range_spec as _digest_range_spec
-from _github import _local_base_from_authority as _local_base_from_authority
-from _github import _remote_branch_exists as _remote_branch_exists
-from _github import check_conflicts as check_conflicts
-from _github import checks_verdict as checks_verdict
-from _github import conflicting_files as conflicting_files
-from _github import default_branch as default_branch
-from _github import dump_failure_logs as dump_failure_logs
-from _github import failing_run_ids as failing_run_ids
-from _github import fetch_merge_state as fetch_merge_state
-from _github import fetch_mergeability as fetch_mergeability
-from _github import issue_state as issue_state
-from _github import merge_state_verdict as merge_state_verdict
-from _github import pr_conflict_verdict as pr_conflict_verdict
-from _github import pr_url as pr_url
-from _github import ready_pr as ready_pr
-from _github import repo_remote_for_ref as repo_remote_for_ref
-from _github import repo_slug_from_url as repo_slug_from_url
-from _github import report_merge_refusal as report_merge_refusal
-from _github import resolve_base as resolve_base
-from _github import resolve_head as resolve_head
-from _github import resolve_merge_state as resolve_merge_state
-from _github import resolve_repo as resolve_repo
-from _github import resolve_title_and_body as resolve_title_and_body
-from _github import run_command as run_command
-from _github import warn_closed_issues as warn_closed_issues
-from _github import watch_checks as watch_checks
-from _options import PrOptions as PrOptions
-from _squash import AFTER_MARKERS as AFTER_MARKERS
-from _squash import BEFORE_AFTER_ARROW as BEFORE_AFTER_ARROW
-from _squash import BEFORE_MARKERS as BEFORE_MARKERS
-from _squash import CHECKBOX_RE as CHECKBOX_RE
-from _squash import CLOSES_LINE_RE as CLOSES_LINE_RE
-from _squash import CLOSES_REF_RE as CLOSES_REF_RE
-from _squash import CLOSING_RE as CLOSING_RE
-from _squash import CODE_AUTHORS_TOKEN as CODE_AUTHORS_TOKEN
-from _squash import CONVENTIONAL_TYPES as CONVENTIONAL_TYPES
-from _squash import COPY_OVERLAP_THRESHOLD as COPY_OVERLAP_THRESHOLD
-from _squash import COPY_TOKEN_FLOOR as COPY_TOKEN_FLOOR
-from _squash import DEFAULT_TEMPLATE_PATH as DEFAULT_TEMPLATE_PATH
-from _squash import DETAILS_BLOCK_RE as DETAILS_BLOCK_RE
-from _squash import DETAILS_UNCLOSED_OPENER_RE as DETAILS_UNCLOSED_OPENER_RE
-from _squash import DIRECTIVE_RE as DIRECTIVE_RE
-from _squash import DOOR_RE as DOOR_RE
-from _squash import EMAIL_KEY_RE as EMAIL_KEY_RE
-from _squash import EMPTY_BULLET_RE as EMPTY_BULLET_RE
-from _squash import FENCE_RE as FENCE_RE
-from _squash import FIX_TYPE as FIX_TYPE
-from _squash import HEADING_RE as HEADING_RE
-from _squash import LABEL_ONLY_RE as LABEL_ONLY_RE
-from _squash import MERMAID_FENCE_RE as MERMAID_FENCE_RE
-from _squash import MERMAID_UNCLOSED_OPENER_RE as MERMAID_UNCLOSED_OPENER_RE
-from _squash import PROCEDURAL_SECTION_RE as PROCEDURAL_SECTION_RE
-from _squash import REVIEW_ONLY_SECTION_RE as REVIEW_ONLY_SECTION_RE
-from _squash import ROLLBACK_RE as ROLLBACK_RE
-from _squash import SQUASH_BODY_MAX_BULLETS as SQUASH_BODY_MAX_BULLETS
-from _squash import SQUASH_BULLET_RE as SQUASH_BULLET_RE
-from _squash import SQUASH_HEADING_RE as SQUASH_HEADING_RE
-from _squash import SQUASH_LABEL_RE as SQUASH_LABEL_RE
-from _squash import SQUASH_MESSAGE_MAX_LINES as SQUASH_MESSAGE_MAX_LINES
-from _squash import SQUASH_MESSAGE_SPEC as SQUASH_MESSAGE_SPEC
-from _squash import SQUASH_SECTIONS as SQUASH_SECTIONS
-from _squash import SQUASH_TITLE_MAX as SQUASH_TITLE_MAX
-from _squash import SQUASH_TITLE_RE as SQUASH_TITLE_RE
-from _squash import TRAILER_RE as TRAILER_RE
-from _squash import _copy_tokens as _copy_tokens
-from _squash import _count_squash_bullets as _count_squash_bullets
-from _squash import _evidence_marker_text as _evidence_marker_text
-from _squash import _fenced_line_mask as _fenced_line_mask
-from _squash import _is_label_line as _is_label_line
-from _squash import _is_stop_line as _is_stop_line
-from _squash import _refuse_squash as _refuse_squash
-from _squash import _section_content as _section_content
-from _squash import _section_key as _section_key
-from _squash import _section_open as _section_open
-from _squash import _states_rollback as _states_rollback
-from _squash import _strip_unclosed as _strip_unclosed
-from _squash import build_squash_message as build_squash_message
-from _squash import check_closes_lines as check_closes_lines
-from _squash import check_explicit_squash_message as check_explicit_squash_message
-from _squash import check_raw_token as check_raw_token
-from _squash import check_squash_body as check_squash_body
-from _squash import check_squash_title as check_squash_title
-from _squash import check_title_length as check_title_length
-from _squash import clean_squash_body as clean_squash_body
-from _squash import copy_body_coverage as copy_body_coverage
-from _squash import copy_overlap as copy_overlap
-from _squash import extract_closes_numbers as extract_closes_numbers
-from _squash import has_unfilled_sentinels as has_unfilled_sentinels
-from _squash import insert_trailers as insert_trailers
-from _squash import is_closing_line as is_closing_line
-from _squash import is_fallback_body as is_fallback_body
-from _squash import is_trailer_line as is_trailer_line
-from _squash import is_unfilled_body as is_unfilled_body
-from _squash import pr_co_author_trailers as pr_co_author_trailers
-from _squash import print_squash_message_required as print_squash_message_required
-from _squash import refuse_mechanic_copy as refuse_mechanic_copy
-from _squash import refuse_raw_token as refuse_raw_token
-from _squash import refuse_unfilled_body as refuse_unfilled_body
-from _squash import refuse_unfilled_sentinels as refuse_unfilled_sentinels
-from _squash import resolve_squash_message as resolve_squash_message
-from _squash import split_squash_sections as split_squash_sections
-from _squash import squash_message as squash_message
-from _squash import trailer_email_key as trailer_email_key
-from _status import collect_status as collect_status
-from _status import degraded_report as degraded_report
-from _status import make_refusal as make_refusal
-from _status import make_transition as make_transition
-from _status import pr_error_to_refusal as pr_error_to_refusal
-from _status import preflight_title as preflight_title
-from _status import render_text as render_text
-
-# Annotated on purpose: a module-level variable annotation is what makes CPython 3.14 build
-# the module's PEP 649 `__annotate__`/`__conditional_annotations__`. The pristine pr.py had
-# the split's only one (`_UNRELEASED_ATTR_RES`), which now lives in `_changelog`; keeping
-# one here keeps `dir(pr)` a superset of the pre-split surface.
 _LIB_DIR: str = str(Path(__file__).resolve().parents[3] / "lib")
 if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
-from range_authority import MalformedSpec as MalformedSpec
-from range_authority import RangeRefusal as RangeRefusal
-from range_authority import RangeResolution as RangeResolution
-from range_authority import find_repo_root as find_repo_root
-from range_authority import get_commit_summary as get_commit_summary
-from range_authority import resolve_range as resolve_range
+
+import _github
+from _changelog import stamp_changelog, stamp_needed, unreleased_attributes_pr, warn_ledger_gap
+from _draft import run_draft_phase
+from _errors import REFUSAL_SCHEMA, PrError, RefusalError, UsageError
+from _github import (
+    classify_failure,
+    merge_pr,
+    pr_url,
+    ready_pr,
+    resolve_base,
+    resolve_head,
+    resolve_repo,
+    resolve_title_and_body,
+    warn_closed_issues,
+    watch_checks,
+)
+from _options import PrOptions, resolve_squash_override
+from _squash import (
+    DEFAULT_TEMPLATE_PATH,
+    check_explicit_squash_message,
+    clean_squash_body,
+    is_unfilled_body,
+    print_squash_message_required,
+    refuse_mechanic_copy,
+    refuse_unfilled_body,
+    refuse_unfilled_sentinels,
+)
+from _status import make_refusal, make_transition, preflight_title, run_status
 
 
 def print_usage() -> None:
@@ -388,10 +244,6 @@ def parse_args(args: list[str]) -> PrOptions:
     )
 
 
-from _github import finalize_squash_message as finalize_squash_message  # noqa: E402
-from _options import resolve_squash_override as resolve_squash_override  # noqa: E402
-
-
 def create_or_reuse_pr(
     repo: str,
     head_ref: str,
@@ -418,26 +270,10 @@ def create_or_reuse_pr(
     if body_supplied:
         refuse_unfilled_sentinels(body)
 
-    owner = repo.split("/")[0]
-    res = _github.run_command(
-        [
-            "gh",
-            "api",
-            f"repos/{repo}/pulls?head={owner}:{head_ref}&state=open",
-            "--jq",
-            r'.[0] // empty | "\(.number)\t\(.isDraft)"',
-        ],
-        cwd=cwd,
-    )
-    if res.returncode != 0:
-        raise PrError(
-            f"failed to query open PR for head {head_ref}: {res.stderr.strip() or 'gh api failed'}"
-        )
-    existing = res.stdout.strip()
-    if existing and existing != "null":
-        fields = existing.split("\t")
-        num = fields[0].strip()
-        is_draft = len(fields) > 1 and fields[1].strip().lower() == "true"
+    ref = _github.lookup_pr(repo, head_ref, state="open", cwd=cwd)
+    if ref is not None:
+        num = ref.number
+        is_draft = ref.is_draft
         print(f"found existing PR #{num}", file=sys.stderr)
         if is_draft and not draft:
             print(
@@ -480,11 +316,8 @@ def create_or_reuse_pr(
             t_res = _github.run_command(
                 ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".title // empty"],
                 cwd=cwd,
+                required=True,
             )
-            if t_res.returncode != 0:
-                raise PrError(
-                    f"failed to fetch title for PR #{num}: {t_res.stderr.strip() or 'gh api failed'}"
-                )
             if t_res.stdout.strip():
                 final_title = t_res.stdout.strip()
 
@@ -495,22 +328,16 @@ def create_or_reuse_pr(
             b_res = _github.run_command(
                 ["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", '.body // ""'],
                 cwd=cwd,
+                required=True,
             )
-            if b_res.returncode != 0:
-                raise PrError(
-                    f"failed to fetch body for PR #{num}: {b_res.stderr.strip() or 'gh api failed'}"
-                )
             final_body = b_res.stdout
 
         if patch_args:
-            patch_res = _github.run_command(
+            _ = _github.run_command(
                 ["gh", "api", f"repos/{repo}/pulls/{num}", "-X", "PATCH", *patch_args],
                 cwd=cwd,
+                required=True,
             )
-            if patch_res.returncode != 0:
-                raise PrError(
-                    f"failed to update PR #{num}: {patch_res.stderr.strip() or 'gh api failed'}"
-                )
             fields_str = ", ".join(updated_fields)
             print(f"updating PR #{num}: {fields_str}", file=sys.stderr)
         return num, final_title, final_body, False
@@ -558,16 +385,11 @@ def create_or_reuse_pr(
             ".number",
         ],
         cwd=cwd,
+        required=True,
     )
-    if create_res.returncode != 0:
-        raise PrError(f"failed to create PR: {create_res.stderr.strip() or 'gh api failed'}")
     num = create_res.stdout.strip()
     print(f"created PR #{num} (draft)", file=sys.stderr)
     return num, title, final_body, True
-
-
-from _github import merge_pr as merge_pr  # noqa: E402
-from _status import run_status as run_status  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -657,60 +479,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             elif not created or not stamp_needed(num):
                 _ = stamp_changelog(head, num)
-            if created and not unreleased_attributes_pr(num):
-                if _read_unreleased_block() is None:
-                    print(
-                        "warning: no ## [Unreleased] section in CHANGELOG.md; "
-                        "the Ledger floor gate requires one before this PR can land. "
-                        f"Add the section with an entry ending in (#{num}).",
-                        file=sys.stderr,
-                    )
-                elif options.draft:
-                    print(
-                        f"note: no ## [Unreleased] entry carries (#{num}); "
-                        "the Ledger floor gate rejects this PR once it goes ready. "
-                        f"Add an entry ending in (#{num}) before you flip it ready "
-                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
-                        file=sys.stderr,
-                    )
-                else:
-                    print(
-                        f"warning: no ## [Unreleased] entry carries (#{num}); "
-                        "the Ledger floor gate\n"
-                        f'("#{num} carries no entries in ## [Unreleased]") will reject this PR on the\n'
-                        f"ready flip. Add an entry ending in (#{num}), commit it to this branch, or\n"
-                        "leave the PR draft until the entry lands "
-                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR).",
-                        file=sys.stderr,
-                    )
-        elif created:
-            if not unreleased_attributes_pr(num):
-                if _read_unreleased_block() is None:
-                    print(
-                        "warning: no ## [Unreleased] section in CHANGELOG.md; "
-                        "the Ledger floor gate requires one before this PR can land. "
-                        f"Add the section with an entry ending in (#{num}).",
-                        file=sys.stderr,
-                    )
-                elif options.draft:
-                    print(
-                        f"note: --no-stamp: head was not stamped for PR #{num} — "
-                        f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
-                        "(changelog gate) rejects this PR once it goes ready. "
-                        f"Add an entry ending in (#{num}) before you flip it ready.",
-                        file=sys.stderr,
-                    )
-                else:
-                    print(
-                        f"warning: --no-stamp: head was not stamped for PR #{num} — "
-                        f"no ## [Unreleased] entry carries (#{num}); the Ledger floor gate "
-                        f'("#{num} carries no entries in ## [Unreleased]") will reject this PR '
-                        "and the changelog gate stays red "
-                        "(the PR-body `Ledger-Waiver:` trailer overrides the gate for this PR). "
-                        f"Add an entry ending in (#{num}) and push it, or re-run without --no-stamp.",
-                        file=sys.stderr,
-                    )
-
+        if created and not unreleased_attributes_pr(num):
+            warn_ledger_gap(num, options.draft, options.no_stamp)
         if created and not options.draft:
             if not ready_pr(repo, num):
                 return 1
@@ -756,12 +526,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
         return 1
-    except CheckFailureError:
-        return 1
     except PrError as e:
-        entry = pr_error_to_refusal(e, tool=failing_tool(str(e)))
-        if entry is not None:
-            print(json.dumps({"refusals": [entry], "transitions": []}, indent=2), file=sys.stderr)
+        failure = classify_failure(e)
+        entry = make_refusal(failure.code, str(e), failure.remedy, failure.tool)
+        print(json.dumps({"refusals": [entry], "transitions": []}, indent=2), file=sys.stderr)
         print(f"pr error: {e}", file=sys.stderr)
         return 1
 

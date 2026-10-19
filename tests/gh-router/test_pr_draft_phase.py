@@ -9,6 +9,7 @@ means write nothing and report path + `stale`; `--force-scaffold` overwrites;
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import subprocess
@@ -16,6 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from tests.gh_helpers import make_repo, run_git
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -33,38 +35,15 @@ exit 0
 """
 
 
-def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=git_env(), check=True)
-
-
-def _git(repo: Path, *args: str) -> None:
-    _ = _run(["git", "-C", str(repo), *args])
-
-
-def _make_repo(repo: Path) -> None:
-    """Synthetic repo: main + origin/main + a two-commit feat-draft branch."""
-    repo.mkdir(parents=True)
-    _ = _run(["git", "init", "-b", "main", str(repo)])
-    for key, value in (
-        ("user.name", "Draft Synthetic"),
-        ("user.email", "draft@x.io"),
-        ("commit.gpgsign", "false"),
-    ):
-        _ = _run(["git", "-C", str(repo), "config", key, value])
-    _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    _git(repo, "add", "base.txt")
-    _git(repo, "commit", "-m", "chore: base")
-    _git(repo, "remote", "add", "origin", "https://github.com/test/draft.git")
-    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-    _git(repo, "checkout", "-b", "feat-draft")
-    _ = (repo / "one.txt").write_text("one\n", encoding="utf-8")
-    _git(repo, "add", "one.txt")
-    _git(repo, "commit", "-m", "feat: one")
-    _ = (repo / "two.txt").write_text("two\n", encoding="utf-8")
-    _git(repo, "add", "two.txt")
-    long_body = "\n".join(f"body-line-{i}" for i in range(1, LONG_BODY_LINES + 1))
-    _git(repo, "commit", "-m", "feat: two", "-m", long_body)
+_DRAFT_LONG_BODY = "\n".join(f"body-line-{i}" for i in range(1, LONG_BODY_LINES + 1))
+_make_repo = functools.partial(
+    make_repo,
+    slug="draft",
+    branch="feat-draft",
+    user_name="Draft Synthetic",
+    user_email="draft@x.io",
+    extra_commits=(("two.txt", "two\n", "feat: two", _DRAFT_LONG_BODY),),
+)
 
 
 def _gh_env(tmp_path: Path) -> dict[str, str]:
@@ -272,7 +251,7 @@ def test_title_follows_head_not_cwd(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
-    _git(repo, "checkout", "main")
+    run_git(repo, "checkout", "main")
     body_file = tmp_path / "pr_body.md"
     _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
 
@@ -291,7 +270,7 @@ def test_empty_range_warns_the_title_is_a_guess(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
-    _git(repo, "branch", "empty", "main")
+    run_git(repo, "branch", "empty", "main")
     body_file = tmp_path / "pr_body.md"
     _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
 

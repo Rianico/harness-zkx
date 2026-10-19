@@ -1,8 +1,11 @@
-"""The pr-land module split: the import DAG, the one subprocess seam, and the re-exports.
+"""The pr-land module split: the import DAG, the one subprocess seam, and the thin CLI entry.
 
 The CLI started as a single 2168-line script. Phase 1 moved the squash domain and the error
 types out; phase 2 moved the GitHub boundary, the `--check` gates, the draft phase, and the
-changelog seam into private siblings. Two properties keep that split from silently rotting:
+changelog seam into private siblings. T3c retired the `pr.py` re-export monolith: `pr.py` is
+now only the CLI entry (`main`/`parse_args`/`create_or_reuse_pr`/`print_usage`), and every
+consumer imports domain names from its home module. Three properties keep that split from
+silently rotting:
 
 * the import direction stays a DAG — no sibling module may import `pr` back;
 * every subprocess call in pr-land's own modules (`pr.py` + `_*.py`) goes through the single
@@ -11,7 +14,9 @@ changelog seam into private siblings. Two properties keep that split from silent
   would shell out for real. The ast scans here catch both that and a sibling spawning its own
   `subprocess.run`; the identity check alone would not. The range/repo-root authority helper
   in `lib/range_authority.py` spawns its own `subprocess.run` coverage, outside the seam and
-  outside this scan.
+  outside this scan;
+* `pr.py` carries no `X as X` self-alias re-exports, and tests import from `pr` only the
+  entry names the module itself defines.
 
 Deterministic and offline: this file reads the sources and imports the modules, nothing else.
 """
@@ -19,13 +24,14 @@ Deterministic and offline: this file reads the sources and imports the modules, 
 from __future__ import annotations
 
 import ast
-import sys
+import inspect
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS / "pr.py"
-PR_PY_MAX_LINES = 800
+PR_PY_MAX_LINES = 600
+PR_FROM_IMPORT_ALLOWLIST = frozenset({"create_or_reuse_pr", "parse_args"})
 SIBLING_MODULES = [
     "_errors.py",
     "_squash.py",
@@ -37,14 +43,8 @@ SIBLING_MODULES = [
     "_changelog.py",
 ]
 
-if str(PR_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(PR_SCRIPTS))
 
-import _check  # noqa: E402
 import _draft  # noqa: E402
-import _github  # noqa: E402
-import _options  # noqa: E402
-import _status  # noqa: E402
 import pr as pr_mod  # noqa: E402
 
 
@@ -80,10 +80,6 @@ def test_no_sibling_module_imports_pr() -> None:
     assert not offenders, f"sibling modules import the entry script: {', '.join(offenders)}"
 
 
-def test_run_command_is_reexported_from_github() -> None:
-    assert pr_mod.run_command is _github.run_command
-
-
 def test_only_github_calls_run_command_by_bare_name() -> None:
     """One patch point: outside `_github.py`, the seam is called as `_github.run_command(...)`."""
     offenders = [
@@ -101,25 +97,28 @@ def test_only_github_calls_run_command_by_bare_name() -> None:
     )
 
 
-def test_names_the_tests_import_from_pr_resolve() -> None:
-    """The `pr` public surface is the re-export block: whatever a test imports must resolve."""
-    importers: dict[str, set[str]] = {}
-    for path in sorted((REPO_ROOT / "tests/gh-router").glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=path.name)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "pr":
-                for alias in node.names:
-                    importers.setdefault(alias.name, set()).add(path.name)
-    assert importers, "no test imports from `pr` — this guard would pass vacuously"
-    missing = sorted(name for name in importers if not hasattr(pr_mod, name))
-    assert not missing, f"pr.py does not re-export: {', '.join(missing)}"
+def test_tests_import_from_pr_only_the_entry_names() -> None:
+    """`pr.py` is an entry, not a surface: tests may import only what it defines itself.
 
-
-def test_shared_objects_are_the_sibling_definitions() -> None:
-    """Re-exports are the same object, not a copy: `is` is what the tests' patches rely on."""
-    assert pr_mod.PrOptions is _options.PrOptions
-    assert pr_mod.CheckReport is _check.CheckReport
-    assert pr_mod.run_status is _status.run_status
+    `create_or_reuse_pr` and `parse_args` are defined in `pr.py` (CLI arg parsing plus the
+    create-flow orchestration, which composes `_status` refusals with `_github` mutations —
+    moving it into a sibling would force a `_github`/`_status` import cycle). Everything else
+    a test needs comes from its home module. This also subsumes the old `run_command` guard:
+    a `from pr import run_command` alias would bind the seam early and escape the tests'
+    `_github.run_command` patch point, and `run_command` is not in the allowlist.
+    """
+    offenders = sorted(
+        f"{path.name}:{node.lineno}:{alias.name}"
+        for path in sorted((REPO_ROOT / "tests/gh-router").glob("*.py"))
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=path.name))
+        if isinstance(node, ast.ImportFrom) and node.module == "pr"
+        for alias in node.names
+        if alias.name not in PR_FROM_IMPORT_ALLOWLIST
+    )
+    assert not offenders, (
+        "import domain names from their home module, not `pr`; `pr` exposes only "
+        f"{sorted(PR_FROM_IMPORT_ALLOWLIST)}: {', '.join(offenders)}"
+    )
 
 
 def test_only_github_module_spawns_subprocesses() -> None:
@@ -152,217 +151,67 @@ def test_only_github_module_spawns_subprocesses() -> None:
     )
 
 
-def test_no_test_imports_run_command_from_pr() -> None:
-    """`pr.run_command` is a patch-blind alias: tests must reach the seam through `_github`.
+def test_pr_py_exposes_only_the_cli_surface() -> None:
+    """`pr.py` is an entry, not a surface: no `X as X` re-exports, retired names stay gone.
 
-    `pr.py` re-exports `run_command` for the public surface, but `from pr import run_command`
-    binds the function object early — a later patch of `_github.run_command` no longer reaches
-    it, so the test silently runs the real subprocess. Only the alias used *inside tests* is a
-    hazard; the re-export itself stays.
+    T3c retired the re-export monolith. The AST scan is the airtight pin: any
+    `from _sibling import name as name` self-alias is a re-export, whether or not a test
+    imports it yet. The `hasattr` pins name the entry surface plus a sample of retired
+    domain names that `pr.py` no longer binds at all (`check_conflicts`, `run_command`,
+    `check_trailers`, `build_squash_message`, `finalize_squash_message`,
+    `dump_failure_logs`, `checks_verdict`; `watch_checks` is deliberately absent —
+    it is a genuine use-import: `main` calls it, so `pr.py` binds it on purpose).
     """
-    offenders = [
-        f"{path.relative_to(REPO_ROOT)}:{node.lineno}"
-        for path in sorted((REPO_ROOT / "tests").rglob("*.py"))
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=path.name))
-        if isinstance(node, ast.ImportFrom)
-        and node.module == "pr"
-        and any(alias.name == "run_command" for alias in node.names)
-    ]
-    assert not offenders, (
-        "import `run_command` from `_github`, not `pr`; the `pr` alias is early-bound and "
-        f"escapes the `_github.run_command` patch point: {', '.join(offenders)}"
+    tree = ast.parse(PR_PY.read_text(encoding="utf-8"), filename="pr.py")
+    aliases = sorted(
+        f"{node.lineno}:{alias.name}"
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.ImportFrom, ast.Import))
+        for alias in node.names
+        if alias.asname is not None and alias.asname == alias.name
     )
-
-
-def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
-    """`dir(pr)` must stay a superset of the pinned 170-name surface.
-
-    The split moved names out of `pr.py`, so anything that enumerated the pre-split module (a
-    shell completion, a `dir()`-driven smoke check, a downstream caller) must still find every
-    name it used to. The annotation on `pr.py`'s `_LIB_DIR` is load-bearing here: a
-    module-level variable annotation is what makes CPython 3.14 build `__annotate__` /
-    `__conditional_annotations__`, and the pristine module had one. Drop the annotation and
-    `dir(pr)` loses those two names. The literal below is the frozen pristine `dir(pr)`
-    (captured pre-split in /tmp/golden/dir_pr.txt, minus the four names ADR-0021 retired:
-    `DRAFT_OUT_DIR`, `DRAFT_SCHEMA`, `build_draft_payload`, `resolve_out_dir`, plus
-    `_draft_dirty`, dropped uncalled by the T2 rework follow-up.)
-    """
-    pristine = (
-        "AFTER_MARKERS",
-        "BEFORE_AFTER_ARROW",
-        "BEFORE_MARKERS",
-        "CHECKBOX_RE",
-        "CLOSES_LINE_RE",
-        "CLOSES_REF_RE",
-        "CLOSING_RE",
-        "CODE_AUTHORS_TOKEN",
-        "CONFLICT_FILES_MAX",
-        "CONFLICT_HELPER",
-        "CONVENTIONAL_TYPES",
-        "COPY_OVERLAP_THRESHOLD",
-        "COPY_TOKEN_FLOOR",
-        "Callable",
-        "CheckFailureError",
-        "CheckReport",
-        "DEFAULT_TEMPLATE_PATH",
-        "DEFAULT_TIMEOUT",
-        "DETAILS_BLOCK_RE",
-        "DETAILS_UNCLOSED_OPENER_RE",
-        "DIRECTIVE_RE",
-        "DIRTY_INTERVAL",
-        "DIRTY_STRIKES",
-        "DOOR_RE",
-        "DRAFT_BODY_MAX_LINES",
-        "DRAFT_BODY_PLACEHOLDER",
-        "EMAIL_KEY_RE",
-        "EMPTY_BULLET_RE",
-        "FENCE_RE",
-        "FIX_TYPE",
-        "HEADING_RE",
-        "LABEL_ONLY_RE",
-        "LOG_TIMEOUT",
-        "MERGE_STATE_INTERVAL",
-        "MERGE_STATE_TRIES",
-        "MERMAID_FENCE_RE",
-        "MERMAID_UNCLOSED_OPENER_RE",
-        "MalformedSpec",
-        "MergeFetch",
-        "MergeObservation",
-        "NoReturn",
-        "POLL_INTERVAL",
-        "POLL_TRIES",
-        "PROCEDURAL_SECTION_RE",
-        "Path",
-        "PrError",
-        "PrOptions",
-        "REVIEW_ONLY_SECTION_RE",
-        "ROLLBACK_RE",
-        "RangeRefusal",
-        "RangeResolution",
-        "RefusalError",
-        "SLUG_PATTERN",
-        "SQUASH_BODY_MAX_BULLETS",
-        "SQUASH_BULLET_RE",
-        "SQUASH_HEADING_RE",
-        "SQUASH_LABEL_RE",
-        "SQUASH_MESSAGE_MAX_LINES",
-        "SQUASH_MESSAGE_SPEC",
-        "SQUASH_SECTIONS",
-        "SQUASH_TITLE_MAX",
-        "SQUASH_TITLE_RE",
-        "TRAILER_RE",
-        "UNKNOWN_INTERVAL",
-        "UNKNOWN_TRIES",
-        "UsageError",
-        "_LIB_DIR",
-        "_UNRELEASED_ATTR_RES",
-        "_UNRELEASED_BULLET_RE",
-        "_UNRELEASED_SECTION_RE",
-        "_UNRELEASED_VERSION_END_RE",
-        "__annotate__",
-        "__builtins__",
-        "__cached__",
-        "__conditional_annotations__",
-        "__doc__",
-        "__file__",
-        "__loader__",
-        "__name__",
-        "__package__",
-        "__spec__",
-        "_authority_resolve",
-        "_copy_tokens",
-        "_count_squash_bullets",
-        "_digest_range_spec",
-        "_draft_range",
-        "_evidence_marker_text",
-        "_fenced_line_mask",
-        "_is_label_line",
-        "_is_stop_line",
-        "_local_base_from_authority",
-        "_read_unreleased_block",
-        "_refuse_squash",
-        "_remote_branch_exists",
-        "_section_content",
-        "_section_key",
-        "_section_open",
-        "_states_rollback",
-        "_strip_unclosed",
-        "_unreleased_attribution_re",
-        "build_squash_message",
-        "cap_draft_body",
-        "check_closes_lines",
+    assert not aliases, f"pr.py re-exports names again: {', '.join(aliases)}"
+    for name in ("main", "parse_args", "create_or_reuse_pr", "print_usage"):
+        obj = inspect.getattr_static(pr_mod, name)
+        assert getattr(obj, "__module__", None) == "pr", (
+            f"pr.py entry name is imported, not defined here: {name}"
+        )
+    for name in (
         "check_conflicts",
-        "check_explicit_squash_message",
-        "check_raw_token",
-        "check_squash_body",
-        "check_squash_title",
-        "check_title_length",
-        "check_trailers",
-        "check_trailers_report",
-        "checks_verdict",
-        "clean_squash_body",
-        "conflicting_files",
-        "copy_body_coverage",
-        "copy_overlap",
-        "create_or_reuse_pr",
-        "dataclass",
-        "default_branch",
-        "draft_commits",
-        "dump_failure_logs",
-        "failing_run_ids",
-        "fetch_merge_state",
-        "fetch_mergeability",
-        "finalize_squash_message",
-        "find_repo_root",
-        "get_commit_summary",
-        "insert_trailers",
-        "is_closing_line",
-        "is_fallback_body",
-        "is_trailer_line",
-        "is_unfilled_body",
-        "json",
-        "main",
-        "merge_pr",
-        "merge_state_verdict",
-        "os",
-        "parse_args",
-        "pr_co_author_trailers",
-        "pr_conflict_verdict",
-        "pr_url",
-        "print_squash_message_required",
-        "print_usage",
-        "re",
-        "ready_pr",
-        "refuse_mechanic_copy",
-        "refuse_raw_token",
-        "refuse_unfilled_body",
-        "repo_remote_for_ref",
-        "repo_slug_from_url",
-        "report_merge_refusal",
-        "resolve_base",
-        "resolve_head",
-        "resolve_merge_state",
-        "resolve_range",
-        "resolve_repo",
-        "resolve_squash_message",
-        "resolve_squash_override",
-        "resolve_title_and_body",
         "run_command",
-        "run_draft_phase",
-        "split_squash_sections",
-        "squash_message",
-        "stamp_changelog",
-        "subprocess",
-        "sys",
-        "time",
-        "trailer_email_key",
-        "unreleased_attributes_pr",
-        "watch_checks",
+        "check_trailers",
+        "build_squash_message",
+        "finalize_squash_message",
+        "dump_failure_logs",
+        "checks_verdict",
+    ):
+        assert not hasattr(pr_mod, name), f"pr.py re-exports retired name: {name}"
+
+
+def test_only_pr_py_installs_a_sys_path_shim() -> None:
+    """One import path: only the CLI entry may mutate `sys.path`.
+
+    T3c collapsed the five per-module `sys.path` shims into the `pr.py` entry shim
+    (plus `tests/gh-router/conftest.py` for pytest). A re-added sibling shim would
+    silently re-fork the import path, so the AST scan fails on any `sys.path`
+    mutation in a sibling module — mirroring `test_only_github_module_spawns_subprocesses`.
+    """
+    offenders = sorted(
+        f"{name}:{node.lineno}"
+        for name, text in _module_texts().items()
+        if name != "pr.py"
+        for node in ast.walk(ast.parse(text, filename=name))
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("insert", "append", "extend")
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "path"
+            and isinstance(node.func.value.value, ast.Name)
+            and node.func.value.value.id == "sys"
+        )
     )
-    assert len(pristine) == 170, "the pinned surface must list all 170 names"
-    present = set(dir(pr_mod))
-    missing = sorted(name for name in pristine if name not in present)
-    assert not missing, f"dir(pr) lost pre-split names: {', '.join(missing)}"
+    assert not offenders, f"sibling re-added a sys.path shim: {', '.join(offenders)}"
 
 
 def test_retired_draft_surface_stays_gone() -> None:
