@@ -95,6 +95,10 @@
   "herdr_worktree.py": [
     {"action": "_StoreTrueAction", "choices": null, "const": true, "default": false, "dest": "json", "family": "--json", "help": "emit a JSON object", "metavar": null, "nargs": 0, "option_strings": ["--json"], "required": false, "type": null},
     {"action": "_StoreTrueAction", "choices": null, "const": true, "default": false, "dest": "json", "family": "--json", "help": "emit a JSON object", "metavar": null, "nargs": 0, "option_strings": ["--json"], "required": false, "type": null},
+    {"action": "_StoreTrueAction", "choices": null, "const": true, "default": false, "dest": "json", "family": "--json", "help": "emit a JSON object", "metavar": null, "nargs": 0, "option_strings": ["--json"], "required": false, "type": null},
+    {"action": "_StoreTrueAction", "choices": null, "const": true, "default": false, "dest": "json", "family": "--json", "help": "emit a JSON object", "metavar": null, "nargs": 0, "option_strings": ["--json"], "required": false, "type": null},
+    {"action": "_StoreTrueAction", "choices": null, "const": true, "default": false, "dest": "json", "family": "--json", "help": "emit a JSON object", "metavar": null, "nargs": 0, "option_strings": ["--json"], "required": false, "type": null},
+    {"action": "_StoreTrueAction", "choices": null, "const": true, "default": false, "dest": "json", "family": "--json", "help": "emit a JSON object", "metavar": null, "nargs": 0, "option_strings": ["--json"], "required": false, "type": null},
     {"action": "_StoreTrueAction", "choices": null, "const": true, "default": false, "dest": "json", "family": "--json", "help": "emit a JSON object", "metavar": null, "nargs": 0, "option_strings": ["--json"], "required": false, "type": null}
   ]
 }
