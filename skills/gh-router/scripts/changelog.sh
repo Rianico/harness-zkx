@@ -69,7 +69,7 @@ if [[ -f scripts/changelog-gate.py ]]; then
   fi
 fi
 
-[[ -f scripts/changelog-unreleased.py ]] || fail "no scripts/changelog-gate.py in $ROOT" 3
+[[ -f scripts/changelog-unreleased.py ]] || fail "no scripts/changelog-unreleased.py (run from the repo root)" 3
 
 if [[ -z "$BASE" ]]; then
   BASE="$(default_branch || true)"

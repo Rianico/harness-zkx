@@ -8,8 +8,8 @@ chain degraded to when no main ref exists.
 
 from __future__ import annotations
 
-import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +26,7 @@ if str(PR_SCRIPTS) not in sys.path:
 if str(LIB_DIR) not in sys.path:
     sys.path.insert(0, str(LIB_DIR))
 
+from _squash import pr_co_author_trailers as pr_co_author_trailers  # noqa: E402
 from pr import RefusalError, resolve_base  # noqa: E402
 from range_authority import resolve_range  # noqa: E402
 
@@ -119,6 +120,21 @@ exit 1
     )
     gh.chmod(0o755)
     return bindir
+
+
+def _wrap_git(bindir: Path, git_log: Path) -> None:
+    """Shadow `git` with an argv-logging shim that delegates to the real binary."""
+    real_git = shutil.which("git")
+    assert real_git is not None
+    git = bindir / "git"
+    _ = git.write_text(
+        f"""#!/usr/bin/env bash
+echo "$@" >> "{git_log}"
+exec "{real_git}" "$@"
+""",
+        encoding="utf-8",
+    )
+    git.chmod(0o755)
 
 
 def _make_master_only_repo(repo: Path) -> None:
@@ -219,6 +235,9 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
     bindir = _make_gh_mock(tmp_path / "bin")
     log = tmp_path / "gh.log"
     _ = log.write_text("", encoding="utf-8")
+    git_log = tmp_path / "git.log"
+    _ = git_log.write_text("", encoding="utf-8")
+    _wrap_git(bindir, git_log)
 
     monkeypatch.chdir(repo)
     resolution = resolve_range("feature", "..")
@@ -257,9 +276,27 @@ def test_check_dry_run_trailers_equal_digest_commit_set(
         cwd=repo,
     )
     assert res.returncode == 0, res.stderr
-    draft = json.loads((repo / ".lsz" / "tmp" / "draft.json").read_text(encoding="utf-8"))
-    assert set(str(draft["trailers"]).splitlines()) == expected
-    # stdout stays small: the trailers live in the draft, never on the console.
+    assert "trailers: 2" in res.stdout, res.stdout
+    # Trailer identity, not just the count: the same digest rows rendered through
+    # the real trailer builder must equal the digest commit set exactly (the gh
+    # login column is a gh-only datum and plays no part in the trailer text).
+    rows = []
+    for line in sorted(expected):
+        name_email = line.split(": ", 1)[1]
+        name, _, email = name_email.rpartition(" <")
+        rows.append(f"\t{name}\t{email.rstrip('>')}")
+    digest_tsv = "\n".join(rows)
+    assert set(pr_co_author_trailers(digest_tsv).splitlines()) == expected
+    # CLI-level tie: the subprocess itself must have asked git log for a range
+    # headed by the feature branch. A `-1`-fallback CLI (or one deriving trailers
+    # from a rangeless query) logs no such argv, so this fails without the tie.
+    logged = git_log.read_text(encoding="utf-8").splitlines()
+    assert any(
+        "log" in line.split()
+        and any(".." in token and token.endswith("feature") for token in line.split())
+        for line in logged
+    ), "\n".join(logged)
+    # stdout stays small: the trailer lines live behind the gate, never on the console.
     assert "Co-authored-by" not in res.stdout
 
 

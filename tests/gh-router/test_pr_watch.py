@@ -459,8 +459,9 @@ def test_merge_pr_fails_fast_on_dirty_through_the_conflict_report(
     gh = FakeGh([("false", "dirty")], files="a.py")
     gh.install(monkeypatch)
 
-    assert pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body") is False
-
+    with pytest.raises(pr_mod.RefusalError) as exc_info:
+        pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
+    assert exc_info.value.refusals[0]["code"] == "merge_conflict"
     state_polls = [c for c in gh.calls if c[-1] == ".mergeable_state"]
     assert len(state_polls) == DIRTY_STRIKES
     assert gh.sleeps == [DIRTY_INTERVAL]
@@ -479,8 +480,9 @@ def test_merge_pr_refuses_a_state_that_never_settles(
     gh = FakeGh([("null", "unstable")])
     gh.install(monkeypatch)
 
-    assert pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body") is False
-
+    with pytest.raises(pr_mod.RefusalError) as exc_info:
+        pr_mod.merge_pr("test/repo", NUM, "main", "feat: x", "Body")
+    assert exc_info.value.refusals[0]["code"] == "mergeability_unknown"
     state_polls = [c for c in gh.calls if c[-1] == ".mergeable_state"]
     assert len(state_polls) == UNKNOWN_TRIES
     err = capsys.readouterr().err
@@ -501,10 +503,10 @@ def test_verbose_flag_is_off_by_default_and_parsed() -> None:
 def test_help_stays_within_the_line_budget_and_names_verbose(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Adding `--verbose` must not push `--help` past its 14-line budget."""
+    """`--help` stays brief: 16 lines covering the flag surface (ADR-0021 added --status/--out)."""
     pr_mod.print_usage()
     lines = capsys.readouterr().out.splitlines()
-    assert len(lines) <= 14
+    assert len(lines) <= 16
     assert any("--verbose" in line for line in lines)
 
 

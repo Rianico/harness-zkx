@@ -10,13 +10,11 @@ with the model; every refusal here is a shape fact a machine can decide.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -97,6 +95,15 @@ def _fix_template_shaped_body() -> str:
 )
 def test_squash_title_accepts_conventional_shape(title: str) -> None:
     check_squash_title(title, 7)
+
+
+def test_squash_title_uses_the_real_number_not_the_bare_title() -> None:
+    """Merge path: the budget applies to the exact `title (#N)` header."""
+    title_95 = "feat: " + "a" * 89
+    assert len(title_95) == 95
+    check_squash_title(title_95, 7)
+    with pytest.raises(RefusalError, match=r"exceeds 100 chars: feat: a+ \(#12345\)"):
+        check_squash_title(title_95, 12345)
 
 
 @pytest.mark.parametrize(
@@ -697,7 +704,7 @@ def _run_check(repo: Path, env: dict[str, str], *extra: str) -> subprocess.Compl
     )
 
 
-def test_check_refuses_a_body_without_core_and_still_writes_both_files(tmp_path: Path) -> None:
+def test_check_refuses_a_body_without_core_and_writes_nothing(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _make_repo(repo)
     env = _gh_env(tmp_path)
@@ -710,12 +717,8 @@ def test_check_refuses_a_body_without_core_and_still_writes_both_files(tmp_path:
 
     assert r.returncode == 1, r.stdout
     assert "Core" in r.stderr
-    draft_path = repo / ".lsz" / "tmp" / "draft.json"
-    assert draft_path.is_file()
-    assert (repo / ".lsz" / "tmp" / "pr_body.md").is_file()
-    draft: dict[str, Any] = json.loads(draft_path.read_text(encoding="utf-8"))
-    assert draft["status"] == "refused"
-    assert draft["exit_code"] == 1
+    assert not (repo / ".lsz").exists(), "a refused gate persists nothing"
+    assert '"code": "gate_refused"' in r.stderr
 
 
 def test_check_strips_mermaid_details_and_checkboxes_from_the_squash_body(tmp_path: Path) -> None:
@@ -734,12 +737,10 @@ def test_check_strips_mermaid_details_and_checkboxes_from_the_squash_body(tmp_pa
     r = _run_check(repo, env, "--body-file", str(body_file))
 
     assert r.returncode == 0, r.stderr
-    draft: dict[str, Any] = json.loads(
-        (repo / ".lsz" / "tmp" / "draft.json").read_text(encoding="utf-8")
-    )
-    squash_body = str(draft["squash_body"])
-    assert "mermaid" not in squash_body
-    assert "flowchart" not in squash_body
-    assert "<details>" not in squash_body
-    assert "[x]" not in squash_body
-    assert "real change" in squash_body
+    assert not (repo / ".lsz").exists(), "a with-body --check persists nothing"
+    assert "squash_body_preview:" in r.stdout
+    assert "mermaid" not in r.stdout
+    assert "flowchart" not in r.stdout
+    assert "<details>" not in r.stdout
+    assert "[x]" not in r.stdout
+    assert "real change" in r.stdout

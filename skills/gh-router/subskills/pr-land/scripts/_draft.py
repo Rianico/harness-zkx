@@ -1,14 +1,20 @@
-"""The `--check` draft phase: `draft.json` + `pr_body.md` for curl-free curation.
+"""The `--check` draft phase: scaffold leaf plus gate facts, never stored state.
 
-`run_draft_phase` turns `_check.check_trailers_report` plus the resolved landing range into
-the two artifacts, keeping stdout to counts, the paths, and one curation hint. Its
-subprocess reads go through the qualified `_github.run_command(...)` lookup so the tests'
-single patch point still intercepts them — the seam covers every subprocess call in pr-land's
-own modules. The range/repo-root authority helper in `lib/range_authority.py` spawns its own
-`subprocess.run` coverage, outside that seam.
+`run_draft_phase` turns `_check.check_trailers_report` plus the resolved landing
+range into stdout facts (and the scaffold leaf when no body was supplied),
+keeping commentary on stderr. Its subprocess reads go through the qualified
+`_github.run_command(...)` lookup so the tests' single patch point still
+intercepts them — the seam covers every subprocess call in pr-land's own
+modules. The range/repo-root authority helper in `lib/range_authority.py`
+spawns its own `subprocess.run` coverage, outside that seam.
+
+The tool never reads an existing artifact to decide anything: a body-less
+`--check` writes the scaffold only when the leaf is absent, and otherwise
+reports the path plus a deterministic `stale` flag computed against the head
+commit. Nothing is persisted about the phase: no stored payload, no scaffold hash,
+and no output-directory flag.
 """
 
-import hashlib
 import json
 import re
 import sys
@@ -24,8 +30,15 @@ from _squash import (
     DEFAULT_TEMPLATE_PATH,
     FIX_TYPE,
     SQUASH_TITLE_RE,
-    insert_trailers,
 )
+from _status import CHECK_SCHEMA as CHECK_SCHEMA
+from _status import SCAFFOLD_MARKER_PREFIX as SCAFFOLD_MARKER_PREFIX
+from _status import TITLE_BUDGET as TITLE_BUDGET
+from _status import TITLE_WORST_CASE_SUFFIX as TITLE_WORST_CASE_SUFFIX
+from _status import artifact_stale as artifact_stale
+from _status import body_site_with_line as body_site_with_line
+from _status import make_refusal as make_refusal
+from _status import resolve_artifact_path as resolve_artifact_path
 
 _LIB_DIR = str(Path(__file__).resolve().parents[3] / "lib")
 if _LIB_DIR not in sys.path:
@@ -41,23 +54,13 @@ from range_authority import (
 __all__ = [
     "DRAFT_BODY_MAX_LINES",
     "DRAFT_BODY_PLACEHOLDER",
-    "DRAFT_OUT_DIR",
-    "DRAFT_SCHEMA",
-    "SCAFFOLD_SIGNATURE_PREFIX",
-    "_draft_dirty",
     "_draft_range",
-    "build_draft_payload",
     "build_scaffold",
     "cap_draft_body",
     "draft_commits",
-    "is_untouched_scaffold",
-    "resolve_out_dir",
     "run_draft_phase",
 ]
 
-
-DRAFT_OUT_DIR = Path(".lsz") / "tmp"
-DRAFT_SCHEMA = "gh-router/pr-land/draft@1"
 
 DRAFT_BODY_MAX_LINES = 15
 DRAFT_BODY_PLACEHOLDER = (
@@ -65,11 +68,15 @@ DRAFT_BODY_PLACEHOLDER = (
     "## Summary\n\n## What Changed\n\n## Blast Radius & Safety\n\n## Evidence\n"
 )
 
-# The candidate pr_body.md scaffold: template shape + mechanical facts + sentinels, signed
-# by the sha256 of the lines below its top line so a later --check tells untouched from
-# hand-edited. The generator writes no subjective prose.
-SCAFFOLD_SIGNATURE_PREFIX = "<!-- draft: scaffold sha256="
-_SCAFFOLD_SIGNATURE_SUFFIX = " -->"
+
+# The scaffold leaf (.lsz/gh-router/<slug>.md): template shape + mechanical facts + sentinels.
+# The generator writes no subjective prose. The marker names the head commit the
+# scaffold was generated from, so a later run reports staleness without deciding
+# anything from the artifact's bytes.
+def _scaffold_marker(head_sha: str) -> str:
+    return f"{SCAFFOLD_MARKER_PREFIX}{head_sha} -->"
+
+
 _SCAFFOLD_DOOR = "**Door:** <FILL: one-way | two-way>"
 _SCAFFOLD_CLOSES_COMMENT = "<!-- Closes #<FILL: issue number or delete> -->"
 _SCAFFOLD_SUMMARY_HEADING_RE = re.compile(r"^##\s+Summary\b", re.IGNORECASE)
@@ -87,22 +94,10 @@ _SCAFFOLD_TEMPLATE_DOOR_RE = re.compile(
 _BRANCH_ISSUE_RE = re.compile(r"(?:^|[/_.\-])(\d{1,6})(?:[/_.\-]|$)")
 
 
-def resolve_out_dir(out_dir: Path | None, cwd: Path | None = None) -> Path:
-    """Resolve the draft output directory (default <repo-root>/.lsz/tmp).
-
-    An explicit --out-dir resolves against the working directory; the default
-    resolves against the repository root so every --check in a checkout lands in
-    the same place.
-    """
-    base = cwd or Path.cwd()
-    if out_dir is not None:
-        target = out_dir if out_dir.is_absolute() else base / out_dir
-        return target.resolve()
-    try:
-        root = find_repo_root(base)
-    except RuntimeError:
-        root = base.resolve()
-    return (root / DRAFT_OUT_DIR).resolve()
+def _head_sha(cwd: Path | None = None) -> str:
+    """Current HEAD commit sha, or empty when unresolvable (marker-only use)."""
+    res = _github.run_command(["git", "rev-parse", "HEAD"], cwd=cwd)
+    return res.stdout.strip() if res.returncode == 0 else ""
 
 
 def cap_draft_body(text: str, max_lines: int = DRAFT_BODY_MAX_LINES) -> tuple[str, int]:
@@ -236,14 +231,15 @@ def build_scaffold(
     range_resolution: RangeResolution | None,
     template_text: str,
     cwd: Path | None = None,
+    head_sha: str = "",
 ) -> str:
-    """The candidate pr_body.md: template shape + mechanical facts + unfilled sentinels.
+    """The scaffold leaf (.lsz/gh-router/<slug>.md): template shape + mechanical facts + unfilled sentinels.
 
     The generator writes no subjective prose. Over the installed template (or the
     placeholder skeleton when absent) it swaps the unchosen Door literal for a `<FILL:>`
     sentinel, injects the range fact line under Summary and a Root Cause guidance comment,
-    and appends the detected closing lines or a visible FILL Closes slot. The result is
-    signed: the top line carries the sha256 of every line below it.
+    and appends the detected closing lines or a visible FILL Closes slot. The marker
+    top line names the head commit the scaffold was generated from.
     """
     additions, deletions, files = _diff_facts(range_resolution, cwd)
     fact_line = (
@@ -271,21 +267,15 @@ def build_scaffold(
     out.append("")
     out.extend(closes if closes else [_SCAFFOLD_CLOSES_COMMENT])
     body = "\n".join(out) + "\n"
-    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
-    return f"{SCAFFOLD_SIGNATURE_PREFIX}{digest}{_SCAFFOLD_SIGNATURE_SUFFIX}\n{body}"
+    return f"{_scaffold_marker(head_sha)}\n{body}"
 
 
-def is_untouched_scaffold(text: str) -> bool:
-    """True when *text*'s top line signs the bytes below it with a matching scaffold hash."""
-    first, sep, rest = text.partition("\n")
-    if (
-        not sep
-        or not first.startswith(SCAFFOLD_SIGNATURE_PREFIX)
-        or not first.endswith(_SCAFFOLD_SIGNATURE_SUFFIX)
-    ):
-        return False
-    digest = first[len(SCAFFOLD_SIGNATURE_PREFIX) : -len(_SCAFFOLD_SIGNATURE_SUFFIX)]
-    return hashlib.sha256(rest.encode("utf-8")).hexdigest() == digest
+def _display_path(path: Path, cwd: Path | None = None) -> str:
+    """Repo-relative artifact display path, absolute when the root is unknown."""
+    try:
+        return str(path.relative_to(find_repo_root(cwd or Path.cwd())))
+    except RuntimeError, ValueError, OSError:
+        return str(path)
 
 
 def _scaffold_template_text(template_path: Path | None, cwd: Path | None) -> str:
@@ -298,75 +288,89 @@ def _scaffold_template_text(template_path: Path | None, cwd: Path | None) -> str
         return DRAFT_BODY_PLACEHOLDER
 
 
-def build_draft_payload(
+def _emit_check_json(payload: dict[str, object]) -> None:
+    """Print the machine-readable `--check` report on stdout."""
+    print(json.dumps(payload, indent=2))
+
+
+def _emit_gate_facts(
+    report: CheckReport,
     *,
+    options: PrOptions,
     repo: str,
     head_ref: str,
     base: str | None,
     title: str,
-    report: CheckReport,
-    range_resolution: RangeResolution | None,
+    title_facts: dict[str, object],
+    body_site: str,
+    body: str,
+    display: str,
+    artifact_path: Path,
+    sha: str,
     commits: list[dict[str, object]],
-    counts: dict[str, int],
-    dirty: dict[str, list[str]],
-    squash_body: str,
-    draft_path: Path,
-    body_path: Path,
     hint: str,
-) -> dict[str, object]:
-    """Assemble the JSON-only draft payload (no YAML view, no full stdout dump)."""
-    return {
-        "schema": DRAFT_SCHEMA,
-        "repo": repo,
-        "head": head_ref,
-        "base": base,
-        "title": title,
-        "pr_number": report.pr_number,
-        "pr_url": report.pr_url,
-        "status": "ok" if report.exit_code == 0 else "refused",
-        "exit_code": report.exit_code,
-        "note": report.note,
-        "range": range_resolution.to_dict() if range_resolution is not None else None,
-        "counts": counts,
-        "commits": commits,
-        "dirty": dirty,
-        "trailers": report.trailers,
-        "squash_body": squash_body,
-        "draft_path": str(draft_path),
-        "body_path": str(body_path),
-        "hint": hint,
-    }
+) -> int:
+    """Emit the gate facts for a description the caller or the PR supplied.
 
-
-def _draft_dirty(cwd: Path | None = None) -> dict[str, list[str]]:
-    """Advisory working-tree reading for draft.json; empty lists when clean or unreadable."""
-    empty: dict[str, list[str]] = {"porcelain": [], "diff_stat": []}
-    try:
-        root = find_repo_root(cwd or Path.cwd())
-    except RuntimeError:
-        root = (cwd or Path.cwd()).resolve()
-    try:
-        porcelain = [
-            line
-            for line in _github.run_command(
-                ["git", "--no-optional-locks", "status", "--porcelain"],
-                cwd=root,
-            ).stdout.splitlines()
-            if line.strip()
+    Nothing is persisted on this path: facts on stdout (`--json` for machine
+    reading), commentary on stderr, the gate verdict as the exit code. A
+    `refusals[]` entry on stderr (exit 1 or 2) carries reason, remedy, and site.
+    """
+    if report.exit_code == 0 and report.note:
+        print(report.note, file=sys.stderr)
+    preview = report.body.strip("\n") if report.exit_code == 0 else ""
+    trailer_count = sum(1 for line in report.trailers.splitlines() if line.strip())
+    refusals: list[dict[str, str]] = []
+    if report.exit_code != 0:
+        reason = report.reason or "one or more merge gates refused"
+        if "title" in reason.lower():
+            site = "--title" if options.title_supplied else "HEAD"
+        else:
+            site = body_site_with_line(body_site, body)
+        refusals = [
+            make_refusal(
+                "body_missing" if report.exit_code == 2 else "gate_refused",
+                reason,
+                "see the gate prose on stderr, fix the defect, then re-run",
+                site,
+            )
         ]
-        if not porcelain:
-            return empty
-        diff_stat = [
-            line
-            for line in _github.run_command(
-                ["git", "--no-optional-locks", "diff", "HEAD", "--stat", "--", "."],
-                cwd=root,
-            ).stdout.splitlines()
-            if line.strip()
-        ]
-    except PrError, OSError, RuntimeError:
-        return empty
-    return {"porcelain": porcelain[:20], "diff_stat": diff_stat[-8:]}
+        print(json.dumps({"refusals": refusals}, indent=2), file=sys.stderr)
+    if options.json_output:
+        _emit_check_json(
+            {
+                "schema": CHECK_SCHEMA,
+                "repo": repo,
+                "head": head_ref,
+                "base": base,
+                "exit_code": report.exit_code,
+                "title": title_facts,
+                "body_site": body_site,
+                "artifact": {"path": display, "stale": artifact_stale(artifact_path, sha)},
+                "refusals": refusals,
+                "squash_body_preview": preview,
+                "scaffold": "",
+                "scaffold_written": False,
+                "commits": len(commits),
+                "trailers": trailer_count,
+            }
+        )
+    else:
+        derived = not options.title_supplied
+        print(f"commits: {len(commits)}")
+        print(f"trailers: {trailer_count}")
+        print(
+            f"title ({'derived' if derived else 'from --title'}): "
+            f"{title!r} {len(title)}/{TITLE_BUDGET} chars "
+            f"(worst case {title_facts['worst_case_chars']}/{TITLE_BUDGET} with ` (#99999)`)"
+        )
+        if preview.strip():
+            print("squash_body_preview:")
+            print(preview)
+        else:
+            print("squash_body_preview: (none — no usable body)")
+        print(f"hint: {hint}")
+    return report.exit_code
 
 
 def run_draft_phase(
@@ -382,24 +386,185 @@ def run_draft_phase(
     template_path: Path | None = None,
     cwd: Path | None = None,
 ) -> int:
-    """Emit draft.json + pr_body.md for --check, keep stdout small, return the gate code.
+    """Run the `--check` gate and emit its facts; write the scaffold leaf when apt.
 
-    Every --check run writes both files, even a refused one: the gate verdict is
-    the exit code (and stderr), while the full text stays on disk. `pr_body.md`
-    carries the authored description (Mermaid and `<details>` kept) plus the
-    trailers a merge would append; `draft.json`'s `squash_body` is the cleaned
-    text a merge would commit. stdout carries only counts, the two paths, and one
-    curation hint.
-
-    When no body was supplied the file is the candidate scaffold (see
-    `build_scaffold`): written when absent, untouched (signature matches), or
-    `--force-scaffold` is passed, and preserved byte-for-byte when the author has
-    hand-edited it. The scaffold never feeds the gate — the no-body verdict stays
-    the refusal it always was.
+    Facts go to stdout — counts, the title facts, the squash preview, and the
+    scaffold payload when no body was supplied (`--json` for machine reading) —
+    commentary goes to stderr. Nothing is persisted except the body-less
+    scaffold: written only when the leaf is absent (`--force-scaffold`
+    overwrites deliberately); when the leaf exists the tool writes nothing and
+    reports the path plus `stale` computed against the head commit. The scaffold
+    never feeds the gate — the no-body verdict stays exit 2. A `refusals[]`
+    entry on stderr (exit 1 or 2) carries reason, remedy, and site.
     """
-    out_dir = resolve_out_dir(options.out_dir, cwd=cwd)
-    draft_path = out_dir / "draft.json"
-    body_path = out_dir / "pr_body.md"
+    artifact_path = resolve_artifact_path(options.out, head_ref, cwd)
+    display = _display_path(artifact_path, cwd)
+    if options.body_file is not None:
+        body_site = f"--body-file {options.body_file}"
+    elif options.body is not None:
+        body_site = "--body"
+    else:
+        body_site = display
+    derived_title = not options.title_supplied
+    title_facts: dict[str, object] = {
+        "text": title,
+        "chars": len(title),
+        "worst_case_chars": len(f"{title}{TITLE_WORST_CASE_SUFFIX}"),
+        "budget": TITLE_BUDGET,
+        "derived": derived_title,
+    }
+
+    try:
+        base: str | None = resolve_base(options.base, repo, cwd=cwd)
+    except RefusalError as exc:
+        print(f"{exc}", file=sys.stderr)
+        base = None
+    range_resolution = _draft_range(base, head_ref, cwd)
+    commits = draft_commits(range_resolution, cwd)
+    if not commits and not options.title_supplied and title:
+        print(
+            f"warning: no unique commits in range; draft title {title!r} is a guess "
+            "-- pass --title explicitly",
+            file=sys.stderr,
+        )
+    sha = _head_sha(cwd)
+    hint = (
+        f"body: keep {artifact_path.name} in the repo's installed PR template shape "
+        "(pr-enhance owns the prose); squash: author a separate overview in "
+        "--squash-message-file, <=5 bullets (Core + Root for fix + Risk:Door + Proof + Links), "
+        "drop wip/fixup trivia, strip Mermaid/details/checklist; "
+        f"then land with --body-file {display} "
+        '(spec: GLOSSARY.md "Curated Squash Message" + pr-land SKILL.md Squash Shape)'
+    )
+
+    if not body_supplied:
+        # An open PR already carries the description: gate on the fetched body
+        # and persist nothing. Only when no PR body exists does the scaffold path
+        # below run (exit 2).
+        probe = check_trailers_report(
+            repo=repo,
+            head_ref=head_ref,
+            body="",
+            body_supplied=False,
+            title=title,
+            template_path=template_path,
+            cwd=cwd,
+            squash_message_override=squash_message_override,
+            squash_message_supplied=squash_message_supplied,
+            title_supplied=options.title_supplied,
+        )
+        if probe.exit_code != 2:
+            return _emit_gate_facts(
+                probe,
+                options=options,
+                repo=repo,
+                head_ref=head_ref,
+                base=base,
+                title=title,
+                title_facts=title_facts,
+                body_site=f"PR #{probe.pr_number}" if probe.pr_number else body_site,
+                body=probe.authored_body,
+                display=display,
+                artifact_path=artifact_path,
+                sha=sha,
+                commits=commits,
+                hint=hint,
+            )
+        refusals = [
+            make_refusal(
+                "body_missing",
+                "no description supplied; opening a PR requires one",
+                f"fill every <FILL:> slot in {display} (or delete the Closes slot), "
+                f"then re-run --check --body-file {display}",
+                body_site,
+            )
+        ]
+        try:
+            existing = (
+                artifact_path.read_text(encoding="utf-8") if artifact_path.is_file() else None
+            )
+        except OSError:
+            existing = None
+        if existing is None or options.force_scaffold:
+            scaffold = build_scaffold(
+                title=title,
+                head_ref=head_ref,
+                commits=commits,
+                range_resolution=range_resolution,
+                template_text=_scaffold_template_text(template_path, cwd),
+                cwd=cwd,
+                head_sha=sha,
+            )
+            try:
+                artifact_path.parent.mkdir(parents=True, exist_ok=True)
+                _ = artifact_path.write_text(scaffold, encoding="utf-8")
+            except OSError as exc:
+                raise PrError(
+                    f"cannot write scaffold leaf under {artifact_path.parent}: {exc}"
+                ) from exc
+            print(
+                f"scaffold: wrote the candidate body at {display}; fill every <FILL:> slot "
+                "(or delete the Closes comment), then re-run --check --body-file it",
+                file=sys.stderr,
+            )
+            print(json.dumps({"refusals": refusals}, indent=2), file=sys.stderr)
+            if options.json_output:
+                _emit_check_json(
+                    {
+                        "schema": CHECK_SCHEMA,
+                        "repo": repo,
+                        "head": head_ref,
+                        "base": base,
+                        "exit_code": 2,
+                        "title": title_facts,
+                        "body_site": body_site,
+                        "artifact": {"path": display, "stale": False},
+                        "refusals": refusals,
+                        "squash_body_preview": "",
+                        "scaffold": scaffold,
+                        "scaffold_written": True,
+                        "commits": len(commits),
+                        "trailers": 0,
+                    }
+                )
+            else:
+                print(f"commits: {len(commits)}")
+                print(f"body: {display}")
+                print(f"hint: {hint}")
+                print(scaffold, end="" if scaffold.endswith("\n") else "\n")
+            return 2
+        stale = artifact_stale(artifact_path, sha)
+        print(
+            f"note: scaffold leaf {display} already exists; wrote nothing "
+            "(re-run with --force-scaffold to regenerate, --out another leaf, or reuse it as-is)",
+            file=sys.stderr,
+        )
+        print(json.dumps({"refusals": refusals}, indent=2), file=sys.stderr)
+        if options.json_output:
+            _emit_check_json(
+                {
+                    "schema": CHECK_SCHEMA,
+                    "repo": repo,
+                    "head": head_ref,
+                    "base": base,
+                    "exit_code": 2,
+                    "title": title_facts,
+                    "body_site": body_site,
+                    "artifact": {"path": display, "stale": stale},
+                    "refusals": refusals,
+                    "squash_body_preview": "",
+                    "scaffold": "",
+                    "scaffold_written": False,
+                    "commits": len(commits),
+                    "trailers": 0,
+                }
+            )
+        else:
+            print(f"commits: {len(commits)}")
+            print(f"body: {display}")
+            print(f"stale: {str(stale).lower()}")
+            print(f"hint: {hint}")
+        return 2
 
     report = check_trailers_report(
         repo=repo,
@@ -411,106 +576,21 @@ def run_draft_phase(
         cwd=cwd,
         squash_message_override=squash_message_override,
         squash_message_supplied=squash_message_supplied,
+        title_supplied=options.title_supplied,
     )
-
-    if report.exit_code == 0 and report.note:
-        print(report.note, file=sys.stderr)
-
-    squash_body = report.body.strip("\n")
-
-    try:
-        base: str | None = resolve_base(options.base, repo, cwd=cwd)
-    except RefusalError as exc:
-        print(f"{exc}", file=sys.stderr)
-        base = None
-
-    range_resolution = _draft_range(base, head_ref, cwd)
-    commits = draft_commits(range_resolution, cwd)
-    if not commits and not options.title_supplied and title:
-        print(
-            f"warning: no unique commits in range; draft title {title!r} is a guess "
-            "-- pass --title explicitly",
-            file=sys.stderr,
-        )
-    dirty = _draft_dirty(cwd)
-    dirty_files = len(dirty["porcelain"])
-
-    authored_body = report.authored_body.strip("\n")
-    scaffold_written = False
-    if report.exit_code == 0 and authored_body:
-        body_text = insert_trailers(authored_body, report.trailers)
-    elif authored_body:
-        body_text = authored_body + "\n"
-    else:
-        scaffold = build_scaffold(
-            title=title,
-            head_ref=head_ref,
-            commits=commits,
-            range_resolution=range_resolution,
-            template_text=_scaffold_template_text(template_path, cwd),
-            cwd=cwd,
-        )
-        existing: str | None
-        try:
-            existing = body_path.read_text(encoding="utf-8") if body_path.is_file() else None
-        except OSError:
-            existing = None
-        if options.force_scaffold or existing is None or is_untouched_scaffold(existing):
-            body_text = scaffold
-            scaffold_written = True
-        else:
-            body_text = existing
-    if not body_text.endswith("\n"):
-        body_text += "\n"
-
-    counts = {
-        "commits": len(commits),
-        "only_in_base": range_resolution.counts.only_in_base if range_resolution else 0,
-        "trailers": sum(1 for line in report.trailers.splitlines() if line.strip()),
-        "body_lines": len(body_text.splitlines()),
-        "dirty_files": dirty_files,
-    }
-    hint = (
-        f"body: keep {body_path.name} in the repo's installed PR template shape "
-        "(pr-enhance owns the prose); squash: author a separate overview in "
-        "--squash-message-file, <=5 bullets (Core + Root for fix + Risk:Door + Proof + Links), "
-        "drop wip/fixup trivia, strip Mermaid/details/checklist; "
-        f"then land with --body-file {body_path} "
-        '(spec: GLOSSARY.md "Curated Squash Message" + pr-land SKILL.md Squash Shape)'
-    )
-    payload = build_draft_payload(
+    return _emit_gate_facts(
+        report,
+        options=options,
         repo=repo,
         head_ref=head_ref,
         base=base,
         title=title,
-        report=report,
-        range_resolution=range_resolution,
+        title_facts=title_facts,
+        body_site=body_site,
+        body=body,
+        display=display,
+        artifact_path=artifact_path,
+        sha=sha,
         commits=commits,
-        counts=counts,
-        squash_body=squash_body,
-        dirty=dirty,
-        draft_path=draft_path,
-        body_path=body_path,
         hint=hint,
     )
-
-    try:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        _ = draft_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        _ = body_path.write_text(body_text, encoding="utf-8")
-    except OSError as exc:
-        raise PrError(f"cannot write draft files under {out_dir}: {exc}") from exc
-
-    if scaffold_written:
-        print(
-            f"scaffold: wrote the candidate body at {body_path}; fill every <FILL: …> slot "
-            "(or delete the Closes comment), then re-run --check --body-file it",
-            file=sys.stderr,
-        )
-
-    print(f"commits: {counts['commits']}")
-    print(f"trailers: {counts['trailers']}")
-    print(f"draft: {draft_path}")
-    print(f"body: {body_path}")
-    print(f"hint: {hint}")
-    return report.exit_code

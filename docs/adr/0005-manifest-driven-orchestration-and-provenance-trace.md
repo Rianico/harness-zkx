@@ -10,6 +10,8 @@ derives from [4. Goal-Driven Development (GDD) as Foundational Philosophy](0004-
 
 refined by [6. Consolidated Orchestration Pipeline](0006-consolidated-orchestration-pipeline.md)
 
+Clarified by [21. pr-land derives state and emits facts instead of persisting artifacts](0021-pr-land-derives-state-and-emits-facts-instead-of-persisting-artifacts.md)
+
 ## Context
 
 "Hallucinated Completion" occurs when a model fills a structured response with claims of success that haven't actually occurred in the environment. To prevent this, we need a way to externalize state and track the "How" and "By Whom" of every change.

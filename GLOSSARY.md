@@ -280,6 +280,26 @@ _Avoid_: commit dump, squash subject list, raw log concat.
 The anti-pattern of concatenating intermediate scratch commit subjects (`* test(...)`, `* fix(...)`) into a mainline squash commit.
 _Avoid_: commit history, squash log replay.
 
+**PR Landing State**:
+The predicates `pr-land` derives from git and `gh` before acting: `branch_pushed` (remote ref exists and is not behind), `pr_state` (`none` | `open` | `merged` | `closed`), `pr_draft`, `body_state` (`none` | `scaffold` | `unfilled` | `ready`), `worktree_clean`, `changelog_stamped`, `head_pushed` (remote tip matches after stamping), `checks`, and `mergeable`. Failure states — `diverged`, `head_stale`, `stamp_failed` — are named the same way. Defined once for the router's PR lifecycle (ADR-0021); `pr-refine` and `pr-enhance` reuse the names.
+_Avoid_: Status flag, phase enum, stored status.
+
+**Derived State**:
+The `pr-land` practice of computing its own phase from the environment on every run instead of persisting it. Environmental truth is the authority; a stored status is a snapshot that goes stale the moment anything changes.
+_Avoid_: State file, cached status, resumable manifest.
+
+**Legal Transition**:
+One action available from the current derived state, emitted with its command, its preconditions, and what it mutates (`mutation`: `none` | `local` | `remote`). `pr-land` reports the transition list rather than a single recommended step, so the model chooses among real alternatives.
+_Avoid_: Next step, suggested action, happy path.
+
+**Refusal Class**:
+The rule deciding whether a script may refuse or must inform. *Mechanical impossibility* (no remote, remote diverged, unresolvable base, `gh` missing or unauthenticated) and *contract violations* (missing squash message, unfilled body, raw `CODE_AUTHORS`) refuse on mutating commands; read-only commands report the same facts and exit 0. *Judgment calls* (body wording, scaffold reuse, an open draft PR) emit state, remedies, and the transition list — and on a mutating command the transition that cannot proceed still refuses, with those facts attached. See ADR-0021.
+_Avoid_: Severity, error level.
+
+**Scaffold Leaf**:
+The caller-chosen file name for the draft scaffold, written under the tool-owned `.lsz/gh-router/` prefix. The leaf defaults to the head-ref slug. A body-less `--check` writes it only when the leaf is absent; when it exists the tool writes nothing and reports the path and a deterministic `stale` flag.
+_Avoid_: Artifact dir, run directory, fixed scratch path.
+
 ## Skill Trigger Evaluation
 
 **Trigger Evaluation**:

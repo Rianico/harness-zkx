@@ -33,6 +33,7 @@ SIBLING_MODULES = [
     "_github.py",
     "_check.py",
     "_draft.py",
+    "_status.py",
     "_changelog.py",
 ]
 
@@ -43,6 +44,7 @@ import _check  # noqa: E402
 import _draft  # noqa: E402
 import _github  # noqa: E402
 import _options  # noqa: E402
+import _status  # noqa: E402
 import pr as pr_mod  # noqa: E402
 
 
@@ -117,7 +119,7 @@ def test_shared_objects_are_the_sibling_definitions() -> None:
     """Re-exports are the same object, not a copy: `is` is what the tests' patches rely on."""
     assert pr_mod.PrOptions is _options.PrOptions
     assert pr_mod.CheckReport is _check.CheckReport
-    assert pr_mod.DRAFT_OUT_DIR is _draft.DRAFT_OUT_DIR
+    assert pr_mod.run_status is _status.run_status
 
 
 def test_only_github_module_spawns_subprocesses() -> None:
@@ -173,7 +175,7 @@ def test_no_test_imports_run_command_from_pr() -> None:
 
 
 def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
-    """`dir(pr)` must stay a superset of the pristine 175-name surface.
+    """`dir(pr)` must stay a superset of the pinned 170-name surface.
 
     The split moved names out of `pr.py`, so anything that enumerated the pre-split module (a
     shell completion, a `dir()`-driven smoke check, a downstream caller) must still find every
@@ -181,7 +183,9 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
     module-level variable annotation is what makes CPython 3.14 build `__annotate__` /
     `__conditional_annotations__`, and the pristine module had one. Drop the annotation and
     `dir(pr)` loses those two names. The literal below is the frozen pristine `dir(pr)`
-    (captured pre-split in /tmp/golden/dir_pr.txt).
+    (captured pre-split in /tmp/golden/dir_pr.txt, minus the four names ADR-0021 retired:
+    `DRAFT_OUT_DIR`, `DRAFT_SCHEMA`, `build_draft_payload`, `resolve_out_dir`, plus
+    `_draft_dirty`, dropped uncalled by the T2 rework follow-up.)
     """
     pristine = (
         "AFTER_MARKERS",
@@ -210,8 +214,6 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
         "DOOR_RE",
         "DRAFT_BODY_MAX_LINES",
         "DRAFT_BODY_PLACEHOLDER",
-        "DRAFT_OUT_DIR",
-        "DRAFT_SCHEMA",
         "EMAIL_KEY_RE",
         "EMPTY_BULLET_RE",
         "FENCE_RE",
@@ -271,7 +273,6 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
         "_copy_tokens",
         "_count_squash_bullets",
         "_digest_range_spec",
-        "_draft_dirty",
         "_draft_range",
         "_evidence_marker_text",
         "_fenced_line_mask",
@@ -287,7 +288,6 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
         "_states_rollback",
         "_strip_unclosed",
         "_unreleased_attribution_re",
-        "build_draft_payload",
         "build_squash_message",
         "cap_draft_body",
         "check_closes_lines",
@@ -342,7 +342,6 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
         "resolve_base",
         "resolve_head",
         "resolve_merge_state",
-        "resolve_out_dir",
         "resolve_range",
         "resolve_repo",
         "resolve_squash_message",
@@ -360,7 +359,32 @@ def test_dir_pr_is_a_superset_of_the_pristine_surface() -> None:
         "unreleased_attributes_pr",
         "watch_checks",
     )
-    assert len(pristine) == 175, "the frozen pristine surface must list all 175 names"
+    assert len(pristine) == 170, "the pinned surface must list all 170 names"
     present = set(dir(pr_mod))
     missing = sorted(name for name in pristine if name not in present)
     assert not missing, f"dir(pr) lost pre-split names: {', '.join(missing)}"
+
+
+def test_retired_draft_surface_stays_gone() -> None:
+    """ADR-0021 deletion proof: no retired helper survives outside the CHANGELOG."""
+    for name in (
+        "DRAFT_OUT_DIR",
+        "DRAFT_SCHEMA",
+        "SCAFFOLD_SIGNATURE_PREFIX",
+        "is_untouched_scaffold",
+        "build_draft_payload",
+        "resolve_out_dir",
+        "_draft_dirty",
+    ):
+        assert not hasattr(pr_mod, name), f"retired name still on pr: {name}"
+        assert not hasattr(_draft, name), f"retired name still on _draft: {name}"
+    texts = _module_texts()
+    for name in (
+        "draft.json",
+        "is_untouched_scaffold",
+        "SCAFFOLD_SIGNATURE",
+        "--out-dir",
+        "_draft_dirty",
+    ):
+        offenders = [mod for mod, text in texts.items() if name in text]
+        assert not offenders, f"{name!r} still referenced in: {', '.join(offenders)}"

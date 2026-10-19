@@ -1,0 +1,15 @@
+id: 20261017T182612067084Z-pr-land-impl-2-925d6573
+recorded_at: '2026-10-17T18:26:12.067Z'
+sender: pr-land-impl-2
+caller: w11:p1N
+ticket_id: '#266-t2-seam-derivation'
+task_id: '#266-t2-seam-derivation'
+in_reply_to: '#266-t2-seam-derivation'
+status: completed
+shape: complete
+evidence: evidence
+sha: dc21673
+digest: 925d6573d8e2ba4ef8f033b86a9d9f8932c776055bc18584f1b21fc3743c2af5
+bytes: 2442
+artifacts: 9
+payload: .lane/replies/20261017T182612067084Z-pr-land-impl-2-925d6573.md
