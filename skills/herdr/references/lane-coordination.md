@@ -41,8 +41,10 @@ To resolve all three anti-patterns and manage context pressure asymmetry, enforc
 1. **Tier 1: Lane-Level Coordination (Herdr Inter-Pane)**
    - **Topology**: Root Orchestrator ↔ Task Manager ↔ Implementers across dedicated Herdr panes.
    - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py` governed by Task Leases and Token Observability.
-   - **Scope**: In-lane execution inside the lane's pre-provisioned `$WORKTREE_PATH`: lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
-   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator pre-provisions the lane worktree and topology but never dispatches callee tickets directly (#166). TM and Implementer run natively inside `$WORKTREE_PATH` from turn zero; neither creates ad-hoc worktrees or nested directories.
+   - **Scope**: In-lane execution inside the role's provisioned worktree (`<repo>.<task-group>.<role>`): lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
+   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator pre-provisions one worktree per role and the topology but never dispatches callee tickets directly (#166). Each writer owns exactly one worktree, and a branch is checked out in exactly one worktree. TM and Implementers run natively inside their own `<repo>.<task-group>.<role>` worktree from turn zero; neither creates ad-hoc worktrees, switches branches, stashes, or forces a checkout. Reviewers stay read-only and evaluate a pinned SHA, never a moving tree.
+   - **Lifecycle**: Branches are `lane/<task-group>/<role>/<ticket>`. `herdr-worktree claim` moves a clean tree onto its branch from an explicit base and records it in `.lane/tasks.yaml`; `status` reports drift; `retire` removes only clean trees and merged branches; `doctor --prune` drops only missing admin entries. Never run `git switch -C`, `-B`, or `-f`, `git stash`, or `git worktree add --force`. The `--cwd` matrix is in [agent-bootstrap](agent-bootstrap.md).
+   - **Commit-addressed review**: Freeze the review target at a SHA. Inspect with `git diff <base>..<sha>` and `git show <sha>:<path>`; for a read-only checkout use an ephemeral detached worktree. Gates run in the TM pane on the pinned SHA; never mutate the implementer's tree to reproduce a review.
 
 2. **Tier 2: Role-Internal Subagent Delegation (Context Isolation)**
    - **Topology**: Host pane ↔ Ephemeral platform subagents (`Agent`, `invoke_subagent`, scratch tasks).
@@ -94,7 +96,7 @@ The Root Orchestrator owns the problem definition, global constraints, topology 
 
 - **Explicit Allow List**:
   - Confirm role-to-agent mapping (role, agent kind, provider, model) with user before lane provisioning (#159).
-  - Pre-allocate one isolated worktree per lane with `uv run ${herdr_skill}/scripts/herdr_worktree.py allocate`, then allocate panes and tabs for lane topology and launch them inside it with `--cwd "$WORKTREE_PATH"`.
+  - Claim one isolated worktree per role with `uv run ${herdr_skill}/scripts/herdr_worktree.py claim <path> lane/<task-group>/<role>/<ticket> --base <ref>`, then allocate panes and tabs for lane topology and launch each one with `--cwd` set to that role's path. Bootstrap validates the path is a registered linked worktree.
   - Name Every Pane Immediately: Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
   - Boot TM and Implementers with verified bootstrap flags (or allocate panes and delegate boot verification to TM per #167).
   - Issue brief to TM specifying intent, goal, constraints, acceptance criteria, verification contract, and sizing budget.
@@ -130,7 +132,7 @@ The Task Manager owns in-lane triage, decomposition, scope boundaries, design ju
   - Exercise independent design judgment (data structures, algorithms, internal interfaces, refactoring depth).
   - Author tickets specifying target files, scope boundaries, constraints, and explicit test/evidence requirements.
   - Dispatch tickets to callees via `herdr_dispatch.py` and await `herdr_reply.py`.
-  - Run verification gates (tests, linter, typecheck) in the TM pane against callee diffs, executed natively inside the lane's `$WORKTREE_PATH`.
+  - Run verification gates (tests, linter, typecheck) in the TM pane against callee diffs at a pinned SHA (or the assigned owner's committed result). Never mutate the implementer's tree to reproduce a gate; use `git diff <base>..<sha>` and `git show <sha>:<path>`, or an ephemeral detached read.
   - Spawn internal subagents for code review under `keel`, `coding-protocol`, and `programming-expert`.
   - Issue review verdicts (`PASS`, `REWORK`, `REJECT`) mapping findings to threatened invariants.
   - Dispatch rework tickets on gate failures or review findings with targeted diagnostics.

@@ -1784,3 +1784,73 @@ def test_bootstrap_refuses_a_negative_settle(
     assert "must not be negative" in done.stderr
     assert starts(stub) == []
     assert slept == []
+
+
+# ── --cwd worktree validation ───────────────────────────────────────────────────────
+
+
+def add_linked_worktree(repo: Path, path: Path, branch: str) -> None:
+    """Register a real linked worktree for the fixture repository."""
+    done = git(repo, "worktree", "add", "-q", "-b", branch, str(path))
+    assert done.returncode == 0, done.stderr
+
+
+def clean_repo_with_linked_worktree(tmp_path: Path, name: str = "repo") -> tuple[Path, Path]:
+    """A committed repo plus one linked worktree in the per-role layout."""
+    repo = tmp_path / name
+    init_repo(repo)
+    _ = (repo / "seed.txt").write_text("seed\n")
+    commit_path(repo, "seed.txt")
+    worktree = tmp_path / f"{name}.w11-t7.impl-1"
+    add_linked_worktree(repo, worktree, "lane/w11-t7/impl-1/265-agent-worktree-cwd")
+    return repo, worktree
+
+
+def test_cwd_accepts_a_registered_linked_worktree(stub: StubHarness, tmp_path: Path) -> None:
+    _repo, worktree = clean_repo_with_linked_worktree(tmp_path)
+
+    done = stub.run(*bootstrap_args(worktree), state=cwd_state(worktree))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert (worktree / "AGENTS.md").exists()
+    assert len(starts(stub)) == 1
+
+
+def test_cwd_refuses_missing_directory(stub: StubHarness, tmp_path: Path) -> None:
+    missing = tmp_path / "gone"
+
+    done = stub.run(*bootstrap_args(missing), state=cwd_state(missing))
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stdout
+    assert "is missing" in done.stderr
+    assert starts(stub) == []
+
+
+def test_cwd_refuses_target_that_is_not_a_linked_worktree(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    _ = (repo / "seed.txt").write_text("seed\n")
+    commit_path(repo, "seed.txt")
+    nested = repo / "nested"
+    nested.mkdir()
+
+    done = stub.run(*bootstrap_args(nested), state=cwd_state(nested))
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stdout
+    assert "not a registered linked worktree" in done.stderr
+    assert starts(stub) == []
+
+
+def test_cwd_refuses_main_checkout_when_linked_worktree_exists(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    repo, worktree = clean_repo_with_linked_worktree(tmp_path)
+
+    done = stub.run(*bootstrap_args(repo, "--task-group", "w11-t7"), state=cwd_state(repo))
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stdout
+    assert "main checkout" in done.stderr
+    assert str(worktree) in done.stderr
+    assert starts(stub) == []
