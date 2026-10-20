@@ -46,7 +46,7 @@ import shlex
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -426,37 +426,49 @@ def list_worktrees(env: Mapping[str, str]) -> tuple[str, list[Worktree]]:
     return ENGINE_GIT, parse_git_worktree_list(raw)
 
 
+def print_rows(rows: Iterable[str]) -> None:
+    """Print one pre-formatted row per line."""
+    for row in rows:
+        print(row)
+
+
+def emit(payload: Mapping[str, Any], as_json: bool, render: Callable[[], None]) -> None:
+    """Print `payload` as JSON, or let the caller render its plain-text rows.
+
+    Every verb answers with the same shape: a JSON object under `--json`, and a fixed
+    human row otherwise. Keeping the branch here means one place decides the encoding,
+    and each verb keeps only its own payload keys and row format.
+    """
+    if as_json:
+        print(json.dumps(payload))
+        return
+    render()
+
+
 def emit_allocation(allocation: Allocation, status: str, as_json: bool) -> None:
     """Print one allocation as a bare path or as JSON."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "branch": allocation.branch,
-                    "cwd": allocation.path,
-                    "engine": allocation.engine,
-                    "status": status,
-                }
-            )
-        )
-        return
-    print(allocation.path)
+    emit(
+        {
+            "branch": allocation.branch,
+            "cwd": allocation.path,
+            "engine": allocation.engine,
+            "status": status,
+        },
+        as_json,
+        lambda: print(allocation.path),
+    )
 
 
 def emit_list(engine: str, worktrees: Sequence[Worktree], as_json: bool) -> None:
     """Print active worktrees as `branch  path` rows or as JSON."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "engine": engine,
-                    "worktrees": [{"branch": w.branch, "path": w.path} for w in worktrees],
-                }
-            )
-        )
-        return
-    for worktree in worktrees:
-        print(f"{worktree.branch}  {worktree.path}")
+    emit(
+        {
+            "engine": engine,
+            "worktrees": [{"branch": w.branch, "path": w.path} for w in worktrees],
+        },
+        as_json,
+        lambda: print_rows(f"{worktree.branch}  {worktree.path}" for worktree in worktrees),
+    )
 
 
 @dataclass(frozen=True)
@@ -816,63 +828,55 @@ def doctor(prune: bool, env: Mapping[str, str]) -> tuple[list[dict[str, Any]], b
 
 def emit_status(status: BindingStatus, as_json: bool) -> None:
     """Print one binding as JSON or as a `branch path state flags` row."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "branch": status.branch,
-                    "path": status.path,
-                    "clean": status.clean,
-                    "dirty": not status.clean,
-                    "detached": status.detached,
-                    "flags": list(status.flags),
-                }
-            )
-        )
-        return
     branch = status.branch or DETACHED_MARKER
     state = "clean" if status.clean else "dirty"
     flags = ",".join(status.flags) if status.flags else "ok"
-    print(f"{branch}  {status.path}  {state}  {flags}")
+    emit(
+        {
+            "branch": status.branch,
+            "path": status.path,
+            "clean": status.clean,
+            "dirty": not status.clean,
+            "detached": status.detached,
+            "flags": list(status.flags),
+        },
+        as_json,
+        lambda: print(f"{branch}  {status.path}  {state}  {flags}"),
+    )
 
 
 def emit_retire(result: RetireResult, as_json: bool) -> None:
     """Print the retired worktree path or a JSON summary."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "path": result.path,
-                    "branch": result.branch,
-                    "removed": True,
-                    "branch_deleted": result.branch_deleted,
-                    "pruned": True,
-                }
-            )
-        )
-        return
-    print(result.path)
+    emit(
+        {
+            "path": result.path,
+            "branch": result.branch,
+            "removed": True,
+            "branch_deleted": result.branch_deleted,
+            "pruned": True,
+        },
+        as_json,
+        lambda: print(result.path),
+    )
 
 
 def emit_doctor(rows: Sequence[Mapping[str, Any]], pruned: bool, as_json: bool) -> None:
     """Print the audit as JSON or as `flags branch path` rows."""
     issues = sum(1 for row in rows if row["flags"])
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "engine": ENGINE_GIT,
-                    "pruned": pruned,
-                    "issues": issues,
-                    "worktrees": list(rows),
-                }
-            )
-        )
-        return
-    for row in rows:
-        flags = ",".join(row["flags"]) if row["flags"] else "ok"
-        branch = row["branch"] or DETACHED_MARKER
-        print(f"{flags}  {branch}  {row['path']}")
+    emit(
+        {
+            "engine": ENGINE_GIT,
+            "pruned": pruned,
+            "issues": issues,
+            "worktrees": list(rows),
+        },
+        as_json,
+        lambda: print_rows(
+            f"{','.join(row['flags']) if row['flags'] else 'ok'}  "
+            f"{row['branch'] or DETACHED_MARKER}  {row['path']}"
+            for row in rows
+        ),
+    )
 
 
 def run_command(options: Options, env: Mapping[str, str]) -> int:

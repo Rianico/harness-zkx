@@ -1204,3 +1204,58 @@ def test_write_tasks_reports_the_shared_write_failure(
 
     with pytest.raises(hw.WorktreeError, match="cannot write .*disk full"):
         hw.write_tasks(tmp_path / "tasks.yaml", {})
+
+
+# ── one JSON/text emit seam (#266 T2b P7) ──────────────────────────────────────────
+
+
+def test_emitters_share_one_json_seam(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[tuple[dict[str, Any], bool]] = []
+
+    def fake(payload: Mapping[str, Any], as_json: bool, _render: Callable[[], None]) -> None:
+        seen.append((dict(payload), as_json))
+
+    monkeypatch.setattr(hw, "emit", fake)
+
+    hw.emit_allocation(
+        hw.Allocation(branch="b", path="/p", engine=hw.ENGINE_GIT), "allocated", True
+    )
+    hw.emit_list(hw.ENGINE_GIT, [hw.Worktree(branch="b", path="/p")], True)
+    hw.emit_status(
+        hw.BindingStatus(path="/p", branch="b", clean=True, detached=False, flags=()), True
+    )
+    hw.emit_retire(hw.RetireResult(path="/p", branch="b", branch_deleted=True), True)
+    hw.emit_doctor([], False, True)
+
+    assert seen == [
+        (
+            {"branch": "b", "cwd": "/p", "engine": hw.ENGINE_GIT, "status": "allocated"},
+            True,
+        ),
+        ({"engine": hw.ENGINE_GIT, "worktrees": [{"branch": "b", "path": "/p"}]}, True),
+        (
+            {
+                "branch": "b",
+                "path": "/p",
+                "clean": True,
+                "dirty": False,
+                "detached": False,
+                "flags": [],
+            },
+            True,
+        ),
+        (
+            {
+                "path": "/p",
+                "branch": "b",
+                "removed": True,
+                "branch_deleted": True,
+                "pruned": True,
+            },
+            True,
+        ),
+        ({"engine": hw.ENGINE_GIT, "pruned": False, "issues": 0, "worktrees": []}, True),
+    ]
+    assert capsys.readouterr().out == ""
