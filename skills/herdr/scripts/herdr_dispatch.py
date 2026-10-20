@@ -786,7 +786,7 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
             subset = {
                 "pane_id": caller_ctx.pane_id,
                 "kind": caller_ctx.kind,
-                "session_path": caller_ctx.session_id,
+                "session_path": caller_ctx.session_path or caller_ctx.session_id,
                 "resume_cmd": caller_ctx.resume_cmd,
                 "cwd": caller_ctx.cwd,
             }

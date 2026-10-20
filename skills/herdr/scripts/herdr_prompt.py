@@ -295,6 +295,31 @@ def build_resume_cmd(kind: str | None, session_id: str | None) -> str | None:
     return None
 
 
+PI_SESSION_FILE_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}T[\d-]+Z_"
+    r"(?P<session>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+    r"\.jsonl"
+)
+
+
+def short_session_id(value: str | None) -> str | None:
+    """Reduce a pi session file name to its session id; anything else is untouched.
+
+    The daemon reports `agent_session.value` as the session file path
+    (`<timestamp>_<uuid>.jsonl`). The id alone selects the same session for
+    `pi --session`, and the envelope's `context_id` is a routing ref, not a filesystem
+    location. Only a filename matching the pi shape is rewritten: another kind's handle,
+    an already-short id, or an unfamiliar path passes through verbatim (#267).
+    """
+    if not value:
+        return value
+    # Only the file name is inspected: the directory is a per-workspace slug, and matching
+    # the whole path would tie this rule to one machine's session root.
+    name = value.replace("\\", "/").rsplit("/", 1)[-1]
+    match = PI_SESSION_FILE_RE.fullmatch(name)
+    return match.group("session") if match else value
+
+
 def _session_value(entry: Mapping[str, object]) -> str | None:
     """Read the agent-native session handle out of an agent list entry."""
     sess = entry.get("agent_session")
@@ -323,11 +348,13 @@ def build_identity(
     agent: str | None = None
     kind: str | None = None
     session_id: str | None = None
+    session_path: str | None = None
     for entry in agents:
         if entry_optional_text(entry, "pane_id") == pane_id:
             agent = entry_optional_text(entry, "name")
             kind = entry_optional_text(entry, "agent")
-            session_id = _session_value(entry)
+            session_path = _session_value(entry)
+            session_id = short_session_id(session_path)
             break
     return CallerContext(
         pane_id=pane_id,
@@ -335,6 +362,7 @@ def build_identity(
         agent=agent,
         kind=kind,
         session_id=session_id,
+        session_path=session_path,
         resume_cmd=build_resume_cmd(kind, session_id),
         tab_id=tab_id,
         cwd=cwd,

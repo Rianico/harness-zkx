@@ -2696,3 +2696,72 @@ def test_broadcast_confirms_each_targets_screen_once(
     assert len(stub.prompts()) == 2
     reads = _screen_reads(stub)
     assert [call[3] for call in reads] == ["callee1", "callee2"]
+
+
+# ── short pi session ids (#267 T1) ─────────────────────────────────────────────────
+
+PI_SESSION_ID = "01a154f2-f28c-7099-bd1d-8b603cbf5156"
+PI_SESSION_PATH = (
+    f"/Users/x/.pi/agent/sessions/-Users-x-work/2026-10-19T16-16-10-381Z_{PI_SESSION_ID}.jsonl"
+)
+
+
+def test_short_session_id_reduces_a_pi_session_path() -> None:
+    assert herdr_prompt.short_session_id(PI_SESSION_PATH) == PI_SESSION_ID
+
+
+def test_short_session_id_reduces_a_bare_pi_session_filename() -> None:
+    assert (
+        herdr_prompt.short_session_id(f"2026-10-19T16-16-10-381Z_{PI_SESSION_ID}.jsonl")
+        == PI_SESSION_ID
+    )
+
+
+def test_short_session_id_keeps_an_already_short_id() -> None:
+    assert herdr_prompt.short_session_id(PI_SESSION_ID) == PI_SESSION_ID
+
+
+def test_short_session_id_keeps_a_foreign_value() -> None:
+    for value in ("/tmp/session.jsonl", "claude-abc", "8f2c1d", "/tmp/sessions/x.jsonl"):
+        assert herdr_prompt.short_session_id(value) == value
+
+
+def test_short_session_id_keeps_missing_and_odd_values() -> None:
+    for value in (None, "", "2026-10-19T16-16-10-381Z_not-a-uuid.jsonl", "x_y.jsonl"):
+        assert herdr_prompt.short_session_id(value) == value
+
+
+def test_build_identity_shortens_the_pi_session_and_keeps_its_path() -> None:
+    panes = [{"pane_id": "w9:p1", "cwd": "/tmp/harness"}]
+    agents = [
+        {
+            "pane_id": "w9:p1",
+            "name": "reviewer",
+            "agent": "pi",
+            "agent_session": {"kind": "path", "value": PI_SESSION_PATH},
+        }
+    ]
+
+    caller = herdr_prompt.build_identity(panes, agents, "w9:p1")
+
+    assert caller.session_id == PI_SESSION_ID
+    assert caller.session_path == PI_SESSION_PATH
+    assert caller.resume_cmd == f"pi --session {PI_SESSION_ID}"
+
+
+def test_build_identity_leaves_a_foreign_session_handle_untouched() -> None:
+    panes = [{"pane_id": "w9:p1"}]
+    agents = [
+        {
+            "pane_id": "w9:p1",
+            "name": "reviewer",
+            "agent": "claude",
+            "agent_session": {"kind": "id", "value": "claude-abc"},
+        }
+    ]
+
+    caller = herdr_prompt.build_identity(panes, agents, "w9:p1")
+
+    assert caller.session_id == "claude-abc"
+    assert caller.session_path == "claude-abc"
+    assert caller.resume_cmd == "claude --resume claude-abc"
