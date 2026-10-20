@@ -1259,3 +1259,64 @@ def test_emitters_share_one_json_seam(
         ({"engine": hw.ENGINE_GIT, "pruned": False, "issues": 0, "worktrees": []}, True),
     ]
     assert capsys.readouterr().out == ""
+
+
+# ── residuals: claim diagnostics (#268 R2) ────────────────────────────────────────
+
+
+def test_claim_names_the_worktree_holding_an_existing_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    other = root.parent / "repo.w11-t7.other"
+    other.mkdir()
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(worktree, "lane/w11-t7/impl/old"),
+        worktree_row(other, BRANCH),
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "main"], env)
+    err = capsys.readouterr().err
+    assert code == herdr_cli.EXIT_HERDR
+    assert "already checked out at" in err
+    assert str(other) in err
+    assert "retire" in err
+
+
+def test_claim_says_an_existing_branch_is_checked_out_nowhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(worktree, "lane/w11-t7/impl/old"),
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "-C", str(worktree)] and argv[3] == "status":
+            return completed(argv)
+        if argv[:2] == ["git", "show-ref"]:
+            return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "main"], env)
+    err = capsys.readouterr().err
+    assert code == herdr_cli.EXIT_HERDR
+    assert "not checked out anywhere" in err
+    assert "fresh ticket branch" in err

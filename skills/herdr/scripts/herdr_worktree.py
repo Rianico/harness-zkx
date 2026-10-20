@@ -712,13 +712,17 @@ def claim(worktree: str, branch: str, base: str, env: Mapping[str, str]) -> Allo
         return Allocation(branch=name, path=entry.path, engine=ENGINE_GIT)
     for other in entries:
         if other.branch == name and worktree_key(other.path) != worktree_key(entry.path):
-            raise WorktreeError(f"branch {name!r} is already checked out at {other.path}")
+            raise WorktreeError(
+                f"branch {name!r} is already checked out at {other.path}; retire that "
+                f"worktree or claim a fresh ticket branch"
+            )
     if run_checked(["git", "-C", entry.path, "status", "--porcelain"], env).strip():
         raise UsageError(f"worktree {entry.path} has uncommitted changes; claim needs a clean tree")
     existing = run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{name}"], env)
     if existing.returncode == 0:
         raise WorktreeError(
-            f"branch {name!r} already exists; retire or delete it explicitly before claiming"
+            f"branch {name!r} already exists and is not checked out anywhere; delete it "
+            f"if it is stale, or claim a fresh ticket branch"
         )
     base_sha = resolve_base_sha(base, env)
     _ = run_safe(["git", "-C", entry.path, "switch", "--create", name, base_sha], env)
