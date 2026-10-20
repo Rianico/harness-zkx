@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **herdr:** consolidate the skill's seams — one shared entrypoint, lane anchor, subprocess runner, atomic YAML store, and result emitter replace the per-script copies; `context_id` and `pi --session` carry the short session id with the full path left in verbose recovery; the merged inventory annotates store facts with snapshot liveness instead of overriding them; and `claim`/`status`/`doctor` name the worktree holding a branch, print the legacy-name migration command, and flag a worktree that keeps a fossil `.lane/` (#276)
 * **herdr:** agent-facing worktree lifecycle and cwd validation per ADR-0022 — add `claim`, `status`, `retire`, and `doctor` lifecycle verbs to `herdr_worktree.py` enforcing clean single-writer boundaries (`<repo>.<task-group>.<role>` topology, `lane/<task-group>/<role>/<ticket>` branch namespace, forbidden force/stash ops), validate that `herdr-bootstrap --cwd` targets a registered linked worktree, exclude `.lane/` from Worktrunk copies, and streamline skill and coordination reference documentation (#275)
 * **rules:** refine mental-model, response-format, and writing skills with 80% ASD-STE100, visual patterns, and model-exclusive IPC contract (#274)
 * **rules:** streamline git-convention and gotcha guardrails with STE-100 compliance (#273)
