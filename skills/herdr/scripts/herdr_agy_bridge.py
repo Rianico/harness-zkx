@@ -390,6 +390,7 @@ def status_bridge(hooks_path: Path, *, as_json: bool) -> int:
             problems.append(f"managed {PRE_TOOL_EVENT} permission hook not present")
     if not script_path.exists():
         problems.append(f"bridge script missing: {script_path}")
+    # ast-grep-ignore: unchecked-throwing-call-python
     elif not os.access(script_path, os.X_OK):
         problems.append(f"bridge script not executable: {script_path}")
     installed = not problems
