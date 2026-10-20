@@ -391,6 +391,17 @@ uv run "$SKILL_DIR/scripts/herdr_worktree.py" list --json
 
 `status` reports branch state and namespace conformance. `retire` cleans merged trees safely. `doctor` audits stale entries. Never run force-switch or stash commands inside lane trees.
 
+### `herdr-lane` — build the lane topology
+
+The lane topology is normative: the orchestrator runs alone in its own tab, and the Task Manager and the Implementer share a crew tab split `horizontal` (left|right). The crew tab's label carries the lane revision (`<prefix>-r<N>`); the orchestrator tab keeps the bare prefix, so it survives every respawn. Bring-up only — teardown stays `herdr pane close`, because the daemon has no agent-stop primitive.
+
+```bash
+uv run "$SKILL_DIR/scripts/herdr_lane.py" up --prefix w11-t7 --cwd-tm ../repo.w11-t7.tm --cwd-impl ../repo.w11-t7.impl --dry-run
+uv run "$SKILL_DIR/scripts/herdr_lane.py" up --prefix w11-t7 --cwd-tm ../repo.w11-t7.tm --cwd-impl ../repo.w11-t7.impl
+```
+
+`up` creates both tabs, the horizontal split, and the three agents, reading every id back from the daemon. Respawn sequence and revision rules: [lane-coordination.md](references/lane-coordination.md#lane-topology--revisions).
+
 ### `herdr-dispatch` — manager-side task dispatch
 
 Dispatches tickets with caller context and reply contracts, acquires task leases, and verifies delivery:
