@@ -350,7 +350,21 @@ def current_pane_id(herdr: str, env: Mapping[str, str]) -> str:
 def fetch_inventory(
     herdr: str, env: Mapping[str, str]
 ) -> tuple[list[Mapping[str, object]], list[Mapping[str, object]]]:
-    """Read the pane and agent inventories once, so every identity comes from one snapshot."""
+    """Read the pane and agent inventories once, so every identity comes from one snapshot.
+
+    Authority, when the two sources disagree (#266 T2a, TM decision):
+
+    - The daemon snapshot (`pane list` / `agent list`) is authoritative for **live identity
+      and liveness** — which panes and agents exist right now, their names, kinds, and
+      revision counters.
+    - `.lane/tasks.yaml` is authoritative for **leases, task state, and worktree bindings** —
+      the durable facts a lane records about who owns what.
+
+    The merge annotates the store's durable facts with the daemon's liveness; it never
+    silently overrides one source with the other. A store entry whose pane the daemon does
+    not list is stale, not deleted; a daemon agent with no store entry is unclaimed, not
+    unowned.
+    """
     panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
     agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
     return panes, agents
