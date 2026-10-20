@@ -58,14 +58,15 @@ A single "no" means revise before filing.
 
 1. Does the title name the concrete proposal or problem, not just a topic area?
 2. Does the problem appear, with evidence, before any mechanism?
-3. Is every factual claim marked observed (count, log, link) or conjectured?
-4. Are distinct failure modes separated, with the cheapest-to-test one scoped first?
-5. Does the proposal assume only project internals that demonstrably exist?
-6. Are non-goals stated explicitly?
-7. Is the ask stated in both the TL;DR and the closing, naming the requested decision?
-8. Is proposer-led follow-up absent, unless the user clearly intended to volunteer it?
-9. Can a maintainer grasp problem, scope, and ask in ~60 seconds?
-10. Does the prose pass [plain-language.md](../../references/plain-language.md)?
+3. Does the proposal use a diagram (Mermaid/ASCII/diff) where prose explanations exceed ~4 sentences?
+4. Is every factual claim marked observed (count, log, link) or conjectured?
+5. Are distinct failure modes separated, with the cheapest-to-test one scoped first?
+6. Does the proposal assume only project internals that demonstrably exist?
+7. Are non-goals stated explicitly?
+8. Is the ask stated in both the TL;DR and the closing, naming the requested decision?
+9. Is proposer-led follow-up absent, unless the user clearly intended to volunteer it?
+10. Can a maintainer grasp problem, scope, and ask in ~60 seconds?
+11. Does the prose pass [plain-language.md](../../references/plain-language.md)?
 
 ## Anti-patterns
 

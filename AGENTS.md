@@ -31,6 +31,9 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
 - **Skills**: Authored in `skills/<name>/SKILL.md`. Exposed via symlinks under `~/.agents/skills/<name>`.
   - Authoring & Verification: `skills/ai-engineering-expert/SKILL.md`.
   - Session Retros & Audit: `skills/harness-audit/SKILL.md`.
+- **Rules**: Authored under `rules/`:
+  - `rules/common/*` inject directly into the system prompt.
+  - Other `rules/*` load conditionally via `paths` frontmatter pattern matching.
 - **Domain & Architecture**:
   - Domain context & ubiquitous language: `GLOSSARY.md` (see `docs/agents/domain.md`). Env snapshot: `docs/agents/env.yaml`.
   - Architecture decisions: `docs/adr/` managed via `skills/adr/SKILL.md`.
