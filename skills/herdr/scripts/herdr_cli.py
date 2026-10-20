@@ -424,6 +424,133 @@ def fetch_inventory(
     return panes, agents
 
 
+LIVENESS_LIVE = "live"
+LIVENESS_STALE = "stale"
+UNCLAIMED_OWNERSHIP = "unclaimed"
+STORE_RELATIVE_PATH = Path(".lane") / "tasks.yaml"
+STORE_SECTIONS = (("lease", "active_leases"), ("task", "tasks"))
+
+
+@dataclass(frozen=True)
+class Inventory:
+    """One daemon snapshot, with the store's durable facts annotated by daemon liveness.
+
+    The rule this encodes (#266 T2c, operator decision): the daemon owns live identity and
+    liveness; `.lane/tasks.yaml` owns leases, task state, and worktree bindings. The merge
+    only annotates, so a store record the daemon does not list is `stale` — reported, never
+    deleted — and a daemon agent no store record claims is `unclaimed` — never given an
+    owner, ticket, or task it did not have.
+
+    `panes` and `agents` carry every daemon field plus `liveness`; `raw_panes`/`raw_agents`
+    are the untouched payloads for callers that still parse text. `bindings` are the store
+    records that name a pane, with `kind`, `key`, `liveness`, and the daemon `evidence`
+    beside their original fields.
+    """
+
+    raw_panes: str
+    raw_agents: str
+    panes: Sequence[Mapping[str, object]]
+    agents: Sequence[Mapping[str, object]]
+    bindings: Sequence[Mapping[str, object]]
+    unclaimed: Sequence[Mapping[str, object]]
+
+
+def read_store_facts(env: Mapping[str, str]) -> Mapping[str, Any]:
+    """Read the durable `.lane/tasks.yaml` mapping; an absent or unreadable store is `{}`.
+
+    Read-only by design: the annotation must never rewrite the store, and a lane-less
+    invocation (no `HERDR_LANE_DIR`, no git anchor) still gets a usable inventory.
+    """
+    try:
+        base = resolve_lane_base_dir(env)
+    except LaneAnchorError:
+        return {}
+    try:
+        raw = (base / STORE_RELATIVE_PATH).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    if not raw.strip():
+        return {}
+    yaml = yaml_module()
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, Mapping) else {}
+
+
+def merged_panes(herdr: str, env: Mapping[str, str]) -> list[Mapping[str, object]]:
+    """The pane inventory with `liveness: live` added to every record."""
+    raw = run_herdr_checked([herdr, "pane", "list"], env)
+    return [{**pane, "liveness": LIVENESS_LIVE} for pane in entries(raw, "result", "panes")]
+
+
+def merged_agents(herdr: str, env: Mapping[str, str]) -> list[Mapping[str, object]]:
+    """The agent inventory with `liveness: live` added to every record."""
+    raw = run_herdr_checked([herdr, "agent", "list"], env)
+    return [{**agent, "liveness": LIVENESS_LIVE} for agent in entries(raw, "result", "agents")]
+
+
+def merged_inventory(herdr: str, env: Mapping[str, str]) -> Inventory:
+    """Read one daemon snapshot and annotate the store's facts with daemon liveness."""
+    raw_panes = run_herdr_checked([herdr, "pane", "list"], env)
+    raw_agents = run_herdr_checked([herdr, "agent", "list"], env)
+    panes = [{**pane, "liveness": LIVENESS_LIVE} for pane in entries(raw_panes, "result", "panes")]
+    agents = [
+        {**agent, "liveness": LIVENESS_LIVE} for agent in entries(raw_agents, "result", "agents")
+    ]
+    listed_panes = {str(pane["pane_id"]) for pane in panes if pane.get("pane_id")}
+    listed_agents = {str(agent["pane_id"]) for agent in agents if agent.get("pane_id")}
+
+    facts = read_store_facts(env)
+    bindings: list[Mapping[str, object]] = []
+    claimed: set[str] = set()
+    for kind, section in STORE_SECTIONS:
+        records = facts.get(section)
+        if not isinstance(records, Mapping):
+            continue
+        for key, record in records.items():
+            if not isinstance(record, Mapping):
+                continue
+            raw_pane_id = record.get("pane_id")
+            pane_id = str(raw_pane_id) if raw_pane_id is not None else None
+            evidence = {
+                "pane_listed": pane_id in listed_panes,
+                "agent_listed": pane_id in listed_agents,
+            }
+            live = evidence["pane_listed"] or evidence["agent_listed"]
+            bindings.append(
+                {
+                    **record,
+                    "kind": kind,
+                    "key": str(key),
+                    "liveness": LIVENESS_LIVE if live else LIVENESS_STALE,
+                    "evidence": evidence,
+                }
+            )
+            if pane_id is not None:
+                claimed.add(pane_id)
+
+    unclaimed = [
+        {
+            "pane_id": agent["pane_id"],
+            "name": agent.get("name"),
+            "liveness": LIVENESS_LIVE,
+            "ownership": UNCLAIMED_OWNERSHIP,
+        }
+        for agent in agents
+        if agent.get("pane_id") and str(agent["pane_id"]) not in claimed
+    ]
+    return Inventory(
+        raw_panes=raw_panes,
+        raw_agents=raw_agents,
+        panes=panes,
+        agents=agents,
+        bindings=bindings,
+        unclaimed=unclaimed,
+    )
+
+
 def error_code(stderr: str) -> str | None:
     """Read the error code from herdr's stderr envelope, if it carries one."""
     try:

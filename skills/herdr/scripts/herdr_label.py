@@ -63,6 +63,8 @@ from herdr_cli import (
     entrypoint,
     fetch_inventory,
     find_herdr,
+    merged_agents,
+    merged_panes,
     require_herdr_env,
     run_herdr_checked,
     scoped_agent_name,
@@ -658,7 +660,7 @@ def check_pairs(options: Options, env: Mapping[str, str]) -> int:
 
 def pane_tab_id(herdr: str, pane_id: str, env: Mapping[str, str]) -> str:
     """The tab id hosting `pane_id`, read from the pane inventory."""
-    panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    panes = merged_panes(herdr, env)
     for entry in panes:
         if entry_optional_text(entry, "pane_id") != pane_id:
             continue
@@ -729,7 +731,7 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
         validate_agent_name(name)
 
     pane_id = options.pane or current_pane_id(herdr, env)
-    agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    agents = merged_agents(herdr, env)
     hosts_agent = any(entry_optional_text(entry, "pane_id") == pane_id for entry in agents)
     rename_agent = hosts_agent and not options.label_only
 

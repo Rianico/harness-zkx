@@ -5,13 +5,14 @@ import json
 import os
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import herdr_cli
 import herdr_prompt
 import herdr_reply
 import pytest
+import yaml
 
 
 def test_error_code_reads_envelope() -> None:
@@ -358,3 +359,109 @@ def test_atomic_write_bytes_cleans_up_when_the_replace_fails(
     with pytest.raises(OSError, match="disk full"):
         herdr_cli.atomic_write_bytes(path, b"x: 1\n")
     assert list(tmp_path.iterdir()) == []
+
+
+# ── merged inventory: snapshot + store, annotated (#266 T2c P6) ────────────────────
+
+
+def inventory_env(tmp_path: Path, store: dict[str, object] | None) -> dict[str, str]:
+    """A lane anchor with an optional `.lane/tasks.yaml` store."""
+    if store is not None:
+        lane = tmp_path / ".lane"
+        lane.mkdir(parents=True, exist_ok=True)
+        _ = (lane / "tasks.yaml").write_text(yaml.safe_dump(store), encoding="utf-8")
+    return {**os.environ, herdr_cli.LANE_DIR_ENV: str(tmp_path)}
+
+
+def stub_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    panes: Sequence[Mapping[str, object]],
+    agents: Sequence[Mapping[str, object]],
+) -> None:
+    """Answer the two inventory reads; any other herdr call is a bug in this test."""
+
+    def fake(argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        if argv[1:3] == ["pane", "list"]:
+            return json.dumps({"result": {"panes": panes}})
+        if argv[1:3] == ["agent", "list"]:
+            return json.dumps({"result": {"agents": agents}})
+        raise AssertionError(f"unexpected herdr call: {argv}")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", fake)
+
+
+def test_merged_inventory_marks_an_absent_store_pane_stale_and_keeps_the_fact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lease = {
+        "target": "ghost",
+        "ticket": "#265",
+        "pane_id": "w9:p9",
+        "acquired_at": "2026-10-20T00:00:00Z",
+    }
+    env = inventory_env(tmp_path, {"active_leases": {"ghost": lease}})
+    stub_snapshot(monkeypatch, [{"pane_id": "w9:p1"}], [])
+
+    inventory = herdr_cli.merged_inventory("/bin/herdr", env)
+
+    assert len(inventory.bindings) == 1
+    binding = inventory.bindings[0]
+    assert binding["liveness"] == "stale"
+    assert binding["kind"] == "lease"
+    assert binding["key"] == "ghost"
+    assert binding["target"] == "ghost"
+    assert binding["ticket"] == "#265"
+    assert binding["evidence"] == {"pane_listed": False, "agent_listed": False}
+    # stale is reported, never deleted
+    stored = yaml.safe_load((tmp_path / ".lane" / "tasks.yaml").read_text(encoding="utf-8"))
+    assert stored["active_leases"]["ghost"] == lease
+
+
+def test_merged_inventory_marks_a_store_pane_the_daemon_lists_live(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = inventory_env(
+        tmp_path,
+        {"active_leases": {"impl": {"target": "impl", "pane_id": "w9:p1", "ticket": "#1"}}},
+    )
+    stub_snapshot(monkeypatch, [{"pane_id": "w9:p1"}], [{"pane_id": "w9:p1", "name": "impl"}])
+
+    binding = herdr_cli.merged_inventory("/bin/herdr", env).bindings[0]
+
+    assert binding["liveness"] == "live"
+    assert binding["evidence"] == {"pane_listed": True, "agent_listed": True}
+
+
+def test_merged_inventory_reports_an_unclaimed_agent_without_inventing_ownership(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = inventory_env(tmp_path, None)
+    stub_snapshot(monkeypatch, [{"pane_id": "w9:p2"}], [{"pane_id": "w9:p2", "name": "reviewer"}])
+
+    inventory = herdr_cli.merged_inventory("/bin/herdr", env)
+
+    assert inventory.bindings == []
+    assert inventory.unclaimed == [
+        {
+            "pane_id": "w9:p2",
+            "name": "reviewer",
+            "liveness": "live",
+            "ownership": "unclaimed",
+        }
+    ]
+
+
+def test_merged_inventory_keeps_every_daemon_field_and_annotates_additively(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = inventory_env(tmp_path, None)
+    pane = {"pane_id": "w9:p1", "tab_id": "w9:t1", "label": "impl"}
+    agent = {"pane_id": "w9:p1", "name": "impl", "status": "idle", "revision": 3}
+    stub_snapshot(monkeypatch, [pane], [agent])
+
+    inventory = herdr_cli.merged_inventory("/bin/herdr", env)
+
+    assert inventory.panes[0] == {**pane, "liveness": "live"}
+    assert inventory.agents[0] == {**agent, "liveness": "live"}
+    assert inventory.raw_panes == json.dumps({"result": {"panes": [pane]}})
+    assert inventory.raw_agents == json.dumps({"result": {"agents": [agent]}})

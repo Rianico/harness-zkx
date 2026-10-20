@@ -49,6 +49,7 @@ from herdr_cli import (
     entry_text,
     entrypoint,
     find_herdr,
+    merged_inventory,
     require_herdr_env,
     run_herdr_checked,
 )
@@ -672,8 +673,9 @@ def run(options: Options, env: Mapping[str, str]) -> int:
     # re-derives the same anchor on its own so it stays usable in isolation.
     _ = _scope_anchor(scope, env)
     herdr = find_herdr(env)
-    panes_raw = run_herdr_checked([herdr, "pane", "list"], env)
-    agents_raw = run_herdr_checked([herdr, "agent", "list"], env)
+    inventory = merged_inventory(herdr, env)
+    panes_raw = inventory.raw_panes
+    agents_raw = inventory.raw_agents
     workspaces_raw = run_herdr_checked([herdr, "workspace", "list"], env)
     tabs_raw = run_herdr_checked([herdr, "tab", "list"], env)
 
