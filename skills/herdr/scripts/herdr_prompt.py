@@ -110,72 +110,37 @@ from herdr_cli import (
 # `herdr_prompt.<name>` for every existing consumer. Identity producers above import
 # `CallerContext`, and `prompt_agents` calls `wrap_with_envelope`; the rest are explicit
 # re-exports (the `name as name` form marks them as public API for the type checker).
-from herdr_envelope import (  # noqa: F401
+# The envelope domain moved to `herdr_envelope`; these names stay reachable as
+# `herdr_prompt.<name>` for every existing consumer (`name as name` marks them public API).
+# fmt: off - keep the one-block grouping the structural test pins
+# isort: off
+from herdr_envelope import (
     PAGING_DELIMITER as PAGING_DELIMITER,
-)
-from herdr_envelope import (
     REPLY_HELPER as REPLY_HELPER,
-)
-from herdr_envelope import (
     SKILL_NOTICE as SKILL_NOTICE,
-)
-from herdr_envelope import (
     STATE_COMPLETED as STATE_COMPLETED,
-)
-from herdr_envelope import (
     STATE_FAILED as STATE_FAILED,
-)
-from herdr_envelope import (
     STATE_INPUT_REQUIRED as STATE_INPUT_REQUIRED,
-)
-from herdr_envelope import (
     STATE_WORKING as STATE_WORKING,
-)
-from herdr_envelope import (
     CallerContext as CallerContext,
-)
-from herdr_envelope import (
     Envelope as Envelope,
-)
-from herdr_envelope import (
     _scalar as _scalar,  # pyright: ignore[reportPrivateUsage]
-)
-from herdr_envelope import (
     _single_line as _single_line,  # pyright: ignore[reportPrivateUsage]
-)
-from herdr_envelope import (
     caller_anchor as caller_anchor,
-)
-from herdr_envelope import (
     format_delivery_summary as format_delivery_summary,
-)
-from herdr_envelope import (
     parse_envelope as parse_envelope,
-)
-from herdr_envelope import (
     render_envelope as render_envelope,
-)
-from herdr_envelope import (
     render_prelude as render_prelude,
-)
-from herdr_envelope import (
     render_reply_contract as render_reply_contract,
-)
-from herdr_envelope import (
     reply_state as reply_state,
-)
-from herdr_envelope import (
     sender_ref as sender_ref,
-)
-from herdr_envelope import (
     split_envelope_and_body as split_envelope_and_body,
-)
-from herdr_envelope import (
     utc_stamp as utc_stamp,
-)
-from herdr_envelope import (
     wrap_with_envelope as wrap_with_envelope,
 )
+
+# isort: on
+# fmt: on
 from herdr_transcript import build_agent_read_argv
 
 BLOCKED = "blocked"

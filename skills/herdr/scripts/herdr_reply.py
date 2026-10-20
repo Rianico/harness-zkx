@@ -147,73 +147,48 @@ from herdr_envelope import (
 )
 
 # Re-exported: the evidence extraction must not move an attribute a test or caller pins.
+# Re-exported: the evidence extraction must not move an attribute a test or caller pins.
+# fmt: off - keep the one-block grouping the structural test pins
+# isort: off
 from herdr_evidence import (
     ARTIFACT_LIMIT as ARTIFACT_LIMIT,
-)
-from herdr_evidence import (
     CANONICAL_EVIDENCE_HEADS as CANONICAL_EVIDENCE_HEADS,
-)
-from herdr_evidence import (
     EVIDENCE_KEYWORDS as EVIDENCE_KEYWORDS,
-)
-from herdr_evidence import (
     EVIDENCE_LABEL_LIMIT as EVIDENCE_LABEL_LIMIT,
-)
-from herdr_evidence import (
     EVIDENCE_LABEL_WORDS as EVIDENCE_LABEL_WORDS,
-)
-from herdr_evidence import (
     EVIDENCE_STEMS as EVIDENCE_STEMS,
-)
-from herdr_evidence import (
     FENCE_MARKER as FENCE_MARKER,
-)
-from herdr_evidence import (
     NOT_EVIDENCE_HEADS as NOT_EVIDENCE_HEADS,
-)
-from herdr_evidence import (
     STATUS_MAP as STATUS_MAP,
-)
-from herdr_evidence import (
-    evidence_label,
-    extract_artifacts,
-    parse_status_line,
-    payload_shape,
-)
-from herdr_evidence import (
+    evidence_label as evidence_label,
+    extract_artifacts as extract_artifacts,
+    parse_status_line as parse_status_line,
+    payload_shape as payload_shape,
     evidence_section as evidence_section,
 )
+# isort: on
+# fmt: on
 
 # Re-exported: the SHA-guard extraction must not move an attribute a test pins.
+# The git guard owns SHA resolution and citation validation; these stay reachable here.
+# fmt: off - keep the one-block grouping the structural test pins
+# isort: off
 from herdr_git_guard import (
-    ALLOW_UNRESOLVABLE_SHA,
-    lane_git_dir,
-    require_resolvable_shas,
-)
-from herdr_git_guard import (
+    ALLOW_UNRESOLVABLE_SHA as ALLOW_UNRESOLVABLE_SHA,
+    lane_git_dir as lane_git_dir,
+    require_resolvable_shas as require_resolvable_shas,
     GIT_LOCATION_REDIRECT_VARS as GIT_LOCATION_REDIRECT_VARS,
-)
-from herdr_git_guard import (
     GIT_VERDICT_NEUTRAL_LOCATION_VARS as GIT_VERDICT_NEUTRAL_LOCATION_VARS,
-)
-from herdr_git_guard import (
     SHA_SHAPED_BACKTICKED_RE as SHA_SHAPED_BACKTICKED_RE,
-)
-from herdr_git_guard import (
     backticked_sha_tokens as backticked_sha_tokens,
-)
-from herdr_git_guard import (
     git_can_resolve_commits as git_can_resolve_commits,
-)
-from herdr_git_guard import (
     git_location_redirect as git_location_redirect,
-)
-from herdr_git_guard import (
     names_a_commit as names_a_commit,
-)
-from herdr_git_guard import (
     unresolvable_sha_tokens as unresolvable_sha_tokens,
 )
+
+# isort: on
+# fmt: on
 from herdr_label import reconcile_lane
 from herdr_lease import (
     REPLIES_DIR_LANE,
