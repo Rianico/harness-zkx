@@ -1130,3 +1130,49 @@ def test_doctor_prune_removes_only_admin_entries(
     assert ["git", "worktree", "prune"] in argvs
     assert not any("remove" in argv for argv in argvs)
     assert not any("--force" in argv for argv in argvs)
+
+
+# ── the runner seam is shared with herdr_cli (#266 T2a P3) ─────────────────────────
+
+
+def test_run_delegates_to_the_shared_subprocess_seam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: Calls = []
+
+    def fake(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        seen.append((list(argv), dict(env)))
+        return completed(list(argv), stdout="ok\n")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr", fake)
+
+    assert hw.run(["git", "status"], {"A": "1"}).stdout == "ok\n"
+    assert seen == [(["git", "status"], {"A": "1"})]
+
+
+def test_run_wraps_shared_failures_as_worktree_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        raise herdr_cli.HerdrError("cannot run git: missing")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr", fake)
+
+    with pytest.raises(hw.WorktreeError, match="cannot run git: missing"):
+        _ = hw.run(["git", "status"], {})
+
+
+def test_run_checked_reports_the_shared_failure_detail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        return completed(list(argv), returncode=1, stderr="fatal: boom\n")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr", fake)
+
+    with pytest.raises(hw.WorktreeError, match="failed: fatal: boom"):
+        _ = hw.run_checked(["git", "status"], {})
+
+
+def test_failure_detail_is_the_shared_helper() -> None:
+    assert hw.failure_detail is herdr_cli.failure_detail

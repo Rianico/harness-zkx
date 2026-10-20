@@ -53,28 +53,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from herdr_cli import (
-    BRANCH_UNSAFE_RE as BRANCH_UNSAFE_RE,
-)
+import herdr_cli
+from herdr_cli import BRANCH_UNSAFE_RE as BRANCH_UNSAFE_RE
 from herdr_cli import (
     EXIT_OK,
     HerdrError,
     UsageError,
     add_shared_argument,
     entrypoint,
+    failure_detail,
+    resolve_lane_base_dir,
+    sanitize_branch,
 )
-from herdr_cli import (
-    LANE_DIR_ENV as LANE_DIR_ENV,
-)
-from herdr_cli import (
-    LaneAnchorError as LaneAnchorError,
-)
-from herdr_cli import (
-    resolve_lane_base_dir as resolve_lane_base_dir,
-)
-from herdr_cli import (
-    sanitize_branch as sanitize_branch,
-)
+from herdr_cli import LANE_DIR_ENV as LANE_DIR_ENV
+from herdr_cli import LaneAnchorError as LaneAnchorError
 
 ENGINE_WORKTRUNK = "worktrunk"
 ENGINE_GIT = "git"
@@ -136,18 +128,15 @@ class Options:
 
 
 def run(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
-    """Run argv without a shell, capturing text; missing binaries raise WorktreeError."""
+    """Run argv without a shell; a failure raises this module's own error type.
+
+    Delegates to the shared subprocess seam so one place spawns a process, and translates
+    its `HerdrError` so worktree callers (and their tests) keep seeing `WorktreeError`.
+    """
     try:
-        return subprocess.run(
-            list(argv), capture_output=True, text=True, check=False, env=dict(env)
-        )
-    except OSError as exc:
-        raise WorktreeError(f"cannot run {argv[0]}: {exc}") from exc
-
-
-def failure_detail(done: subprocess.CompletedProcess[str]) -> str:
-    """One-line diagnostic from a failed process, preferring stderr."""
-    return (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
+        return herdr_cli.run_herdr(argv, env)
+    except HerdrError as exc:
+        raise WorktreeError(str(exc)) from exc
 
 
 def run_checked(argv: Sequence[str], env: Mapping[str, str]) -> str:

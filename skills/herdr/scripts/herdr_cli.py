@@ -272,12 +272,16 @@ def run_herdr(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.Complet
         raise HerdrError(f"cannot run {argv[0]}: {exc}") from exc
 
 
+def failure_detail(done: subprocess.CompletedProcess[str]) -> str:
+    """One-line diagnostic from a failed process, preferring stderr over stdout."""
+    return (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
+
+
 def run_herdr_checked(argv: Sequence[str], env: Mapping[str, str]) -> str:
     """Run herdr, raising with its own error output when it fails; return stdout."""
     done = run_herdr(argv, env)
     if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
-        raise HerdrError(f"{shlex.join(argv)} failed: {detail}")
+        raise HerdrError(f"{shlex.join(argv)} failed: {failure_detail(done)}")
     return done.stdout
 
 
