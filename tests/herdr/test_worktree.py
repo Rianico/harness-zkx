@@ -12,6 +12,7 @@ import stat
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import herdr_cli
 import herdr_worktree as hw
@@ -1176,3 +1177,30 @@ def test_run_checked_reports_the_shared_failure_detail(
 
 def test_failure_detail_is_the_shared_helper() -> None:
     assert hw.failure_detail is herdr_cli.failure_detail
+
+
+def test_write_tasks_uses_the_shared_atomic_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[Path, dict[str, Any]]] = []
+
+    def fake(path: Path, data: Mapping[str, Any], **_kwargs: object) -> None:
+        calls.append((path, dict(data)))
+
+    monkeypatch.setattr(herdr_cli, "atomic_write_yaml", fake)
+
+    hw.write_tasks(tmp_path / "tasks.yaml", {"b": 1, "a": 2})
+
+    assert calls == [(tmp_path / "tasks.yaml", {"b": 1, "a": 2})]
+
+
+def test_write_tasks_reports_the_shared_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def explode(_path: Path, _data: Mapping[str, Any], **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(herdr_cli, "atomic_write_yaml", explode)
+
+    with pytest.raises(hw.WorktreeError, match="cannot write .*disk full"):
+        hw.write_tasks(tmp_path / "tasks.yaml", {})

@@ -63,6 +63,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+import herdr_cli
 import yaml
 from herdr_cli import (
     LaneAnchorError,
@@ -398,20 +399,8 @@ def state_is_readable(
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.tmp-")
-    try:
-        with open(fd, "wb") as f:
-            _ = f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, path)
-    except BaseException:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    """Write `content` through the shared primitive (see `herdr_cli.atomic_write_bytes`)."""
+    herdr_cli.atomic_write_bytes(path, content)
 
 
 def _write_state(
@@ -420,10 +409,9 @@ def _write_state(
     env: Mapping[str, str] | None = None,
 ) -> None:
     """Persist `state` to the canonical tasks file, atomically."""
-    payload = yaml.safe_dump(
-        state, sort_keys=False, allow_unicode=True, default_flow_style=False
-    ).encode("utf-8")
-    _atomic_write(resolve_tasks_file(base_dir, env=env), payload)
+    herdr_cli.atomic_write_yaml(
+        resolve_tasks_file(base_dir, env=env), state, default_flow_style=False
+    )
 
 
 def get_lease(

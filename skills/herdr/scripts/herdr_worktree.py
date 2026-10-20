@@ -46,7 +46,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -573,10 +572,9 @@ def run_safe(argv: Sequence[str], env: Mapping[str, str]) -> str:
 def yaml_module() -> Any:
     """Import pyyaml on demand; sibling scripts import this module without the dependency."""
     try:
-        import yaml  # noqa: PLC0415
-    except ModuleNotFoundError as exc:
+        return herdr_cli.yaml_module()
+    except HerdrError as exc:
         raise WorktreeError("claim/retire need pyyaml; run this script with `uv run`") from exc
-    return yaml
 
 
 def now_iso() -> str:
@@ -613,17 +611,9 @@ def load_tasks(path: Path) -> dict[str, Any]:
 
 def write_tasks(path: Path, data: Mapping[str, Any]) -> None:
     """Atomically rewrite the shared store so other lanes never see half a file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = yaml_module().safe_dump(dict(data), sort_keys=False, allow_unicode=True)
-    fd, temp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".tasks.", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            _ = handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_name, path)
+        herdr_cli.atomic_write_yaml(path, data)
     except OSError as exc:
-        Path(temp_name).unlink(missing_ok=True)
         raise WorktreeError(f"cannot write {path}: {exc}") from exc
 
 

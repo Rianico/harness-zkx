@@ -323,3 +323,38 @@ def test_worktree_module_reexports_the_anchor_primitive() -> None:
     assert herdr_worktree.LaneAnchorError is herdr_cli.LaneAnchorError
     assert herdr_worktree.LANE_DIR_ENV == herdr_cli.LANE_DIR_ENV
     assert herdr_worktree.sanitize_branch is herdr_cli.sanitize_branch
+
+
+# ── the shared atomic store primitive (#266 T2b P4) ────────────────────────────────
+
+
+def test_atomic_write_yaml_preserves_declaration_order(tmp_path: Path) -> None:
+    path = tmp_path / "store.yaml"
+
+    herdr_cli.atomic_write_yaml(path, {"b": 1, "a": {"z": 3, "y": 2}}, default_flow_style=False)
+
+    assert path.read_text(encoding="utf-8") == "b: 1\na:\n  z: 3\n  y: 2\n"
+
+
+def test_atomic_write_bytes_leaves_no_temporary_file(tmp_path: Path) -> None:
+    path = tmp_path / "store.yaml"
+
+    herdr_cli.atomic_write_bytes(path, b"x: 1\n")
+
+    assert path.read_text(encoding="utf-8") == "x: 1\n"
+    assert [entry.name for entry in tmp_path.iterdir()] == ["store.yaml"]
+
+
+def test_atomic_write_bytes_cleans_up_when_the_replace_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "store.yaml"
+
+    def explode(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(herdr_cli.os, "replace", explode)
+
+    with pytest.raises(OSError, match="disk full"):
+        herdr_cli.atomic_write_bytes(path, b"x: 1\n")
+    assert list(tmp_path.iterdir()) == []

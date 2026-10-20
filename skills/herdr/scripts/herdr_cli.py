@@ -24,6 +24,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -175,6 +176,59 @@ def sanitize_branch(branch: str) -> str:
     """Reduce a branch name to a filesystem-safe suffix (feat/184 -> feat-184)."""
     sanitized = BRANCH_UNSAFE_RE.sub("-", branch).strip("-.")
     return sanitized or "worktree"
+
+
+def yaml_module() -> Any:
+    """Import pyyaml on demand; helpers that never touch a store stay dependency-free.
+
+    Only `claim`/`retire` (worktrees) and lease writes need the YAML database, and several
+    helpers run under an inline script environment without pyyaml. Importing it at module
+    scope would break importing this adapter from those helpers.
+    """
+    try:
+        import yaml  # noqa: PLC0415 - optional dependency of the store, not of every helper
+    except ModuleNotFoundError as exc:
+        raise HerdrError("store access needs pyyaml; run this script with `uv run`") from exc
+    return yaml
+
+
+def atomic_write_bytes(path: Path, content: bytes) -> None:
+    """Replace `path` with `content` atomically, so a reader never sees half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.tmp-")
+    try:
+        with open(fd, "wb") as handle:
+            _ = handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
+def atomic_write_yaml(
+    path: Path,
+    data: Mapping[str, Any],
+    *,
+    default_flow_style: bool | None = None,
+) -> None:
+    """Serialise `data` in declaration order (`sort_keys=False`) and write it atomically.
+
+    Key order is load-bearing for both stores: `.lane/tasks.yaml` is read by humans and by
+    other agents mid-run, and reordering it on every write makes diffs unreadable. Callers
+    that need block style pass `default_flow_style=False`; the default keeps pyyaml's own.
+    """
+    text = yaml_module().safe_dump(
+        dict(data),
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=default_flow_style,
+    )
+    atomic_write_bytes(path, text.encode("utf-8"))
 
 
 def reply_helper() -> Path:
