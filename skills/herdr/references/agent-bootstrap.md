@@ -53,16 +53,25 @@ Please approve this configuration or provide desired overrides for agent kind, p
 
 Follow this 6-step sequence when provisioning any coding agent in Herdr:
 
-0. **Worktree Pre-provisioning**: For multi-agent lane coordination, allocate one isolated worktree for the lane before any pane starts, so Task Manager and Implementer run inside it from turn zero.
+0. **Worktree Pre-provisioning**: For multi-agent lane coordination, claim one isolated worktree **per role** before any pane starts, so Task Manager, each Implementer, and the Reviewer run inside their own tree from turn zero. Never let a callee create or switch a worktree.
    ```bash
-   WORKTREE_PATH=$(uv run "$SKILL_DIR/scripts/herdr_worktree.py" allocate <branch-name>)
+   WORKTREE_PATH=$(uv run "$SKILL_DIR/scripts/herdr_worktree.py" claim ../<repo>.w11-t7.impl-1 lane/w11-t7/impl-1/<ticket> --base main)
+   uv run "$SKILL_DIR/scripts/herdr_worktree.py" status --worktree "$WORKTREE_PATH" --json
    ```
+
+   | Role | Worktree layout | `--cwd` |
+   |---|---|---|
+   | Task Manager | `<repo>.<task-group>.tm` | its own claimed path |
+   | Implementer | `<repo>.<task-group>.<role>` | its own claimed path |
+   | Reviewer | none required | its own claimed path, or an ephemeral detached read of a pinned SHA |
+
+   `--cwd` must name a registered linked worktree. Bootstrap refuses a missing directory, a path that is not a registered linked worktree, and the main checkout once the repository already has linked worktrees (exit 2), naming the expected worktree and the actual pane cwd. `status` and `doctor` report namespace and layout drift; `retire` only removes clean trees and merged branches. Forbidden in every lane tree: `git switch -C`, `-B`, or `-f`, `git stash`, and `git worktree add --force`.
 1. **User Confirmation**: Confirm role ↔ agent kind ↔ provider ↔ model mapping with user.
-2. **Pane Allocation**: Split pane with `--no-focus`, `--label <role>`, and `--cwd "$WORKTREE_PATH"` (the worktree pre-provisioned in Step 0).
+2. **Pane Allocation**: Split pane with `--no-focus`, `--label <role>`, and `--cwd "$WORKTREE_PATH"` (that role's worktree claimed in Step 0).
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_pane.py" right --label reviewer --cwd "$WORKTREE_PATH" --no-focus
    ```
-3. **Agent Start**: Start through `herdr-bootstrap` — it stamps the ROLE INVARIANT, injects the kind's trust flags from `skills/herdr/references/kinds.yaml`, and cds the pane into `--cwd` before start. Raw `agent start` (native arguments strictly after `--`) is the fallback when bootstrap cannot express the launch.
+3. **Agent Start**: Start through `herdr-bootstrap` — it stamps the ROLE INVARIANT, injects the kind's trust flags from `skills/herdr/references/kinds.yaml`, and cds the pane into `--cwd`, verifies the target is a registered linked worktree, and only then starts. Raw `agent start` (native arguments strictly after `--`) is the fallback when bootstrap cannot express the launch.
    ```bash
    herdr agent start <name> --kind <kind> --pane <pane-id> -- <native-flags>
    ```
@@ -94,7 +103,7 @@ A compacted agent forgets its lane: it stops delegating to subagents and exits w
 | `cline` | `AGENTS.md` append (prefers an existing `.clinerules`) | `.clinerules` \| `AGENTS.md` |
 | `codex`, `copilot`, `qodercli`, `agy`, unknown | `AGENTS.md` append | `AGENTS.md` |
 
-Delivery follows `skills/herdr/references/kinds.yaml`: `inline` kinds (`pi`, `claude`) receive `--append-system-prompt`; `file` kinds and unknown kinds get the universal `AGENTS.md` append. Trust flags ride after `--` as native agent args, configured per kind (verified: `pi` → `--approve`, `claude` → `--dangerously-skip-permissions`); unverified kinds carry none. The same file declares `revision_moves` per kind. `agy` sets it false because its revision never moves, so the unconfirmed-acceptance warning does not send that kind to a revision-based re-check — a wanted state at revision 0 is unsatisfiable and the wait helper exits 2 — and names the agy bridge's status title instead. When `--cwd` names a worktree, bootstrap cds the pane there first (`--cwd-timeout`, default 10s) and refuses to start when the pane does not converge. The file target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
+Delivery follows `skills/herdr/references/kinds.yaml`: `inline` kinds (`pi`, `claude`) receive `--append-system-prompt`; `file` kinds and unknown kinds get the universal `AGENTS.md` append. Trust flags ride after `--` as native agent args, configured per kind (verified: `pi` → `--approve`, `claude` → `--dangerously-skip-permissions`); unverified kinds carry none. The same file declares `revision_moves` per kind. `agy` sets it false because its revision never moves, so the unconfirmed-acceptance warning does not send that kind to a revision-based re-check — a wanted state at revision 0 is unsatisfiable and the wait helper exits 2 — and names the agy bridge's status title instead. When `--cwd` names a worktree, bootstrap cds the pane there first (`--cwd-timeout`, default 10s), refuses to start when the pane does not converge, then refuses (exit 2) a missing directory, a target that is not a registered linked worktree, or the main checkout once the repository has linked worktrees; the diagnostic names the expected worktree and the actual pane cwd. The file target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
 
 ### The spawn settle
 

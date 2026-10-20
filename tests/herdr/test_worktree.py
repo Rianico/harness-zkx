@@ -16,6 +16,7 @@ from pathlib import Path
 import herdr_cli
 import herdr_worktree as hw
 import pytest
+import yaml
 
 Handler = Callable[[list[str], dict[str, str]], subprocess.CompletedProcess[str]]
 Calls = list[tuple[list[str], dict[str, str]]]
@@ -536,3 +537,596 @@ def test_missing_command_is_usage_error() -> None:
     with pytest.raises(SystemExit) as exc:
         _ = hw.main([], {"PATH": ""})
     assert exc.value.code == herdr_cli.EXIT_USAGE
+
+
+BRANCH = "lane/w11-t7/impl/265-agent-worktree-cwd"
+OTHER_BRANCH = "lane/w11-t7/impl/265-agent-worktree-other"
+BASE_SHA = "2222222222222222222222222222222222222222"
+
+
+def lane_env(tmp_path: Path) -> dict[str, str]:
+    """PATH without wt plus an explicit lane anchor for the shared store."""
+    return {**env_without_wt(tmp_path), "HERDR_LANE_DIR": str(tmp_path / "lane")}
+
+
+def tasks_file(tmp_path: Path) -> Path:
+    """The store the lifecycle verbs write under the explicit lane anchor."""
+    return tmp_path / "lane" / ".lane" / "tasks.yaml"
+
+
+def worktree_row(path: Path | str, branch: str | None) -> str:
+    """One `git worktree list --porcelain` record, detached when branch is None."""
+    lines = [f"worktree {path}", "HEAD 0000000000000000000000000000000000000000"]
+    lines.append(f"branch refs/heads/{branch}" if branch else "detached")
+    return "\n".join(lines) + "\n"
+
+
+def porcelain(*rows: str) -> str:
+    """Concatenate porcelain records into one `git worktree list` answer."""
+    return "".join(rows)
+
+
+def seed_worktrees(tmp_path: Path, entries: Mapping[str, object]) -> Path:
+    """Write a store with existing top-level keys plus a worktrees map."""
+    path = tasks_file(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
+        yaml.safe_dump({"active_leases": {"keep": {}}, "worktrees": dict(entries)}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_claim_transitions_clean_worktree_and_persists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(worktree, "lane/w11-t7/impl/old"),
+    )
+    head = {"branch": "lane/w11-t7/impl/old"}
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:2] == ["git", "show-ref"]:
+            return completed(argv, returncode=1)
+        if argv[:3] == ["git", "rev-parse", "--verify"]:
+            return completed(argv, stdout=f"{BASE_SHA}\n")
+        if argv[:3] == ["git", "-C", str(worktree)]:
+            if argv[3] == "status":
+                return completed(argv)
+            if argv[3] == "rev-parse":
+                return completed(argv, stdout=f"{head['branch']}\n")
+            if argv[3] == "switch":
+                head["branch"] = argv[5]
+                return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "origin/main"], env)
+    assert code == herdr_cli.EXIT_OK
+    assert capsys.readouterr().out.strip() == str(worktree)
+    (switch_argv, _switch_env) = next(call for call in calls if "switch" in call[0])
+    assert switch_argv == [
+        "git",
+        "-C",
+        str(worktree),
+        "switch",
+        "--create",
+        BRANCH,
+        BASE_SHA,
+    ]
+    for argv, _env in calls:
+        assert not {"-B", "-f", "--force"} & set(argv)
+        assert "stash" not in argv
+    stored = yaml.safe_load(tasks_file(tmp_path).read_text(encoding="utf-8"))
+    entry = stored["worktrees"][os.path.realpath(str(worktree))]
+    assert entry["branch"] == BRANCH
+    assert entry["path"] == os.path.realpath(str(worktree))
+    assert entry["base_sha"] == BASE_SHA
+    assert entry["role"] == "impl"
+    assert entry["task_group"] == "w11-t7"
+    assert entry["ticket"] == "265-agent-worktree-cwd"
+    assert entry["claimed_at"].endswith("Z")
+
+
+def test_claim_is_idempotent_when_branch_is_already_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(worktree_row(root, "main"), worktree_row(worktree, BRANCH))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "rev-parse", "--verify"]:
+            return completed(argv, stdout=f"{BASE_SHA}\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "origin/main"], env)
+    assert code == herdr_cli.EXIT_OK
+    assert capsys.readouterr().out.strip() == str(worktree)
+    assert not any("switch" in argv for argv, _env in calls)
+    stored = yaml.safe_load(tasks_file(tmp_path).read_text(encoding="utf-8"))
+    assert stored["worktrees"][os.path.realpath(str(worktree))]["branch"] == BRANCH
+
+
+def test_claim_refuses_dirty_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(worktree, "lane/w11-t7/impl/old"),
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "-C", str(worktree)] and argv[3] == "status":
+            return completed(argv, stdout=" M src/app.py\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "origin/main"], env)
+    assert code == herdr_cli.EXIT_USAGE
+    assert "clean tree" in capsys.readouterr().err
+    assert not any("switch" in argv for argv, _env in calls)
+    assert not tasks_file(tmp_path).exists()
+
+
+def test_claim_refuses_branch_outside_namespace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    worktree = tmp_path / "repo.w11-t7.impl"
+    worktree.mkdir()
+    calls = patch_runner(monkeypatch, lambda argv, _env: completed(argv))
+    code = hw.main(["claim", str(worktree), "feat/184", "--base", "main"], env)
+    assert code == herdr_cli.EXIT_USAGE
+    assert "namespace" in capsys.readouterr().err
+    assert calls == []
+
+
+def test_claim_requires_explicit_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    worktree = tmp_path / "repo.w11-t7.impl"
+    worktree.mkdir()
+    calls = patch_runner(monkeypatch, lambda argv, _env: completed(argv))
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "   "], env)
+    assert code == herdr_cli.EXIT_USAGE
+    assert "explicit --base" in capsys.readouterr().err
+    assert calls == []
+
+
+def test_claim_refuses_branch_checked_out_elsewhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    other = root.parent / "repo.w11-t7.other"
+    other.mkdir()
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(worktree, "lane/w11-t7/impl/old"),
+        worktree_row(other, BRANCH),
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "main"], env)
+    assert code == herdr_cli.EXIT_HERDR
+    assert "already checked out" in capsys.readouterr().err
+    assert not any("switch" in argv for argv, _env in calls)
+
+
+def test_claim_refuses_unregistered_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(worktree_row(root, "main"))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "main"], env)
+    assert code == herdr_cli.EXIT_USAGE
+    assert "not a registered git worktree" in capsys.readouterr().err
+    assert not any("switch" in argv for argv, _env in calls)
+
+
+def test_claim_refuses_existing_branch_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(worktree, "lane/w11-t7/impl/old"),
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "-C", str(worktree)] and argv[3] == "status":
+            return completed(argv)
+        if argv[:2] == ["git", "show-ref"]:
+            return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["claim", str(worktree), BRANCH, "--base", "main"], env)
+    assert code == herdr_cli.EXIT_HERDR
+    assert "already exists" in capsys.readouterr().err
+    assert not any("switch" in argv for argv, _env in calls)
+
+
+def test_status_reports_clean_conforming_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        assert argv[:3] == ["git", "-C", str(worktree)]
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout=f"{BRANCH}\n")
+        if argv[3] == "status":
+            return completed(argv)
+        if argv[3] == "rev-parse":
+            return completed(argv, stdout=f"{root / '.git'}\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree), "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["branch"] == BRANCH
+    assert payload["path"] == os.path.realpath(str(worktree))
+    assert payload["clean"] is True
+    assert payload["dirty"] is False
+    assert payload["detached"] is False
+    assert payload["flags"] == []
+
+
+def test_status_flags_dirty_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout=f"{BRANCH}\n")
+        if argv[3] == "status":
+            return completed(argv, stdout="?? scratch.txt\n")
+        if argv[3] == "rev-parse":
+            return completed(argv, stdout=f"{root / '.git'}\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree), "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["clean"] is False
+    assert payload["dirty"] is True
+    assert payload["flags"] == ["dirty"]
+
+
+def test_status_flags_detached_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    worktree = tmp_path / "repo.w11-t7.impl"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout="HEAD\n")
+        if argv[3] == "status":
+            return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree), "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["branch"] is None
+    assert payload["detached"] is True
+    assert payload["flags"] == ["detached"]
+
+
+def test_status_flags_namespace_violation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    worktree = tmp_path / "repo.feat-184"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout="feat/184\n")
+        if argv[3] == "status":
+            return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree), "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    assert json.loads(capsys.readouterr().out)["flags"] == ["namespace"]
+
+
+def test_status_flags_layout_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.feat-184"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout=f"{BRANCH}\n")
+        if argv[3] == "status":
+            return completed(argv)
+        if argv[3] == "rev-parse":
+            return completed(argv, stdout=f"{root / '.git'}\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree), "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    assert json.loads(capsys.readouterr().out)["flags"] == ["layout"]
+
+
+def test_status_plain_output_names_the_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    worktree = tmp_path / "repo.w11-t7.impl"
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout="HEAD\n")
+        if argv[3] == "status":
+            return completed(argv, stdout=" M x\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree)], env)
+    assert code == herdr_cli.EXIT_OK
+    out = capsys.readouterr().out
+    assert hw.DETACHED_MARKER in out
+    assert "dirty" in out
+    assert "detached,dirty" in out
+
+
+def test_retire_removes_clean_worktree_and_merged_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(worktree_row(root, "main"), worktree_row(worktree, BRANCH))
+    store = seed_worktrees(tmp_path, {os.path.realpath(str(worktree)): {"branch": BRANCH}})
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "-C", str(worktree)] and argv[3] == "status":
+            return completed(argv)
+        if argv[:3] == ["git", "worktree", "remove"]:
+            return completed(argv)
+        if argv[:2] == ["git", "branch"]:
+            return completed(argv)
+        if argv[:3] == ["git", "worktree", "prune"]:
+            return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["retire", str(worktree)], env)
+    assert code == herdr_cli.EXIT_OK
+    assert capsys.readouterr().out.strip() == str(worktree)
+    argvs = [argv for argv, _env in calls]
+    assert ["git", "worktree", "remove", str(worktree)] in argvs
+    assert ["git", "branch", "-d", BRANCH] in argvs
+    assert ["git", "worktree", "prune"] in argvs
+    assert not any("-D" in argv for argv in argvs)
+    stored = yaml.safe_load(store.read_text(encoding="utf-8"))
+    assert "worktrees" not in stored
+    assert stored["active_leases"] == {"keep": {}}
+
+
+def test_retire_refuses_dirty_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(worktree_row(root, "main"), worktree_row(worktree, BRANCH))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "-C", str(worktree)] and argv[3] == "status":
+            return completed(argv, stdout=" M src/app.py\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["retire", str(worktree)], env)
+    assert code == herdr_cli.EXIT_USAGE
+    assert "clean tree" in capsys.readouterr().err
+    assert not any("remove" in argv for argv, _env in calls)
+
+
+def test_retire_keeps_unmerged_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    listing = porcelain(worktree_row(root, "main"), worktree_row(worktree, BRANCH))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "-C", str(worktree)] and argv[3] == "status":
+            return completed(argv)
+        if argv[:3] == ["git", "worktree", "remove"]:
+            return completed(argv)
+        if argv[:2] == ["git", "branch"]:
+            return completed(argv, returncode=1, stderr="error: not fully merged\n")
+        if argv[:3] == ["git", "worktree", "prune"]:
+            return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["retire", str(worktree), "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["branch_deleted"] is False
+    assert "kept branch" in captured.err
+    assert not any("-D" in argv for argv, _env in calls)
+
+
+def test_retire_refuses_branch_checked_out_elsewhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.w11-t7.impl"
+    worktree.mkdir(parents=True)
+    other = root.parent / "repo.w11-t7.other"
+    other.mkdir()
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(worktree, BRANCH),
+        worktree_row(other, BRANCH),
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["retire", str(worktree)], env)
+    assert code == herdr_cli.EXIT_HERDR
+    assert "still checked out" in capsys.readouterr().err
+    assert not any("remove" in argv for argv, _env in calls)
+
+
+def test_retire_refuses_primary_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    root.mkdir(parents=True)
+    listing = porcelain(worktree_row(root, "main"))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["retire", str(root)], env)
+    assert code == herdr_cli.EXIT_USAGE
+    assert "primary worktree" in capsys.readouterr().err
+
+
+def test_doctor_reports_unlinked_orphan_and_namespace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    root.mkdir(parents=True)
+    missing = root.parent / "repo.gone"
+    detached = root.parent / "repo.detached"
+    detached.mkdir()
+    stray = root.parent / "repo.feat-x"
+    stray.mkdir()
+    live = root.parent / "repo.w11-t7.impl"
+    live.mkdir()
+    listing = porcelain(
+        worktree_row(root, "main"),
+        worktree_row(missing, BRANCH),
+        worktree_row(detached, None),
+        worktree_row(stray, "feat/x"),
+        worktree_row(live, BRANCH),
+    )
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["doctor", "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    flags = {row["path"]: row["flags"] for row in payload["worktrees"]}
+    assert flags[str(missing)] == ["unlinked"]
+    assert flags[str(detached)] == ["orphan"]
+    assert flags[str(stray)] == ["namespace"]
+    assert flags[str(live)] == []
+    assert payload["issues"] == 3
+    assert payload["pruned"] is False
+    assert not any("prune" in argv for argv, _env in calls)
+
+
+def test_doctor_prune_removes_only_admin_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    root.mkdir(parents=True)
+    missing = root.parent / "repo.gone"
+    listing = porcelain(worktree_row(root, "main"), worktree_row(missing, BRANCH))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        if argv[:3] == ["git", "worktree", "prune"]:
+            return completed(argv)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    calls = patch_runner(monkeypatch, handler)
+    code = hw.main(["doctor", "--prune", "--json"], env)
+    assert code == herdr_cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["pruned"] is True
+    argvs = [argv for argv, _env in calls]
+    assert ["git", "worktree", "prune"] in argvs
+    assert not any("remove" in argv for argv in argvs)
+    assert not any("--force" in argv for argv in argvs)

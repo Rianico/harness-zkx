@@ -55,6 +55,9 @@ Deliberate quirks (implemented minimally, documented here): trust flags come onl
 ``kinds.yaml`` and ride after ``--`` as native agent args — bootstrap never invents flags, and an
 unverified kind carries none; an unknown kind falls back to the universal ``AGENTS.md`` append
 rather than failing, so a new kind is bootstrapped by default. When ``--cwd`` names a worktree,
+bootstrap refuses a missing directory, a path that is not a registered linked worktree, and the
+main checkout once the repository already has linked worktrees; the pane cwd must already agree
+with the requested path before that check runs.
 bootstrap cds the pane there and refuses to start when the pane does not converge.
 Exit status: 0 ok, 1 herdr failure, 2 usage or missing precondition.
 
@@ -96,6 +99,11 @@ from herdr_cli import (
 # The one place a pane rename is spelled, shared with `herdr-label` and the reconciliation pass
 # (#182 t5 2.4); same flat-sibling import as `herdr-pane`.
 from herdr_label import pane_rename_argv
+from herdr_worktree import (
+    expected_worktree_name,
+    parse_git_worktree_entries,
+    worktree_key,
+)
 
 AGENTS_MD = "AGENTS.md"
 CLINE_RULES = ".clinerules"
@@ -756,6 +764,55 @@ def pane_cwd_matches(current: str | None, target: str) -> bool:
     return current is not None and _norm_path(current) == _norm_path(target)
 
 
+def ensure_linked_worktree(
+    target: str,
+    pane_id: str,
+    env: Mapping[str, str],
+    *,
+    role: str | None = None,
+    task_group: str | None = None,
+) -> None:
+    """Refuse a ``--cwd`` that is missing or not a registered linked worktree.
+
+    A directory outside git is left to the existing pane-cwd guarantee: synthetic lanes and
+    non-repository workspaces have no worktree registry to answer against. Inside a repository
+    the target must appear in ``git worktree list --porcelain``; the primary checkout is refused
+    once the repository has linked worktrees, because that means the per-role topology is in use.
+    """
+    path = Path(os.path.abspath(os.path.expanduser(target)))
+    if not path.is_dir():
+        raise UsageError(
+            f"pane {pane_id} cwd {target} is missing; expected a linked worktree directory"
+        )
+    if _git_location_is_redirected(env):
+        return
+    listed = _run_git(["git", "-C", str(path), "worktree", "list", "--porcelain"], env)
+    if listed is None or listed.returncode != 0:
+        return
+    entries = parse_git_worktree_entries(listed.stdout)
+    if not entries:
+        return
+    target_key = worktree_key(str(path))
+    primary = worktree_key(entries[0].path)
+    linked = [entry for entry in entries if worktree_key(entry.path) != primary]
+    if target_key == primary:
+        if not linked:
+            return
+        expected = linked[0].path
+        if task_group and role:
+            name = expected_worktree_name(Path(primary), {"task_group": task_group, "role": role})
+            expected = str(Path(primary).parent / name)
+        raise UsageError(
+            f"pane {pane_id} cwd {target} is the main checkout; expected linked worktree {expected}"
+        )
+    if all(worktree_key(entry.path) != target_key for entry in linked):
+        expected = ", ".join(entry.path for entry in linked) or "a registered linked worktree"
+        raise UsageError(
+            f"pane {pane_id} cwd {target} is not a registered linked worktree; "
+            f"expected one of {expected}"
+        )
+
+
 def ensure_pane_cwd(
     herdr: str, pane_id: str, target: str, env: Mapping[str, str], *, timeout_s: float
 ) -> None:
@@ -933,7 +990,7 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
             # Two independent signs say the file may be tracked: git's own worktree answer, and
             # a `.git` entry at or above the target that a refusing git could not use. Either
             # one refuses, unless the caller overrides; only a git that never ran appends.
-            refusable = confirmed is True or (confirmed is False and marker)
+            refusable = bool(confirmed) or (confirmed is not None and not confirmed and marker)
             if refusable and not options.allow_tracked_invariant:
                 refusal = undetermined_refusal(absolute_target(agents_file))
         elif agents_tracked and would_change and not options.allow_tracked_invariant:
@@ -964,6 +1021,13 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
 
     if options.cwd:
         ensure_pane_cwd(herdr, options.pane, options.cwd, env, timeout_s=options.cwd_timeout)
+        ensure_linked_worktree(
+            options.cwd,
+            options.pane,
+            env,
+            role=options.role,
+            task_group=options.task_group,
+        )
     _ = run_herdr_checked(rename_argv, env)
     if agents_file is not None:
         try:

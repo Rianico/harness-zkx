@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.14"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """herdr-worktree — pre-provision isolated worktrees for Herdr lane coordination.
 
@@ -15,12 +15,25 @@ falls back to `git worktree` when it is not.
     uv run "$SKILL_DIR/scripts/herdr_worktree.py" allocate feat/184-worktree --json
     uv run "$SKILL_DIR/scripts/herdr_worktree.py" resolve feat/184-worktree
     uv run "$SKILL_DIR/scripts/herdr_worktree.py" list --json
+    uv run "$SKILL_DIR/scripts/herdr_worktree.py" claim <worktree> lane/<group>/<role>/<ticket> --base main
+    uv run "$SKILL_DIR/scripts/herdr_worktree.py" status --worktree <path> --json
+    uv run "$SKILL_DIR/scripts/herdr_worktree.py" retire <worktree|branch>
+    uv run "$SKILL_DIR/scripts/herdr_worktree.py" doctor --prune
 
 `allocate` in its plain form prints only the absolute path, so callers substitute it
 directly: `WORKTREE_PATH=$(... allocate <branch>)`. Exit status: `0` ok, `1` the worktree
 engine failed, `2` usage or missing precondition. Unlike its siblings this helper needs no
 `HERDR_ENV=1` session; it only shells out to `wt`/`git`. Local addition to the absorbed
 upstream Herdr skill; not part of `herdrdev/herdr`.
+
+`claim`, `status`, `retire`, and `doctor` extend the helper with agent-scoped lifecycle verbs.
+`claim` records the binding in `<lane-base>/.lane/tasks.yaml` under the top-level `worktrees`
+mapping, keyed by the worktree's real path (the anchor `resolve_lane_base_dir` uses, never
+`PWD`). `claim` never forces a checkout: it requires a clean tree, an explicit `--base`, and a
+branch inside `lane/<task-group>/<role>/<ticket>`, and it refuses `switch -C`, `switch -B`,
+`switch -f`, `git stash`, and `worktree add --force`. `retire` removes only a clean worktree
+and deletes its branch with `git branch -d` (never `-D`); `doctor --prune` only drops admin
+entries for missing directories.
 """
 
 from __future__ import annotations
@@ -33,10 +46,12 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from herdr_cli import EXIT_OK, HerdrError, UsageError, add_shared_argument, guard
 
@@ -51,6 +66,19 @@ DETACHED_MARKER = "(detached HEAD)"
 #   /path/to/wt 0e57943 [feat/184-worktree]
 COMPACT_WORKTREE_RE = re.compile(r"^(?P<path>\S+)\s+[0-9a-f]{7,40}\s+\[(?P<branch>.+)\]$")
 BRANCH_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+BRANCH_NAMESPACE_RE = re.compile(
+    r"^lane/(?P<task_group>[A-Za-z0-9._-]+)/(?P<role>[A-Za-z0-9._-]+)/"
+    r"(?P<ticket>[A-Za-z0-9._-]+)$"
+)
+STORE_RELATIVE_PATH = ".lane/tasks.yaml"
+WORKTREES_KEY = "worktrees"
+FORBIDDEN_TOKENS = frozenset({"-B", "-f", "--force"})
+FLAG_DETACHED = "detached"
+FLAG_DIRTY = "dirty"
+FLAG_UNLINKED = "unlinked"
+FLAG_ORPHAN = "orphan"
+FLAG_NAMESPACE = "namespace"
+FLAG_LAYOUT = "layout"
 
 
 class WorktreeError(HerdrError):
@@ -82,6 +110,9 @@ class Options:
     branch: str | None = None
     base: str | None = None
     json: bool = False
+    worktree: str | None = None
+    target: str | None = None
+    prune: bool = False
 
 
 def run(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
@@ -474,6 +505,431 @@ def emit_list(engine: str, worktrees: Sequence[Worktree], as_json: bool) -> None
         print(f"{worktree.branch}  {worktree.path}")
 
 
+@dataclass(frozen=True)
+class WorktreeEntry:
+    """One `git worktree list --porcelain` entry, detached entries included."""
+
+    path: str
+    branch: str | None
+    detached: bool
+
+
+@dataclass(frozen=True)
+class BindingStatus:
+    """The branch binding and mismatch flags for one worktree."""
+
+    path: str
+    branch: str | None
+    clean: bool
+    detached: bool
+    flags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RetireResult:
+    """What `retire` removed and whether its branch was deleted."""
+
+    path: str
+    branch: str | None
+    branch_deleted: bool
+
+
+def parse_git_worktree_entries(raw: str) -> list[WorktreeEntry]:
+    """Parse `git worktree list --porcelain`, keeping detached entries too."""
+    entries: list[WorktreeEntry] = []
+    path: str | None = None
+    branch: str | None = None
+    detached = False
+
+    def flush() -> None:
+        nonlocal path, branch, detached
+        if path is not None:
+            entries.append(WorktreeEntry(path=path, branch=branch, detached=detached))
+        path, branch, detached = None, None, False
+
+    for line in raw.splitlines():
+        if line.startswith(PORCELAIN_WORKTREE):
+            flush()
+            path = line[len(PORCELAIN_WORKTREE) :].strip()
+        elif line.startswith(PORCELAIN_BRANCH):
+            ref = line[len(PORCELAIN_BRANCH) :].strip()
+            if ref.startswith(HEAD_REF_PREFIX):
+                branch = ref[len(HEAD_REF_PREFIX) :]
+        elif line.strip() == "detached":
+            detached = True
+    flush()
+    return entries
+
+
+def namespace_parts(branch: str) -> dict[str, str] | None:
+    """Return the lane/<task-group>/<role>/<ticket> segments, or None."""
+    match = BRANCH_NAMESPACE_RE.match(branch)
+    return cast(dict[str, str], match.groupdict()) if match else None
+
+
+def expected_worktree_name(repo_root: Path, parts: Mapping[str, str]) -> str:
+    """Return the `<repo>.<task-group>.<role>` directory name for a namespace."""
+    group = sanitize_branch(parts["task_group"])
+    role = sanitize_branch(parts["role"])
+    return f"{repo_root.name}.{group}.{role}"
+
+
+def worktree_key(path: str) -> str:
+    """Normalize a worktree path into the store key used by `.lane/tasks.yaml`."""
+    return os.path.realpath(path)
+
+
+def git_common_dir_for(path: str, env: Mapping[str, str]) -> Path:
+    """Resolve the common git directory as seen from one worktree."""
+    raw = run_checked(
+        ["git", "-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir"], env
+    ).strip()
+    return Path(os.path.realpath(raw))
+
+
+def repo_root_for(path: str, env: Mapping[str, str]) -> Path:
+    """Resolve the repository root as seen from one worktree."""
+    common = git_common_dir_for(path, env)
+    return common.parent if common.name == ".git" else common
+
+
+def guard_operation(argv: Sequence[str]) -> None:
+    """Refuse the forbidden operation surface before anything touches git."""
+    tokens = list(argv)
+    unsafe = [token for token in tokens if token in FORBIDDEN_TOKENS]
+    if "stash" in tokens:
+        unsafe.append("stash")
+    for verb in ("switch", "checkout"):
+        if verb in tokens and "-C" in tokens[tokens.index(verb) + 1 :]:
+            unsafe.append("-C")
+    if unsafe:
+        raise WorktreeError(f"refusing unsafe git operation: {shlex.join(argv)}")
+
+
+def run_safe(argv: Sequence[str], env: Mapping[str, str]) -> str:
+    """Guard then run argv; used for every mutating lifecycle step."""
+    guard_operation(argv)
+    return run_checked(argv, env)
+
+
+# --- `.lane/tasks.yaml` persistence -------------------------------------
+
+
+def yaml_module() -> Any:
+    """Import pyyaml on demand; sibling scripts import this module without the dependency."""
+    try:
+        import yaml  # noqa: PLC0415
+    except ModuleNotFoundError as exc:
+        raise WorktreeError("claim/retire need pyyaml; run this script with `uv run`") from exc
+    return yaml
+
+
+def now_iso() -> str:
+    """UTC timestamp with a trailing Z, matching the lease store style."""
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def resolve_tasks_file(env: Mapping[str, str]) -> Path:
+    """Resolve the shared store from the lane anchor, never from PWD."""
+    return resolve_lane_base_dir(env) / STORE_RELATIVE_PATH
+
+
+def load_tasks(path: Path) -> dict[str, Any]:
+    """Load the shared YAML store, treating a missing file as empty."""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise WorktreeError(f"cannot read {path}: {exc}") from exc
+    if not raw.strip():
+        return {}
+    yaml = yaml_module()
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise WorktreeError(f"{path} is not valid YAML: {exc}") from exc
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise WorktreeError(f"{path} must contain a mapping at the top level")
+    return cast(dict[str, Any], data)
+
+
+def write_tasks(path: Path, data: Mapping[str, Any]) -> None:
+    """Atomically rewrite the shared store so other lanes never see half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml_module().safe_dump(dict(data), sort_keys=False, allow_unicode=True)
+    fd, temp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".tasks.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            _ = handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    except OSError as exc:
+        Path(temp_name).unlink(missing_ok=True)
+        raise WorktreeError(f"cannot write {path}: {exc}") from exc
+
+
+def record_claim(branch: str, path: str, base_sha: str, env: Mapping[str, str]) -> None:
+    """Upsert one binding into the store's top-level `worktrees` mapping."""
+    parts = namespace_parts(branch)
+    if parts is None:
+        raise UsageError(f"branch {branch!r} is outside the agent namespace")
+    tasks_file = resolve_tasks_file(env)
+    data = load_tasks(tasks_file)
+    stored = data.get(WORKTREES_KEY)
+    if stored is None:
+        entries: dict[str, Any] = {}
+    elif isinstance(stored, dict):
+        entries = cast(dict[str, Any], stored)
+    else:
+        raise WorktreeError(f"{tasks_file} has a non-mapping {WORKTREES_KEY} section")
+    key = worktree_key(path)
+    entries[key] = {
+        "branch": branch,
+        "path": key,
+        "base_sha": base_sha,
+        "role": parts["role"],
+        "task_group": parts["task_group"],
+        "ticket": parts["ticket"],
+        "claimed_at": now_iso(),
+    }
+    data[WORKTREES_KEY] = entries
+    write_tasks(tasks_file, data)
+
+
+def forget_claim(path: str, env: Mapping[str, str]) -> None:
+    """Drop one binding, removing the `worktrees` key once it is empty."""
+    tasks_file = resolve_tasks_file(env)
+    data = load_tasks(tasks_file)
+    stored = data.get(WORKTREES_KEY)
+    if not isinstance(stored, dict):
+        return
+    entries = cast(dict[str, Any], stored)
+    entries.pop(worktree_key(path), None)
+    if entries:
+        data[WORKTREES_KEY] = entries
+    else:
+        data.pop(WORKTREES_KEY, None)
+    write_tasks(tasks_file, data)
+
+
+# --- lifecycle verbs ----------------------------------------------------
+
+
+def worktree_entries(env: Mapping[str, str]) -> list[WorktreeEntry]:
+    """List worktrees straight from git (the lifecycle verbs ignore `wt`)."""
+    raw = run_checked(["git", "worktree", "list", "--porcelain"], env)
+    return parse_git_worktree_entries(raw)
+
+
+def find_entry(entries: Sequence[WorktreeEntry], path: str) -> WorktreeEntry | None:
+    """Find the registered entry whose real path matches."""
+    wanted = worktree_key(path)
+    for entry in entries:
+        if worktree_key(entry.path) == wanted:
+            return entry
+    return None
+
+
+def claim(worktree: str, branch: str, base: str, env: Mapping[str, str]) -> Allocation:
+    """Move one clean worktree onto a new agent-scoped branch from an explicit base."""
+    name = require_branch(branch)
+    if namespace_parts(name) is None:
+        raise UsageError(
+            f"branch {name!r} is outside the agent namespace lane/<task-group>/<role>/<ticket>"
+        )
+    if not base.strip():
+        raise UsageError("claim requires an explicit --base <ref>")
+    target = Path(worktree).expanduser()
+    if not target.is_dir():
+        raise UsageError(f"worktree path {worktree!r} is not a directory")
+    entries = worktree_entries(env)
+    entry = find_entry(entries, worktree)
+    if entry is None:
+        raise UsageError(f"{worktree!r} is not a registered git worktree")
+    if entry.branch == name:
+        record_claim(name, entry.path, resolve_base_sha(base, env), env)
+        return Allocation(branch=name, path=entry.path, engine=ENGINE_GIT)
+    for other in entries:
+        if other.branch == name and worktree_key(other.path) != worktree_key(entry.path):
+            raise WorktreeError(f"branch {name!r} is already checked out at {other.path}")
+    if run_checked(["git", "-C", entry.path, "status", "--porcelain"], env).strip():
+        raise UsageError(f"worktree {entry.path} has uncommitted changes; claim needs a clean tree")
+    existing = run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{name}"], env)
+    if existing.returncode == 0:
+        raise WorktreeError(
+            f"branch {name!r} already exists; retire or delete it explicitly before claiming"
+        )
+    base_sha = resolve_base_sha(base, env)
+    _ = run_safe(["git", "-C", entry.path, "switch", "--create", name, base_sha], env)
+    head = run_checked(["git", "-C", entry.path, "rev-parse", "--abbrev-ref", "HEAD"], env)
+    if head.strip() != name:
+        raise WorktreeError(f"switch succeeded but HEAD is {head.strip()!r}, not {name!r}")
+    record_claim(name, entry.path, base_sha, env)
+    return Allocation(branch=name, path=entry.path, engine=ENGINE_GIT)
+
+
+def inspect_status(worktree: str | None, env: Mapping[str, str]) -> BindingStatus:
+    """Inspect one worktree's branch binding and mismatch flags."""
+    target = worktree or "."
+    raw_branch = run_checked(
+        ["git", "-C", target, "rev-parse", "--abbrev-ref", "HEAD"], env
+    ).strip()
+    detached = raw_branch == "HEAD"
+    branch = None if detached else raw_branch
+    clean = not run_checked(["git", "-C", target, "status", "--porcelain"], env).strip()
+    resolved = worktree_key(target)
+    flags: list[str] = []
+    if detached:
+        flags.append(FLAG_DETACHED)
+    if not clean:
+        flags.append(FLAG_DIRTY)
+    parts = namespace_parts(branch) if branch is not None else None
+    if branch is not None and parts is None:
+        flags.append(FLAG_NAMESPACE)
+    if parts is not None:
+        expected = expected_worktree_name(repo_root_for(target, env), parts)
+        if Path(resolved).name != expected:
+            flags.append(FLAG_LAYOUT)
+    return BindingStatus(
+        path=resolved,
+        branch=branch,
+        clean=clean,
+        detached=detached,
+        flags=tuple(flags),
+    )
+
+
+def retire(target: str, env: Mapping[str, str]) -> RetireResult:
+    """Remove a clean worktree, delete its merged branch, and prune admin entries."""
+    entries = worktree_entries(env)
+    wanted = worktree_key(target)
+    entry = next(
+        (item for item in entries if worktree_key(item.path) == wanted or item.branch == target),
+        None,
+    )
+    if entry is None:
+        raise UsageError(f"no registered worktree matches {target!r}")
+    if entries and worktree_key(entries[0].path) == worktree_key(entry.path):
+        raise UsageError("refusing to retire the primary worktree")
+    if entry.branch is not None:
+        for other in entries:
+            if other.branch == entry.branch and worktree_key(other.path) != worktree_key(
+                entry.path
+            ):
+                raise WorktreeError(f"branch {entry.branch!r} is still checked out at {other.path}")
+    if run_checked(["git", "-C", entry.path, "status", "--porcelain"], env).strip():
+        raise UsageError(
+            f"worktree {entry.path} has uncommitted changes; retire needs a clean tree"
+        )
+    _ = run_safe(["git", "worktree", "remove", entry.path], env)
+    deleted = False
+    if entry.branch is not None:
+        done = run(["git", "branch", "-d", entry.branch], env)
+        if done.returncode == 0:
+            deleted = True
+        else:
+            print(
+                f"herdr-worktree: kept branch {entry.branch} (not fully merged): "
+                f"{failure_detail(done)}",
+                file=sys.stderr,
+            )
+    _ = run_safe(["git", "worktree", "prune"], env)
+    forget_claim(entry.path, env)
+    return RetireResult(path=entry.path, branch=entry.branch, branch_deleted=deleted)
+
+
+def doctor(prune: bool, env: Mapping[str, str]) -> tuple[list[dict[str, Any]], bool]:
+    """Audit registered worktrees, optionally pruning only missing admin entries."""
+    entries = worktree_entries(env)
+    primary = entries[0] if entries else None
+    repo_root = Path(worktree_key(primary.path)) if primary is not None else None
+    rows: list[dict[str, Any]] = []
+    for entry in entries:
+        if primary is not None and worktree_key(entry.path) == worktree_key(primary.path):
+            continue
+        present = Path(entry.path).is_dir()
+        flags: list[str] = []
+        if not present:
+            flags.append(FLAG_UNLINKED)
+        if entry.branch is None:
+            flags.append(FLAG_ORPHAN)
+        parts = namespace_parts(entry.branch) if entry.branch is not None else None
+        if entry.branch is not None and parts is None:
+            flags.append(FLAG_NAMESPACE)
+        if present and parts is not None and repo_root is not None:
+            if Path(entry.path).name != expected_worktree_name(repo_root, parts):
+                flags.append(FLAG_LAYOUT)
+        rows.append({"path": entry.path, "branch": entry.branch, "flags": flags})
+    if prune:
+        _ = run_safe(["git", "worktree", "prune"], env)
+    return rows, prune
+
+
+def emit_status(status: BindingStatus, as_json: bool) -> None:
+    """Print one binding as JSON or as a `branch path state flags` row."""
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "branch": status.branch,
+                    "path": status.path,
+                    "clean": status.clean,
+                    "dirty": not status.clean,
+                    "detached": status.detached,
+                    "flags": list(status.flags),
+                }
+            )
+        )
+        return
+    branch = status.branch or DETACHED_MARKER
+    state = "clean" if status.clean else "dirty"
+    flags = ",".join(status.flags) if status.flags else "ok"
+    print(f"{branch}  {status.path}  {state}  {flags}")
+
+
+def emit_retire(result: RetireResult, as_json: bool) -> None:
+    """Print the retired worktree path or a JSON summary."""
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "path": result.path,
+                    "branch": result.branch,
+                    "removed": True,
+                    "branch_deleted": result.branch_deleted,
+                    "pruned": True,
+                }
+            )
+        )
+        return
+    print(result.path)
+
+
+def emit_doctor(rows: Sequence[Mapping[str, Any]], pruned: bool, as_json: bool) -> None:
+    """Print the audit as JSON or as `flags branch path` rows."""
+    issues = sum(1 for row in rows if row["flags"])
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "engine": ENGINE_GIT,
+                    "pruned": pruned,
+                    "issues": issues,
+                    "worktrees": list(rows),
+                }
+            )
+        )
+        return
+    for row in rows:
+        flags = ",".join(row["flags"]) if row["flags"] else "ok"
+        branch = row["branch"] or DETACHED_MARKER
+        print(f"{flags}  {branch}  {row['path']}")
+
+
 def run_command(options: Options, env: Mapping[str, str]) -> int:
     """Execute the selected subcommand and emit its result."""
     if options.command == "allocate":
@@ -485,13 +941,26 @@ def run_command(options: Options, env: Mapping[str, str]) -> int:
     elif options.command == "list":
         engine, worktrees = list_worktrees(env)
         emit_list(engine, worktrees, options.json)
+    elif options.command == "claim":
+        emit_allocation(
+            claim(options.worktree or "", options.branch or "", options.base or "", env),
+            "claimed",
+            options.json,
+        )
+    elif options.command == "status":
+        emit_status(inspect_status(options.worktree, env), options.json)
+    elif options.command == "retire":
+        emit_retire(retire(options.target or "", env), options.json)
+    elif options.command == "doctor":
+        rows, pruned = doctor(options.prune, env)
+        emit_doctor(rows, pruned, options.json)
     else:
         raise UsageError(f"unknown command {options.command!r}")
     return EXIT_OK
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser for allocate, resolve, and list."""
+    """Build the argument parser for the lifecycle verbs."""
     parser = argparse.ArgumentParser(
         prog="herdr-worktree",
         description="Pre-provision isolated worktrees for Herdr lane coordination.",
@@ -516,6 +985,34 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_parser = subparsers.add_parser("list", help="list every active worktree")
     add_shared_argument(list_parser, "json", help="emit a JSON object")
+
+    claim_parser = subparsers.add_parser(
+        "claim", help="move one worktree onto a new agent-scoped branch"
+    )
+    _ = claim_parser.add_argument("worktree", help="path of the registered worktree to move")
+    _ = claim_parser.add_argument("branch", help="agent branch lane/<task-group>/<role>/<ticket>")
+    _ = claim_parser.add_argument(
+        "--base", required=True, help="base revision the new branch starts from"
+    )
+    add_shared_argument(claim_parser, "json", help="emit a JSON object")
+
+    status_parser = subparsers.add_parser("status", help="inspect one worktree's branch binding")
+    _ = status_parser.add_argument(
+        "--worktree", help="worktree path (defaults to the current directory)"
+    )
+    add_shared_argument(status_parser, "json", help="emit a JSON object")
+
+    retire_parser = subparsers.add_parser(
+        "retire", help="remove a clean worktree and its merged branch"
+    )
+    _ = retire_parser.add_argument("target", help="worktree path or branch to retire")
+    add_shared_argument(retire_parser, "json", help="emit a JSON object")
+
+    doctor_parser = subparsers.add_parser("doctor", help="audit every registered worktree")
+    _ = doctor_parser.add_argument(
+        "--prune", action="store_true", help="prune admin entries for missing directories"
+    )
+    add_shared_argument(doctor_parser, "json", help="emit a JSON object")
     return parser
 
 
