@@ -1,78 +1,97 @@
 # Hierarchical Lane Coordination (Task Manager <-> Implementer)
 
-Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract protocols for multi-tier Herdr lanes where an in-lane Task Manager coordinates one or more Implementers (#153, #156, #166, #167, #172).
+Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract protocols for multi-tier Herdr lanes where an in-lane Task Manager coordinates one or more Implementers.
 
 > [!IMPORTANT] Method Constraint
 > Always use harness scripts in `$SKILL_DIR/scripts/` (e.g. `herdr_dispatch.py`, `herdr_reply.py`, `herdr_prompt.py`, `herdr_overview.py`), NOT bare `herdr` CLI commands, for lane coordination, task dispatch, and completion replies.
 
+## Which part of this file you need
+
+- Multi-agent boundaries and anti-patterns: [Context and Delegation Architecture](#context-and-delegation-architecture).
+- Orchestrator, Task Manager, and Implementer duties: [Role Boundaries and Authority Contracts](#role-boundaries-and-authority-contracts).
+- Deliverables and ownership: [Artifact Ownership Matrix](#artifact-ownership-matrix).
+- Dispatch and brief templates: [Canonical Prompt Contracts](#canonical-prompt-contracts).
+  - Orchestrator to TM brief: [Root Orchestrator to TM Brief Contract](#root-orchestrator-to-tm-brief-contract).
+  - TM to Implementer ticket: [TM to Implementer Ticket Contract](#tm-to-implementer-ticket-contract).
+  - Implementer to TM reply: [The Final Reply Template](#the-final-reply-template).
+  - Adversarial code review: [TM to Internal Code Review Subagent Contract](#tm-to-internal-code-review-subagent-contract).
+  - Frontmatter samples and correlation: [A2A Frontmatter Envelope and Correlation IDs](#a2a-frontmatter-envelope-and-correlation-ids).
+  - Trimmed caller stdout: [Caller Delivery Summary](#caller-delivery-summary).
+  - Ticket and task correlation IDs: [Ticket-ID and Task-ID Contract](#ticket-id-and-task-id-contract).
+  - Scoped agent naming: [Scoped-Prefix Rule](#scoped-prefix-rule).
+- End-to-end sequence: [Execution Lifecycle](#execution-lifecycle).
+- In-pane context isolation: [Context Isolation via Subagents](#context-isolation-via-subagents).
+- Leases, readiness, and storage: [Advanced Communication and Coordination Protocol](#advanced-communication-and-coordination-protocol).
+  - Async turn model: [1. Dispatch-and-Yield](#1-dispatch-and-yield).
+  - Concurrency locks and task states: [2. Task Leases and Trajectories](#2-task-leases-and-trajectories).
+  - Agent delegation state: [3. Token Observability and Delegation Detection](#3-token-observability-and-delegation-detection).
+  - Subagent boundaries: [4. The Iron Curtain and Unified Message Format](#4-the-iron-curtain-and-unified-message-format).
+  - Branch merges: [5. Superset Task-Branch Integrations](#5-superset-task-branch-integrations).
+
 ---
 
-## 1. Context & Motivation
+## Context and Delegation Architecture
 
-When a workflow requires both high-level coordination (triage, planning, verification, review) and focused code execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Callees)** in dedicated panes within a shared workspace or tab.
+When a workflow requires high-level coordination and focused execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Callees)** in dedicated panes within a shared workspace or tab.
 
-`herdr-prompt` and `herdr-dispatch` open every dispatch with the script-rendered A2A frontmatter envelope — the `sender`/`receiver` addresses, the correlation IDs, and the live `group` roster — close it with the Herdr skill notice on its own line, and end it with the reply contract. The canonical sample and its rules live in `$SKILL_DIR/SKILL.md` under **Know your post**; this file does not restate them.
+`herdr_prompt.py` and `herdr_dispatch.py` open every dispatch with the script-rendered A2A frontmatter envelope (`sender`/`receiver` addresses, correlation IDs, live `group` roster), close it with the Herdr skill notice, and end with the reply contract. The canonical sample lives in `$SKILL_DIR/SKILL.md` under **Know your post**.
 
 > [!IMPORTANT] Name Every Pane Immediately
-> Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
+> Unlabeled panes cause blind spots in `herdr_overview.py` and break automated reply routing. Name each pane with text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
 
 > [!NOTE] Receiver Target Parsing
-> The `metadata.group` roster lists participants as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **live agent name before the `@` symbol** (`impl-1`, `impl-2`), NOT the full `name@pane_id` string — or the pane id, which is the only other target `herdr agent prompt` accepts. A pane `label` is never a target; use the pane id or `--label` to resolve it. `metadata.receiver` renders the resolved `<agent>@<pane>` address, and the bare target token when it does not.
+> The `metadata.group` roster lists participants as `name@pane_id`. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the live agent name before `@` or the pane ID. These are the only targets `herdr agent prompt` accepts. Pane labels do not serve as direct targets.
 
 ### Core Anti-Patterns & Their Tells
 
-Without explicit, enforceable boundaries, multi-agent lanes degrade into three common failure modes:
-
 | Anti-Pattern | Definition | The Tell That Exposes It | Failure Mode & Impact |
 |---|---|---|---|
-| **Anchored Brief** | The Orchestrator exceeds its intent/constraints scope by performing deep code reconnaissance and baking line-level implementation maps or design pre-decisions into the TM brief (#172). | The brief specifies exact line numbers, private function names, AST/parser instructions, internal state table indices, or pre-decided algorithms/precedence orders. | Pre-empts TM triage, strips TM of architectural ownership, and forces the TM into a pass-through router. |
-| **Router TM** | The TM fails to exercise decomposition, scoping, or design judgment, acting merely as a pass-through relay that forwards the brief verbatim or slices it mechanically (#172). | Callee tickets are copy-pasted verbatim from the brief; TM makes zero exploratory/triage tool calls before dispatching; tickets lack independent scoping, evidence criteria, or architecture invariant checks. | Callees receive un-scoped or over-anchored tickets; edge cases and module invariants are ignored; verification becomes a superficial check of whatever test was named in the brief. |
-| **Hero-Mode TM** | The TM receives the brief and, instead of delegating to assigned callees, directly invokes file-editing tools (`edit`, `write`, `bash`) to implement the changes itself (#153). | Assigned callees in `metadata.group` remain completely idle (revision 0 or no dispatches); TM tool calls are dominated by file edits and compile/fix loops; TM context window rapidly exhausts. | Multi-agent topology is bypassed; lane loses division of labor; TM suffers context compaction degradation, losing ticket constraints and architectural invariants. |
+| **Anchored Brief** | Orchestrator performs deep code reconnaissance and bakes line-level implementation maps or design choices into the TM brief. | Brief specifies exact line numbers, private function names, AST details, internal state indices, or pre-decided algorithms. | Pre-empts TM triage, strips TM architectural ownership, and forces TM into a passive router. |
+| **Router TM** | TM fails to exercise decomposition, scoping, or design judgment, acting merely as a pass-through relay. | Callee tickets copy-paste the brief verbatim; TM makes zero exploratory tool calls; tickets lack independent scoping or evidence criteria. | Callees receive un-scoped tickets; edge cases and module invariants are ignored; verification becomes superficial. |
+| **Hero-Mode TM** | TM implements code changes directly instead of delegating to assigned callees. | Assigned callees in `metadata.group` remain idle; TM tool calls are dominated by file edits and compile loops; TM context exhausts. | Multi-agent topology is bypassed; division of labor is lost; TM suffers context compaction degradation. |
 
 ### Two-Tier Delegation Architecture: Lane Coordination vs. Role-Internal Subagents
 
-To resolve all three anti-patterns and manage context pressure asymmetry, enforce a clean two-tier delegation architecture:
-
 > [!IMPORTANT] Subagent-First Execution Mandate
-> Subagent-First Execution is a **Universal Mandate across all coding agents**, regardless of underlying kind or engine (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, `qodercli`, etc.). All coding agents in lane coordination (both Task Managers and Implementers) **MUST** use subagents as drafts for heavy tasks:
-> - **Implementers**: MUST delegate deep exploration (Scout), code development and multi-file drafting (Editor), research, and test failure log triage (Test Runner) to ephemeral subagents. Treat subagent outputs as disposable drafts; the host pane main session focuses on synthesizing, verifying, and evaluating the results before committing. Direct execution of heavy work in the callee host pane exhausts context windows, triggers severe compaction degradation, and leads to instruction amnesia.
-> - **Task Managers**: MUST delegate crux adversarial code review under `keel`, `coding-protocol`, and `programming-expert` to an internal review subagent. Reviewing massive diffs directly in the TM pane blinds the TM to lane invariants and architectural oversight.
+> All coding agents across all engines (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, `qodercli`) MUST delegate heavy tasks to subagents:
+> - **Implementers**: MUST delegate deep exploration (Scout), bulk multi-file editing (Editor), and test failure log triage (Test Runner) to ephemeral subagents. Host panes synthesize and verify before committing.
+> - **Task Managers**: MUST delegate crux adversarial code review under `keel`, `coding-protocol`, and `programming-expert` to an internal review subagent.
 
 1. **Tier 1: Lane-Level Coordination (Herdr Inter-Pane)**
    - **Topology**: Root Orchestrator ↔ Task Manager ↔ Implementers across dedicated Herdr panes.
    - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py` governed by Task Leases and Token Observability.
    - **Scope**: In-lane execution inside the role's provisioned worktree (`<repo>.<task-group>.<role>`): lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
-   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator pre-provisions one worktree per role and the topology but never dispatches callee tickets directly (#166). Each writer owns exactly one worktree, and a branch is checked out in exactly one worktree. TM and Implementers run natively inside their own `<repo>.<task-group>.<role>` worktree from turn zero; neither creates ad-hoc worktrees, switches branches, stashes, or forces a checkout. Reviewers stay read-only and evaluate a pinned SHA, never a moving tree.
-   - **Lifecycle**: Branches are `lane/<task-group>/<role>/<ticket>`. `herdr-worktree claim` moves a clean tree onto its branch from an explicit base and records it in `.lane/tasks.yaml`; `status` reports drift; `retire` removes only clean trees and merged branches; `doctor --prune` drops only missing admin entries. Never run `git switch -C`, `-B`, or `-f`, `git stash`, or `git worktree add --force`. The `--cwd` matrix is in [agent-bootstrap](agent-bootstrap.md).
-   - **Commit-addressed review**: Freeze the review target at a SHA. Inspect with `git diff <base>..<sha>` and `git show <sha>:<path>`; for a read-only checkout use an ephemeral detached worktree. Gates run in the TM pane on the pinned SHA; never mutate the implementer's tree to reproduce a review.
+   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator provisions one worktree per role and the topology, but never dispatches callee tickets directly. Each writer owns exactly one worktree, and a branch is checked out in exactly one worktree. TM and Implementers run natively inside their assigned worktrees from turn zero. Reviewers evaluate a pinned SHA on a read-only tree.
+   - **Lifecycle**: Branches follow `lane/<task-group>/<role>/<ticket>`. `herdr-worktree claim` moves a clean tree onto its branch from an explicit base and records it in `.lane/tasks.yaml`. Inspect [agent-bootstrap](agent-bootstrap.md) for the `--cwd` matrix.
+   - **Commit-addressed review**: Freeze review targets at a SHA. Inspect using `git diff <base>..<sha>` and `git show <sha>:<path>`. Never mutate the implementer's tree to reproduce a review.
 
 2. **Tier 2: Role-Internal Subagent Delegation (Context Isolation)**
    - **Topology**: Host pane ↔ Ephemeral platform subagents (`Agent`, `invoke_subagent`, scratch tasks).
-   - **Scope for Implementer**: Heavy codebase exploration (Scout), bulk multi-file edits (Editor), and verbose test runs (Test Runner) isolated to disposable subagent contexts (#156).
-   - **Scope for Task Manager**: Adversarial crux code review (`keel`, `coding-protocol`, `programming-expert`) delegated to an internal review subagent to prevent TM context pollution from reading massive diffs and to guarantee an objective review verdict (#166, #172).
-   - **Boundary Invariant (The Iron Curtain)**: Internal subagents are strictly private to the hosting pane. They **NEVER** invoke Herdr CLI commands, **NEVER** manage panes, and **NEVER** call `herdr_reply.py`. The hosting agent remains the sole owner of the role contract and the single point of contact for external lane communication.
+   - **Scope for Implementer**: Deep codebase exploration (Scout), bulk edits (Editor), and verbose test runs (Test Runner) isolated to disposable contexts.
+   - **Scope for Task Manager**: Adversarial crux code review (`keel`, `coding-protocol`, `programming-expert`) delegated to an internal review subagent to keep TM context clean and verdicts objective.
+   - **The Iron Curtain**: Internal subagents are strictly private to the hosting pane. They **NEVER** invoke Herdr CLI commands, **NEVER** manage panes, and **NEVER** call `herdr_reply.py`. The host agent owns all external lane communication.
 
 ---
 
-## 2. Role Boundaries & Authority Contracts
+## Role Boundaries and Authority Contracts
 
-### A. Root Orchestrator Contract
+### Root Orchestrator Contract
 
-The Root Orchestrator owns the problem definition, global constraints, topology provisioning, and final delivery verification. It does not dictate implementation mechanics or pre-empt in-lane design decisions.
+The Root Orchestrator owns problem definition, global constraints, topology provisioning, and final delivery verification. It does not dictate implementation mechanics or pre-empt in-lane design decisions.
 
 - **Bound Architectural Skills**:
-  - `keel`: Identify affected module boundaries, seams, and cross-cutting invariants at a high level without probing private internals.
-  - `coding-protocol`: Frame the acceptance and verification contract—specify what observable empirical evidence proves completion, without prescribing line-level code changes.
+  - `keel`: Identify affected module boundaries, seams, and cross-cutting invariants at a high level.
+  - `coding-protocol`: Frame the verification contract—specify what observable empirical evidence proves completion, without prescribing line-level edits.
 - **Reconnaissance Budget (Go/No-Go Sizing Only)**:
   - **Allowed Sizing Scope**:
-    1. *Seam inventory*: How many module boundaries or public interfaces are affected.
-    2. *Dependency impact*: Does the change introduce new external dependencies or build tools.
-    3. *Existing test coverage*: Do regression test suites or fixtures exist for the affected surface, or must a new harness be bootstrapped.
+    1. *Seam inventory*: Number of module boundaries or public interfaces affected.
+    2. *Dependency impact*: External dependencies or build tools introduced.
+    3. *Existing test coverage*: Existing test suites or fixtures versus required harness bootstrapping.
     4. *Topology sizing*: Sizing magnitude (S/M/L) to allocate sufficient implementer panes.
   - **Forbidden Internals**:
-    1. Reading private functions, helper utilities, or internal state tables to craft an implementation map.
-    2. Specifying line numbers, exact read sites, or specific statement edits.
-    3. Pre-deciding design choices (precedence order, algorithm selection, lockfile preferences, data structures).
+    1. Reading private functions or state tables to craft an implementation map.
+    2. Specifying line numbers, read sites, or specific statement edits.
+    3. Pre-deciding design choices (precedence order, algorithms, data structures).
     4. Slicing tasks into code-granular sub-steps for the TM.
 
 #### Worked Reconnaissance Examples
@@ -95,11 +114,11 @@ The Root Orchestrator owns the problem definition, global constraints, topology 
 > ```
 
 - **Explicit Allow List**:
-  - Confirm role-to-agent mapping (role, agent kind, provider, model) with user before lane provisioning (#159).
-  - Claim one isolated worktree per role with `uv run ${herdr_skill}/scripts/herdr_worktree.py claim <path> lane/<task-group>/<role>/<ticket> --base <ref>`, then allocate panes and tabs for lane topology and launch each one with `--cwd` set to that role's path. Bootstrap validates the path is a registered linked worktree.
-  - Name Every Pane Immediately: Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
-  - Boot TM and Implementers with verified bootstrap flags (or allocate panes and delegate boot verification to TM per #167).
-  - Issue brief to TM specifying intent, goal, constraints, acceptance criteria, verification contract, and sizing budget.
+  - Confirm role-to-agent mapping (role, agent kind, provider, model) before lane provisioning.
+  - Claim one isolated worktree per role with `uv run ${herdr_skill}/scripts/herdr_worktree.py claim <path> lane/<task-group>/<role>/<ticket> --base <ref>`, allocate panes and tabs, and launch each with `--cwd` set to that role's path.
+  - Label every pane immediately with meaningful text matching its role.
+  - Boot TM and Implementers with verified bootstrap flags.
+  - Issue brief to TM specifying intent, constraints, acceptance criteria, verification contract, and sizing budget.
   - Re-brief or escalate when TM reports `BLOCKED` or `REJECTED`.
   - Run final release/audit gate on lane completion.
 - **Explicit Forbid List**:
@@ -107,32 +126,31 @@ The Root Orchestrator owns the problem definition, global constraints, topology 
   - Pre-deciding design trade-offs belonging to the TM.
   - Writing code-granular or line-level requirements in the brief.
   - Editing source, test, or config files directly.
-  - Bypassing TM to dispatch tickets directly to lane callees (#166).
+  - Bypassing TM to dispatch tickets directly to lane callees.
 
 ---
 
-### B. Task Manager (TM) Contract
+### Task Manager Contract
 
 The Task Manager owns in-lane triage, decomposition, scope boundaries, design judgment, ticket authoring, verification gate execution, and code review verdicts.
 
 - **Bound Architectural Skills**:
-  - `keel`: Discover, judge, and govern architectural seams, module boundaries, and domain state invariants. Ensure callee changes do not introduce structural drift, hidden coupling, or leaky abstractions.
-  - `coding-protocol`: Risk-scaled execution, evidence standards, and explicit verification contracts (`[action] -> [check]`). Demand concrete, reproducible test evidence from callees.
-  - `programming-expert`: Language-level correctness, idiomatic implementation, error handling, type soundness, and deep design (narrow interfaces, absorbing complexity, rejecting classitis). Distinguish permitted design deepening from harmful scope creep.
+  - `keel`: Discover and govern architectural seams, module boundaries, and domain state invariants. Prevent structural drift, hidden coupling, or leaky abstractions.
+  - `coding-protocol`: Risk-scaled execution, evidence standards, and explicit verification contracts (`[action] -> [check]`). Demand concrete test evidence from callees.
+  - `programming-expert`: Language correctness, idiomatic implementation, error handling, type soundness, and deep design (narrow interfaces, absorbing complexity). Distinguish design deepening from scope creep.
 - **Mandatory Review Lens**:
-  - Every review finding MUST be explicitly mapped to the invariant it threatens.
-  - Green gate passes (tests, linter) are necessary but NEVER sufficient; an explicit review verdict is required for every ticket (#166).
+  - Every review finding MUST explicitly map to the invariant it threatens.
+  - Green gate passes (tests, linter) are necessary but NEVER sufficient; an explicit review verdict is required for every ticket.
 - **Code Review via Internal Subagents**:
   - The TM MUST use internal ephemeral subagents for code review.
-  - Spawns an internal subagent (e.g. `Agent` / `invoke_subagent`) equipped with `keel`, `coding-protocol`, and `programming-expert` to review the callee diff.
-  - **Rationale**: Keeps the TM's context window pristine, eliminates reviewer fatigue, prevents context compaction degradation across long multi-ticket runs, and ensures an adversarial, objective review.
+  - Spawns an internal subagent equipped with `keel`, `coding-protocol`, and `programming-expert` to review the callee diff.
   - Subagent returns structured review findings with invariant mapping; TM renders the formal review verdict.
 - **Explicit Allow List**:
   - Decompose orchestrator brief into atomic, single-intent tickets.
-  - Exercise independent design judgment (data structures, algorithms, internal interfaces, refactoring depth).
+  - Exercise independent design judgment on data structures, algorithms, interfaces, and refactoring depth.
   - Author tickets specifying target files, scope boundaries, constraints, and explicit test/evidence requirements.
   - Dispatch tickets to callees via `herdr_dispatch.py` and await `herdr_reply.py`.
-  - Run verification gates (tests, linter, typecheck) in the TM pane against callee diffs at a pinned SHA (or the assigned owner's committed result). Never mutate the implementer's tree to reproduce a gate; use `git diff <base>..<sha>` and `git show <sha>:<path>`, or an ephemeral detached read.
+  - Run verification gates in the TM pane against callee diffs at a pinned SHA. Inspect via `git diff <base>..<sha>` and `git show <sha>:<path>`.
   - Spawn internal subagents for code review under `keel`, `coding-protocol`, and `programming-expert`.
   - Issue review verdicts (`PASS`, `REWORK`, `REJECT`) mapping findings to threatened invariants.
   - Dispatch rework tickets on gate failures or review findings with targeted diagnostics.
@@ -140,26 +158,25 @@ The Task Manager owns in-lane triage, decomposition, scope boundaries, design ju
 - **Explicit Forbid List**:
   - Editing source, test, or config files directly ("Hero-Mode TM").
   - Running iterative fix loops directly in the TM pane.
-  - Acting as a pass-through router ("Router TM") that forwards brief requirements without decomposition, scoping, or design judgment.
-  - Accepting green gates as a substitute for code review without an explicit review verdict (#166).
-  - Flagging cohesive internal refactoring (design deepening) as scope creep when it strengthens invariants without expanding public surfaces.
-  - Ignoring assigned callees in `metadata.group`.
+  - Acting as a pass-through router ("Router TM") that forwards brief requirements without decomposition.
+  - Accepting green gates as a substitute for code review without an explicit review verdict.
+  - Treating cohesive internal refactoring as scope creep when it strengthens invariants.
   - Allowing internal subagents to invoke Herdr CLI or `herdr_reply.py`.
 
 ---
 
-### C. Implementer (Callee) Contract
+### Implementer Contract
 
 The Implementer owns execution, mutation, and concrete evidence production. It translates assigned ticket requirements into atomic, verified commits.
 
 - **Bound Architectural Skills**:
   - `keel`: Respect structural boundaries and module seams. Adhere to domain invariants and interface contracts established by the ticket.
-  - `coding-protocol`: Risk-scaled execution, red-first / replayable test evidence, minimal diffs, atomic commits. Every changed line must trace directly to ticket requirements.
-  - `programming-expert`: Language-level idiomatic implementation, strict typing, rigorous error handling, resource cleanup (RAII), and robust test coverage.
+  - `coding-protocol`: Risk-scaled execution, red-first replayable test evidence, minimal diffs, atomic commits.
+  - `programming-expert`: Language idioms, strict typing, rigorous error handling, resource cleanup, and robust test coverage.
 - **Concrete Evidence Requirement**:
-  - The implementer must produce concrete, replayable evidence (red-then-green test runs, linter passes, diff summaries, commit SHAs), NOT a mere textual assertion of quality ("tests pass").
+  - The implementer must produce concrete, replayable evidence (red-then-green test runs, linter passes, diff summaries, commit SHAs), NOT a mere textual assertion of quality.
 - **Context Isolation via Internal Subagents**:
-  - For large or complex tasks, the implementer delegates heavy search, bulk editing, or verbose test triage to ephemeral internal subagents to prevent context bloating and compaction degradation (#156).
+  - Delegates heavy search, bulk editing, or verbose test triage to ephemeral internal subagents to prevent context compaction degradation.
 - **Explicit Allow List**:
   - Read assigned ticket requirements and constraints.
   - Spawn internal subagents for context isolation (Scout, Editor, Test Runner).
@@ -169,7 +186,7 @@ The Implementer owns execution, mutation, and concrete evidence production. It t
   - Make atomic commits matching ticket scope.
   - Aggregate results and reply to TM via `herdr_reply.py`.
 - **Explicit Forbid List**:
-  - Expanding scope beyond ticket boundaries (unmandated public APIs, config mutations).
+  - Expanding scope beyond ticket boundaries.
   - Attempting lane-level orchestration (dispatching to other Herdr panes or agents).
   - Modifying architectural boundaries or public seams unasked.
   - Producing assertions of quality without concrete replayable evidence.
@@ -177,13 +194,13 @@ The Implementer owns execution, mutation, and concrete evidence production. It t
 
 ---
 
-## 3. Artifact Ownership Matrix (Boundary Table)
+## Artifact Ownership Matrix
 
 Each artifact in the lane coordination lifecycle has **exactly one author role**:
 
 | Artifact | Author Role | Consumer Role | Purpose & Binding Standard |
 |---|---|---|---|
-| **Brief** | Root Orchestrator | Task Manager | Global intent, constraints, acceptance criteria, verification contract, and go/no-go sizing budget. Free of line-level internals. |
+| **Brief** | Root Orchestrator | Task Manager | Global intent, constraints, acceptance criteria, verification contract, and sizing budget. Free of line-level internals. |
 | **Ticket** | Task Manager | Implementer | Decomposed task specification with bounded scope, test criteria, and evidence expectations. |
 | **Diff** | Implementer | Task Manager | Source, test, and config mutations fulfilling ticket requirements. Accompanied by atomic commit. |
 | **Gate Output** | Task Manager | Task Manager / Orchestrator | Verbatim logs from formal test, lint, and typecheck suites executed in the TM pane against the callee diff. |
@@ -193,21 +210,21 @@ Each artifact in the lane coordination lifecycle has **exactly one author role**
 
 ---
 
-## 4. Canonical Prompt Contracts
+## Canonical Prompt Contracts
 
 ### The Injected Context Header & Caller Recovery
 
-Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` automatically injects the envelope at turn zero, before the ticket payload (see **Know your post** in `$SKILL_DIR/SKILL.md`). The envelope carries lane topology and the correlation IDs, giving full context fidelity and debugging observability. `metadata.receiver` names the addressee — so an agent that was addressed in a broadcast can read its role straight off the message. `herdr_reply.py` wraps a completion reply in the same envelope.
+Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` injects the frontmatter envelope at turn zero, before the ticket payload (see **Know your post** in `$SKILL_DIR/SKILL.md`). The envelope carries lane topology and correlation IDs for context fidelity. `metadata.receiver` names the addressee. `herdr_reply.py` wraps completion replies in the same envelope.
 
-- **Caller recovery (`kind + session_path + cwd`)**: any participant, watchdog, or human operator can re-enter or resume the exact sending agent session in the identical working directory without amnesia. The resumption triple is no longer in the envelope; dispatch persists it as `caller_recovery` on the task record in `.lane/tasks.yaml`, retrieved just-in-time only when a reply target has exited or is a bare shell (see **JIT Diagnostic Recovery** in section 7). Pass `--verbose` to any of the three helpers to add `cwd`/`resume` under `metadata` back into the envelope for debugging.
-- **Addresses**: `metadata.sender` and `metadata.receiver` carry the strict `<agent>@<pane>` address — the bare pane id when no agent name resolved, the bare target token for an unresolved receiver. The tab rides inside `metadata.task_group` (`<slug>@<tab_id>`) and the sender's session as `context_id`. Pane labels and agent kinds no longer ride the envelope: they lived in the retired pre-cutover header lines, which nothing renders or parses any more.
-- **`group` roster**: `metadata.group` lists lane participants as `name@pane_id`, sending agent first. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the **agent name before the `@` symbol** (`impl-1`, `impl-2`).
+- **Caller recovery (`kind + session_path + cwd`)**: Dispatch persists caller environment coordinates as `caller_recovery` in `.lane/tasks.yaml`. Recovery is retrieved just-in-time when a reply target has exited or is a bare shell. Passing `--verbose` adds `cwd`/`resume` back into `metadata`.
+- **Addresses**: `metadata.sender` and `metadata.receiver` carry strict `<agent>@<pane>` addresses. The tab rides inside `metadata.task_group` (`<slug>@<tab_id>`), and sender session rides as `context_id`.
+- **`group` roster**: `metadata.group` lists lane participants as `name@pane_id`, sender first. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the agent name before `@` (e.g. `impl-1`).
 
 ---
 
-### A. Root Orchestrator → TM Brief Contract
+### Root Orchestrator to TM Brief Contract
 
-The orchestrator brief defines the problem, boundary constraints, acceptance criteria, verification contract, and sizing budget. It does not dictate implementation internals:
+The orchestrator brief defines the problem, boundary constraints, acceptance criteria, verification contract, and sizing budget:
 
 ```markdown
 # TASK: <Feature / Bug Name>
@@ -249,9 +266,9 @@ On gate pass and review approval, reply to the sender using the Final Reply Temp
 
 ---
 
-### B. Synthesized IDD/GDD Dispatch Template (TM → Implementer Ticket Contract)
+### TM to Implementer Ticket Contract
 
-Every ticket dispatched to a callee pairs upstream teleological purpose (**IDD**) with downstream verifiable targets (**GDD/EDD**). This dual pairing prevents both specification gaming (Goodhart's Law) and semantic drift:
+Every ticket dispatched to a callee pairs upstream teleological purpose (**IDD**) with downstream verifiable targets (**GDD/EDD**):
 
 ```markdown
 # TICKET / BRIEF: <ID> — <Title>
@@ -279,9 +296,9 @@ On completion, reply to the caller in one message using the herdr helper script:
 
 ---
 
-### C. The Final Reply Template (Aligned with `skills/ai-engineering-expert/references/resp-format.md`)
+### The Final Reply Template
 
-All completion replies delivered via `herdr_reply.py` adhere strictly to the dual-mode response format defined in `retired/dynamic-workflow-wrapper/references/resp-format.md` and `skills/ai-engineering-expert/references/resp-format.md`. `herdr_reply.py` prepends the A2A frontmatter envelope itself, `status.timestamp` and all, so the reply body below starts at the status line:
+All completion replies delivered via `herdr_reply.py` adhere to the response format defined in `skills/ai-engineering-expert/references/resp-format.md`. `herdr_reply.py` prepends the frontmatter envelope:
 
 ```markdown
 COMPLETED <commit-sha>
@@ -307,21 +324,21 @@ continue | remediate | blocked
 - [<Category>] <observation>. Workaround: <workaround>. Suggestion: <suggestion>
 ```
 
-The recorded `evidence` is this template's `## Evidence` section, not the first section that happens to be present: the ledger stores the normalized label `evidence`, and the canonical `## Evidence` heading outranks the earlier `## Artifacts` even though `Artifacts` also matches evidence vocabulary (#231 F5).
+The ledger records normalized label `evidence` from `## Evidence`, outranking earlier `## Artifacts` sections.
 
 #### Status Triad & Routing Semantics
 - **Status Triad**:
-  - `COMPLETED <commit-sha>`: All requirements met, all deterministic verification checks green, clean commit created.
+  - `COMPLETED <commit-sha>`: All requirements met, all verification checks green, clean commit created.
   - `BLOCKED <reason>`: Unresolvable environmental blocker, missing dependencies, or contradictory specification.
   - `REJECTED <reason>`: Requested change violates codebase invariants, architectural boundaries, or security constraints.
 - **Route**:
-  - `continue`: 0 P1/P2 issues AND all verification checks green. Ready to proceed or merge.
+  - `continue`: 0 P1/P2 issues AND all verification checks green. Ready to merge.
   - `remediate`: P1/P2 issues exist or tests failed, but remediation within the callee is possible.
   - `blocked`: Unresolvable conflict; escalate to Task Manager or Orchestrator.
 
 ---
 
-### D. TM → Internal Code Review Subagent Contract
+### TM to Internal Code Review Subagent Contract
 
 When callee signals completion, the TM invokes an internal review subagent:
 
@@ -331,9 +348,9 @@ Task: Audit the callee diff for ticket `<ticket-name>` against codebase invarian
 
 ## Review Lens & Standards
 Evaluate the diff strictly against three architectural skills:
-1. `keel`: Seam integrity, architectural boundaries, aggregate invariants, and anti-drift. Does the change leak internal details or violate module separation?
-2. `coding-protocol`: Risk-scaled execution, evidence refutability, diff minimalism. Does every changed line trace directly to ticket requirements?
-3. `programming-expert`: Language correctness, strict typing, error handling, resource cleanup (RAII), and deep design (narrow interfaces, no classitis). Distinguish permitted design deepening from unmandated scope creep.
+1. `keel`: Seam integrity, architectural boundaries, aggregate invariants, and anti-drift.
+2. `coding-protocol`: Risk-scaled execution, evidence refutability, diff minimalism.
+3. `programming-expert`: Language correctness, strict typing, error handling, resource cleanup, and deep design.
 
 ## Verification Inputs
 - Ticket: `<path-to-ticket.md>`
@@ -349,11 +366,11 @@ Return a structured review verdict:
 
 ---
 
-### E. The A2A frontmatter envelope & the Correlation IDs
+### A2A Frontmatter Envelope and Correlation IDs
 
-Every `herdr-prompt`, `herdr-dispatch`, and `herdr-reply` message renders one A2A Markdown frontmatter block (`docs/adr/0020-a2a-markdown-frontmatter-envelope.md`): the four top-level keys `id`, `context_id`, `status`, and `metadata`, with the addresses, task group, correlation IDs, and live roster under `metadata` and the lifecycle state under `status`. An absent `metadata` field renders no key; `id` always renders and is never empty — a message that bound no task gets a generated `unlinked-<compact UTC stamp>` id, which names no task and never reaches `metadata`. `context_id` renders `''` when the harness knows no session, and no session is invented. The retired Style 2 blocks (`Routing:`, `Hierarchy:`, `Runtime:`, `Protocol:`) and the leading bracket timestamp are never rendered or parsed — a zero-shim cutover. The `---` fence that opens the block on line 1 also closes it before the payload, and the Herdr skill notice rides on its own line after the closing fence. `cwd`/`resume` are not in the default envelope; `--verbose` opts them back in for debugging, and recovery metadata otherwise lives in `.lane/tasks.yaml`.
+Every message dispatched or replied via `herdr_prompt.py`, `herdr_dispatch.py`, and `herdr_reply.py` renders one A2A Markdown frontmatter block (`docs/adr/0020-a2a-markdown-frontmatter-envelope.md`) with four top-level keys: `id`, `context_id`, `status`, and `metadata`. The opening and closing `---` delimiters wrap the metadata, followed immediately by the Herdr skill notice line.
 
-Dispatch — forwards a ticket, with the correlation IDs that bind it to the lane's task record:
+Dispatch envelope:
 
 ```text
 ---
@@ -376,7 +393,7 @@ Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scr
 <ticket body>
 ```
 
-Reply — reports a result: `status.state` carries the lifecycle state the reply's first token maps to (`TASK_STATE_COMPLETED` for `COMPLETED`, `TASK_STATE_INPUT_REQUIRED` for `BLOCKED`, `TASK_STATE_FAILED` for `REJECTED`; unsettled is `TASK_STATE_WORKING`), and `id` plus `metadata.in_reply_to` name the Task-ID it answers (no roster on replies; `metadata.task_group` carries the bare tab when no group slug is recorded; the reply reuses the sender's session):
+Reply envelope:
 
 ```text
 ---
@@ -397,32 +414,29 @@ Herdr: follow the herdr skill — run its helper scripts from ${herdr_skill}/scr
 <STATUS> <artifacts> <issues>
 ```
 
-#### Caller delivery summary (#259)
+#### Caller Delivery Summary
 
-The envelope above is what the **callee** receives, byte-for-byte. What the **caller's own stdout** prints is deliberately trimmed, so an orchestrator dispatching many tickets is not flooded with full message bodies or serialized argv JSON. The callee delivery never changes; only this caller-side echo shrinks. Both `herdr-prompt`/`herdr-dispatch` and `herdr-reply` print the same shape:
+The caller stdout echo is trimmed to prevent terminal flooding. Both dispatch and reply print:
+- **First line**: Identity anchor `[You: <agent>@<pane>]` followed by target, byte count, revision, and state.
+- **Delimiters & Metadata**: Frontmatter key lines between `---` delimiters (omitting the repeated skill notice).
+- **Source**: Origin line (`File: <path>` or `Payload: inline/stdin`).
+- **Body preview**: Up to 3 lines, or head and tail with line-skip count.
+Pass `--json` to output machine-parseable JSON instead.
 
-- **First line** — the anchored status the caller reads, prefixed with its own identity `[You: <agent>@<pane>]` so a weak model never mistakes itself for the receiver (the bare pane id when no agent name resolved; no anchor under `--no-caller-context` unless `HERDR_PANE_ID` is set): live `prompted <target> (<pane>)  bytes=<size>  revision=<rev>  state=<state>`, live reply `replied to <target> (<pane>)  bytes=<size>  revision=<rev>  state=<state>`, or a dry run `dry-run: would prompt <target> (<pane>)` / `dry-run: would reply to <target> (<pane>)`. The pane suffix prints only when it resolves and differs from the target name.
-- **`---`** — the paging delimiter, closing the status line before the metadata block.
-- **Metadata** — the delivered envelope's frontmatter key lines, rendered exactly as delivered. The `---` fences and the boilerplate `Herdr:` skill notice line are cut: the notice is identical on every message and carries nothing the caller needs, and the fences are this summary's own delimiters. The `status.timestamp` line stays — it is what makes a transcript readable in order.
-- **`---`** — the same paging delimiter that separates the callee's envelope from its body.
-- **Source** — one line naming where the payload came from: a file-backed dispatch prints `File: <path>`; a direct string or stdin prints `Payload: inline (<N> bytes)` (reply) or `Payload: stdin (<N> bytes)`.
-- **Body preview** — the original payload (never the appended reply contract or inserted pointer): if it has ≤ 3 non-empty lines they all print; a longer body prints its first and last non-empty lines with `... [skipped N lines]` between them.
+#### Ticket-ID and Task-ID Contract
 
-`--json` is the escape hatch and keeps the machine render: under `--dry-run` it prints the raw argv array (for dispatch/prompt) or the raw argv / revive-plan JSON (for reply), and on a live run it prints herdr's raw JSON response. The trimmed summary is human-facing only; anything that parses the delivery programmatically passes `--json`.
+- **Ticket-ID** identifies the dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). `herdr-dispatch --ticket-id` sets it explicitly; otherwise the dispatcher derives it from the ticket filename.
+- **Task-ID** identifies one task inside that ticket, shaped `<ticket-id>#<task-slug>`. `herdr-dispatch --task-id` binds it explicitly; otherwise it mirrors the Ticket-ID. It keys the task record in `.lane/tasks.yaml` and rides as the envelope `id`.
+- `herdr_reply.py` populates `id`, `metadata.ticket_id`, and `metadata.in_reply_to` from the sender's active lease, appends the status to the task trajectory, and releases the sender's lease. Explicit `--ticket <ID>` or `--in-reply-to <RECORD>` overrides lease resolution.
+- Outbound payloads are verified before recording: every backticked 7-40 hex token must resolve as a commit (`git rev-parse --verify <tok>^{commit}`); one that drifts by a digit points at nothing (#247). An unresolvable token aborts the reply with exit 2 naming the token and payload path; deliberate non-commit tokens must be waived via `--allow-unresolvable-sha <TOKEN>`.
 
-#### Ticket-ID / Task-ID contract
+#### Scoped-Prefix Rule
 
-- **Ticket-ID** identifies the dispatched ticket, shaped `[REF]-[slug]` (e.g. `#182-herdr-msg-enhance`). `herdr-dispatch --ticket-id` sets it explicitly; when omitted, the dispatcher derives it deterministically from the ticket filename.
-- **Task-ID** identifies one task inside that ticket, shaped `<ticket-id>#<task-slug>` (e.g. `#182-herdr-msg-enhance#overview-rich`). `herdr-dispatch --task-id` binds it explicitly; when omitted it mirrors the derived Ticket-ID. It keys the task record in `.lane/tasks.yaml` and rides as the envelope's `id` field.
-- `herdr-reply` reads the replying sender's active lease and populates the envelope's `id`, `metadata.ticket_id`, and `metadata.in_reply_to` (the Task-ID it answers), appends the mapped status event to that task's `trajectory`, then soft-releases that lease (never the target's) while keeping the task record. A missing lease leaves the correlation fields empty and the reply still sends. The record's `task_id` linkage is resolved apart from those envelope fields: `--ticket <ID>` (or `--in-reply-to <RECORD>`) wins, else the lease. The rendered dispatch contract supplies the ticket — it binds `--ticket` to the dispatcher's derived id (#246 E1.1) — so a reply that names no ticket is never guessed at; zero, one, or several open tasks, or a flag that names no open task of the sender, records the reply unlinked with one warning line — the line leads with a stable severity marker, `unlinked reply (open work refused)` when the step refused to bind what it was told (open work it would not guess at, or a flag that names no open task of the sender) and `unlinked reply (nothing to link)` when it holds no open task, with the third wording `unlinked reply (sender or store unreadable)` when there was no answer at all because no sender resolved or the anchor/store could not be read (a store that cannot be read says so instead of claiming the sender holds no open task) — and it claims a record only when one was written: the `; recording the reply unlinked` tail is appended after the store took the record, and `; no store record was written` when it did not, so the warning never contradicts the `NOT RECORDED` pointer in the same run. Every warning now accompanies an unlinked reply; the explicit `--ticket`/`--in-reply-to` bindings are the caller's instruction and stay silent. The addendum case follows from that: a COMPLETED reply releases the lease, and a follow-up addendum for the same ticket binds to the correct task by passing `--ticket`/`--in-reply-to` (the value the rendered contract carried), while a flagless addendum is recorded unlinked. Before any record is written the outbound payload itself is checked: every backticked 7-40 lowercase-hex token must name a commit in this lane (`git rev-parse --verify <tok>^{commit}`), because a backticked hex token is an instruction and one that drifts by a digit points at nothing (#247 D2); an unresolvable token refuses the reply (exit 2) naming the token and the payload path, `--dry-run` reports it the same way instead of accepting it silently, a payload with hex only in prose is untouched, and `--allow-unresolvable-sha <TOKEN>` waives a genuinely intentional non-resolving token loudly on stderr.
-
-#### Scoped-prefix rule
-
-Every lane agent name is `<task-group-slug>-<role>[-<subrole|index>]`. For the `msg-enhance` lane: `msg-orch`, `msg-tm`, `msg-impl-1`, `msg-reviewer`. `--task-group <slug>` prefixes a bare role (`uv run ${herdr_skill}/scripts/herdr_bootstrap.py --role tm --task-group msg` → `msg-tm`) and leaves an already-scoped value unchanged; the scoped string is both the pane label and the agent name, and must satisfy `[a-z][a-z0-9_-]{0,31}` (max 32 chars).
+Every lane agent name is `<task-group-slug>-<role>[-<subrole|index>]` (e.g. `msg-orch`, `msg-tm`, `msg-impl-1`). Passing `--task-group <slug>` prefixes a bare role (`uv run ${herdr_skill}/scripts/herdr_bootstrap.py --role tm --task-group msg` → `msg-tm`). The scoped name serves as both pane label and agent name, satisfying `[a-z][a-z0-9_-]{0,31}` (max 32 chars).
 
 ---
 
-## 5. Execution Lifecycle
+## Execution Lifecycle
 
 ```mermaid
 sequenceDiagram
@@ -475,31 +489,31 @@ sequenceDiagram
 ### Lifecycle Phases
 
 1. **Brief Dispatch & Sizing**:
-   - Orchestrator briefs TM via `herdr_dispatch.py`, supplying intent, constraints, acceptance, verification contract, and sizing budget.
-   - Orchestrator yields turn and awaits callback. **Dispatch-&-Yield is REQUIRED (not advisory) for `agy` and revision-0 agents**; external polling via `herdr-wait` cannot reliably observe them to completion. A freshly spawned pane is settled by the helper that spawned it (`herdr-bootstrap --settle SEC`, default 5; the `herdr-reply --auto-start` revive carries the same) before it is treated as acceptant (#238), while a dispatch to an already-running pane pays no settle.
+   - Orchestrator dispatches brief (`brief.md`) to TM via `herdr_dispatch.py` with intent, constraints, acceptance, verification contract, and sizing budget.
+   - Orchestrator yields turn and awaits callback. Dispatch-and-Yield is required for `agy` and revision-0 agents. Freshly spawned panes are settled via `herdr-bootstrap --settle SEC` (default 5s) before accepting work.
 2. **TM Triage & Decomposition**:
    - TM applies `keel` and `programming-expert` design judgment to evaluate the solution space.
    - Decomposes brief into atomic tickets with concrete evidence criteria.
    - Dispatches first ticket via `uv run ${herdr_skill}/scripts/herdr_dispatch.py <callee> --file <ticket>` and yields turn.
-   - Even single-ticket lanes go `Orch → TM → Impl` (#166).
+   - Even single-ticket lanes go `Orch → TM → Impl`.
 3. **Context-Isolated Implementation**:
    - Implementer executes under `keel`, `coding-protocol`, and `programming-expert`.
-   - Spawns internal subagents for deep research, bulk edits, or verbose test triage as needed (#156).
+   - Spawns internal subagents for deep research, bulk edits, or verbose test triage as needed.
    - Commits changes and replies via `uv run ${herdr_skill}/scripts/herdr_reply.py <tm> "COMPLETED <sha> <evidence>"`.
 4. **Verification & Code Review Loop**:
    - **Gate Check**: TM runs test, lint, and typecheck gates in TM pane.
-   - **Code Review**: On gate pass, TM spawns an internal review subagent to audit the diff against `keel`, `coding-protocol`, and `programming-expert`, mapping each finding to its threatened invariant (#166, #172).
-   - **Rework Handling**: If gates fail OR review reveals invariant violations, TM packages diagnostics into a rework ticket (`rework.md`) and redispatches to the callee. **TM never fixes code directly.**
+   - **Code Review**: On gate pass, TM spawns an internal review subagent to audit the diff against `keel`, `coding-protocol`, and `programming-expert`, mapping findings to threatened invariants.
+   - **Rework Handling**: If gates fail OR review reveals invariant violations, TM packages diagnostics into a rework ticket (`rework.md`) and redispatches to callee. TM never fixes code directly.
 5. **Lane Completion**:
    - Once all tickets pass verification and code review, TM aggregates artifacts and signals completion to Root Orchestrator via `uv run ${herdr_skill}/scripts/herdr_reply.py <orch> "COMPLETED <summary>"`.
 
 ---
 
-## 6. Context Isolation via Subagents (Tier 2)
+## Context Isolation via Subagents
 
 ### Universal Subagent Tooling by Agent Kind
 
-The Tier 2 Subagent Delegation pattern applies universally to **any coding agent kind** deployed in a lane pane (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, etc.). Every agent kind delegates heavy, noisy tasks to its platform-native subagent mechanism:
+All coding agents delegate heavy, noisy tasks to platform-native subagents:
 
 | Agent Kind | Engine / Platform | Native Subagent Mechanism | Invocation / Dispatch Pattern | Context Isolation Boundary |
 |---|---|---|---|---|
@@ -540,88 +554,62 @@ The Tier 2 Subagent Delegation pattern applies universally to **any coding agent
                                      └───────────────────────┘
 ```
 
-1. **Pointer-Based State Exchange**:
-   - Parents never inline large code blobs into subagent prompts. Pass file paths, ticket paths, and command lines.
-2. **Ephemeral Context Lifecycle**:
-   - Subagents are single-task and disposable. When done, heavy context is discarded. The parent pane retains only crisp summaries and artifact pointers.
-3. **Strict Lane Isolation (The Iron Curtain)**:
-   - **Subagents must NEVER interact with Herdr**: They do not run `herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`, or any Herdr CLI commands.
-   - **Single Interface**: External lane communication is owned exclusively by the pane agents (TM and Implementer).
-   - **No Agent-ception**: Internal subagents must not spawn further nested subagents.
-4. **Name Every Pane Immediately**:
-   - Unlabeled panes (`null`) cause blind spots in `herdr-overview` and break automated reply routing. Name each pane with meaningful text matching its role (`orchestrator`, `task-manager`, `impl-auth`, `reviewer`) using `herdr-pane --label` or `herdr-label`.
+1. **Pointer-Based State Exchange**: Parents pass file paths, ticket paths, and command lines instead of inlining large code blocks.
+2. **Ephemeral Context Lifecycle**: Subagents are single-task and disposable. Host panes retain only crisp summaries and artifact pointers.
+3. **Strict Lane Isolation (The Iron Curtain)**: Subagents **NEVER** interact with Herdr CLI commands or scripts (`herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`). Only pane agents communicate across the lane. Internal subagents never spawn nested subagents.
+4. **Name Every Pane Immediately**: Unlabeled panes cause blind spots in `herdr_overview.py`. Label each pane with its assigned role using `herdr-pane --label` or `herdr-label`.
 
 ---
 
-## 7. Advanced Communication & Coordination Protocol
+## Advanced Communication and Coordination Protocol
 
-Multi-agent coordination across Herdr lanes is governed by four core pillars that eliminate race conditions, prevent context destruction, and resolve observability blindness.
-
-### 1. Dispatch-and-Yield (Async Event-Driven Turn Model)
+### 1. Dispatch-and-Yield
 - **Asynchronous Handoff**: Multi-agent coordination in Herdr is strictly event-driven. Tasks are dispatched asynchronously using:
   ```bash
   uv run ${herdr_skill}/scripts/herdr_dispatch.py <target> --file <ticket.md> --no-wait
   ```
-- **Immediate Yield**: After dispatching, the caller **immediately yields its turn** (stops calling tools, enters idle). It does NOT enter busy-polling loops or launch external wait barriers.
-- **Caller Recovery (`kind + session_path + cwd`)**: The dispatch helper persists the caller's execution environment coordinates (`pane_id`, `kind`, `session_path`, `resume_cmd`, `cwd`) as `caller_recovery` on the task record in `.lane/tasks.yaml`; the envelope stays trimmed — the same coordinates ride it only under `--verbose`, as `metadata.cwd`/`metadata.resume`. When the callee wakes the caller via a reply, the caller's turn resumes with full session continuity and zero context amnesia.
-- **Completion Callback**: The callee completes the ticket and issues a structured reply with `uv run ${herdr_skill}/scripts/herdr_reply.py <caller> "<STATUS>..."` (inline) or `uv run ${herdr_skill}/scripts/herdr_reply.py <caller> --file <reply.md>` (file payload). This wakes the caller's turn with the full execution results and status triad.
+- **Immediate Yield**: After dispatching, the caller **immediately yields its turn** (stops calling tools, enters idle). It does NOT busy-poll or launch external wait barriers.
+- **Caller Recovery (`kind + session_path + cwd`)**: Dispatch persists caller coordinates (`pane_id`, `kind`, `session_path`, `resume_cmd`, `cwd`) as `caller_recovery` in `.lane/tasks.yaml`. Recovery is retrieved when a reply target has exited.
+- **Completion Callback**: The callee completes the ticket and issues a structured reply with `uv run ${herdr_skill}/scripts/herdr_reply.py <caller> "<STATUS>..."` (inline) or `uv run ${herdr_skill}/scripts/herdr_reply.py <caller> --file <reply.md>` (file payload). This wakes the caller with execution results and status triad.
 
-### 2. Task Leases & Trajectories (Race & Overwrite Prevention)
-- **Lease Store**: Maintains state in `.lane/tasks.yaml` with two top-level keys — `active_leases` (mutual-exclusion locks that prevent overlapping dispatches to callees with in-flight tickets) and `tasks` (durable records keyed by `task_id`). Each task carries `ticket_id`, `ticket_path`, `task_group`, `status`, `assignee`, `caller`, `caller_recovery`, and an append-only `trajectory` of `{seq, timestamp, event, actor, role, from_status, to_status, note, sha?}`. Canonical statuses: `TASK_STATE_SUBMITTED`, `TASK_STATE_WORKING`, `TASK_STATE_INPUT_REQUIRED`, `TASK_STATE_FAILED`, `TASK_STATE_COMPLETED` — every write emits these. The historical tokens (`unassigned`, `dispatched`, `in_progress`, `blocked`, `rework`, `completed`) stay readable through the one alias table — `STATUS_ALIASES` in `herdr_lease.py` — are never written, and historical records are never migrated or rewritten. Reads accept both vocabularies because `.lane/tasks.yaml` is a shared live database: worktrees running pre-cutover code write into the same file this process reads and cannot be upgraded in lockstep, while the envelope is per-process and took the ADR-0020 zero-shim cutover. `unassigned` and `dispatched` both alias `TASK_STATE_SUBMITTED` — six historical tokens cannot map injectively onto five A2A states, and both spellings mean "handed over, not yet worked"; `blocked`, `rework`, and `completed` mirror the reply mapping in `herdr_envelope.py`. A token that names no state reads as no state and is refused by both write entry points. The `event` field of a trajectory entry is an action token (`dispatched`, `delivered`) and is deliberately not canonicalized, while `status`/`from_status`/`to_status` always are. The store base is one resolved path per lane: `HERDR_LANE_DIR`, else the git common dir's repository root (the common dir itself when it is not named `.git` — bare repositories, submodules, `--separate-git-dir`), else — for an ad-hoc pane with neither anchor — one deterministic user-level store at `<home>/.herdr/lane`; never PWD, and the fallback is never cwd-derived (#229, #182 h3). Taking that third layer prints one stderr advisory per process naming the resolved path, so repo lanes and ad-hoc panes are visibly different stores, and the directory is created only by the first write, never by resolving or reading. `herdr-pane split` always re-exports the resolved anchor, and each lease records its `store` and a release compares the two physically (`os.path.samefile`, which is what decides identity on a case-insensitive volume), so a release resolving another store prints a stderr diagnostic instead of moving the write. The diagnostic only reaches a lease that is present in the resolving store; a lease in a store this process never resolves is an honest silent no-op. Splitting a pane in a directory with no anchor exits 2 before creating a pane, and `--dry-run` prints no plan there (#229).
-- **Read Fallback & Write Target**: Reads fall back `.lane/tasks.yaml` → `.lane/lease.yaml` → `.lane/lease.json` (a legacy JSON file loads as active leases with no trajectory); writes always go to `.lane/tasks.yaml`.
-- **Atomic File Updates**: All state reads/writes use atomic file operations (`tempfile.mkstemp` beside the target file, flush, `os.fsync`, and atomic `os.replace`), preventing concurrent write corruption.
-- **Target Canonicalization**: Leases record both canonical agent name and `pane_id`. Queries via `get_lease` and `is_leased` match against lease key, stored `target`, or `pane_id`. Dispatches via `--label` or pane IDs seamlessly resolve to the canonical agent.
-- **Pre-Dispatch Check**: Before prompting a callee, `herdr_dispatch.py` checks whether the target has an active lease. If active and `--force` is not passed:
-  ```text
-  herdr-dispatch: error: target callee-1 has an active ticket lease (ticket_1.md) issued by task-manager. Await reply or pass --force
-  ```
-- **Pre-Dispatch Label Staleness**: The same pass reads the `pane list` and `agent list` inventories to report a **label that outlived its agent** (#234). A pane carrying an agent-shaped label (`[a-z][a-z0-9_-]{0,31}`) with no live agent in it prints one stderr line naming the pane and the label, so *detection* no longer waits for an operator-invoked pass; the line names the repair that acts on the orphan — `herdr-label --clear --pane <pane_id>`, or a re-label for the next occupant. The check is positivist, per #210: an unreadable or empty inventory answers nothing and reports nothing, never declaring every label stale. Its scope is the whole Herdr server (`pane list`), so an orphan in another workspace prints too. It is advisory only — it changes no target, acquires or releases no lease, and never kills, retries, restarts, or interrupts a pane — and identity still comes from the live agent inventory, so a reused label cannot misroute a dispatch.
-- **Pre-Dispatch Acquisition with Rollback**: `herdr_dispatch.py` acquires the lease *before* delivering the prompt. If the prompt fails, is rejected, or returns a blocked exit code (`EXIT_BLOCKED` / 3, `EXIT_HERDR` / 1), the acquired lease is automatically rolled back and released. Leases are retained only upon prompt acceptance (`EXIT_OK` / 0 or `WaitTimeout` / 4).
-- **Dispatch Hook**: On acquisition, `herdr_dispatch.py` creates or updates the task record with `status: TASK_STATE_SUBMITTED`, appends a `dispatched` event (its `to_status` is `TASK_STATE_SUBMITTED`; its `from_status` is the record's previous status as stored, or `TASK_STATE_SUBMITTED` for a new record), and persists `caller_recovery` (`pane_id`, `kind`, `session_path`, `resume_cmd`, `cwd`; missing fields omitted; `session_path` is the agent session handle).
-- **Pre-Flight Readiness Gate**: Before injecting bytes, `herdr_dispatch.py` and `herdr_prompt.py` probe `herdr agent get <target>`, polling every 200ms up to 10s until `interactive_ready` is not false and `agent_status` is `idle` or `done`; a timeout aborts with a `UsageError` naming the auth/approval-dialog unblock path. Under `--no-wait` they then handshake up to 5s (100ms intervals) for a revision increment or `working`; when acceptance is unconfirmed the handshake warns on stderr and still exits 0, because exit 0 from `herdr agent prompt` already confirms acceptance (#193). The warning names the remedy that can actually confirm delivery for the target's kind: `herdr-wait` for an ordinary agent, and the agy bridge's status title for a kind that declares `revision_moves: false` in `references/kinds.yaml`, whose revision never moves (#238). Caveat: an agent that reports `interactive_ready: true` while blocked on a trust selector (e.g. `qodercli`) cannot be detected by the gate.
-- **Reply Hook & Soft Completion**: When the callee delivers its completion callback via `herdr_reply.py`, it maps the payload's first token (`COMPLETED`→`completed`, `BLOCKED`→`blocked`, `REJECTED`→`rework`), appends that event (with the commit SHA and the status line as the note) to the *replying sender's* leased task `trajectory`, then drops only the sender's `active_leases` lock (`release_active_lease`, keyed by `current_agent` or `HERDR_PANE_ID`). It **never** touches the caller/target's lease, and it never deletes the task record — completion is soft. Lease bookkeeping is best-effort and never blocks delivery: the correlation lookup runs before the send, the trajectory note and the release after it. An unresolvable store prints one stderr line per skipped step (`lease correlation`, `trajectory note`, `lease release`) and never changes the reply's exit status or suppresses the prompt; a skipped correlation drops the envelope's `metadata.ticket_id`/`metadata.in_reply_to` fields and leaves `id` empty (#229).
-- **Reply Authority**: A reply's authority is its store record, never its prompt text. `herdr_reply.py` persists every reply first — the body to `.lane/replies/<id>.md` beside one metadata-only sidecar `.lane/replies/<id>.yaml` per record (a legacy `.lane/replies.yaml` is merged on read, deduped by id, never rewritten) — and then delivers the envelope plus a short pointer block naming that record. The sidecar holds no payload text: `status` (mapped token only), `sha` when hex, `evidence` as a normalized closed-vocabulary label, `artifacts` as a count, plus `digest` and `bytes`. The reader (`herdr-lease replies <ID>`) returns a row only while the body exists and its sha256 equals the recorded `digest`; an index file that cannot be parsed is moved aside byte-for-byte to `<name>.corrupt-<utc-stamp>`. A `COMPLETED` payload with no evidence section is recorded `shape=incomplete` and does not advance the sender's leased task; that evidence floor is a shape check, not a grade. A `BLOCKED`/`REJECTED` reply (shape `n/a`) carries no pointer when recorded, but no shape is exempt from the store-failure pointer: when the store cannot be resolved or written, delivery still succeeds with the payload unchanged except for the added `Payload: NOT RECORDED` pointer. Read a record back with `herdr-lease replies [ID]`. Prompt text is never provenance: a reply with no matching store record advances no task state, so bypassing the helper degrades to silence rather than a false success.
-- **Completion Negative Path**: completion is never inferred from silence. A pane launched with `herdr-pane --command '<line>'` carries a launch-line sentinel (#230): the helper appends `[herdr-launch] finished exit=<rc>`, which reports process exit, never task success. Only that launch path carries one — panes started with `herdr agent start`, `herdr-dispatch --auto-start`, or `herdr-bootstrap` have no sentinel — and two line shapes cannot emit one (an inline `#` comment swallows the appended sentinel; `exit`/`exec` leaves no shell to print it), so an absent sentinel is an honest signal, never a fabricated success. A pane without one is cooperative-only, so `herdr-wait --stale-after SEC` (opt-in, off by default) reports a stall once per episode — status and revision unchanged for SEC, the clock restarting each time the pair changes — on stderr. That advisory is warning-only: it never kills, retries, restarts, or interrupts a target, establishes no result, and does not change the exit status; it prompts evidence collection only, and completion for a foreign pane is cooperative, not guaranteed.
-- **Inspection & Milestones**: run `uv run ${herdr_skill}/scripts/herdr_lease.py show [--yaml|--json] [--limit N]` to print active leases and recent tasks for compaction recovery; run `uv run ${herdr_skill}/scripts/herdr_lease.py transition <target|task-id> <status> [--note TEXT] [--actor NAME] [--role NAME]` to append a trajectory event and advance the status. Pass `--force` to intentionally supersede or reclaim an active lease.
-- **JIT Diagnostic Recovery**: When reply delivery fails because the caller agent exited or is a bare shell, `herdr_reply.py` reads `caller_recovery` for that caller from `.lane/tasks.yaml` and prints an exact copy-paste recovery block on stderr:
+### 2. Task Leases and Trajectories
+- **Lease Store**: State is maintained in `.lane/tasks.yaml` across two top-level keys: `active_leases` (mutual-exclusion locks per callee) and `tasks` (durable task records). Each task holds `ticket_id`, `ticket_path`, `task_group`, `status`, `assignee`, `caller`, `caller_recovery`, and an append-only `trajectory` list (`{seq, timestamp, event, actor, role, from_status, to_status, note, sha?}`). Canonical statuses: `TASK_STATE_SUBMITTED`, `TASK_STATE_WORKING`, `TASK_STATE_INPUT_REQUIRED`, `TASK_STATE_FAILED`, `TASK_STATE_COMPLETED` — every write emits these. Historical status tokens (`unassigned`, `dispatched`, `in_progress`, `blocked`, `rework`, `completed`) are accepted on read via `STATUS_ALIASES` in `herdr_lease.py`, are never written, and historical records are never migrated. Reads accept both vocabularies because `.lane/tasks.yaml` is a shared live database across potentially mixed-version worktrees, whereas the frontmatter envelope is per-process and uses only canonical states (`herdr_envelope.py`). Store resolution checks `HERDR_LANE_DIR`, the git common directory root, and finally `<home>/.herdr/lane`.
+- **Atomic File Updates**: All state reads/writes use atomic file replacement, preventing concurrent write corruption.
+- **Target Canonicalization**: Leases record canonical agent name and `pane_id`. Dispatches via `--label` or pane IDs resolve to canonical agent names.
+- **Pre-Dispatch Check**: `herdr_dispatch.py` verifies the target has no active lease before dispatching. If leased and `--force` is omitted, dispatch aborts.
+- **Pre-Dispatch Label Staleness**: Dispatches verify that pane labels match live agents (`pane list` / `agent list`). Stale labels report an advisory to clear (`herdr-label --clear --pane <pane_id>`) or re-label the pane.
+- **Pre-Dispatch Acquisition with Rollback**: `herdr_dispatch.py` acquires the lease before delivering the prompt. If prompt injection fails or is rejected, the lease automatically rolls back.
+- **Dispatch Hook**: On acquisition, `herdr_dispatch.py` updates the task record with `status: TASK_STATE_SUBMITTED`, appends a `dispatched` event, and persists `caller_recovery`.
+- **Pre-Flight Readiness Gate**: Before injecting bytes, `herdr_dispatch.py` and `herdr_prompt.py` probe `herdr agent get <target>`, polling every 200ms up to 10s until `interactive_ready` is not false and `agent_status` is `idle` or `done`; a timeout aborts with a usage error naming the approval unblock path. Under `--no-wait` they then handshake up to 5s (100ms intervals) for a revision increment or `working`; when acceptance is unconfirmed the handshake warns on stderr and still exits 0, because exit 0 from `herdr agent prompt` already confirms acceptance. The warning names the remedy for the target's kind: `herdr-wait` for standard agents, and the agy bridge status title for kinds with `revision_moves: false` in `references/kinds.yaml`.
+- **Reply Hook & Soft Completion**: When callee replies via `herdr_reply.py`, it maps the payload status (`COMPLETED`→`completed`, `BLOCKED`→`blocked`, `REJECTED`→`rework`), appends the event with commit SHA to the sender's task trajectory, and releases the sender's active lease. The task record is preserved; completion is soft.
+- **Reply Authority**: A reply's authority is its store record, never its prompt text. `herdr_reply.py` persists replies to `.lane/replies/<id>.md` with a metadata sidecar `.lane/replies/<id>.yaml`. A `COMPLETED` reply lacking an evidence section is recorded `shape=incomplete` and does not advance the leased task. If the store cannot be written, delivery appends `Payload: NOT RECORDED`.
+- **Completion Negative Path**: Completion is never inferred from silence. Panes launched via `herdr-pane --command '<line>'` emit `[herdr-launch] finished exit=<rc>` on process exit (never task success). Panes started via `herdr agent start` lack launch sentinels and rely on cooperative completion or `herdr-wait --stale-after SEC` stall advisories.
+- **Inspection & Milestones**: Run `uv run ${herdr_skill}/scripts/herdr_lease.py show [--yaml|--json] [--limit N]` to inspect leases and tasks; run `uv run ${herdr_skill}/scripts/herdr_lease.py transition <target|task-id> <status> [--note TEXT] [--actor NAME] [--role NAME]` to append trajectory events. Pass `--force` to supersede an active lease.
+- **JIT Diagnostic Recovery**: When reply delivery fails because the caller agent exited or is a bare shell, `herdr_reply.py` reads `caller_recovery` from `.lane/tasks.yaml` and prints a copy-paste recovery suggestion on stderr:
   ```text
   herdr-reply: target agent '<caller>' in pane <pane_id> has exited.
   Suggested recovery:
     1. Auto-revive & deliver: uv run "${herdr_skill}/scripts/herdr_reply.py" <caller> --file <reply> --auto-start <kind>
     2. Or resume manually in pane <pane_id>: <resume_cmd>
   ```
-  `--auto-start <kind>` revives the agent, then delivers. With no stored recovery metadata it falls back to the older shell-pane diagnostic.
 
-### 3. Token Observability & The False-Idle Phenomenon
-- **The False-Idle Phenomenon**: When a primary coding agent (Implementer or TM) invokes internal subagents (e.g. AGY subagents, Claude Code task runners, or platform subagent tools), the parent turn yields or pauses to wait for the subagent's result. During this window, traditional process inspectors and terminal listeners see the host agent process as `idle`. External observers relying purely on `agent_status` misinterpret this as task completion or an abandoned turn.
-- **Session Navigator Tokens**: Herdr resolves this observability gap by exposing live Session Navigator tokens:
-  ```json
-  "tokens": {
-    "summary": "⏳ 1 subagent (developer)",
-    "title-suffix": "⏳developer"
-  }
-  ```
-- **`herdr-overview` Integration**: When `agent_status` is `idle` or `done` while active subagent tokens (`⏳` in `summary` or `title-suffix`) are present, `herdr-overview` displays the agent's state as `delegating`. In JSON and YAML formats, the full `tokens` mapping is serialized under each pane.
-- **`herdr-wait` Subagent-Aware Settle Detection**: In `herdr-wait`, the settle predicate inspects both `tokens.summary` and `tokens.title-suffix`. An agent reporting `idle` or `done` while active subagent tokens are present is treated as **UNSETTLED**, preventing premature wait barrier exit or false failures.
+### 3. Token Observability and Delegation Detection
+- **The False-Idle Phenomenon**: When a coding agent delegates to internal subagents, the host turn pauses to await results. Process inspectors see the host agent as `idle`, risking false completion detection by external observers.
+- **Session Navigator Tokens**: Herdr resolves this observability gap through Session Navigator tokens (`tokens.summary`, `tokens.title-suffix`). When an agent reports `idle` or `done` while subagent tokens indicate active child tasks, `herdr_overview.py` displays the agent's state as `delegating`.
+- **`herdr_wait.py` Subagent Awareness**: In `herdr_wait.py`, the settle predicate inspects subagent tokens. An agent reporting `idle` with active subagent tokens is treated as unsettled, preventing premature wait-barrier exit.
 
-### 4. The Iron Curtain & Unified Message Format
-- **The Iron Curtain (Strict Boundary Invariant)**:
-  - Role-internal subagents (Tier 2) are strictly private, ephemeral tools for the host pane agent.
-  - **The Invariant**: Subagents **NEVER** invoke Herdr CLI commands, **NEVER** inspect pane layouts, and **NEVER** invoke `herdr_reply.py` or `herdr_dispatch.py`.
-  - **Single Interface**: Only the parent agent owning the Herdr pane may communicate with the lane. The parent ingests structured summaries and artifact pointers from subagents, verifies diffs and evidence, and interfaces with the rest of the lane.
-- **Synthesized IDD/GDD Communication Invariant**:
-  - Every dispatch pairs upstream teleological purpose (**IDD**: Problem, Proposed Outcome, Non-Negotiable Constraints) with downstream verifiable targets (**GDD/EDD**: Check Command, Required Evidence).
-  - This pairing eliminates both Goodhart specification gaming and semantic drift.
-- **Dual-Mode Response Contract**:
-  - All replies delivered across the lane follow the **Final Reply Template** aligned with `skills/ai-engineering-expert/references/resp-format.md`:
-    - Status Triad: `COMPLETED <sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
-    - `## Summary` (Carmack-style technical rationale, ≤100 words)
-    - `## Artifacts` (absolute paths with kinds: diff, spec, report, eval)
-    - `## Evidence` (deterministic command checks: PASS / FAIL)
-    - `## Route` (`continue | remediate | blocked`)
-    - `## Issues` (P1/P2/P3 severity with file:line, invariant, defect, remediation)
-    - `## Suggestions` (optional non-blocking environment observations)
+### 4. The Iron Curtain and Unified Message Format
+- **The Iron Curtain**: Role-internal subagents are strictly private tools for the host pane agent. Subagents **NEVER** invoke Herdr CLI commands or helper scripts (`herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`). Only the host agent interfaces with the lane.
+- **Synthesized IDD/GDD Communication Invariant**: Every dispatch pairs teleological purpose (**IDD**: Problem, Proposed Outcome, Constraints) with verifiable targets (**GDD/EDD**: Check Command, Required Evidence).
+- **Dual-Mode Response Contract**: All replies follow the **Final Reply Template** aligned with `skills/ai-engineering-expert/references/resp-format.md`:
+  - Status Triad: `COMPLETED <sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
+  - `## Summary` (Carmack-style technical rationale, ≤100 words)
+  - `## Artifacts` (absolute paths with kinds: diff, spec, report, eval)
+  - `## Evidence` (deterministic command checks: PASS / FAIL)
+  - `## Route` (`continue | remediate | blocked`)
+  - `## Issues` (P1/P2/P3 severity with file:line, invariant, defect, remediation)
+  - `## Suggestions` (optional non-blocking environment observations)
 
-### 5. Superset task-branch integrations keep cited SHAs resolvable
+### 5. Superset Task-Branch Integrations
 
-The sanctioned merge path squashes a task branch into a single commit, so the landed history carries none of the cited per-unit SHAs. When the task branch is a strict descendant of the integration branch, integrate with `git merge --ff-only` instead: the fast-forward writes no new commit and every cited SHA stays on the landed history. Confirm the superset first with `git merge-base --is-ancestor`; a branch that is not a descendant stays on the sanctioned path.
+The sanctioned merge path squashes a task branch into a single commit, so the landed history carries none of the cited per-unit SHAs. When the task branch is a strict descendant of the integration branch, integrate with `git merge --ff-only` instead: the fast-forward writes no new commit and every cited SHA stays on the landed history. Confirm the superset first with `git merge-base --is-ancestor`; a branch that is not a descendant stays on the squash path.
