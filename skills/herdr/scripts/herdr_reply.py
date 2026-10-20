@@ -86,7 +86,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -126,11 +125,11 @@ from herdr_cli import (
     diagnose_agent_not_found,
     entries,
     entry_optional_text,
+    entrypoint,
     error_code,
     fetch_inventory,
     find_herdr,
     format_shell_pane_diagnostic,
-    guard,
     inspect_target_shell_pane,
     read_payload_stream,
     reply_helper,
@@ -1466,16 +1465,16 @@ def refuse_space_form_dash_ticket(parser: argparse.ArgumentParser, argv: Sequenc
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    parser = build_parser()
-    raw = list(sys.argv[1:] if argv is None else argv)
-    refuse_space_form_dash_ticket(parser, raw)
-    options = parser.parse_args(raw, namespace=Options())
-    try:
-        return guard("herdr-reply", lambda: reply_caller(options, env_map))
-    except WaitTimeout as exc:
-        print(f"herdr-reply: {exc}", file=sys.stderr)
-        return EXIT_WAIT_TIMEOUT
+    return entrypoint(
+        "herdr-reply",
+        build_parser,
+        reply_caller,
+        namespace=Options(),
+        argv=argv,
+        env=env,
+        before_parse=refuse_space_form_dash_ticket,
+        timeout=(WaitTimeout, EXIT_WAIT_TIMEOUT),
+    )
 
 
 if __name__ == "__main__":

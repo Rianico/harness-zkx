@@ -64,7 +64,7 @@ from types import MappingProxyType
 from typing import Any
 
 import yaml
-from herdr_cli import UsageError, add_shared_argument, guard
+from herdr_cli import UsageError, add_shared_argument, entrypoint
 from herdr_worktree import LaneAnchorError, resolve_lane_base_dir
 
 # ── the task-status vocabulary (ADR-0020, #182 t3 A/B) ─────────────────────────────
@@ -1359,9 +1359,7 @@ def main(
     argv: Sequence[str] | None = None,
     env: Mapping[str, str] | None = None,
 ) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-lease", lambda: run(options, env_map))
+    return entrypoint("herdr-lease", build_parser, run, namespace=Options(), argv=argv, env=env)
 
 
 if __name__ == "__main__":

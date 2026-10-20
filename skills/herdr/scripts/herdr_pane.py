@@ -34,8 +34,8 @@ from herdr_cli import (
     UsageError,
     add_shared_argument,
     current_pane_id,
+    entrypoint,
     find_herdr,
-    guard,
     payload_field,
     require_herdr_env,
     run_herdr_checked,
@@ -423,11 +423,16 @@ def run_command(options: Options, env: Mapping[str, str]) -> int:
     return EXIT_OK
 
 
-def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
+def _dispatch(options: Options, env: Mapping[str, str]) -> int:
+    """Pick the verb from the parsed options; no subcommand means split."""
     handler = run_command if options.command is not None else split_pane
-    return guard("herdr-pane", lambda: handler(options, env_map))
+    return handler(options, env)
+
+
+def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
+    return entrypoint(
+        "herdr-pane", build_parser, _dispatch, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

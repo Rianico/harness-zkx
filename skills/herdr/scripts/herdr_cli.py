@@ -15,8 +15,10 @@ sentence, which is why the help text is not part of the shared table.
 
 from __future__ import annotations
 
+import argparse
 import errno
 import json
+import os
 import re
 import shlex
 import shutil
@@ -535,6 +537,49 @@ def guard(prog: str, action: Callable[[], int]) -> int:
     except HerdrError as exc:
         print(f"{prog}: {exc}", file=sys.stderr)
         return EXIT_HERDR
+
+
+def entrypoint[OptionsT](
+    prog: str,
+    build_parser: Callable[[], argparse.ArgumentParser],
+    action: Callable[[OptionsT, Mapping[str, str]], int],
+    *,
+    namespace: OptionsT | None = None,
+    argv: Sequence[str] | None = None,
+    env: Mapping[str, str] | None = None,
+    before_parse: Callable[[argparse.ArgumentParser, list[str]], None] | None = None,
+    timeout: tuple[type[BaseException], int] | None = None,
+) -> int:
+    """Parse this helper's argv and run its action under the shared error taxonomy.
+
+    Every helper repeated the same five steps: default the environment mapping, build its
+    parser, parse into its own options dataclass, run the action through `guard`, and map a
+    delivery timeout onto its own exit status. Spelling that once keeps `prog: message`,
+    the exit statuses, and the timeout print identical across helpers.
+
+    `before_parse` is the caller's own pre-parse refusal (only `herdr-reply` has one), and
+    `timeout` pairs the caller's exception type with its exit status. Neither changes the
+    error taxonomy: `guard` still maps `UsageError`/`HerdrError`, and the timeout exception
+    is re-raised untouched when it is not the declared type.
+    """
+    env_map = dict(os.environ if env is None else env)
+    parser = build_parser()
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if before_parse is not None:
+        before_parse(parser, raw)
+    options = cast(
+        OptionsT, parser.parse_args(raw, namespace=cast("argparse.Namespace | None", namespace))
+    )
+    if timeout is None:
+        return guard(prog, lambda: action(options, env_map))
+    timeout_type, timeout_code = timeout
+    try:
+        return guard(prog, lambda: action(options, env_map))
+    except BaseException as exc:  # noqa: BLE001 - re-raised unless it is the declared timeout
+        if not isinstance(exc, timeout_type):
+            raise
+        print(f"{prog}: {exc}", file=sys.stderr)
+        return timeout_code
 
 
 class ArgumentSink(Protocol):

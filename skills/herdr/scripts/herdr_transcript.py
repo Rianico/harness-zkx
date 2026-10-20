@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -43,8 +42,8 @@ from herdr_cli import (
     add_shared_argument,
     decode_response,
     entry_optional_text,
+    entrypoint,
     find_herdr,
-    guard,
     require_herdr_env,
     run_herdr,
     run_herdr_checked,
@@ -247,9 +246,9 @@ def transcript(options: Options, env: Mapping[str, str]) -> int:
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-transcript", lambda: transcript(options, env_map))
+    return entrypoint(
+        "herdr-transcript", build_parser, transcript, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

@@ -44,7 +44,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -61,9 +60,9 @@ from herdr_cli import (
     current_pane_id,
     entries,
     entry_optional_text,
+    entrypoint,
     fetch_inventory,
     find_herdr,
-    guard,
     require_herdr_env,
     run_herdr_checked,
     scoped_agent_name,
@@ -767,13 +766,18 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
     return EXIT_OK
 
 
-def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
+def _dispatch(options: Options, env: Mapping[str, str]) -> int:
+    """Pick the verb from the parsed options; `--tab` renames the tab, not the pane."""
     if options.tab is not None:
-        return guard("herdr-label", lambda: rename_tab(options, env_map))
+        return rename_tab(options, env)
     action = check_pairs if (options.verify or options.sync) else label_pane
-    return guard("herdr-label", lambda: action(options, env_map))
+    return action(options, env)
+
+
+def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
+    return entrypoint(
+        "herdr-label", build_parser, _dispatch, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

@@ -30,7 +30,6 @@ Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -48,8 +47,8 @@ from herdr_cli import (
     decode_payload,
     entries,
     entry_optional_text,
+    entrypoint,
     find_herdr,
-    guard,
     inspect_target_shell_pane,
     read_payload_stream,
     require_herdr_env,
@@ -830,13 +829,15 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    try:
-        return guard("herdr-dispatch", lambda: dispatch_agents(options, env_map))
-    except WaitTimeout as exc:
-        print(f"herdr-dispatch: {exc}", file=sys.stderr)
-        return EXIT_WAIT_TIMEOUT
+    return entrypoint(
+        "herdr-dispatch",
+        build_parser,
+        dispatch_agents,
+        namespace=Options(),
+        argv=argv,
+        env=env,
+        timeout=(WaitTimeout, EXIT_WAIT_TIMEOUT),
+    )
 
 
 if __name__ == "__main__":

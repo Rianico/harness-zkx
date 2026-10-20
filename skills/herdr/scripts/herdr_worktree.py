@@ -53,7 +53,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from herdr_cli import EXIT_OK, HerdrError, UsageError, add_shared_argument, guard
+from herdr_cli import (
+    EXIT_OK,
+    HerdrError,
+    UsageError,
+    add_shared_argument,
+    entrypoint,
+)
 
 ENGINE_WORKTRUNK = "worktrunk"
 ENGINE_GIT = "git"
@@ -1018,13 +1024,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """Parse arguments and run the helper; return the process exit status."""
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-
-    def action() -> int:
-        return run_command(options, env_map)
-
-    return guard("herdr-worktree", action)
+    return entrypoint(
+        "herdr-worktree", build_parser, run_command, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":
