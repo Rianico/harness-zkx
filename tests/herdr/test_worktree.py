@@ -1243,6 +1243,7 @@ def test_emitters_share_one_json_seam(
                 "dirty": False,
                 "detached": False,
                 "flags": [],
+                "hint": None,
             },
             True,
         ),
@@ -1320,3 +1321,61 @@ def test_claim_says_an_existing_branch_is_checked_out_nowhere(
     assert code == herdr_cli.EXIT_HERDR
     assert "not checked out anywhere" in err
     assert "fresh ticket branch" in err
+
+
+BRANCH_268 = "lane/w11-t7/impl/268-residuals"
+
+
+# ── residuals: legacy layout migration hint (#268 R4) ─────────────────────────────
+
+
+def test_status_layout_flag_reports_the_migration_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.legacy-name"
+    worktree.mkdir(parents=True)
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout=f"{BRANCH_268}\n")
+        if argv[3] == "status":
+            return completed(argv)
+        if argv[3] == "rev-parse":
+            return completed(argv, stdout=f"{root / '.git'}\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree)], env)
+    out = capsys.readouterr().out
+    assert code == herdr_cli.EXIT_OK
+    assert "layout" in out
+    assert "retire" in out
+    assert "claim" in out
+    assert "repo.w11-t7.impl" in out
+
+
+def test_status_layout_hint_appears_in_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    worktree = root.parent / "repo.legacy-name"
+    worktree.mkdir(parents=True)
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[3] == "rev-parse" and "--abbrev-ref" in argv:
+            return completed(argv, stdout=f"{BRANCH_268}\n")
+        if argv[3] == "status":
+            return completed(argv)
+        if argv[3] == "rev-parse":
+            return completed(argv, stdout=f"{root / '.git'}\n")
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["status", "--worktree", str(worktree), "--json"], env)
+    payload = json.loads(capsys.readouterr().out)
+    assert code == herdr_cli.EXIT_OK
+    assert payload["flags"] == ["layout"]
+    assert "retire" in payload["hint"]

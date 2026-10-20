@@ -489,6 +489,7 @@ class BindingStatus:
     clean: bool
     detached: bool
     flags: tuple[str, ...]
+    hint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -751,16 +752,23 @@ def inspect_status(worktree: str | None, env: Mapping[str, str]) -> BindingStatu
     parts = namespace_parts(branch) if branch is not None else None
     if branch is not None and parts is None:
         flags.append(FLAG_NAMESPACE)
+    hint: str | None = None
     if parts is not None:
         expected = expected_worktree_name(repo_root_for(target, env), parts)
         if Path(resolved).name != expected:
             flags.append(FLAG_LAYOUT)
+            hint = (
+                f"legacy worktree name; migrate with `herdr_worktree.py retire {resolved}` "
+                f"then `herdr_worktree.py claim {Path(resolved).parent / expected} "
+                f"{branch} --base <base>`"
+            )
     return BindingStatus(
         path=resolved,
         branch=branch,
         clean=clean,
         detached=detached,
         flags=tuple(flags),
+        hint=hint,
     )
 
 
@@ -843,9 +851,13 @@ def emit_status(status: BindingStatus, as_json: bool) -> None:
             "dirty": not status.clean,
             "detached": status.detached,
             "flags": list(status.flags),
+            "hint": status.hint,
         },
         as_json,
-        lambda: print(f"{branch}  {status.path}  {state}  {flags}"),
+        lambda: print(
+            f"{branch}  {status.path}  {state}  {flags}"
+            + (f"\n  hint: {status.hint}" if status.hint else "")
+        ),
     )
 
 
