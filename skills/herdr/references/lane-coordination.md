@@ -264,7 +264,7 @@ Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` injects th
 
 - **Caller recovery (`kind + session_path + cwd`)**: Dispatch persists caller environment coordinates as `caller_recovery` in `.lane/tasks.yaml`. Recovery is retrieved just-in-time when a reply target has exited or is a bare shell. Passing `--verbose` adds `cwd`/`resume` back into `metadata`.
 - **Addresses**: `metadata.sender` and `metadata.receiver` carry strict `<agent>@<pane>` addresses. The tab rides inside `metadata.task_group` (`<slug>@<tab_id>`), and sender session rides as `context_id`.
-- **`group` roster**: `metadata.group` lists lane participants as `name@pane_id`, sender first. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the agent name before `@` (e.g. `impl-1`).
+- **`group` roster**: `metadata.group` lists lane participants as `name@pane_id`, sender first. The lane is the task-group slug: with one, the roster is every live agent named `<slug>-…` in the sender's and receiver's workspaces plus the addressing pair — the sender always, and any addressed target even when its name carries no slug (`orchestrator`, `reviewer`), because being party to the message is what puts a pane in the lane. Without a slug it falls back to every live agent in those workspaces. The roster stays informational: the target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the agent name before `@` (e.g. `impl-1`).
 
 ---
 

@@ -2765,3 +2765,64 @@ def test_build_identity_leaves_a_foreign_session_handle_untouched() -> None:
     assert caller.session_id == "claude-abc"
     assert caller.session_path == "claude-abc"
     assert caller.resume_cmd == "claude --resume claude-abc"
+
+
+# ── lane-scoped group roster (#270) ───────────────────────────────────────────────
+
+
+def _two_lanes_in_one_tab() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    panes = [
+        {"pane_id": "w9:p1", "workspace_id": "w9"},
+        {"pane_id": "w9:p2", "workspace_id": "w9"},
+        {"pane_id": "w9:p3", "workspace_id": "w9"},
+        {"pane_id": "w9:p4", "workspace_id": "w9"},
+    ]
+    agents = [
+        {"pane_id": "w9:p1", "name": "pep758-tm"},
+        {"pane_id": "w9:p2", "name": "pep758-impl"},
+        {"pane_id": "w9:p3", "name": "style-tm"},
+        {"pane_id": "w9:p4", "name": "style-impl-1"},
+    ]
+    return panes, agents
+
+
+def test_group_members_scoped_to_the_lane_slug() -> None:
+    panes, agents = _two_lanes_in_one_tab()
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["pep758-impl"], lane_slug="pep758"
+    )
+
+    assert members == ["pep758-tm@w9:p1", "pep758-impl@w9:p2"]
+
+
+def test_group_members_keep_a_slugless_receiver_in_the_roster() -> None:
+    panes = [
+        {"pane_id": "w9:p1", "workspace_id": "w9"},
+        {"pane_id": "w9:p2", "workspace_id": "w9"},
+        {"pane_id": "w9:p3", "workspace_id": "w9"},
+    ]
+    agents = [
+        {"pane_id": "w9:p1", "name": "orchestrator"},
+        {"pane_id": "w9:p2", "name": "reviewer"},
+        {"pane_id": "w9:p3", "name": "style-tm"},
+    ]
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["reviewer"], lane_slug="pep758"
+    )
+
+    assert members == ["orchestrator@w9:p1", "reviewer@w9:p2"]
+
+
+def test_group_members_without_a_slug_keep_the_workspace_roster() -> None:
+    panes, agents = _two_lanes_in_one_tab()
+
+    members = herdr_prompt.resolve_group_members(panes, agents, "w9:p1", ["pep758-impl"])
+
+    assert members == [
+        "pep758-tm@w9:p1",
+        "pep758-impl@w9:p2",
+        "style-impl-1@w9:p4",
+        "style-tm@w9:p3",
+    ]
