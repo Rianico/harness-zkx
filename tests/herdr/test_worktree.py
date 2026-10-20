@@ -1379,3 +1379,55 @@ def test_status_layout_hint_appears_in_json(
     assert code == herdr_cli.EXIT_OK
     assert payload["flags"] == ["layout"]
     assert "retire" in payload["hint"]
+
+
+# ── residuals: stale lane dir (#268 R1) ───────────────────────────────────────────
+
+
+def test_doctor_flags_a_worktree_holding_a_stale_lane_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    root.mkdir(parents=True)
+    stale = root.parent / "repo.w11-t7.impl"
+    stale.mkdir()
+    (stale / ".lane").mkdir()
+    listing = porcelain(worktree_row(root, "main"), worktree_row(stale, BRANCH_268))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["doctor", "--json"], env)
+    payload = json.loads(capsys.readouterr().out)
+    assert code == herdr_cli.EXIT_OK
+    assert payload["worktrees"] == [
+        {"path": str(stale), "branch": BRANCH_268, "flags": ["stale-lane"]}
+    ]
+
+
+def test_doctor_does_not_flag_the_store_base_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = lane_env(tmp_path)
+    root = tmp_path / "work" / "repo"
+    root.mkdir(parents=True)
+    store = root.parent / "repo.w11-t7.impl"
+    store.mkdir()
+    (store / ".lane").mkdir()
+    env = {**env, herdr_cli.LANE_DIR_ENV: str(store)}
+    listing = porcelain(worktree_row(root, "main"), worktree_row(store, BRANCH_268))
+
+    def handler(argv: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["git", "worktree", "list"]:
+            return completed(argv, stdout=listing)
+        raise AssertionError(f"unexpected call: {argv}")
+
+    _ = patch_runner(monkeypatch, handler)
+    code = hw.main(["doctor", "--json"], env)
+    payload = json.loads(capsys.readouterr().out)
+    assert code == herdr_cli.EXIT_OK
+    assert payload["worktrees"] == [{"path": str(store), "branch": BRANCH_268, "flags": []}]

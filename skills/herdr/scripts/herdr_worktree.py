@@ -90,6 +90,10 @@ FLAG_UNLINKED = "unlinked"
 FLAG_ORPHAN = "orphan"
 FLAG_NAMESPACE = "namespace"
 FLAG_LAYOUT = "layout"
+FLAG_STALE_LANE = "stale-lane"
+
+#: Per-worktree fossil of the lane's shared state; the real store is the lane base (#268 R1).
+LANE_STATE_DIR = ".lane"
 
 
 class WorktreeError(HerdrError):
@@ -816,6 +820,10 @@ def doctor(prune: bool, env: Mapping[str, str]) -> tuple[list[dict[str, Any]], b
     entries = worktree_entries(env)
     primary = entries[0] if entries else None
     repo_root = Path(worktree_key(primary.path)) if primary is not None else None
+    try:
+        store_base = herdr_cli.resolve_lane_base_dir(env)
+    except herdr_cli.LaneAnchorError:
+        store_base = None
     rows: list[dict[str, Any]] = []
     for entry in entries:
         if primary is not None and worktree_key(entry.path) == worktree_key(primary.path):
@@ -832,6 +840,13 @@ def doctor(prune: bool, env: Mapping[str, str]) -> tuple[list[dict[str, Any]], b
         if present and parts is not None and repo_root is not None:
             if Path(entry.path).name != expected_worktree_name(repo_root, parts):
                 flags.append(FLAG_LAYOUT)
+        if (
+            present
+            and store_base is not None
+            and worktree_key(entry.path) != worktree_key(str(store_base))
+            and (Path(entry.path) / LANE_STATE_DIR).is_dir()
+        ):
+            flags.append(FLAG_STALE_LANE)
         rows.append({"path": entry.path, "branch": entry.branch, "flags": flags})
     if prune:
         _ = run_safe(["git", "worktree", "prune"], env)
