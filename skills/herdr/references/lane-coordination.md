@@ -80,7 +80,7 @@ The standard lane topology is two tabs: the orchestrator alone in one tab, and a
 
 ### Bringing Up The Topology
 
-Six commands, in order. Ids are read from responses, never predicted.
+Six commands, in order. Ids are read from responses, never predicted. The lane helper runs exactly this sequence (`herdr-lane up`, with `--dry-run` to print it); the commands below are what it executes, and what to do by hand if it has not been run.
 
 ```bash
 # Orchestrator tab: one pane.
