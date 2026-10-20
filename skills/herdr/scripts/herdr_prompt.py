@@ -695,7 +695,9 @@ def agent_readiness(
         obs = observe_agent(herdr, target, env)
     except HerdrError:
         return (False, None, None)
-    ready = obs.status in ("idle", "done") and obs.interactive_ready is not False
+    # Tri-state: None (unreported) counts as ready; only an explicit False blocks.
+    blocked_on_input = obs.interactive_ready is not None and not obs.interactive_ready
+    ready = obs.status in ("idle", "done") and not blocked_on_input
     return (ready, obs.status, obs.revision)
 
 
@@ -1030,7 +1032,7 @@ def wait_for_ready(
     status_label = last_status or "unknown"
     held = f"{_format_seconds(timeout)}s over {attempts} readiness probes"
     interactive_ready = _read_interactive_ready(herdr, target, env)
-    if interactive_ready is False:
+    if interactive_ready is not None and not interactive_ready:
         detail = (
             "observed BLOCKED-ON-INPUT — the readiness read reports "
             f"interactive_ready=false (status={status_label}); open the pane and "

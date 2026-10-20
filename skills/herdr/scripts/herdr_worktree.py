@@ -54,11 +54,26 @@ from pathlib import Path
 from typing import Any, cast
 
 from herdr_cli import (
+    BRANCH_UNSAFE_RE as BRANCH_UNSAFE_RE,
+)
+from herdr_cli import (
     EXIT_OK,
     HerdrError,
     UsageError,
     add_shared_argument,
     entrypoint,
+)
+from herdr_cli import (
+    LANE_DIR_ENV as LANE_DIR_ENV,
+)
+from herdr_cli import (
+    LaneAnchorError as LaneAnchorError,
+)
+from herdr_cli import (
+    resolve_lane_base_dir as resolve_lane_base_dir,
+)
+from herdr_cli import (
+    sanitize_branch as sanitize_branch,
 )
 
 ENGINE_WORKTRUNK = "worktrunk"
@@ -71,7 +86,6 @@ DETACHED_MARKER = "(detached HEAD)"
 # `git worktree list` compact rows some wrappers emit despite --porcelain:
 #   /path/to/wt 0e57943 [feat/184-worktree]
 COMPACT_WORKTREE_RE = re.compile(r"^(?P<path>\S+)\s+[0-9a-f]{7,40}\s+\[(?P<branch>.+)\]$")
-BRANCH_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 BRANCH_NAMESPACE_RE = re.compile(
     r"^lane/(?P<task_group>[A-Za-z0-9._-]+)/(?P<role>[A-Za-z0-9._-]+)/"
     r"(?P<ticket>[A-Za-z0-9._-]+)$"
@@ -261,54 +275,6 @@ def git_repo_root(env: Mapping[str, str]) -> Path:
     return common.parent if common.name == ".git" else common
 
 
-LANE_DIR_ENV = "HERDR_LANE_DIR"
-
-
-class LaneAnchorError(UsageError):
-    """No lane state anchor could be resolved (exit status 2).
-
-    A lane's state must resolve to one path for the two agents answering each other
-    inside it. Refusing loudly, naming the missing anchors, beats guessing a directory
-    that nothing else reads (#229); `PWD` is not an anchor for the same reason.
-    """
-
-
-def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
-    """The directory one lane's shared state lives in: `HERDR_LANE_DIR`, else the repo root.
-
-    The explicit anchor wins, so a pane provisioned by `herdr-pane` seats its callee's
-    store deliberately instead of letting the callee derive its own. Without it, the
-    repository root that the git common directory sits in is the one path every worktree
-    and every nested subdirectory of this repository agrees on. That root is what
-    `git_repo_root` derives, and it is the repository root only when the common directory
-    is named `.git`. For a bare repository, a submodule (common directory under the
-    superproject's `.git/modules/…`), or `git init --separate-git-dir`, the common
-    directory itself is the base. It can live inside a git directory, and it is still one
-    path per repository.
-
-    `PWD` and the process cwd are deliberately not anchors: a dispatcher and the callee
-    it dispatched to ran in different working directories, resolved different stores
-    through them, and left a lease nobody could release (#229). With no anchor this
-    raises `LaneAnchorError` instead of guessing.
-
-    The result is resolved, so a caller and its callee usually agree on one spelling: an
-    anchor written as a symlink or as `/tmp/...` would otherwise name the same directory as
-    its `realpath` under a second string. Resolution alone is not identity — a case-insensitive
-    volume keeps `MyLaneRepo` and `mylanerepo` as one file and two strings — so the lease
-    comparison decides identity physically, with `os.path.samefile` (#229).
-    """
-    env_dir = env.get(LANE_DIR_ENV)
-    if env_dir:
-        return Path(env_dir).resolve()
-    try:
-        return git_repo_root(env).resolve()
-    except WorktreeError as exc:
-        raise LaneAnchorError(
-            "no lane state anchor: HERDR_LANE_DIR is unset and no git common dir "
-            f"resolves for this working directory ({exc})"
-        ) from exc
-
-
 def is_bare_repository(env: Mapping[str, str]) -> bool:
     """Whether this repository has no working tree of its own."""
     state = run_checked(["git", "rev-parse", "--is-bare-repository"], env).strip()
@@ -342,12 +308,6 @@ def guard_not_in_git_dir(path: Path, env: Mapping[str, str]) -> None:
             f"(computed {path}); remove that worktree, fix Worktrunk's worktree-path, or run "
             "herdr-worktree from a normal checkout"
         )
-
-
-def sanitize_branch(branch: str) -> str:
-    """Reduce a branch name to a filesystem-safe suffix (feat/184 -> feat-184)."""
-    sanitized = BRANCH_UNSAFE_RE.sub("-", branch).strip("-.")
-    return sanitized or "worktree"
 
 
 def fallback_path(branch: str, env: Mapping[str, str]) -> Path:

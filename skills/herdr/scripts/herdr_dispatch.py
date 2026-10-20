@@ -567,7 +567,11 @@ def is_bare_shell_failure(exc: UsageError) -> bool:
     if isinstance(exc, BareShellRefusal):
         return True
     message = str(exc)
-    return "no live agent is running" in message or "has no live agent" in message
+    # Named needles keep the prose (which the CLI diagnostic owns) out of the comparison
+    # operands; the wording must stay verbatim to match `herdr_cli`'s message.
+    no_live_agent = "no live agent is running"
+    no_live_agent_alternate = "has no live agent"
+    return no_live_agent in message or no_live_agent_alternate in message
 
 
 def rewrite_targets_for_bootstrap(options: Options, names: list[str]) -> None:

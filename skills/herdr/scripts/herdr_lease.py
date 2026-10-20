@@ -64,8 +64,13 @@ from types import MappingProxyType
 from typing import Any
 
 import yaml
-from herdr_cli import UsageError, add_shared_argument, entrypoint
-from herdr_worktree import LaneAnchorError, resolve_lane_base_dir
+from herdr_cli import (
+    LaneAnchorError,
+    UsageError,
+    add_shared_argument,
+    entrypoint,
+    resolve_lane_base_dir,
+)
 
 # ── the task-status vocabulary (ADR-0020, #182 t3 A/B) ─────────────────────────────
 # A task record's `status`, and every trajectory event's `from_status`/`to_status`, name one

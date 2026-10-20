@@ -2,6 +2,8 @@
 
 import io
 import json
+import os
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -271,3 +273,53 @@ def test_reply_empty_refusal_names_the_reply(tmp_path: Path) -> None:
     _ = path.write_text("   \n", encoding="utf-8")
     with pytest.raises(herdr_cli.UsageError, match="empty reply"):
         _ = herdr_reply.read_payload(str(path), None)
+
+
+# ── lane anchor primitive (#266 T2a P2) ────────────────────────────────────────────
+
+
+def test_lane_anchor_prefers_the_explicit_env_anchor(tmp_path: Path) -> None:
+    lane = tmp_path / "lane"
+    lane.mkdir()
+
+    assert herdr_cli.resolve_lane_base_dir({herdr_cli.LANE_DIR_ENV: str(lane)}) == lane
+
+
+def test_lane_anchor_resolves_the_repo_root_of_a_real_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = {**os.environ}
+    _ = env.pop(herdr_cli.LANE_DIR_ENV, None)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
+    _ = monkeypatch.chdir(repo)
+
+    assert herdr_cli.resolve_lane_base_dir(env) == repo.resolve()
+
+
+def test_lane_anchor_refuses_when_no_anchor_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = {**os.environ, "GIT_CEILING_DIRECTORIES": str(tmp_path)}
+    _ = env.pop(herdr_cli.LANE_DIR_ENV, None)
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    _ = monkeypatch.chdir(plain)
+
+    with pytest.raises(herdr_cli.LaneAnchorError, match="no lane state anchor"):
+        _ = herdr_cli.resolve_lane_base_dir(env)
+
+
+def test_sanitize_branch_maps_a_slash_to_a_dash() -> None:
+    assert herdr_cli.sanitize_branch("feat/184-worktree") == "feat-184-worktree"
+    assert herdr_cli.sanitize_branch("///") == "worktree"
+
+
+def test_worktree_module_reexports_the_anchor_primitive() -> None:
+    import herdr_worktree
+
+    assert herdr_worktree.resolve_lane_base_dir is herdr_cli.resolve_lane_base_dir
+    assert herdr_worktree.LaneAnchorError is herdr_cli.LaneAnchorError
+    assert herdr_worktree.LANE_DIR_ENV == herdr_cli.LANE_DIR_ENV
+    assert herdr_worktree.sanitize_branch is herdr_cli.sanitize_branch

@@ -1159,7 +1159,9 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 except OSError as exc:
                     raise UsageError(f"cannot read {agents_file}: {exc}") from exc
                 if planned_invariant_content(current, snippet) != current:
-                    if target_is_tracked(agents_file, env) is not False:
+                    # Tri-state: True or None (unknown) is not certainly untracked.
+                    tracked = target_is_tracked(agents_file, env)
+                    if tracked is None or tracked:
                         raise UsageError(
                             f"refusing to append the lane invariant to {agents_file}: its "
                             "version-control state is not certainly untracked — bootstrap the "

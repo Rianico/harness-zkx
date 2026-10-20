@@ -29,6 +29,7 @@ from pathlib import Path
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_OK,
+    LANE_DIR_ENV,
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
@@ -38,13 +39,13 @@ from herdr_cli import (
     find_herdr,
     payload_field,
     require_herdr_env,
+    resolve_lane_base_dir,
     run_herdr_checked,
     scoped_agent_name,
     text_field,
     validate_agent_name,
 )
 from herdr_label import pane_rename_argv
-from herdr_worktree import LANE_DIR_ENV, resolve_lane_base_dir
 
 DIRECTION_ALIASES = {
     "vertical": "down",

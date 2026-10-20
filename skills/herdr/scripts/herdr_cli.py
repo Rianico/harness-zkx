@@ -98,6 +98,85 @@ def find_herdr(env: Mapping[str, str]) -> str:
     return found
 
 
+LANE_DIR_ENV = "HERDR_LANE_DIR"
+BRANCH_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+class LaneAnchorError(UsageError):
+    """No lane state anchor could be resolved (exit status 2).
+
+    A lane's state must resolve to one path for the two agents answering each other
+    inside it. Refusing loudly, naming the missing anchors, beats guessing a directory
+    that nothing else reads (#229); `PWD` is not an anchor for the same reason.
+    """
+
+
+def git_common_dir(env: Mapping[str, str]) -> Path:
+    """Absolute path to the git directory every worktree of this repository shares.
+
+    `--path-format=absolute` answers inside a bare repository too, where `--show-toplevel`
+    fails with "this operation must be run in a work tree" and the plain flag returns `.`,
+    which used to collapse a bare repo's root onto the git directory itself (#207).
+    """
+    done = run_herdr(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], env)
+    if done.returncode == 0 and done.stdout.strip():
+        return Path(os.path.realpath(done.stdout.strip()))
+    raw = run_herdr_checked(["git", "rev-parse", "--git-common-dir"], env).strip()
+    common = Path(raw)
+    if not common.is_absolute():
+        top = run_herdr_checked(["git", "rev-parse", "--show-toplevel"], env).strip()
+        common = Path(top).resolve() / common
+    return Path(os.path.realpath(common))
+
+
+def git_repo_root(env: Mapping[str, str]) -> Path:
+    """Absolute path to the main worktree root, even when called from a linked worktree."""
+    common = git_common_dir(env)
+    return common.parent if common.name == ".git" else common
+
+
+def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
+    """The directory one lane's shared state lives in: `HERDR_LANE_DIR`, else the repo root.
+
+    The explicit anchor wins, so a pane provisioned by `herdr-pane` seats its callee's
+    store deliberately instead of letting the callee derive its own. Without it, the
+    repository root that the git common directory sits in is the one path every worktree
+    and every nested subdirectory of this repository agrees on. That root is what
+    `git_repo_root` derives, and it is the repository root only when the common directory
+    is named `.git`. For a bare repository, a submodule (common directory under the
+    superproject's `.git/modules/…`), or `git init --separate-git-dir`, the common
+    directory itself is the base. It can live inside a git directory, and it is still one
+    path per repository.
+
+    `PWD` and the process cwd are deliberately not anchors: a dispatcher and the callee
+    it dispatched to ran in different working directories, resolved different stores
+    through them, and left a lease nobody could release (#229). With no anchor this
+    raises `LaneAnchorError` instead of guessing.
+
+    The result is resolved, so a caller and its callee usually agree on one spelling: an
+    anchor written as a symlink or as `/tmp/...` would otherwise name the same directory as
+    its `realpath` under a second string. Resolution alone is not identity — a case-insensitive
+    volume keeps `MyLaneRepo` and `mylanerepo` as one file and two strings — so the lease
+    comparison decides identity physically, with `os.path.samefile` (#229).
+    """
+    env_dir = env.get(LANE_DIR_ENV)
+    if env_dir:
+        return Path(env_dir).resolve()
+    try:
+        return git_repo_root(env).resolve()
+    except HerdrError as exc:
+        raise LaneAnchorError(
+            "no lane state anchor: HERDR_LANE_DIR is unset and no git common dir "
+            f"resolves for this working directory ({exc})"
+        ) from exc
+
+
+def sanitize_branch(branch: str) -> str:
+    """Reduce a branch name to a filesystem-safe suffix (feat/184 -> feat-184)."""
+    sanitized = BRANCH_UNSAFE_RE.sub("-", branch).strip("-.")
+    return sanitized or "worktree"
+
+
 def reply_helper() -> Path:
     """Absolute path to this tree's `herdr_reply.py`, a sibling of this module.
 
