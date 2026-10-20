@@ -8,6 +8,7 @@ Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract pro
 ## Which part of this file you need
 
 - Multi-agent boundaries and anti-patterns: [Context and Delegation Architecture](#context-and-delegation-architecture).
+- Lane topology and revision bumps: [Lane Topology & Revisions](#lane-topology--revisions).
 - Orchestrator, Task Manager, and Implementer duties: [Role Boundaries and Authority Contracts](#role-boundaries-and-authority-contracts).
 - Deliverables and ownership: [Artifact Ownership Matrix](#artifact-ownership-matrix).
 - Dispatch and brief templates: [Canonical Prompt Contracts](#canonical-prompt-contracts).
@@ -70,6 +71,51 @@ When a workflow requires high-level coordination and focused execution, the Root
    - **Scope for Implementer**: Deep codebase exploration (Scout), bulk edits (Editor), and verbose test runs (Test Runner) isolated to disposable contexts.
    - **Scope for Task Manager**: Adversarial crux code review (`keel`, `coding-protocol`, `programming-expert`) delegated to an internal review subagent to keep TM context clean and verdicts objective.
    - **The Iron Curtain**: Internal subagents are strictly private to the hosting pane. They **NEVER** invoke Herdr CLI commands, **NEVER** manage panes, and **NEVER** call `herdr_reply.py`. The host agent owns all external lane communication.
+
+---
+
+## Lane Topology & Revisions
+
+The standard lane topology is two tabs: the orchestrator alone in one tab, and a crew tab with the Task Manager and the Implementer side by side. Roles stay the same; only their placement is standardised.
+
+### Bringing Up The Topology
+
+Six commands, in order. Ids are read from responses, never predicted.
+
+```bash
+# Orchestrator tab: one pane.
+herdr tab create --label <prefix> --cwd <orch-worktree> --focus    # read .result.tab
+herdr-bootstrap --pane <orch-pane> --kind agy --role orch --task-group <prefix> --cwd <orch-worktree>
+
+# Crew tab: TM left, Implementer right.
+herdr tab create --label <prefix>-crew --cwd <tm-worktree>        # read .result.tab
+herdr-pane horizontal --pane <tm-pane> --cwd <impl-worktree>       # prints the new pane id
+herdr-bootstrap --pane <tm-pane> --kind pi --role tm --task-group <prefix> --cwd <tm-worktree>
+herdr-bootstrap --pane <impl-pane> --kind pi --role impl --task-group <prefix> --cwd <impl-worktree>
+```
+
+`herdr tab create` names the tab in its response (`.result.tab`); the tab's first pane id is not named there, so read it from `herdr pane list` for that tab. `herdr-pane horizontal` maps to `herdr pane split --direction right` and prints the pane it created — a lane that wants a stacked crew uses `vertical` instead.
+
+> [!WARNING] Tab labels are not unique
+> An exact label resolves to every match, so `herdr-overview --tab <label>` widens silently when two tabs share a label. Keep the lane prefix unique and let revisions carry the difference.
+
+### Revision Bumps
+
+A revision marks a respawn event on the tab label, and nothing else. The slug, agent names, worktrees, branches, leases, and store records are untouched: a tab rename is display-only, and the envelope binds the slug to the physical `tab_id`, never to the label.
+
+```bash
+# 1. Respawn in place: same pane id, same worktree, same agent name.
+herdr-bootstrap --pane <pane> --kind pi --role <role> --task-group <prefix> --cwd <worktree>
+
+# 2. Mark the event on the tab, monotonic by one.
+herdr-label --tab <prefix>-r<N+1>
+```
+
+The revision increments once per respawn event and is monotonic for the life of the lane. After the bump, `herdr-overview --tab <prefix>-r<N+1>` is the live view; the previous label names nothing. Leases and trajectories keep running across a respawn, so a reply that lands after a bump still resolves against the same `<slug>@<tab_id>`.
+
+**Accepted limitation:** a respawn of one role bumps the revision for the whole tab. The tab reports the latest respawn event, not a per-pane generation: after the Implementer alone is respawned, the Task Manager pane is older than the label says. Per-pane precision would require renaming agents per generation, and agent names are the dispatch address (`<slug>-<role>`), so a rename breaks in-flight addressing. That is out of scope by decision; the tab label is the granularity the topology offers.
+
+**Teardown:** there is no `agent stop`. Exit the agent in its pane — it leaves a shell prompt, which is exactly what the next `herdr-bootstrap --pane` needs — or `herdr pane close <pane-id>` when the generation shrinks. Never rebuild a worktree to respawn: the pane is the unit.
 
 ---
 
