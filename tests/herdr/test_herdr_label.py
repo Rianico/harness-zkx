@@ -6,7 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import herdr_cli
@@ -1267,3 +1267,27 @@ def test_uv_run_help_executes_without_path_configuration(tmp_path: Path) -> None
     )
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert "usage: herdr-label" in done.stdout
+
+
+def test_pane_tab_id_reads_the_merged_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The tab lookup must reuse the annotated snapshot, not query the daemon again."""
+    inventory = herdr_cli.Inventory(
+        raw_panes="",
+        raw_agents="",
+        panes=[{"pane_id": "w9:p1", "tab_id": "w9:t1"}],
+        agents=[],
+        bindings=[],
+        unclaimed=[],
+    )
+
+    def fake_merged_panes(_herdr: str, _env: Mapping[str, str]) -> Sequence[Mapping[str, object]]:
+        return inventory.panes
+
+    monkeypatch.setattr(herdr_label, "merged_panes", fake_merged_panes)
+
+    def refuse(_argv: list[str], _env: dict[str, str]) -> str:
+        raise AssertionError("pane_tab_id must not read the daemon directly")
+
+    monkeypatch.setattr(herdr_label, "run_herdr_checked", refuse)
+
+    assert herdr_label.pane_tab_id("/bin/herdr", "w9:p1", {}) == "w9:t1"

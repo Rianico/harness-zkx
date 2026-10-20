@@ -685,3 +685,21 @@ def test_new_writes_reach_the_store_only_through_the_resolver(
     assert (lane / ".lane" / "tasks.yaml").is_file()
     assert not (worktree / ".lane").exists(), "a per-worktree store was created"
     assert not (worktree / ".herdr-lease.json").exists()
+
+
+def test_write_state_uses_the_shared_atomic_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import herdr_cli
+
+    calls: list[tuple[Path, dict[str, Any]]] = []
+
+    def fake(path: Path, data: Mapping[str, Any], **_kwargs: object) -> None:
+        calls.append((path, dict(data)))
+
+    monkeypatch.setattr(herdr_cli, "atomic_write_yaml", fake)
+
+    herdr_lease._write_state({"active_leases": {"callee": {}}}, base_dir=tmp_path)
+
+    assert calls
+    assert calls[0][1] == {"active_leases": {"callee": {}}}

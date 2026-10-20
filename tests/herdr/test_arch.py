@@ -29,6 +29,12 @@ from tests.herdr.stub import SCRIPTS_DIR
 
 EXTRACTED = ("herdr_evidence", "herdr_git_guard")
 
+REEXPORT_SHIMS = (
+    ("herdr_prompt", "herdr_envelope"),
+    ("herdr_reply", "herdr_evidence"),
+    ("herdr_reply", "herdr_git_guard"),
+)
+
 
 def _imported_roots(tree: ast.AST) -> set[str]:
     """Top-level module names imported at any depth of the tree, absolute imports only."""
@@ -69,4 +75,18 @@ def test_importing_the_module_never_loads_herdr_reply(module: str) -> None:
     assert done.returncode == 0, (
         f"importing {module} loaded herdr_reply "
         f"(rc={done.returncode}): {done.stderr.strip() or 'herdr_reply in sys.modules'}"
+    )
+
+
+@pytest.mark.parametrize(("module", "source"), REEXPORT_SHIMS)
+def test_reexport_shim_is_one_grouped_import(module: str, source: str) -> None:
+    """Each re-export shim imports its source module once, not once per exported name."""
+    path = SCRIPTS_DIR / f"{module}.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    statements = [
+        node for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == source
+    ]
+    assert len(statements) == 1, (
+        f"{module}.py imports {source} in {len(statements)} statements; "
+        "group the re-exports into one"
     )
