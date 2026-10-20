@@ -1,5 +1,8 @@
 # Subagent & Task Delivery Contract
 
+> [!IMPORTANT]
+> **Model-Exclusive IPC Contract**: This format is strictly for headless subagents and autonomous tasks. Never emit these headings (`## Route`, `## Issues`, `## Artifacts`) to the human user.
+
 Subagents, lane workers, and autonomous tasks must format output using standard headings:
 
 - **`## Summary`**: Carmack-style technical approach, architectural rationale, state tradeoffs (≤100 words).

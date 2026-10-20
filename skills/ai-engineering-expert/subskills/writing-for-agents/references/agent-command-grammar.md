@@ -12,7 +12,7 @@ Apply this file to tool/function descriptions, error messages, system prompts, i
 
 ## Single action per sentence
 
-- Limit each sentence to exactly one action.
+- Limit each instruction to exactly one action in execution runbooks and tool prompts. Explanatory rationale and context are exempt.
 - Never join consecutive actions with `and then`, semicolons, or comma splices.
 - Compound sentences tempt the model into premature completion or partial step execution.
 

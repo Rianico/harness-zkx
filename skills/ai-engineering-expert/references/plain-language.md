@@ -18,7 +18,7 @@ Adapted from `warpdotdev/common-skills@b811c24` (MIT, © Denver Technologies, In
 >   - Rule 8.5-8.7: count parentheticals, elements, and hyphenated words as one word.
 > - **Enforcement status:** `ste100.py` enforces Rules 3.7, 5.1, and 8.1, plus the lexical bans, deterministically. Rule 2.1 (multi-word nouns) and the Section 6 descriptive rules stay review judgment calls. No reliable deterministic check exists for noun chains.
 > - **Intentional CS Adaptations / Deviations:**
->   1. **Dictionary Decoupling:** Replaced Part 2 aerospace dictionary with CS Ubiquitous Language and insulated code tokens.
+>   1. **The 80% Sweet Spot:** Decouple from the aerospace dictionary and grammatical rigidity. Apply STE-100 rules to eliminate fluff, active-voice ambiguity, and run-ons without inflating token volume.
 >   2. **Epistemic Modality:** Preserved `MUST`, `SHOULD`, `MAY`, and `could` for system certainty and confidence bounds. Issue 9 Rule 3.4 bans auxiliary verbs, but computing requires them.
 >   3. **Marketing Fluff Extension:** Added empirical replacements for ungrounded superlatives (`robust`, `seamless`).
 
@@ -125,6 +125,7 @@ A maintainer triaging under context-switching pressure must grasp problem, evide
 - **Front-load the core point:** State the observed problem and proposed decision in the first paragraph.
 - **Short paragraphs:** Split blocks longer than ~6 sentences into vertical lists.
 - **Scannable formatting:** Use bold anchors, tables for multi-attribute comparisons, and fenced blocks for commands.
+- **Visual escalation ladder:** Stop writing text when relationships become non-linear. Use ASCII trees for hierarchies, Mermaid for sequences, and standalone HTML artifacts for multi-dimensional data.
 
 ## What is exempt
 
@@ -134,6 +135,7 @@ Technical names stay verbatim. Never paraphrase an identifier to satisfy a word 
 - Command lines, flags, and arguments: `uv run pytest -k test_ste100`.
 - Established repository and domain terms: merge queue, feature flag, migration, presubmit, one-way door.
 - Product, protocol, and service names: `PostgreSQL`, `HTTP/2`, `Docker`.
+- Established CS acronyms: `API`, `CLI`, `PR`, `CI`, `AST`, `JSON`, `HTTP`, `SQL`, `CPU`, `OS`. Never expand universal industry abbreviations.
 
 ## Rewriting pinned text
 

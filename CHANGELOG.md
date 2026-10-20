@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **rules:** refine mental-model, response-format, and writing skills with 80% ASD-STE100, visual patterns, and model-exclusive IPC contract (#274)
 * **rules:** streamline git-convention and gotcha guardrails with STE-100 compliance (#273)
 * **gh-router/pr-land:** One failure seam, one classifier and one home per reader replace the scattered error handling the four lens reviews found. `run_command` now raises a typed `CommandFailed` carrying the tool, argv, exit code and stderr, so nothing infers a failure from message text; `StatusReport`/`CheckReport` build the pinned schema once instead of three dict literals and ten renderer asserts; the `pr.py` re-export monolith (770→538 lines) is retired, nine duplicated readers collapse to one each, and the orphaned `checks.sh` twin is deleted. No behaviour change. (#272)
 * **gh-router/pr-land:** Derive landing state per run and emit it instead of persisting an artifact. `--status --json` reports the pinned `gh-router/pr-land/status@1` predicates, failure states, the scaffold's `stale` flag, the title's bare and worst-case budget, the squash preview and the legal transitions with their `mutation` kind, always exiting 0 and never refusing. `draft.json`, the scaffold signature and `--out-dir` are gone; the leaf lives at `.lsz/gh-router/<head-slug>.md`; refusals carry `code`/`reason`/`remedy`/`site` on mutating paths; a failed read degrades to a named refusal (ADR-0021) (#271)
