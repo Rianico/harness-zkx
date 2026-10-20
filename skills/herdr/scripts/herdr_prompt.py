@@ -404,8 +404,17 @@ def resolve_group_members(
     agents: Sequence[Mapping[str, object]],
     caller_pane_id: str,
     target_panes: Sequence[str],
+    lane_slug: str | None = None,
 ) -> list[str]:
-    """Find every live agent in the caller's workspace (or target's workspace), caller first."""
+    """Every live lane agent near the caller: caller first, then the lane roster.
+
+    With a lane slug the roster is the lane, not the workspace: agents named `<slug>-…` in the
+    caller and target workspaces, plus the addressing pair — the caller always, and any addressed
+    target even when its name carries no slug (`orchestrator`, `reviewer`), because being party to
+    the message is what puts a pane in the lane. Without a slug the roster stays workspace-wide,
+    byte-identical to the ad-hoc behaviour.
+    """
+    slug = (lane_slug or "").strip() or None
     pane_ws: dict[str, str] = {}
     for p in panes:
         pid = entry_optional_text(p, "pane_id")
@@ -450,6 +459,8 @@ def resolve_group_members(
         name = entry_optional_text(a, "name")
         pid = entry_optional_text(a, "pane_id")
         if not name or not pid or pid == caller_pane_id:
+            continue
+        if slug is not None and not name.startswith(f"{slug}-") and pid not in resolved_targets:
             continue
         if pane_ws.get(pid) in workspaces_to_check:
             others.append(f"{name}@{pid}")
@@ -1242,7 +1253,9 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
         panes, agents = fetch_inventory(herdr, env)
         caller = resolve_caller(herdr, env, inventory=(panes, agents))
         receivers = {target: resolve_receiver(panes, agents, target) for target in targets}
-        group_members = resolve_group_members(panes, agents, caller.pane_id, targets)
+        group_members = resolve_group_members(
+            panes, agents, caller.pane_id, targets, options.task_group
+        )
         payloads = {
             target: wrap_with_envelope(
                 payload,
