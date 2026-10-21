@@ -20,6 +20,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../../../lib" && pwd)"
 # shellcheck source=../../../lib/repo.sh
 source "$LIB_DIR/repo.sh"
+# shellcheck source=../../../lib/runs.sh
+source "$LIB_DIR/runs.sh"
 
 # Release repo from this checkout's push remote — see repo_slug() in lib/repo.sh for why
 # `gh repo view` is unsafe here (upstream/fork remote → wrong release target).
@@ -65,8 +67,16 @@ for ((i=1;i<=TRIES;i++)); do
       git describe --tags --abbrev=0 2>&1 | tail -n 1 || true
       exit 0
     else
-      echo "release $CONCLUSION — fetching logs" >&2
-      gh run view "$RUN_ID" --repo "$REPO" --log 2>&1 | tail -n 300 >&2 || true
+      echo "release ${CONCLUSION:-failed} — fetching logs" >&2
+      # Name the failing job › step before the tail: a bare conclusion sent the operator
+      # back to two hand-written `gh run view` calls (release run 39621268988).
+      _steps=$(run_failing_steps "$REPO" "$RUN_ID") || true
+      if [[ -n "$_steps" ]]; then
+        while IFS= read -r _step_line; do
+          printf '  %s\n' "$_step_line" >&2
+        done <<<"$_steps"
+      fi
+      run_log_tail "$REPO" "$RUN_ID" 300 >&2 || true
       exit 1
     fi
   fi
