@@ -66,6 +66,7 @@ def test_lib_variant_fields():
         "format:fix": "oxfmt .",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
+        "verify": "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test",
     }
     assert "coverage" not in pkg["scripts"]
     assert "@vitest/coverage-v8" not in pkg["devDependencies"]
@@ -90,6 +91,90 @@ def test_coverage_wiring():
     assert "@vitest/coverage-v8" in pkg["devDependencies"]
     cfg = scaffold.render_template("typescript/vitest.config.ts.j2", threshold=90)
     assert "lines: 90" in cfg and "functions: 90" in cfg
+
+
+def _node_ci_gate(with_coverage: bool, coverage_script: str = "coverage") -> str:
+    """The one command the node release workflow runs as its verify gate."""
+    yml = scaffold.render_ci_release(
+        "node",
+        with_coverage=with_coverage,
+        threshold=scaffold.DEFAULT_COVERAGE_THRESHOLD,
+        coverage_script=coverage_script,
+    )
+    runs = [
+        line.split("- run: ", 1)[1].strip()
+        for line in yml.splitlines()
+        if "- run: " in line and ("run lint" in line or f"run {coverage_script}" in line)
+    ]
+    assert len(runs) == 1, runs
+    return runs[0]
+
+
+def test_verify_script_is_the_whole_gate_in_ci_order():
+    """One command, one exit code: `verify` is the chain CI runs, not a second spelling."""
+    pkg = json.loads(scaffold.build_package_json("demo", "lib", with_coverage=False))
+    verify = pkg["scripts"]["verify"]
+    assert verify == _node_ci_gate(with_coverage=False)
+    assert verify.split(" && ") == [
+        "pnpm run lint",
+        "pnpm run format",
+        "pnpm run typecheck",
+        "pnpm test",
+    ]
+
+
+def test_coverage_verify_ends_on_the_project_coverage_script():
+    """Coverage projects gate on their own script name, and it stays the last step."""
+    pkg = json.loads(scaffold.build_package_json("demo", "lib", with_coverage=True))
+    assert pkg["scripts"]["verify"] == (
+        "pnpm run lint && pnpm run format && pnpm run typecheck && "
+        + _node_ci_gate(with_coverage=True)
+    )
+    aliased = json.loads(scaffold.build_package_json("demo", "lib", True, "test:coverage"))
+    assert aliased["scripts"]["verify"].endswith("&& " + _node_ci_gate(True, "test:coverage"))
+
+
+def test_agents_runtime_pointer_cites_verify(tmp_path):
+    """The agent-facing pointer names one command, not the four-step chain."""
+    rc = _run_main(
+        "--flavor",
+        "typescript",
+        "--ts-variant",
+        "lib",
+        "--project-name",
+        "demo",
+        "--cwd",
+        str(tmp_path),
+    )
+    assert rc == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    runtime = text.split("### Runtime", 1)[1]
+    assert "`pnpm run verify`" in runtime
+    assert "oxlint/oxfmt/tsc/vitest" not in runtime
+
+
+def test_existing_manifest_adopts_verify_with_one_script(tmp_path):
+    """A consumer repo adds the script and nothing else; existing entries keep their values."""
+    (tmp_path / "package.json").write_text(
+        json.dumps({"name": "demo", "scripts": {"test": "vitest run"}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    rc = _run_main(
+        "ensure",
+        "--cwd",
+        str(tmp_path),
+        "ts-script",
+        "--name",
+        "verify",
+        "--cmd",
+        "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test",
+    )
+    assert rc == 0
+    pkg = json.loads((tmp_path / "package.json").read_text(encoding="utf-8"))
+    assert pkg["scripts"]["verify"] == (
+        "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test"
+    )
+    assert pkg["scripts"]["test"] == "vitest run"
 
 
 def test_tsconfig_base():
