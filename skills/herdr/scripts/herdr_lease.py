@@ -63,9 +63,15 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+import herdr_cli
 import yaml
-from herdr_cli import UsageError, add_shared_argument, guard
-from herdr_worktree import LaneAnchorError, resolve_lane_base_dir
+from herdr_cli import (
+    LaneAnchorError,
+    UsageError,
+    add_shared_argument,
+    entrypoint,
+    resolve_lane_base_dir,
+)
 
 # ── the task-status vocabulary (ADR-0020, #182 t3 A/B) ─────────────────────────────
 # A task record's `status`, and every trajectory event's `from_status`/`to_status`, name one
@@ -393,20 +399,8 @@ def state_is_readable(
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.tmp-")
-    try:
-        with open(fd, "wb") as f:
-            _ = f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, path)
-    except BaseException:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    """Write `content` through the shared primitive (see `herdr_cli.atomic_write_bytes`)."""
+    herdr_cli.atomic_write_bytes(path, content)
 
 
 def _write_state(
@@ -415,10 +409,9 @@ def _write_state(
     env: Mapping[str, str] | None = None,
 ) -> None:
     """Persist `state` to the canonical tasks file, atomically."""
-    payload = yaml.safe_dump(
-        state, sort_keys=False, allow_unicode=True, default_flow_style=False
-    ).encode("utf-8")
-    _atomic_write(resolve_tasks_file(base_dir, env=env), payload)
+    herdr_cli.atomic_write_yaml(
+        resolve_tasks_file(base_dir, env=env), state, default_flow_style=False
+    )
 
 
 def get_lease(
@@ -1359,9 +1352,7 @@ def main(
     argv: Sequence[str] | None = None,
     env: Mapping[str, str] | None = None,
 ) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-lease", lambda: run(options, env_map))
+    return entrypoint("herdr-lease", build_parser, run, namespace=Options(), argv=argv, env=env)
 
 
 if __name__ == "__main__":

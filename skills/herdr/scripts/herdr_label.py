@@ -44,7 +44,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -61,9 +60,11 @@ from herdr_cli import (
     current_pane_id,
     entries,
     entry_optional_text,
+    entrypoint,
     fetch_inventory,
     find_herdr,
-    guard,
+    merged_agents,
+    merged_panes,
     require_herdr_env,
     run_herdr_checked,
     scoped_agent_name,
@@ -659,7 +660,7 @@ def check_pairs(options: Options, env: Mapping[str, str]) -> int:
 
 def pane_tab_id(herdr: str, pane_id: str, env: Mapping[str, str]) -> str:
     """The tab id hosting `pane_id`, read from the pane inventory."""
-    panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    panes = merged_panes(herdr, env)
     for entry in panes:
         if entry_optional_text(entry, "pane_id") != pane_id:
             continue
@@ -730,7 +731,7 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
         validate_agent_name(name)
 
     pane_id = options.pane or current_pane_id(herdr, env)
-    agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    agents = merged_agents(herdr, env)
     hosts_agent = any(entry_optional_text(entry, "pane_id") == pane_id for entry in agents)
     rename_agent = hosts_agent and not options.label_only
 
@@ -767,13 +768,18 @@ def label_pane(options: Options, env: Mapping[str, str]) -> int:
     return EXIT_OK
 
 
-def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
+def _dispatch(options: Options, env: Mapping[str, str]) -> int:
+    """Pick the verb from the parsed options; `--tab` renames the tab, not the pane."""
     if options.tab is not None:
-        return guard("herdr-label", lambda: rename_tab(options, env_map))
+        return rename_tab(options, env)
     action = check_pairs if (options.verify or options.sync) else label_pane
-    return guard("herdr-label", lambda: action(options, env_map))
+    return action(options, env)
+
+
+def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
+    return entrypoint(
+        "herdr-label", build_parser, _dispatch, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

@@ -50,7 +50,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import re
 import sys
 import time
@@ -96,10 +95,10 @@ from herdr_cli import (
     diagnose_target_pane,
     entries,
     entry_optional_text,
+    entrypoint,
     error_code,
     fetch_inventory,
     find_herdr,
-    guard,
     read_payload_stream,
     require_herdr_env,
     run_herdr,
@@ -111,72 +110,37 @@ from herdr_cli import (
 # `herdr_prompt.<name>` for every existing consumer. Identity producers above import
 # `CallerContext`, and `prompt_agents` calls `wrap_with_envelope`; the rest are explicit
 # re-exports (the `name as name` form marks them as public API for the type checker).
-from herdr_envelope import (  # noqa: F401
+# The envelope domain moved to `herdr_envelope`; these names stay reachable as
+# `herdr_prompt.<name>` for every existing consumer (`name as name` marks them public API).
+# fmt: off - keep the one-block grouping the structural test pins
+# isort: off
+from herdr_envelope import (
     PAGING_DELIMITER as PAGING_DELIMITER,
-)
-from herdr_envelope import (
     REPLY_HELPER as REPLY_HELPER,
-)
-from herdr_envelope import (
     SKILL_NOTICE as SKILL_NOTICE,
-)
-from herdr_envelope import (
     STATE_COMPLETED as STATE_COMPLETED,
-)
-from herdr_envelope import (
     STATE_FAILED as STATE_FAILED,
-)
-from herdr_envelope import (
     STATE_INPUT_REQUIRED as STATE_INPUT_REQUIRED,
-)
-from herdr_envelope import (
     STATE_WORKING as STATE_WORKING,
-)
-from herdr_envelope import (
     CallerContext as CallerContext,
-)
-from herdr_envelope import (
     Envelope as Envelope,
-)
-from herdr_envelope import (
     _scalar as _scalar,  # pyright: ignore[reportPrivateUsage]
-)
-from herdr_envelope import (
     _single_line as _single_line,  # pyright: ignore[reportPrivateUsage]
-)
-from herdr_envelope import (
     caller_anchor as caller_anchor,
-)
-from herdr_envelope import (
     format_delivery_summary as format_delivery_summary,
-)
-from herdr_envelope import (
     parse_envelope as parse_envelope,
-)
-from herdr_envelope import (
     render_envelope as render_envelope,
-)
-from herdr_envelope import (
     render_prelude as render_prelude,
-)
-from herdr_envelope import (
     render_reply_contract as render_reply_contract,
-)
-from herdr_envelope import (
     reply_state as reply_state,
-)
-from herdr_envelope import (
     sender_ref as sender_ref,
-)
-from herdr_envelope import (
     split_envelope_and_body as split_envelope_and_body,
-)
-from herdr_envelope import (
     utc_stamp as utc_stamp,
-)
-from herdr_envelope import (
     wrap_with_envelope as wrap_with_envelope,
 )
+
+# isort: on
+# fmt: on
 from herdr_transcript import build_agent_read_argv
 
 BLOCKED = "blocked"
@@ -331,6 +295,31 @@ def build_resume_cmd(kind: str | None, session_id: str | None) -> str | None:
     return None
 
 
+PI_SESSION_FILE_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}T[\d-]+Z_"
+    r"(?P<session>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+    r"\.jsonl"
+)
+
+
+def short_session_id(value: str | None) -> str | None:
+    """Reduce a pi session file name to its session id; anything else is untouched.
+
+    The daemon reports `agent_session.value` as the session file path
+    (`<timestamp>_<uuid>.jsonl`). The id alone selects the same session for
+    `pi --session`, and the envelope's `context_id` is a routing ref, not a filesystem
+    location. Only a filename matching the pi shape is rewritten: another kind's handle,
+    an already-short id, or an unfamiliar path passes through verbatim (#267).
+    """
+    if not value:
+        return value
+    # Only the file name is inspected: the directory is a per-workspace slug, and matching
+    # the whole path would tie this rule to one machine's session root.
+    name = value.replace("\\", "/").rsplit("/", 1)[-1]
+    match = PI_SESSION_FILE_RE.fullmatch(name)
+    return match.group("session") if match else value
+
+
 def _session_value(entry: Mapping[str, object]) -> str | None:
     """Read the agent-native session handle out of an agent list entry."""
     sess = entry.get("agent_session")
@@ -359,11 +348,13 @@ def build_identity(
     agent: str | None = None
     kind: str | None = None
     session_id: str | None = None
+    session_path: str | None = None
     for entry in agents:
         if entry_optional_text(entry, "pane_id") == pane_id:
             agent = entry_optional_text(entry, "name")
             kind = entry_optional_text(entry, "agent")
-            session_id = _session_value(entry)
+            session_path = _session_value(entry)
+            session_id = short_session_id(session_path)
             break
     return CallerContext(
         pane_id=pane_id,
@@ -371,6 +362,7 @@ def build_identity(
         agent=agent,
         kind=kind,
         session_id=session_id,
+        session_path=session_path,
         resume_cmd=build_resume_cmd(kind, session_id),
         tab_id=tab_id,
         cwd=cwd,
@@ -412,8 +404,17 @@ def resolve_group_members(
     agents: Sequence[Mapping[str, object]],
     caller_pane_id: str,
     target_panes: Sequence[str],
+    lane_slug: str | None = None,
 ) -> list[str]:
-    """Find every live agent in the caller's workspace (or target's workspace), caller first."""
+    """Every live lane agent near the caller: caller first, then the lane roster.
+
+    With a lane slug the roster is the lane, not the workspace: agents named `<slug>-…` in the
+    caller and target workspaces, plus the addressing pair — the caller always, and any addressed
+    target even when its name carries no slug (`orchestrator`, `reviewer`), because being party to
+    the message is what puts a pane in the lane. Without a slug the roster stays workspace-wide,
+    byte-identical to the ad-hoc behaviour.
+    """
+    slug = (lane_slug or "").strip() or None
     pane_ws: dict[str, str] = {}
     for p in panes:
         pid = entry_optional_text(p, "pane_id")
@@ -458,6 +459,8 @@ def resolve_group_members(
         name = entry_optional_text(a, "name")
         pid = entry_optional_text(a, "pane_id")
         if not name or not pid or pid == caller_pane_id:
+            continue
+        if slug is not None and not name.startswith(f"{slug}-") and pid not in resolved_targets:
             continue
         if pane_ws.get(pid) in workspaces_to_check:
             others.append(f"{name}@{pid}")
@@ -696,7 +699,9 @@ def agent_readiness(
         obs = observe_agent(herdr, target, env)
     except HerdrError:
         return (False, None, None)
-    ready = obs.status in ("idle", "done") and obs.interactive_ready is not False
+    # Tri-state: None (unreported) counts as ready; only an explicit False blocks.
+    blocked_on_input = obs.interactive_ready is not None and not obs.interactive_ready
+    ready = obs.status in ("idle", "done") and not blocked_on_input
     return (ready, obs.status, obs.revision)
 
 
@@ -1031,7 +1036,7 @@ def wait_for_ready(
     status_label = last_status or "unknown"
     held = f"{_format_seconds(timeout)}s over {attempts} readiness probes"
     interactive_ready = _read_interactive_ready(herdr, target, env)
-    if interactive_ready is False:
+    if interactive_ready is not None and not interactive_ready:
         detail = (
             "observed BLOCKED-ON-INPUT — the readiness read reports "
             f"interactive_ready=false (status={status_label}); open the pane and "
@@ -1248,7 +1253,9 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
         panes, agents = fetch_inventory(herdr, env)
         caller = resolve_caller(herdr, env, inventory=(panes, agents))
         receivers = {target: resolve_receiver(panes, agents, target) for target in targets}
-        group_members = resolve_group_members(panes, agents, caller.pane_id, targets)
+        group_members = resolve_group_members(
+            panes, agents, caller.pane_id, targets, options.task_group
+        )
         payloads = {
             target: wrap_with_envelope(
                 payload,
@@ -1340,13 +1347,15 @@ def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    try:
-        return guard("herdr-prompt", lambda: prompt_agents(options, env_map))
-    except WaitTimeout as exc:
-        print(f"herdr-prompt: {exc}", file=sys.stderr)
-        return EXIT_WAIT_TIMEOUT
+    return entrypoint(
+        "herdr-prompt",
+        build_parser,
+        prompt_agents,
+        namespace=Options(),
+        argv=argv,
+        env=env,
+        timeout=(WaitTimeout, EXIT_WAIT_TIMEOUT),
+    )
 
 
 if __name__ == "__main__":

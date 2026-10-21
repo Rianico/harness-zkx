@@ -82,9 +82,16 @@ warn() { _log "$_C_YELLOW" "⚠" "$*"; }
 # fail — log and exit with the caller's code (default 1).
 # Without the exit, `cmd || fail … 3` kept running and reported success, so documented exit
 # codes never happened — a failed workflow watch returned 0.
+# fail_line — log a failure marker and return. The non-exiting half of `fail`, for failure
+# paths that still owe the operator diagnostics (failing job › step, log tail) before the
+# exit. Using `fail` there would make every statement after it unreachable.
+fail_line() {
+  _log "$_C_RED" "✘" "$*"
+}
+
 fail() {
   local _code="${2:-1}"
-  _log "$_C_RED" "✘" "$1"
+  fail_line "$1"
   exit "$_code"
 }
 dim() {

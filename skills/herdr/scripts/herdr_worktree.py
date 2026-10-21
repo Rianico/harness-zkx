@@ -46,14 +46,26 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from herdr_cli import EXIT_OK, HerdrError, UsageError, add_shared_argument, guard
+import herdr_cli
+from herdr_cli import BRANCH_UNSAFE_RE as BRANCH_UNSAFE_RE
+from herdr_cli import (
+    EXIT_OK,
+    HerdrError,
+    UsageError,
+    add_shared_argument,
+    entrypoint,
+    failure_detail,
+    resolve_lane_base_dir,
+    sanitize_branch,
+)
+from herdr_cli import LANE_DIR_ENV as LANE_DIR_ENV
+from herdr_cli import LaneAnchorError as LaneAnchorError
 
 ENGINE_WORKTRUNK = "worktrunk"
 ENGINE_GIT = "git"
@@ -65,7 +77,6 @@ DETACHED_MARKER = "(detached HEAD)"
 # `git worktree list` compact rows some wrappers emit despite --porcelain:
 #   /path/to/wt 0e57943 [feat/184-worktree]
 COMPACT_WORKTREE_RE = re.compile(r"^(?P<path>\S+)\s+[0-9a-f]{7,40}\s+\[(?P<branch>.+)\]$")
-BRANCH_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 BRANCH_NAMESPACE_RE = re.compile(
     r"^lane/(?P<task_group>[A-Za-z0-9._-]+)/(?P<role>[A-Za-z0-9._-]+)/"
     r"(?P<ticket>[A-Za-z0-9._-]+)$"
@@ -79,6 +90,10 @@ FLAG_UNLINKED = "unlinked"
 FLAG_ORPHAN = "orphan"
 FLAG_NAMESPACE = "namespace"
 FLAG_LAYOUT = "layout"
+FLAG_STALE_LANE = "stale-lane"
+
+#: Per-worktree fossil of the lane's shared state; the real store is the lane base (#268 R1).
+LANE_STATE_DIR = ".lane"
 
 
 class WorktreeError(HerdrError):
@@ -116,18 +131,15 @@ class Options:
 
 
 def run(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
-    """Run argv without a shell, capturing text; missing binaries raise WorktreeError."""
+    """Run argv without a shell; a failure raises this module's own error type.
+
+    Delegates to the shared subprocess seam so one place spawns a process, and translates
+    its `HerdrError` so worktree callers (and their tests) keep seeing `WorktreeError`.
+    """
     try:
-        return subprocess.run(
-            list(argv), capture_output=True, text=True, check=False, env=dict(env)
-        )
-    except OSError as exc:
-        raise WorktreeError(f"cannot run {argv[0]}: {exc}") from exc
-
-
-def failure_detail(done: subprocess.CompletedProcess[str]) -> str:
-    """One-line diagnostic from a failed process, preferring stderr."""
-    return (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
+        return herdr_cli.run_herdr(argv, env)
+    except HerdrError as exc:
+        raise WorktreeError(str(exc)) from exc
 
 
 def run_checked(argv: Sequence[str], env: Mapping[str, str]) -> str:
@@ -255,54 +267,6 @@ def git_repo_root(env: Mapping[str, str]) -> Path:
     return common.parent if common.name == ".git" else common
 
 
-LANE_DIR_ENV = "HERDR_LANE_DIR"
-
-
-class LaneAnchorError(UsageError):
-    """No lane state anchor could be resolved (exit status 2).
-
-    A lane's state must resolve to one path for the two agents answering each other
-    inside it. Refusing loudly, naming the missing anchors, beats guessing a directory
-    that nothing else reads (#229); `PWD` is not an anchor for the same reason.
-    """
-
-
-def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
-    """The directory one lane's shared state lives in: `HERDR_LANE_DIR`, else the repo root.
-
-    The explicit anchor wins, so a pane provisioned by `herdr-pane` seats its callee's
-    store deliberately instead of letting the callee derive its own. Without it, the
-    repository root that the git common directory sits in is the one path every worktree
-    and every nested subdirectory of this repository agrees on. That root is what
-    `git_repo_root` derives, and it is the repository root only when the common directory
-    is named `.git`. For a bare repository, a submodule (common directory under the
-    superproject's `.git/modules/…`), or `git init --separate-git-dir`, the common
-    directory itself is the base. It can live inside a git directory, and it is still one
-    path per repository.
-
-    `PWD` and the process cwd are deliberately not anchors: a dispatcher and the callee
-    it dispatched to ran in different working directories, resolved different stores
-    through them, and left a lease nobody could release (#229). With no anchor this
-    raises `LaneAnchorError` instead of guessing.
-
-    The result is resolved, so a caller and its callee usually agree on one spelling: an
-    anchor written as a symlink or as `/tmp/...` would otherwise name the same directory as
-    its `realpath` under a second string. Resolution alone is not identity — a case-insensitive
-    volume keeps `MyLaneRepo` and `mylanerepo` as one file and two strings — so the lease
-    comparison decides identity physically, with `os.path.samefile` (#229).
-    """
-    env_dir = env.get(LANE_DIR_ENV)
-    if env_dir:
-        return Path(env_dir).resolve()
-    try:
-        return git_repo_root(env).resolve()
-    except WorktreeError as exc:
-        raise LaneAnchorError(
-            "no lane state anchor: HERDR_LANE_DIR is unset and no git common dir "
-            f"resolves for this working directory ({exc})"
-        ) from exc
-
-
 def is_bare_repository(env: Mapping[str, str]) -> bool:
     """Whether this repository has no working tree of its own."""
     state = run_checked(["git", "rev-parse", "--is-bare-repository"], env).strip()
@@ -336,12 +300,6 @@ def guard_not_in_git_dir(path: Path, env: Mapping[str, str]) -> None:
             f"(computed {path}); remove that worktree, fix Worktrunk's worktree-path, or run "
             "herdr-worktree from a normal checkout"
         )
-
-
-def sanitize_branch(branch: str) -> str:
-    """Reduce a branch name to a filesystem-safe suffix (feat/184 -> feat-184)."""
-    sanitized = BRANCH_UNSAFE_RE.sub("-", branch).strip("-.")
-    return sanitized or "worktree"
 
 
 def fallback_path(branch: str, env: Mapping[str, str]) -> Path:
@@ -472,37 +430,49 @@ def list_worktrees(env: Mapping[str, str]) -> tuple[str, list[Worktree]]:
     return ENGINE_GIT, parse_git_worktree_list(raw)
 
 
+def print_rows(rows: Iterable[str]) -> None:
+    """Print one pre-formatted row per line."""
+    for row in rows:
+        print(row)
+
+
+def emit(payload: Mapping[str, Any], as_json: bool, render: Callable[[], None]) -> None:
+    """Print `payload` as JSON, or let the caller render its plain-text rows.
+
+    Every verb answers with the same shape: a JSON object under `--json`, and a fixed
+    human row otherwise. Keeping the branch here means one place decides the encoding,
+    and each verb keeps only its own payload keys and row format.
+    """
+    if as_json:
+        print(json.dumps(payload))
+        return
+    render()
+
+
 def emit_allocation(allocation: Allocation, status: str, as_json: bool) -> None:
     """Print one allocation as a bare path or as JSON."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "branch": allocation.branch,
-                    "cwd": allocation.path,
-                    "engine": allocation.engine,
-                    "status": status,
-                }
-            )
-        )
-        return
-    print(allocation.path)
+    emit(
+        {
+            "branch": allocation.branch,
+            "cwd": allocation.path,
+            "engine": allocation.engine,
+            "status": status,
+        },
+        as_json,
+        lambda: print(allocation.path),
+    )
 
 
 def emit_list(engine: str, worktrees: Sequence[Worktree], as_json: bool) -> None:
     """Print active worktrees as `branch  path` rows or as JSON."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "engine": engine,
-                    "worktrees": [{"branch": w.branch, "path": w.path} for w in worktrees],
-                }
-            )
-        )
-        return
-    for worktree in worktrees:
-        print(f"{worktree.branch}  {worktree.path}")
+    emit(
+        {
+            "engine": engine,
+            "worktrees": [{"branch": w.branch, "path": w.path} for w in worktrees],
+        },
+        as_json,
+        lambda: print_rows(f"{worktree.branch}  {worktree.path}" for worktree in worktrees),
+    )
 
 
 @dataclass(frozen=True)
@@ -523,6 +493,7 @@ class BindingStatus:
     clean: bool
     detached: bool
     flags: tuple[str, ...]
+    hint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -618,10 +589,9 @@ def run_safe(argv: Sequence[str], env: Mapping[str, str]) -> str:
 def yaml_module() -> Any:
     """Import pyyaml on demand; sibling scripts import this module without the dependency."""
     try:
-        import yaml  # noqa: PLC0415
-    except ModuleNotFoundError as exc:
+        return herdr_cli.yaml_module()
+    except HerdrError as exc:
         raise WorktreeError("claim/retire need pyyaml; run this script with `uv run`") from exc
-    return yaml
 
 
 def now_iso() -> str:
@@ -658,17 +628,9 @@ def load_tasks(path: Path) -> dict[str, Any]:
 
 def write_tasks(path: Path, data: Mapping[str, Any]) -> None:
     """Atomically rewrite the shared store so other lanes never see half a file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = yaml_module().safe_dump(dict(data), sort_keys=False, allow_unicode=True)
-    fd, temp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".tasks.", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            _ = handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_name, path)
+        herdr_cli.atomic_write_yaml(path, data)
     except OSError as exc:
-        Path(temp_name).unlink(missing_ok=True)
         raise WorktreeError(f"cannot write {path}: {exc}") from exc
 
 
@@ -755,13 +717,17 @@ def claim(worktree: str, branch: str, base: str, env: Mapping[str, str]) -> Allo
         return Allocation(branch=name, path=entry.path, engine=ENGINE_GIT)
     for other in entries:
         if other.branch == name and worktree_key(other.path) != worktree_key(entry.path):
-            raise WorktreeError(f"branch {name!r} is already checked out at {other.path}")
+            raise WorktreeError(
+                f"branch {name!r} is already checked out at {other.path}; retire that "
+                f"worktree or claim a fresh ticket branch"
+            )
     if run_checked(["git", "-C", entry.path, "status", "--porcelain"], env).strip():
         raise UsageError(f"worktree {entry.path} has uncommitted changes; claim needs a clean tree")
     existing = run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{name}"], env)
     if existing.returncode == 0:
         raise WorktreeError(
-            f"branch {name!r} already exists; retire or delete it explicitly before claiming"
+            f"branch {name!r} already exists and is not checked out anywhere; delete it "
+            f"if it is stale, or claim a fresh ticket branch"
         )
     base_sha = resolve_base_sha(base, env)
     _ = run_safe(["git", "-C", entry.path, "switch", "--create", name, base_sha], env)
@@ -790,16 +756,23 @@ def inspect_status(worktree: str | None, env: Mapping[str, str]) -> BindingStatu
     parts = namespace_parts(branch) if branch is not None else None
     if branch is not None and parts is None:
         flags.append(FLAG_NAMESPACE)
+    hint: str | None = None
     if parts is not None:
         expected = expected_worktree_name(repo_root_for(target, env), parts)
         if Path(resolved).name != expected:
             flags.append(FLAG_LAYOUT)
+            hint = (
+                f"legacy worktree name; migrate with `herdr_worktree.py retire {resolved}` "
+                f"then `herdr_worktree.py claim {Path(resolved).parent / expected} "
+                f"{branch} --base <base>`"
+            )
     return BindingStatus(
         path=resolved,
         branch=branch,
         clean=clean,
         detached=detached,
         flags=tuple(flags),
+        hint=hint,
     )
 
 
@@ -847,6 +820,10 @@ def doctor(prune: bool, env: Mapping[str, str]) -> tuple[list[dict[str, Any]], b
     entries = worktree_entries(env)
     primary = entries[0] if entries else None
     repo_root = Path(worktree_key(primary.path)) if primary is not None else None
+    try:
+        store_base = herdr_cli.resolve_lane_base_dir(env)
+    except herdr_cli.LaneAnchorError:
+        store_base = None
     rows: list[dict[str, Any]] = []
     for entry in entries:
         if primary is not None and worktree_key(entry.path) == worktree_key(primary.path):
@@ -863,6 +840,13 @@ def doctor(prune: bool, env: Mapping[str, str]) -> tuple[list[dict[str, Any]], b
         if present and parts is not None and repo_root is not None:
             if Path(entry.path).name != expected_worktree_name(repo_root, parts):
                 flags.append(FLAG_LAYOUT)
+        if (
+            present
+            and store_base is not None
+            and worktree_key(entry.path) != worktree_key(str(store_base))
+            and (Path(entry.path) / LANE_STATE_DIR).is_dir()
+        ):
+            flags.append(FLAG_STALE_LANE)
         rows.append({"path": entry.path, "branch": entry.branch, "flags": flags})
     if prune:
         _ = run_safe(["git", "worktree", "prune"], env)
@@ -871,63 +855,59 @@ def doctor(prune: bool, env: Mapping[str, str]) -> tuple[list[dict[str, Any]], b
 
 def emit_status(status: BindingStatus, as_json: bool) -> None:
     """Print one binding as JSON or as a `branch path state flags` row."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "branch": status.branch,
-                    "path": status.path,
-                    "clean": status.clean,
-                    "dirty": not status.clean,
-                    "detached": status.detached,
-                    "flags": list(status.flags),
-                }
-            )
-        )
-        return
     branch = status.branch or DETACHED_MARKER
     state = "clean" if status.clean else "dirty"
     flags = ",".join(status.flags) if status.flags else "ok"
-    print(f"{branch}  {status.path}  {state}  {flags}")
+    emit(
+        {
+            "branch": status.branch,
+            "path": status.path,
+            "clean": status.clean,
+            "dirty": not status.clean,
+            "detached": status.detached,
+            "flags": list(status.flags),
+            "hint": status.hint,
+        },
+        as_json,
+        lambda: print(
+            f"{branch}  {status.path}  {state}  {flags}"
+            + (f"\n  hint: {status.hint}" if status.hint else "")
+        ),
+    )
 
 
 def emit_retire(result: RetireResult, as_json: bool) -> None:
     """Print the retired worktree path or a JSON summary."""
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "path": result.path,
-                    "branch": result.branch,
-                    "removed": True,
-                    "branch_deleted": result.branch_deleted,
-                    "pruned": True,
-                }
-            )
-        )
-        return
-    print(result.path)
+    emit(
+        {
+            "path": result.path,
+            "branch": result.branch,
+            "removed": True,
+            "branch_deleted": result.branch_deleted,
+            "pruned": True,
+        },
+        as_json,
+        lambda: print(result.path),
+    )
 
 
 def emit_doctor(rows: Sequence[Mapping[str, Any]], pruned: bool, as_json: bool) -> None:
     """Print the audit as JSON or as `flags branch path` rows."""
     issues = sum(1 for row in rows if row["flags"])
-    if as_json:
-        print(
-            json.dumps(
-                {
-                    "engine": ENGINE_GIT,
-                    "pruned": pruned,
-                    "issues": issues,
-                    "worktrees": list(rows),
-                }
-            )
-        )
-        return
-    for row in rows:
-        flags = ",".join(row["flags"]) if row["flags"] else "ok"
-        branch = row["branch"] or DETACHED_MARKER
-        print(f"{flags}  {branch}  {row['path']}")
+    emit(
+        {
+            "engine": ENGINE_GIT,
+            "pruned": pruned,
+            "issues": issues,
+            "worktrees": list(rows),
+        },
+        as_json,
+        lambda: print_rows(
+            f"{','.join(row['flags']) if row['flags'] else 'ok'}  "
+            f"{row['branch'] or DETACHED_MARKER}  {row['path']}"
+            for row in rows
+        ),
+    )
 
 
 def run_command(options: Options, env: Mapping[str, str]) -> int:
@@ -1018,13 +998,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """Parse arguments and run the helper; return the process exit status."""
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-
-    def action() -> int:
-        return run_command(options, env_map)
-
-    return guard("herdr-worktree", action)
+    return entrypoint(
+        "herdr-worktree", build_parser, run_command, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

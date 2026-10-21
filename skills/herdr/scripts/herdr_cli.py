@@ -15,13 +15,16 @@ sentence, which is why the help text is not part of the shared table.
 
 from __future__ import annotations
 
+import argparse
 import errno
 import json
+import os
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -94,6 +97,138 @@ def find_herdr(env: Mapping[str, str]) -> str:
     if found is None:
         raise UsageError("herdr not found on PATH (HERDR_BIN_PATH unset)")
     return found
+
+
+LANE_DIR_ENV = "HERDR_LANE_DIR"
+BRANCH_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+class LaneAnchorError(UsageError):
+    """No lane state anchor could be resolved (exit status 2).
+
+    A lane's state must resolve to one path for the two agents answering each other
+    inside it. Refusing loudly, naming the missing anchors, beats guessing a directory
+    that nothing else reads (#229); `PWD` is not an anchor for the same reason.
+    """
+
+
+def git_common_dir(env: Mapping[str, str]) -> Path:
+    """Absolute path to the git directory every worktree of this repository shares.
+
+    `--path-format=absolute` answers inside a bare repository too, where `--show-toplevel`
+    fails with "this operation must be run in a work tree" and the plain flag returns `.`,
+    which used to collapse a bare repo's root onto the git directory itself (#207).
+    """
+    done = run_herdr(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], env)
+    if done.returncode == 0 and done.stdout.strip():
+        return Path(os.path.realpath(done.stdout.strip()))
+    raw = run_herdr_checked(["git", "rev-parse", "--git-common-dir"], env).strip()
+    common = Path(raw)
+    if not common.is_absolute():
+        top = run_herdr_checked(["git", "rev-parse", "--show-toplevel"], env).strip()
+        common = Path(top).resolve() / common
+    return Path(os.path.realpath(common))
+
+
+def git_repo_root(env: Mapping[str, str]) -> Path:
+    """Absolute path to the main worktree root, even when called from a linked worktree."""
+    common = git_common_dir(env)
+    return common.parent if common.name == ".git" else common
+
+
+def resolve_lane_base_dir(env: Mapping[str, str]) -> Path:
+    """The directory one lane's shared state lives in: `HERDR_LANE_DIR`, else the repo root.
+
+    The explicit anchor wins, so a pane provisioned by `herdr-pane` seats its callee's
+    store deliberately instead of letting the callee derive its own. Without it, the
+    repository root that the git common directory sits in is the one path every worktree
+    and every nested subdirectory of this repository agrees on. That root is what
+    `git_repo_root` derives, and it is the repository root only when the common directory
+    is named `.git`. For a bare repository, a submodule (common directory under the
+    superproject's `.git/modules/…`), or `git init --separate-git-dir`, the common
+    directory itself is the base. It can live inside a git directory, and it is still one
+    path per repository.
+
+    `PWD` and the process cwd are deliberately not anchors: a dispatcher and the callee
+    it dispatched to ran in different working directories, resolved different stores
+    through them, and left a lease nobody could release (#229). With no anchor this
+    raises `LaneAnchorError` instead of guessing.
+
+    The result is resolved, so a caller and its callee usually agree on one spelling: an
+    anchor written as a symlink or as `/tmp/...` would otherwise name the same directory as
+    its `realpath` under a second string. Resolution alone is not identity — a case-insensitive
+    volume keeps `MyLaneRepo` and `mylanerepo` as one file and two strings — so the lease
+    comparison decides identity physically, with `os.path.samefile` (#229).
+    """
+    env_dir = env.get(LANE_DIR_ENV)
+    if env_dir:
+        return Path(env_dir).resolve()
+    try:
+        return git_repo_root(env).resolve()
+    except HerdrError as exc:
+        raise LaneAnchorError(
+            "no lane state anchor: HERDR_LANE_DIR is unset and no git common dir "
+            f"resolves for this working directory ({exc})"
+        ) from exc
+
+
+def sanitize_branch(branch: str) -> str:
+    """Reduce a branch name to a filesystem-safe suffix (feat/184 -> feat-184)."""
+    sanitized = BRANCH_UNSAFE_RE.sub("-", branch).strip("-.")
+    return sanitized or "worktree"
+
+
+def yaml_module() -> Any:
+    """Import pyyaml on demand; helpers that never touch a store stay dependency-free.
+
+    Only `claim`/`retire` (worktrees) and lease writes need the YAML database, and several
+    helpers run under an inline script environment without pyyaml. Importing it at module
+    scope would break importing this adapter from those helpers.
+    """
+    try:
+        import yaml  # noqa: PLC0415 - optional dependency of the store, not of every helper
+    except ModuleNotFoundError as exc:
+        raise HerdrError("store access needs pyyaml; run this script with `uv run`") from exc
+    return yaml
+
+
+def atomic_write_bytes(path: Path, content: bytes) -> None:
+    """Replace `path` with `content` atomically, so a reader never sees half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.tmp-")
+    try:
+        with open(fd, "wb") as handle:
+            _ = handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
+def atomic_write_yaml(
+    path: Path,
+    data: Mapping[str, Any],
+    *,
+    default_flow_style: bool | None = None,
+) -> None:
+    """Serialise `data` in declaration order (`sort_keys=False`) and write it atomically.
+
+    Key order is load-bearing for both stores: `.lane/tasks.yaml` is read by humans and by
+    other agents mid-run, and reordering it on every write makes diffs unreadable. Callers
+    that need block style pass `default_flow_style=False`; the default keeps pyyaml's own.
+    """
+    text = yaml_module().safe_dump(
+        dict(data),
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=default_flow_style,
+    )
+    atomic_write_bytes(path, text.encode("utf-8"))
 
 
 def reply_helper() -> Path:
@@ -191,12 +326,16 @@ def run_herdr(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.Complet
         raise HerdrError(f"cannot run {argv[0]}: {exc}") from exc
 
 
+def failure_detail(done: subprocess.CompletedProcess[str]) -> str:
+    """One-line diagnostic from a failed process, preferring stderr over stdout."""
+    return (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
+
+
 def run_herdr_checked(argv: Sequence[str], env: Mapping[str, str]) -> str:
     """Run herdr, raising with its own error output when it fails; return stdout."""
     done = run_herdr(argv, env)
     if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
-        raise HerdrError(f"{shlex.join(argv)} failed: {detail}")
+        raise HerdrError(f"{shlex.join(argv)} failed: {failure_detail(done)}")
     return done.stdout
 
 
@@ -265,10 +404,151 @@ def current_pane_id(herdr: str, env: Mapping[str, str]) -> str:
 def fetch_inventory(
     herdr: str, env: Mapping[str, str]
 ) -> tuple[list[Mapping[str, object]], list[Mapping[str, object]]]:
-    """Read the pane and agent inventories once, so every identity comes from one snapshot."""
+    """Read the pane and agent inventories once, so every identity comes from one snapshot.
+
+    Authority, when the two sources disagree (#266 T2a, TM decision):
+
+    - The daemon snapshot (`pane list` / `agent list`) is authoritative for **live identity
+      and liveness** — which panes and agents exist right now, their names, kinds, and
+      revision counters.
+    - `.lane/tasks.yaml` is authoritative for **leases, task state, and worktree bindings** —
+      the durable facts a lane records about who owns what.
+
+    The merge annotates the store's durable facts with the daemon's liveness; it never
+    silently overrides one source with the other. A store entry whose pane the daemon does
+    not list is stale, not deleted; a daemon agent with no store entry is unclaimed, not
+    unowned.
+    """
     panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
     agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
     return panes, agents
+
+
+LIVENESS_LIVE = "live"
+LIVENESS_STALE = "stale"
+UNCLAIMED_OWNERSHIP = "unclaimed"
+STORE_RELATIVE_PATH = Path(".lane") / "tasks.yaml"
+STORE_SECTIONS = (("lease", "active_leases"), ("task", "tasks"))
+
+
+@dataclass(frozen=True)
+class Inventory:
+    """One daemon snapshot, with the store's durable facts annotated by daemon liveness.
+
+    The rule this encodes (#266 T2c, operator decision): the daemon owns live identity and
+    liveness; `.lane/tasks.yaml` owns leases, task state, and worktree bindings. The merge
+    only annotates, so a store record the daemon does not list is `stale` — reported, never
+    deleted — and a daemon agent no store record claims is `unclaimed` — never given an
+    owner, ticket, or task it did not have.
+
+    `panes` and `agents` carry every daemon field plus `liveness`; `raw_panes`/`raw_agents`
+    are the untouched payloads for callers that still parse text. `bindings` are the store
+    records that name a pane, with `kind`, `key`, `liveness`, and the daemon `evidence`
+    beside their original fields.
+    """
+
+    raw_panes: str
+    raw_agents: str
+    panes: Sequence[Mapping[str, object]]
+    agents: Sequence[Mapping[str, object]]
+    bindings: Sequence[Mapping[str, object]]
+    unclaimed: Sequence[Mapping[str, object]]
+
+
+def read_store_facts(env: Mapping[str, str]) -> Mapping[str, Any]:
+    """Read the durable `.lane/tasks.yaml` mapping; an absent or unreadable store is `{}`.
+
+    Read-only by design: the annotation must never rewrite the store, and a lane-less
+    invocation (no `HERDR_LANE_DIR`, no git anchor) still gets a usable inventory.
+    """
+    try:
+        base = resolve_lane_base_dir(env)
+    except LaneAnchorError:
+        return {}
+    try:
+        raw = (base / STORE_RELATIVE_PATH).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    if not raw.strip():
+        return {}
+    yaml = yaml_module()
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, Mapping) else {}
+
+
+def merged_panes(herdr: str, env: Mapping[str, str]) -> list[Mapping[str, object]]:
+    """The pane inventory with `liveness: live` added to every record."""
+    raw = run_herdr_checked([herdr, "pane", "list"], env)
+    return [{**pane, "liveness": LIVENESS_LIVE} for pane in entries(raw, "result", "panes")]
+
+
+def merged_agents(herdr: str, env: Mapping[str, str]) -> list[Mapping[str, object]]:
+    """The agent inventory with `liveness: live` added to every record."""
+    raw = run_herdr_checked([herdr, "agent", "list"], env)
+    return [{**agent, "liveness": LIVENESS_LIVE} for agent in entries(raw, "result", "agents")]
+
+
+def merged_inventory(herdr: str, env: Mapping[str, str]) -> Inventory:
+    """Read one daemon snapshot and annotate the store's facts with daemon liveness."""
+    raw_panes = run_herdr_checked([herdr, "pane", "list"], env)
+    raw_agents = run_herdr_checked([herdr, "agent", "list"], env)
+    panes = [{**pane, "liveness": LIVENESS_LIVE} for pane in entries(raw_panes, "result", "panes")]
+    agents = [
+        {**agent, "liveness": LIVENESS_LIVE} for agent in entries(raw_agents, "result", "agents")
+    ]
+    listed_panes = {str(pane["pane_id"]) for pane in panes if pane.get("pane_id")}
+    listed_agents = {str(agent["pane_id"]) for agent in agents if agent.get("pane_id")}
+
+    facts = read_store_facts(env)
+    bindings: list[Mapping[str, object]] = []
+    claimed: set[str] = set()
+    for kind, section in STORE_SECTIONS:
+        records = facts.get(section)
+        if not isinstance(records, Mapping):
+            continue
+        for key, record in records.items():
+            if not isinstance(record, Mapping):
+                continue
+            raw_pane_id = record.get("pane_id")
+            pane_id = str(raw_pane_id) if raw_pane_id is not None else None
+            evidence = {
+                "pane_listed": pane_id in listed_panes,
+                "agent_listed": pane_id in listed_agents,
+            }
+            live = evidence["pane_listed"] or evidence["agent_listed"]
+            bindings.append(
+                {
+                    **record,
+                    "kind": kind,
+                    "key": str(key),
+                    "liveness": LIVENESS_LIVE if live else LIVENESS_STALE,
+                    "evidence": evidence,
+                }
+            )
+            if pane_id is not None:
+                claimed.add(pane_id)
+
+    unclaimed = [
+        {
+            "pane_id": agent["pane_id"],
+            "name": agent.get("name"),
+            "liveness": LIVENESS_LIVE,
+            "ownership": UNCLAIMED_OWNERSHIP,
+        }
+        for agent in agents
+        if agent.get("pane_id") and str(agent["pane_id"]) not in claimed
+    ]
+    return Inventory(
+        raw_panes=raw_panes,
+        raw_agents=raw_agents,
+        panes=panes,
+        agents=agents,
+        bindings=bindings,
+        unclaimed=unclaimed,
+    )
 
 
 def error_code(stderr: str) -> str | None:
@@ -535,6 +815,49 @@ def guard(prog: str, action: Callable[[], int]) -> int:
     except HerdrError as exc:
         print(f"{prog}: {exc}", file=sys.stderr)
         return EXIT_HERDR
+
+
+def entrypoint[OptionsT](
+    prog: str,
+    build_parser: Callable[[], argparse.ArgumentParser],
+    action: Callable[[OptionsT, Mapping[str, str]], int],
+    *,
+    namespace: OptionsT | None = None,
+    argv: Sequence[str] | None = None,
+    env: Mapping[str, str] | None = None,
+    before_parse: Callable[[argparse.ArgumentParser, list[str]], None] | None = None,
+    timeout: tuple[type[BaseException], int] | None = None,
+) -> int:
+    """Parse this helper's argv and run its action under the shared error taxonomy.
+
+    Every helper repeated the same five steps: default the environment mapping, build its
+    parser, parse into its own options dataclass, run the action through `guard`, and map a
+    delivery timeout onto its own exit status. Spelling that once keeps `prog: message`,
+    the exit statuses, and the timeout print identical across helpers.
+
+    `before_parse` is the caller's own pre-parse refusal (only `herdr-reply` has one), and
+    `timeout` pairs the caller's exception type with its exit status. Neither changes the
+    error taxonomy: `guard` still maps `UsageError`/`HerdrError`, and the timeout exception
+    is re-raised untouched when it is not the declared type.
+    """
+    env_map = dict(os.environ if env is None else env)
+    parser = build_parser()
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if before_parse is not None:
+        before_parse(parser, raw)
+    options = cast(
+        OptionsT, parser.parse_args(raw, namespace=cast("argparse.Namespace | None", namespace))
+    )
+    if timeout is None:
+        return guard(prog, lambda: action(options, env_map))
+    timeout_type, timeout_code = timeout
+    try:
+        return guard(prog, lambda: action(options, env_map))
+    except BaseException as exc:  # noqa: BLE001 - re-raised unless it is the declared timeout
+        if not isinstance(exc, timeout_type):
+            raise
+        print(f"{prog}: {exc}", file=sys.stderr)
+        return timeout_code
 
 
 class ArgumentSink(Protocol):

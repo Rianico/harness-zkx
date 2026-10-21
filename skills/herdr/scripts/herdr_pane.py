@@ -29,22 +29,23 @@ from pathlib import Path
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
     EXIT_OK,
+    LANE_DIR_ENV,
     METHOD_CONSTRAINT_EPILOG,
     HerdrError,
     UsageError,
     add_shared_argument,
     current_pane_id,
+    entrypoint,
     find_herdr,
-    guard,
     payload_field,
     require_herdr_env,
+    resolve_lane_base_dir,
     run_herdr_checked,
     scoped_agent_name,
     text_field,
     validate_agent_name,
 )
 from herdr_label import pane_rename_argv
-from herdr_worktree import LANE_DIR_ENV, resolve_lane_base_dir
 
 DIRECTION_ALIASES = {
     "vertical": "down",
@@ -423,11 +424,16 @@ def run_command(options: Options, env: Mapping[str, str]) -> int:
     return EXIT_OK
 
 
-def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
+def _dispatch(options: Options, env: Mapping[str, str]) -> int:
+    """Pick the verb from the parsed options; no subcommand means split."""
     handler = run_command if options.command is not None else split_pane
-    return guard("herdr-pane", lambda: handler(options, env_map))
+    return handler(options, env)
+
+
+def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
+    return entrypoint(
+        "herdr-pane", build_parser, _dispatch, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

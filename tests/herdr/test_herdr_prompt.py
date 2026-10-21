@@ -2696,3 +2696,133 @@ def test_broadcast_confirms_each_targets_screen_once(
     assert len(stub.prompts()) == 2
     reads = _screen_reads(stub)
     assert [call[3] for call in reads] == ["callee1", "callee2"]
+
+
+# ── short pi session ids (#267 T1) ─────────────────────────────────────────────────
+
+PI_SESSION_ID = "01a154f2-f28c-7099-bd1d-8b603cbf5156"
+PI_SESSION_PATH = (
+    f"/Users/x/.pi/agent/sessions/-Users-x-work/2026-10-19T16-16-10-381Z_{PI_SESSION_ID}.jsonl"
+)
+
+
+def test_short_session_id_reduces_a_pi_session_path() -> None:
+    assert herdr_prompt.short_session_id(PI_SESSION_PATH) == PI_SESSION_ID
+
+
+def test_short_session_id_reduces_a_bare_pi_session_filename() -> None:
+    assert (
+        herdr_prompt.short_session_id(f"2026-10-19T16-16-10-381Z_{PI_SESSION_ID}.jsonl")
+        == PI_SESSION_ID
+    )
+
+
+def test_short_session_id_keeps_an_already_short_id() -> None:
+    assert herdr_prompt.short_session_id(PI_SESSION_ID) == PI_SESSION_ID
+
+
+def test_short_session_id_keeps_a_foreign_value() -> None:
+    for value in ("/tmp/session.jsonl", "claude-abc", "8f2c1d", "/tmp/sessions/x.jsonl"):
+        assert herdr_prompt.short_session_id(value) == value
+
+
+def test_short_session_id_keeps_missing_and_odd_values() -> None:
+    for value in (None, "", "2026-10-19T16-16-10-381Z_not-a-uuid.jsonl", "x_y.jsonl"):
+        assert herdr_prompt.short_session_id(value) == value
+
+
+def test_build_identity_shortens_the_pi_session_and_keeps_its_path() -> None:
+    panes = [{"pane_id": "w9:p1", "cwd": "/tmp/harness"}]
+    agents = [
+        {
+            "pane_id": "w9:p1",
+            "name": "reviewer",
+            "agent": "pi",
+            "agent_session": {"kind": "path", "value": PI_SESSION_PATH},
+        }
+    ]
+
+    caller = herdr_prompt.build_identity(panes, agents, "w9:p1")
+
+    assert caller.session_id == PI_SESSION_ID
+    assert caller.session_path == PI_SESSION_PATH
+    assert caller.resume_cmd == f"pi --session {PI_SESSION_ID}"
+
+
+def test_build_identity_leaves_a_foreign_session_handle_untouched() -> None:
+    panes = [{"pane_id": "w9:p1"}]
+    agents = [
+        {
+            "pane_id": "w9:p1",
+            "name": "reviewer",
+            "agent": "claude",
+            "agent_session": {"kind": "id", "value": "claude-abc"},
+        }
+    ]
+
+    caller = herdr_prompt.build_identity(panes, agents, "w9:p1")
+
+    assert caller.session_id == "claude-abc"
+    assert caller.session_path == "claude-abc"
+    assert caller.resume_cmd == "claude --resume claude-abc"
+
+
+# ── lane-scoped group roster (#270) ───────────────────────────────────────────────
+
+
+def _two_lanes_in_one_tab() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    panes = [
+        {"pane_id": "w9:p1", "workspace_id": "w9"},
+        {"pane_id": "w9:p2", "workspace_id": "w9"},
+        {"pane_id": "w9:p3", "workspace_id": "w9"},
+        {"pane_id": "w9:p4", "workspace_id": "w9"},
+    ]
+    agents = [
+        {"pane_id": "w9:p1", "name": "pep758-tm"},
+        {"pane_id": "w9:p2", "name": "pep758-impl"},
+        {"pane_id": "w9:p3", "name": "style-tm"},
+        {"pane_id": "w9:p4", "name": "style-impl-1"},
+    ]
+    return panes, agents
+
+
+def test_group_members_scoped_to_the_lane_slug() -> None:
+    panes, agents = _two_lanes_in_one_tab()
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["pep758-impl"], lane_slug="pep758"
+    )
+
+    assert members == ["pep758-tm@w9:p1", "pep758-impl@w9:p2"]
+
+
+def test_group_members_keep_a_slugless_receiver_in_the_roster() -> None:
+    panes = [
+        {"pane_id": "w9:p1", "workspace_id": "w9"},
+        {"pane_id": "w9:p2", "workspace_id": "w9"},
+        {"pane_id": "w9:p3", "workspace_id": "w9"},
+    ]
+    agents = [
+        {"pane_id": "w9:p1", "name": "orchestrator"},
+        {"pane_id": "w9:p2", "name": "reviewer"},
+        {"pane_id": "w9:p3", "name": "style-tm"},
+    ]
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["reviewer"], lane_slug="pep758"
+    )
+
+    assert members == ["orchestrator@w9:p1", "reviewer@w9:p2"]
+
+
+def test_group_members_without_a_slug_keep_the_workspace_roster() -> None:
+    panes, agents = _two_lanes_in_one_tab()
+
+    members = herdr_prompt.resolve_group_members(panes, agents, "w9:p1", ["pep758-impl"])
+
+    assert members == [
+        "pep758-tm@w9:p1",
+        "pep758-impl@w9:p2",
+        "style-impl-1@w9:p4",
+        "style-tm@w9:p3",
+    ]
