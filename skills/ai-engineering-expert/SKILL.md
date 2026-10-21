@@ -100,39 +100,29 @@ Split implementation from review. Each side carries a different context load:
 
 ---
 
-## 80/20 Principle
+## Progressive Disclosure & Context Load
 
-The 20% of knowledge that solves 80% of problems lives in SKILL.md files. The deep 80% lives in reference files behind context pointers. This applies recursively at every level -- parent spine, subskills, and subskill references.
+Context load is a primary architectural constraint. Attention degrades and costs rise as context grows. Load guidance only when a task needs it.
 
-Every line in a SKILL.md earns its place by passing the test: does this solve 80% of problems? If it's deep methodology, edge-case patterns, or platform-specific detail, disclose it behind a pointer. If the pointer fires unreliably on must-have material, sharpen its wording first. Pull it inline only if that fails.
+- **The 80/20 Rule**: The 20% of knowledge that solves 80% of problems lives in `SKILL.md`. The deep 80% lives in reference files behind context pointers. This applies recursively: parent spine, subskills, and subskill references.
+- **Root Steering via `AGENTS.md`**: the open standard ([agents.md](https://agents.md)). Closest file wins. Nested files are supported. `CLAUDE.md` and other agent variants are compatibility mirrors. Keep to navigation pointers, never inline specs.
+- **Prune No-Ops**: Delete steering instructions that do not measurably alter agent decisions.
+- **Dispatch on Demand**: Isolate specialized workflows into sub-skills. Load them by handle, never by pasting their bodies.
 
-- **Root steering file: `AGENTS.md`** — the open standard ([agents.md](https://agents.md); closest file wins, nested files supported). `CLAUDE.md` and other agent variants are compatibility mirrors. Keep minimal: strictly **navigation pointers**, never inline specs.
-- **Prune No-Ops:** Aggressively delete steering instructions that don't measurably alter agent decisions.
+For invocation classes, description budgets, and platform prompt filtering, read the [context-load policy](references/context-load-policy.md). For authoring a new skill, load `skill-authoring`.
 
 ---
 
-## Context-Load Policy
+## Skill Creation
 
-Context load is a first-class architectural constraint. Every skill's `description` sits in the initial skill-list metadata on every turn, spending tokens and attention regardless of invocation class.
+Creating, editing, or debugging a skill? Read `subskills/skill-authoring/SKILL.md` before you write anything. It holds the taxonomy, the three phases (Gather, Draft, Review), the frontmatter contract, and the checklist.
 
-### Invocation Classes
+The spine holds only the decision:
 
-Every skill declares one of two classes via the canonical `disable-model-invocation` field:
+- **Embed, don't create**: an Atomic, Universal workflow under 300 words belongs in the agent, not in a skill.
+- **Pick one of three types**: Orchestration sequences phases and parties. Workflow owns phases and artifacts. Domain Knowledge supplies retrieval-time expertise.
 
-| Declaration                      | Class              | Behavior                                                                                       |
-| -------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously; description triggers discovery                                  |
-| `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke; on Pi omitted from `<available_skills>` XML (true zero-load) |
-
-Base standard: the open Agent Skills spec ([agentskills.io](https://agentskills.io)). `disable-model-invocation` is an enhancement beyond the spec, shared by Claude Code and Pi; Pi's semantics are the default — `formatSkillsForPrompt` strips flagged skills from the system-prompt XML entirely: no description, no tokens, no attention, reachable only via `/skill:name`. Claude's gating is selection-only (description stays listed). So on Pi, `explicit-only` is the correct way to remove a skill from model context — never add a pointer to it from an always-loaded doc.
-
-### Description Budget
-
-Every description is a machine-readable trigger and a permanent context-load footprint within a **300-character hard gate**. Follow the tripartite formula — what it is (front-loaded in the first 50 chars), what it does (third-person verbs), when to use (**required** `Use when...` clause) — plus symptom keywords (fundamental standard: users report *flaky tests*, *drift*, *crash*, not solutions), an opt-in negative boundary for adjacent-skill collisions, and no `TRIGGER:` pseudo-syntax. `validate-deps.py context-check` enforces the hard gates and warns on contract misses; semantic quality is enforced by `skill-authoring` methodology.
-
-Canonical `SKILL.md` frontmatter is the single source: `validate-deps.py sync` regenerates `agents/openai.yaml`, and Pi applies invocation-class filtering at prompt build.
-
-Reference: [Context-load policy contract](references/context-load-policy.md)
+Gates: `validate-deps.py lint` for conventions, `validate-deps.py context-check` for the context-load budget. The `check`, `related`, and `sync` subcommands live in `skill-authoring`.
 
 ---
 
@@ -145,29 +135,6 @@ Reference: [Context-load policy contract](references/context-load-policy.md)
 | Strong     | Architecture, root-cause analysis, complex invariants | Simple tasks (wasteful)                   |
 
 Escalate tier only when lower tier fails with a clear reasoning gap.
-
----
-
-## Skill Infrastructure
-
-The canonical tool for skill management is in the `skill-authoring` sub-skill.
-
-```bash
-# Validate all skill dependencies
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py check
-
-# Check inbound/outbound dependencies for a skill
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py related <skill_name>
-
-# Lint all skills for quality and conventions
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py lint
-
-# Generate platform-specific artifacts from canonical metadata
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py sync
-
-# Enforce context-load policy (hard gates + soft warnings)
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check
-```
 
 ---
 
