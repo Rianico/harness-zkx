@@ -262,7 +262,7 @@ Before publishing a skill:
 
 - [ ] BDD scenarios cover Happy Path, Edge Case, and Error Case
 - [ ] Deterministic goals have corresponding evaluation scripts (EDD)
-- [ ] Semantic goals have a verification plan (e.g., Adversarial Review)
+- [ ] Semantic goals have a verification plan (e.g. Adversarial Review)
 - [ ] Description follows tripartite formula: what it is + what it does + when to use via `Use when...`
 - [ ] Description is third-person, ≤ 300 chars, and uses `>-` YAML block scalar
 - [ ] Description covers natural trigger patterns (direct request, problem framing/symptoms, decision points)
@@ -273,19 +273,19 @@ Before publishing a skill:
 - [ ] Consistent terminology throughout
 - [ ] Examples are concrete, not abstract
 - [ ] No redundant sections -- each concept lives in one place
-- [ ] SKILL.md is practical usage guide; env/config/setup/state is in `references/`
+- [ ] SKILL.md serves as practical usage guide, with env/config/setup/state in `references/`
 
 **Structure**
 
 - [ ] Frontmatter includes `name` and `description` (both required)
 - [ ] `description` and `argument-hint` use YAML block scalars (`>-` or `|`)
 - [ ] `argument-hint` present if skill accepts arguments
-- [ ] `user-invocable: false` set for internal skills accessed only through routing commands (do NOT use `disable-model-invocation` -- it blocks the `Skill` tool)
+- [ ] `user-invocable: false` set for internal skills accessed only through routing commands (do not use `disable-model-invocation`, which blocks the `Skill` tool)
 - [ ] All `depends-on` entries validated via `uv run $SKILL_DIR/scripts/validate-deps.py check`
 - [ ] Gotchas section for non-obvious environment facts
 - [ ] Templates/checklists for multi-step workflows
 - [ ] Validation loops for quality-critical tasks
-- [ ] Env-agnostic SKILL.md — no env/config/setup/state inlined (see references/)
+- [ ] Env-agnostic SKILL.md -- no env/config/setup/state inlined (see references/)
 
 ## Metadata Conventions
 
@@ -309,7 +309,7 @@ metadata:
 - Hard dependencies only -- only list skills whose absence breaks this skill's behavior
 - Simple list of skill names, no arguments (argument details belong in the skill body)
 - Sub-skills declare their own `depends-on` independently
-- Add `depends-on` when a skill must load/invoke another skill, read its resources, consume its artifacts, or rely on its output contract
+- Add `depends-on` when a skill invokes or loads another skill, reads resources, consumes artifacts, or requires an output contract
 - Keep optional alternatives, related reading, examples, and background mentions in prose, not `depends-on`
 - Before renaming, moving, merging, or deleting a skill, run `uv run $SKILL_DIR/scripts/validate-deps.py related <skill-name>` and update every listed dependent skill first
 - After dependency edits or skill renames, run validation to catch stale references
@@ -328,7 +328,7 @@ metadata:
 
 ### `credits` (Attribution & Provenance)
 
-Declares upstream origins when a skill is adapted or ported from an external reference (repo, blog, paper). Optional; `validate-deps.py lint` structurally validates it when present.
+Declares upstream origins when a skill is adapted or ported from an external reference (repo, blog, paper). This field is optional. When present, `validate-deps.py lint` structurally validates it.
 
 ```yaml
 metadata:
@@ -342,7 +342,7 @@ metadata:
 **Rules:**
 
 - Either a single mapping or a list of mappings (one skill may credit several sources)
-- Each entry needs at least `source` or `author`; both is preferred
+- Each entry needs at least `source` or `author`. Declaring both is preferred.
 - `source` should deep-link to the specific upstream document (blob file path), not just the repository root
 - Only `source`, `author`, `version`, `note` keys are allowed, and all values must be strings
 - Malformed or unrecognized structure fails `lint`
@@ -377,16 +377,16 @@ metadata:
 
 **Key points:**
 
-- Sub-skills are nested in `subskills/` directory (hidden from Claude Code discovery)
+- Sub-skills are nested in `subskills/` directory (hidden from skill discovery on both platforms)
 - Parent uses `Read` tool to dispatch (not `Skill` tool -- nested paths not discoverable)
 - Sub-skills are full skills with frontmatter, references, scripts
-- Dispatch on task-match OR explicit domain — never domain-only. Parent dispatch reads "when `$domain` matches OR the task matches a sub-skill's triggers, Read it"; "omitted loads spine only" states the default, not a gate. The model must never wait for the user to name the domain.
+- Dispatch on task-match or explicit domain, never domain-only. Parent dispatch reads "when `$domain` matches or task matches a sub-skill's triggers, Read it". The phrase "omitted loads spine only" states the default, not a gate. The model must never wait for the user to name the domain.
 
-**Sub-skill names must not collide with top-level skill names** — see Name Collision Rule in the reference. Enforced by `validate-deps.py lint`.
+**Sub-skill names must not collide with top-level skill names** -- see Name Collision Rule in the reference. Enforced by `validate-deps.py lint`.
 
 **Reference:**
 
-- [skill-authoring.md](references/skill-authoring.md) -- Full "Parent Skill with Sub-Skills Pattern" section with structure, metadata, registry format, dispatch mechanism, migration guide, and Name Collision Rule
+- [skill-authoring.md](references/skill-authoring.md) -- "Parent Skill with Sub-Skills Pattern" section: structure, metadata, registry format, dispatch, migration, and collision rules.
 
 ## Rules vs Skills Boundary
 
