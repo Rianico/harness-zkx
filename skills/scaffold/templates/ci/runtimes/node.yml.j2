@@ -7,12 +7,8 @@
       - uses: actions/setup-node@{{ shas['setup-node'] }} # v7.0.0  # zizmor: ignore[cache-poisoning]
         with: { node-version: {{ node_version }}, cache: pnpm }
       - run: pnpm install
-      - run: pnpm audit --audit-level high
-{% if with_coverage %}
-      - run: pnpm run {{ coverage_script }}
-{% else %}
-      - run: pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
-{% endif %}
+      - run: pnpm run audit
+      - run: pnpm run verify
 {% endblock %}
 {% block release %}
       - uses: actions/checkout@{{ shas.checkout }} # v7.0.1

@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import yaml
+
 # Add scaffold scripts dir for scaffold.py import (single-file script, no package)
 SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "skills" / "scaffold"
 SCRIPT = SKILL_DIR / "scripts" / "scaffold.py"
@@ -66,6 +68,7 @@ def test_lib_variant_fields():
         "format:fix": "oxfmt .",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
+        "audit": "pnpm audit --audit-level high --registry https://registry.npmjs.org/",
         "verify": "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test",
     }
     assert "coverage" not in pkg["scripts"]
@@ -93,45 +96,38 @@ def test_coverage_wiring():
     assert "lines: 90" in cfg and "functions: 90" in cfg
 
 
-def _node_ci_gate(with_coverage: bool, coverage_script: str = "coverage") -> str:
-    """The one command the node release workflow runs as its verify gate."""
-    yml = scaffold.render_ci_release(
-        "node",
-        with_coverage=with_coverage,
-        threshold=scaffold.DEFAULT_COVERAGE_THRESHOLD,
-        coverage_script=coverage_script,
-    )
-    runs = [
-        line.split("- run: ", 1)[1].strip()
-        for line in yml.splitlines()
-        if "- run: " in line and ("run lint" in line or f"run {coverage_script}" in line)
-    ]
-    assert len(runs) == 1, runs
-    return runs[0]
+def _verify_runs(yml: str) -> list[str]:
+    """The run steps of a workflow's `verify` job, in order."""
+    doc = yaml.safe_load(yml)
+    assert isinstance(doc, dict)
+    return [step["run"] for step in doc["jobs"]["verify"]["steps"] if "run" in step]
 
 
 def test_verify_script_is_the_whole_gate_in_ci_order():
     """One command, one exit code: `verify` is the chain CI runs, not a second spelling."""
     pkg = json.loads(scaffold.build_package_json("demo", "lib", with_coverage=False))
     verify = pkg["scripts"]["verify"]
-    assert verify == _node_ci_gate(with_coverage=False)
     assert verify.split(" && ") == [
         "pnpm run lint",
         "pnpm run format",
         "pnpm run typecheck",
         "pnpm test",
     ]
+    assert _verify_runs(scaffold.render_ci_release("node", False, 80))[-1] == "pnpm run verify"
 
 
 def test_coverage_verify_ends_on_the_project_coverage_script():
     """Coverage projects gate on their own script name, and it stays the last step."""
     pkg = json.loads(scaffold.build_package_json("demo", "lib", with_coverage=True))
     assert pkg["scripts"]["verify"] == (
-        "pnpm run lint && pnpm run format && pnpm run typecheck && "
-        + _node_ci_gate(with_coverage=True)
+        "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm run coverage"
     )
     aliased = json.loads(scaffold.build_package_json("demo", "lib", True, "test:coverage"))
-    assert aliased["scripts"]["verify"].endswith("&& " + _node_ci_gate(True, "test:coverage"))
+    assert aliased["scripts"]["verify"].endswith("&& pnpm run test:coverage")
+    assert (
+        _verify_runs(scaffold.render_ci_release("node", True, 80, "test:coverage"))[-1]
+        == "pnpm run verify"
+    )
 
 
 def test_agents_runtime_pointer_cites_verify(tmp_path):
@@ -219,9 +215,11 @@ def test_dry_run_lists_expected_files(tmp_path, capsys):
         ".oxlintrc.json",
         ".oxfmtrc.json",
         ".nvmrc",
+        "pnpm-workspace.yaml",
         "index.ts",
         "cli.ts",
         "index.test.ts",
+        "ci.yml",
     ):
         assert name in out
 
@@ -264,17 +262,109 @@ def test_node_ci_variant_is_pnpm_on_the_declared_runtime():
     )
     assert f"node-version: {scaffold.NODE_VERSION_NUM}" in release_yml
     assert "node-version: 24" not in release_yml
-    assert "pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test" in release_yml
+    assert _verify_runs(release_yml) == [
+        "pnpm install",
+        "pnpm run audit",
+        "pnpm run verify",
+    ]
+    assert "pnpm audit --audit-level" not in release_yml, "CI spells the audit command twice"
     assert "npm ci" not in release_yml
 
 
-def test_node_coverage_variant_runs_the_coverage_script():
-    """Regression: the coverage cell was a no-op `.replace()` and ran `pnpm test` un-gated."""
+def test_node_ci_does_not_fork_on_coverage():
+    """The coverage variant lives in the manifest's `verify` script, so CI bytes match."""
     plain = scaffold.render_ci_release("node", with_coverage=False, threshold=80)
     covered = scaffold.render_ci_release("node", with_coverage=True, threshold=80)
-    assert "- run: pnpm run coverage" in covered
-    assert "pnpm run coverage" not in plain
-    assert covered != plain
+    assert plain == covered
+    assert "- run: pnpm run verify" in covered
+
+
+def test_audit_script_pins_the_public_registry():
+    """A mirror without the audit endpoint answers ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS (#288)."""
+    for coverage in (False, True):
+        pkg = json.loads(scaffold.build_package_json("demo", "lib", coverage))
+        assert pkg["scripts"]["audit"] == (
+            "pnpm audit --audit-level high --registry https://registry.npmjs.org/"
+        )
+
+
+def test_typescript_emits_a_pr_workflow_with_the_release_gate(tmp_path):
+    """The PR workflow must run the release verify block, skip drafts, and cancel in flight."""
+    rc = _run_main(
+        "--flavor",
+        "typescript",
+        "--ts-variant",
+        "lib",
+        "--project-name",
+        "demo",
+        "--cwd",
+        str(tmp_path),
+    )
+    assert rc == 0
+    ci = (tmp_path / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    doc = yaml.safe_load(ci)
+    triggers = doc.get("on") or doc.get(True)
+    assert "synchronize" in triggers["pull_request"]["types"]
+    assert "ready_for_review" in triggers["pull_request"]["types"]
+    assert triggers["push"]["branches"] == ["main"]
+    assert doc["concurrency"]["cancel-in-progress"] is True
+    assert doc["permissions"] == {"contents": "read"}
+    assert doc["jobs"]["verify"]["if"] == (
+        "github.event_name == 'push' || github.event.pull_request.draft == false"
+    )
+    assert _verify_runs(ci) == _verify_runs(
+        scaffold.render_ci_release("node", with_coverage=True, threshold=80)
+    )
+
+
+def test_existing_manifest_adopts_audit_with_one_script(tmp_path):
+    """A consumer repo adds the audit script; CI regenerates with no hand edit (#288)."""
+    (tmp_path / "package.json").write_text(
+        json.dumps({"name": "demo", "scripts": {"verify": "pnpm test"}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    rc = _run_main(
+        "ensure",
+        "--cwd",
+        str(tmp_path),
+        "ts-script",
+        "--name",
+        "audit",
+        "--cmd",
+        "pnpm audit --audit-level high --registry https://registry.npmjs.org/",
+    )
+    assert rc == 0
+    pkg = json.loads((tmp_path / "package.json").read_text(encoding="utf-8"))
+    assert pkg["scripts"]["audit"] == (
+        "pnpm audit --audit-level high --registry https://registry.npmjs.org/"
+    )
+    assert pkg["scripts"]["verify"] == "pnpm test"
+
+
+def test_pnpm_workspace_allows_one_build_and_suppresses_one_advisory(tmp_path):
+    """A scaffolded repo must install and audit clean, without a blanket suppression (#288)."""
+    rc = _run_main(
+        "--flavor",
+        "typescript",
+        "--ts-variant",
+        "lib",
+        "--project-name",
+        "demo",
+        "--cwd",
+        str(tmp_path),
+    )
+    assert rc == 0
+    text = (tmp_path / "pnpm-workspace.yaml").read_text(encoding="utf-8")
+    doc = yaml.safe_load(text)
+    assert doc["allowBuilds"] == {"esbuild": True}
+    assert doc["auditConfig"]["ignoreGhsas"] == ["GHSA-vfj7-8cjw-p6xm"], (
+        "the suppression must stay singular: any other high advisory still gates"
+    )
+    assert "Removal condition" in text
+    pkg = json.loads((tmp_path / "package.json").read_text(encoding="utf-8"))
+    audit = pkg["scripts"]["audit"]
+    assert "--prod" not in audit, "dev advisories must stay visible"
+    assert "--ignore-registry-errors" not in audit
 
 
 def test_python_flavor_untouched(tmp_path, capsys):

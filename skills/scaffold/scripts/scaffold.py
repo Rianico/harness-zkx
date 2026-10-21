@@ -142,6 +142,11 @@ _ENV = Environment(
 # A GitHub Actions expression (`${{ … }}`) reaches templates as a *variable*: Jinja's
 # delimiters are the default `{{ }}`, so the literal must never enter the parser.
 GH_ACTIONS_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
+GH_PR_REF = "${{ github.event.pull_request.number || github.ref }}"
+
+# pnpm's audit endpoint is served by the public registry: a configured mirror without it answers
+# `ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`, so the generated script pins the registry (#288).
+NPM_AUDIT_REGISTRY = "https://registry.npmjs.org/"
 
 DEFAULT_COVERAGE_THRESHOLD = 80
 
@@ -198,6 +203,7 @@ RUST_LIB_RS = load_template("rust/src/lib.rs")
 OXLINT_JSON = load_template("typescript/.oxlintrc.json")
 OXFMT_JSON = load_template("typescript/.oxfmtrc.json")
 OXLINT_COMMENT_GATE_JS = load_template("typescript/scripts/oxlint-plugin-comment-gate.js")
+TS_PNPM_WORKSPACE = load_template("typescript/pnpm-workspace.yaml")
 INDEX_TEST_TS = load_template("typescript/tests/index.test.ts")
 CLI_TS = load_template("typescript/src/cli.ts")
 
@@ -675,6 +681,7 @@ def build_package_json(
         "format:fix": "oxfmt .",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
+        "audit": f"pnpm audit --audit-level high --registry {NPM_AUDIT_REGISTRY}",
     }
     dev_deps: dict[str, str] = {
         "typescript": "^7",
@@ -1178,6 +1185,16 @@ def render_ci_release(
     )
 
 
+def build_ts_ci_workflow() -> str:
+    """Render .github/workflows/ci.yml — the pull-request/push gate for a TS repo (#288)."""
+    return render_template(
+        "typescript/.github/workflows/ci.yml.j2",
+        shas=SHA_TABLE,
+        node_version=NODE_VERSION_NUM,
+        pr_ref=GH_PR_REF,
+    )
+
+
 def do_git(
     cwd: pathlib.Path,
     project_name: str,
@@ -1400,6 +1417,9 @@ def do_typescript(
             f"WARNING: npm package name normalized to '{npm_name}' (from '{project_name}') — proofread package.json name."
         )
     _ = write_file(cwd / ".nvmrc", NODE_VERSION, dry_run)
+    # pnpm 12 refuses an install whose dependencies carry blocked build scripts, and its audit
+    # config lives beside them (#288): esbuild is allowed, one unpatched advisory is dated.
+    _ = write_file(cwd / "pnpm-workspace.yaml", TS_PNPM_WORKSPACE, dry_run)
     pkg_json = build_package_json(project_name, ts_variant, with_coverage, coverage_script)
     warn = "mixed: {{project_name}} + description — proofread package name and description."
     if with_coverage:
@@ -1451,6 +1471,11 @@ def do_typescript(
         REPORT.note(
             f"NOTE: TypeScript coverage wired — run `pnpm run {coverage_script}` (fail_under lines/functions {threshold}%)"
         )
+    note = write_source(
+        cwd, ".github/workflows/ci.yml", build_ts_ci_workflow(), dry_run, update=update
+    )
+    if note:
+        notes.append(note)
     patch_releaserc_lockfile(cwd, dry_run)
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
     patch_agents(
@@ -1679,7 +1704,15 @@ def detect_project(cwd: pathlib.Path, *, drift: bool = False) -> dict[str, objec
         or "llvm-cov" in release_yml
         or "fail-under" in release_yml
         or "--coverage" in release_yml
-        or (node_coverage_script is not None and f"pnpm run {node_coverage_script}" in release_yml)
+        or (
+            node_coverage_script is not None
+            and (
+                f"pnpm run {node_coverage_script}" in release_yml
+                # CI delegates the whole gate to `pnpm run verify`, so the coverage step lives
+                # in the manifest and the workflow never spells the script name (#288).
+                or "pnpm run verify" in release_yml
+            )
+        )
     )
     ts_variant: str | None
     if node_present:

@@ -333,7 +333,7 @@ def test_9_coverage_script_defaults_to_detected(tmp_path: Path, capsys):
     capsys.readouterr()
     assert (tmp_path / ".github" / "workflows" / "release.yml").exists()
     yml = (tmp_path / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert "pnpm run cov" in yml
+    assert "- run: pnpm run verify" in yml
 
 
 def test_9_explicit_coverage_script_threads_to_ci(tmp_path: Path):
@@ -350,7 +350,7 @@ def test_9_explicit_coverage_script_threads_to_ci(tmp_path: Path):
     )
     assert rc == 0
     yml = (tmp_path / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert "pnpm run my-cov" in yml
+    assert "- run: pnpm run verify" in yml
 
 
 def test_9_all_threads_coverage_script_through_do_ci(tmp_path: Path):
@@ -367,7 +367,7 @@ def test_9_all_threads_coverage_script_through_do_ci(tmp_path: Path):
     )
     assert rc == 0
     yml = (tmp_path / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert "pnpm run my-cov" in yml
+    assert "- run: pnpm run verify" in yml
 
 
 # --- 10: boundary contract docs + CLI self-description ---

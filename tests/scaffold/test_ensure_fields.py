@@ -208,11 +208,28 @@ def test_aliased_coverage_script_is_detected(tmp_path: Path):
     assert result["ci"]["coverage"] is True
 
 
-def test_coverage_script_flag_threads_through_generation():
+def test_verify_script_alone_marks_ci_coverage(tmp_path: Path):
+    """CI delegates to `pnpm run verify`, so the workflow need not name the coverage script."""
+    pkg = dict(PKG)
+    pkg["scripts"] = {"cov": "vitest run --coverage", "verify": "pnpm run cov"}
+    _ = (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+    release = tmp_path / ".github" / "workflows"
+    release.mkdir(parents=True)
+    _ = (release / "release.yml").write_text(
+        "jobs:\n  verify:\n    steps:\n      - run: pnpm run verify\n", encoding="utf-8"
+    )
+    result = scaffold.detect_project(tmp_path)
+    assert result["typescript"]["coverage"] is True
+    assert result["ci"]["coverage"] is True
+
+
+def test_coverage_script_flag_threads_through_the_manifest_not_ci():
     pkg = json.loads(scaffold.build_package_json("demo", "lib", True, "test:coverage"))
     assert pkg["scripts"]["test:coverage"] == "vitest run --coverage"
+    assert pkg["scripts"]["verify"].endswith("&& pnpm run test:coverage")
     assert "coverage" not in pkg["scripts"]
     rendered = scaffold.render_ci_release(
         "node", with_coverage=True, threshold=80, coverage_script="test:coverage"
     )
-    assert "pnpm run test:coverage" in rendered
+    assert "- run: pnpm run verify" in rendered
+    assert "pnpm run test:coverage" not in rendered

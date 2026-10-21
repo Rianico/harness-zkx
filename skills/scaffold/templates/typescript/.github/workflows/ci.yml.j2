@@ -1,0 +1,28 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-{{ pr_ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    # Draft PRs spend no runner minutes; the `ready_for_review` type reruns the job.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@{{ shas.checkout }} # v7.0.1
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@{{ shas['pnpm-setup'] }} # v6.1.0
+        with: { run_install: false }
+      - uses: actions/setup-node@{{ shas['setup-node'] }} # v7.0.0
+        with: { node-version: {{ node_version }}, cache: pnpm }
+      - run: pnpm install
+      - run: pnpm run audit
+      - run: pnpm run verify
