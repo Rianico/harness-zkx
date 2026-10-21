@@ -17,6 +17,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _squash import (  # noqa: E402
+    SQUASH_BODY_MAX_BULLETS,
+    SQUASH_MESSAGE_MAX_LINES,
+)
+
 from tests.gh_helpers import make_repo, run_git
 from tests.git_env import git_env
 
@@ -317,6 +322,24 @@ def test_hint_splits_body_template_duty_from_squash_overview(tmp_path: Path) -> 
     assert "pr-enhance" in r.stdout
     assert "--squash-message-file" in r.stdout
     assert "curate pr_body.md to <=5 bullets" not in r.stdout
+
+
+def test_hint_states_both_shape_caps_from_the_gate_constants(tmp_path: Path) -> None:
+    """The hint names both caps, sourced from `_squash` so a retune cannot drift (#287).
+
+    Mutation: drop the line cap, or hardcode 15 -> the constant-driven line assertion fails.
+    """
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+
+    r = _run_check(repo, env, "--body-file", str(body_file))
+
+    assert r.returncode == 0, r.stderr
+    assert f"<={SQUASH_BODY_MAX_BULLETS} bullets" in r.stdout
+    assert f"<={SQUASH_MESSAGE_MAX_LINES} lines" in r.stdout
 
 
 def test_check_merge_keeps_read_only_preflight(tmp_path: Path) -> None:
