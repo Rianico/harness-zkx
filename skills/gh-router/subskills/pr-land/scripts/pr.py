@@ -480,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
             elif not created or not stamp_needed(num):
                 _ = stamp_changelog(head, num)
         if created and not unreleased_attributes_pr(num):
-            warn_ledger_gap(num, options.draft, options.no_stamp)
+            warn_ledger_gap(num, options.draft, options.no_stamp, final_title)
         if created and not options.draft:
             if not ready_pr(repo, num):
                 return 1
