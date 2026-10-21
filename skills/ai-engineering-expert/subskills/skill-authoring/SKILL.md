@@ -14,15 +14,15 @@ Designing and building skills in the LSZ architecture.
 
 Every LSZ skill falls into one of three types:
 
-| Type                 | When to Use                                                                                                                                                           | Key Trait                                                                                                                                                                                                                        |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Orchestration**    | Multi-phase, multi-party, fan-out/fan-in, router-projection pattern                                                                                                   | Owns sequencing, branching, checkpoints across heterogeneous subskills; delegates all implementation via Read + managed-by; never writes artifacts itself. Scaffold router (`manage: [git,python,rust,ci]`) is canonical example |
-| **Workflow**         | One or more phases with artifact contract; 1-phase = formerly Action (compact, self-contained), N-phase = formerly Complex (owns transitions, may dispatch subagents) | Owns phase transitions and artifact generation within single flow; `phases==1` is compact Action, `phases>1` is Complex                                                                                                          |
-| **Domain Knowledge** | Guides, patterns, expert methodology, reusable constraints                                                                                                            | Retrieval-time expertise; does not own orchestration                                                                                                                                                                             |
+| Type                 | When to Use                                                                                                                           | Key Trait                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Orchestration**    | Multi-phase, multi-party, fan-out/fan-in, router-projection pattern                                                                   | Owns sequencing, branching, checkpoints across heterogeneous subskills; delegates implementation via Read + managed-by; never writes artifacts itself. Scaffold router is canonical example.        |
+| **Workflow**         | One or more phases with artifact contract; 1-phase = formerly Action (compact, self-contained), N-phase = formerly Complex           | Owns phase transitions and artifact generation within a single flow; `phases==1` is compact Action, `phases>1` is Complex.                                                                           |
+| **Domain Knowledge** | Guides, patterns, expert methodology, reusable constraints                                                                            | Retrieval-time expertise; does not own orchestration.                                                                                                                                                |
 
 > Former `Action` → `Workflow (phases==1)`. Router-Projection pattern: parent dispatches via `Read`, not `Skill` tool, hidden `subskills/` — see `scaffold`.
 
-**When to embed logic directly in an Agent** instead of creating a skill: only when the workflow is Atomic (one specific thing, no loops), Universal (doesn't vary by language/framework), and Short (< 300 words). Example: the `planner` agent.
+**When to embed logic directly in an Agent**: only when workflow is Atomic, Universal, and Short (< 300 words). Example: the `planner` agent.
 
 **Full definitions:** See [skill-authoring.md](references/skill-authoring.md) for detailed descriptions of each type, including when to use each and common pitfalls.
 
@@ -32,35 +32,35 @@ Every LSZ skill falls into one of three types:
 
 Ask the user about:
 
-1. **Task and domain** -- What does the skill do? What specific use cases must it handle?
-2. **Success Criteria (GDD/EDD)** -- How do we know the goal is achieved? What are the measurable, deterministic outputs? What are the qualitative, semantic goals?
-3. **Behavioral Scenarios (BDD)** -- What are the key Given/When/Then scenarios the skill must satisfy?
-4. **Taxonomy classification** -- Which of the three types above fits? If unsure, ask: "Does this govern across skills / need multiple parties / fan-out or a router-projection?" (orchestration), "Is it one flow with 1-to-N phases and artifact contracts?" (workflow — `phases==1` compact formerly Action, `phases>1` formerly Complex), or "Is this expertise to load on demand?" (domain knowledge).
-5. **Resources needed** -- Does it need executable scripts (deterministic operations), reference files (deep content beyond 500 lines), or just instructions?
-6. **Dependencies** -- Does it depend on other skills? If so, declare `metadata.depends-on`.
-7. **Parent-skill relationship** -- Is this part of a cluster? Should it be a sub-skill under a parent, or a standalone skill?
+1. **Task and domain**: What does the skill do? What specific use cases must it handle?
+2. **Success Criteria (GDD/EDD)**: How do we know the goal is achieved? Which outputs are measurable and deterministic, and which goals stay semantic?
+3. **Behavioral Scenarios (BDD)**: What are the key Given/When/Then scenarios the skill must satisfy?
+4. **Taxonomy classification**: Which of the three types fits? Ask if it governs multiple parties (Orchestration), runs phased artifact flows (Workflow), or provides retrieval-time expertise (Domain Knowledge).
+5. **Resources needed**: Does it need executable scripts, reference files beyond 500 lines, or just instructions?
+6. **Dependencies**: Does it depend on other skills? If so, declare `metadata.depends-on`.
+7. **Parent-skill relationship**: Is this part of a cluster? Should it be a sub-skill under a parent, or standalone?
 
 ### Phase 2: Draft
 
 Create the skill following LSZ conventions:
 
-1. **Directory structure** -- `skills/<name>/SKILL.md` plus `references/` and `scripts/` as needed
-2. **Verification Logic (EDD)** -- Include scripts in `scripts/` for deterministic verification. Define how semantic verification (e.g., via a Skeptic subagent) will be handled.
-3. **Behavioral Spec (BDD)** -- Include a `references/bdd-scenarios.md` if the workflow is complex, or embed scenarios directly in the SKILL.md body.
-4. **Frontmatter** -- `name` (matches directory), `description` (third-person, tripartite formula: what it is + what it does + when to use via `Use when...`, ≤300 chars), `arguments` + `argument-hint` if the skill accepts params, `metadata` for relationships and dependencies.
-   - **CRITICAL: YAML Formatting** -- Always use YAML block scalars (`>-` or `|`) for `description` and `argument-hint` to prevent parsing errors caused by unquoted colons, special characters, or multi-line text.
+1. **Directory structure**: `skills/<name>/SKILL.md` plus `references/` and `scripts/` as needed.
+2. **Verification Logic (EDD)**: Include scripts in `scripts/` for deterministic verification. Define how semantic verification (e.g. via a Skeptic subagent) will be handled.
+3. **Behavioral Spec (BDD)**: Include a `references/bdd-scenarios.md` if the workflow is complex, or embed scenarios directly in the SKILL.md body.
+4. **Frontmatter**: `name` (matches directory), `description` (tripartite formula, ≤300 chars), `arguments` + `argument-hint` if needed, `metadata` for relationships.
+   - **YAML Formatting**: Always use YAML block scalars (`>-` or `|`) for `description` and `argument-hint`. This prevents parsing errors from colons, special characters, or multi-line text.
      ```yaml
      description: >-
        Expert methodology for X. Synthesizes Y. Use when...
      ```
-5. **SKILL.md body** -- Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`. Apply [writing-for-agents sub-skill](../writing-for-agents/SKILL.md) for information hierarchy, pointer wording, completion criteria, leading words, and pruning.
-6. **Resource paths** -- Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links
-7. **Scripts** -- Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally, don't punt to the LLM
+5. **SKILL.md body**: Under 500 lines. Progressive disclosure: high-level guidance in the body, deep content in `references/`. Apply [writing-for-agents sub-skill](../writing-for-agents/SKILL.md) for information hierarchy and pointer wording.
+6. **Resource paths**: Use `$SKILL_DIR/` prefix in prose, relative paths in markdown links.
+7. **Scripts**: Use `uv run` with inline script metadata. Place in `scripts/`. Handle errors internally. Never punt error interpretation to the LLM.
 8. **Taxonomy-specific structure:**
-   - Orchestration: dispatch table + subagent templates, router-projection pattern (`Read` + `managed-by`, hidden `subskills/`), no implementation logic — budget ≤500 lines
-   - Workflow (1-phase): compact, focused, minimal structure (formerly Action) — budget ≤150 lines
-   - Workflow (N-phase): phase definitions with state transitions, artifact contracts (formerly Complex) — budget ≤150×phases capped 500; lint soft warning first (e.g., "Workflow with 2 phases is 340 lines but budget 300 — consider splitting")
-   - Domain knowledge: organized by topic, patterns with examples, gotchas — budget ≤500 lines
+   - Orchestration: dispatch table + subagent templates, router-projection pattern (`Read` + `managed-by`, hidden `subskills/`), no implementation logic — budget ≤500 lines.
+   - Workflow (1-phase): compact, focused, minimal structure (formerly Action) — budget ≤150 lines.
+   - Workflow (N-phase): phase definitions with state transitions and artifact contracts. Budget is ≤150 lines per phase, capped at 500. Review convention, not a lint gate.
+   - Domain knowledge: organized by topic, patterns with examples, gotchas — budget ≤500 lines.
 
 ### Phase 3: Review
 
@@ -76,7 +76,7 @@ Validate the draft before presenting to the user:
 - [ ] References are one level deep from SKILL.md
 - [ ] Scripts handle errors internally and use `uv run $SKILL_DIR/scripts/` invocation
 - [ ] No content that belongs in rules (always-on preferences) or other skills
-- [ ] Writing rigor applied (hierarchy, pointers, completion criteria, leading words, pruning) via writing sub-skill; no-ops pruned
+- [ ] Writing rigor applied (hierarchy, pointers, completion criteria, leading words, pruning) via writing sub-skill, with no-ops pruned
 - [ ] Router dispatch triggers on task-match, not just explicit domain (no "only when $domain" gate)
 
 Then ask the user:
