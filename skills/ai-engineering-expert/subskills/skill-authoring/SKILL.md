@@ -89,36 +89,36 @@ Then ask the user:
 
 ## Required Frontmatter
 
-Frontmatter follows the open Agent Skills spec ([agentskills.io](https://agentskills.io)): `name` and `description` are required; `license`, `compatibility`, `metadata`, and `allowed-tools` are optional base fields. Claude Code and Pi frontmatter attributes are enhancements on that base — Pi's semantics are the default where they diverge (see the [reference](references/skill-authoring.md)).
+Frontmatter follows the open Agent Skills spec ([agentskills.io](https://agentskills.io)). Fields `name` and `description` are required. Optional base fields include `license`, `compatibility`, `metadata`, and `allowed-tools`. Claude Code and Pi add platform enhancements. Pi semantics govern where platforms diverge (see [reference](references/skill-authoring.md)).
 
-- `name`: **Required** -- must match directory name (lowercase, hyphens, max 64 chars)
+- `name`: **Required** -- must match directory name (lowercase, hyphens, max 64 chars).
 - `description`: **Required** -- what it is + what it does + when to use (`Use when...`), third-person, trigger vocabulary. Use `>-` block scalar.
 
 **Description Writing Principles**
 
-The description is the skill's machine-readable trigger and permanent context-load footprint. Budget: 300 chars (hard gate). Grounded in empirical function-calling benchmarks, descriptions reject pseudo-syntax annotations (`TRIGGER:`) in favor of natural language conditionals and symptom hooks.
+The description is the skill's machine-readable trigger and permanent context-load footprint. Budget: 300 chars (hard gate). Descriptions reject pseudo-syntax annotations (`TRIGGER:`) in favor of natural language conditionals and symptom hooks. This design is grounded in empirical function-calling benchmarks.
 
 **The Tripartite Formula:**
 
 Every effective skill description MUST explicitly address three elements:
 
-1. **What it is (Role/Identity Anchor):** Category noun defining nature and domain (e.g., *"Adversarial crux code review gate..."*, *"Methodology spine..."*, *"CLI reference manager..."*). Front-load in the first 50 chars to anchor identity and distinguish from adjacent skills.
-2. **What it does (Active Capabilities & Outputs):** Active third-person present tense verbs articulating specific functional capabilities, actions taken, and concrete outputs (e.g., *"audits test refutability, state invariants, and Clean Architecture boundaries"*, *"synthesizes multi-stack test runners and executes contract checks"*).
+1. **What it is (Role/Identity Anchor):** Category noun defining nature and domain (e.g. *"Adversarial crux code review gate..."*, *"Methodology spine..."*, *"CLI reference manager..."*). Front-load in the first 50 chars to anchor identity and distinguish from adjacent skills.
+2. **What it does (Active Capabilities & Outputs):** Active third-person present tense verbs articulating functional capabilities and concrete outputs (e.g. *"audits test refutability, state invariants, and Clean Architecture boundaries"*, *"synthesizes multi-stack test runners and executes contract checks"*).
 3. **When to use (Activation Boundary via `Use when...`):** **Required.** Explicit condition starting with `Use when...` (or `when the user...`). Benchmarks show natural language conditionals activate model routing policy heads far more reliably than passive topic summaries.
 
 **Empirical Benchmark Levers:**
 
-- **Symptom Keywords Standard (Fundamental):** Users describe problems and symptoms, not solutions. Bridge the user-to-tool semantic gap by embedding concrete failure states, bug indicators, debugging signals, and pain phrases (e.g., *flaky tests*, *drift*, *messy code*, *memory leak*, *crash*, *slow*, *unhandled exception*). Academic taxonomy alone (*"architectural hygiene"*) causes routing misses.
-- **Negative Boundary (Opt-in):** Highest-leverage steering lever in empirical evals (+20–35% routing precision). When two skills have adjacent or overlapping scopes, include an explicit exclusion (e.g., *"Do not use for unit tests; defer to Y for Z"*). Opt-in: only needed when adjacent boundaries collide.
-- **No Pseudo-Syntax (`TRIGGER:` Removed):** Models possess no internal `TRIGGER` parser. Uppercase annotations waste character budget without adding semantic weight. Put keyword tokens directly inside the `Use when...` clause.
-- **Strict Third-Person Present Tense:** "Synthesizes...", "Audits...", "Extracts...". Strictly avoid first-person ("I can help...", "My purpose is...") or second-person ("You can use this to...").
+- **Symptom Keywords Standard (Fundamental):** Users describe problems and symptoms, not solutions. Bridge the semantic gap by embedding failure states, bug indicators, and pain phrases (e.g. *flaky tests*, *drift*, *messy code*, *memory leak*, *crash*, *slow*). Academic taxonomy alone (*"architectural hygiene"*) causes routing misses.
+- **Negative Boundary (Opt-in):** Highest-leverage steering lever in empirical evals (+20–35% routing precision). When two skills overlap, include an explicit exclusion (e.g. *"Do not use for unit tests, defer to Y for Z"*). Opt-in: only needed when adjacent boundaries collide.
+- **No Pseudo-Syntax (`TRIGGER:` Removed):** Models possess no internal `TRIGGER` parser. Uppercase annotations waste character budget without adding semantic weight. Place keyword tokens directly inside the `Use when...` clause.
+- **Strict Third-Person Present Tense:** Use "Synthesizes...", "Audits...", "Extracts...". Strictly avoid first-person ("I can help...", "My purpose is...") or second-person ("You can use this to...").
 - **Strict Budget:** Hard gate ≤ 300 characters. Every character counts against global context load.
 
 **Compression Rules (apply in order until within budget):**
 
 1. **Categories over actions** — "ADR lifecycle management" not "create, edit, link, list, and read ADRs"
 2. **Domain slashes** — "Spring Boot/JPA/Hibernate" not "Spring Boot, JPA, Hibernate, and JUnit"
-3. **Parentheticals to body** — "(hard to reverse, surprising without context)" moves to SKILL.md body
+3. **Parentheticals to body** — Move parenthetical detail to SKILL.md body
 4. **Embed keywords into `Use when...`** — Weave technical nouns directly into the conditional clause
 5. **Front-load distinctive terms** — First 50 chars must distinguish this skill from related skills
 
@@ -134,13 +134,13 @@ Adversarial crux code review gate auditing test refutability, domain state invar
 Eval-driven verification gate for deterministic pass/fail quality decisions. Synthesizes native test and quality runners across polyglot stacks, executing capability, contract, and regression checks. Use when defining acceptance criteria, validating implementations, or running pre-PR quality gates.
 ```
 
-**Good with Opt-in Negative Boundary (279 chars):** What it is + What it does + When to use + Negative boundary.
+**Good with Opt-in Negative Boundary (250 chars):** What it is + What it does + When to use + Negative boundary.
 
 ```
 ADR lifecycle manager via `adr` CLI. Initiates, links, supersedes, and verifies architecture decision records. Use when documenting architectural decisions, evaluating technical trade-offs, or diagnosing ADR drift. Defer to git for commit management.
 ```
 
-**Bad (108 chars):** Missing required `Use when...` clause. Fails script check; model cannot evaluate decision boundary.
+**Bad (108 chars):** Missing required `Use when...` clause. Fails script check because model cannot evaluate decision boundary.
 
 ```
 Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.
@@ -152,13 +152,13 @@ Reference for writing and editing skills well — the vocabulary and principles 
 Manage architecture decision records with the `adr` CLI. Use for initializing an ADR repository, creating, linking, superseding, listing, and reading ADRs; for deciding whether a new decision relates to older ADRs; for evaluating whether a decision warrants an ADR (hard to reverse, surprising without context, genuine trade-off); and for keeping ADR content short, historical, and compatible with adr-tools templates and status/link behavior.
 ```
 
-**Bad:** Legacy syntax (`TRIGGER: foo, bar`) or first-person POV ("I can help you..."). Script warns on `TRIGGER:`; first-person causes agent discovery failures.
+**Bad:** Legacy syntax (`TRIGGER: foo, bar`) or first-person POV ("I can help you..."). Script warns on `TRIGGER:`. First-person causes agent discovery failures.
 
-Reference: [glossary.md](references/glossary.md) for the full domain vocabulary (invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms).
+Reference: [glossary.md](references/glossary.md) defines invocation classes, description budget, context load, and progressive disclosure.
 
 ### Trigger Calibration & Evidential Ledgers
 
-Never judge skill description quality by crude invocation counts or unconstrained `skill_coverage`. A skill firing on unrelated tasks is context pollution; an installed skill failing to fire on matching domain problems is a discovery failure.
+Never judge skill description quality by crude invocation counts or unconstrained `skill_coverage`. A skill firing on unrelated tasks causes context pollution. Failing to fire on matching domain problems causes discovery failure.
 
 Measure trigger performance via:
 - **Trigger Recall**: $\frac{\text{Triggered in\_domain}}{\text{Total in\_domain}}$ (must be high).
@@ -202,46 +202,48 @@ cases:
       Model attempted manual sed/grep edits instead of loading skill.
 ```
 
-Harvest real-world failure sessions into this ledger (via `harness-audit capture`). When Trigger Recall is low, extract exact user symptom keywords from captured observations and inject them into the `Use when...` clause.
+Harvest real-world failure sessions into this ledger via `harness-audit capture`. When Trigger Recall is low, extract user symptom keywords from captured observations and inject them into the `Use when...` clause.
 
-For complete step-by-step troubleshooting when a skill fails to fire, over-triggers, or loops during execution, see the [Skill Diagnosis Guide](references/skill-diagnosis.md).
+For complete troubleshooting when a skill fails to fire, over-triggers, or loops during execution, see the [Skill Diagnosis Guide](references/skill-diagnosis.md).
 
 **Key Optional Fields**
 
-- `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution; `argument-hint` documents them for autocomplete. Names should reflect skill function (`content_type`, `platform`, `scope` not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line using the `|` or `>-` block scalar: `<required>` / `[optional]` / `[opt=a|b]` / `[--flag]`, each with `-- description (default: value)`.
-- `allowed-tools`: Tool allowlist without permission prompts
+- `arguments` + `argument-hint` (pair): `arguments` declares semantic named params for `$name` substitution. `argument-hint` documents autocomplete hints. Names must reflect skill function (e.g. `content_type`, `platform`, `scope` -- not `arg1`, `arg2`). Place `arguments` first. Format `argument-hint` as multi-line YAML with one hint per line. Use block scalar `|` or `>-` with syntax `<required>`, `[optional]`, `[opt=a|b]`, or `[--flag]` -- description (default: value).
+- `allowed-tools`: Tool allowlist without permission prompts.
 - `user-invocable`: Show in `/` menu (default: `true`). Set `false` for internal skills accessed only through routing commands.
-- `disable-model-invocation`: Invocation-class enhancement beyond the open spec — shared by Claude Code and Pi, with Pi's zero-load semantics as the default; mechanics live in the parent [Context-Load Policy](../../references/context-load-policy.md). Do NOT use for skills accessed through routing commands: it blocks automatic loading AND explicit invocation via the `Skill` tool on Claude, and hides the skill from model context entirely on Pi.
-- `model`: Override model (`opus`, `sonnet`, `haiku`, `inherit`)
-- `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`)
+- `disable-model-invocation`: Invocation-class enhancement beyond the open spec, shared by Claude Code and Pi. Pi zero-load semantics serve as default. Mechanics live in parent [Context-Load Policy](../../references/context-load-policy.md). Do not use for skills accessed via routing commands. It blocks automatic loading and explicit `Skill` tool invocation on Claude. It hides the skill from model context entirely on Pi.
+- `model`: Override model (`opus`, `sonnet`, `haiku`, `inherit`).
+- `effort`: Thinking level (`low`, `medium`, `high`, `xhigh`, `max`).
 
 **Structure**
 
-- SKILL.md under 500 lines — practical usage guide (workflows, commands, examples)
-- SKILL.md is env-agnostic — env/config/setup/state belongs in `references/` (progressive disclosure)
-- Deep content in `references/` (one level deep)
-- Executable logic in `scripts/`
-  **Resource Path Convention**
-- `$SKILL_DIR` is the path anchor for ALL skill-owned resources (scripts, references, raw docs, config)
-- **Prose text:** Always `$SKILL_DIR/references/<module>.md` -- cwd is unknown to the reader
-- **Markdown links:** Always relative like `[text](references/<module>.md)` -- standard relative-to-file convention
-- Scripts: `uv run $SKILL_DIR/scripts/xxx.py` -- runs from any directory
-- Raw docs: `$SKILL_DIR/references/<skill-name>-raw/` in prose -- self-contained within skill
-- Avoid `cd` prefixes -- scripts should handle paths internally
-- Use `~/.claude/lsz/<skill-name>/` for runtime artifacts (results, temp files)
-- Scripts are invoked via `uv run` with inline script metadata for dependencies
+- SKILL.md under 500 lines — practical usage guide (workflows, commands, examples).
+- SKILL.md is env-agnostic — env/config/setup/state belongs in `references/` (progressive disclosure).
+- Deep content in `references/` (one level deep).
+- Executable logic in `scripts/`.
+
+### Resource Path Convention
+
+- `$SKILL_DIR` is the path anchor for all skill-owned resources (scripts, references, raw docs, config).
+- **Prose text:** Always `$SKILL_DIR/references/<module>.md` -- cwd is unknown to the reader.
+- **Markdown links:** Always relative like `[text](references/<module>.md)` -- standard relative-to-file convention.
+- Scripts: `uv run $SKILL_DIR/scripts/xxx.py` -- runs from any directory.
+- Raw docs: `$SKILL_DIR/references/<skill-name>-raw/` in prose -- self-contained within skill.
+- Avoid `cd` prefixes -- scripts should handle paths internally.
+- Use `~/.claude/lsz/<skill-name>/` for runtime artifacts (results, temp files).
+- Scripts are invoked via `uv run` with inline script metadata for dependencies.
 
 **User Interaction**
 
-- Use Dialog Contract pattern for all user questions (tool-agnostic structural spec)
-- One question per dialog, 2-4 options plus "Other"
-- Always include clear descriptions explaining tradeoffs
-- Present questions as plain text — structured but no special tool required
+- Use Dialog Contract pattern for all user questions (tool-agnostic structural spec).
+- One question per dialog, 2-4 options plus "Other".
+- Always include clear descriptions explaining tradeoffs.
+- Present questions as plain text — structured but no special tool required.
 
 **Interaction Anti-Patterns:**
 
-- Generating 5 files or a massive plan to disk, then asking "Is this okay?" via an unstructured follow-up
-- Heavy orchestration and complex workflow skills MUST define explicit checkpoints and structured branching points when approval or divergence is required
+- Generating multiple files or a massive plan to disk, then asking "Is this okay?" via an unstructured follow-up.
+- Heavy orchestration and workflow skills must define explicit checkpoints and branching points when divergence requires approval.
 
 **References:**
 
@@ -250,7 +252,7 @@ For complete step-by-step troubleshooting when a skill fails to fire, over-trigg
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts
 - [dialog-contract.md](references/dialog-contract.md) -- Standard pattern for user interactions
 - [glossary.md](references/glossary.md) -- Domain vocabulary: invocation classes, description budget, context load, progressive disclosure, and all skill-authoring terms
-- [writing-for-agents sub-skill](../writing-for-agents/SKILL.md) -- Agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; load when drafting any SKILL.md/AGENTS.md/CLAUDE.md
+- [writing-for-agents sub-skill](../writing-for-agents/SKILL.md) -- Agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, and pruning. Load when drafting any SKILL.md, AGENTS.md, or CLAUDE.md.
 
 ## Skill Authoring Checklist
 
