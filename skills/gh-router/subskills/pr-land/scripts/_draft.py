@@ -30,6 +30,8 @@ from _squash import (
     CLOSES_LINE_RE,
     DEFAULT_TEMPLATE_PATH,
     FIX_TYPE,
+    SQUASH_BODY_MAX_BULLETS,
+    SQUASH_MESSAGE_MAX_LINES,
     SQUASH_TITLE_RE,
 )
 from _status import CHECK_SCHEMA as CHECK_SCHEMA
@@ -453,7 +455,9 @@ def run_draft_phase(
     hint = (
         f"body: keep {artifact_path.name} in the repo's installed PR template shape "
         "(pr-enhance owns the prose); squash: author a separate overview in "
-        "--squash-message-file, <=5 bullets (Core + Root for fix + Risk:Door + Proof + Links), "
+        f"--squash-message-file, <={SQUASH_BODY_MAX_BULLETS} bullets / "
+        f"<={SQUASH_MESSAGE_MAX_LINES} lines "
+        "(Core + Root for fix + Risk:Door + Proof + Links), "
         "drop wip/fixup trivia, strip Mermaid/details/checklist; "
         f"then land with --body-file {display} "
         '(spec: GLOSSARY.md "Curated Squash Message" + pr-land SKILL.md Squash Shape)'
