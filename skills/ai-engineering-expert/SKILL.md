@@ -126,6 +126,19 @@ Gates: `validate-deps.py lint` for conventions, `validate-deps.py context-check`
 
 ---
 
+## High-Fidelity Handoffs
+
+A handoff transfers intent and pointers, never duplicated technical detail ([ADR-0009](../../docs/adr/0009-behavioral-evals-and-manifest-indexed-handoffs.md)). Subsequent agents initialize state from the handoff and referenced artifacts, displacing prior conversation history.
+
+- **Intent First**: Capture the "Why" and explicit user constraints.
+- **Artifact Trail**: Pass absolute pointers to durable artifacts (`design.md`, `mission_manifest.json`, diffs).
+- **Zero Duplication**: Never repeat technical decisions, file lists, or test results already present in artifacts.
+- **Suggested Skills**: Name the next directive and specific skills to invoke.
+
+To generate a phase handoff, invoke the `handoff` skill.
+
+---
+
 ## Model Routing
 
 | Model Tier | Use For                                               | Avoid                                     |
@@ -138,20 +151,23 @@ Escalate tier only when lower tier fails with a clear reasoning gap.
 
 ---
 
-## High-Fidelity Handoffs
+## Subagent-First Execution
 
-**The Handoff is the Mission Bridge**. Multi-agent systems and long-running tasks require reliable handoffs. The handoff document distills Goals, Reasoning, and Intent from a sprawling session into a single source of truth.
+> [!IMPORTANT] Universal Mandate Across All Coding Agents
+> Subagent-First Execution is a **Universal Mandate across all coding agents** (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, and others).
+>
+> Any coding agent handling high-noise tasks **MUST delegate to ephemeral subagents**. This covers broad exploration, recursive symbol searches, bulk editing, verbose build traces, and adversarial crux review. The same rule applies when only the final conclusion or artifact is needed. This guarantees:
+> 1. **Context Isolation**: High-entropy intermediate output (hundreds of lines of file dumps, compile errors, stack traces) stays trapped in disposable subagent contexts.
+> 2. **Parallel Execution**: Independent investigations or reviews execute concurrently across separate context budgets.
+> 3. **Compaction Prevention**: The primary agent's working memory remains lean and focused, avoiding compaction degradation, instruction amnesia, and lost constraints.
+>
+> **The orchestrator never does implementation work**. Implementers never do heavy exploration, bulk refactoring, or verbose test triage directly in the host pane.
 
-| Requirement          | Description                                                            |
-| -------------------- | ---------------------------------------------------------------------- |
-| **Intent First**     | Preserve the "Why" and the "Goal" over just the "What"                 |
-| **Artifact Trail**   | Absolute pointers to all durable artifacts (Design, ADRs, Code, Evals) |
-| **Success Criteria** | Define exactly what "done" looks like for the next agent               |
-| **Context Recovery** | The next phase starts by reading the handoff to initialize state       |
+The primary agent routes, dispatches with structured prompts, monitors, synthesizes summaries, and passes pointers between phases. It never writes code, edits files, runs verbose tests in the host pane, or reads full artifact contents into context.
 
 ### Subagent Response Contract
 
-Every subagent MUST return the canonical structured response ([resp-format.md](references/resp-format.md)):
+Every subagent MUST return the canonical structured response ([resp-format.md](references/resp-format.md), [lane-coordination.md](../herdr/references/lane-coordination.md)):
 
 | Field        | Purpose                                                        |
 | ------------ | -------------------------------------------------------------- |
@@ -160,32 +176,6 @@ Every subagent MUST return the canonical structured response ([resp-format.md](r
 | **Evidence** | Deterministic check results (`name`: PASS/FAIL + command)      |
 | **Route**    | `continue`, `remediate`, or `blocked`                          |
 | **Issues**   | Discovered risks, each with severity, `file:line`, remediation |
-
-### Pointer Continuity
-
-Use the handoff document as the index for durable artifacts (`design.md`, `lineage.md`, etc.). Subsequent agents start by reading the handoff to initialize state, displacing (ignoring) the original full conversation history.
-
-### Anti-Patterns
-
-- **History Hoarding** -- Expecting the next agent to re-read the entire chat history
-- **Embedded Bloat** -- Pasting 500-line specs into the handoff instead of passing pointers
-- **Prose-Only Handoff** -- Vague summaries without concrete artifact trails or success criteria
-
----
-
-## Subagent-First Execution
-
-> [!IMPORTANT] Universal Mandate Across All Coding Agents
-> Subagent-First Execution is a **Universal Mandate across all coding agents**, regardless of underlying engine (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, etc.).
->
-> Any coding agent handling tasks with high noise (e.g. broad codebase exploration, recursive symbol searches, multi-file bulk editing, verbose build/test traces, adversarial crux review) or where only the final conclusion/artifact is needed **MUST delegate to ephemeral subagents**. This guarantees:
-> 1. **Context Isolation**: High-entropy intermediate output (hundreds of lines of file dumps, compile errors, stack traces) stays trapped in disposable subagent contexts.
-> 2. **Parallel Execution**: Independent investigations or reviews execute concurrently across separate context budgets.
-> 3. **Compaction Prevention**: The primary agent's working memory remains lean and focused, avoiding compaction degradation, instruction amnesia, and lost constraints.
->
-> **The orchestrator never does implementation work**. Implementers never do heavy exploration, bulk refactoring, or verbose test triage directly in the host pane.
-
-The primary agent routes, dispatches with structured prompts, monitors, synthesizes summaries, and passes pointers between phases. It never writes code, edits files, runs verbose tests in the host pane, or reads full artifact contents into context.
 
 ### Execution Profile Boundary
 - **Heavy Mutation & Implementation**: Subagent-first is mandatory. Keeps primary agent context clean and isolates trial-and-error churn.
