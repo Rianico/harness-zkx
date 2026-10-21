@@ -861,3 +861,92 @@ def test_squash_title_flag_needs_pr(tmp_path: Path) -> None:
 
     assert result.returncode == 2, result.stderr
     assert "--squash-title needs --pr" in result.stderr
+
+
+# --- the bump-vs-ledger audit ----------------------------------------------------------------
+
+
+def test_ledger_blocks_a_feature_entry_under_a_fix_title(tmp_path: Path) -> None:
+    """A `fix` title licenses a patch; a `### Features` entry publishes a minor feature (#282)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#96)"),
+        ["fix(thing): repair a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "fix(thing): repair a thing")
+
+    assert result.returncode == 1, result.stderr
+    assert "bump-alignment" in result.stderr
+    assert "licenses a patch" in result.stderr
+    assert "add a thing" in result.stderr
+    assert "fix(thing): repair a thing" in result.stderr
+
+
+def test_ledger_blocks_a_breaking_entry_under_a_non_breaking_title(tmp_path: Path) -> None:
+    """A breaking ledger entry needs a major title, never a plain `feat` (#282)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat(thing): break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(thing): break a thing")
+
+    assert result.returncode == 1, result.stderr
+    assert "bump-alignment" in result.stderr
+    assert "requires a major" in result.stderr
+    assert "break a thing" in result.stderr
+    assert "feat(thing): break a thing" in result.stderr
+
+
+def test_ledger_passes_a_hidden_title_that_adds_no_entries(tmp_path: Path) -> None:
+    """The hidden-type exemption is unchanged: a chore PR still owes nothing (#282)."""
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["chore(thing): tidy (#96)"])
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "chore(thing): tidy")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_passes_a_feature_title_under_features_entries(tmp_path: Path) -> None:
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#96)"),
+        ["feat(thing): add a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(thing): add a thing")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_passes_a_breaking_title_under_a_breaking_entry(tmp_path: Path) -> None:
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat(thing)!: break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(thing)!: break a thing")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_blocks_a_feature_entry_under_a_hidden_title(tmp_path: Path) -> None:
+    """A `docs` title licenses no release, so it cannot carry a feature entry."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#96)"),
+        ["docs(thing): add a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "docs(thing): add a thing")
+
+    assert result.returncode == 1, result.stderr
+    assert "bump-alignment" in result.stderr
+    assert "licenses no release" in result.stderr
+    assert "add a thing" in result.stderr
