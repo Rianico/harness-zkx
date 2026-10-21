@@ -2290,3 +2290,52 @@ def test_dispatch_delivers_past_a_quoted_dialog_in_the_callee_transcript(
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert len(stub.prompts()) == 1
     assert len(_dispatch_reads(stub)) == 1
+
+
+def test_dispatch_group_roster_is_scoped_to_the_lane(stub: StubHarness, tmp_path: Path) -> None:
+    """#270: the roster is the lane, not every agent sharing the workspace and tab."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "harness-tm", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "harness-impl", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p3", "name": "style-tm", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {**DEFAULT_STATE["panes"][0], "cwd": "/tmp/harness"},
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+                "label": "impl",
+            },
+            {
+                "pane_id": "w9:p3",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/harness",
+                "label": "style",
+            },
+        ],
+    }
+
+    done = stub.run(
+        "w9:p2",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--task-group",
+        "harness",
+        state=state,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    envelope, _body = herdr_prompt.split_envelope_and_body(call[4])
+    assert envelope is not None
+    assert envelope.group == ("harness-tm@w9:p1", "harness-impl@w9:p2")

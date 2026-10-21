@@ -26,6 +26,24 @@ Reference for running Pi coding agent under Herdr.
   - `--resume`/`-r` is the *value-less picker* ("Select a session to resume"), so `pi --resume <path>` opens the picker and never re-attaches. Verified 2026-10-09 in a non-TTY `--print` run: the path argument was ignored and the session list rendered (#211).
   - `--session-id <id>` creates the session when missing, which is the idempotent form for a bare id.
 
+## Recovery Handles By Kind
+
+Each kind's resume command is built in `herdr_prompt.py:build_resume_cmd`. Only pi's daemon
+handle is a file path, so only pi is shortened (`short_session_id`) before it reaches
+`context_id` and `resume_cmd`; the full path stays in verbose recovery metadata
+(`session_path`).
+
+| Kind | Handle form | Short/long | Verified by |
+|---|---|---|---|
+| pi | `--session <id>` (id or file both accepted) | short id | 2026-10-20: `pi --session 00000000-… --offline` -> `No session found matching '<id>'` exit 1; `pi --session 01a154f2-…` (real session's id) -> found the session (project-mismatch prompt) exit 0, no model call |
+| claude | `--resume <session_id>` | already short (daemon reports the id) | `references/agents/claude.md` "Session Path & Resume"; unchanged by #267 |
+| qodercli / qoderclicn | `resume` (latest), or `-r [id]` for a specific session | no path involved | `references/agents/qodercli.md` "Session & Resume" |
+| agy | `--conversation=<uuid>` | short uuid | `references/agents/agy.md` "Session Path & Resume" |
+
+The shortening rule is deliberately narrow: a value is rewritten only when its file name is
+`<timestamp>_<uuid-v4-shape>.jsonl`. Another kind's handle, an already-short id, or an
+unfamiliar path passes through untouched.
+
 ## Known Quirks & Failure Modes
 - Background completions settle to `done`, not `idle`. Waiting with `--until idle` alone hangs.
 - Extract clean assistant text from session files with `uv run skills/herdr/scripts/herdr_transcript.py <target> --last`.

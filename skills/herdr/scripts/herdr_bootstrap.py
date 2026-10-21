@@ -87,8 +87,8 @@ from herdr_cli import (
     add_shared_argument,
     entries,
     entry_optional_text,
+    entrypoint,
     find_herdr,
-    guard,
     reply_helper,
     require_herdr_env,
     run_herdr_checked,
@@ -1053,9 +1053,9 @@ def bootstrap(options: Options, env: Mapping[str, str]) -> int:
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-bootstrap", lambda: bootstrap(options, env_map))
+    return entrypoint(
+        "herdr-bootstrap", build_parser, bootstrap, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

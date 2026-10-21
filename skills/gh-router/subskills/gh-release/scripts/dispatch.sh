@@ -6,8 +6,12 @@ LIB_DIR="$(cd "$SCRIPT_DIR/../../../lib" && pwd)"
 source "$LIB_DIR/log.sh"
 # shellcheck source=../../../lib/repo.sh
 source "$LIB_DIR/repo.sh"
+# shellcheck source=../../../lib/runs.sh
+source "$LIB_DIR/runs.sh"
 
 DRY="false"
+# Bounded log tail for a failed run: enough to name the cause, small enough to stay readable.
+LOG_TAIL_LINES=120
 if [[ "${1:-}" == "--dry-run" ]]; then DRY="true"; fi
 
 # fetch token once
@@ -162,7 +166,6 @@ for _ in $(seq 1 120); do
       ok "workflow completed: success"
       RC=0
     else
-      fail "workflow completed: ${CONCLUSION:-failed}"
       RC=1
     fi
     break
@@ -182,11 +185,19 @@ if [[ $RC -eq 0 ]]; then
   dim "run: https://github.com/${OWNER_REPO}/actions/runs/${RUN_ID}"
   phase_ok 3 "released v${NEXT_VER:-unknown} — workflow ${RUN_ID} passed"
 else
-  _conclusion=$(gh run view "$RUN_ID" --repo "$OWNER_REPO" --json conclusion --jq .conclusion 2>/dev/null || echo "failed")
-  phase_fail 3 "release workflow ${_conclusion} — run ${RUN_ID}"
-  warn "fetching failed logs…"
-  gh run view "$RUN_ID" --repo "$OWNER_REPO" --log-failed 2>&1 | tail -n 120 || gh run view "$RUN_ID" --repo "$OWNER_REPO" 2>&1 | tail -n 80 || true
+  _conclusion=$(gh run view "$RUN_ID" --repo "$OWNER_REPO" --json conclusion --jq '.conclusion // "failed"' 2>/dev/null || echo "failed")
+  phase_fail 3 "release workflow ${_conclusion:-failed} — run ${RUN_ID}"
+  # Diagnostics before the exit, never after it: print the failing job › step and a
+  # bounded log tail so the operator does not have to re-derive either by hand.
+  _steps=$(run_failing_steps "$OWNER_REPO" "$RUN_ID")
+  if [[ -n "$_steps" ]]; then
+    while IFS= read -r _step_line; do fail_line "$_step_line"; done <<<"$_steps"
+  else
+    warn "no failing job or step reported for run ${RUN_ID}"
+  fi
+  warn "log tail (last ${LOG_TAIL_LINES} lines):"
+  run_log_tail "$OWNER_REPO" "$RUN_ID" "$LOG_TAIL_LINES" >&2 || true
   dim "view: gh run view ${RUN_ID} --repo ${OWNER_REPO} --log-failed"
   dim "web:  https://github.com/${OWNER_REPO}/actions/runs/${RUN_ID}"
-  exit $RC
+  exit 1
 fi

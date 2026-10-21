@@ -52,7 +52,7 @@ from herdr_cli import (
     HerdrError,
     UsageError,
     add_shared_argument,
-    guard,
+    entrypoint,
 )
 
 BRIDGE_SCRIPT_NAME = "herdr-agy-bridge.sh"
@@ -390,6 +390,7 @@ def status_bridge(hooks_path: Path, *, as_json: bool) -> int:
             problems.append(f"managed {PRE_TOOL_EVENT} permission hook not present")
     if not script_path.exists():
         problems.append(f"bridge script missing: {script_path}")
+    # ast-grep-ignore: unchecked-throwing-call-python
     elif not os.access(script_path, os.X_OK):
         problems.append(f"bridge script not executable: {script_path}")
     installed = not problems
@@ -428,9 +429,9 @@ def run(options: Options, env: Mapping[str, str]) -> int:
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-agy-bridge", lambda: run(options, env_map))
+    return entrypoint(
+        "herdr-agy-bridge", build_parser, run, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

@@ -11,7 +11,10 @@ setup-hooks = "git config core.hooksPath .githooks"
 [step.copy-ignored]
 # `.lane/` is the lane's single shared database (resolved via the git common dir), not
 # per-worktree state. Copying it creates stale shadows; exclude it from artifact copies.
-# wt 0.76 has no `copy-ignored --exclude` flag, but project config supports this key.
+# Verified 2026-10-20 against wt v0.76.0: the key is recognised (no unknown-key warning
+# in `wt config show`) and a fresh worktree carries no `.lane/` while the main store
+# stays intact. wt has no `copy-ignored --exclude` flag, so this key is the only lever;
+# re-run the probe after any wt upgrade.
 exclude = [".lane/"]
 
 [pre-merge]

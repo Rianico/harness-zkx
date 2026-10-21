@@ -8,6 +8,7 @@ Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract pro
 ## Which part of this file you need
 
 - Multi-agent boundaries and anti-patterns: [Context and Delegation Architecture](#context-and-delegation-architecture).
+- Lane topology and revision bumps: [Lane Topology & Revisions](#lane-topology--revisions).
 - Orchestrator, Task Manager, and Implementer duties: [Role Boundaries and Authority Contracts](#role-boundaries-and-authority-contracts).
 - Deliverables and ownership: [Artifact Ownership Matrix](#artifact-ownership-matrix).
 - Dispatch and brief templates: [Canonical Prompt Contracts](#canonical-prompt-contracts).
@@ -62,7 +63,7 @@ When a workflow requires high-level coordination and focused execution, the Root
    - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py` governed by Task Leases and Token Observability.
    - **Scope**: In-lane execution inside the role's provisioned worktree (`<repo>.<task-group>.<role>`): lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
    - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator provisions one worktree per role and the topology, but never dispatches callee tickets directly. Each writer owns exactly one worktree, and a branch is checked out in exactly one worktree. TM and Implementers run natively inside their assigned worktrees from turn zero. Reviewers evaluate a pinned SHA on a read-only tree.
-   - **Lifecycle**: Branches follow `lane/<task-group>/<role>/<ticket>`. `herdr-worktree claim` moves a clean tree onto its branch from an explicit base and records it in `.lane/tasks.yaml`. Inspect [agent-bootstrap](agent-bootstrap.md) for the `--cwd` matrix.
+   - **Lifecycle**: Branches follow `lane/<task-group>/<role>/<ticket>`. `herdr-worktree claim` moves a clean tree onto its branch from an explicit base and records it in `.lane/tasks.yaml`. Inspect [agent-bootstrap](agent-bootstrap.md) for the `--cwd` matrix. A tree still named `<repo>.<sanitized-branch>` instead of `<repo>.<task-group>.<role>` is reported as `layout`; `status` prints the migration command for it — `retire` the old tree, then `claim` the same branch into the canonical name — and `doctor` carries the same flag.
    - **Commit-addressed review**: Freeze review targets at a SHA. Inspect using `git diff <base>..<sha>` and `git show <sha>:<path>`. Never mutate the implementer's tree to reproduce a review.
 
 2. **Tier 2: Role-Internal Subagent Delegation (Context Isolation)**
@@ -70,6 +71,51 @@ When a workflow requires high-level coordination and focused execution, the Root
    - **Scope for Implementer**: Deep codebase exploration (Scout), bulk edits (Editor), and verbose test runs (Test Runner) isolated to disposable contexts.
    - **Scope for Task Manager**: Adversarial crux code review (`keel`, `coding-protocol`, `programming-expert`) delegated to an internal review subagent to keep TM context clean and verdicts objective.
    - **The Iron Curtain**: Internal subagents are strictly private to the hosting pane. They **NEVER** invoke Herdr CLI commands, **NEVER** manage panes, and **NEVER** call `herdr_reply.py`. The host agent owns all external lane communication.
+
+---
+
+## Lane Topology & Revisions
+
+The standard lane topology is two tabs: the orchestrator alone in one tab, and a crew tab with the Task Manager and the Implementer side by side. Roles stay the same; only their placement is standardised.
+
+### Bringing Up The Topology
+
+Six commands, in order. Ids are read from responses, never predicted. The lane helper runs exactly this sequence (`herdr-lane up`, with `--dry-run` to print it); the commands below are what it executes, and what to do by hand if it has not been run.
+
+```bash
+# Orchestrator tab: one pane.
+herdr tab create --label <prefix> --cwd <orch-worktree> --focus    # read .result.tab
+herdr-bootstrap --pane <orch-pane> --kind agy --role orch --task-group <prefix> --cwd <orch-worktree>
+
+# Crew tab: TM left, Implementer right.
+herdr tab create --label <prefix>-crew --cwd <tm-worktree>        # read .result.tab
+herdr-pane horizontal --pane <tm-pane> --cwd <impl-worktree>       # prints the new pane id
+herdr-bootstrap --pane <tm-pane> --kind pi --role tm --task-group <prefix> --cwd <tm-worktree>
+herdr-bootstrap --pane <impl-pane> --kind pi --role impl --task-group <prefix> --cwd <impl-worktree>
+```
+
+`herdr tab create` names the tab in its response (`.result.tab`); the tab's first pane id is not named there, so read it from `herdr pane list` for that tab. `herdr-pane horizontal` maps to `herdr pane split --direction right` and prints the pane it created — a lane that wants a stacked crew uses `vertical` instead.
+
+> [!WARNING] Tab labels are not unique
+> An exact label resolves to every match, so `herdr-overview --tab <label>` widens silently when two tabs share a label. Keep the lane prefix unique and let revisions carry the difference.
+
+### Revision Bumps
+
+A revision marks a respawn event on the tab label, and nothing else. The slug, agent names, worktrees, branches, leases, and store records are untouched: a tab rename is display-only, and the envelope binds the slug to the physical `tab_id`, never to the label.
+
+```bash
+# 1. Respawn in place: same pane id, same worktree, same agent name.
+herdr-bootstrap --pane <pane> --kind pi --role <role> --task-group <prefix> --cwd <worktree>
+
+# 2. Mark the event on the tab, monotonic by one.
+herdr-label --tab <prefix>-r<N+1>
+```
+
+The revision increments once per respawn event and is monotonic for the life of the lane. After the bump, `herdr-overview --tab <prefix>-r<N+1>` is the live view; the previous label names nothing. Leases and trajectories keep running across a respawn, so a reply that lands after a bump still resolves against the same `<slug>@<tab_id>`.
+
+**Accepted limitation:** a respawn of one role bumps the revision for the whole tab. The tab reports the latest respawn event, not a per-pane generation: after the Implementer alone is respawned, the Task Manager pane is older than the label says. Per-pane precision would require renaming agents per generation, and agent names are the dispatch address (`<slug>-<role>`), so a rename breaks in-flight addressing. That is out of scope by decision; the tab label is the granularity the topology offers.
+
+**Teardown:** there is no `agent stop`. Exit the agent in its pane — it leaves a shell prompt, which is exactly what the next `herdr-bootstrap --pane` needs — or `herdr pane close <pane-id>` when the generation shrinks. Never rebuild a worktree to respawn: the pane is the unit.
 
 ---
 
@@ -218,7 +264,7 @@ Every dispatch initiated via `herdr_dispatch.py` or `herdr_prompt.py` injects th
 
 - **Caller recovery (`kind + session_path + cwd`)**: Dispatch persists caller environment coordinates as `caller_recovery` in `.lane/tasks.yaml`. Recovery is retrieved just-in-time when a reply target has exited or is a bare shell. Passing `--verbose` adds `cwd`/`resume` back into `metadata`.
 - **Addresses**: `metadata.sender` and `metadata.receiver` carry strict `<agent>@<pane>` addresses. The tab rides inside `metadata.task_group` (`<slug>@<tab_id>`), and sender session rides as `context_id`.
-- **`group` roster**: `metadata.group` lists lane participants as `name@pane_id`, sender first. The target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the agent name before `@` (e.g. `impl-1`).
+- **`group` roster**: `metadata.group` lists lane participants as `name@pane_id`, sender first. The lane is the task-group slug: with one, the roster is every live agent named `<slug>-…` in the sender's and receiver's workspaces plus the addressing pair — the sender always, and any addressed target even when its name carries no slug (`orchestrator`, `reviewer`), because being party to the message is what puts a pane in the lane. Without a slug it falls back to every live agent in those workspaces. The roster stays informational: the target passed to `herdr_dispatch.py` or `herdr_prompt.py` is the agent name before `@` (e.g. `impl-1`).
 
 ---
 
@@ -582,7 +628,7 @@ All coding agents delegate heavy, noisy tasks to platform-native subagents:
 - **Dispatch Hook**: On acquisition, `herdr_dispatch.py` updates the task record with `status: TASK_STATE_SUBMITTED`, appends a `dispatched` event, and persists `caller_recovery`.
 - **Pre-Flight Readiness Gate**: Before injecting bytes, `herdr_dispatch.py` and `herdr_prompt.py` probe `herdr agent get <target>`, polling every 200ms up to 10s until `interactive_ready` is not false and `agent_status` is `idle` or `done`; a timeout aborts with a usage error naming the approval unblock path. Under `--no-wait` they then handshake up to 5s (100ms intervals) for a revision increment or `working`; when acceptance is unconfirmed the handshake warns on stderr and still exits 0, because exit 0 from `herdr agent prompt` already confirms acceptance. The warning names the remedy for the target's kind: `herdr-wait` for standard agents, and the agy bridge status title for kinds with `revision_moves: false` in `references/kinds.yaml`.
 - **Reply Hook & Soft Completion**: When callee replies via `herdr_reply.py`, it maps the payload status (`COMPLETED`→`completed`, `BLOCKED`→`blocked`, `REJECTED`→`rework`), appends the event with commit SHA to the sender's task trajectory, and releases the sender's active lease. The task record is preserved; completion is soft.
-- **Reply Authority**: A reply's authority is its store record, never its prompt text. `herdr_reply.py` persists replies to `.lane/replies/<id>.md` with a metadata sidecar `.lane/replies/<id>.yaml`. A `COMPLETED` reply lacking an evidence section is recorded `shape=incomplete` and does not advance the leased task. If the store cannot be written, delivery appends `Payload: NOT RECORDED`.
+- **Reply Authority**: A reply's authority is its store record, never its prompt text. `herdr_reply.py` persists replies to `.lane/replies/<id>.md` with a metadata sidecar `.lane/replies/<id>.yaml`. A `COMPLETED` reply lacking an evidence section is recorded `shape=incomplete` and does not advance the leased task. If the store cannot be written, delivery appends `Payload: NOT RECORDED`. Records live in the lane store, not in a worktree: a linked worktree created before `.lane/` was excluded from wt artifact copies can still hold a fossil `.lane/` whose `replies/` is a stale snapshot, and reading there finds no new record because the writer resolved the shared base. `herdr-worktree doctor` reports that fossil as `stale-lane`; the record's `payload` path is relative to the store base, so the check is `ls <lane-base>/.lane/replies/<id>.md`.
 - **Completion Negative Path**: Completion is never inferred from silence. Panes launched via `herdr-pane --command '<line>'` emit `[herdr-launch] finished exit=<rc>` on process exit (never task success). Panes started via `herdr agent start` lack launch sentinels and rely on cooperative completion or `herdr-wait --stale-after SEC` stall advisories.
 - **Inspection & Milestones**: Run `uv run ${herdr_skill}/scripts/herdr_lease.py show [--yaml|--json] [--limit N]` to inspect leases and tasks; run `uv run ${herdr_skill}/scripts/herdr_lease.py transition <target|task-id> <status> [--note TEXT] [--actor NAME] [--role NAME]` to append trajectory events. Pass `--force` to supersede an active lease.
 - **JIT Diagnostic Recovery**: When reply delivery fails because the caller agent exited or is a bare shell, `herdr_reply.py` reads `caller_recovery` from `.lane/tasks.yaml` and prints a copy-paste recovery suggestion on stderr:

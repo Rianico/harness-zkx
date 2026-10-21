@@ -49,7 +49,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -83,8 +82,8 @@ from herdr_cli import (
     add_shared_argument,
     entries,
     entry_optional_text,
+    entrypoint,
     find_herdr,
-    guard,
     require_herdr_env,
     run_herdr_checked,
 )
@@ -451,9 +450,9 @@ def wait_agents(options: Options, env: Mapping[str, str]) -> int:
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    return guard("herdr-wait", lambda: wait_agents(options, env_map))
+    return entrypoint(
+        "herdr-wait", build_parser, wait_agents, namespace=Options(), argv=argv, env=env
+    )
 
 
 if __name__ == "__main__":

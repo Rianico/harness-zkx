@@ -42,6 +42,7 @@ class CallerContext:
     agent: str | None = None
     kind: str | None = None
     session_id: str | None = None
+    session_path: str | None = None
     resume_cmd: str | None = None
     tab_id: str | None = None
     cwd: str | None = None

@@ -30,7 +30,6 @@ Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -48,8 +47,8 @@ from herdr_cli import (
     decode_payload,
     entries,
     entry_optional_text,
+    entrypoint,
     find_herdr,
-    guard,
     inspect_target_shell_pane,
     read_payload_stream,
     require_herdr_env,
@@ -568,7 +567,11 @@ def is_bare_shell_failure(exc: UsageError) -> bool:
     if isinstance(exc, BareShellRefusal):
         return True
     message = str(exc)
-    return "no live agent is running" in message or "has no live agent" in message
+    # Named needles keep the prose (which the CLI diagnostic owns) out of the comparison
+    # operands; the wording must stay verbatim to match `herdr_cli`'s message.
+    no_live_agent = "no live agent is running"
+    no_live_agent_alternate = "has no live agent"
+    return no_live_agent in message or no_live_agent_alternate in message
 
 
 def rewrite_targets_for_bootstrap(options: Options, names: list[str]) -> None:
@@ -783,7 +786,7 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
             subset = {
                 "pane_id": caller_ctx.pane_id,
                 "kind": caller_ctx.kind,
-                "session_path": caller_ctx.session_id,
+                "session_path": caller_ctx.session_path or caller_ctx.session_id,
                 "resume_cmd": caller_ctx.resume_cmd,
                 "cwd": caller_ctx.cwd,
             }
@@ -830,13 +833,15 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    env_map = dict(os.environ if env is None else env)
-    options = build_parser().parse_args(argv, namespace=Options())
-    try:
-        return guard("herdr-dispatch", lambda: dispatch_agents(options, env_map))
-    except WaitTimeout as exc:
-        print(f"herdr-dispatch: {exc}", file=sys.stderr)
-        return EXIT_WAIT_TIMEOUT
+    return entrypoint(
+        "herdr-dispatch",
+        build_parser,
+        dispatch_agents,
+        namespace=Options(),
+        argv=argv,
+        env=env,
+        timeout=(WaitTimeout, EXIT_WAIT_TIMEOUT),
+    )
 
 
 if __name__ == "__main__":
