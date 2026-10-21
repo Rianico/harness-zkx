@@ -35,7 +35,7 @@ A pointer states what the material is and does, and lists the **branches** (`Use
 - **Front-load the leading word**. The pointer is where the leading word triggers retrieval.
 - **One trigger per branch**. Synonyms that rename one branch duplicate it. Keep only genuinely distinct branches.
 - **Cut identity the body already carries**.
-- **Never point to an independent surface**. Prompt Templates (`/release`) and `disable-model-invocation: true` skills are invisible to the model until a human enters them, so an always-loaded pointer to them never fires and adds context load with zero retrieval benefit. Keep the command description as the sole index. Mechanics: parent context-load policy.
+- **Never point to an independent surface**. Prompt Templates and `disable-model-invocation: true` skills remain invisible to the model until entered by a human. An always-loaded pointer to them never fires, adding context load with zero retrieval benefit. Keep the command description as the sole index. Mechanics: parent context-load policy.
 
 ## The two loads
 
