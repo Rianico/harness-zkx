@@ -107,6 +107,7 @@ def _render_cases() -> dict[str, str]:
         "python/tests/test_smoke.py (module=demo)": scaffold.render_template(
             "python/tests/test_smoke.py.j2", module="demo"
         ),
+        "typescript/.github/workflows/ci.yml": scaffold.build_ts_ci_workflow(),
     }
     for variant in scaffold.CI_RUNTIMES:
         for coverage in (False, True):
@@ -131,6 +132,7 @@ RAW_SHA256: dict[str, str] = {
     "typescript/.oxfmtrc.json": "de9ec5a4f748493a84113f6f9881a3db585cc4e8a8bea2c83e3ba65c204e8fb3",
     "typescript/.oxlintrc.json": "af18217668580c6e3df7ede6481eb29df644a4f8929d5a9a15faec6a476a6d71",
     "typescript/scripts/oxlint-plugin-comment-gate.js": "9cbf8af3366f0e71f743c518c8ba31d5aed0144c7705ae76144a639673dd7484",
+    "typescript/pnpm-workspace.yaml": "6518607298274f98d4a1c249abef400d8830487c7758ecc03eb61896b732f3ea",
     "typescript/src/cli.ts": "3dd9148df21a5c186761c242b7f49ef8a3c4f6041535707ee5bc09879ceeeb85",
     "typescript/tests/index.test.ts": "4b91f6158817cf7dd1b57a41472772e961106bdf34430690e17386b53e0df80f",
 }
@@ -140,8 +142,8 @@ RENDERED_SHA256: dict[str, str] = {
     "CONTRIBUTING.default (project_name=demo)": "656e87cde47a27f9d469fe1f86c5cae6e8e2da2cf182fc5481121b915c076a52",
     "CONTRIBUTING.python (project_name=demo)": "45f4aaf929d262254f29a86a58a827c9c5efc63db19963e0fc960feb3c449ef8",
     "CONTRIBUTING.typescript (project_name=demo)": "6bd887e3e3993898b793435ffdd6bcf66de0af9305213dbce366f1c9453b3cab",
-    "ci/release.yml[node+coverage]": "4cd8aa8f14f7af9257078d6a1dab12b15668880a99d1571c399f8aa690bbbbfe",
-    "ci/release.yml[node]": "420116969768e215f715b50cf1fcc6446e864db0f6ec0437a64182a5490be940",
+    "ci/release.yml[node+coverage]": "229ed99d25f2a5a13527f7b89a5ff892bb26af0539fe4b0a31f970af244c0d5c",
+    "ci/release.yml[node]": "229ed99d25f2a5a13527f7b89a5ff892bb26af0539fe4b0a31f970af244c0d5c",
     "ci/release.yml[python+coverage]": "c62cdb275d459f6ccd22a447d3ff6fbc8c3540bcab52574cdc452e8e523f374e",
     "ci/release.yml[python]": "88ae1021e0c30bdc37211fa9dedf46253bad2b70ed1f4b3197a1b22806e6366c",
     "ci/release.yml[rust+coverage]": "263338d0df619d5fc45d91cb2a4425e26d4ce92b553e29231d4588a265d4eda5",
@@ -151,6 +153,7 @@ RENDERED_SHA256: dict[str, str] = {
     "rust/Cargo.toml (project_name=demo-cli)": "506eabda9eef1b9f5bf528259059d3d866aa0dc3bd538d83174602f9e9f0d047",
     "typescript/src/index.ts (project_name=demo)": "dd66d9df929a39c2e17a8b6609c030e03b6d247d7dee0b22649654633708410f",
     "typescript/vitest.config.ts (threshold=75)": "a175e6b0d7402032010f980086249c89968a5b393575f084126fd1645911b586",
+    "typescript/.github/workflows/ci.yml": "498264f544e58d6c82870588a644930e553267c85851d1fdbe8aeeac076a1d58",
 }
 
 
@@ -254,8 +257,8 @@ def test_no_rendered_release_workflow_clears_the_ledger():
 def test_rendered_output_has_no_template_leftovers():
     for label, out in _render_cases().items():
         assert "{%" not in out, f"{label} shipped a Jinja tag"
-        # the one legitimate `{{` is the Actions expression the context supplies
-        stripped = out.replace(scaffold.GH_ACTIONS_TOKEN, "")
+        # the legitimate `{{` bytes are the Actions expressions the context supplies
+        stripped = out.replace(scaffold.GH_ACTIONS_TOKEN, "").replace(scaffold.GH_PR_REF, "")
         assert "{{" not in stripped and "}}" not in stripped, (
             f"{label} shipped an unrendered variable"
         )
