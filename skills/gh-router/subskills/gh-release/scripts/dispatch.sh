@@ -28,6 +28,32 @@ NEXT_VER=""
 # release-note body). The full plugin trace is discarded — it is unrelated noise
 # that would otherwise flood the context window. Full log available on demand via
 # the hint printed by `preview`.
+# condensed_notes <trace> — the curated release-note lines from a semantic-release dry-run.
+#
+# The trace logs every analyzed commit message with its body (`Analyzing commit: …`), so a
+# bare heading filter reprinted the commit body's own `## Summary`/`## Root Cause` headings
+# above the real notes (#284). Prefer the block semantic-release prints after its
+# `Release note for version` marker; a trace without that marker (older releases) falls back
+# to dropping the `Analyzing commit:` blocks, the only place a commit body appears.
+condensed_notes() {
+  local trace="$1" body
+  if printf '%s\n' "$trace" | grep -qE '^\[[^]]*\] \[semantic-release\].*Release note for version '; then
+    body=$(printf '%s\n' "$trace" | awk '
+      /^\[[^]]*\] \[semantic-release\].*Release note for version / { found = 1; next }
+      found && /^\[[^]]*\] \[semantic-release\]/ { exit }
+      found { print }
+    ')
+  else
+    body=$(printf '%s\n' "$trace" | awk '
+      /Analyzing commit:/ { skipping = 1; next }
+      skipping && /^\[[^]]*\] \[semantic-release\]/ { skipping = 0 }
+      !skipping { print }
+    ')
+  fi
+  printf '%s\n' "$body" | grep -E "^(##|###) |^    \* |^  \* |^\* " | head -n 50 || true
+  return 0
+}
+
 preview() {
   local tmp out _pm_exec sr_exit rc=0
   tmp=$(mktemp)
@@ -55,8 +81,9 @@ preview() {
     rc=1
   elif [[ -n "$NEXT_VER" ]]; then
     ok "next version: v$NEXT_VER"
-    # condensed release-note body: version title, section headers, bullet lines
-    echo "$out" | grep -E "^(##|###) |^    \* |^  \* |^\* " | head -n 50 || true
+    # condensed release-note body: section headers and bullet lines, selected from the
+    # release notes only so a commit body cannot masquerade as release content.
+    condensed_notes "$out"
   else
     warn "no new version — nothing to release"
     dim "commits since last tag do not trigger a release (need feat/fix/! or BREAKING CHANGE)"
