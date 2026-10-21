@@ -19,6 +19,8 @@ Designing agent action spaces, tool definitions, and observation formatting for 
 
 ## Observation Design
 
+Deliver runtime truth passively (tee server logs or pipes) rather than forcing blind query loops.
+
 Every tool response should include:
 
 - `status`: success|warning|error
