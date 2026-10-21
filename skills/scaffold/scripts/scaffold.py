@@ -700,6 +700,11 @@ def build_package_json(
     if with_coverage:
         scripts[coverage_script] = "vitest run --coverage"
         dev_deps["@vitest/coverage-v8"] = "^5"
+    # One command, one exit code: `verify` holds the Node CI gate's steps in the same order
+    # (see `ci/runtimes/node.yml.j2`), so a local pass predicts a CI pass and an agent never
+    # re-runs the suite to recover a verdict (#286). Coverage projects end on their own script.
+    test_step = f"pnpm run {coverage_script}" if with_coverage else "pnpm test"
+    scripts["verify"] = f"pnpm run lint && pnpm run format && pnpm run typecheck && {test_step}"
     pkg: dict[str, object] = {
         "name": npm_name,
         "version": "0.1.0",
@@ -1450,7 +1455,7 @@ def do_typescript(
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
     patch_agents(
         cwd / "AGENTS.md",
-        "### Runtime\nTypeScript: pnpm v12 + .nvmrc (26) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json\n",
+        "### Runtime\nTypeScript: pnpm v12 + .nvmrc (26) + TS v7 + Vite v8, verify with `pnpm run verify` (lint → format → typecheck → test); see package.json\n",
         dry_run,
     )
     contrib_ts = render_template("shared/CONTRIBUTING.typescript.md.j2", project_name=project_name)

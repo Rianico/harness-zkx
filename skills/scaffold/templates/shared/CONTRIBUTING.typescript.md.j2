@@ -11,7 +11,7 @@ Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (bl
 - Bugs: paste-complete, prefer text over screenshots.
 - Features: state problem + proposal at minimum; alternatives optional.
 ## Before PR
-`pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` must pass. See `AGENTS.md` for agent rules.
+`pnpm run verify` must pass — one command, one exit code. It runs lint → format → typecheck → test in the order CI gates them (the coverage script when this project gates coverage). See `AGENTS.md` for agent rules.
 ## Pull Requests
 Prefer topic branch → PR → squash merge. Keep one concern per PR; link the issue with `Closes #NN`.
 ### Description

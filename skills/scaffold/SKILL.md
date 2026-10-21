@@ -22,7 +22,7 @@ Deterministic project scaffolding — one spine, many projections. The 20% that 
 ## GDD Wiring
 
 - **BDD contract:** `Given` conventional commit `feat`/`fix`, `When` `repository_dispatch` `semantic-release` (or `workflow_dispatch`) fires on `main`, `Then` `semantic-release` cuts a version with `### Features`/`### Bug Fixes` and updates `CHANGELOG.md`. Shared contract is `CONTRIBUTING.md` + `.releaserc.json` (git) plus language toolchain files.
-- **EDD gate:** `commitlint` + `npm run lint/typecheck/test` (or `uv`/`cargo` equivalent) are deterministic. Tag push fails if commit not conventional. Env truth is `npm ls` / `uv lock --check` / `cargo --version` + `git tag -l`.
+- **EDD gate:** `commitlint` + `pnpm run verify` (or `uv`/`cargo` equivalent) are deterministic — one command, one exit code, CI's order. Tag push fails if commit not conventional. Env truth is `pnpm ls` / `uv lock --check` / `cargo --version` + `git tag -l`.
 - **Semantic vs deterministic split:** `feat`/`fix` intent → human/model; bump + notes + changelog → `commit-analyzer` / `release-notes-generator` / tool.
 
 ## Keel Spine

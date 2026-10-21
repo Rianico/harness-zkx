@@ -80,7 +80,7 @@ The printed `NEXT` block _is_ the remaining task. Work it in this order:
 ## GDD Wiring
 
 - **BDD contract:** `Given` conventional commit `feat`/`fix`, `When` `repository_dispatch` `semantic-release` (or `workflow_dispatch`) is sent, `Then` `semantic-release` on `main` cuts `v1.3.0` with `### Features`/`### Bug Fixes` and updates `CHANGELOG.md`. Contract is `CONTRIBUTING.md` + `.releaserc.json`.
-- **EDD gate:** `commitlint` + `pnpm run lint/typecheck/test` are deterministic; tag push fails if commit not conventional. Env truth is `pnpm ls` + `git tag -l`.
+- **EDD gate:** `commitlint` + `pnpm run verify` (lint → format → typecheck → test) are deterministic; tag push fails if commit not conventional. Env truth is `pnpm ls` + `git tag -l`.
 - **Semantic vs deterministic split:** `feat`/`fix` intent → model/human; `commit-analyzer` bump + `release-notes-generator` → tool.
 
 ## Steps — Tool Owns Determinism
@@ -94,7 +94,7 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 
 > [!tip] Verification — run before every push/release
 >
-> - `pnpm run lint` / `pnpm run typecheck` / `pnpm test` — if any fails → `BLOCKED`
+> - `pnpm run verify` — if it fails → `BLOCKED`
 > - `custom/no-comments` allows `SAFETY:` `WHY:` `Invariant:` `See ADR-` `via https://` `TODO(#\d+):` `HACK:` + Gherkin (`Given|When|Then`); `noUncheckedIndexedAccess` needs `(l: string)` in tests — see ADR-0014 (harness AI engineering, `files:off` is shrink-only, `edit-pipeline` hard-code deleted, harness owns regex)
 
 ## Notes

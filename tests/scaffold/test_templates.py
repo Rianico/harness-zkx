@@ -37,6 +37,14 @@ scaffold = _load("scaffold_mod_templates", SCRIPT)
 SRC = SCRIPT.read_text(encoding="utf-8")
 
 
+def test_typescript_contributing_cites_the_verify_script():
+    """#286: one command replaces the four-step chain that made agents re-run the suite."""
+    text = scaffold.render_template("shared/CONTRIBUTING.typescript.md.j2", project_name="demo")
+    before_pr = text.split("## Before PR", 1)[1].split("## Pull Requests", 1)[0]
+    assert "`pnpm run verify`" in before_pr
+    assert "pnpm run typecheck" not in before_pr
+
+
 def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -131,7 +139,7 @@ RAW_SHA256: dict[str, str] = {
 RENDERED_SHA256: dict[str, str] = {
     "CONTRIBUTING.default (project_name=demo)": "656e87cde47a27f9d469fe1f86c5cae6e8e2da2cf182fc5481121b915c076a52",
     "CONTRIBUTING.python (project_name=demo)": "45f4aaf929d262254f29a86a58a827c9c5efc63db19963e0fc960feb3c449ef8",
-    "CONTRIBUTING.typescript (project_name=demo)": "cea0c8f0d3c226d95d79e134e28b92113895ffa8c892bf38edf14f3295d3df35",
+    "CONTRIBUTING.typescript (project_name=demo)": "6bd887e3e3993898b793435ffdd6bcf66de0af9305213dbce366f1c9453b3cab",
     "ci/release.yml[node+coverage]": "4cd8aa8f14f7af9257078d6a1dab12b15668880a99d1571c399f8aa690bbbbfe",
     "ci/release.yml[node]": "420116969768e215f715b50cf1fcc6446e864db0f6ec0437a64182a5490be940",
     "ci/release.yml[python+coverage]": "c62cdb275d459f6ccd22a447d3ff6fbc8c3540bcab52574cdc452e8e523f374e",
