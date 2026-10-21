@@ -19,14 +19,7 @@ Designing agent action spaces, tool definitions, and observation formatting for 
 
 ## Observation Design
 
-Deliver runtime truth passively (tee server logs or pipes) rather than forcing blind query loops.
-
-Every tool response should include:
-
-- `status`: success|warning|error
-- `summary`: one-line result
-- `next_actions`: actionable follow-ups
-- `artifacts`: file paths / IDs
+Deliver runtime truth passively (tee server logs or pipes) rather than forcing blind query loops. Standard commands and scripts return native execution truth (stdout, stderr, exit codes). Do not force artificial JSON envelopes onto standard shell output. Reserve structured envelopes for specialized RPC or MCP agent endpoints.
 
 ## Error Recovery
 
@@ -41,11 +34,11 @@ Every error path needs:
 Maximize context efficiency and reduce latency by launching independent subagents concurrently.
 
 - **Anti-Pattern:** Running a security review agent, waiting for it to finish, then running a performance review agent
-- **LSZ Pattern:** Launching multiple subagents concurrently in a single tool call payload when their tasks do not depend on each other's outputs
+- **LSZ Pattern:** Launch independent subagents concurrently in one payload when outputs do not depend on each other.
 
 ## Intent vs Execution
 
-Orchestrator owns intent; subagent owns execution. The orchestrator grills the user via Dialog Contracts (e.g., `Project Shape → Verification Gate → Coverage → CI Release`) to capture `flavor`, gates, `coverage threshold`, and `CI variant` as flags/pointers. The subagent executes generation and verification (`uv run skills/scaffold/scripts/scaffold.py --flavor python --with-coverage 80`, `pytest`, `lint`) and must not re-grill the user; it returns a structured result. Prevents hero-mode and preserves observation quality — intent is grilling, execution is tool-owned.
+Orchestrator owns intent. Subagents own execution. The orchestrator grills the user to capture parameters and pointers as a settled design tree. The subagent executes generation and verification. It must not re-grill the user. It returns a structured result. This division prevents hero-mode and preserves execution fidelity.
 
 ## Native Agent Orchestration Constraints
 
@@ -53,14 +46,14 @@ Subagents operate under strict constraints. Violating them produces brittle or b
 
 - **No Agent-ception:** Subagents DO NOT have access to the `Agent` tool. A subagent cannot launch a new subagent. All orchestration MUST be done by the primary orchestrator in the main conversation context.
 - **No Subagent UI:** Subagents do not own the interaction flow with the user. If a subagent needs approval or a branch decision, it must return a structured response to the primary agent.
-- **Stateless Iteration:** When iterating on a subagent's artifact (e.g., user rejects a plan and provides feedback), do NOT resume the old subagent via `SendMessage`. Resumed agents accumulate context bloat. Instead, spawn a NEW agent and pass the file path of the previous artifact alongside the user's feedback.
+- **Stateless Iteration:** When iterating on a subagent's artifact (e.g. user rejects a plan and provides feedback), do not resume the old subagent via `SendMessage`. Resumed agents accumulate context bloat. Instead, spawn a new agent and pass the file path of the previous artifact alongside the user's feedback.
 
 ## Frontmatter Requirements
 
 ### Agents
 
-- ALWAYS include `tools:` — explicitly define tool scope as a YAML array. Omitting it defaults to full tool access, which is a security and alignment risk.
-- If an agent has deterministic skill invocation, define a `skills:` header as a YAML array so those skills can be preloaded up front. Prefer this over runtime `Skill` calls when the required skills are known in advance — it reduces round-trip overhead and keeps execution predictable.
+- Always include `tools:` to define tool scope as a YAML array. Omitting it defaults to full tool access, which is a security and alignment risk.
+- For deterministic skill invocation, declare skills as a YAML array in frontmatter. Preloading skills avoids runtime `Skill` calls, reduces latency, and keeps execution predictable.
 
 ## Reference
 
