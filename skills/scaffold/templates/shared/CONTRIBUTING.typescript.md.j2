@@ -6,6 +6,15 @@
 - Enforced by `commitlint` + `husky` (`npx commitlint --from=origin/main --to=HEAD`)
 ## Changelog
 `CHANGELOG.md` `## [Unreleased]` gated by `scripts/changelog-gate.py` in `changelog-check.yml` (a PR run reads the `Landing:` declaration from the PR body; the `main` run is the durable one); `release.yml` runs `semantic-release`, whose `scripts/release-changelog.mjs` plugin promotes the curated ledger into the versioned section and re-opens an empty `## [Unreleased]`. Do not hand-edit versioned sections. Commit a sync as a hidden type (e.g. `chore: sync changelog unreleased section`) so it mints no ledger entry. Hidden types only appear when `!`/`BREAKING CHANGE`.
+## Release
+Cut a release from `main` with the release workflow; five phases run in order, and each exits `0` before the next starts.
+1. Check — working tree clean, on `main`, conventional commits.
+2. Verify — `pnpm run verify` passes; it is the same gate CI runs.
+3. Preview — a dry run prints the next version and its release notes.
+4. Dispatch — run the release workflow and wait for it to succeed.
+5. Confirm — the tag is reachable from `main` and `CHANGELOG.md` has the versioned section.
+
+The ledger decides the bump. A user-facing feature needs a `feat` title; a breaking entry needs `!` in the title. A `fix` title licenses a patch and cannot publish a `### Features` entry.
 ## Reporting Issues
 Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (blank issues disabled).
 - Bugs: paste-complete, prefer text over screenshots.
