@@ -1,7 +1,7 @@
 ---
 name: ai-engineering-expert
 description: >-
-  AI engineering methodology spine for LSZ harness — context-load, skill/agent design, writing for agents, testing, subagent-first execution. Use when designing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md), or diagnosing context bloat or skill discovery failures.
+  AI engineering methodology spine for LSZ harness — context-load, skill authoring, agent design, agent-doc writing, testing, subagent-first execution. Use when creating or editing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md), or diagnosing context bloat or discovery failure.
 arguments: domain
 argument-hint: |-
   skill-authoring -- loads skill design and diagnosis methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, trigger diagnosis, progressive disclosure, rules-vs-skills boundary, platform sync, and authoring checklists
@@ -18,97 +18,85 @@ metadata:
 
 Core principles for building reliable AI systems in the LSZ harness. This file holds the 20% that solves 80% of problems. Deep methodology lives in subskills and their references.
 
-## The Foundation: IDD (Intent-Driven Development) & GDD (Goal-Driven Development)
+## The Foundation: IDD & GDD
 
-AI engineering translates **Human Intent** into verifiable reality. It structures the symbiotic boundary between the **Formal Substrate** (deterministic rules, compilers, typecheckers, databases, linters, git algorithms) and the **Semantic Reasoner** (probabilistic LLM agents operating under uncertainty). **IDD** is the upstream source of authority; **GDD** is the derived operational spine.
+AI engineering turns human intent into verified artifacts. **IDD** owns intent. **GDD** derives goals from intent.
 
-### 1. IDD (Intent-Driven Development): Source of Authority
-Answers *"Why are we changing reality?"* Anchors teleological purpose and boundary invariants before any code or goals are authored. Defined by the **4-part Intent Formula**:
-- **Problem**: Concrete deficiency, friction, or behavioral regression in the current world state.
-- **Proposed Outcome**: Observable change in behavior, capability, or invariant once resolved.
-- **Affected Seams**: Architectural boundaries, module interfaces, or protocols touched.
-- **Non-Negotiable Constraints**: Invariants, backwards compatibility, performance ceilings, or forbidden patterns.
+Two owners split the work:
 
-### 2. GDD (Goal-Driven Development): Derived Operational Spine
-Derives verifiable milestone world states from Intent. Answers *"What world state confirms the intent was realized?"*
-
-### 3. The Derivation Chain
-1. **Intent (IDD)** establishes the human purpose and boundary invariants.
-2. **Derived Goals (GDD)** operationalize intent into discrete, ordered milestone states.
-3. **BDD Contracts** define behavior via Given/When/Then acceptance criteria — the shared contract that turns a creative guessing task into a structured translation task.
-4. **EDD Verification** executes deterministic environment checks (`test`, `lint`, `typecheck`). We never trust what the model _says_ it did, only what the _environment says_ it did. **Environmental Truth is the Supreme Authority.**
-
-Both ends are strictly required. A goal without intent invites **Specification Gaming** (Goodhart's Law): the agent optimizes the metric or test directly — mock tautologies, stubbed checks, deleted assertions, broken cross-cutting invariants — and defeats the human purpose. Intent without goal invites **Semantic Drift**: unbounded refactors of unrelated files that never converge on verifiable completion.
-
-### 4. Root-Cause Archetypes for Agent Failure
-Hard reality and qualitative alignment are distinct domains. Default to building checks over writing rules. When an agent fails, classify the root cause:
-
-- **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → deterministic tools in the Formal Substrate (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
-- **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → refine prompt contracts (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
-- **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → enforce via Context Pressure Asymmetry (move to Skeptic reviewer) or build a hard tool gate. Prune ignored prose.
-- **Route Friction** (model bypassed rule because compliance was too manual or multi-step) → pack steps into a script (`scripts/<cmd>`). Make the governed path the cheapest path.
-
-### 5. Unified Message Format
-All inter-agent dispatches and completion replies adhere to an isomorphic dual-mode contract (Markdown prose and structured JSON schema) covering Summary (Carmack-style), Artifacts, Evidence, Route, and Issues. (See [Subagent Response Format](references/resp-format.md) and [Lane Coordination](../herdr/references/lane-coordination.md)).
-
-## Information Boundary Design: Formal Substrate vs. Semantic Reasoner
-
-The boundary between deterministic computation and language models is absolute:
-
-- **Formal Substrate owns environmental truth and mechanical verification**: Compilers, linters, property tests, ACID databases, AST parsers, and git engines. Anything checkable without judgment stays in the substrate. It diagnoses conflicts, validates invariants, and renders binary verdicts. Never require the model to supply verification data or to echo text to prove honesty.
-- **Semantic Reasoner owns intent, synthesis, and conflict resolution**: The model navigates ambiguity, interprets human objectives, bridges conceptual mismatches, and proposes semantic integrations when the formal substrate flags an impasse (e.g. merge conflicts, type divergences, schema mutations).
-- **Minimal handles, hidden substrate mechanics**: Expose minimal anchors/handles for the model to reference. Hide verbose content, AST nodes, and persistence mechanics behind the tool. The model copies the handle; the substrate resolves, executes, and verifies.
-- **Grade by determinism**: Hard checks (syntax, types, hashes, invariants) belong to the formal substrate. Qualitative decisions (phrasing, architecture trade-offs, scoping) belong to the semantic reasoner.
+- **Formal Substrate**: Compilers, linters, typecheckers, databases, and tests return pass/fail. It owns environmental truth. The model never supplies verification data and never echoes text to prove honesty.
+- **Semantic Reasoner**: The model navigates ambiguity, resolves conflicts, and proposes integrations when the substrate reports an impasse.
 
 > Reference: [Information boundary pattern](references/information-boundary.md)
 
+### 1. IDD (Intent-Driven Development): Source of Authority
+
+Answers *Why change reality?* Anchors purpose and boundary invariants before anyone writes code or goals. Defined by the **4-part Intent Formula**:
+
+- **Problem**: Concrete deficiency, friction, or regression in the current state.
+- **Proposed Outcome**: Observable change in behavior, capability, or invariant once resolved.
+- **Affected Seams**: Architectural boundaries, module interfaces, or protocols touched.
+- **Non-Negotiable Constraints**: Invariants, backward compatibility, performance ceilings, or forbidden patterns.
+
+### 2. GDD (Goal-Driven Development): Derived Operational Spine
+
+Derives verifiable milestone world states from intent. Answers *What world state confirms the intent was realized?*
+
+### 3. The Derivation Chain
+
+1. **Intent (IDD)**: Establishes human purpose and boundary invariants.
+2. **Derived Goals (GDD)**: Converts intent into discrete, ordered milestone states.
+3. **BDD Contracts**: Defines behavior as Given/When/Then acceptance criteria. Turns guessing into structured translation.
+4. **EDD Verification**: Runs `test`, `lint`, and `typecheck`. Never trust what the model says it did. **Environmental Truth is the Supreme Authority.**
+
+Both ends are mandatory:
+
+- **Goal without intent** causes **Specification Gaming** (Goodhart's Law). The agent optimizes the metric itself: mock tautologies, stubbed checks, deleted assertions, broken cross-cutting invariants. It defeats the human purpose.
+- **Intent without goal** causes **Semantic Drift**: unbounded refactors of unrelated files that never converge on verifiable completion.
+
+### 4. Root-Cause Archetypes for Agent Failure
+
+Build checks over writing rules. Classify each failure by cause:
+
+- **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → Add a deterministic tool to the Formal Substrate (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
+- **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → Refine the prompt contract (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
+- **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → Enforce via Context Pressure Asymmetry (move it to the Skeptic reviewer) or a hard tool gate. Prune ignored prose.
+- **Route Friction** (model bypassed the rule because compliance was manual or multi-step) → Pack the steps into `scripts/<cmd>`. Make the governed path the cheapest path.
+
 ---
 
-## Core Mental Model
+## Expert Knowledge Activation
 
-AI system quality is constrained by nine factors:
+Name the canonical work for a mental model. Invoke the installed skill for a checklist.
 
-1. **Action space quality** -- Can the agent express the right operations?
-2. **Observation access** -- Does the agent see what it needs? Deliver runtime truth passively (tee server logs/pipes) rather than forcing blind query loops.
-3. **Recovery quality** -- Can the agent handle errors gracefully?
-4. **Tool feedback quality** -- Are automated signals (LSP, linters, compilers) treated as authoritative blockers?
-5. **Tool economy** -- Are tool/MCP outputs streamlined to prevent token-bloated payloads?
-6. **Context budget quality** -- Is guidance loaded when needed, not before? Are descriptions within budget and invocation classes declared correctly?
-7. **Artifact hygiene** -- Are files organized, deduplicated, and free of bloat?
-8. **Subagent-first execution** -- Is all implementation work delegated to subagents?
-9. **Handoff quality** -- Is state captured such that a fresh agent can resume with full fidelity?
+### 1. Parametric Anchoring
 
----
+Name the canonical source. A canonical name activates structured prior knowledge at low token cost.
 
-## Expert Role Placement
+- **Module design**: when a task places a seam, use Ousterhout's terms: deep module, information hiding, narrow interface.
+- **Test-first work**: when a test must fail first, use Kent Beck's red-green-refactor loop and name the failing assertion.
+- **Refactoring**: when a change touches existing code, name the smell (divergent change, shotgun surgery) before the mechanics.
+- **Interface contracts**: when narrowing an interface, state the Liskov case — which caller expectation must still hold.
 
-When assigning a specialist role (architect, TDD expert, refactoring expert, etc.), place it according to scope rather than stuffing it into one layer.
+Parametric recall supplies shape, not proof. Confirm specifics against a skill or a check before you rely on them.
 
-| Layer                         | Scope                                 | What Goes Here                                                             |
-| ----------------------------- | ------------------------------------- | -------------------------------------------------------------------------- |
-| **Agents**                    | Stable baseline identity              | Short, durable role framing that applies in nearly every use of that agent |
-| **Skills**                    | Deep reusable methodology             | Checklists, heuristics, trade-off frameworks, discipline-specific guidance |
-| **Orchestration / Workflows** | Workflow-specific overlay             | Phase-local emphasis, suppressions, artifact-specific instructions         |
-| **Rules**                     | Lightweight cross-cutting constraints | Conventions, tool preferences, artifact locations, global guardrails       |
+### 2. Context Skill Activation
 
-### Context Pressure Asymmetry
+Invoke the installed skill instead of inlining its methodology into a prompt:
 
-All work splits into implementation and review:
-- **Implementer**: Max context pressure (exploration, drafting, debug loops). Keep free of style/standards overhead.
-- **Reviewer**: Min context pressure (receives diff only, zero exploration). Place coding standards and qualitative checks here, not in implementation prompts.
+- **Deep module and seam design**: invoke the `Skill` tool for `codebase-design` where installed, else use the APoSD terms above.
+- **Language idioms**: invoke `Skill(skill="programming-expert", args="<language>")`.
+- **Strict red-green-refactor**: invoke `tdd-expert` where installed. Otherwise state the loop in the prompt.
+- **Pass/fail acceptance**: invoke `Skill(skill="eval-gate", args="define")`, then `args="check"` to verify.
 
-**Default decision rule:**
+Place each role by scope: agent for identity, skill for methodology, phase prompt for one step, rule for repo-wide constraints.
 
-- Almost everywhere for that agent → agent definition
-- Deep and reusable across workflows → skill
-- Specific to one workflow, phase, or artifact contract → orchestration skill
-- Broad repository-wide constraint → rules
+### 3. Context Pressure Asymmetry
 
-### Examples
+Split implementation from review. Each side carries a different context load:
 
-- `developer` agent in TDD: keep the agent generic. Load the `tdd-expert` skill for methodology. Inject scope boundaries in the TDD workflow prompt.
-- `onboarding` agent: load `onboarding` skill for codebase-specific context
-- `code-reviewer` agent: keep it generally reusable. Inject "do not replay TDD verification" only in the code-review workflow
+- **Implementer**: give it the full budget — exploration, drafts, failing output. Keep standards and style out of its prompt.
+- **Reviewer**: give it the diff only, with zero exploration. Load standards, invariants, and skepticism there.
 
 ---
 
