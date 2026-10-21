@@ -1755,6 +1755,10 @@ def _main_args(*extra: str) -> list[str]:
     return ["--head", "feat-x", "--title", "feat: x", "--body", "## Summary\nReal.\n", *extra]
 
 
+def _title_args(title: str, *extra: str) -> list[str]:
+    return ["--head", "feat-x", "--title", title, "--body", "## Summary\nReal.\n", *extra]
+
+
 def test_draft_handshake_create_stamp_then_ready(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2036,6 +2040,65 @@ def test_no_stamp_warns_when_unreleased_carries_no_entry_for_pr(
     assert "changelog gate" in err
     assert "carries no entries in ## [Unreleased]" in err
     assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_hidden_title_with_no_entries_stays_silent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A hidden-type PR that owes no entry gets no advisory and no remediation (#285).
+
+    The ledger gate exempts exactly this case, so warning that it will reject the PR is false.
+    """
+    _ = _write_changelog(tmp_path, entry=None)
+    fake = _FakeRun()
+    monkeypatch.setattr(github_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_title_args("chore(deps): bump vite to 8.3.5"))
+
+    assert rc == 0, fake.calls
+    err = capsys.readouterr().err
+    assert "warning:" not in err
+    assert "note:" not in err
+    assert "carries" not in err
+    assert "Add an entry" not in err
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_hidden_title_with_unattributed_entries_still_warns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Hiddenness silences only an empty ledger; unattributed entries still owe a stamp (#285)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(github_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_title_args("chore(deps): bump vite to 8.3.5", "--no-stamp"))
+
+    assert rc == 0, fake.calls
+    err = capsys.readouterr().err
+    assert "warning: --no-stamp" in err
+    assert "no ## [Unreleased] entry carries (#7)" in err
+    assert "Add an entry ending in (#7)" in err
+
+
+def test_non_hidden_title_with_unstamped_entries_still_warns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A visible title keeps the advisory for unstamped entries (#285)."""
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun()
+    monkeypatch.setattr(github_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_title_args("feat: x", "--no-stamp"))
+
+    assert rc == 0, fake.calls
+    err = capsys.readouterr().err
+    assert "warning: --no-stamp" in err
+    assert "no ## [Unreleased] entry carries (#7)" in err
+    assert "Add an entry ending in (#7)" in err
 
 
 def test_unreleased_attributes_pr_matches_gate_attribution_rules(tmp_path: Path) -> None:

@@ -32,6 +32,9 @@ __all__ = [
 ]
 
 
+_HIDDEN_TYPES = frozenset({"docs", "chore", "style", "test", "ci", "build"})
+_HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?P<bang>!)?(\([^)]*\))?:")
+
 _UNRELEASED_BULLET_RE = re.compile(r"^[*+-]\s+")
 
 
@@ -336,21 +339,35 @@ def stamp_changelog(
         return False
 
 
-def warn_ledger_gap(num: str, draft: bool, no_stamp: bool) -> None:
+def _title_is_hidden(title: str) -> bool:
+    """Mirror the ledger gate: a hidden type without `!` owes no entry."""
+    match = _HIDDEN_TITLE_RE.match(title.strip().casefold())
+    if match is None or match.group("bang") is not None:
+        return False
+    return match.group("type") in _HIDDEN_TYPES
+
+
+def warn_ledger_gap(num: str, draft: bool, no_stamp: bool, title: str = "") -> None:
     """Advise when no ## [Unreleased] entry carries `(#num)` after a create-or-reuse.
 
     The single home for the ledger advisory: the no-section, draft, and ready
     wordings live here once instead of once per stamp-mode branch in `pr.py`.
+    A hidden-type title with nothing left to attribute owes no entry: the gate
+    exempts exactly that case, so it prints nothing.
     Pure commentary on stderr; never refuses, never mutates.
     """
-    if _read_unreleased_block() is None:
+    block = _read_unreleased_block()
+    if block is None:
         print(
             "warning: no ## [Unreleased] section in CHANGELOG.md; "
             "the Ledger floor gate requires one before this PR can land. "
             f"Add the section with an entry ending in (#{num}).",
             file=sys.stderr,
         )
-    elif draft:
+        return
+    if _title_is_hidden(title) and not stamp_needed(num):
+        return
+    if draft:
         if no_stamp:
             print(
                 f"note: --no-stamp: head was not stamped for PR #{num} — "
