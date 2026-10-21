@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **changelog-gate:** audit the squash title's release level against the entries a PR adds, so a `fix(...)` (or hidden-type) title refuses `### Features` and a non-breaking title refuses a `(BREAKING CHANGE)` entry, naming both sides (#291)
 * **herdr:** agent-facing worktree lifecycle and cwd validation per ADR-0022 — add `claim`, `status`, `retire`, and `doctor` lifecycle verbs to `herdr_worktree.py` enforcing clean single-writer boundaries (`<repo>.<task-group>.<role>` topology, `lane/<task-group>/<role>/<ticket>` branch namespace, forbidden force/stash ops), validate that `herdr-bootstrap --cwd` targets a registered linked worktree, exclude `.lane/` from Worktrunk copies, and streamline skill and coordination reference documentation (#275)
 * **rules:** refine mental-model, response-format, and writing skills with 80% ASD-STE100, visual patterns, and model-exclusive IPC contract (#274)
 * **rules:** streamline git-convention and gotcha guardrails with STE-100 compliance (#273)
