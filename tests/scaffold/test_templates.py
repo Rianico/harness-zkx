@@ -45,6 +45,18 @@ def test_typescript_contributing_cites_the_verify_script():
     assert "pnpm run typecheck" not in before_pr
 
 
+def test_typescript_contributing_names_the_release_flow_and_ledger_rule():
+    """#289: a repo-local agent must be able to route a release from CONTRIBUTING alone."""
+    text = scaffold.render_template("shared/CONTRIBUTING.typescript.md.j2", project_name="demo")
+    release = text.split("## Release", 1)[1].split("## Reporting Issues", 1)[0]
+    for number, phase in enumerate(("Check", "Verify", "Preview", "Dispatch", "Confirm"), 1):
+        assert f"{number}. {phase}" in release, f"phase {number} ({phase}) is out of order"
+    assert "`pnpm run verify`" in release
+    assert "pnpm run lint" not in release, "cite the verify command, never repeat the chain"
+    assert "`feat`" in release and "`!`" in release
+    assert "`fix`" in release
+
+
 def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -141,7 +153,7 @@ RAW_SHA256: dict[str, str] = {
 RENDERED_SHA256: dict[str, str] = {
     "CONTRIBUTING.default (project_name=demo)": "656e87cde47a27f9d469fe1f86c5cae6e8e2da2cf182fc5481121b915c076a52",
     "CONTRIBUTING.python (project_name=demo)": "45f4aaf929d262254f29a86a58a827c9c5efc63db19963e0fc960feb3c449ef8",
-    "CONTRIBUTING.typescript (project_name=demo)": "6bd887e3e3993898b793435ffdd6bcf66de0af9305213dbce366f1c9453b3cab",
+    "CONTRIBUTING.typescript (project_name=demo)": "f53b2bd126285d088ac95db61fc67010adabc7a57fd2a89d0bc253adecbf442e",
     "ci/release.yml[node+coverage]": "229ed99d25f2a5a13527f7b89a5ff892bb26af0539fe4b0a31f970af244c0d5c",
     "ci/release.yml[node]": "229ed99d25f2a5a13527f7b89a5ff892bb26af0539fe4b0a31f970af244c0d5c",
     "ci/release.yml[python+coverage]": "c62cdb275d459f6ccd22a447d3ff6fbc8c3540bcab52574cdc452e8e523f374e",
