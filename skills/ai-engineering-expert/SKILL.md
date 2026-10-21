@@ -210,27 +210,13 @@ Reference: [Subagent-first execution](references/subagent-first-execution.md) �
 
 ## Artifact Hygiene
 
-Every modification must preserve or improve organization. Additive changes without consolidation create bloat. Scattered knowledge creates discovery failures.
+Every change must preserve or improve organization. Accumulation creates bloat. Scattered knowledge creates discovery failures.
 
-**Before any update:** audit the target, identify redundancy, find the right home.
-
-**During updates:** consolidate don't accumulate, one concept one location, reorganize when needed, group by topic.
-
-**Red flags:** files over size limits, duplicated concepts, copy-pasted content, catch-all sections, unclear ordering.
-
-**After every structural change** (renames, moves, metadata edits, dependency changes): run the deterministic gate. Binary pass/fail — no ambiguity.
-
-```bash
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py check  # dependency graph
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py lint   # frontmatter conformance
-```
-
-**Gotchas:**
-
-- Windows-style paths -- always use forward slashes
-- Additive-only updates -- every new section should prompt "is there old content this replaces?"
-- Copy-paste across skills -- reference the canonical source instead
-- Size blindness -- check line counts periodically
+- **Audit before you edit**: find the redundancy, then the right home. Every addition must name the old content it replaces.
+- **One concept, one canonical location**: reorganize and group by topic when needed. Reference the canonical source instead of copying.
+- **Signals of failure**: files over the size budget, duplicated concepts, catch-all sections, unclear ordering.
+- **Normalize paths**: always use forward slashes.
+- **Gate structural changes**: run `validate-deps.py check` after a rename, move, or dependency change. Run `lint` after a metadata edit.
 
 ---
 
@@ -238,9 +224,9 @@ uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py lint   # fr
 
 Design decisions the architecture makes intentionally:
 
-- **Latency vs Context Efficiency** -- On-demand skill loading adds a small runtime penalty (model must call `Skill` tool to retrieve deep knowledge). This keeps the base context window focused on the user's immediate request. Load only what is needed for the current sub-task.
-- **Hero-Mode Prevention** -- Generic agents are prone to ignoring delegation instructions. Skills that dispatch agents SHOULD use explicit execution schemas. Stable Agent dispatch templates force the model into orchestration mode.
-- **Tooling Preference** -- For shell search, prefer `rg` for content search and `fd` for file discovery. Avoid `grep`, `find`, and built-in search tools. Reserve `ls` and `tree` for structural inspection.
+- **Latency vs Context Efficiency**: on-demand loading costs one extra `Skill` call. It keeps base context focused. Load only what the sub-task needs.
+- **Hero-Mode Prevention**: generic models ignore delegation under load. Skills that dispatch agents SHOULD define explicit execution schemas. Stable templates force orchestration mode.
+- **Tooling Preference**: prefer `rg` for content search and `fd` for file discovery. Avoid `grep`, `find`, and built-in search tools. Reserve `ls` and `tree` for structure.
 
 ---
 
@@ -248,19 +234,19 @@ Design decisions the architecture makes intentionally:
 
 When workflow steps are plain shell that the model rewrites each time, they add variance. Tighten by packing.
 
-- **Pack plain steps into scripts**. Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/`. Use shell for file and branch work. Use Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`. Each packed fix removes the inline lines it replaces; otherwise the guide grows.
+- **Pack plain steps into scripts**. Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/`. Use shell for file and branch work. Use Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`. Each packed fix removes the replaced inline lines so the guide stays lean.
 - **Use plain words.** Keep prompts as `branch, copy, merge, conflict, fix, test, check, file, folder`. Plain words travel reliably and keep the guide short.
 
 ## Sub-Skill Dispatch
 
-This skill manages five domain-specific sub-skills. Dispatch on task-match OR explicit `domain` argument — never wait for the user to name the domain. When the task writes or edits any agent-consumed document (SKILL.md, AGENTS.md, CLAUDE.md, pointer docs), also load `writing-for-agents` — even when the primary domain is `skill-authoring`.
+This skill manages five domain-specific sub-skills. Dispatch on task-match OR explicit `domain` argument — never wait for the user to name the domain. When writing or editing any agent-consumed document, load `writing-for-agents`. This covers SKILL.md, AGENTS.md, CLAUDE.md, and pointer docs. Do this even when the primary domain is `skill-authoring`.
 
 | Domain                 | Sub-Skill                                            | Covers                                                                                                                                                                                                    |
 | ---------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skill-authoring`      | `$SKILL_DIR/subskills/skill-authoring/SKILL.md`      | Skill design, descriptions, invocation classes, description budgets, platform sync, rules-vs-skills boundary, progressive disclosure, parent-skill pattern, authoring checklists                          |
-| `subagent-engineering` | `$SKILL_DIR/subskills/subagent-engineering/SKILL.md` | Action space design, observation design, error recovery, parallel execution, orchestration constraints, agent frontmatter                                                                                 |
-| `verification`         | `$SKILL_DIR/subskills/verification/SKILL.md`         | EDD, deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loop, runtime trace fixtures                                                                             |
-| `writing-for-agents`   | `$SKILL_DIR/subskills/writing-for-agents/SKILL.md`   | Agent-document writing — context pointers, hierarchy, progressive disclosure, completion criteria, leading words, pruning; use for any SKILL.md/AGENTS.md/CLAUDE.md or narrative rigor in skill-authoring |
-| `writing-for-humans`   | `$SKILL_DIR/subskills/writing-for-humans/SKILL.md`   | Human-facing proposal writing — problem-first framing, evidence grounding, scannability, explicit asks, non-goals; use for GitHub issues, RFCs, and proposals a maintainer triages |
+| `skill-authoring`      | `$SKILL_DIR/subskills/skill-authoring/SKILL.md`      | **Creating, editing, or debugging a skill** → Skill design, descriptions, invocation classes, description budgets, platform sync, rules-vs-skills boundary, progressive disclosure, parent-skill pattern, authoring checklists |
+| `subagent-engineering` | `$SKILL_DIR/subskills/subagent-engineering/SKILL.md` | **Designing an agent or a delegation workflow** → Action space design, observation design, error recovery, parallel execution, orchestration constraints, agent frontmatter |
+| `verification`         | `$SKILL_DIR/subskills/verification/SKILL.md`         | **Deciding how to prove a change works** → EDD, deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loop, runtime trace fixtures |
+| `writing-for-agents`   | `$SKILL_DIR/subskills/writing-for-agents/SKILL.md`   | **Writing any agent-consumed doc** → Agent-document writing — context pointers, hierarchy, progressive disclosure, completion criteria, leading words, pruning; use for any SKILL.md/AGENTS.md/CLAUDE.md or narrative rigor in skill-authoring |
+| `writing-for-humans`   | `$SKILL_DIR/subskills/writing-for-humans/SKILL.md`   | **Writing an issue, RFC, or proposal** → Human-facing proposal writing — problem-first framing, evidence grounding, scannability, explicit asks, non-goals; use for GitHub issues, RFCs, and proposals a maintainer triages |
 
-**Dispatch:** Read the matching sub-skill file and follow its instructions. With no matching domain or task, only the philosophy above is loaded.
+**Dispatch:** Read the matching sub-skill file and follow its instructions. A skill-creation task always loads `skill-authoring`. With no matching trigger, only the philosophy above is loaded.
