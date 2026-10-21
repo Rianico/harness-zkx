@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **scaffold:** the TypeScript projection ships one `verify` script chaining lint → format → typecheck → test in the Node CI gate's order (the project's coverage script when scaffolded with coverage), and generated `CONTRIBUTING.md`, the `AGENTS.md` runtime pointer, and the typescript-scaffolding steps cite `pnpm run verify` instead of a four-command chain — one command, one exit code, and an existing repo adopts it by adding one script (#292)
 * **herdr:** agent-facing worktree lifecycle and cwd validation per ADR-0022 — add `claim`, `status`, `retire`, and `doctor` lifecycle verbs to `herdr_worktree.py` enforcing clean single-writer boundaries (`<repo>.<task-group>.<role>` topology, `lane/<task-group>/<role>/<ticket>` branch namespace, forbidden force/stash ops), validate that `herdr-bootstrap --cwd` targets a registered linked worktree, exclude `.lane/` from Worktrunk copies, and streamline skill and coordination reference documentation (#275)
 * **rules:** refine mental-model, response-format, and writing skills with 80% ASD-STE100, visual patterns, and model-exclusive IPC contract (#274)
 * **rules:** streamline git-convention and gotcha guardrails with STE-100 compliance (#273)
