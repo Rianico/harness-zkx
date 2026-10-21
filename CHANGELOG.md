@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **scaffold:** the TypeScript projection now checks the release gate on every pull request — a generated `ci.yml` runs `pnpm run audit` then `pnpm run verify` (draft PRs skipped, superseded runs cancelled), the manifest's `audit` script pins `https://registry.npmjs.org/` with `--audit-level high`, and the release verify job calls the same two scripts instead of respelling them; a generated `pnpm-workspace.yaml` allows esbuild's build script and suppresses exactly one unpatched advisory with its removal condition inline (#296)
 * **gh-router/pr-land:** the `--check` draft hint now states both squash shape caps (`<=5 bullets / <=15 lines`) interpolated from the gate constants, so an author who mirrors the hint no longer loses a round trip to the line budget (#295)
 * **scaffold:** the TypeScript projection ships one `verify` script chaining lint → format → typecheck → test in the Node CI gate's order (the project's coverage script when scaffolded with coverage), and generated `CONTRIBUTING.md`, the `AGENTS.md` runtime pointer, and the typescript-scaffolding steps cite `pnpm run verify` instead of a four-command chain — one command, one exit code, and an existing repo adopts it by adding one script (#292)
 * **changelog-gate:** audit the squash title's release level against the entries a PR adds, so a `fix(...)` (or hidden-type) title refuses `### Features` and a non-breaking title refuses a `(BREAKING CHANGE)` entry, naming both sides (#291)
