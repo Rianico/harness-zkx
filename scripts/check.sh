@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/check.sh — the four authoritative quality gates, in CI order.
+# scripts/check.sh — the seven authoritative quality gates, in CI order.
 # Stops at the first failure and names the failed gate.
 set -euo pipefail
 
@@ -64,9 +64,9 @@ esac
 run_gate() {
   local number="$1"
   shift
-  echo "==> [gate ${number}/4] $*"
+  echo "==> [gate ${number}/7] $*"
   if ! "$@"; then
-    echo "FAILED: gate ${number}/4 -> $*" >&2
+    echo "FAILED: gate ${number}/7 -> $*" >&2
     exit 1
   fi
 }
@@ -74,15 +74,18 @@ run_gate() {
 run_gate 1 uv run ruff check .
 run_gate 2 uv run ruff format --check .
 run_gate 3 uv run basedpyright --warnings
+run_gate 4 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
+run_gate 5 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
+run_gate 6 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
 
 if [ "$SKIP_TESTS" -eq 1 ]; then
-  echo "==> [gate 4/4] SKIPPED: uv run --group dev pytest was skipped (--skip-tests)"
+  echo "==> [gate 7/7] SKIPPED: uv run --group dev pytest was skipped (--skip-tests)"
 else
-  run_gate 4 uv run --group dev pytest
+  run_gate 7 uv run --group dev pytest
 fi
 
 if [ "$SKIP_TESTS" -eq 1 ]; then
-  echo "3/4 gates passed (pytest skipped: --skip-tests)"
+  echo "6/7 gates passed (pytest skipped: --skip-tests)"
 else
   echo "All gates passed."
 fi

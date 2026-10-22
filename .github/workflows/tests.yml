@@ -167,3 +167,12 @@ jobs:
 
       - name: Check types
         run: uv run basedpyright --warnings
+
+      - name: Validate dependencies lint
+        run: uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
+
+      - name: Validate dependencies check
+        run: uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
+
+      - name: Validate dependencies context-check
+        run: uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
