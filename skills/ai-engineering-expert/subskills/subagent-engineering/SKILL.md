@@ -4,16 +4,6 @@ description: >-
   Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, model selection, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
 metadata:
   managed-by: ai-engineering-expert
-  credits:
-    - source: https://arxiv.org/abs/2609.35928
-      author: arXiv:2609.35928
-      note: Prompted Identity Degrades Cooperation in Multi-Agent LLM Systems
-    - source: https://arxiv.org/abs/2307.03172
-      author: Liu et al. (2023)
-      note: Lost in the Middle - How Language Models Use Long Contexts
-    - source: https://arxiv.org/abs/2603.20324
-      author: arXiv:2603.20324
-      note: The Selection Bottleneck in Multi-Agent LLM Pipelines
 ---
 
 # Subagent Engineering
@@ -87,7 +77,7 @@ Matching model capability to subagent responsibility prevents toxic premise fail
 
 ### The Selection Bottleneck
 
-The orchestrator reasoning capacity must match or exceed its subagents. A weaker orchestrator cannot evaluate, reconcile, or verify conflicting subagent outputs.
+The orchestrator is the selector, and selection is the bottleneck. A weak orchestrator cannot exploit a strong candidate pool (Maryanskyy et al., 2026). Match orchestrator capability to or above its subagents.
 
 ### The Toxic Premise Risk
 
@@ -118,7 +108,7 @@ Subagents operate under strict structural boundaries:
 
 ## References
 
-- [tool-design-contracts.md](references/tool-design-contracts.md) -- Action space granularity, observation schemas, error recovery examples, and context budgeting.
+- [tool-design-contracts.md](references/tool-design-contracts.md) -- Action space granularity, passive runtime truth, structured return contracts, and error recovery.
 - [arXiv:2609.35928](https://arxiv.org/abs/2609.35928) -- Prompted identity degrades cooperation in multi-agent LLM systems.
 - [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) -- Lost in the middle: how language models use long contexts.
 - [arXiv:2603.20324](https://arxiv.org/abs/2603.20324) -- The selection bottleneck in multi-agent LLM pipelines.
