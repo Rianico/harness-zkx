@@ -5,7 +5,7 @@ description: >-
 argument-hint: |-
   [feature|refactor|bugfix|docs] [--lightweight|--heavy]
 metadata:
-  depends-on: [brainstorming, eval-gate, tdd-cycle, code-review, update-docs, handoff]
+  depends-on: [eval-gate, tdd-cycle, code-review, update-docs, handoff]
 disable-model-invocation: true
 
 ---
