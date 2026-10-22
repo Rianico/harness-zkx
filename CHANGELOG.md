@@ -121,6 +121,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
+* **changelog-gate:** flatten the entry-coverage exemption into one condition, so the byte-identical vendored copy passes consumer nested-`if` lint without a local exclusion while findings and messages stay unchanged (#303)
 * **gh-router/pr-land:** derive the landing title from the branch's own newest non-merge commit when a merge sits at `HEAD`, and refuse with the exact `--title "type(scope): subject"` form when the branch has no commit of its own (#300)
 * **herdr:** the completion contract appended to every dispatched prompt now states, in one line, that a `COMPLETED` payload needs an evidence heading or an inline evidence label, and `herdr-reply` prints one stderr line naming the missing shape and the stored record path when a payload is recorded `shape=incomplete` — a live #281 closing roll-up that named every merge was recorded incomplete with no explanation (#301)
 * **gh-router/pr-land:** silence the LEDGER advisory when a hidden-type title (`chore`, `docs`, `ci`, …) owes no entry, so a passing PR no longer warns that the Ledger floor gate will reject it or prints a manual remediation; unattributed entries keep the same warning and remedy (#294)
