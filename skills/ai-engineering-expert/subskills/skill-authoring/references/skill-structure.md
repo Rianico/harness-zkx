@@ -97,7 +97,7 @@ Workflow skills own procedures and state transitions. They must anchor mental mo
 2. **Operational Workflow**: Ordered phases, deterministic commands, error handling, and completion criteria.
 3. **Execution Contract**: How to invoke the skill, arguments, and expected response format.
 
-#### 2. Knowledge Skills: Mental Model First, Then Reference
+#### 2. Knowledge Skills: Mental Model & Invariants First, Then Reference
 
 Knowledge skills provide on-demand domain expertise. They do not own execution pipelines:
 1. **Core Mental Model**: Architectural trade-offs, foundational invariants, and domain rules.

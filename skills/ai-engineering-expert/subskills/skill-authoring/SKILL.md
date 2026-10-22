@@ -23,7 +23,7 @@ Meta-behavior is load-bearing. A flawed skill corrupts every future session wher
 Every skill falls into one of two operational categories:
 
 1. **Workflow Skills (Procedural)**: Step-by-step procedures to produce artifacts or change system state. Follows **Philosophy First, Then Workflow**. Anchor the core mental model and invariants before detailing sequential execution phases.
-2. **Knowledge Skills (Reference)**: Mental models, domain constraints, heuristics, and expert patterns loaded just-in-time. Follows **Mental Model First, Then Reference Patterns & Gotchas**. Never invent artificial procedural workflows for reference material.
+2. **Knowledge Skills (Reference)**: Mental models, domain constraints, heuristics, and expert patterns loaded just-in-time. Follows **Mental Model & Invariants First, Then Reference Patterns & Gotchas**. Never invent artificial procedural workflows for reference material.
 
 > **Note on Orchestration & Management**: Orchestration is a multi-agent workflow pattern, not a distinct taxonomy type. The `manage` and `managed-by` metadata declarations provide structural context routing (hiding subskills under `subskills/` to eliminate root context load), rather than an intrinsic skill class.
 
@@ -94,7 +94,7 @@ Structure the body based on the skill's taxonomy type:
 - **Workflow Skills (Philosophy First, Then Workflow):**
   1. *Philosophy & Foundation:* Core mental model, invariants, design constraints, anti-patterns.
   2. *Operational Workflow:* Sequential phases, commands, scripts, deterministic gates.
-- **Knowledge Skills (Mental Model First, Then Reference):**
+- **Knowledge Skills (Mental Model & Invariants First, Then Reference):**
   1. *Core Mental Model:* Domain invariants, architectural trade-offs, conceptual foundations.
   2. *Topical Patterns & Gotchas:* Worked code shapes, anti-patterns, framework-specific edge cases.
 
