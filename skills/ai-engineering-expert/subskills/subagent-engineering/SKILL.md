@@ -1,60 +1,86 @@
 ---
 name: subagent-engineering
 description: >-
-  Subagent design and execution methodology — action space design, observation formatting, error recovery, parallel execution, orchestration constraints, and agent frontmatter for the LSZ architecture.
+  Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
 metadata:
   managed-by: ai-engineering-expert
 ---
 
 # Subagent Engineering
 
-Designing agent action spaces, tool definitions, and observation formatting for reliable completion.
+Subagent orchestration methodology, context isolation boundaries, and execution scope contracts.
 
-## Action Space Rules
+## Core Mental Model: Subagents as Context Firewalls
 
-- Stable, explicit tool names
-- Schema-first, narrow inputs
-- Deterministic output shapes
-- Avoid catch-all tools unless isolation impossible
+Monolithic agents degrade over long horizons. High token churn, command logs, and large file reads dilute attention. This causes instruction drift and "Lost in the Middle" failure modes (Liu et al., 2023).
 
-## Observation Design
+A subagent operates as an **ephemeral execution scope**. Its primary function is **Context Isolation**:
+- **Token Churn Absorption:** The subagent consumes high-volume exploration, file scanning, and research in an isolated window.
+- **Asymmetric Information Flow:** The subagent returns only distilled conclusions, structured schemas, or file pointers.
+- **Context Preservation:** The orchestrator maintains a lean, high-signal context across multi-phase missions.
 
-Deliver runtime truth passively (tee server logs or pipes) rather than forcing blind query loops. Standard commands and scripts return native execution truth (stdout, stderr, exit codes). Do not force artificial JSON envelopes onto standard shell output. Reserve structured envelopes for specialized RPC or MCP agent endpoints.
+### Speculative Drafting as Context Isolation
 
-## Error Recovery
+Drafting in a subagent provides speculative execution with automatic rollback protection:
+- **Scratchpad Quarantine:** Prototyping, exploratory edits, and syntax trials remain inside the subagent.
+- **Zero In-Band Pollution:** Discarded trials leave no debris in the primary conversation history.
+- **Stateless Revision:** Revise artifacts by spawning fresh subagents with file pointers rather than accumulating conversational scars.
 
-Every error path needs:
+### Concurrency and Throughput
 
-- Root cause hint
-- Safe retry instruction
-- Explicit stop condition
+Parallelism is the secondary purpose of subagents. Concurrently dispatching independent subtasks collapses sequential wall-clock latency from linear wait times into constant time.
 
-## Parallel Agent Execution
+---
 
-Maximize context efficiency and reduce latency by launching independent subagents concurrently.
+## Timing & Scenarios: When to Dispatch Subagents
 
-- **Anti-Pattern:** Running a security review agent, waiting for it to finish, then running a performance review agent
-- **LSZ Pattern:** Launch independent subagents concurrently in one payload when outputs do not depend on each other.
+Knowing when to dispatch a subagent determines orchestration efficiency.
 
-## Intent vs Execution
+### When to Dispatch a Subagent
 
-Orchestrator owns intent. Subagents own execution. The orchestrator grills the user to capture parameters and pointers as a settled design tree. The subagent executes generation and verification. It must not re-grill the user. It returns a structured result. This division prevents hero-mode and preserves execution fidelity.
+- **High Token Churn Research:** Broad codebase searches, reading large documentation sets, or scanning multi-megabyte logs.
+- **Speculative Drafting & Prototyping:** Exploring candidate implementations or drafting complex proposals without risking the primary thread.
+- **Independent Verification:** Running security audits, architectural checks, or adversarial code reviews concurrently.
+- **Context Pressure Asymmetry:** Offloading high-pressure exploration from the low-pressure, strategic orchestrator.
 
-## Native Agent Orchestration Constraints
+### When NOT to Dispatch a Subagent
 
-Subagents operate under strict constraints. Violating them produces brittle or broken workflows.
+- **Trivial In-Band Operations:** Single-file reads, quick inspection commands, or one-line edits where subagent setup overhead exceeds execution time.
+- **Interactive User Alignment:** Interactive grilling and parameter capture require direct human dialog. Subagents must never interrogate the user.
+- **Shared Mutable State Without Seams:** Concurrent tasks touching the same files risk merge conflicts and broken state invariants.
 
-- **No Agent-ception:** Subagents DO NOT have access to the `Agent` tool. A subagent cannot launch a new subagent. All orchestration MUST be done by the primary orchestrator in the main conversation context.
-- **No Subagent UI:** Subagents do not own the interaction flow with the user. If a subagent needs approval or a branch decision, it must return a structured response to the primary agent.
-- **Stateless Iteration:** When iterating on a subagent's artifact (e.g. user rejects a plan and provides feedback), do not resume the old subagent via `SendMessage`. Resumed agents accumulate context bloat. Instead, spawn a new agent and pass the file path of the previous artifact alongside the user's feedback.
+---
 
-## Frontmatter Requirements
+## Context Topology: Fresh Context vs Inherited Context
 
-### Agents
+Choosing context topology defines how information moves across agent boundaries.
 
-- Always include `tools:` to define tool scope as a YAML array. Omitting it defaults to full tool access, which is a security and alignment risk.
-- For deterministic skill invocation, declare skills as a YAML array in frontmatter. Preloading skills avoids runtime `Skill` calls, reduces latency, and keeps execution predictable.
+### Fresh Context (The Default)
 
-## Reference
+Fresh context provides a clean room:
+- **Pristine Window:** The subagent starts with only its system prompt, role definition, and target brief.
+- **Zero Baggage:** Eliminates prompt pollution, confirmation bias, and instruction drift from earlier conversational turns.
+- **Pointer-First Exchange:** Pass context via file paths (file links) and structured contracts. Never copy-paste conversation transcripts.
 
-[Full details: tool-design-contracts.md](references/tool-design-contracts.md)
+### Inherited Context & Continuation Scopes
+
+Inherited context passes prior session history into the subagent:
+- **Use Sparingly:** Use only when the subagent requires historical conversational nuances that cannot be captured in a pointer brief.
+- **The Context Rot Trap:** Resumed agents accumulate token debt rapidly.
+- **Stateless Iteration Rule:** Never resume old subagents via SendMessage to iterate on rejected artifacts. Spawn a fresh subagent with the artifact pointer and critique notes.
+
+---
+
+## Native Orchestration Constraints
+
+Subagents operate under strict structural boundaries:
+- **No Agent-ception:** Subagents cannot access the Agent tool (depth limit 1). The primary orchestrator coordinates all agents.
+- **No Subagent UI:** Subagents do not own user interaction. When blocked, the subagent returns a structured blocker to the orchestrator.
+- **Principle of Least Privilege:** Explicitly declare tool scope via the frontmatter tools array. Researchers receive read-only tools. Implementers receive edit tools.
+- **Passive Runtime Truth:** Rely on native execution truth (stdout, stderr, exit codes). Never force artificial JSON envelopes onto standard shell output.
+
+---
+
+## References
+
+- [tool-design-contracts.md](references/tool-design-contracts.md) -- Action space granularity, observation schemas, error recovery examples, and context budgeting.
