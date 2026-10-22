@@ -79,8 +79,10 @@ Address this reading tax with controlled technical English.
 Aim for the 80% ASD-STE100 standard:
 - **Active voice and imperative mood:** Instruct the reader directly (`Validate once at admission`). Avoid passive phrasing (`Validation should be performed`).
 - **Short sentences:** Keep procedural instructions to 20 words or fewer. Keep descriptive sentences to 25 words or fewer.
-- **One action per sentence:** Never combine multiple sequential commands with coordinating conjunctions.
+- **One action per sentence:** Never combine multiple sequential commands with coordinating conjunctions. Compound sentences tempt the model into premature completion or partial step execution.
+- **Front-loaded guards:** Place the condition before the action: `If <condition>, then <action>`. A trailing condition lets the model emit tool calls before it evaluates the guard.
 - **Single meaning per term:** Assign one specific meaning to each word. Avoid decorative synonyms or metaphors.
+- **Budget emphasis:** Bold a term at its first definition only. Every bold mark spends attention on every re-read.
 - **Zero filler:** Strip out conversational padding, qualifiers, and unsupported assertions.
 
 Follow the representation ladder for high-density communication:
