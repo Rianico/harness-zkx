@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -53,11 +54,22 @@ ENV_REL = Path("docs") / "agents" / "env.yaml"
 TRIAGE_LABELS = ("needs-triage", "needs-info", "ready-for-agent", "ready-for-human", "wontfix")
 
 
-def detect_toolchain() -> dict[str, dict[str, Any]]:
-    """Check availability of the canonical CLI tools."""
+def detect_toolchain(cwd: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Check availability of the canonical CLI tools.
+
+    A tool resolves from `PATH` first, then from the target repo's local
+    `node_modules/.bin`. Node toolchains pin the Rust linters as
+    devDependencies (`oxlint`, `oxfmt`), so they never land on `PATH` and a
+    PATH-only probe reports a false gap.
+    """
     results: dict[str, dict[str, Any]] = {}
+    local_bin = (cwd / "node_modules" / ".bin") if cwd is not None else None
     for name, spec in TOOL_SPECS.items():
         bin_path = shutil.which(name)
+        if bin_path is None and local_bin is not None:
+            candidate = local_bin / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                bin_path = str(candidate)
         results[name] = {
             "detected": bin_path is not None,
             "path": bin_path,
@@ -163,7 +175,7 @@ def detect_environment(cwd: Path) -> dict[str, Any]:
         "has_adr_dir": adr_dir.is_dir(),
         "existing_docs_agents": existing_docs_agents,
         "stale_files": detect_stale_files(cwd),
-        "toolchain": detect_toolchain(),
+        "toolchain": detect_toolchain(cwd),
     }
 
 
@@ -461,7 +473,10 @@ def _format_report(state: dict[str, Any]) -> str:
     lines.append("")
     lines.append("Toolchain Availability:")
     for tool, details in state["toolchain"].items():
-        status = "FOUND" if details["detected"] else "NOT FOUND"
+        if details["detected"] and "/node_modules/.bin/" in (details["path"] or ""):
+            status = "FOUND (local)"
+        else:
+            status = "FOUND" if details["detected"] else "NOT FOUND"
         lines.append(
             f"  {tool:<14} {status:<10} ({details['purpose']}) fallback: {details['fallback']}"
         )

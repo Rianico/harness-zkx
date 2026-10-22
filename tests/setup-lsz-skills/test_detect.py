@@ -177,3 +177,42 @@ def test_cli_render_writes_all_docs(tmp_repo: Path, run_cli) -> None:
     docs = tmp_repo / "docs" / "agents"
     for name in ("domain.md", "toolchain.md", "issue-tracker.md", "triage-labels.md"):
         assert (docs / name).is_file()
+
+
+def _no_binary(_name: str) -> None:
+    """Stand-in for `shutil.which` that finds nothing (typed, so basedpyright stays clean)."""
+    return None
+
+
+def test_toolchain_resolves_repo_local_node_modules_bin(sd, tmp_repo: Path, monkeypatch) -> None:
+    """oxlint/oxfmt are Node devDependencies: PATH alone reports a false gap."""
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)
+    local_bin = tmp_repo / "node_modules" / ".bin"
+    local_bin.mkdir(parents=True)
+    for name in ("oxlint", "oxfmt"):
+        binary = local_bin / name
+        _ = binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        binary.chmod(0o755)
+
+    tools = sd.detect_toolchain(tmp_repo)
+
+    assert tools["oxlint"]["detected"] is True
+    assert tools["oxlint"]["path"] == str(local_bin / "oxlint")
+    assert tools["oxfmt"]["detected"] is True
+    assert tools["uv"]["detected"] is False  # a missing tool stays missing
+
+
+def test_toolchain_ignores_non_executable_local_bin(sd, tmp_repo: Path, monkeypatch) -> None:
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)
+    local_bin = tmp_repo / "node_modules" / ".bin"
+    local_bin.mkdir(parents=True)
+    _ = (local_bin / "oxlint").write_text("not a binary", encoding="utf-8")
+
+    tools = sd.detect_toolchain(tmp_repo)
+
+    assert tools["oxlint"]["detected"] is False
+
+
+def test_toolchain_without_cwd_does_not_probe_node_modules(sd, monkeypatch) -> None:
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)
+    assert all(tool["detected"] is False for tool in sd.detect_toolchain().values())
