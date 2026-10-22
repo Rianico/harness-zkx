@@ -406,6 +406,16 @@ class TestCLIEntryPoint:
             exit_code = main([str(p)])
             assert exit_code == 0
 
+    def test_multiple_paths_cli(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d)
+            f1 = p / "f1.md"
+            f2 = p / "f2.md"
+            _ = f1.write_text("# File 1\nClean sentence here.\n")
+            _ = f2.write_text("# File 2\nAnother clean sentence.\n")
+            exit_code = main([str(f1), str(f2)])
+            assert exit_code == 0
+
     def test_frontmatter_stripped_in_cli(self):
         with tempfile.TemporaryDirectory() as d:
             md_file = Path(d) / "with_frontmatter.md"

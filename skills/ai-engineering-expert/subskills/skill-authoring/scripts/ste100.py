@@ -339,7 +339,9 @@ def main(argv: list[str] | None = None) -> int:
         prog="ste100",
         description="ASD-STE100 Issue 9 (published January 15, 2025) deterministic linter for procedural and instructional prose.",
     )
-    _ = parser.add_argument("path", type=Path, help="Path to markdown file or directory to lint")
+    _ = parser.add_argument(
+        "paths", type=Path, nargs="+", help="Markdown files or directories to lint"
+    )
     _ = parser.add_argument(
         "--max-words",
         type=int,
@@ -355,19 +357,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    target_path: Path = args.path
-    if not target_path.exists():
-        print(f"Error: path does not exist: {target_path}", file=sys.stderr)
-        return 2
-
     files_to_lint: list[Path] = []
-    if target_path.is_file():
-        files_to_lint.append(target_path)
-    elif target_path.is_dir():
-        files_to_lint.extend(sorted(target_path.rglob("*.md")))
+    for target_path in args.paths:
+        if not target_path.exists():
+            print(f"Error: path does not exist: {target_path}", file=sys.stderr)
+            return 2
+
+        if target_path.is_file():
+            files_to_lint.append(target_path)
+        elif target_path.is_dir():
+            files_to_lint.extend(sorted(target_path.rglob("*.md")))
 
     if not files_to_lint:
-        print(f"No markdown files found under: {target_path}")
+        print(f"No markdown files found under: {', '.join(str(p) for p in args.paths)}")
         return 0
 
     total_issues = 0
