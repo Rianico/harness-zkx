@@ -119,6 +119,17 @@ jobs:
           # the release workflow's verify job installs both.
           uv sync --frozen --group dev --no-install-package basedpyright --no-install-package nodejs-wheel-binaries
 
+      - name: Warm the pinned formatter
+        run: |
+          # The scaffold canonicalizes bytes through a pinned oxfmt fetched by npx into a
+          # shared `~/.npm/_npx/<hash>` tree. Two things make that fragile on a CI runner:
+          # the image can ship that tree half-installed, and the xdist workers below then race
+          # each other into importing a package whose dependency is still missing. Clear the
+          # tree and install the pin once, serially, before any worker starts.
+          rm -rf "$HOME/.npm/_npx"
+          version=$(sed -n 's/^OXFMT_VERSION = "\(.*\)"/\1/p' skills/scaffold/scripts/scaffold.py)
+          npx -y "oxfmt@${version}" --version
+
       - name: Run all tests
         run: uv run --no-sync pytest
 
