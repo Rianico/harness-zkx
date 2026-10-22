@@ -700,25 +700,60 @@ def resolve_base(base: str | None, repo: str, cwd: Path | None = None) -> str:
         ) from exc
 
 
+def _local_base_ref(explicit: str | None, cwd: Path | None = None) -> str | None:
+    """The base ref for the branch-only title range, resolved without a gh call.
+
+    Precedence: explicit `--base`, then the remote's symbolic HEAD, then the common
+    local/remote trunk names. None means no base was found locally; the title walk
+    then falls back to the head's own first-parent history.
+    """
+    if explicit:
+        return explicit
+    sym = run_command(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd=cwd)
+    if sym.returncode == 0 and sym.stdout.strip():
+        return sym.stdout.strip()
+    for candidate in ("origin/main", "origin/master", "main", "master"):
+        res = run_command(["git", "rev-parse", "--verify", "--quiet", candidate], cwd=cwd)
+        if res.returncode == 0 and res.stdout.strip():
+            return candidate
+    return None
+
+
+def _branch_subject(ref: str, base: str | None, cwd: Path | None = None) -> str:
+    """The branch's own newest non-merge commit subject, or "" when it has none.
+
+    The range is `base..ref`, so commits the base already contains (the merged-in
+    trunk side) are excluded. `--first-parent` keeps the branch's own line when the
+    branch itself merged side work, and `--no-merges` skips the merge at HEAD. A
+    branch whose only commit is a merge of the base therefore yields ""; a plain
+    non-merge head still derives its own subject when the base already contains it.
+    """
+    spec = f"{base}..{ref}" if base else ref
+    res = run_command(
+        ["git", "log", "--first-parent", "--no-merges", "-1", "--pretty=%s", spec],
+        cwd=cwd,
+    )
+    subject = res.stdout.strip() if res.returncode == 0 else ""
+    if subject or base is None:
+        return subject
+    parents = run_command(["git", "log", "-1", "--pretty=%P", ref], cwd=cwd)
+    if parents.returncode != 0 or len(parents.stdout.split()) >= 2:
+        return ""
+    head_res = run_command(["git", "log", "-1", "--pretty=%s", ref], cwd=cwd)
+    return head_res.stdout.strip() if head_res.returncode == 0 else ""
+
+
 def resolve_title_and_body(
     options: PrOptions, cwd: Path | None = None
 ) -> tuple[str, str, bool, bool]:
     title = options.title
     title_supplied = options.title_supplied
     if not title:
+        base = _local_base_ref(options.base, cwd)
         if options.head:
-            res = run_command(
-                ["git", "log", "-1", "--pretty=%s", options.head],
-                cwd=cwd,
-            )
-            if res.returncode == 0 and res.stdout.strip():
-                title = res.stdout.strip()
+            title = _branch_subject(options.head, base, cwd)
         if not title:
-            res = run_command(
-                ["git", "log", "-1", "--pretty=%s"],
-                cwd=cwd,
-            )
-            title = res.stdout.strip() if res.returncode == 0 else ""
+            title = _branch_subject("HEAD", base, cwd)
 
     body = options.body or ""
     body_supplied = options.body_supplied

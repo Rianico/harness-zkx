@@ -365,13 +365,16 @@ def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] 
     """
     site = "--title" if not derived else "HEAD"
     provenance = (
-        "title from --title" if not derived else "title derived from the HEAD commit subject"
+        "title from --title"
+        if not derived
+        else "title derived from the branch's own commit subject"
     )
     if not title.strip():
         return make_refusal(
             "title_missing",
-            f"{provenance} is empty; a squash merge needs one Conventional Commit line",
-            "pass --title 'type(scope): subject' explicitly, then re-run",
+            f"{provenance} is empty; a squash merge needs one Conventional Commit line; "
+            'run with --title "type(scope): subject"',
+            'pass an explicit title, then re-run: --title "type(scope): subject"',
             site,
         )
     if num is not None:
@@ -404,8 +407,12 @@ def title_gate(title: str, num: str | None, *, derived: bool) -> dict[str, str] 
         return make_refusal(
             "title_shape",
             reason,
-            "rename the PR title to `type(scope): subject` "
-            "(feat, fix, docs, refactor, test, ...), then re-run",
+            (
+                'pass an explicit title, then re-run: --title "type(scope): subject"'
+                if derived
+                else "rename the PR title to `type(scope): subject` "
+                "(feat, fix, docs, refactor, test, ...), then re-run"
+            ),
             site,
         )
     return None
