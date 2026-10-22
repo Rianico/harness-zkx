@@ -246,6 +246,11 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
     step. The guidance names `--allow-unresolvable-sha` with a single-quoted example, so
     the example survives copy-paste as one shell word — prose advice, never a shell
     template, so nothing pasted from it widens the waiver.
+
+    The contract also states, in one line, what makes a COMPLETED payload complete: an
+    evidence heading or an inline evidence label. The check runs in `herdr_reply`; naming
+    the shape at authoring time is what a sender needs before the reply is recorded
+    incomplete (#299).
     """
     if sender.agent:
         contract = f'  uv run "{REPLY_HELPER}" {sender.agent} "<STATUS> <artifacts> <issues>"'
@@ -254,6 +259,8 @@ def render_reply_contract(sender: CallerContext, ticket_id: str | None = None) -
         return (
             "On completion, reply to the sender in one message using the herdr helper script:\n"
             f"{contract}\n"
+            "  A COMPLETED payload is complete only with evidence: an evidence heading"
+            ' (such as "## Evidence") or an inline evidence label (such as "**Evidence:**").\n'
             "  If the reply quotes a review id such as '0c81f04c' that names no commit,"
             " the SHA guard refuses it: waive that token by name with"
             " --allow-unresolvable-sha '0c81f04c' (one flag per token, reported on stderr)."
