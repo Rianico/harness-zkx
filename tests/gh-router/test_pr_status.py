@@ -371,7 +371,7 @@ def test_derived_title_refusal_names_the_derivation() -> None:
     entry = title_gate("wip stuff", None, derived=True)
     assert entry is not None
     assert entry["site"] == "HEAD"
-    assert "derived from the HEAD commit subject" in entry["reason"]
+    assert "derived from the branch's own commit subject" in entry["reason"]
 
     supplied = title_gate("wip stuff", None, derived=False)
     assert supplied is not None

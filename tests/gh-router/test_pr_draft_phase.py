@@ -434,3 +434,103 @@ def test_merge_empty_squash_message_file_exits_2_before_any_gh_call(tmp_path: Pa
     assert "--squash-message is empty" in r.stderr
     gh_log = Path(env["GH_LOG"])
     assert not gh_log.exists() or gh_log.read_text(encoding="utf-8") == "", gh_log
+
+
+def _merge_main_into_branch(repo: Path) -> None:
+    """Move main, then merge it into the branch so HEAD is an ordinary merge commit."""
+    run_git(repo, "checkout", "main")
+    _ = (repo / "main-only.txt").write_text("main\n", encoding="utf-8")
+    run_git(repo, "add", "main-only.txt")
+    run_git(repo, "commit", "-m", "chore: main moved")
+    run_git(repo, "checkout", "feat-draft")
+    run_git(repo, "merge", "--no-ff", "-m", "Merge branch 'main' into feat-draft", "main")
+
+
+def _merge_only_branch(repo: Path) -> None:
+    """A branch at the base whose only commit is a merge of the advanced base."""
+    run_git(repo, "branch", "merge-only", "main")
+    run_git(repo, "checkout", "main")
+    _ = (repo / "main-only.txt").write_text("main\n", encoding="utf-8")
+    run_git(repo, "add", "main-only.txt")
+    run_git(repo, "commit", "-m", "chore: main moved")
+    run_git(repo, "update-ref", "refs/remotes/origin/main", "main")
+    run_git(repo, "checkout", "merge-only")
+    run_git(repo, "merge", "--no-ff", "-m", "Merge branch 'main' into merge-only", "main")
+
+
+def test_merge_commit_at_head_derives_the_branch_commit_title(tmp_path: Path) -> None:
+    """A base merged into the branch must not donate its merge subject as the title (#298).
+
+    Mutation: derive from HEAD -> `title (derived)` becomes the merge subject and --check
+    refuses a non-conventional title instead of using the branch's own `feat: two`.
+    """
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    _merge_main_into_branch(repo)
+
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+
+    r = _run_check(repo, env, "--body-file", str(body_file))
+
+    assert r.returncode == 0, r.stderr
+    assert "title (derived): 'feat: two'" in r.stdout
+
+
+def test_explicit_title_still_wins_over_merge_commit_derivation(tmp_path: Path) -> None:
+    """`--title` keeps precedence even when HEAD is a merge commit (#298)."""
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    _merge_main_into_branch(repo)
+
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+
+    r = _run_check(repo, env, "--body-file", str(body_file), "--title", "feat: explicit")
+
+    assert r.returncode == 0, r.stderr
+    assert "title (from --title): 'feat: explicit'" in r.stdout
+
+
+def test_merge_only_history_refuses_with_the_explicit_title_form(tmp_path: Path) -> None:
+    """A branch whose only reachable commit is a merge has no subject to derive (#298).
+
+    A branch at the base whose only commit is a merge of the advanced base reproduces that
+    history; the refusal must print the exact `--title "type(scope): subject"` form and
+    precede any gh mutation.
+    """
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    _merge_only_branch(repo)
+
+    env = _gh_env(tmp_path)
+    body_file = tmp_path / "pr_body.md"
+    _ = body_file.write_text("## Summary\ncurated landing body\n\nCloses #7\n", encoding="utf-8")
+    msg_file = tmp_path / "msg.md"
+    _ = msg_file.write_text("## Summary\n- Core: x\n", encoding="utf-8")
+
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(PR_PY),
+            "--merge",
+            "--no-stamp",
+            "--head",
+            "merge-only",
+            "--body-file",
+            str(body_file),
+            "--squash-message-file",
+            str(msg_file),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+    )
+
+    assert r.returncode == 1, r.stderr
+    assert '--title "type(scope): subject"' in r.stderr
+    gh_log = Path(env["GH_LOG"])
+    assert not gh_log.exists() or gh_log.read_text(encoding="utf-8") == "", gh_log
