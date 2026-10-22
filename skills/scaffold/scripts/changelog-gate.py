@@ -510,11 +510,8 @@ def check_ledger(
     # Current PR coverage: must carry at least one entry attributed to this PR
     if pr is not None:
         pr_entries = [entry for entry in entries if attributed_pr(entry) == pr]
-        if not pr_entries:
-            if not (squash_title is not None and title_is_hidden(squash_title)):
-                findings.append(
-                    Finding("landing", f"#{pr} carries no entries in {UNRELEASED_HEADING}")
-                )
+        if not pr_entries and not (squash_title is not None and title_is_hidden(squash_title)):
+            findings.append(Finding("landing", f"#{pr} carries no entries in {UNRELEASED_HEADING}"))
     # Declared squash landing without a PR number: the squash commit is unresolvable
     # from the ledger, so reachability is skipped above and only shape is checked.
     elif landing == "squash" and not entries:
