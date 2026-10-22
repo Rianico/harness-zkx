@@ -43,6 +43,17 @@ Use rules for universal preferences that apply unconditionally. Use skills for s
 
 Because skills encode persistent agent behaviors, agents must never assume requirements silently. We use the **Grilling Pattern**, documented in the `grilling` skill where installed. Map the design space as a tree. Query the frontier of open decisions with recommended answers. Establish shared understanding before generating files.
 
+### Authoring Anti-Patterns (Gotchas)
+
+Avoid these core failure modes when conceiving and authoring skills:
+- **Vague descriptions**: "Helps with code" fails routing. Always embed concrete symptom keywords.
+- **Wrong POV**: First-person ("I can help") causes discovery failures. Always write in third-person.
+- **Hero-mode execution**: The orchestrator doing direct edits instead of delegating to subagents. Always dispatch.
+- **Overloading `SKILL.md`**: Keep under 500 lines. Move deep details to `references/`.
+- **Deep nesting**: References must be exactly one level from `SKILL.md`.
+- **Missing validation loops**: Destructive edits without verification gates produce silent regressions.
+- **Interrogating the user**: Asking questions for facts already in the workspace. Always inspect first.
+
 ---
 
 ## Operational Workflow
@@ -75,33 +86,16 @@ Interactive CLI generators use single-question dialogs instead. See the `scaffol
 
 ### Phase 2: Draft & Structure Contract
 
-#### Directory Layout & Budget
+Execute the four drafting steps in order. Deep frontmatter schemas and edge cases live in [references/skill-authoring.md](references/skill-authoring.md).
 
-```
-skills/<skill-name>/
-├── SKILL.md          # Primary entry point (under 500 lines)
-├── references/       # Deep reference docs (one level deep)
-└── scripts/          # Deterministic executable scripts (uv run)
-```
+#### Step 1: Initialize Directory & Layout
+Create `skills/<skill-name>/` matching `name` (1-64 chars, lowercase alphanumeric, hyphens):
+- `SKILL.md`: Main entry point (strictly under 500 lines).
+- `references/`: Optional domain guides and specs (one level deep).
+- `scripts/`: Optional deterministic helpers and gates.
 
-- Keep `SKILL.md` under 500 lines. Place deep reference material in `references/`.
-- Progressive disclosure: Level 1 metadata (frontmatter) -> Level 2 body (`SKILL.md`) -> Level 3 deep assets (`references/`, `scripts/`).
-
-#### Body Structural Signatures
-
-Structure the body based on the skill's taxonomy type:
-
-- **Workflow Skills (Philosophy First, Then Workflow):**
-  1. *Philosophy & Foundation:* Core mental model, invariants, design constraints, anti-patterns.
-  2. *Operational Workflow:* Sequential phases, commands, scripts, deterministic gates.
-- **Knowledge Skills (Mental Model & Invariants First, Then Reference):**
-  1. *Core Mental Model:* Domain invariants, architectural trade-offs, conceptual foundations.
-  2. *Topical Patterns & Gotchas:* Worked code shapes, anti-patterns, framework-specific edge cases.
-
-#### Required Frontmatter
-
-Frontmatter follows the open Agent Skills spec ([agentskills.io](https://agentskills.io)):
-
+#### Step 2: Draft & Calibrate Frontmatter
+Scaffold minimal YAML frontmatter using folded block scalar `>-`:
 ```yaml
 ---
 name: skill-name
@@ -109,87 +103,53 @@ description: >-
   Category noun defining role. Active verbs articulating capabilities. Use when concrete symptoms, pain points, or triggers arise.
 ---
 ```
+- **Tripartite Formula**: 1. What it is (Role anchor noun in first 50 chars), 2. What it does (third-person present action verbs), 3. When to use (`Use when...` with symptom keywords).
+- **Hard Budget**: Strictly ≤ 300 characters.
+- **Optional Attributes**: Add `argument-hint` (`|-`), `disable-model-invocation: true` (user-only), or `metadata` (`manage`, `managed-by`, `depends-on`).
 
-- `name`: Required. Must match directory name (1-64 chars, lowercase alphanumeric and hyphens).
-- `description`: Required. Machine-readable trigger. Enforce the **Tripartite Formula**:
-  1. **What it is (Role Anchor)**: Front-load a category noun in the first 50 chars.
-  2. **What it does (Active Capabilities)**: Third-person present tense verbs defining concrete outputs.
-  3. **When to use (Activation Boundary)**: Mandatory condition starting with `Use when...`. Embed concrete symptom keywords (e.g. *flaky tests*, *drift*, *crash*, *slow*) to bridge the user-to-tool semantic gap.
-- **Strict Budget**: Hard limit ≤ 300 characters.
-- **YAML Scalar**: Always use `>-` block scalars for `description` and `argument-hint` to prevent character escaping errors.
+#### Step 3: Author Body by Structural Signature
+Structure the markdown body according to its taxonomy class:
+- **Workflow Skills (Philosophy First, Then Workflow)**:
+  1. *Philosophy & Foundation*: Core mental model, invariants, design constraints.
+  2. *Operational Workflow*: Ordered execution phases, scripts, and deterministic completion criteria.
+- **Knowledge Skills (Mental Model & Invariants First, Then Reference)**:
+  1. *Core Mental Model*: Domain invariants, architectural trade-offs, and rules.
+  2. *Topical Guidance & Gotchas*: Worked code shapes, anti-patterns, framework gotchas. Never invent artificial operational workflows for reference material.
 
-#### Key Optional Frontmatter Fields
-
-- `arguments` + `argument-hint`: Declares named parameters. Format `argument-hint` using YAML block scalar `|-` or `>-` with syntax `<required>`, `[optional]`, `[opt=a|b]`, or `[--flag]` -- description (default: value).
-- `disable-model-invocation`: Set `true` for user-only workflows. On Pi, this strips the skill from model context entirely, paying zero tokens. Do not use it for routing-command targets. It blocks the `Skill` tool.
-- `user-invocable`: Set `false` for internal router projections.
-
-#### Resource Path Convention
-
-- `$SKILL_DIR` is the path anchor for all skill-owned resources.
-- Prose references: Always `$SKILL_DIR/references/<module>.md`.
-- Markdown links: Always relative like `[text](references/<module>.md)`.
-- Scripts: Place in `scripts/` and invoke via `uv run $SKILL_DIR/scripts/<script>.py`. Handle errors internally. Never punt error interpretation to the LLM.
-
-#### Metadata Conventions & Routing
-
-- `manage` and `managed-by`: Used for parent-subskill clusters. Subskills are hidden in `subskills/` and dispatched via `Read` tool. Dispatch on task match or explicit domain, never domain-only.
-- `depends-on`: Declare hard dependencies on other skills. Add `depends-on` when a skill invokes or loads another skill, reads resources, consumes artifacts, or requires an output contract.
-- `credits`: Attribution for ported skills (`source`, `author`, `version`, `note`). `validate-deps.py lint` checks the schema.
+#### Step 4: Wire Resources & Paths
+- Anchor prose paths with `$SKILL_DIR`: `$SKILL_DIR/scripts/<cmd>.py` or `$SKILL_DIR/references/<ref>.md`.
+- Use relative markdown links for reading: `[text](references/<module>.md)`.
+- Make scripts self-contained via `uv run` with PEP 723 inline dependencies. Handle errors internally.
 
 ### Phase 3: Verify & Deterministic Gate
 
-Run all deterministic gates before publishing:
+Run automated scripts first, then perform qualitative semantic checks:
 
-1. **STE-100 Linting**:
-   ```bash
-   uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/<name>/SKILL.md
-   ```
-2. **Metadata & Dependency Check**:
-   ```bash
-   uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
-   uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
-   ```
-3. **Context Budget Verification**:
-   ```bash
-   uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
-   ```
+#### 1. Deterministic Verification Gate (Formal Substrate)
+Execute the native verification suite from the project root:
 
----
+```bash
+# Gate 1 & 2: Frontmatter syntax, scalar conventions, and name collisions
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
 
-## Unified Skill Authoring Checklist
+# Gate 3: Description budget (≤300 chars) and tripartite formula
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
 
-Validate the skill against these gates before publishing:
+# Gate 4: Plain English and STE-100 deterministic linting
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/<name>/SKILL.md
 
-**Core Quality**
-- [ ] BDD scenarios cover Happy Path, Edge Case, and Error Case
-- [ ] Deterministic goals have corresponding evaluation scripts in `scripts/` (EDD)
-- [ ] Semantic goals have an explicit verification plan (e.g. Adversarial Skeptic Review)
-- [ ] Description follows the Tripartite Formula (What it is, What it does, When to use via `Use when...`)
-- [ ] Description embeds symptom keywords and stays within the 300-character budget
-- [ ] `SKILL.md` body is under 500 lines, with deep reference content in `references/`
-- [ ] Environment facts, config, and setup details are kept out of `SKILL.md` body
+# Gate 5: Unit test integrity
+uv run pytest tests/ai-engineering-expert
+```
 
-**Structure & Mechanics**
-- [ ] `name` matches directory name
-- [ ] Block scalars (`>-` or `|-`) format `description` and `argument-hint`
-- [ ] Resource links use relative markdown paths, while prose paths use `$SKILL_DIR`
-- [ ] Scripts use `uv run` with inline dependencies and handle errors internally
-- [ ] `depends-on` entries verified via `validate-deps.py check`
-- [ ] Subskills in `subskills/` are wired with `manage` and `managed-by`
-- [ ] All files pass `ste100.py` with 0 issues
+All deterministic checks must pass with zero errors before moving to semantic review.
 
----
-
-## Skill Gotchas
-
-- **Vague descriptions**: "Helps with code" fails routing. Use concrete symptom keywords.
-- **Wrong POV**: First-person ("I can help...") causes discovery failures. Always write in third-person.
-- **Hero-mode execution**: The orchestrator doing direct edits instead of delegating to subagents. Always dispatch.
-- **Overloading `SKILL.md`**: Keep under 500 lines. Move depth to `references/`.
-- **Deep nesting**: References must be exactly one level from `SKILL.md`.
-- **Missing validation loops**: Destructive edits without verification gates produce silent failures.
-- **Interrogating the user**: Asking questions for facts already present in the workspace. Always inspect first.
+#### 2. Semantic Verification Gate (Semantic Reasoner)
+Dispatch an adversarial Skeptic subagent to verify qualitative alignment:
+- [ ] **Symptom Grounding**: Does `Use when...` contain natural user problem terms rather than academic jargon?
+- [ ] **BDD Scenario Coverage**: Do Given/When/Then scenarios cover the happy path, edge cases, and failure modes?
+- [ ] **Default Selection**: Does the skill provide clear defaults rather than open menus?
+- [ ] **Context Cleanliness**: Are environment-specific paths and setup noise kept out of the skill body?
 
 ---
 
