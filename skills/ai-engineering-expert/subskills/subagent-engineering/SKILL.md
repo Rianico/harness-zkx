@@ -1,7 +1,7 @@
 ---
 name: subagent-engineering
 description: >-
-  Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
+  Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, model selection, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
 metadata:
   managed-by: ai-engineering-expert
 ---
@@ -68,6 +68,29 @@ Inherited context passes prior session history into the subagent:
 - **Use Sparingly:** Use only when the subagent requires historical conversational nuances that cannot be captured in a pointer brief.
 - **The Context Rot Trap:** Resumed agents accumulate token debt rapidly.
 - **Stateless Iteration Rule:** Never resume old subagents via SendMessage to iterate on rejected artifacts. Spawn a fresh subagent with the artifact pointer and critique notes.
+
+---
+
+## Model Selection & Tier Allocation
+
+Matching model capability to subagent responsibility prevents toxic premise failures and syntax thrashing.
+
+### The Selection Bottleneck
+
+The orchestrator reasoning capacity must match or exceed its subagents. A weaker orchestrator cannot evaluate, reconcile, or verify conflicting subagent outputs.
+
+### The Toxic Premise Risk
+
+Smaller models suffer premature convergence during research. Hallucinated facts returned to the orchestrator corrupt downstream architecture.
+- **Frontier Tier Default:** Keep subagents on the frontier model (inherit) for research, drafting, and adversarial review.
+- **Model Anonymity:** Never prompt subagents with model names. Prompt strictly by task role and contract to avoid model factionalism.
+
+### The Three Guardrails for Lighter Models
+
+Downgrade to lighter models (e.g. Flash or Haiku) only when all three conditions hold:
+1. **Read-Only Action Space:** Grant only read tools. Smaller models must never hold mutation permissions.
+2. **Schema-First Contracts:** Force rigid JSON or YAML schemas. Never request free-form prose.
+3. **Deterministic Environmental Backstops:** Verify all outputs via compilers, linters, or regex gates rather than orchestrator trust.
 
 ---
 
