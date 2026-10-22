@@ -2,19 +2,91 @@
 
 Actionable troubleshooting methodology for skill discovery failures, false-positive collisions, execution loops, and dead skills in the LSZ harness.
 
-## Which part of this guide you need
+## Evidential Diagnosis & Failure Philosophy
 
-- **Skill failed to trigger on a task?** → [Discovery Failure](#1-discovery-failure-trigger-miss)
-- **Skill fired on an unrelated task?** → [Collision & Context Pollution](#2-collision--context-pollution)
-- **Skill crashed, looped, or dumped oversized output?** → [Execution Failure](#3-execution-failure)
-- **Skill has 0 invocations in audit?** → [Dead Skill Triage](#4-dead-skill-triage)
-- **Standard end-to-end diagnosis protocol?** → [The 4-Step Diagnosis Protocol](#the-4-step-diagnosis-protocol)
-- **Diagnosing a skill failure mid-session?** → [Mid-Session Execution](#mid-session-execution-forked-context-subagent-isolation)
-- **Classify root cause into the 4 tiers?** → [4-Tier Failure Triage](#step-3-4-tier-failure-triage)
+### The Evidential Diagnosis Principle
 
----
+Environmental truth is supreme authority. Never guess why a skill failed or patch frontmatter blindly. Rely strictly on fresh environmental signals, static linters, and the empirical trigger ledger.
 
-## Common Failure Symptoms
+### Context Pressure Asymmetry in Diagnosis
+
+When diagnosing a skill failure mid-session (e.g. user asks *"why didn't skill X trigger here?"*), **the parent agent must never execute the diagnosis in-process**.
+
+Reading raw skill files, running `validate-deps.py`, inspecting ledgers, and drafting diffs consumes 3,000–8,000 tokens of diagnostic chatter. This bloat degrades the parent agent's reasoning on the user's primary task.
+
+#### The Forked-Context Dispatch Pattern
+
+1. **Dispatch Subagent**: Parent agent invokes a specialized subagent (`Skill Diagnostician`) with forked context or passes turn pointers:
+   - Target skill name
+   - Current turn observation or tool error output
+   - Expected trigger behavior (`should_trigger: true`)
+2. **Isolated Execution**: The subagent executes the diagnosis protocol in isolation:
+   - Runs static gates (`validate-deps.py`)
+   - Evaluates the trigger ledger (`~/.pi/agent/evals/<skill_name>.yaml`)
+   - Classifies root cause via the 4-tier model
+   - Writes the proposed frontmatter diff to scratch or temp storage
+3. **Distilled Return**: Subagent returns strictly via structured response contract:
+   - `## Summary`: 1–2 sentence root cause (e.g. "Trigger miss: prompt used 'rebase' but description only listened for 'merge'")
+   - `## Artifacts`: Absolute path to proposed diff
+   - `## Route`: `COMPLETED`
+4. **Zero Bloat on Parent**: The parent thread receives only the distilled summary and diff pointer. Its context stays focused.
+
+### The 4-Tier Failure Model
+
+Map every failure to its root architectural tier. Never apply a prose patch to a mechanical defect.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        4-TIER FAILURE TRIAGE                           │
+├───────────────────────┬────────────────────────────────────────────────┤
+│ Failure Tier          │ Remediation Action                             │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ 1. Mechanical         │ Pack shell steps into scripts/ or enforce tool │
+│    Violation          │ gate. Never patch via prose.                   │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ 2. Semantic Ambiguity │ Extract user symptom keywords from captured    │
+│    (Trigger Miss)     │ session; inject into 'Use when...' clause.     │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ 3. Semantic Over-     │ Add explicit Negative Boundary:                │
+│    trigger (Collision)│ 'Do not use for X; defer to Y for Z'.          │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ 4. Semantic Disregard │ Enforce via Context Pressure Asymmetry         │
+│    (No-Op)            │ (Skeptic reviewer) or hard pre-commit hook.    │
+└───────────────────────┴────────────────────────────────────────────────┘
+```
+
+#### Tier 1: Mechanical Violation
+- **Indicators:** Skill loaded, but execution crashed on bash syntax, missing flags, unhandled exit codes, or oversized dumps (>20 lines).
+- **Rule:** Never add explanatory prose to `SKILL.md` telling the agent "remember to pass flag -q".
+- **Remediation:**
+  - Pack multi-step commands into `$SKILL_DIR/scripts/<cmd>.py` or `.sh`.
+  - Handle exit codes, piping, and output truncation natively inside the script.
+  - Expose a single deterministic CLI command in `SKILL.md`.
+
+#### Tier 2: Semantic Ambiguity / Trigger Miss
+- **Indicators:** Task was clearly within skill domain, but model bypassed skill and improvised manual commands.
+- **Root cause:** Description used academic abstractions (*"architectural hygiene"*, *"dependency reconciliation"*) rather than symptom vocabulary.
+- **Remediation:**
+  - Inspect the failed turn's `trigger_observation` (error string, user query, tool exit code).
+  - Extract the exact pain terms (e.g., `merge conflict`, `drift`, `flaky test`, `syntax error`).
+  - Update the `Use when...` clause to embed those exact symptom keywords within the 300-char budget.
+
+#### Tier 3: Semantic Over-trigger / Collision
+- **Indicators:** Skill fired on an unrelated task or collided with an adjacent skill (e.g., `tdd-cycle` vs `eval-gate`).
+- **Remediation:**
+  - Add an explicit **Negative Boundary** clause to the description:
+    `Do not use for <adjacent_domain>; defer to <other-skill> for <other_task>.`
+  - In benchmarks, negative boundaries improve collision resistance by +20–35% without hurting recall.
+
+#### Tier 4: Semantic Disregard / No-Op
+- **Indicators:** The instruction is already clearly written in `SKILL.md`, but the model ignored it during complex execution.
+- **Root cause:** Context Pressure. An implementer agent juggling many files and errors suffers attention decay.
+- **Remediation:**
+  - Do not bold, capitalize, or re-emphasize the instruction in the implementer prompt.
+  - Move the verification to the **Reviewer** (Context Pressure Asymmetry) or create an automated eval gate.
+  - Prune the ignored prose from `SKILL.md` if it produces no behavioral difference.
+
+### Common Failure Symptoms & Primary Levers
 
 | Symptom | Manifestation | Root Failure Mode | Primary Lever |
 |---|---|---|---|
@@ -22,31 +94,6 @@ Actionable troubleshooting methodology for skill discovery failures, false-posit
 | **Collision / Pollution** | Skill loads unexpectedly on an unrelated or adjacent task, wasting context tokens and attention. | Unbounded Semantic Trigger | Add explicit Negative Boundary (`Do not use for X; defer to Y`) |
 | **Execution Failure** | Skill loads successfully but loops on tool calls, dumps oversized terminal output, or errors out mechanically. | Mechanical Violation / Route Friction | Pack shell steps into `scripts/` or add deterministic check |
 | **Dead Skill** | `audit_skills.py` reports 0 invocations across past 30 days. | Discovery Failure or Redundant Skill | Recalibrate triggers or prune skill |
-
----
-
-## Mid-Session Execution: Forked-Context Subagent Isolation
-
-When diagnosing a skill failure mid-session (e.g. user says *"why didn't skill X trigger here?"*), **the parent agent must never execute the diagnosis in-process**.
-
-Reading raw skill files, running `validate-deps.py`, inspecting ledgers, and drafting diffs consumes 3,000–8,000 tokens of diagnostic chatter, bloating the parent agent's context and derailing the user's primary task.
-
-### The Forked-Context Dispatch Pattern
-
-1. **Dispatch Subagent**: Parent agent invokes a specialized subagent (`Skill Diagnostician`) with forked context or passes turn pointers:
-   - Target skill name.
-   - Current turn observation / error output.
-   - Expected trigger behavior (`should_trigger: true`).
-2. **Isolated Execution**: The subagent executes the 4-step protocol in isolation:
-   - Runs static gates (`validate-deps.py`).
-   - Checks/captures the trigger ledger (`~/.pi/agent/evals/<skill_name>.yaml`).
-   - Diagnoses the root cause via the 4-tier triage.
-   - Writes the proposed frontmatter diff to scratch/tmp.
-3. **Distilled Return**: Subagent returns strictly via structured response contract:
-   - `## Summary`: 1–2 sentence root cause (e.g. "Trigger miss: prompt used 'rebase' but description only listened for 'merge'").
-   - `## Artifacts`: Absolute path to proposed diff (`/tmp/.../patch.diff`).
-   - `## Route`: `COMPLETED`.
-4. **Zero Bloat on Parent**: The parent thread receives only the distilled summary and diff pointer, keeping its context window completely focused on the user's primary feature or bug.
 
 ---
 
@@ -61,7 +108,7 @@ When a skill malfunctions or fails to trigger, execute these 4 steps in order:
 [Step 2: Trigger Ledger Evaluation]
           │
           ▼
-[Step 3: 4-Tier Failure Triage]
+[Step 3: Tier Remediation Action]
           │
           ▼
 [Step 4: Offline Probe Validation]
@@ -71,7 +118,7 @@ When a skill malfunctions or fails to trigger, execute these 4 steps in order:
 
 Always verify structural conformance before semantic diagnosis. A syntactic flaw or budget overrun breaks discovery automatically.
 
-Run the deterministic linters from project root:
+Run deterministic linters from project root:
 
 ```bash
 # Frontmatter syntax, fields, and name collisions
@@ -83,7 +130,7 @@ uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-d
 
 **Audit against the Static Gate Checklist:**
 1. **Budget gate:** `description` is strictly ≤ 300 characters (hard gate).
-2. **YAML block scalar:** Written using `>-` or `|` to avoid unquoted colon/quote parsing truncation.
+2. **YAML block scalar:** Written using `>-` or `|-` to avoid unquoted colon or quote parsing truncation.
 3. **Tripartite formula present:**
    - Anchor noun (first 50 chars): What it is (e.g., *Methodology spine...*, *Verification gate...*).
    - Active capability: What it does (e.g., *audits test refutability...*).
@@ -124,60 +171,13 @@ Each case records a dual snapshot to preserve provenance:
 - If a test regresses and `captured_description == current_description` → **Model weight drift**.
 - If `captured_description != current_description` → **Description regression**.
 
-### Step 3: 4-Tier Failure Triage
+### Step 3: Tier Remediation Action
 
-Map the failure to the appropriate architectural tier. Never apply a prose patch to a mechanical defect.
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        4-TIER FAILURE TRIAGE                           │
-├───────────────────────┬────────────────────────────────────────────────┤
-│ Failure Tier          │ Remediation Action                             │
-├───────────────────────┼────────────────────────────────────────────────┤
-│ 1. Mechanical         │ Pack shell steps into scripts/ or enforce tool │
-│    Violation          │ gate. Never patch via prose.                   │
-├───────────────────────┼────────────────────────────────────────────────┤
-│ 2. Semantic Ambiguity │ Extract user symptom keywords from captured    │
-│    (Trigger Miss)     │ session; inject into 'Use when...' clause.     │
-├───────────────────────┼────────────────────────────────────────────────┤
-│ 3. Semantic Over-     │ Add explicit Negative Boundary:                │
-│    trigger (Collision)│ 'Do not use for X; defer to Y for Z'.          │
-├───────────────────────┼────────────────────────────────────────────────┤
-│ 4. Semantic Disregard │ Enforce via Context Pressure Asymmetry         │
-│    (No-Op)            │ (Skeptic reviewer) or hard pre-commit hook.    │
-└───────────────────────┴────────────────────────────────────────────────┘
-```
-
-#### Tier 1: Mechanical Violation
-- **Indicators:** Skill loaded, but execution crashed on bash syntax, missing flags, unhandled exit codes, or oversized dumps (>20 lines).
-- **Rule:** Never add explanatory prose to `SKILL.md` telling the agent "remember to pass flag -q".
-- **Remediation:**
-  - Pack the multi-step command into `$SKILL_DIR/scripts/<cmd>.py` or `.sh`.
-  - Handle exit codes, piping, and output truncation natively inside the script.
-  - Expose a single deterministic CLI command in `SKILL.md`.
-
-#### Tier 2: Semantic Ambiguity / Trigger Miss
-- **Indicators:** Task was clearly within skill domain, but model bypassed skill and improvised manual commands.
-- **Root cause:** Description used academic abstractions (*"architectural hygiene"*, *"dependency reconciliation"*) rather than symptom vocabulary.
-- **Remediation:**
-  - Inspect the failed turn's `trigger_observation` (e.g., error string, user query, tool exit code).
-  - Extract the exact pain terms (e.g., `merge conflict`, `drift`, `flaky test`, `syntax error`).
-  - Update the `Use when...` clause to embed those exact symptom keywords within the 300-char budget.
-
-#### Tier 3: Semantic Over-trigger / Collision
-- **Indicators:** Skill fired on an unrelated task or collided with an adjacent skill (e.g., `tdd-cycle` vs `eval-gate`).
-- **Remediation:**
-  - Add an explicit **Negative Boundary** clause to the description:
-    `Do not use for <adjacent_domain>; defer to <other-skill> for <other_task>.`
-  - In benchmarks, negative boundaries improve collision resistance by +20–35% without hurting recall.
-
-#### Tier 4: Semantic Disregard / No-Op
-- **Indicators:** The instruction is already clearly written in `SKILL.md`, but the model ignored it during complex execution.
-- **Root cause:** Context Pressure. An implementer agent juggling many files and errors suffers attention decay.
-- **Remediation:**
-  - Do not bold, capitalize, or re-emphasize the instruction in the implementer prompt.
-  - Move the verification to the **Reviewer** (Context Pressure Asymmetry) or create an automated eval gate.
-  - Prune the ignored prose from `SKILL.md` if it produces no behavioral difference.
+Apply the remediation matching the diagnosed tier from the 4-tier model above:
+- **Tier 1 (Mechanical):** Pack shell commands into `scripts/` with native exit code handling.
+- **Tier 2 (Trigger Miss):** Extract symptom terms from the failed turn and add them to `Use when...`.
+- **Tier 3 (Collision):** Add an explicit negative boundary referencing the colliding skill.
+- **Tier 4 (No-Op):** Shift checks to a Reviewer subagent or automated git hook.
 
 ### Step 4: Offline Probe Validation
 
@@ -187,12 +187,12 @@ Before pushing description changes, evaluate the candidate description against t
    ```bash
    python3 -c "desc = '''<candidate_description>'''; print(f'Length: {len(desc.strip())} chars (limit 300)')"
    ```
-2. **Re-run harness lint & context checks:**
+2. **Re-run harness lint and context checks:**
    ```bash
    uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
    uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
    ```
-3. **Verify Recall and Precision:** Ensure the updated description triggers on all `in_domain` test cases in `~/.pi/agent/evals/<skill_name>.yaml` without firing on `hard_negative` cases.
+3. **Verify Recall and Precision:** Ensure the updated description triggers on all in_domain test cases in `~/.pi/agent/evals/<skill_name>.yaml` without firing on hard_negatives.
 
 ---
 
@@ -222,7 +222,7 @@ Before pushing description changes, evaluate the candidate description against t
 
 ### Recipe C: Fixing an Execution Loop or Oversized Dump
 
-**Problem:** Agent ran a test runner inside the skill that dumped 300 lines of terminal output, causing the agent to lose context and repeat the command.
+**Problem:** An agent ran a test runner that dumped 300 lines of output. The terminal dump broke context and caused looping.
 - *Diagnosis:* Tier 1 (Mechanical Violation).
 - *Remediation:*
   1. Add `--keep-head-tail` or `-q` flag in the script wrapper under `$SKILL_DIR/scripts/run-gate.sh`.
