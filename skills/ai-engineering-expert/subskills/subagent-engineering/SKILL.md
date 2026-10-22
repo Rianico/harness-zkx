@@ -81,14 +81,16 @@ The orchestrator reasoning capacity must match or exceed its subagents. A weaker
 
 ### The Toxic Premise Risk
 
-Smaller models suffer premature convergence during research. Hallucinated facts returned to the orchestrator corrupt downstream architecture.
-- **Frontier Tier Default:** Keep subagents on the frontier model (inherit) for research, drafting, and adversarial review.
-- **Model Anonymity:** Never prompt subagents with model names. Prompt strictly by task role and contract to avoid model factionalism.
+Smaller models suffer premature convergence during research. Hallucinated facts returned to the orchestrator corrupt downstream architecture. Keep subagents on the frontier model (inherit) for research, drafting, and adversarial review.
 
-### The Three Guardrails for Lighter Models
+### Model Anonymity
 
-Downgrade to lighter models (e.g. Flash or Haiku) only when all three conditions hold:
-1. **Read-Only Action Space:** Grant only read tools. Smaller models must never hold mutation permissions.
+Never prompt subagents with model names. Prompt strictly by task role and contract to avoid model factionalism (arXiv:2609.35928).
+
+### The Three Guardrails for Lighter Subagents
+
+For subagent dispatch, downgrade to lighter models (e.g. Flash or Haiku) only when all three conditions hold. In-band execution follows the parent Model Routing table:
+1. **Read-Only Action Space:** Grant only read tools. Smaller subagents must never hold mutation permissions.
 2. **Schema-First Contracts:** Force rigid JSON or YAML schemas. Never request free-form prose.
 3. **Deterministic Environmental Backstops:** Verify all outputs via compilers, linters, or regex gates rather than orchestrator trust.
 
