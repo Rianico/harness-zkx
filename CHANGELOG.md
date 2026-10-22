@@ -121,6 +121,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
+* **changelog-gate:** treat a `refactor(...)` squash title as hidden, so it owes no ledger entry — semantic-release mints no release for that type, `TITLE_BUMP` already scored it `no release`, and `CONTRIBUTING.md` lists it among the hidden types, but the exemption set omitted it and refused a refactor-only PR outright
 * **ci:** the pytest job clears the shared npx tree and installs the pinned oxfmt once before the parallel workers start, because a runner image can ship that tree half-installed and the xdist workers then race into importing a package whose dependency is missing — the scaffold's byte canonicalization failed with `ERR_MODULE_NOT_FOUND: tinypool` and took ten tests with it (#306)
 * **changelog-gate:** flatten the entry-coverage exemption into one condition, so the byte-identical vendored copy passes consumer nested-`if` lint without a local exclusion while findings and messages stay unchanged (#303)
 * **gh-router/pr-land:** derive the landing title from the branch's own newest non-merge commit when a merge sits at `HEAD`, and refuse with the exact `--title "type(scope): subject"` form when the branch has no commit of its own (#300)

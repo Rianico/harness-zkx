@@ -69,7 +69,7 @@ ERROR_CODE_RE = re.compile(
 )
 ENTRY_SCOPE_RE = re.compile(r"^\* \*\*(?P<scope>[^*:]+):\*\* \S")
 TITLE_SCOPE_RE = re.compile(r"^[A-Za-z]+(?:\((?P<scope>[^()]+)\))?!?:")
-HIDDEN_TYPES = frozenset({"docs", "chore", "style", "test", "ci", "build"})
+HIDDEN_TYPES = frozenset({"docs", "chore", "style", "test", "ci", "build", "refactor"})
 HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?P<bang>!)?(\([^)]*\))?:")
 
 # Release levels a squash title or a ledger section licenses (semantic-release defaults).

@@ -910,6 +910,16 @@ def test_ledger_passes_a_hidden_title_that_adds_no_entries(tmp_path: Path) -> No
     assert result.stdout.strip() == "ledger: pass"
 
 
+def test_ledger_passes_a_refactor_title_that_adds_no_entries(tmp_path: Path) -> None:
+    """A refactor mints no release, so it owes no entry — same exemption as chore (#304)."""
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["refactor(gate): tidy (#304)"])
+
+    result = _run(repo, "ledger", "--pr", "304", "--squash-title", "refactor(gate): tidy")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
 def test_ledger_passes_a_feature_title_under_features_entries(tmp_path: Path) -> None:
     repo = _repo(
         tmp_path,
