@@ -71,8 +71,6 @@ Interview the user systematically to settle the **design tree** before drafting:
    - **Context Footprint**: Does this belong in a parent-subskill cluster (`manage`) or standalone?
 4. **Lock Shared Understanding**: Wait for user confirmation before advancing to file generation.
 
-Grilling fits open design decisions. For tool-driven generation with typed flags, follow [dialog-contract.md](references/dialog-contract.md) instead.
-
 ### Phase 2: Draft & Structure Contract
 
 #### Directory Layout & Budget
@@ -187,6 +185,5 @@ Validate the skill against these gates before publishing:
 - [skill-authoring.md](references/skill-authoring.md) -- Full reference: frontmatter schemas, worked description examples, credits schema, compression rules, string substitutions, calibration.
 - [skill-diagnosis.md](references/skill-diagnosis.md) -- Trigger misses, collisions, execution loops, dead skills, and the evidential trigger ledger.
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts.
-- [dialog-contract.md](references/dialog-contract.md) -- One-question-per-dialog pattern for tool-driven generation.
 - [glossary.md](references/glossary.md) -- Invocation classes, description budget, context load, progressive disclosure.
 - [writing-for-agents](../writing-for-agents/SKILL.md) -- Agent-document writing: hierarchy, pointers, leading words, pruning.
