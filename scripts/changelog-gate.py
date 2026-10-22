@@ -63,8 +63,7 @@ PERCENTILE_RE = re.compile(r"\bp\d{2}\b", re.IGNORECASE)
 SUBSECOND_RE = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?\s*(?:ns|ps|µs|μs|us)\b")
 RATE_RE = re.compile(r"\b[\w-]+/(?:s|sec|min)\b", re.IGNORECASE)
 ERROR_CODE_RE = re.compile(
-    r"\b(?:err|error|errno|exit|status)[ _-]?(?:code|no|num)?\s*[=:]\s*-?\d+\b"
-    r"|\b0x[0-9a-fA-F]{6,}\b",
+    r"\b(?:err|error|errno|exit|status)[ _-]?(?:code|no|num)?\s*[=:]\s*-?\d+\b|\b0x[0-9a-fA-F]{6,}\b",
     re.IGNORECASE,
 )
 ENTRY_SCOPE_RE = re.compile(r"^\* \*\*(?P<scope>[^*:]+):\*\* \S")
@@ -341,9 +340,11 @@ def check_bump_alignment(
                 Finding(
                     "bump-alignment",
                     f"squash title {squash_title.strip()!r} licenses {_bump_phrase(licensed)} "
-                    f"but the '### {section}' entry {reason}: {entry_identity(entry)!r}",
-                    hint="retitle the squash commit to the higher level (`feat(...)` for a feature, "
-                    "`feat(...)!` or a BREAKING CHANGE for a major), or land this entry in its own PR",
+                    + f"but the '### {section}' entry {reason}: {entry_identity(entry)!r}",
+                    hint=(
+                        "retitle the squash commit to the higher level (`feat(...)` for a feature, "
+                        "`feat(...)!` or a BREAKING CHANGE for a major), or land this entry in its own PR"
+                    ),
                 )
             )
     return findings
@@ -377,7 +378,7 @@ def check_squash_alignment(
         Finding(
             "squash-alignment",
             f"squash title scope {title.group('scope')!r} matches no entry scope under #{pr} "
-            f"(entry scopes: {', '.join(sorted(set(entry_scopes)))!r})",
+            + f"(entry scopes: {', '.join(sorted(set(entry_scopes)))!r})",
             hint="retarget the ledger entries, or reuse one of their scopes in the squash title",
         )
     ]
@@ -472,7 +473,7 @@ def check_ledger(
         return findings
 
     # Check provenance
-    landings = landing_commits() if not pr else set()
+    landings: set[str] = landing_commits() if not pr else set()
 
     for entry in entries:
         ref = attributed_pr(entry)
