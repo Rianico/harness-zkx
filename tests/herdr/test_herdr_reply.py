@@ -2659,9 +2659,46 @@ def test_incomplete_completed_reply_does_not_advance_the_leased_task(
     assert [event for event in task["trajectory"] if event["event"] == "completed"] == []
 
     # The verdict rides on the ledger record, not on a fabricated canonical status.
-    assert herdr_lease.list_replies(base_dir=tmp_path)[-1]["shape"] == "incomplete"
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["shape"] == "incomplete"
+    # One stderr line names the shape that was missing and the record that holds the verdict,
+    # so a sender can correct the payload instead of re-deriving the rule (#299).
+    warnings = [line for line in done.stderr.splitlines() if "shape=incomplete" in line]
+    assert len(warnings) == 1, done.stderr
+    assert "no evidence heading or inline evidence label" in warnings[0], warnings[0]
+    assert str(tmp_path / ".lane" / "replies" / f"{record['id']}.yaml") in warnings[0], warnings[0]
     # The lease still releases: bookkeeping is unchanged, only the state advance is gated.
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_live_rollup_reply_reports_the_missing_shape_and_its_record(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The live #281 closing roll-up: every merge named, still incomplete, now explained.
+
+    Fixture: `.lane/replies/20261021T173214448051Z-publish-tm-b11d718b.yaml` recorded this
+    single-line payload with `shape: incomplete` and `evidence: null` because it carried no
+    evidence heading, despite naming all eight merged tickets, SHAs and PRs. The shape check
+    is unchanged; what #299 adds is the stderr line naming the missing shape and the record.
+    """
+    payload = (
+        "COMPLETED lane #281: all eight frictions merged to main. "
+        "#282->ad106c1e (PR #291) #283->dc6a2e86 (PR #290) #284->6b76bb47 (PR #293) "
+        "#285->3309be2b (PR #294) #286->489c8ce4 (PR #292) #287->324cfb30 (PR #295) "
+        "#288->31fe4c77 (PR #296) #289->e819c4ba (PR #297). Each ticket: adversarial review "
+        "vs pinned SHA, full check.sh + CI 4/4 green, squash via pr-land. Nothing blocked."
+    )
+
+    done = stub.run("orchestrator", payload, env={"PWD": str(tmp_path)})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+
+    record = herdr_lease.list_replies(base_dir=tmp_path)[-1]
+    assert record["shape"] == "incomplete"
+    assert record["evidence"] is None
+    warnings = [line for line in done.stderr.splitlines() if "shape=incomplete" in line]
+    assert len(warnings) == 1, done.stderr
+    assert "no evidence heading or inline evidence label" in warnings[0], warnings[0]
+    assert str(tmp_path / ".lane" / "replies" / f"{record['id']}.yaml") in warnings[0], warnings[0]
 
 
 def test_complete_completed_reply_records_the_completed_event(
@@ -2687,6 +2724,7 @@ def test_complete_completed_reply_records_the_completed_event(
     completed = [event for event in task["trajectory"] if event["event"] == "completed"]
     assert len(completed) == 1
     assert completed[-1]["sha"] == "deadbeef"
+    assert "shape=incomplete" not in done.stderr, done.stderr
 
 
 def test_record_sender_status_is_silent_without_a_store_record(

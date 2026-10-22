@@ -203,6 +203,7 @@ from herdr_lease import (
     list_tasks,
     record_event,
     release_lease,
+    resolve_replies_dir,
     save_verified_reply,
     state_is_readable,
     status_of,
@@ -359,6 +360,10 @@ NOT_RECORDED_POINTER = (
     "Payload: NOT RECORDED — delivery continues body-only ({reason}); no store record, "
     "task state unchanged, and this prompt is the only copy."
 )
+INCOMPLETE_STDERR = (
+    "herdr-reply: payload recorded incomplete (shape=incomplete): no evidence heading or "
+    "inline evidence label; record={record}"
+)
 
 
 def _one_line(text: str, limit: int = 160) -> str:
@@ -473,6 +478,18 @@ def pointer_block(
             "re-derive from the cited artifacts; this prompt is not provenance."
         )
     return None
+
+
+def _record_path(stored: Mapping[str, Any], env: Mapping[str, str]) -> str:
+    """The record sidecar just written: absolute when the store resolves, else store-relative.
+
+    Best-effort by contract (#231): the reply has already been delivered, so a store that
+    cannot re-resolve its own base degrades the printed path instead of raising.
+    """
+    try:
+        return str(resolve_replies_dir(env=env) / f"{stored['id']}.yaml")
+    except Exception:
+        return f"{REPLIES_DIR_LANE}/{stored['id']}.yaml"
 
 
 def recovery_file_arg(options: Options) -> str:
@@ -1341,6 +1358,14 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             # clause always states a recording outcome.
             clause = RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE
             print(f"herdr-reply: {linkage_warning}{clause}", file=sys.stderr)
+        if shape == "incomplete" and stored is not None:
+            # One line, naming the shape that was missing and where the record lives, so the
+            # sender can correct the payload instead of guessing (#299). The reply has already
+            # been delivered: this line reports the recording verdict and changes nothing.
+            print(
+                INCOMPLETE_STDERR.format(record=_record_path(stored, env)),
+                file=sys.stderr,
+            )
         pointer = pointer_block(shape=shape, evidence=evidence, stored=stored, reason=reason)
         # The pointer rides between the envelope and the body; the body stays last.
         delivered = f"{prelude}{pointer}\n\n{payload}" if pointer else f"{prelude}{payload}"

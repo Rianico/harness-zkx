@@ -378,6 +378,19 @@ def test_reply_contract_documents_the_sha_guard_waiver_with_a_quoted_example() -
         assert "<TOKEN>" not in contract
 
 
+def test_reply_contract_states_what_makes_a_payload_complete() -> None:
+    """#299: the contract names the evidence shape in one line, before the reply is sent.
+
+    A callee that closes a lane with a summary payload learns here — not from a later
+    `shape=incomplete` record — whether its payload counts as complete.
+    """
+    contract = herdr_envelope.render_reply_contract(sender(agent="reviewer"))
+    lines = [line for line in contract.splitlines() if "COMPLETED payload is complete" in line]
+    assert len(lines) == 1, contract
+    assert "evidence heading" in lines[0], lines[0]
+    assert "inline evidence label" in lines[0], lines[0]
+
+
 # ── wrap_with_envelope: exact layout ───────────────────────────────────────────────────────────
 
 
