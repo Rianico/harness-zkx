@@ -101,6 +101,13 @@ Push too little down, and the top-level document bloats.
 Push too much down, and you hide essential instructions.
 Balancing this tension is the central design choice.
 
+### Start from Intent
+
+Derive a one-sentence goal before drafting.
+Use that goal as the review bar for every section.
+Delete any section if the document satisfies the goal without it.
+Exclude out-of-scope details by naming who reads the document.
+
 ### Progressive Disclosure
 
 **Progressive disclosure** moves reference material out of the main document and behind a pointer.
@@ -138,6 +145,22 @@ Two properties determine criterion effectiveness:
   Demanding criteria bind flat reference rules as firmly as sequential steps.
 
 Construct criteria that are both checkable and exhaustive.
+
+## Report What Ran
+
+Every claim names something that ran, or states plainly that it did not.
+Never write intent as though it were a result.
+
+| Situation | What the text says |
+| --- | --- |
+| Nothing ran | Say so, and name the command a reader would run. |
+| CI produced the result | Name the run. Never describe it as local. |
+| Checks added, not run | Say they are skipped, and that the skip was deliberate. |
+| You could not run it | Name what it needs. Never let a skip look like a pass. |
+| Someone else recorded it | Attribute it by name. |
+
+_Check:_ grep the draft for `fully tested|no regressions|comprehensive|robust|properly|should work`.
+Every hit needs evidence or deletion.
 
 ## When to Split
 
@@ -201,6 +224,7 @@ Identify and resolve these structural failure modes:
 | **Negation** | Negative phrasing names banned behavior and causes the model to focus on it. | Restate the rule as a positive target behavior. |
 | **Scattering** | Concept definitions, execution rules, and edge cases are divided across distant sections. | Co-locate definition, rules, and edge cases under a single heading. |
 | **Restating the environment** | The document copies script names, tool arguments, or configuration schemas into prose. | Point to the underlying file or tool directly; cache only hidden rationale. |
+| **Narrating history** | Prose discusses previous edits ("This section was moved...", "An earlier version said..."). | Describe current state only. The reader requires the current specification. |
 | **Self-grading** | Prose uses vague praise without empirical proof. | Replace adjectives with measurable conditions and explicit verification commands. |
 | **Lecturing** | Text offers generic advice without concrete guidance. | Point to specific edge cases or remove the lecture. |
 
@@ -209,6 +233,7 @@ Identify and resolve these structural failure modes:
 Apply these integration patterns across the harness:
 
 - **Skill authoring integration:** Apply ASD-STE100 rules, hierarchy ladders, pointer formulas, and pruning during skill creation. Keep skill bodies under 500 lines. Disclose complex methodology into `references/`.
+- **Proofreading and backwards reading:** Proofread backwards across sections to isolate individual statements from narrative momentum.
 - **Deterministic verification:** Validate frontmatter and trigger budgets using `validate-deps.py lint` and `context-check`. Validate plain English constraints using `ste100.py`.
 - **Semantic verification:** Dispatch a Skeptic reviewer subagent to evaluate prose against user intent. The reviewer audits for unstated assumptions, vague completion criteria, and narrative bloat.
 - **Prose evaluation evals:** Run blind evaluations in `evals/evals.json` with assertions withheld from the worker agent. Grade output against strict criteria. Any fabricated claim regarding unrun commands constitutes a hard failure.
