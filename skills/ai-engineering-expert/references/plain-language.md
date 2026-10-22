@@ -3,7 +3,7 @@
 Sentence-level rules shared by `writing-for-agents` and `writing-for-humans`. Every rule here applies to all prose the harness writes. The reader sets the structural strictness:
 
 - **Human-Targeted STE Flavor** (Narrative Mode): human-judged artifacts. Examples include PR descriptions, CHANGELOGs, issues, RFCs, proposals, ADRs, and review comments. Apply this file.
-- **Machine-Targeted STE Flavor** (Strict Structure): model-primary artifacts. Apply this file, then the stricter structure in [agent-command-grammar.md](../subskills/writing-for-agents/references/agent-command-grammar.md).
+- **Machine-Targeted STE Flavor** (Strict Structure): model-primary artifacts. Apply this file, then the stricter structure in [writing-for-agents](../subskills/writing-for-agents/SKILL.md).
 
 Adapted from `warpdotdev/common-skills@b811c24` (MIT, © Denver Technologies, Inc.): `write-pr-description/references/plain-language.md` + `write-feature-docs` style rules.
 

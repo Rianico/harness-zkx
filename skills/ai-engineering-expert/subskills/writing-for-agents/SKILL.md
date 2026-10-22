@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: >-
-  Writing reference for agent-consumed docs — context pointers, hierarchy, completion criteria, leading words, and pruning under STE-100. Use when drafting or editing SKILL.md, AGENTS.md, or CLAUDE.md, fixing prompt bloat, pruning no-ops, or clarifying agent instructions.
+  Writing reference for agent-consumed docs — philosophy, contracts, context pointers, hierarchy, completion criteria, and pruning under STE-100. Use when drafting or editing SKILL.md, AGENTS.md, or CLAUDE.md, fixing prompt bloat, pruning no-ops, or clarifying agent instructions.
 metadata:
   managed-by: ai-engineering-expert
 ---
@@ -18,32 +18,70 @@ This skill teaches how to shape documents so future agent runs follow them relia
 You are the designer.
 A future agent is the reader.
 The same levers apply to a skill, `AGENTS.md`, `CLAUDE.md`, or pointer documents.
-The root virtue is **predictability**.
-Wrangle determinism out of stochastic models.
-Ensure the agent takes the same process on every run, rather than expecting identical tokens.
 
 **Sibling boundaries:**
 - Sentence-level plain language rules live in [plain-language.md](../../references/plain-language.md).
-- Strict machine command grammar lives in [agent-command-grammar.md](references/agent-command-grammar.md).
 - Human-facing issues, RFCs, and proposals belong to [writing-for-humans](../writing-for-humans/SKILL.md).
-- Skill frontmatter and invocation options live in [skill-mechanics.md](references/skill-mechanics.md).
 - Context-load and description-budget policies live in the parent [context-load policy](../../references/context-load-policy.md).
-- See [philosophy.md](references/philosophy.md) for historical builder framework mappings.
 
-## The Reading Bottleneck and Controlled English
+## Part I: Philosophy
+
+### 1. Predictability as the Root Virtue
+
+A skill exists to wrangle determinism out of a stochastic model.
+**Predictability** is the root virtue of agent engineering.
+Ensure the agent takes the same process on every run, rather than expecting identical token output.
+Every structural lever in this skill serves predictable execution.
+
+### 2. Goal-Driven Development: Intent and Scoping
+
+Derive a one-sentence **goal** from user intent and repository state before drafting.
+Let that goal govern what the document keeps, trims, and orders:
+- **The goal is the review bar:** Audit every section against the goal sentence. If deleting a section leaves the goal intact, delete the section.
+- **Name the consumer, then the exclusion:** The reader sets what must not appear. Exclude restated environment details from a skill. Exclude implementation secrets from public instructions.
+- **State non-goals explicitly:** Explicit boundaries prevent model improvisation and scope creep.
+
+### 3. Behavior-Driven Development: Concrete Contracts
+
+Pin every rule and execution branch with a concrete, falsifiable example.
+The example serves as the behavioral contract:
+- **Avoid abstract prose explanations:** Ground rules in before-after pairs or Given-When-Then cases.
+- **Turn guessing into translation:** A future agent must map each example to a concrete file and line without ambiguity.
+- **Insulate technical tokens:** Wrap code tokens, file paths, tool names, and flags in backticks (`token`).
+
+### 4. Environmental Truth and Honest Reporting
+
+Environmental truth is supreme authority.
+Trust only what tools, compilers, linters, and tests observe, never what the model claims.
+
+**Report what ran:**
+Every factual claim must name something that ran, or state plainly that it did not.
+Never write intent as though it were a result.
+
+| Situation | What the text says |
+| --- | --- |
+| Nothing ran | Say so, and name the command a reader would run. |
+| CI produced the result | Name the run. Never describe it as local. |
+| Checks added, not run | Say they are skipped, and that the skip was deliberate. |
+| You could not run it | Name what it needs. Never let a skip look like a pass. |
+| Someone else recorded it | Attribute it by name. |
+
+_Check:_ grep the draft for `fully tested|no regressions|comprehensive|robust|properly|should work`.
+Every hit needs evidence or deletion.
+
+### 5. The Reading Bottleneck and Controlled Language (ASD-STE100)
 
 Reading is the primary bottleneck in agent systems.
-Language models process and generate tokens rapidly.
-However, long context windows dilute attention and increase latency.
-Verbose instructions cause model hesitation, hallucinations, and premature exits.
+Language models generate tokens quickly, but long context windows dilute attention and increase latency.
+Verbose instructions cause model hesitation, hallucinations, and premature completion.
 
 Address this reading tax with controlled technical English.
 Aim for the 80% ASD-STE100 standard:
-- **Active voice and imperative mood:** Instruct the reader directly (`Validate once at admission`). Avoid passive hedging (`Validation should be performed`).
+- **Active voice and imperative mood:** Instruct the reader directly (`Validate once at admission`). Avoid passive phrasing (`Validation should be performed`).
 - **Short sentences:** Keep procedural instructions to 20 words or fewer. Keep descriptive sentences to 25 words or fewer.
 - **One action per sentence:** Never combine multiple sequential commands with coordinating conjunctions.
 - **Single meaning per term:** Assign one specific meaning to each word. Avoid decorative synonyms or metaphors.
-- **Zero filler:** Strip out conversational padding, qualifiers, and unsupported claims.
+- **Zero filler:** Strip out conversational padding, qualifiers, and unsupported assertions.
 
 Follow the representation ladder for high-density communication:
 1. **Controlled text:** Concise STE-100 sentences for sequential steps.
@@ -51,24 +89,26 @@ Follow the representation ladder for high-density communication:
 3. **Focused visual diagrams:** Use call trees or Mermaid diagrams when relationships exceed four sentences.
 4. **Interactive artifacts:** Use self-contained files when human parameters require inspection.
 
-## The Two Loads
+## Part II: Workflow Pattern
 
-Every document and pointer consumes one of two budgets:
-- **Context load:** The cost of always-loaded material on the agent window. Skill descriptions and `AGENTS.md` pointer lines sit in context on every turn. They consume tokens and attention whether used or not.
-- **Cognitive load:** The cost on human operators to remember documents and when to invoke each one. The human acts as the index. Cognitive load represents the price of human agency. Spend cognitive load where human judgment matters. Eliminate it elsewhere.
+### 6. The Two Loads Budgeting
+
+Every document and pointer spends one of two budgets:
+- **Context load:** The cost of always-loaded material on the agent window. Skill descriptions and `AGENTS.md` lines sit in context on every turn. They consume tokens and attention whether used or not.
+- **Cognitive load:** The cost on human operators to remember documents and when to invoke each one. The human acts as the index. Spend cognitive load where human judgment matters. Eliminate it elsewhere.
 
 Material reached through a pointer avoids context load at the price of the pointer line.
 Material without a pointer relies entirely on cognitive load.
 
-### Router Skills
+#### Router Skills
 
-When user-invoked skills multiply past memory, cognitive load piles up.
+When user-invoked skills multiply past human memory, cognitive load piles up.
 Resolve this with a **router skill**:
 - Create a single user-invoked skill that indexes related workflows.
 - Name each managed subskill and its triggering conditions.
 - Keep the router user-invoked to avoid context load on normal turns.
 
-## Context Pointers
+### 7. Crafting Context Pointers
 
 A **context pointer** is an in-context reference that points to external material and specifies when to read it.
 A skill description or an `AGENTS.md` entry is a context pointer.
@@ -86,7 +126,7 @@ Prune pointers with extreme care:
 - **Cut identity already in the body:** Remove internal section names or redundant metadata.
 - **Never point to invisible surfaces:** Avoid pointing to commands marked with `disable-model-invocation: true`. Such pointers consume context tokens without aiding autonomous model retrieval.
 
-## Information Hierarchy and Progressive Disclosure
+### 8. Structuring the Information Hierarchy
 
 A document contains two types of content:
 - **Steps:** Ordered actions the agent performs sequentially.
@@ -101,14 +141,7 @@ Push too little down, and the top-level document bloats.
 Push too much down, and you hide essential instructions.
 Balancing this tension is the central design choice.
 
-### Start from Intent
-
-Derive a one-sentence goal before drafting.
-Use that goal as the review bar for every section.
-Delete any section if the document satisfies the goal without it.
-Exclude out-of-scope details by naming who reads the document.
-
-### Progressive Disclosure
+#### Progressive Disclosure
 
 **Progressive disclosure** moves reference material out of the main document and behind a pointer.
 This move keeps the operational spine clear.
@@ -118,16 +151,15 @@ Use branching as the disclosure test:
 
 Disclose reference files with self-routing navigation.
 When a reference file exceeds roughly 150 lines, open with a short navigation table.
-See [game-rules-writing.md](references/game-rules-writing.md) for game instruction transfer principles.
 
-### Co-Location
+#### Co-Location
 
 **Co-location** governs what sits beside a concept within a file.
 Keep a concept's definition, execution rules, and edge cases under a single heading.
 Do not scatter related rules across different sections.
 Grouped material ensures reading one rule loads adjacent caveats automatically.
 
-## Steps and Completion Criteria
+### 9. Steps and Completion Criteria
 
 Every procedural step must conclude with a **completion criterion**.
 The criterion tells the agent when the task is finished.
@@ -146,23 +178,7 @@ Two properties determine criterion effectiveness:
 
 Construct criteria that are both checkable and exhaustive.
 
-## Report What Ran
-
-Every claim names something that ran, or states plainly that it did not.
-Never write intent as though it were a result.
-
-| Situation | What the text says |
-| --- | --- |
-| Nothing ran | Say so, and name the command a reader would run. |
-| CI produced the result | Name the run. Never describe it as local. |
-| Checks added, not run | Say they are skipped, and that the skip was deliberate. |
-| You could not run it | Name what it needs. Never let a skip look like a pass. |
-| Someone else recorded it | Attribute it by name. |
-
-_Check:_ grep the draft for `fully tested|no regressions|comprehensive|robust|properly|should work`.
-Every hit needs evidence or deletion.
-
-## When to Split
+### 10. When to Split
 
 Dividing documents incurs cognitive or context overhead.
 Split a document only when the boundary earns its cost:
@@ -172,9 +188,8 @@ Split a document only when the boundary earns its cost:
 - **By invocation:** Split off an independent skill when a distinct leading word warrants dedicated autonomous triggering.
   An independent model-invoked skill adds context load through its description.
   Ensure that independent discovery justifies the token cost.
-  Mechanics: [skill-mechanics.md](references/skill-mechanics.md).
 
-## Leading Words and Positive Steering
+### 11. Leading Words and Positive Steering
 
 A **leading word** is a compact concept from model pretraining that anchors agent behavior (`tight`, `red`, `tracer bullets`).
 A leading word recruits existing model priors to govern behavior in few tokens.
@@ -189,7 +204,7 @@ Refactor wordy instructions into compact leading words:
 - "Fast, deterministic, low-overhead" -> `tight` (a `tight` verification loop).
 - "A check you trust" -> `red` (the test goes `red` on regression).
 
-### Avoid Negation
+#### Avoid Negation
 
 Steering by prohibition activates the forbidden behavior.
 In *do not think of an elephant*, attention fixes upon the elephant.
@@ -199,7 +214,7 @@ Always prompt the **positive target behavior**:
 - Keep prohibitions only as absolute boundaries.
 - When using a negative boundary, pair it immediately with the required positive action.
 
-## Pruning Discipline
+### 12. Pruning Discipline
 
 Maintain strict pruning discipline to preserve model attention:
 
@@ -210,7 +225,7 @@ Maintain strict pruning discipline to preserve model attention:
 - **Template projection:** Never paste complete template files into reference prose. Keep authoritative templates in `templates/` or generator scripts, and point to them.
 - **Cut in dedicated passes:** Draft content completely first. Then audit each sentence to verify what concrete behavior it changes. Delete sentences that provide only narrative filler or backstory.
 
-## Failure Modes
+### 13. Diagnosing Failure Modes
 
 Identify and resolve these structural failure modes:
 
@@ -228,11 +243,11 @@ Identify and resolve these structural failure modes:
 | **Self-grading** | Prose uses vague praise without empirical proof. | Replace adjectives with measurable conditions and explicit verification commands. |
 | **Lecturing** | Text offers generic advice without concrete guidance. | Point to specific edge cases or remove the lecture. |
 
-## Harness Wiring and Verification
+### 14. Harness Wiring and Verification
 
 Apply these integration patterns across the harness:
 
-- **Skill authoring integration:** Apply ASD-STE100 rules, hierarchy ladders, pointer formulas, and pruning during skill creation. Keep skill bodies under 500 lines. Disclose complex methodology into `references/`.
+- **Skill authoring integration:** Apply ASD-STE100 rules, hierarchy ladders, pointer formulas, and pruning during skill creation. Keep skill bodies under 500 lines.
 - **Proofreading and backwards reading:** Proofread backwards across sections to isolate individual statements from narrative momentum.
 - **Deterministic verification:** Validate frontmatter and trigger budgets using `validate-deps.py lint` and `context-check`. Validate plain English constraints using `ste100.py`.
 - **Semantic verification:** Dispatch a Skeptic reviewer subagent to evaluate prose against user intent. The reviewer audits for unstated assumptions, vague completion criteria, and narrative bloat.
