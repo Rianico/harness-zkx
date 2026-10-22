@@ -4,6 +4,16 @@ description: >-
   Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, model selection, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
 metadata:
   managed-by: ai-engineering-expert
+  credits:
+    - source: https://arxiv.org/abs/2609.35928
+      author: arXiv:2609.35928
+      note: Prompted Identity Degrades Cooperation in Multi-Agent LLM Systems
+    - source: https://arxiv.org/abs/2307.03172
+      author: Liu et al. (2023)
+      note: Lost in the Middle - How Language Models Use Long Contexts
+    - source: https://arxiv.org/abs/2603.20324
+      author: arXiv:2603.20324
+      note: The Selection Bottleneck in Multi-Agent LLM Pipelines
 ---
 
 # Subagent Engineering
@@ -109,3 +119,6 @@ Subagents operate under strict structural boundaries:
 ## References
 
 - [tool-design-contracts.md](references/tool-design-contracts.md) -- Action space granularity, observation schemas, error recovery examples, and context budgeting.
+- [arXiv:2609.35928](https://arxiv.org/abs/2609.35928) -- Prompted identity degrades cooperation in multi-agent LLM systems.
+- [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) -- Lost in the middle: how language models use long contexts.
+- [arXiv:2603.20324](https://arxiv.org/abs/2603.20324) -- The selection bottleneck in multi-agent LLM pipelines.
