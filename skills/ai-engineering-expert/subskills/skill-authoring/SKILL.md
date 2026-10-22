@@ -22,8 +22,8 @@ Meta-behavior is load-bearing. A flawed skill corrupts every future session wher
 
 Every skill falls into one of two operational categories:
 
-1. **Workflow Skills (Procedural)**: Step-by-step procedures to produce artifacts or change system state. Covers single-phase automated tasks and multi-agent phased workflows. Owns state transitions, tool sequencing, and concrete deliverables.
-2. **Knowledge Skills (Reference)**: Mental models, domain constraints, heuristics, and expert patterns loaded just-in-time to steer decisions. Provides retrieval-time guidance without owning workflow orchestration.
+1. **Workflow Skills (Procedural)**: Step-by-step procedures to produce artifacts or change system state. Follows **Philosophy First, Then Workflow**. Anchor the core mental model and invariants before detailing sequential execution phases.
+2. **Knowledge Skills (Reference)**: Mental models, domain constraints, heuristics, and expert patterns loaded just-in-time. Follows **Mental Model First, Then Reference Patterns & Gotchas**. Never invent artificial procedural workflows for reference material.
 
 > **Note on Orchestration & Management**: Orchestration is a multi-agent workflow pattern, not a distinct taxonomy type. The `manage` and `managed-by` metadata declarations provide structural context routing (hiding subskills under `subskills/` to eliminate root context load), rather than an intrinsic skill class.
 
@@ -86,6 +86,17 @@ skills/<skill-name>/
 
 - Keep `SKILL.md` under 500 lines. Place deep reference material in `references/`.
 - Progressive disclosure: Level 1 metadata (frontmatter) -> Level 2 body (`SKILL.md`) -> Level 3 deep assets (`references/`, `scripts/`).
+
+#### Body Structural Signatures
+
+Structure the body based on the skill's taxonomy type:
+
+- **Workflow Skills (Philosophy First, Then Workflow):**
+  1. *Philosophy & Foundation:* Core mental model, invariants, design constraints, anti-patterns.
+  2. *Operational Workflow:* Sequential phases, commands, scripts, deterministic gates.
+- **Knowledge Skills (Mental Model First, Then Reference):**
+  1. *Core Mental Model:* Domain invariants, architectural trade-offs, conceptual foundations.
+  2. *Topical Patterns & Gotchas:* Worked code shapes, anti-patterns, framework-specific edge cases.
 
 #### Required Frontmatter
 

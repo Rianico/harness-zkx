@@ -95,14 +95,16 @@ All skills in LSZ belong to one of two structural categories. Classification det
 #### Workflow Skills (Procedural)
 
 Use for multi-phase tasks with concrete input/output contracts.
+- **Structural Signature:** **Philosophy First, Then Workflow**. Anchor the mental model and invariants before describing state transitions and commands.
 - **1-Phase Workflow:** Focused, self-contained task with low ambiguity (e.g., `handoff`, `skill-stocktake`). Budget: ≤150 lines.
 - **N-Phase Workflow:** Manages state transitions, gates, and sequential execution (e.g., `tdd-cycle` with RED/GREEN/REFACTOR). Budget: ≤150 lines per phase, capped at 500 lines.
 
 #### Knowledge Skills (Reference)
 
 Use for guides, domain invariants, architectural patterns, and specialized constraints.
+- **Structural Signature:** **Mental Model & Invariants First, Then Reference Patterns & Gotchas**.
+- **No Artificial Workflows:** Never force a procedural workflow onto reference knowledge. Structure the body by domain topics, concrete code shapes, anti-patterns, and framework gotchas.
 - Loaded just-in-time when entering a specific domain.
-- Organized by topic, patterns, and non-obvious pitfalls.
 - Examples: `ai-engineering-expert`, `python-expert`, `codebase-design`. Budget: ≤500 lines.
 
 #### Context Routers (`manage` / `managed-by`)

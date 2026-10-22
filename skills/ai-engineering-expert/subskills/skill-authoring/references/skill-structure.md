@@ -88,11 +88,21 @@ Optional folders:
 
 ### Skill Body Structure
 
-1. **Purpose statement** -- What the skill does (1-2 sentences)
-2. **When to use** -- Explicit trigger conditions (matches `Use when...`)
-3. **Execution contract** -- How to invoke, arguments, expected behavior
-4. **Workflow phases** -- Ordered steps if procedural
-5. **Output format** -- Expected artifacts or response contract
+Structure the skill body according to its taxonomy type:
+
+#### 1. Workflow Skills: Philosophy First, Then Workflow
+
+Workflow skills own procedures and state transitions. They must anchor mental models before listing execution steps:
+1. **Philosophy & Foundation**: Core mental model, invariants, design constraints, and non-goals.
+2. **Operational Workflow**: Ordered phases, deterministic commands, error handling, and completion criteria.
+3. **Execution Contract**: How to invoke the skill, arguments, and expected response format.
+
+#### 2. Knowledge Skills: Mental Model First, Then Reference
+
+Knowledge skills provide on-demand domain expertise. They do not own execution pipelines:
+1. **Core Mental Model**: Architectural trade-offs, foundational invariants, and domain rules.
+2. **Topical Guidance & Gotchas**: Practical patterns with code shapes, anti-patterns, and framework failure modes.
+3. **Pointers to Deep Assets**: Markdown links to one-level-deep reference materials. Never invent artificial procedural workflows for reference material.
 
 ### Complete Worked Example
 
