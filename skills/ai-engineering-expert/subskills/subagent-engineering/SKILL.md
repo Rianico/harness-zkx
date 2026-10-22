@@ -77,7 +77,7 @@ Subagents operate under strict structural boundaries:
 - **No Agent-ception:** Subagents cannot access the Agent tool (depth limit 1). The primary orchestrator coordinates all agents.
 - **No Subagent UI:** Subagents do not own user interaction. When blocked, the subagent returns a structured blocker to the orchestrator.
 - **Principle of Least Privilege:** Explicitly declare tool scope via the frontmatter tools array. Researchers receive read-only tools. Implementers receive edit tools.
-- **Passive Runtime Truth:** Rely on native execution truth (stdout, stderr, exit codes). Never force artificial JSON envelopes onto standard shell output.
+- **Passive Runtime Truth:** Capture runtime truth passively (`tee` logs, pipes) instead of polling with blind query loops. Rely on native execution truth (stdout, stderr, exit codes). Never force artificial JSON envelopes onto standard shell output. Reserve structured envelopes for specialized RPC or MCP agent endpoints.
 
 ---
 
