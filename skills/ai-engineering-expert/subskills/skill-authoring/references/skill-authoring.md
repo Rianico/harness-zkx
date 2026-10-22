@@ -190,6 +190,8 @@ Because skills encode persistent agent behaviors, agents must never assume requi
    - **Behavioral Scenarios:** What BDD cases must hold?
 4. **Lock Shared Understanding:** Secure user confirmation before creating files.
 
+Interactive CLI generators use single-question dialogs instead. See `scaffold`.
+
 ---
 
 ### Phase 2: Schema & Frontmatter Mechanics

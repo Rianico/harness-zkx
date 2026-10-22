@@ -71,6 +71,8 @@ Interview the user systematically to settle the **design tree** before drafting:
    - **Context Footprint**: Does this belong in a parent-subskill cluster (`manage`) or standalone?
 4. **Lock Shared Understanding**: Wait for user confirmation before advancing to file generation.
 
+Interactive CLI generators use single-question dialogs instead. See the `scaffold` skill.
+
 ### Phase 2: Draft & Structure Contract
 
 #### Directory Layout & Budget
