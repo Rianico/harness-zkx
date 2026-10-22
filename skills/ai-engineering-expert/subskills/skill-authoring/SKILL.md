@@ -138,14 +138,18 @@ uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-d
 # Gate 4: Plain English and STE-100 deterministic linting
 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/<name>/SKILL.md
 
-# Gate 5: Unit test integrity
-uv run pytest tests/ai-engineering-expert
+# Gate 5: Dependency resolution and manage/managed-by wiring
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
+
+# Gate 6: Unit test integrity
+uv run pytest tests/<name>  # or tests/ai-engineering-expert
 ```
 
 All deterministic checks must pass with zero errors before moving to semantic review.
 
 #### 2. Semantic Verification Gate (Semantic Reasoner)
 Dispatch an adversarial Skeptic subagent to verify qualitative alignment:
+- [ ] **EDD Anchors**: Does each deterministic goal have an evaluation script under `scripts/` or a test?
 - [ ] **Symptom Grounding**: Does `Use when...` contain natural user problem terms rather than academic jargon?
 - [ ] **BDD Scenario Coverage**: Do Given/When/Then scenarios cover the happy path, edge cases, and failure modes?
 - [ ] **Default Selection**: Does the skill provide clear defaults rather than open menus?
