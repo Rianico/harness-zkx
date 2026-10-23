@@ -69,7 +69,9 @@ Context load is a primary architectural constraint. Attention degrades as contex
 
 `SKILL.md` holds the 20% that solves 80% of problems. Reference files behind context pointers hold the deep 80%, recursively across spine, subskills, and references.
 
-Read the [context-load policy](references/context-load-policy.md) for invocation classes and description budgets. Use when you set a load cost.
+Read the [context-load policy](subskills/skill-authoring/references/context-load-policy.md) for enforcement gates, description budgets, and platform sync. Use when you set a load cost or audit a violation.
+
+- **Plain Language Standard**: Follow [plain-language.md](references/plain-language.md) for ASD-STE100 active voice, concise sentences, and banned filler.
 
 ### Root Steering via AGENTS.md
 
@@ -114,8 +116,7 @@ Every change must preserve or improve organization. Accumulation creates bloat.
 
 **The orchestrator never does implementation work.** Route, dispatch, monitor, and synthesize in the primary agent. Keep code writing, file edits, and verbose test triage inside subagents. This mandate covers every coding agent.
 
-- Dispatch mechanics: read [Subagent-first execution](references/subagent-first-execution.md). Use when you write a dispatch prompt.
-- Dispatch decisions: read `subskills/subagent-engineering/SKILL.md`. Use when you decide whether to dispatch, pick a context topology, or tier the model.
+- Orchestration contracts and execution: read `subskills/subagent-engineering/SKILL.md`. Use when you write a dispatch prompt, pick a context topology, define response contracts, or tier the model.
 - **Hero-Mode Prevention**: Generic models ignore delegation under load, so dispatching skills SHOULD define explicit execution schemas.
 
 ### Model Routing

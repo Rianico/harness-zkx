@@ -64,7 +64,7 @@ Rules can delegate to skills for complex scenarios:
 ## Expertise Routing
 
 For complex patterns and domain gotchas, invoke the expert skill:
-Skill(skill="python-expert", args="[async|testing|django|pytorch]")
+/python-expert [async|testing|django|pytorch]
 ```
 
 This keeps rules lean while ensuring deep knowledge is available when needed.

@@ -170,5 +170,6 @@ Dispatch an adversarial Skeptic subagent to verify qualitative alignment:
 - [skill-authoring.md](references/skill-authoring.md) -- Full reference: frontmatter schemas, worked description examples, credits schema, compression rules, string substitutions, calibration.
 - [skill-diagnosis.md](references/skill-diagnosis.md) -- Trigger misses, collisions, execution loops, dead skills, and the evidential trigger ledger.
 - [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts.
-- [glossary.md](references/glossary.md) -- Invocation classes, description budget, context load, progressive disclosure.
+- [glossary.md](references/glossary.md) -- Skill authoring terminology: predictability, invocation classes, information hierarchy, steering, and pruning.
 - [writing-for-agents](../writing-for-agents/SKILL.md) -- Agent-document writing: hierarchy, pointers, leading words, pruning.
+- [context-load-policy.md](references/context-load-policy.md) -- Enforcement contract: hard CI gates, description budgets, platform sync mapping, regeneration. Use when a load-cost rule must be audited.

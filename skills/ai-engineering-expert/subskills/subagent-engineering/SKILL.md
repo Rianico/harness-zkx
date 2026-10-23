@@ -109,6 +109,8 @@ Subagents operate under strict structural boundaries:
 ## References
 
 - [tool-design-contracts.md](references/tool-design-contracts.md) -- Action space granularity, passive runtime truth, structured return contracts, and error recovery.
+- [subagent-first-execution.md](references/subagent-first-execution.md) -- Universal subagent-first execution mandate, dispatch patterns, topic roots, and anti-patterns.
+- [resp-format.md](references/resp-format.md) -- Dual-mode representation, response schemas, issue severities, and completion signals.
 - [arXiv:2609.35928](https://arxiv.org/abs/2609.35928) -- Prompted identity degrades cooperation in multi-agent LLM systems.
 - [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) -- Lost in the middle: how language models use long contexts.
 - [arXiv:2603.20324](https://arxiv.org/abs/2603.20324) -- The selection bottleneck in multi-agent LLM pipelines.

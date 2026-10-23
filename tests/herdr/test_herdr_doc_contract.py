@@ -427,7 +427,9 @@ def test_skill_overview_qualifies_the_reply_template_pointer() -> None:
         assert pointers, f"no reply-template pointer on: {line.strip()}"
         for pointer in pointers:
             assert "/" in pointer, f"the template pointer is unqualified: {pointer}"
-            assert pointer.endswith("ai-engineering-expert/references/" + template), pointer
+            assert pointer.endswith(
+                "ai-engineering-expert/subskills/subagent-engineering/references/" + template
+            ), pointer
             assert _resolve(OVERVIEW_DOC, pointer) is not None, f"{pointer} does not exist"
 
 

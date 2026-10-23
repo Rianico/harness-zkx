@@ -285,7 +285,7 @@ No bug in /api/notifications     → Don't write test (yet)
 ## Integrating into Bug-Check Workflow
 
 ```markdown
-<!-- .claude/commands/bug-check.md -->
+<!-- commands/bug-check.md -->
 ## Step 1: Automated Tests (mandatory, cannot skip)
 
 Run FIRST before any code review:

@@ -22,7 +22,7 @@ Reading raw skill files, running `validate-deps.py`, inspecting ledgers, and dra
    - Expected trigger behavior (`should_trigger: true`)
 2. **Isolated Execution**: The subagent executes the diagnosis protocol in isolation:
    - Runs static gates (`validate-deps.py`)
-   - Evaluates the trigger ledger (`~/.pi/agent/evals/<skill_name>.yaml`)
+   - Evaluates the trigger ledger at `$EVALS_DIR/<skill_name>.yaml` (defaults to `~/.pi/agent/evals/<skill_name>.yaml` on Pi)
    - Classifies root cause via the 4-tier model
    - Writes the proposed frontmatter diff to scratch or temp storage
 3. **Distilled Return**: Subagent returns strictly via structured response contract:
@@ -143,7 +143,7 @@ uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-d
 
 Do not guess whether a prompt should have triggered a skill. Measure against the skill's evidential test ledger:
 
-Ledger path: `~/.pi/agent/evals/<skill_name>.yaml`
+Ledger path: `$EVALS_DIR/<skill_name>.yaml` (defaults to `~/.pi/agent/evals/<skill_name>.yaml` on Pi)
 
 Compute empirical rates across recorded cases:
 - **Trigger Recall:** $\frac{\text{Triggered in\_domain}}{\text{Total in\_domain}}$ (target: ≥ 0.90)
@@ -192,7 +192,7 @@ Before pushing description changes, evaluate the candidate description against t
    uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
    uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
    ```
-3. **Verify Recall and Precision:** Ensure the updated description triggers on all in_domain test cases in `~/.pi/agent/evals/<skill_name>.yaml` without firing on hard_negatives.
+3. **Verify Recall and Precision:** Ensure the updated description triggers on all in_domain test cases in `$EVALS_DIR/<skill_name>.yaml` without firing on hard_negatives.
 
 ---
 

@@ -60,7 +60,7 @@ Write tests for bugs that were found, not just for code that works. Once tested,
 3. Execute implementation
 4. Re-run evals and compare deltas
 
-> **Doc/writing verification:** Agent-document output (SKILL.md, AGENTS.md, CLAUDE.md) verifies via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` and `context-check`. Verify prose semantically via a Skeptic subagent (see [writing sub-skill](../writing-for-agents/SKILL.md)). For human readers, run that sub-skill's blind evals with assertions withheld.
+> **Doc/writing verification:** Agent-document output (SKILL.md, AGENTS.md, CLAUDE.md) verifies via `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py lint` and `context-check`. Verify prose semantically via a Skeptic subagent. Agent-facing docs use [writing-for-agents](../writing-for-agents/SKILL.md). Human-facing proposals and PR bodies use [writing-for-humans](../writing-for-humans/SKILL.md). In both cases, run the blind evals with assertions withheld.
 
 ### Skill Trigger Verification (CI Tests vs Offline Evals)
 

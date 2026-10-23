@@ -344,7 +344,7 @@ On completion, reply to the caller in one message using the herdr helper script:
 
 ### The Final Reply Template
 
-All completion replies delivered via `herdr_reply.py` adhere to the response format defined in `skills/ai-engineering-expert/references/resp-format.md`. `herdr_reply.py` prepends the frontmatter envelope:
+All completion replies delivered via `herdr_reply.py` adhere to the response format defined in `skills/ai-engineering-expert/subskills/subagent-engineering/references/resp-format.md`. `herdr_reply.py` prepends the frontmatter envelope:
 
 ```markdown
 COMPLETED <commit-sha>
@@ -647,7 +647,7 @@ All coding agents delegate heavy, noisy tasks to platform-native subagents:
 ### 4. The Iron Curtain and Unified Message Format
 - **The Iron Curtain**: Role-internal subagents are strictly private tools for the host pane agent. Subagents **NEVER** invoke Herdr CLI commands or helper scripts (`herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`). Only the host agent interfaces with the lane.
 - **Synthesized IDD/GDD Communication Invariant**: Every dispatch pairs teleological purpose (**IDD**: Problem, Proposed Outcome, Constraints) with verifiable targets (**GDD/EDD**: Check Command, Required Evidence).
-- **Dual-Mode Response Contract**: All replies follow the **Final Reply Template** aligned with `skills/ai-engineering-expert/references/resp-format.md`:
+- **Dual-Mode Response Contract**: All replies follow the **Final Reply Template** aligned with `skills/ai-engineering-expert/subskills/subagent-engineering/references/resp-format.md`:
   - Status Triad: `COMPLETED <sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
   - `## Summary` (Carmack-style technical rationale, ≤100 words)
   - `## Artifacts` (absolute paths with kinds: diff, spec, report, eval)

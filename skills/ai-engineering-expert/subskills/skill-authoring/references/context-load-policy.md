@@ -1,6 +1,6 @@
 # Context-Load Policy Reference
 
-Full policy contract and enforcement details. The parent spine holds the 20% summary; this file holds the deep 80%.
+Full policy contract and enforcement details. `skill-authoring` holds the summary. This file holds the deep 80%.
 
 ## Invocation Classes
 
@@ -11,15 +11,15 @@ Every skill declares one of two invocation classes via the canonical `disable-mo
 | Omit (default `false`)           | `implicit-allowed` | Model can invoke autonomously                                                | `allow_implicit_invocation: true`  | Listed in `<available_skills>` XML — normal load                                          |
 | `disable-model-invocation: true` | `explicit-only`    | Only user or `$skill` can invoke (description still listed — selection-only) | `allow_implicit_invocation: false` | **Removed from `<available_skills>` XML** — true zero-load; only `/skill:name` reaches it |
 
-**Base standard:** the open Agent Skills spec ([agentskills.io](https://agentskills.io)) — `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`. `disable-model-invocation` is an enhancement beyond that spec, shared by Claude Code and Pi. **Pi ≥0.84.4 semantics are the default enhancement** — `formatSkillsForPrompt` filters `disableModelInvocation=true` and omits the entry from the system-prompt XML entirely. Claude's gating is selection-only (description stays, model instructed not to pick it); Pi strips it from context (no tokens, no attention).
+**Base standard:** the open Agent Skills spec ([agentskills.io](https://agentskills.io)) — `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`. `disable-model-invocation` is an enhancement beyond that spec, shared by Claude Code and Pi. **Pi ≥0.84.4 semantics are the default enhancement** — `formatSkillsForPrompt` filters `disableModelInvocation=true` and omits the entry from the system-prompt XML entirely. Claude's gating is selection-only (description stays, model instructed not to pick it). Pi strips it from context (no tokens, no attention).
 
-**The field is the single switch.** It controls Claude Code behavior, the generated `agents/openai.yaml`, and — on Pi — prompt inclusion. No separate platform-specific field exists in `SKILL.md` — the sync script maps this single field to each platform's mechanism; Pi applies the filter at prompt-build time.
+**The field is the single switch.** It controls Claude Code behavior, the generated `agents/openai.yaml`, and prompt inclusion on Pi. No separate platform-specific field exists in `SKILL.md`. The sync script maps this field to each platform. Pi applies the filter at prompt-build time.
 
 ## Selection vs Metadata Cost — Platform Divergence
 
-**Claude Code (origin):** The invocation class controls _selection_ — whether the model can autonomously pick the skill. It does NOT control _metadata presence_ — the `description` stays in the initial skill-list metadata, visible to the harness on every turn. An explicit-only skill still pays context load for its description. It is not zero-load. This selection≠metadata separation is the single most surprising fact about the original policy and the primary reason it was recorded as an ADR.
+**Claude Code (origin):** The invocation class controls _selection_ — whether the model can autonomously pick the skill. It does NOT control _metadata presence_. The `description` stays in the initial skill-list metadata, visible on every turn. An explicit-only skill still pays context load for its description. It is not zero-load. This selection-versus-metadata separation is surprising, and it is the primary reason this policy became an ADR.
 
-**Pi ≥0.84.4 (advanced):** `disable-model-invocation: true` **does** control metadata presence. Skills with the flag are filtered by `formatSkillsForPrompt` (`skills.filter(s => !s.disableModelInvocation)`) and **removed from the `<available_skills>` XML** injected into the system prompt. They pay **zero context/metadata cost** — the model never learns their name until the human invokes `/skill:name`. Design consequence: on Pi, `explicit-only` is the correct tool to remove a skill from skill context; do not add a pointer to it from any always-loaded doc (see `writing-for-agents` — independent surfaces).
+**Pi ≥0.84.4 (advanced):** `disable-model-invocation: true` **does** control metadata presence. Skills with the flag are filtered by `formatSkillsForPrompt` (`skills.filter(s => !s.disableModelInvocation)`) and **removed from the `<available_skills>` XML** injected into the system prompt. They pay **zero context/metadata cost** — the model never learns their name until the human invokes `/skill:name`. Design consequence: on Pi, `explicit-only` removes a skill from context. Keep always-loaded docs free of pointers to it.
 
 ## Description Budget Rationale
 
@@ -88,11 +88,11 @@ The following are enforced by `skill-authoring` methodology during authoring:
 
 ```bash
 # Enforce policy on all skills
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check
+uv run $SKILL_DIR/scripts/validate-deps.py context-check
 
 # Single skill
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check <name>
+uv run $SKILL_DIR/scripts/validate-deps.py context-check <name>
 
 # JSON output for CI
-uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py context-check --json
+uv run $SKILL_DIR/scripts/validate-deps.py context-check --json
 ```
