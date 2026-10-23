@@ -27,6 +27,14 @@ Every skill falls into one of two operational categories:
 
 > **Note on Orchestration & Management**: Orchestration is a multi-agent workflow pattern, not a distinct taxonomy type. The `manage` and `managed-by` metadata declarations provide structural context routing (hiding subskills under `subskills/` to eliminate root context load), rather than an intrinsic skill class.
 
+### Router Skills for Invocation Management
+
+When user-invoked skills (`disable-model-invocation: true`) multiply past human memory, cognitive load accumulates.
+Resolve this using a **router skill**:
+- Create a single user-invoked skill that indexes related specialized skills.
+- Detail when to reach for each managed skill without registering them into root context.
+- Keep the router itself user-invoked to avoid always-on context load.
+
 ### Rules vs Skills Boundary (Context Economics)
 
 Rules and skills serve different context-cost economics:

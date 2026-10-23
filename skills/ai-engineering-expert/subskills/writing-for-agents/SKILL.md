@@ -102,14 +102,6 @@ Every document and pointer spends one of two budgets:
 Material reached through a pointer avoids context load at the price of the pointer line.
 Material without a pointer relies entirely on cognitive load.
 
-#### Router Skills
-
-When user-invoked skills multiply past human memory, cognitive load piles up.
-Resolve this with a **router skill**:
-- Create a single user-invoked skill that indexes related workflows.
-- Name each managed subskill and its triggering conditions.
-- Keep the router user-invoked to avoid context load on normal turns.
-
 ### 7. Crafting Context Pointers
 
 A **context pointer** is an in-context reference that points to external material and specifies when to read it.
@@ -213,10 +205,21 @@ In *do not think of an elephant*, attention fixes upon the elephant.
 Negation acts as a weak modifier that the model easily overruns.
 Always prompt the **positive target behavior**:
 - Instead of "Do not write multi-line comments", write "Write single-line comments".
-- Keep prohibitions only as absolute boundaries.
-- When using a negative boundary, pair it immediately with the required positive action.
+- State what the model must do, rather than what it must avoid.
+- Only if a model repeatedly performs a forbidden action do you add it as a negative gotcha.
 
-### 12. Pruning Discipline
+### 12. Model Gotchas and Retirable Constraints
+
+Isolate empirical model quirks into an independent section.
+Add a negative constraint only if a model repeatedly executes a forbidden action despite positive steering.
+Never add speculative negative prohibitions without observed failures.
+
+Maintain this independent section under strict lifecycle rules:
+- **Isolate from core prose:** Keep model-specific workarounds in this dedicated section. Do not scatter negative rules across procedural workflows.
+- **Pair with positive recovery:** For every recorded gotcha, specify both the forbidden failure and the required recovery action.
+- **Retire as models advance:** Frontier model updates resolve older reasoning traps. An isolated section allows rapid auditing, iteration, and pruning without disrupting core instructions.
+
+### 13. Pruning Discipline
 
 Maintain strict pruning discipline to preserve model attention:
 
@@ -227,7 +230,7 @@ Maintain strict pruning discipline to preserve model attention:
 - **Template projection:** Never paste complete template files into reference prose. Keep authoritative templates in `templates/` or generator scripts, and point to them.
 - **Cut in dedicated passes:** Draft content completely first. Then audit each sentence to verify what concrete behavior it changes. Delete sentences that provide only narrative filler or backstory.
 
-### 13. Diagnosing Failure Modes
+### 14. Diagnosing Failure Modes
 
 Identify and resolve these structural failure modes:
 
@@ -245,7 +248,7 @@ Identify and resolve these structural failure modes:
 | **Self-grading** | Prose uses vague praise without empirical proof. | Replace adjectives with measurable conditions and explicit verification commands. |
 | **Lecturing** | Text offers generic advice without concrete guidance. | Point to specific edge cases or remove the lecture. |
 
-### 14. Harness Wiring and Verification
+### 15. Harness Wiring and Verification
 
 Apply these integration patterns across the harness:
 
