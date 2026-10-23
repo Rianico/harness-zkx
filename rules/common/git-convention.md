@@ -1,6 +1,6 @@
-# Git Convention — daily default
+# Git Convention — Daily Default
 
-`dev worktree → task sub-worktree → squash to dev → curated [Unreleased] → PR → squash or merge commit to main` — never auto-merge.
+Follow the staged workflow. Branch a task sub-worktree from `dev`. Squash into `dev`, curate the changelog, and PR to `main`. Never auto-merge.
 
 ## 1. Branch
 
@@ -10,14 +10,14 @@
 
 ## 2. Repo identity
 
-- Multi-remote trap: bare `gh` commands resolve to upstream, not your push target.
-- Truth order: `branch.<ref>.pushRemote` → `branch.<ref>.remote` → `origin`.
+- Avoid multi-remote traps: bare `gh` commands resolve to upstream instead of your push target.
+- Determine repository identity in order: `branch.<ref>.pushRemote` → `branch.<ref>.remote` → `origin`.
 - Always pass `--repo <owner/repo>` to `gh` commands.
-- Confirm resolved slug against `git remote -v` before mutating calls.
+- Confirm the resolved slug against `git remote -v` before mutating calls.
 
 ## 3. Worktree & Hierarchy
 
-- Use `dev` worktree as the integration anchor.
+- Use the `dev` worktree as the integration anchor.
 - Branch task sub-worktrees off `dev`: `wt switch --create <task> --base dev --no-cd`.
 - Squash-merge task worktrees into `dev`: `wt merge --squash`.
 - Always use `wt` commands (`wt switch`, `wt merge`).
@@ -26,8 +26,8 @@
 
 ## 4. Gate
 
-- `.config/wt.toml [pre-merge]` executes on every `wt merge`.
-- Merge only when green.
+- The `.config/wt.toml [pre-merge]` hook runs on every `wt merge`.
+- Merge only after all checks pass green.
 
 ## 5. Commits & Changelog Ledger
 

@@ -10,7 +10,7 @@ Blocking signals are hard gates. Never bypass verification. Fix failures at the 
 - **Prohibited:** Never use `--no-verify`, `--no-gpg-sign`, `--force`, or raw `git worktree add` and `git merge`.
 - **Prohibited:** Never disable gates or alter tooling configs (`.config/wt.toml`, `.githooks/`, linter configs, CI workflows) to silence errors.
 - **Action:** Fix code, config, or tests at source until all gates pass green.
-- **False positives:** Suppress only at the narrowest seam with invariant and owner (`// SAFETY:`, `// ast-grep-ignore:`).
+- **False positives:** Suppress only at the narrowest possible line or scope with invariant and owner (`// SAFETY:`, `// ast-grep-ignore:`).
 
 ---
 
@@ -26,7 +26,7 @@ Blocking signals are hard gates. Never bypass verification. Fix failures at the 
 
 - **Trigger:** Commit or rebase blocked by a gate.
 - **Prohibited:** Never set `GIT_EDITOR=true` or `EDITOR=:` to auto-accept blocked commits.
-- **Action:** Use headless editor only for non-gate plumbing after all checks pass green.
+- **Action:** Use headless editors only for non-gate plumbing after all checks pass green.
 
 ---
 
@@ -52,4 +52,4 @@ Blocking signals are hard gates. Never bypass verification. Fix failures at the 
 
 - **Taint:** Bypassing gates taints shell provenance as untrusted. This blocks future actions until terminal restart.
 - **Evidence:** Bypasses break the EDD evidence loop. Verification requires real tool output.
-- **Escalation:** Suppress false positives at the smallest seam with a documented invariant. Never bypass gates.
+- **Escalation:** Suppress false positives at the narrowest possible line or scope with a documented invariant. Never bypass gates.

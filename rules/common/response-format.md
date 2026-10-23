@@ -5,11 +5,11 @@
 
 Subagents, lane workers, and autonomous tasks must format output using standard headings:
 
-- **`## Summary`**: Carmack-style technical approach, architectural rationale, state tradeoffs (≤100 words).
-- **`## Artifacts`**: Absolute paths to touched/created files (`<path> (<spec|diff|report|eval|pr>)`). Never paste file bodies.
-- **`## Evidence`**: Deterministic verification command results (`<check_name>: PASS|FAIL (<cmd>)`).
-- **`## Route`**: `continue` | `remediate` | `blocked`.
-- **`## Issues`**: `[P1|P2|P3] <file>:<line> — <Invariant>: <Defect>. Remediation: <Fix>`. (Empty or "None" if clean).
-- **`## Suggestions`**: Non-blocking observations on tooling/environment friction (≤2 items, optional).
+- **`## Summary`**: Carmack-style delivery of the technical approach, architectural rationale, and state tradeoffs in 100 words or fewer.
+- **`## Artifacts`**: List absolute paths for modified or created files (`<path> (<spec|diff|report|eval|pr>)`). Never paste full file contents.
+- **`## Evidence`**: Report deterministic verification commands and outcomes (`<check_name>: PASS|FAIL (<cmd>)`).
+- **`## Route`**: Specify next action: `continue`, `remediate`, or `blocked`.
+- **`## Issues`**: Report issues as `[P1|P2|P3] <file>:<line> — <Invariant>: <Defect>. Remediation: <Fix>`. State `None` if clean.
+- **`## Suggestions`**: Share optional non-blocking observations on tooling or environment friction (at most two items).
 
 Deep reference, JSON schema, and severity taxonomy: `skills/ai-engineering-expert/subskills/subagent-engineering/references/resp-format.md`.

@@ -5,10 +5,11 @@ paths:
 
 # Markdown Flavour — Standard links, Obsidian where safe
 
-Use standard markdown links `[text](path)` for cross-references in repo documents (skill files, agent docs, ADRs, changelogs). Do **not** write Obsidian wikilinks `[[Note]]` there: a wikilink names a vault-relative note, so a model or renderer without that vault cannot locate the target. Resolve the real path first, then link it.
+Use standard markdown links `[text](path)` for cross-references in repository documents. These include skill files, agent docs, ADRs, and changelogs. Avoid Obsidian wikilinks `[[Note]]` in repository documents. A wikilink targets a vault-relative note. A model or renderer without that vault cannot resolve the target. Resolve the real path first, then link it.
 
-Other Obsidian syntax is fine when it stays readable outside a vault: callouts `> [!type]`, `==highlight==`, tags `#tag`/`#nested/tag`. Wikilinks are correct only inside a real Obsidian vault — use the `obsidian-markdown` skill there.
+Use other Obsidian syntax when it stays readable outside a vault. Supported elements include callouts `> [!type]`, `==highlight==`, and tags `#tag` or `#nested/tag`. Use wikilinks only inside a true Obsidian vault with the `obsidian-markdown` skill.
 
-- Properties (`title`, `tags`, `date`, `aliases`, `cssclasses`) — only personal/task notes, never skill files or structured artifacts.
-- Exceptions: scraped/external docs → standard markdown; SKILL.md frontmatter → the `skill-authoring` reference (`skills/ai-engineering-expert/subskills/skill-authoring/references/skill-authoring.md`).
-- Deep syntax → `obsidian-markdown` skill.
+- Keep properties (`title`, `tags`, `date`, `aliases`, `cssclasses`) in personal notes. Never place properties in skill files or structured artifacts.
+- Use standard markdown links for scraped or external documentation.
+- For SKILL.md frontmatter, follow the `skill-authoring` reference (`skills/ai-engineering-expert/subskills/skill-authoring/references/skill-authoring.md`).
+- For advanced vault features, load the `obsidian-markdown` skill.
