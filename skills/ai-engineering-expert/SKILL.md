@@ -29,12 +29,23 @@ AI engineering turns human intent into verified artifacts. **IDD** owns intent. 
 
 ### 1. IDD (Intent-Driven Development): Source of Authority
 
-IDD answers *Why change reality?* It anchors purpose and boundary invariants before code or goals exist. The **4-part Intent Formula** records:
+IDD answers *Why change reality?* It anchors purpose and boundary invariants before code or goals exist.
 
+Clear, concise human intent is the prerequisite of all execution. Ambiguous direction always causes disaster. Never assume intent arrives fully formed. Humans experience symptoms and solution biases. They carry unknown unknowns. The harness must actively draw out intent before formalizing goals.
+
+#### Intent Probing Rules
+- **Look Before You Ask**: Investigate the environment (code, git history, dependencies) first. Facts belong to the harness. Decisions belong to the user.
+- **Excavate Unknown Unknowns**: Match ambiguity to the probing pattern (root-cause drilling, approaches matrix, decision frontiers).
+- **Say Defaults Out Loud**: Never leave implicit architectural assumptions unvoiced. A default the user never heard is one they could not reject.
+- **The Confirmation Gate**: Settle the **Intent Contract** with explicit human alignment before entering GDD.
+
+#### The Intent Contract
 - **Problem**: Concrete deficiency, friction, or regression in the current state.
 - **Proposed Outcome**: Observable change in behavior, capability, or invariant once resolved.
 - **Affected Seams**: Architectural boundaries, module interfaces, or protocols touched.
-- **Non-Negotiable Constraints**: Invariants, backward compatibility, performance ceilings, or forbidden patterns.
+- **Non-Negotiable Constraints**: Invariants, backward compatibility, performance ceilings, and explicit **Non-Goals**.
+
+> Pointer: [Intent-Driven Development](references/intent-driven-development.md). Use when probing ambiguous requests, excavating unknown unknowns, or establishing intent contracts.
 
 ### 2. GDD (Goal-Driven Development): Derived Operational Spine
 
