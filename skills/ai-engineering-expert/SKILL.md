@@ -22,16 +22,14 @@ Core principles for building reliable AI systems in the LSZ harness. This file h
 
 AI engineering turns human intent into verified artifacts. **IDD** owns intent. **GDD** derives goals from intent.
 
-Two owners split the work:
-
-- **Formal Substrate**: Compilers, linters, typecheckers, databases, and tests return pass/fail. It owns environmental truth. The model never supplies verification data and never echoes text to prove honesty.
+- **Formal Substrate**: Compilers, linters, typecheckers, and tests return pass/fail. The substrate owns environmental truth and supplies verification data.
 - **Semantic Reasoner**: The model navigates ambiguity, resolves conflicts, and proposes integrations when the substrate reports an impasse.
 
-> Reference: [Information boundary pattern](references/information-boundary.md)
+> Pointer: [Information boundary pattern](references/information-boundary.md). Use when you split a check between tool and model.
 
 ### 1. IDD (Intent-Driven Development): Source of Authority
 
-Answers *Why change reality?* Anchors purpose and boundary invariants before anyone writes code or goals. Defined by the **4-part Intent Formula**:
+IDD answers *Why change reality?* It anchors purpose and boundary invariants before code or goals exist. The **4-part Intent Formula** records:
 
 - **Problem**: Concrete deficiency, friction, or regression in the current state.
 - **Proposed Outcome**: Observable change in behavior, capability, or invariant once resolved.
@@ -40,106 +38,87 @@ Answers *Why change reality?* Anchors purpose and boundary invariants before any
 
 ### 2. GDD (Goal-Driven Development): Derived Operational Spine
 
-Derives verifiable milestone world states from intent. Answers *What world state confirms the intent was realized?*
+GDD derives verifiable milestone world states from intent. It answers *What world state confirms the intent was realized?*
 
 ### 3. The Derivation Chain
 
 1. **Intent (IDD)**: Establishes human purpose and boundary invariants.
 2. **Derived Goals (GDD)**: Converts intent into discrete, ordered milestone states.
-3. **BDD Contracts**: Defines behavior as Given/When/Then acceptance criteria. Turns guessing into structured translation.
-4. **EDD Verification**: Runs `test`, `lint`, and `typecheck`. Never trust what the model says it did. **Environmental Truth is the Supreme Authority.**
+3. **BDD Contracts**: Defines behavior as Given/When/Then acceptance criteria.
+4. **EDD Verification**: Runs `test`, `lint`, and `typecheck`. **Environmental Truth is the Supreme Authority**, above any model claim.
 
 Both ends are mandatory:
 
-- **Goal without intent** causes **Specification Gaming** (Goodhart's Law). The agent optimizes the metric itself: mock tautologies, stubbed checks, deleted assertions, broken cross-cutting invariants. It defeats the human purpose.
-- **Intent without goal** causes **Semantic Drift**: unbounded refactors of unrelated files that never converge on verifiable completion.
+- **Goal without intent** causes **Specification Gaming** (Goodhart's Law): the agent optimizes the metric itself.
+- **Intent without goal** causes **Semantic Drift**: unbounded refactors that never converge.
 
 ### 4. Root-Cause Archetypes for Agent Failure
 
 Build checks over writing rules. Classify each failure by cause:
 
-- **Mechanical Violation** (syntax, argument types, banned APIs, file paths, dump sizes) → Add a deterministic tool to the Formal Substrate (compilers, linters, property tests, pre-commit hooks). Never patch via prose.
-- **Semantic Ambiguity** (model interpreted guidance plausibly but diverged from intent) → Refine the prompt contract (tripartite formula, negative boundary, concrete input/output specs, STE-100 terminology).
-- **Semantic Disregard / No-Op** (rule is clear, model ignored it under context pressure) → Enforce via Context Pressure Asymmetry (move it to the Skeptic reviewer) or a hard tool gate. Prune ignored prose.
-- **Route Friction** (model bypassed the rule because compliance was manual or multi-step) → Pack the steps into `scripts/<cmd>`. Make the governed path the cheapest path.
+- **Mechanical Violation** (syntax, types, banned APIs, file paths) → Add a deterministic tool to the Formal Substrate.
+- **Semantic Ambiguity** (plausible but divergent reading) → Refine the prompt contract: tripartite formula, negative boundary, input/output specs, STE-100 terms.
+- **Semantic Disregard** (clear rule, ignored under pressure) → Enforce via Context Pressure Asymmetry, or a hard tool gate.
+- **Route Friction** (manual compliance) → Pack the steps into `scripts/<cmd>`. Make the governed path the cheapest.
 
----
+## Context Architecture & Progressive Disclosure
 
-## Expert Knowledge Activation
+Context load is a primary architectural constraint. Attention degrades as context grows.
 
-Name the canonical work for a mental model. Invoke the installed skill for a checklist.
+### The 80/20 Rule
 
-### 1. Parametric Anchoring
+`SKILL.md` holds the 20% that solves 80% of problems. Reference files behind context pointers hold the deep 80%, recursively across spine, subskills, and references.
 
-Name the canonical source. A canonical name activates structured prior knowledge at low token cost.
+Read the [context-load policy](references/context-load-policy.md) for invocation classes and description budgets. Use when you set a load cost.
 
-- **Module design**: when a task places a seam, use Ousterhout's terms: deep module, information hiding, narrow interface.
-- **Test-first work**: when a test must fail first, use Kent Beck's red-green-refactor loop and name the failing assertion.
-- **Refactoring**: when a change touches existing code, name the smell (divergent change, shotgun surgery) before the mechanics.
-- **Interface contracts**: when narrowing an interface, state the Liskov case — which caller expectation must still hold.
+### Root Steering via AGENTS.md
 
-Parametric recall supplies shape, not proof. Confirm specifics against a skill or a check before you rely on them.
+- `AGENTS.md` is the open standard ([agents.md](https://agents.md)). The closest file wins. Nested files are supported. `CLAUDE.md` and other agent variants are compatibility mirrors. Keep the file to navigation pointers.
 
-### 2. Context Skill Activation
+### Activate Knowledge on Demand
 
-Invoke the installed skill instead of inlining its methodology into a prompt:
+- **Dispatch on Demand**: Isolate specialized workflows into subskills. Load them by handle. On-demand loading costs one invocation and keeps base context focused.
+- **Parametric Anchoring**: Name the canonical source for cheap recall.
+  - **Module design**: When a task places a seam, use Ousterhout's terms: deep module, information hiding, narrow interface.
+  - **Test-first work**: When a test must fail first, use Kent Beck's red-green-refactor loop.
+  - **Refactoring**: When a change touches existing code, name the smell first: divergent change, shotgun surgery.
+  - **Interface contracts**: When you narrow an interface, state which caller expectation must still hold.
 
-- **Deep module and seam design**: invoke the `Skill` tool for `codebase-design` where installed, else use the APoSD terms above.
-- **Language idioms**: invoke `Skill(skill="programming-expert", args="<language>")`.
-- **Strict red-green-refactor**: invoke `tdd-expert` where installed. Otherwise state the loop in the prompt.
-- **Pass/fail acceptance**: invoke `Skill(skill="eval-gate", args="define")`, then `args="check"` to verify.
+Parametric recall supplies shape, not proof. Confirm specifics against a check.
 
-Place each role by scope: agent for identity, skill for methodology, phase prompt for one step, rule for repo-wide constraints.
+- **Invoke the Skill**: When a task needs domain methodology, invoke the installed skill for that domain. Keep the methodology out of the prompt.
+- **Separate the Scopes**: The agent owns identity and action space. The skill supplies domain methodology. The rule holds repo-wide constraints. The phase prompt covers one step.
 
-### 3. Context Pressure Asymmetry
+### Context Pressure Asymmetry
 
 Split implementation from review. Each side carries a different context load:
 
-- **Implementer**: give it the full budget — exploration, drafts, failing output. Keep standards and style out of its prompt.
-- **Reviewer**: give it the diff only, with zero exploration. Load standards, invariants, and skepticism there.
+- **Implementer**: Give it the full budget: exploration, drafts, failing output. Keep standards out of its prompt.
+- **Reviewer**: Give it the diff only, with zero exploration. Load standards, invariants, and skepticism there.
 
----
+### Pruning & Artifact Hygiene
 
-## Progressive Disclosure & Context Load
+Every change must preserve or improve organization. Accumulation creates bloat.
 
-Context load is a primary architectural constraint. Attention degrades and costs rise as context grows. Load guidance only when a task needs it.
-
-- **The 80/20 Rule**: The 20% of knowledge that solves 80% of problems lives in `SKILL.md`. The deep 80% lives in reference files behind context pointers. This applies recursively: parent spine, subskills, and subskill references.
-- **Root Steering via `AGENTS.md`**: the open standard ([agents.md](https://agents.md)). Closest file wins. Nested files are supported. `CLAUDE.md` and other agent variants are compatibility mirrors. Keep to navigation pointers, never inline specs.
 - **Prune No-Ops**: Delete steering instructions that do not measurably alter agent decisions.
-- **Dispatch on Demand**: Isolate specialized workflows into sub-skills. Load them by handle, never by pasting their bodies.
+- **Audit before you edit**: Find the redundancy, then the right home. Every addition names the old content it replaces.
+- **One concept, one canonical location**: Group by topic. Reference the canonical source instead of copying it.
+- **Signals of failure**: Files over the size budget, duplicated concepts, catch-all sections, unclear ordering.
+- **Normalize paths**: Always use forward slashes.
+- **Gate structural changes**: Run `validate-deps.py check` after a rename, move, or dependency change. Run `lint` after a metadata edit.
+- **Tooling Preference**: Use `rg` for content search and `fd` for file discovery. Reserve `ls` and `tree` for structure.
 
-For invocation classes, description budgets, and platform prompt filtering, read the [context-load policy](references/context-load-policy.md). For authoring a new skill, load `skill-authoring`.
+## Execution & Delegation Boundaries
 
----
+### Subagent-First Execution
 
-## Skill Creation
+**The orchestrator never does implementation work.** Route, dispatch, monitor, and synthesize in the primary agent. Keep code writing, file edits, and verbose test triage inside subagents. This mandate covers every coding agent.
 
-Creating, editing, or debugging a skill? Read `subskills/skill-authoring/SKILL.md` before you write anything. It holds the taxonomy, the three phases (Gather, Draft, Review), the frontmatter contract, and the checklist.
+- Dispatch mechanics: read [Subagent-first execution](references/subagent-first-execution.md). Use when you write a dispatch prompt.
+- Dispatch decisions: read `subskills/subagent-engineering/SKILL.md`. Use when you decide whether to dispatch, pick a context topology, or tier the model.
+- **Hero-Mode Prevention**: Generic models ignore delegation under load, so dispatching skills SHOULD define explicit execution schemas.
 
-The spine holds only the decision:
-
-- **Embed, don't create**: an Atomic, Universal workflow under 300 words belongs in the agent, not in a skill.
-- **Pick one of three types**: Orchestration sequences phases and parties. Workflow owns phases and artifacts. Domain Knowledge supplies retrieval-time expertise.
-
-Gates: `validate-deps.py lint` for conventions, `validate-deps.py context-check` for the context-load budget. The `check`, `related`, and `sync` subcommands live in `skill-authoring`.
-
----
-
-## High-Fidelity Handoffs
-
-A handoff transfers intent and pointers, never duplicated technical detail ([ADR-0009](../../docs/adr/0009-behavioral-evals-and-manifest-indexed-handoffs.md)). Subsequent agents initialize state from the handoff and referenced artifacts, displacing prior conversation history.
-
-- **Intent First**: Capture the "Why" and explicit user constraints.
-- **Artifact Trail**: Pass absolute pointers to durable artifacts (`design.md`, `mission_manifest.json`, diffs).
-- **Zero Duplication**: Never repeat technical decisions, file lists, or test results already present in artifacts.
-- **Suggested Skills**: Name the next directive and specific skills to invoke.
-
-To generate a phase handoff, invoke the `handoff` skill.
-
----
-
-## Model Routing
+### Model Routing
 
 | Model Tier | Use For                                               | Avoid                                     |
 | ---------- | ----------------------------------------------------- | ----------------------------------------- |
@@ -147,106 +126,34 @@ To generate a phase handoff, invoke the `handoff` skill.
 | Balanced   | Implementation, refactors, multi-file work            | Root-cause analysis, subtle invariants    |
 | Strong     | Architecture, root-cause analysis, complex invariants | Simple tasks (wasteful)                   |
 
-Escalate tier only when lower tier fails with a clear reasoning gap.
+Escalate tier only when a lower tier fails with a clear reasoning gap.
 
----
+### High-Fidelity Handoffs
 
-## Subagent-First Execution
+A handoff transfers intent and pointers to durable artifacts. The next agent initializes state from them.
 
-> [!IMPORTANT] Universal Mandate Across All Coding Agents
-> Subagent-First Execution is a **Universal Mandate across all coding agents** (`pi`, `claude`, `agy`, `cursor`, `cline`, `codex`, `gemini`, and others).
->
-> Any coding agent handling high-noise tasks **MUST delegate to ephemeral subagents**. This covers broad exploration, recursive symbol searches, bulk editing, verbose build traces, and adversarial crux review. The same rule applies when only the final conclusion or artifact is needed. This guarantees:
-> 1. **Context Isolation**: High-entropy intermediate output (hundreds of lines of file dumps, compile errors, stack traces) stays trapped in disposable subagent contexts.
-> 2. **Parallel Execution**: Independent investigations or reviews execute concurrently across separate context budgets.
-> 3. **Compaction Prevention**: The primary agent's working memory remains lean and focused, avoiding compaction degradation, instruction amnesia, and lost constraints.
->
-> **The orchestrator never does implementation work**. Implementers never do heavy exploration, bulk refactoring, or verbose test triage directly in the host pane.
+- **Intent First**: Capture the "Why" and the user constraints.
+- **Artifact Trail**: Pass absolute pointers to durable artifacts.
+- **Zero Duplication**: Reference technical decisions, file lists, and test results through their artifacts.
+- **Suggested Skills**: Name the next directive and the skills to invoke.
 
-The primary agent routes, dispatches with structured prompts, monitors, synthesizes summaries, and passes pointers between phases. It never writes code, edits files, runs verbose tests in the host pane, or reads full artifact contents into context.
+### Deterministic Script Packing
 
-### Subagent Response Contract
+Plain shell steps that the model rewrites each time add variance. Tighten by packing.
 
-Every subagent MUST return the canonical structured response ([resp-format.md](references/resp-format.md), [lane-coordination.md](../herdr/references/lane-coordination.md)):
-
-| Field        | Purpose                                                        |
-| ------------ | -------------------------------------------------------------- |
-| **Summary**  | Approach and reasoning, ≤100 words — not a play-by-play log    |
-| **Artifacts**| Absolute file paths to generated plans, code, or reviews       |
-| **Evidence** | Deterministic check results (`name`: PASS/FAIL + command)      |
-| **Route**    | `continue`, `remediate`, or `blocked`                          |
-| **Issues**   | Discovered risks, each with severity, `file:line`, remediation |
-
-### Execution Profile Boundary
-- **Heavy Mutation & Implementation**: Subagent-first is mandatory. Keeps primary agent context clean and isolates trial-and-error churn.
-- **Diagnostic & Audit Pipelines**: Standalone retrospective audits (`harness-audit`) may run as in-process linear pipelines in scratch directories. Dispatch **mid-session diagnostics** (such as trigger failures) to a subagent with forked context. This prevents diagnostic meta-chatter from bloating the parent session's working memory.
-
-### Dispatch Pattern
-
-Always use structured dispatch templates. Every dispatch MUST specify the expected response format.
-
-```markdown
-Agent tool (<subagent_type>):
-description: "<short task summary>"
-prompt: |
-<context and requirements>
-<execution instructions>
-
-    Return format per skills/ai-engineering-expert/references/resp-format.md:
-    ## Summary
-    ## Artifacts
-    ## Evidence
-    ## Route (if applicable)
-    ## Issues
-```
-
-### Pointer-Based State Passing
-
-Subagents exchange state through **file paths**, not content. The orchestrator passes pointers. Subagents read and write artifacts at those paths. Preserves orchestrator context budget and supports large artifacts.
-
-Reference: [Subagent-first execution](references/subagent-first-execution.md) — full DOES/NEVER tables, dispatch examples, summary style, anti-patterns.
-
----
-
-## Artifact Hygiene
-
-Every change must preserve or improve organization. Accumulation creates bloat. Scattered knowledge creates discovery failures.
-
-- **Audit before you edit**: find the redundancy, then the right home. Every addition must name the old content it replaces.
-- **One concept, one canonical location**: reorganize and group by topic when needed. Reference the canonical source instead of copying.
-- **Signals of failure**: files over the size budget, duplicated concepts, catch-all sections, unclear ordering.
-- **Normalize paths**: always use forward slashes.
-- **Gate structural changes**: run `validate-deps.py check` after a rename, move, or dependency change. Run `lint` after a metadata edit.
-
----
-
-## Trade-Offs
-
-Design decisions the architecture makes intentionally:
-
-- **Latency vs Context Efficiency**: on-demand loading costs one extra `Skill` call. It keeps base context focused. Load only what the sub-task needs.
-- **Hero-Mode Prevention**: generic models ignore delegation under load. Skills that dispatch agents SHOULD define explicit execution schemas. Stable templates force orchestration mode.
-- **Tooling Preference**: prefer `rg` for content search and `fd` for file discovery. Avoid `grep`, `find`, and built-in search tools. Reserve `ls` and `tree` for structure.
-
----
-
-## Skill Refinement Pattern
-
-When workflow steps are plain shell that the model rewrites each time, they add variance. Tighten by packing.
-
-- **Pack plain steps into scripts**. Put repeated `git`, `wt`, `gh`, `npm` lines into `scripts/`. Use shell for file and branch work. Use Python for checks that read `json`. The guide then calls `scripts/<name> <args>`. The guide is the router, scripts hold the steps. A step is done when the script exits `0`. Each packed fix removes the replaced inline lines so the guide stays lean.
-- **Use plain words.** Keep prompts as `branch, copy, merge, conflict, fix, test, check, file, folder`. Plain words travel reliably and keep the guide short.
+- **Pack plain steps into scripts**: Put repeated `git`, `wt`, `gh`, and `npm` lines into `scripts/`. Use shell for file work and Python for `json` checks. The guide calls `scripts/<name> <args>`. A step is done when the script exits `0`. Remove the replaced inline lines.
+- **Use plain words**: Keep prompts as `branch, copy, merge, conflict, fix, test, check, file, folder`. Plain words travel reliably and keep the guide short.
 
 ## Sub-Skill Dispatch
 
-This skill manages five domain-specific sub-skills. Dispatch on task-match OR explicit `domain` argument — never wait for the user to name the domain. When writing or editing any agent-consumed document, load `writing-for-agents`. This covers SKILL.md, AGENTS.md, CLAUDE.md, and pointer docs. Do this even when the primary domain is `skill-authoring`.
+Dispatch on a task match or an explicit `domain` argument. Infer the domain from the task.
 
-| Domain                 | Sub-Skill                                            | Covers                                                                                                                                                                                                    |
-| ---------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skill-authoring`      | `$SKILL_DIR/subskills/skill-authoring/SKILL.md`      | **Creating, editing, or debugging a skill** → Skill design, descriptions, invocation classes, description budgets, platform sync, rules-vs-skills boundary, progressive disclosure, parent-skill pattern, authoring checklists |
-| `subagent-engineering` | `$SKILL_DIR/subskills/subagent-engineering/SKILL.md` | **Designing an agent or a delegation workflow** → Action space design, observation design, error recovery, parallel execution, orchestration constraints, agent frontmatter |
-| `verification`         | `$SKILL_DIR/subskills/verification/SKILL.md`         | **Deciding how to prove a change works** → EDD, deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loop, runtime trace fixtures |
-| `writing-for-agents`   | `$SKILL_DIR/subskills/writing-for-agents/SKILL.md`   | **Writing any agent-consumed doc** → Agent-document writing — context pointers, hierarchy, progressive disclosure, completion criteria, leading words, pruning; use for any SKILL.md/AGENTS.md/CLAUDE.md or narrative rigor in skill-authoring |
-| `writing-for-humans`   | `$SKILL_DIR/subskills/writing-for-humans/SKILL.md`   | **Writing an issue, RFC, or proposal** → Human-facing proposal writing — problem-first framing, evidence grounding, scannability, explicit asks, non-goals; use for GitHub issues, RFCs, and proposals a maintainer triages |
+Load `writing-for-agents` for any agent-consumed document, including `SKILL.md` and `AGENTS.md`. Do this even when the primary domain is `skill-authoring`.
 
-**Dispatch:** Read the matching sub-skill file and follow its instructions. A skill-creation task always loads `skill-authoring`. With no matching trigger, only the philosophy above is loaded.
+- `skill-authoring` -- Use when you create, edit, or debug a skill (`$SKILL_DIR/subskills/skill-authoring/SKILL.md`).
+- `subagent-engineering` -- Use when you design an agent or a delegation workflow (`$SKILL_DIR/subskills/subagent-engineering/SKILL.md`).
+- `verification` -- Use when you decide how to prove a change works (`$SKILL_DIR/subskills/verification/SKILL.md`).
+- `writing-for-agents` -- Use when you write any agent-consumed doc (`$SKILL_DIR/subskills/writing-for-agents/SKILL.md`).
+- `writing-for-humans` -- Use when you write an issue, RFC, or proposal (`$SKILL_DIR/subskills/writing-for-humans/SKILL.md`).
+
+Run `validate-deps.py lint` to check conventions. Run `validate-deps.py context-check` to check the load budget.
