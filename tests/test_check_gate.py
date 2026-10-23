@@ -46,6 +46,19 @@ GATE_COMMANDS = [
     "uv run ruff check .",
     "uv run ruff format --check .",
     "uv run basedpyright --warnings",
+    "uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint",
+    "uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check",
+    "uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check",
+    (
+        "uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py"
+        " skills/ai-engineering-expert/SKILL.md"
+        " skills/ai-engineering-expert/subskills/skill-authoring/SKILL.md"
+        " skills/ai-engineering-expert/subskills/subagent-engineering/SKILL.md"
+        " skills/ai-engineering-expert/subskills/verification/SKILL.md"
+        " skills/ai-engineering-expert/subskills/writing-for-agents/SKILL.md"
+        " skills/ai-engineering-expert/subskills/writing-for-humans/SKILL.md"
+        " skills/ai-engineering-expert/subskills/subagent-engineering/references/tool-design-contracts.md"
+    ),
     "uv run --group dev pytest",
 ]
 
@@ -163,7 +176,7 @@ def _assert_grades_harness_from_foreign_dir(tmp_path: Path, extra_env: dict[str,
     assert result.returncode == 0, f"graded the foreign tree:\n{result.stdout}\n{result.stderr}"
     assert f"==> checking {HARNESS_ROOT}" in result.stdout
     records = calls.read_text().splitlines()
-    assert [line for line in records if not line.startswith("pwd=")] == STUB_GATE_LOG[:3]
+    assert [line for line in records if not line.startswith("pwd=")] == STUB_GATE_LOG[:7]
     assert set(line for line in records if line.startswith("pwd=")) == {f"pwd={HARNESS_ROOT}"}
 
 
@@ -224,7 +237,7 @@ def test_check_script_unsets_cdpath_and_grades_harness(tmp_path: Path) -> None:
     assert f"==> checking {HARNESS_ROOT}" in result.stdout
     assert str(shadow) not in result.stdout, "graded the CDPATH shadow"
     records = calls.read_text().splitlines()
-    assert [line for line in records if not line.startswith("pwd=")] == STUB_GATE_LOG[:3]
+    assert [line for line in records if not line.startswith("pwd=")] == STUB_GATE_LOG[:7]
     assert set(line for line in records if line.startswith("pwd=")) == {f"pwd={HARNESS_ROOT}"}
 
 
@@ -240,7 +253,7 @@ def test_skip_tests_exit_zero_and_gate_banners() -> None:
     assert result.returncode == 0, result.stderr[-2000:]
     # Regression: check.sh prints the PHYSICAL root (pwd -P), never a /tmp alias.
     assert f"==> checking {HARNESS_ROOT}" in result.stdout
-    for banner in GATE_COMMANDS[:3]:
+    for banner in GATE_COMMANDS[:7]:
         assert banner in result.stdout, f"gate banner missing from stdout: {banner!r}"
 
 
@@ -250,9 +263,9 @@ def test_skip_tests_banner_reports_skipped_gate() -> None:
     assert result.returncode == 0, result.stderr[-2000:]
     assert "SKIPPED" in result.stdout
     assert "uv run --group dev pytest was skipped" in result.stdout
-    assert "3/4 gates passed (pytest skipped: --skip-tests)" in result.stdout
+    assert "7/8 gates passed (pytest skipped: --skip-tests)" in result.stdout
     # Pinning the absence: the unconditional "All gates passed." must not lie
-    # when gate 4 never ran.
+    # when gate 8 never ran.
     assert "All gates passed." not in result.stdout
 
 
@@ -266,16 +279,19 @@ def test_stubbed_gates_all_invoked_in_order(tmp_path: Path) -> None:
 
 
 def test_stubbed_gate2_failure_stops_before_gate3(tmp_path: Path) -> None:
-    """A failing gate 2 aborts the run; gate 3/4 tools are never invoked."""
+    """A failing gate 2 aborts the run; gate 3/8 tools are never invoked."""
     env, calls = _stub_toolchain(tmp_path, fail_pattern="run ruff format --check ")
     result = _run("bash", str(CHECK_SCRIPT), env=env, timeout=STUB_TIMEOUT)
     combined = result.stdout + result.stderr
     assert result.returncode != 0, combined
-    assert "FAILED: gate 2/4" in combined
+    assert "FAILED: gate 2/8" in combined
     invoked = calls.read_text()
     assert "run ruff check ." in invoked
     assert "basedpyright" not in invoked, "early stop broken: gate 3 ran after gate 2 failed"
-    assert "--group dev pytest" not in invoked, "early stop broken: gate 4 ran after gate 2 failed"
+    assert "validate-deps.py" not in invoked, (
+        "early stop broken: validate-deps ran after gate 2 failed"
+    )
+    assert "--group dev pytest" not in invoked, "early stop broken: gate 8 ran after gate 2 failed"
     assert "All gates passed." not in result.stdout
 
 
@@ -287,9 +303,9 @@ def test_check_script_deep_relative_invocation_grades_harness(tmp_path: Path) ->
     relative = os.path.relpath(CHECK_SCRIPT, deep)
     result = _run("bash", relative, "--skip-tests", cwd=deep, env=env, timeout=STUB_TIMEOUT)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert calls.read_text().splitlines() == STUB_GATE_LOG[:3]
+    assert calls.read_text().splitlines() == STUB_GATE_LOG[:7]
     assert f"==> checking {HARNESS_ROOT}" in result.stdout
-    assert "3/4 gates passed (pytest skipped: --skip-tests)" in result.stdout
+    assert "7/8 gates passed (pytest skipped: --skip-tests)" in result.stdout
 
 
 def test_check_script_gates_run_in_harness_root_from_foreign_cwd(tmp_path: Path) -> None:
@@ -309,7 +325,7 @@ def test_check_script_gates_run_in_harness_root_from_foreign_cwd(tmp_path: Path)
 
 
 def test_pre_commit_hook_forwards_to_check_script(tmp_path: Path) -> None:
-    """The hook must `exec scripts/check.sh` so all four real gates reach `uv`.
+    """The hook must `exec scripts/check.sh` so all eight real gates reach `uv`.
 
     Asserted through the stub argv log (a side effect of the real invocation),
     not banner text: echoing gate names from the hook cannot fake the log, and a
@@ -329,7 +345,7 @@ def test_pre_commit_hook_skip_tests_env_escape(tmp_path: Path) -> None:
     env["HARNESS_CHECK_SKIP_TESTS"] = "1"
     result = _run("bash", str(HOOK), env=env, timeout=STUB_TIMEOUT)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "3/4 gates passed (pytest skipped: --skip-tests)" in result.stdout
+    assert "7/8 gates passed (pytest skipped: --skip-tests)" in result.stdout
     assert "All gates passed." not in result.stdout
     assert "--group dev pytest" not in calls.read_text()
 
@@ -349,7 +365,7 @@ def _pre_merge_gate() -> str:
 def test_wt_pre_merge_gate_delegates_to_check_script() -> None:
     """The wt gate must bootstrap check.sh, never restate a weaker gate list.
 
-    Measured gap (#247): the gate ran two of check.sh's four steps, so a tree with
+    Measured gap (#247): the gate ran two of check.sh's eight steps, so a tree with
     formatting or type drift merged through `wt merge` while `bash scripts/check.sh`
     refused it. Naming a tool at this site re-opens that drift; the gate must invoke
     the script that owns the definition.
@@ -364,8 +380,8 @@ def test_wt_pre_merge_gate_delegates_to_check_script() -> None:
         assert tool not in gate, f"wt pre-merge gate restates the {tool!r} gate: {gate!r}"
 
 
-def test_check_script_performs_all_four_authoritative_steps() -> None:
-    """Delegation is only safe while check.sh still performs all four gates.
+def test_check_script_performs_all_eight_authoritative_steps() -> None:
+    """Delegation is only safe while check.sh still performs all eight gates.
 
     Pins the delegation target's own contents: `gate = "bash scripts/check.sh"`
     must not silently degrade into a weaker script that drops the formatter or the

@@ -61,11 +61,11 @@ done
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "not a git repository" 2
 if [[ -f scripts/changelog-gate.py ]]; then
-  if python3 scripts/changelog-gate.py ledger; then
+  if uv run scripts/changelog-gate.py ledger; then
     ok "$CHANGELOG ledger is valid and curated"
     exit 0
   else
-    fail "$CHANGELOG ledger has findings; run 'python scripts/changelog-gate.py ledger'" 1
+    fail "$CHANGELOG ledger has findings; run 'uv run scripts/changelog-gate.py ledger'" 1
   fi
 fi
 
@@ -86,7 +86,7 @@ git show "origin/$BASE:$CHANGELOG" >"$base_file" 2>/dev/null || fail "$CHANGELOG
 
 # Rebuild = base file + regenerated block, so formatting drift cannot ride along.
 cp "$base_file" "$rebuilt"
-python3 scripts/changelog-unreleased.py update --changelog "$rebuilt" >/dev/null
+uv run scripts/changelog-unreleased.py update --changelog "$rebuilt" >/dev/null
 
 added="$(diff "$CHANGELOG" "$rebuilt" 2>/dev/null | grep -c '^>' || true)"
 removed="$(diff "$CHANGELOG" "$rebuilt" 2>/dev/null | grep -c '^<' || true)"

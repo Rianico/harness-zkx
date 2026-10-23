@@ -125,7 +125,7 @@ Selection rule: **preset when confident, ask only when ambiguous.** If `inferred
 
 ## Grilling — Confirm Ambiguous Leaves
 
-Grilling is the selection projection **after** Explore First. One truth: `scaffold.py` owns bytes; dialogs own selection. Ask only for ambiguous leaves — skip any dialog where detection is confident (preset the answer and note `preset from detect: <evidence>`). Sequential, one question per dialog, 2–4 options + `Other`, header ≤20 chars — then map answers to the generator. Branch only on prior answer (see notes). Present each dialog as plain text per `dialog-contract.md`.
+Grilling is the selection projection **after** Explore First. One truth: `scaffold.py` owns bytes; dialogs own selection. Ask only for ambiguous leaves — skip any dialog where detection is confident (preset the answer and note `preset from detect: <evidence>`). Sequential, one question per dialog, 2–4 options + `Other`, header ≤20 chars — then map answers to the generator. Branch only on prior answer (see notes). Present each question as clear plain text with options and recommended defaults.
 
 ### Dialog 1 — Project Shape
 
