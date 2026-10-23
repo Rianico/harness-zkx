@@ -33,7 +33,7 @@ Everything else — headings, paragraphs, lists, bold, code, tables — passes t
 ## Usage
 
 ```bash
-uv run python3 skills/md-to-html/scripts/render.py <source.md> [-o output.html] [-f <flavor>]
+uv run python skills/md-to-html/scripts/render.py <source.md> [-o output.html] [-f <flavor>]
 ```
 
 ### Arguments
@@ -71,7 +71,7 @@ A skill only needs to follow the card section order and use the supported callou
 When developing or modifying a flavor's `style.css`, run the validator to ensure the CSS covers every class, attribute selector, and design token in the rendering contract:
 
 ```bash
-uv run python3 skills/md-to-html/scripts/validate_flavor.py <flavor>
+uv run python skills/md-to-html/scripts/validate_flavor.py <flavor>
 ```
 
 The validator parses the machine-readable manifest from `references/flavors/RENDERING-CONTRACT.md` and reports any missing selectors or tokens. A passing validator is required before committing CSS changes.
@@ -79,7 +79,7 @@ The validator parses the machine-readable manifest from `references/flavors/REND
 To list all required items without running a check:
 
 ```bash
-uv run python3 skills/md-to-html/scripts/validate_flavor.py --list
+uv run python skills/md-to-html/scripts/validate_flavor.py --list
 ```
 
 The self-consistency tests in `tests/md-to-html/test_contract.py` also verify that every class in rendered HTML is documented in the contract and vice versa — run the full suite after contract or renderer changes:
@@ -93,7 +93,7 @@ uv run pytest tests/md-to-html/ -q
 The `assets/` directory contains immutable files — third-party libraries and skill-owned scripts that must never be manually edited. To verify asset integrity against the locked manifest:
 
 ```bash
-uv run python3 skills/md-to-html/scripts/verify_assets.py
+uv run python skills/md-to-html/scripts/verify_assets.py
 ```
 
 This compares SHA-256 hashes of every file in `assets/` against `assets/MANIFEST.json`. If a file has been modified, deleted, or added without updating the manifest, the check fails.
@@ -101,7 +101,7 @@ This compares SHA-256 hashes of every file in `assets/` against `assets/MANIFEST
 After intentionally updating an asset (e.g., upgrading mermaid.min.js to a new version), regenerate the manifest:
 
 ```bash
-uv run python3 skills/md-to-html/scripts/verify_assets.py --update
+uv run python skills/md-to-html/scripts/verify_assets.py --update
 ```
 
 Then manually edit `assets/MANIFEST.json` to record the new `source` and `version` before committing.

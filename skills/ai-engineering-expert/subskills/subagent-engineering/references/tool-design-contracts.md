@@ -1,141 +1,125 @@
-# Harness Design
+# Tool Design Contracts
 
-Designing agent action spaces, tool definitions, and observation formatting for reliable completion.
+Designing agent action spaces, tool definitions, and observation formatting for reliable subagent execution.
 
 ## Core Quality Model
 
-Agent output quality is constrained by:
+Agent output quality depends on four core properties:
 
-1. **Action space quality** — Can the agent express the right operations?
-2. **Observation quality** — Does the agent see what it needs to decide?
-3. **Recovery quality** — Can the agent handle errors gracefully?
-4. **Context budget quality** — Is guidance loaded when needed, not before?
+1. **Action space quality:** Can the agent express the intended operations unambiguously?
+2. **Observation quality:** Does the agent receive clean environmental truth to guide decisions?
+3. **Recovery quality:** Can the agent handle errors gracefully without human intervention?
+4. **Context budget quality:** Is guidance loaded when needed, not before? (governed by [context-load-policy.md](../../../references/context-load-policy.md)).
+
+---
 
 ## Action Space Design
 
-### Rules
+### Core Principles
 
 1. **Use stable, explicit tool names**
-   - Prefer `create_user` over `user_management` with mode parameter
-   - Names should describe what happens, not what domain
+   - Prefer `create_user` over `user_management` with an action parameter.
+   - Names describe what happens, not the broad domain.
 
 2. **Keep inputs schema-first and narrow**
-   - Required fields explicit, optional fields minimal
-   - Avoid polymorphic inputs (same field accepts string or object)
+   - Make required fields explicit and keep optional fields minimal.
+   - Avoid polymorphic inputs where one field accepts multiple types.
 
 3. **Return deterministic output shapes**
-   - Same inputs → same structure, even on error
-   - Agents pattern-match on output; variance breaks reasoning
+   - Return the same structural schema for identical operations, even on error.
+   - Agents pattern-match on output. Variance degrades reasoning.
 
 4. **Avoid catch-all tools unless isolation is impossible**
-   - Generic `run_command` is necessary sometimes
-   - Prefer specific `deploy_service`, `run_tests`, `validate_config`
+   - Generic `run_command` is sometimes necessary.
+   - Prefer domain tools like `deploy_service`, `run_tests`, or `validate_config`.
 
-### Granularity Rules
+### Tool Granularity Matrix
 
-| Size | Use Case | Example |
-|------|----------|---------|
-| Micro | High-risk operations | `deploy_production`, `migrate_database`, `grant_admin_access` |
-| Medium | Common edit/read/search loops | `read_file`, `edit_file`, `grep_search` |
-| Macro | Round-trip overhead dominates | `process_pdf_batch` (when each file needs 10+ operations) |
+| Size | Use Case | Latency vs Risk | Example |
+|---|---|---|---|
+| **Micro** | Dangerous or destructive operations | High safety, higher round-trip overhead | `deploy_production`, `migrate_database` |
+| **Medium** | Common read, edit, or search loops | Balanced safety and throughput | `read_file`, `edit_file`, `grep_search` |
+| **Macro** | Batch operations with high round-trip overhead | Fast throughput, lower intermediate visibility | `process_pdf_batch`, `scrape_site_corpus` |
 
-When in doubt, start medium. Micro for safety, macro for latency.
+Start medium by default. Use micro for destructive operations and macro for high-volume pipelines.
 
-## Observation Design
+---
 
-Every tool response should include:
+## Observation Design Contracts
 
+Observation design depends on the tool runtime:
+
+### 1. Passive Runtime Truth (Shell & CLI Commands)
+
+Standard terminal commands return native execution truth:
+- Stream stdout, stderr, and exit codes directly.
+- Never wrap standard shell outputs in artificial JSON envelopes.
+- Capture output passively using pipes or log streams instead of polling with blind query loops.
+
+### 2. Structured Return Contracts (RPC & MCP Endpoints)
+
+Specialized RPC or Model Context Protocol (MCP) endpoints must return structured envelopes:
+
+```yaml
+status: success | warning | error
+summary: one-line result describing the outcome
+next_actions: list of actionable next steps
+artifacts: list of file paths, identifiers, or links produced
 ```
-status:       success | warning | error
-summary:      one-line result (what happened)
-next_actions: list of actionable follow-ups
-artifacts:    file paths, IDs, URLs produced
-```
 
-### Example
+#### Structured Success Example
 
 ```yaml
 status: success
 summary: "Created 3 database migrations for user schema changes"
 next_actions:
-  - "Run `npm run migrate:verify` to check migration validity"
-  - "Review generated files in `migrations/20241201_*.sql`"
+  - "Run npm run migrate:verify to check migration validity"
+  - "Review generated files in migrations/20241201_*.sql"
 artifacts:
   - migrations/20241201_add_user_profile.sql
   - migrations/20241201_add_user_preferences.sql
   - migrations/20241201_create_user_indexes.sql
 ```
 
-### Anti-Patterns
+---
 
-- Empty success with no artifacts
-- Error-only response with no recovery hint
-- Wall of text summary (should be one line)
-- Missing next_actions when agent could continue
+## Error Recovery Contracts
 
-## Error Recovery Contract
+Every tool error path must return actionable diagnostic metadata:
 
-For every error path, include:
+1. **Root cause hint:** State the concrete failure condition, not just that execution failed.
+2. **Safe retry instruction:** State what parameter or environment state to modify before retrying.
+3. **Explicit stop condition:** State when the subagent must stop and escalate to the orchestrator.
 
-1. **Root cause hint** — What went wrong, not just that it failed
-2. **Safe retry instruction** — What to change before retrying
-3. **Explicit stop condition** — When to escalate to human
-
-### Example
+### Error Recovery Example
 
 ```yaml
 status: error
-summary: "Migration failed: column 'email' already exists"
-root_cause: "The migration assumes a fresh schema, but this database has prior migrations"
-retry_instruction: "Run with --force to recreate schema, or remove conflicting migrations"
-stop_condition: "If --force fails or data loss risk, escalate to DBA"
+summary: "Migration failed: column email already exists"
+root_cause: "The migration assumes an empty schema, but the database holds prior tables"
+retry_instruction: "Run with --force to rebuild schema, or drop conflicting columns manually"
+stop_condition: "If --force fails or data loss risk exists, escalate to user"
 ```
 
-## Context Budgeting
+---
 
-1. **Keep system prompt minimal and invariant**
-   - Don't stuff with domain knowledge that changes per task
+## Tool Design Anti-Patterns
 
-2. **Move large guidance into skills loaded on demand**
-   - Progressive disclosure: metadata always, body on trigger, references as needed
+- **Polymorphic parameters:** A single argument accepting either a string or an object confuses the model.
+- **Forced JSON on shell tools:** Wrapping raw compiler output in JSON envelopes wastes tokens and breaks diff parsers.
+- **Opaque error strings:** Returning generic error codes with no root cause or retry guidance creates infinite retry loops.
+- **Overlapping tool semantics:** Providing multiple tools that perform similar operations forces the agent to guess.
+- **Unbounded toolsets:** Injecting dozens of tools into a subagent dilutes tool selection accuracy.
 
-3. **Prefer references to files over inlining long documents**
-   - "See [patterns.md](patterns.md) for detailed guidance" vs 200 lines inline
+---
 
-4. **Compact at phase boundaries, not arbitrary token thresholds**
-   - After completing a feature, compact history
-   - Don't compact mid-debugging (loses context)
+## Tool Authoring Checklist
 
-## Architecture Pattern Guidance
-
-| Pattern | Best For | Avoid |
-|---------|----------|-------|
-| ReAct | Exploratory tasks with uncertain path | Deterministic workflows |
-| Function-calling | Structured, predictable flows | Open-ended research |
-| Hybrid (recommended) | ReAct planning + typed tool execution | — |
-
-## Benchmarking
-
-Track:
-- **Completion rate** — % of tasks finishing successfully
-- **Retries per task** — Efficiency metric
-- **pass@1 and pass@3** — Success without vs with retries
-- **Cost per successful task** — Economic efficiency
-
-## Anti-Patterns
-
-- **Too many tools with overlapping semantics** — Agent wastes time choosing
-- **Opaque tool output with no recovery hints** — Agent gets stuck
-- **Error-only output without next steps** — Dead end
-- **Context overloading with irrelevant references** — Token waste, distraction
-
-## Summary Checklist
-
-Designing a new tool or harness:
-- [ ] Action name is stable and explicit
-- [ ] Input schema is narrow and typed
-- [ ] Output shape is deterministic
-- [ ] Errors include root cause, retry hint, stop condition
-- [ ] Success includes summary, next_actions, artifacts
-- [ ] Granularity matches risk (micro for dangerous, macro for efficient)
-- [ ] Not duplicating existing tools
+- [ ] Tool name is explicit, stable, and active-voice.
+- [ ] Input schema is narrow, strictly typed, and non-polymorphic.
+- [ ] Output schema returns deterministic shapes.
+- [ ] Shell tools return native stdout and stderr streams.
+- [ ] RPC and MCP tools return structured envelopes with summary and artifacts.
+- [ ] Error paths return root cause, retry instruction, and stop condition.
+- [ ] Granularity matches operation risk (micro for destructive, macro for batch).
+- [ ] Tool does not duplicate existing action space capabilities.

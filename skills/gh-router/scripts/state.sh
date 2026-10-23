@@ -85,7 +85,7 @@ fi
 # --- changelog guard verdict
 guard_line="no changelog script"
 if [[ -f "$ROOT/scripts/changelog-gate.py" ]] && [[ -f "$ROOT/CHANGELOG.md" ]]; then
-  if python3 "$ROOT/scripts/changelog-gate.py" ledger >/dev/null 2>&1; then
+  if uv run "$ROOT/scripts/changelog-gate.py" ledger >/dev/null 2>&1; then
     guard_line="ledger ok"
   else
     guard_line="ledger has findings"

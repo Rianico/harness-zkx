@@ -1,65 +1,114 @@
 ---
 name: subagent-engineering
 description: >-
-  Subagent design and execution methodology — action space design, observation formatting, error recovery, parallel execution, orchestration constraints, and agent frontmatter for the LSZ architecture.
+  Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, model selection, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
 metadata:
   managed-by: ai-engineering-expert
 ---
 
 # Subagent Engineering
 
-Designing agent action spaces, tool definitions, and observation formatting for reliable completion.
+Subagent orchestration methodology, context isolation boundaries, and execution scope contracts.
 
-## Action Space Rules
+## Core Mental Model: Subagents as Context Firewalls
 
-- Stable, explicit tool names
-- Schema-first, narrow inputs
-- Deterministic output shapes
-- Avoid catch-all tools unless isolation impossible
+Monolithic agents degrade over long horizons. High token churn, command logs, and large file reads dilute attention. This causes instruction drift and "Lost in the Middle" failure modes (Liu et al., 2023).
 
-## Observation Design
+A subagent operates as an **ephemeral execution scope**. Its primary function is **Context Isolation**:
+- **Token Churn Absorption:** The subagent consumes high-volume exploration, file scanning, and research in an isolated window.
+- **Asymmetric Information Flow:** The subagent returns only distilled conclusions, structured schemas, or file pointers.
+- **Context Preservation:** The orchestrator maintains a lean, high-signal context across multi-phase missions.
 
-Every tool response should include:
+### Speculative Drafting as Context Isolation
 
-- `status`: success|warning|error
-- `summary`: one-line result
-- `next_actions`: actionable follow-ups
-- `artifacts`: file paths / IDs
+Drafting in a subagent provides speculative execution with automatic rollback protection:
+- **Scratchpad Quarantine:** Prototyping, exploratory edits, and syntax trials remain inside the subagent.
+- **Zero In-Band Pollution:** Discarded trials leave no debris in the primary conversation history.
+- **Stateless Revision:** Revise artifacts by spawning fresh subagents with file pointers rather than accumulating conversational scars.
 
-## Error Recovery
+### Concurrency and Throughput
 
-Every error path needs:
+Parallelism is the secondary purpose of subagents. Concurrently dispatching independent subtasks collapses sequential wall-clock latency from linear wait times into constant time.
 
-- Root cause hint
-- Safe retry instruction
-- Explicit stop condition
+---
 
-## Parallel Agent Execution
+## Timing & Scenarios: When to Dispatch Subagents
 
-Maximize context efficiency and reduce latency by launching independent subagents concurrently.
+Knowing when to dispatch a subagent determines orchestration efficiency.
 
-- **Anti-Pattern:** Running a security review agent, waiting for it to finish, then running a performance review agent
-- **LSZ Pattern:** Launching multiple subagents concurrently in a single tool call payload when their tasks do not depend on each other's outputs
+### When to Dispatch a Subagent
 
-## Intent vs Execution
+- **High Token Churn Research:** Broad codebase searches, reading large documentation sets, or scanning multi-megabyte logs.
+- **Speculative Drafting & Prototyping:** Exploring candidate implementations or drafting complex proposals without risking the primary thread.
+- **Independent Verification:** Running security audits, architectural checks, or adversarial code reviews concurrently.
+- **Context Pressure Asymmetry:** Offloading high-pressure exploration from the low-pressure, strategic orchestrator.
 
-Orchestrator owns intent; subagent owns execution. The orchestrator grills the user via Dialog Contracts (e.g., `Project Shape → Verification Gate → Coverage → CI Release`) to capture `flavor`, gates, `coverage threshold`, and `CI variant` as flags/pointers. The subagent executes generation and verification (`uv run skills/scaffold/scripts/scaffold.py --flavor python --with-coverage 80`, `pytest`, `lint`) and must not re-grill the user; it returns a structured result. Prevents hero-mode and preserves observation quality — intent is grilling, execution is tool-owned.
+### When NOT to Dispatch a Subagent
 
-## Native Agent Orchestration Constraints
+- **Trivial In-Band Operations:** Single-file reads, quick inspection commands, or one-line edits where subagent setup overhead exceeds execution time.
+- **Interactive User Alignment:** Interactive grilling and parameter capture require direct human dialog. Subagents must never interrogate the user.
+- **Shared Mutable State Without Seams:** Concurrent tasks touching the same files risk merge conflicts and broken state invariants.
 
-Subagents operate under strict constraints. Violating them produces brittle or broken workflows.
+---
 
-- **No Agent-ception:** Subagents DO NOT have access to the `Agent` tool. A subagent cannot launch a new subagent. All orchestration MUST be done by the primary orchestrator in the main conversation context.
-- **No Subagent UI:** Subagents do not own the interaction flow with the user. If a subagent needs approval or a branch decision, it must return a structured response to the primary agent.
-- **Stateless Iteration:** When iterating on a subagent's artifact (e.g., user rejects a plan and provides feedback), do NOT resume the old subagent via `SendMessage`. Resumed agents accumulate context bloat. Instead, spawn a NEW agent and pass the file path of the previous artifact alongside the user's feedback.
+## Context Topology: Fresh Context vs Inherited Context
 
-## Frontmatter Requirements
+Choosing context topology defines how information moves across agent boundaries.
 
-### Agents
+### Fresh Context (The Default)
 
-- ALWAYS include `tools:` — explicitly define tool scope as a YAML array. Omitting it defaults to full tool access, which is a security and alignment risk.
-- If an agent has deterministic skill invocation, define a `skills:` header as a YAML array so those skills can be preloaded up front. Prefer this over runtime `Skill` calls when the required skills are known in advance — it reduces round-trip overhead and keeps execution predictable.
+Fresh context provides a clean room:
+- **Pristine Window:** The subagent starts with only its system prompt, role definition, and target brief.
+- **Zero Baggage:** Eliminates prompt pollution, confirmation bias, and instruction drift from earlier conversational turns.
+- **Pointer-First Exchange:** Pass context via file paths (file links) and structured contracts. Never copy-paste conversation transcripts.
 
-## Reference
+### Inherited Context & Continuation Scopes
 
-[Full details: tool-design-contracts.md](references/tool-design-contracts.md)
+Inherited context passes prior session history into the subagent:
+- **Use Sparingly:** Use only when the subagent requires historical conversational nuances that cannot be captured in a pointer brief.
+- **The Context Rot Trap:** Resumed agents accumulate token debt rapidly.
+- **Stateless Iteration Rule:** Never resume old subagents via SendMessage to iterate on rejected artifacts. Spawn a fresh subagent with the artifact pointer and critique notes.
+
+---
+
+## Model Selection & Tier Allocation
+
+Matching model capability to subagent responsibility prevents toxic premise failures and syntax thrashing.
+
+### The Selection Bottleneck
+
+The orchestrator is the selector, and selection is the bottleneck. A weak orchestrator cannot exploit a strong candidate pool (Maryanskyy et al., 2026). Match orchestrator capability to or above its subagents.
+
+### The Toxic Premise Risk
+
+Smaller models suffer premature convergence during research. Hallucinated facts returned to the orchestrator corrupt downstream architecture. Keep subagents on the frontier model (inherit) for research, drafting, and adversarial review.
+
+### Model Anonymity
+
+Never prompt subagents with model names. Prompt strictly by task role and contract to avoid model factionalism (arXiv:2609.35928).
+
+### The Three Guardrails for Lighter Subagents
+
+For subagent dispatch, downgrade to lighter models (e.g. Flash or Haiku) only when all three conditions hold. In-band execution follows the parent Model Routing table:
+1. **Read-Only Action Space:** Grant only read tools. Smaller subagents must never hold mutation permissions.
+2. **Schema-First Contracts:** Force rigid JSON or YAML schemas. Never request free-form prose.
+3. **Deterministic Environmental Backstops:** Verify all outputs via compilers, linters, or regex gates rather than orchestrator trust.
+
+---
+
+## Native Orchestration Constraints
+
+Subagents operate under strict structural boundaries:
+- **No Agent-ception:** Subagents cannot access the Agent tool (depth limit 1). The primary orchestrator coordinates all agents.
+- **No Subagent UI:** Subagents do not own user interaction. When blocked, the subagent returns a structured blocker to the orchestrator.
+- **Principle of Least Privilege:** Explicitly declare tool scope via the frontmatter tools array. Researchers receive read-only tools. Implementers receive edit tools.
+- **Passive Runtime Truth:** Capture runtime truth passively (`tee` logs, pipes) instead of polling with blind query loops. Rely on native execution truth (stdout, stderr, exit codes). Never force artificial JSON envelopes onto standard shell output. Reserve structured envelopes for specialized RPC or MCP agent endpoints.
+
+---
+
+## References
+
+- [tool-design-contracts.md](references/tool-design-contracts.md) -- Action space granularity, passive runtime truth, structured return contracts, and error recovery.
+- [arXiv:2609.35928](https://arxiv.org/abs/2609.35928) -- Prompted identity degrades cooperation in multi-agent LLM systems.
+- [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) -- Lost in the middle: how language models use long contexts.
+- [arXiv:2603.20324](https://arxiv.org/abs/2603.20324) -- The selection bottleneck in multi-agent LLM pipelines.

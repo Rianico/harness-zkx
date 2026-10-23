@@ -233,8 +233,8 @@ from pathlib import Path
 
 # Paths to individual check scripts or commands
 CHECKS = {
-    "TYPE-01": ["python3", "scripts/check-types.py"],
-    "TEST-01": ["python3", "scripts/run-tests.py"],
+    "TYPE-01": ["uv", "run", "scripts/check-types.py"],
+    "TEST-01": ["uv", "run", "scripts/run-tests.py"],
     "LINT-01": ["ruff", "check", ".", "--format", "json"],
     "SEC-01": ["rg", "sk-", "."], # Example simple check
 }

@@ -2,9 +2,9 @@
 """Validate that a flavor's style.css covers all required classes from the rendering contract.
 
 Usage:
-    uv run python3 scripts/validate_flavor.py <flavor_dir>    # Check a flavor
-    uv run python3 scripts/validate_flavor.py --list          # List required items
-    uv run python3 scripts/validate_flavor.py kami            # Check by name (resolved to flavors/<name>)
+    uv run python scripts/validate_flavor.py <flavor_dir>    # Check a flavor
+    uv run python scripts/validate_flavor.py --list          # List required items
+    uv run python scripts/validate_flavor.py kami            # Check by name (resolved to flavors/<name>)
 """
 
 import re
