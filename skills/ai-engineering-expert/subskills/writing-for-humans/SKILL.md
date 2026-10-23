@@ -16,7 +16,6 @@ Authoritative guide for documents a human maintainer triages: RFCs, GitHub issue
 
 - Sentence-level grammar, STE-100 vocabulary, and banned fluff live in [plain-language.md](../../references/plain-language.md).
 - Agent-consumed runbooks and skills belong to [writing-for-agents](../writing-for-agents/SKILL.md).
-- Visual shapes and their syntax live in [show-me](../../../.agents/skills/show-me/SKILL.md).
 
 ## 1. The Reading Bottleneck
 
@@ -31,7 +30,20 @@ Reading is the bottleneck. Long prose defers decisions and hides warnings. Climb
    - Refactor → shallow file tree.
    - Interaction or data flow → Mermaid sequence diagram.
    - Exact mutation → targeted unified diff.
-4. **Interactive HTML:** Use this when the reviewer must explore multi-variable states. Open the file for the reviewer.
+   Show a change by diffing the shape itself. Diff a call tree, component tree, file tree, or state as you diff code:
+
+   ```diff
+   submitForm
+     createSession
+       persistPrompt
+   +    expandSkillMention
+       launchAgent
+   ```
+
+   Show the whole shape when most of it is new. Show it when omitted context hides ownership or order, or when the reviewer needs a copyable target.
+4. **Interactive HTML:** Use this when the reviewer must explore multi-variable states. Match the product's colors, type, spacing, and components. Use real labels and data. Support desktop and mobile. Open the file for the reviewer.
+
+Place each visual next to the short text it supports. Keep only the calls, files, props, states, and boundaries the decision needs. Use one shape, sometimes several, rarely all.
 
 Replace the prose that a visual covers. Do not restate a diagram in sentences.
 
