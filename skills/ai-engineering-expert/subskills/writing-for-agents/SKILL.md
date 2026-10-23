@@ -101,6 +101,8 @@ Every document and pointer spends one of two budgets:
 
 Material reached through a pointer avoids context load at the price of the pointer line.
 Material without a pointer relies entirely on cognitive load.
+A router skill indexes user-invoked skills without registering them into root context.
+See [skill-authoring](../skill-authoring/SKILL.md).
 
 ### 7. Crafting Context Pointers
 
@@ -206,13 +208,12 @@ Negation acts as a weak modifier that the model easily overruns.
 Always prompt the **positive target behavior**:
 - Instead of "Do not write multi-line comments", write "Write single-line comments".
 - State what the model must do, rather than what it must avoid.
-- Only if a model repeatedly performs a forbidden action do you add it as a negative gotcha.
+- Only a repeated failure earns a negative gotcha. See Section 12.
 
 ### 12. Model Gotchas and Retirable Constraints
 
 Isolate empirical model quirks into an independent section.
 Add a negative constraint only if a model repeatedly executes a forbidden action despite positive steering.
-Never add speculative negative prohibitions without observed failures.
 
 Maintain this independent section under strict lifecycle rules:
 - **Isolate from core prose:** Keep model-specific workarounds in this dedicated section. Do not scatter negative rules across procedural workflows.
