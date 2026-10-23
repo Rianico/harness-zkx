@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
-* **ai-engineering-expert:** consolidate writing-for-agents and writing-for-humans skills with 80% ASD-STE100 discipline, absorbing visual code shapes and diffing from show-me
+* **ai-engineering-expert:** consolidate writing-for-agents and writing-for-humans skills with 80% ASD-STE100 discipline, absorbing visual code shapes and diffing from show-me (#314)
 * **scaffold:** generated TypeScript `CONTRIBUTING.md` now names the release flow — check → verify → preview → dispatch → confirm — and states the ledger rule that decides the bump: a user-facing feature needs a `feat` title, a breaking entry needs `!`, and a `fix` title cannot publish a `### Features` entry; the verify step cites `pnpm run verify` rather than the command chain (#297)
 * **scaffold:** the TypeScript projection now checks the release gate on every pull request — a generated `ci.yml` runs `pnpm run audit` then `pnpm run verify` (draft PRs skipped, superseded runs cancelled), the manifest's `audit` script pins `https://registry.npmjs.org/` with `--audit-level high`, and the release verify job calls the same two scripts instead of respelling them; a generated `pnpm-workspace.yaml` allows esbuild's build script and suppresses exactly one unpatched advisory with its removal condition inline (#296)
 * **gh-router/pr-land:** the `--check` draft hint now states both squash shape caps (`<=5 bullets / <=15 lines`) interpolated from the gate constants, so an author who mirrors the hint no longer loses a round trip to the line budget (#295)
