@@ -8,78 +8,76 @@ metadata:
 
 # Writing for Humans
 
-Managed sub-skill of `ai-engineering-expert`. Load when `$domain` is `writing-for-humans`. Also load when an `ai-engineering-expert` task drafts, reviews, or revises a document a human maintainer triages. Examples are a GitHub issue, discussion post, RFC, or proposal.
+Authoritative guide for documents a human maintainer triages: RFCs, GitHub issues, discussions, proposals, and PR descriptions.
 
-This skill teaches how to **shape a proposal so a maintainer can decide on it in one read**. You are the proposer. A busy maintainer with fragmented attention is the reader: you persuade, you do not instruct.
+**Completion criterion:** a reviewer answers yes, no, or later after one pass, with no re-reading.
 
-**Sibling boundary.** Sentence-level rules live in [plain-language.md](../../references/plain-language.md). Agent-consumed instructions (`SKILL.md`, `AGENTS.md`) belong to [writing-for-agents](../writing-for-agents/SKILL.md).
+## Sibling Boundaries
 
-## Start from the decision, not the idea
+- Sentence-level grammar, STE-100 vocabulary, and banned fluff live in [plain-language.md](../../references/plain-language.md).
+- Agent-consumed runbooks and skills belong to [writing-for-agents](../writing-for-agents/SKILL.md).
+- Visual shapes and their syntax live in [show-me](../../../.agents/skills/show-me/SKILL.md).
 
-Derive one sentence naming **the decision you want** before drafting. If a section does not move the maintainer toward that decision, delete it.
+## 1. The Reading Bottleneck
 
-- **State the ask twice.** Once in the title or summary, and once at the end. Name the exact decision or next step requested.
-- **Request a decision without presuming ownership.** Mention proposer-led next steps only if the user clearly intended to volunteer implementation. State the offer concretely as a minimal pilot PR or repro script.
-- **Separate what you verified from what you suspect.** Mark every claim as observed (run counts, logs, links) or conjectured. A maintainer who catches one inflated claim discounts the whole post.
-- **Isolate distinct root causes.** Split separate failure modes into distinct proposals. Blending external concurrency with tool errors inflates perceived complexity and stalls review.
-- **Propose within demonstrated capabilities.** Specify only hooks, interfaces, or observability the project demonstrably has. Flag the rest as open questions.
+Reading is the bottleneck. Long prose defers decisions and hides warnings. Climb one rung for each added relationship:
 
-## Visual-First Proposal Anatomy
+1. **Prose:** Write controlled technical English at 80% ASD-STE100 strength. Use active voice and direct verbs.
+2. **Tables:** Compare three or more items: trade-offs, schemas, parameters.
+3. **Visual shapes:** Switch when the prose explaining one relationship exceeds four sentences. Pick the smallest shape that answers the question:
+   - Algorithm → pseudocode.
+   - Control flow → call tree.
+   - UI boundaries → component tree.
+   - Refactor → shallow file tree.
+   - Interaction or data flow → Mermaid sequence diagram.
+   - Exact mutation → targeted unified diff.
+4. **Interactive HTML:** Use this when the reviewer must explore multi-variable states. Open the file for the reviewer.
 
-Structure proposals so a maintainer grasps the decision in one quick read. Follow visual-first principles: skip preamble and pick the smallest view that makes the point clear.
+Replace the prose that a visual covers. Do not restate a diagram in sentences.
 
-1. **Title & Summary**: Name the concrete proposal in the title (`RFC: <Actionable Title>`). Open with a brief summary of the observed problem, proposed scope, and exact decision requested.
-2. **Problem & Evidence**: Establish the friction before any mechanism. No maintainer can evaluate a solution to an unagreed problem. Back it with run logs, reproduction traces, or failure rates.
-3. **Scoped Visual Solution**: Pair short text with the smallest visual artifact that makes the mechanism clear:
-   - File responsibility or refactor: shallow file tree
-   - Runtime control flow: concise call tree
-   - Component or data interactions: focused Mermaid sequence diagram
-   - Code mutations: targeted unified diff
-4. **Explicit Non-Goals**: List what is out of scope. Explicit non-goals relieve maintainer fears of unbounded scope or brittle maintenance.
-5. **Call to Action**: End with the explicit decision or feedback requested.
+## 2. Decision-First Framing
 
-## Published Documentation Formatting
+Name the requested decision in one sentence before drafting. Delete every sentence that does not advance it.
 
-Follow these formatting rules when writing user-facing documentation:
-- **Headings:** Use sentence case. Preserve proper feature capitalization.
-- **Lists:** Format as `**Term** - Description`. Never place a colon after the bold term.
-- **UI elements:** Bold buttons, links, and menu items (`Click **Save**`). Bold each path segment, leaving `>` plain (`**Settings** > **AI** > **Knowledge**`).
-- **Tense:** Use present tense for descriptions. Use imperative mood for instructions.
-- **Description field:** State the user benefit first. Name the feature and key terms next.
-- **Unverified leftovers:** Mark placeholders explicitly (`[UNVERIFIED]`). Never smooth unverified assertions into confident prose.
+- **Ask twice:** Open with the decision. Close with the decision.
+- **Prior art first:** Cite existing solutions, or state why each one fails. Maintainers reject what already exists.
+- **Cheapest test first:** Bound the proposal with non-goals. Scope the cheapest-to-test failure mode first.
+- **Request, do not presume:** Offer a minimal pilot PR. Never assume unassigned ownership.
+- **Demonstrated capabilities only:** Rely on interfaces the codebase already has. Flag novel hooks as open questions with a recommended default.
 
-## Pre-submit checklist
+## 3. Evidence and Honesty
 
-A single "no" means revise before filing.
+- **Observed versus conjectured:** Tag every claim. Back observed facts with run counts, logs, or links.
+- **One label per concept:** Tag unconfirmed assumptions `[UNVERIFIED]`. Do not also call them hypotheses.
+- **Isolate root causes:** Split independent failure modes into separate proposals.
+- **Inflation costs the whole post:** One caught exaggeration discounts every other claim.
 
-1. Does the title name the concrete proposal or problem, not just a topic area?
-2. Does the problem appear, with evidence, before any mechanism?
-3. Does the proposal use a visual diagram or diff where prose explanations exceed four sentences?
-4. Is every factual claim marked observed (count, log, link) or conjectured?
-5. Are distinct failure modes separated, with the cheapest-to-test one scoped first?
-6. Does the proposal assume only project internals that demonstrably exist?
-7. Are non-goals stated explicitly?
-8. Is the ask stated in both the summary and the closing?
-9. Is proposer-led follow-up absent, unless the user clearly intended to volunteer it?
-10. Can a maintainer grasp problem, scope, and ask in a single pass?
-11. Does the prose pass [plain-language.md](../../references/plain-language.md)?
+## 4. Proposal Anatomy
 
-## Anti-patterns
+1. **Title and Summary:** Name the concrete proposal (`RFC: <Actionable Title>`). Summarize problem, scope, and decision requested.
+2. **Problem and Evidence:** Lead with observed friction. Use reproduction commands or log snippets.
+3. **Scoped Visual Solution:** Pair short text with the smallest clarifying artifact.
+4. **Non-Goals:** List excluded paths.
+5. **Call to Action:** State the exact decision or feedback required.
 
-- **Solution-first jump.** Opening with mechanics before establishing the blind spot. Establish the concrete friction first.
-- **Multi-problem mush.** Combining multiple unrelated failure mechanisms into one complaint. Isolate the mechanisms into separate proposals.
-- **Ghost evidence.** Making sweeping claims without verified data. Cite verified runs or omit the claim.
-- **Architectural presumption.** Assuming unsupported internal hooks or interception capabilities. Propose within demonstrated APIs.
-- **Triage dump.** Closing with open questions that transfer design labor onto maintainers. Recommend a concrete default for each question.
+## 5. Ship Gate
+
+Revise until all four checks pass:
+
+1. A reviewer reaches the decision in one pass.
+2. Prior art appears, or the draft explains why it does not apply.
+3. Distinct failure modes are separate proposals, cheapest test first.
+4. The prose passes [plain-language.md](../../references/plain-language.md).
+
+## 6. Failure Modes
+
+- **Solution-first jump** → establish the friction first.
+- **Multi-problem mush** → split the mechanisms.
+- **Ghost evidence** → cite a verified run, or drop the claim.
+- **Architectural presumption** → use demonstrated APIs only.
+- **Triage dump** → recommend a concrete default for each open question.
 
 ## Harness Wiring
 
-- **Verification:** Validate frontmatter deterministically with `uv run $SKILL_DIR/../skill-authoring/scripts/validate-deps.py context-check`. Review drafts semantically via a Skeptic subagent checking for unverified assertions, presumed architecture, and missing non-goals.
-
-## Further reading
-
-- Simon Tatham, "How to Report Bugs Effectively" — ground reports in verified fact.
-- Nolan Lawson, "What it feels like to be an open-source maintainer" — triage fatigue deprioritizes unfocused proposals.
-- Brett Cannon, "Setting expectations for open source participation" — state intent and own the work.
-- GitHub Open Source Guides, "How to Contribute" — align with repo workflow.
-- Phil Calçado, "A Structured RFC Process" — decouple problem from solution with explicit non-goals.
+- Deterministic: `uv run $SKILL_DIR/../skill-authoring/scripts/ste100.py <file>` gates sentence length and banned words.
+- Semantic: dispatch a Skeptic subagent to find unverified claims, presumed architecture, and missing non-goals.
