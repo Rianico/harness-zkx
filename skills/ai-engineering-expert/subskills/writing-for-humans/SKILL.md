@@ -38,6 +38,16 @@ Structure proposals so a maintainer grasps the decision in one quick read. Follo
 4. **Explicit Non-Goals**: List what is out of scope. Explicit non-goals relieve maintainer fears of unbounded scope or brittle maintenance.
 5. **Call to Action**: End with the explicit decision or feedback requested.
 
+## Published Documentation Formatting
+
+Follow these formatting rules when writing user-facing documentation:
+- **Headings:** Use sentence case. Preserve proper feature capitalization.
+- **Lists:** Format as `**Term** - Description`. Never place a colon after the bold term.
+- **UI elements:** Bold buttons, links, and menu items (`Click **Save**`). Bold each path segment, leaving `>` plain (`**Settings** > **AI** > **Knowledge**`).
+- **Tense:** Use present tense for descriptions. Use imperative mood for instructions.
+- **Description field:** State the user benefit first. Name the feature and key terms next.
+- **Unverified leftovers:** Mark placeholders explicitly (`[UNVERIFIED]`). Never smooth unverified assertions into confident prose.
+
 ## Pre-submit checklist
 
 A single "no" means revise before filing.

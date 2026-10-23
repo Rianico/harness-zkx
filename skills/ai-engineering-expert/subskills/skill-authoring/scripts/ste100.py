@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.14"
+# dependencies = []
+# ///
 """ASD-STE100 Issue 9 (published January 15, 2025) deterministic linting helper for procedural and instructional prose."""
 
 from __future__ import annotations

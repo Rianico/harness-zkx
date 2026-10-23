@@ -36,7 +36,6 @@ Adapted from `warpdotdev/common-skills@b811c24` (MIT, © Denver Technologies, In
 - Preserving test assertions: [Rewriting pinned text](#rewriting-pinned-text).
 - Tightening a vague draft: [A rewrite](#a-rewrite).
 - Cutting padding and fluff: [Words that add nothing](#words-that-add-nothing).
-- Writing published docs: [Shape rules for published docs](#shape-rules-for-published-docs).
 
 ## Mode selection
 
@@ -148,7 +147,7 @@ A phrase pin is a prose constraint (e.g., a case-sensitive test assertion). An e
 Pass `--preserve <string>` to `ste100.py` to fail when a rewrite drops a pinned substring. Repeat the flag to check several pins.
 
 ```bash
-python3 skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py <path> --preserve <string>
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py <path> --preserve <string>
 ```
 
 ## A rewrite
@@ -169,12 +168,3 @@ Cut these terms unless concrete data backs them:
 - **Banned soft phrasal verbs:** `spin up`, `kick off`, `dive into`, `reach out`, `circle back`, `touch base`.
 - **Conversational padding:** `basically`, `essentially`, `in order to`, `it should be noted that`, `a number of`, `should work`, `clearly`, `very common`.
 - **Diminishing qualifiers:** `simply`, `just`. They mislead readers about difficulty and sound dismissive.
-
-## Shape rules for published docs
-
-- **Headings:** sentence case. Proper feature names keep their capitalization — `## Agent Mode settings`, not `## Agent mode settings`.
-- **Lists:** `**Term** - Description`. Never a colon after the bold term.
-- **UI elements:** bold buttons, links, and menu items — `Click **Save**`. Bold every segment of a settings path, leave `>` plain — `**Settings** > **AI** > **Knowledge**`.
-- **Tense:** present for how things work, imperative for instructions.
-- **Description field:** a standalone snippet — user benefit first, then the feature name and key terms. `Environments ensure your cloud agents run with a consistent toolchain. Learn when to use them and how to configure them.` — not `This page describes environments.`
-- **Unverified leftovers:** mark them (`[UNVERIFIED]`, `[TODO: <owner> — …]`) instead of smoothing them into confident prose. A placeholder the reader can see beats a sentence they will trust and act on.

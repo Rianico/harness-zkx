@@ -185,7 +185,7 @@ Before pushing description changes, evaluate the candidate description against t
 
 1. **Verify candidate length:**
    ```bash
-   python3 -c "desc = '''<candidate_description>'''; print(f'Length: {len(desc.strip())} chars (limit 300)')"
+   uv run python -c "desc = '''<candidate_description>'''; print(f'Length: {len(desc.strip())} chars (limit 300)')"
    ```
 2. **Re-run harness lint and context checks:**
    ```bash
