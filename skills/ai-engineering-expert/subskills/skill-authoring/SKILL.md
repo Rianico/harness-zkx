@@ -10,166 +10,208 @@ metadata:
 
 Structural methodology for authoring, curating, and verifying skills.
 
-## Philosophy & Core Mental Model
+## Philosophy & Foundation
 
-### The Nature of Skills
+Skills encode persistent meta-behavior for autonomous agents.
+A skill exists to wrangle determinism out of stochastic models.
+Its root virtue is **Predictability**.
+Meta-behavior is load-bearing.
+A flawed skill corrupts every future session where it triggers.
+Authoring therefore requires mutual curation before execution.
+Never guess user intent.
+Never improvise architecture.
 
-Skills establish persistent meta-behavior for autonomous agents. A skill exists to wrangle determinism out of stochastic models. Its root virtue is **Predictability**.
+### Dual Taxonomy
 
-Meta-behavior is load-bearing. A flawed skill corrupts every future session where it triggers. Therefore, authoring a skill requires rigorous mutual curation before execution. Never guess user intent or improvise architecture.
+| Class | Shape | Budget |
+| --- | --- | --- |
+| Workflow | Philosophy first, then ordered phases | ≤150 lines per phase, ≤500 total |
+| Knowledge | Mental model first, then patterns and gotchas | ≤500 lines total |
 
-### The Dual Taxonomy
+Orchestration is a workflow pattern, not a third class.
+The `manage` and `managed-by` fields are context routing, not a taxonomy.
 
-Every skill falls into one of two operational categories:
+### Rules vs Skills
 
-1. **Workflow Skills (Procedural)**: Step-by-step procedures to produce artifacts or change system state. Follows **Philosophy First, Then Workflow**. Anchor the core mental model and invariants before detailing sequential execution phases.
-2. **Knowledge Skills (Reference)**: Mental models, domain constraints, heuristics, and expert patterns loaded just-in-time. Follows **Mental Model & Invariants First, Then Reference Patterns & Gotchas**. Never invent artificial procedural workflows for reference material.
+| Attribute | Rules | Skills |
+| --- | --- | --- |
+| Context tax | Always loaded | Loaded on demand |
+| Content | Defaults and invariants | Procedures, patterns, scripts |
+| Expression | State the rule directly | Explain with examples |
 
-> **Note on Orchestration & Management**: Orchestration is a multi-agent workflow pattern, not a distinct taxonomy type. The `manage` and `managed-by` metadata declarations provide structural context routing (hiding subskills under `subskills/` to eliminate root context load), rather than an intrinsic skill class.
+Use rules for universal preferences.
+Use skills for specialized workflows and deep reference material.
+Deep mechanics live in [references/skill-authoring.md](references/skill-authoring.md).
 
-### Router Skills for Invocation Management
+## Sibling Boundaries
 
-When user-invoked skills (`disable-model-invocation: true`) multiply past human memory, cognitive load accumulates.
-Resolve this using a **router skill**:
-- Create a single user-invoked skill that indexes related specialized skills.
-- Detail when to reach for each managed skill without registering them into root context.
-- Keep the router itself user-invoked to avoid always-on context load.
+| Sibling | Use for |
+| --- | --- |
+| `grilling` (when installed) | Intent probing and decision-tree dialogue |
+| `scaffold` | Interactive CLI generators with single-question dialogs |
+| `subagent-engineering` | Dispatch topology, contracts, and model routing |
+| `verification` | Gate synthesis, EDD anchors, and test design |
+| `plain-language` | Sentence grammar and STE-100 vocabulary |
+| `ste100.py` | Deterministic sentence-length and prose linting |
+| `context-load-policy` | Description budgets, invocation classes, and platform sync |
+| `writing-for-agents` | Pointers, hierarchy, completion criteria, and pruning |
 
-### Rules vs Skills Boundary (Context Economics)
-
-Rules and skills serve different context-cost economics:
-
-| Attribute | Rules (`rules/`) | Skills (`skills/`) |
-| :--- | :--- | :--- |
-| **Context Tax** | Always loaded into root prompt; permanent token cost. | Loaded on demand; zero token cost until triggered. |
-| **Content** | Tool defaults, styling preferences, invariant constraints. | Procedural steps, reference patterns, executable scripts. |
-| **Expression** | State the rule directly; do not explain rationale. | Explain how to implement with concrete examples. |
-
-Use rules for universal preferences that apply unconditionally. Use skills for specialized workflows, domain gotchas, and progressive reference material.
-
-### The Grilling Principle
-
-Because skills encode persistent agent behaviors, agents must never assume requirements silently. We use the **Grilling Pattern**, documented in the `grilling` skill where installed. Map the design space as a tree. Query the frontier of open decisions with recommended answers. Establish shared understanding before generating files.
-
-### Authoring Anti-Patterns (Gotchas)
-
-Avoid these core failure modes when conceiving and authoring skills:
-- **Vague descriptions**: "Helps with code" fails routing. Always embed concrete symptom keywords.
-- **Wrong POV**: First-person ("I can help") causes discovery failures. Always write in third-person.
-- **Hero-mode execution**: The orchestrator doing direct edits instead of delegating to subagents. Always dispatch.
-- **Overloading `SKILL.md`**: Keep under 500 lines. Move deep details to `references/`.
-- **Deep nesting**: References must be exactly one level from `SKILL.md`.
-- **Missing validation loops**: Destructive edits without verification gates produce silent regressions.
-- **Interrogating the user**: Asking questions for facts already in the workspace. Always inspect first.
-
----
+Load `writing-for-agents` before drafting any agent-consumed document.
+This holds even when the primary domain is `skill-authoring`.
 
 ## Operational Workflow
 
-```
-Phase 1: Grill & Curate Intent
-               │
-               ▼
-Phase 2: Draft & Structure Contract
-               │
-               ▼
-Phase 3: Verify & Deterministic Gate
-```
+Workflow: Phase 1 → Phase 2 → Phase 3.
 
-### Phase 1: Grill & Curate Intent
+### Phase 1: Settle Intent Contract
 
-Interview the user systematically to settle the **design tree** before drafting:
+Discover workspace facts first.
+Inspect files, dependencies, linters, and git history before asking.
+Query the decision frontier in numbered rounds.
+Recommend one default per question.
+Wait for user confirmation before drafting.
 
-1. **Discover Environment Facts First**: Finding facts is the agent's job, never the user's. Inspect workspace files, dependencies, linters, and git history before asking questions.
-2. **Identify the Decision Frontier**: The frontier comprises decisions whose prerequisites are already settled.
-3. **Ask in Numbered Rounds**: Present open frontier decisions clearly with a recommended answer for each:
-   - **Goal & Scope**: What problem does this skill solve? What are the concrete non-goals?
-   - **Category**: Is this an executable Workflow or domain Knowledge?
-   - **Verification Anchors (GDD/EDD)**: Which outputs are measurable with deterministic scripts, and which remain semantic?
-   - **Behavioral Scenarios (BDD)**: What Given/When/Then cases must hold?
-   - **Context Footprint**: Does this belong in a parent-subskill cluster (`manage`) or standalone?
-4. **Lock Shared Understanding**: Wait for user confirmation before advancing to file generation.
+| Question | Intent Contract field |
+| --- | --- |
+| Goal and scope | Problem, plus explicit non-goals |
+| Taxonomy class | Non-negotiable constraint |
+| Verification anchors | Proposed outcome |
+| Behavioral scenarios | Proposed outcome |
+| Context footprint | Affected seams |
 
-Interactive CLI generators use single-question dialogs instead. See the `scaffold` skill.
+Lock these four fields before advancing:
+
+- **Problem**: concrete deficiency, friction, or regression.
+- **Proposed Outcome**: observable behavior, plus Given/When/Then cases and verification anchors.
+- **Affected Seams**: skill boundaries, trigger collisions, and parent-subskill wiring.
+- **Non-Negotiable Constraints**: taxonomy class, token budget, platform support, and explicit non-goals.
+
+The user confirmation gate locks the contract. The orchestrator owns this phase.
+Interactive CLI generators use single-question dialogs instead.
+See `scaffold`.
 
 ### Phase 2: Draft & Structure Contract
 
-Execute the four drafting steps in order. Deep frontmatter schemas and edge cases live in [references/skill-authoring.md](references/skill-authoring.md).
+Resolve your role before editing:
 
-#### Step 1: Initialize Directory & Layout
-Create `skills/<skill-name>/` matching `name` (1-64 chars, lowercase alphanumeric, hyphens):
-- `SKILL.md`: Main entry point (strictly under 500 lines).
-- `references/`: Optional domain guides and specs (one level deep).
-- `scripts/`: Optional deterministic helpers and gates.
+- If you are the orchestrator, then dispatch an implementer subagent.
+- Pass the locked Intent Contract as a durable artifact path.
+- If you are the implementer, then execute these steps directly.
+- Do not dispatch another implementer from an implementer.
+- If no subagent facility exists, then execute inline and record the deviation.
 
-#### Step 2: Draft & Calibrate Frontmatter
-Scaffold minimal YAML frontmatter using folded block scalar `>-`:
-```yaml
----
-name: skill-name
-description: >-
-  Category noun defining role. Active verbs articulating capabilities. Use when concrete symptoms, pain points, or triggers arise.
----
-```
-- **Tripartite Formula**: 1. What it is (Role anchor noun in first 50 chars), 2. What it does (third-person present action verbs), 3. When to use (`Use when...` with symptom keywords).
-- **Hard Budget**: Strictly ≤ 300 characters.
-- **Optional Attributes**: Add `argument-hint` (`|-`), `disable-model-invocation: true` (user-only), or `metadata` (`manage`, `managed-by`, `depends-on`).
+Load `writing-for-agents` before drafting the body.
 
-#### Step 3: Author Body by Structural Signature
-Structure the markdown body according to its taxonomy class:
-- **Workflow Skills (Philosophy First, Then Workflow)**:
-  1. *Philosophy & Foundation*: Core mental model, invariants, design constraints.
-  2. *Operational Workflow*: Ordered execution phases, scripts, and deterministic completion criteria.
-- **Knowledge Skills (Mental Model & Invariants First, Then Reference)**:
-  1. *Core Mental Model*: Domain invariants, architectural trade-offs, and rules.
-  2. *Topical Guidance & Gotchas*: Worked code shapes, anti-patterns, framework gotchas. Never invent artificial operational workflows for reference material.
+#### Step 1: Scaffold and Layout
 
-#### Step 4: Wire Resources & Paths
-- Anchor prose paths with `$SKILL_DIR`: `$SKILL_DIR/scripts/<cmd>.py` or `$SKILL_DIR/references/<ref>.md`.
-- Use relative markdown links for reading: `[text](references/<module>.md)`.
-- Make scripts self-contained via `uv run` with PEP 723 inline dependencies. Handle errors internally.
-
-### Phase 3: Verify & Deterministic Gate
-
-Run automated scripts first, then perform qualitative semantic checks:
-
-#### 1. Deterministic Verification Gate (Formal Substrate)
-Execute the native verification suite from the project root:
+Run the canonical lifecycle tool:
 
 ```bash
-# Gate 1 & 2: Frontmatter syntax, scalar conventions, and name collisions
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
-
-# Gate 3: Description budget (≤300 chars) and tripartite formula
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
-
-# Gate 4: Plain English and STE-100 deterministic linting
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/<name>/SKILL.md
-
-# Gate 5: Dependency resolution and manage/managed-by wiring
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
-
-# Gate 6: Unit test integrity
-uv run pytest tests/<name>  # or tests/ai-engineering-expert
+uv run $SKILL_DIR/scripts/skill.py add <name>
+uv run $SKILL_DIR/scripts/skill.py add <name> --parent <parent> --description "<text>"
 ```
 
-All deterministic checks must pass with zero errors before moving to semantic review.
+The tool creates `skills/<name>/SKILL.md` for a top-level skill.
+For a subskill, it creates `skills/<parent>/subskills/<name>/SKILL.md`.
+It wires `metadata.manage` on the parent and writes `managed-by` for a subskill.
+Use `skill.py` for `depend`, `manage`, `rename`, and `remove` changes.
+Do not create the directory by hand or duplicate wiring with `validate-deps.py rename`.
+**Completion criterion:** `test -f` exits 0 on the created path.
 
-#### 2. Semantic Verification Gate (Semantic Reasoner)
-Dispatch an adversarial Skeptic subagent to verify qualitative alignment:
-- [ ] **EDD Anchors**: Does each deterministic goal have an evaluation script under `scripts/` or a test?
-- [ ] **Symptom Grounding**: Does `Use when...` contain natural user problem terms rather than academic jargon?
-- [ ] **BDD Scenario Coverage**: Do Given/When/Then scenarios cover the happy path, edge cases, and failure modes?
-- [ ] **Default Selection**: Does the skill provide clear defaults rather than open menus?
-- [ ] **Context Cleanliness**: Are environment-specific paths and setup noise kept out of the skill body?
+#### Step 2: Calibrate Frontmatter
 
----
+Use the folded block scalar `>-`.
+Apply the tripartite formula:
+
+1. **What it is**: role anchor noun in the first 50 characters.
+2. **What it does**: third-person present action verbs.
+3. **When to use**: `Use when...` plus concrete symptom keywords.
+
+Add an optional negative boundary.
+Write `Do not use for X. Defer to Y.`
+Keep the description at or below 300 characters.
+Add `argument-hint`, `disable-model-invocation`, or `metadata` only when needed.
+**Completion criterion:** `validate-deps.py lint` exits 0.
+Also run `validate-deps.py context-check`.
+Require exit 0 and a PASS row for the skill.
+Treat warnings as advisory, not proof.
+
+#### Step 3: Author the Body
+
+Match the body to the taxonomy signature:
+
+- **Workflow**: philosophy and invariants first, then ordered phases.
+- **Knowledge**: mental model and invariants first, then patterns and gotchas.
+- Never invent a workflow for reference material.
+
+Keep each procedural sentence at or below 20 words.
+End every step with an observable completion criterion.
+**Completion criterion:** `rg -n '^## ' skills/<name>/SKILL.md` lists the signature headings.
+
+#### Step 4: Wire Resources
+
+Anchor prose paths with `$SKILL_DIR`.
+Use relative markdown links for reading.
+Keep references one level deep from `SKILL.md`.
+Make scripts self-contained with `uv run` and PEP 723 metadata.
+**Completion criterion:** a reviewer confirms every link resolves and prose paths use `$SKILL_DIR`.
+No link checker exists today, so this check is reviewer-only.
+
+### Phase 3: Verify & Gate Execution
+
+Run the native verification suite from the project root:
+
+```bash
+# Frontmatter syntax, scalar conventions, and name collisions
+uv run $SKILL_DIR/scripts/validate-deps.py lint
+
+# Description budget (≤300 chars)
+uv run $SKILL_DIR/scripts/validate-deps.py context-check
+
+# Plain English and STE-100 linting (per file)
+uv run $SKILL_DIR/scripts/ste100.py skills/<name>/SKILL.md
+```
+
+Run these gates when their condition holds:
+
+```bash
+# After a dependency, move, or rename change. Validates depends-on only.
+uv run $SKILL_DIR/scripts/validate-deps.py check
+
+# Only when targeted tests exist
+uv run pytest tests/ai-engineering-expert tests/test_validate_deps.py
+uv run pytest tests/<name>
+```
+
+Run the full repo gate before handoff:
+
+```bash
+bash scripts/check.sh
+```
+
+- `check` validates `depends-on` only. It does not validate `manage` wiring.
+- `context-check` scans the whole tree. It has no working single-skill mode.
+- `ste100.py` enforces 20 words for every sentence.
+- CI lints 7 named files, not the whole skill tree.
+
+#### Semantic Gate
+
+Dispatch an adversarial Skeptic subagent.
+Review these checks:
+
+- **EDD anchors**: each deterministic goal has a script or test.
+- **Symptom grounding**: `Use when...` uses user problem terms.
+- **BDD coverage**: happy path, edge cases, and failure modes.
+- **Default selection**: one clear default, not an open menu.
+- **Context cleanliness**: no environment-specific noise.
+- **Link integrity**: every markdown reference resolves.
+- **Path anchoring**: prose uses `$SKILL_DIR`.
 
 ## References
 
-- [skill-authoring.md](references/skill-authoring.md) -- Full reference: frontmatter schemas, worked description examples, credits schema, compression rules, string substitutions, calibration.
-- [skill-diagnosis.md](references/skill-diagnosis.md) -- Trigger misses, collisions, execution loops, dead skills, and the evidential trigger ledger.
-- [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, scripts.
-- [glossary.md](references/glossary.md) -- Skill authoring terminology: predictability, invocation classes, information hierarchy, steering, and pruning.
-- [writing-for-agents](../writing-for-agents/SKILL.md) -- Agent-document writing: hierarchy, pointers, leading words, pruning.
-- [context-load-policy.md](references/context-load-policy.md) -- Enforcement contract: hard CI gates, description budgets, platform sync mapping, regeneration. Use when a load-cost rule must be audited.
+- [skill-authoring.md](references/skill-authoring.md) -- Deep mechanics: frontmatter schemas, worked examples, lifecycle tooling, and gate details.
+- [skill-diagnosis.md](references/skill-diagnosis.md) -- Failure archetypes, trigger misses, collisions, and the evidential ledger.
+- [skill-structure.md](references/skill-structure.md) -- Directory layout, progressive disclosure, and scripts.
+- [context-load-policy.md](references/context-load-policy.md) -- Description budgets, invocation classes, and platform sync.
+- [glossary.md](references/glossary.md) -- Skill authoring terminology.
+- [writing-for-agents](../writing-for-agents/SKILL.md) -- Agent-document hierarchy, pointers, and pruning.

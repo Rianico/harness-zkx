@@ -53,16 +53,21 @@ See [details.md](details.md)...  # Nested links risk partial reads
 
 ### Source of Truth and Discovery Mirror
 
-**Source of truth: `<project_root>/skills/<skill-name>/`.** Agents discover skills through the `.agents/skills/` convention (the Agent Skills / Pi discovery path). Expose each skill by mirroring or symlinking it into `~/.agents/skills/<name>` or project `.agents/skills/<name>`. This repo symlinks `skills/<name>` into `.agents/skills/<name>`.
+**Source of truth: `<project_root>/skills/<skill-name>/`.** Agents discover skills through the `.agents/skills/` convention. Expose each skill by mirroring or symlinking it into `~/.agents/skills/<name>` or project `.agents/skills/<name>`.
+
+The project `.agents/` path is gitignored. It is a mixed install target. Repo skills can be symlinked into `.agents/skills/<name>`. Standalone or vendored skills can be real directories. `~/.agents/skills/` is the user-global mirror. It can also contain non-repo skills.
 
 ```
 <project_root>/
-├── skills/              # Source of truth
+├── skills/              # Source of truth (tracked)
 │   └── <skill-name>/
 │       └── ...
-└── .agents/skills/      # Discovery mirror (symlinks), per the Agent Skills convention
-    └── <skill-name> -> ../../skills/<skill-name>
+└── .agents/skills/      # Local install target (gitignored, mixed)
+    ├── <skill-name> -> ../../skills/<skill-name>
+    └── <vendored-skill>/   # Real directory
 ```
+
+`validate-deps.py` scans `skills/` only. It does not scan `.agents/skills/`. Author every owned skill under `skills/`.
 
 Do NOT author skills in `.claude/skills/` or other runtime-specific locations. Those are generated or synced, never the source.
 

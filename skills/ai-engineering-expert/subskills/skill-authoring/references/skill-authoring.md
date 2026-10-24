@@ -1,302 +1,179 @@
 # Skill Authoring Reference
 
-Complete reference for authoring skills in the LSZ harness.
+Deep reference for authoring skills in the LSZ harness.
 
-**Default standard: the open Agent Skills spec ([agentskills.io](https://agentskills.io)). The root steering file is `AGENTS.md` ([agents.md](https://agents.md)).** Claude Code and Pi frontmatter attributes are enhancements layered on that base. Where enhancements diverge, Pi's semantics are the default (Pi implements the spec, warns on unknown fields, and strips `disable-model-invocation: true` skills from model context entirely).
+**Default standard: the open Agent Skills spec ([agentskills.io](https://agentskills.io)). The root steering file is `AGENTS.md` ([agents.md](https://agents.md)).** Claude Code and Pi frontmatter attributes are enhancements layered on that base. Where enhancements diverge, Pi's semantics are the default. Pi implements the spec, warns on unknown fields, and strips `disable-model-invocation: true` skills from model context entirely.
+
+The entrypoint `SKILL.md` carries the 20% operational spine. This file carries the deep 80%.
 
 ---
 
 ## Part I: Authoring Philosophy
 
-### 1. Rules vs Skills Boundary (The Context Tax)
+### 1. Rules vs Skills Boundary
 
-Rules and skills serve fundamentally different purposes in the agent harness. Understanding this boundary is critical for designing a maintainable, context-efficient system.
+Rules and skills spend different context budgets. Rules are always loaded. Skills are loaded on demand.
 
-| Dimension | Rules | Skills |
-|---|---|---|
-| **Loading** | Always-on (injected every prompt) | On-demand (loaded only when triggered) |
-| **Token Cost** | Deducted from every conversation | Consumed only when invoked |
-| **Purpose** | Universal preferences & defaults | Specialized workflows & deep domain expertise |
-| **Content** | WHAT to choose (concise directives) | HOW to execute (procedures, gotchas, examples) |
-| **Knowledge Type** | Personal taste, baseline reminders | Non-obvious, experiential, framework-specific |
+Use this boundary test:
+
+| Question | Rule | Skill |
+| --- | --- | --- |
+| Does this apply to every turn in every conversation? | Yes | No |
+| Is it a one-line tool or styling preference? | Yes | No |
+| Does the model already understand the concept? | Yes | No |
+| Does the procedure need code examples, scripts, or templates? | No | Yes |
+| Is it framework-specific or domain-specific? | No | Yes |
+| Could a subtle, catastrophic assumption appear without it? | No | Yes |
 
 #### Rules Design Principles
 
-Rules are **always loaded** into context. Every rule token competes for attention with conversation history and code:
-
-1. **Conciseness is Mandatory:** Rules must justify their token tax on every single turn.
-   - *Good:* `- **pytest**: Run with 'uv run pytest -q'`
-   - *Bad:* Long paragraphs explaining why pytest is preferable to unittest.
-2. **State Defaults, Do Not Explain:** Rules declare settled decisions. They do not teach or justify.
-   - *Good:* `Use FastAPI for new REST services.`
-   - *Bad:* Three sentences explaining OpenAPI generation, async performance, and Pydantic integration.
-3. **Encode Settled Taste:** Rules capture decisions you never want to debate:
-   - Tool choices: `uv` over `pip`, `ruff` over `black`, `basedpyright` over `pyright`.
-   - Coding preferences: `pytest -q` by default, file-level lint suppressions over global ignores.
+1. **Conciseness is mandatory.** Every rule token competes for attention on every turn.
+   - Good: `- **pytest**: Run with 'uv run pytest -q'`
+   - Bad: A long paragraph explaining why pytest beats unittest.
+2. **State defaults. Do not explain.** Rules declare settled decisions.
+   - Good: `Use FastAPI for new REST services.`
+   - Bad: Three sentences about OpenAPI, async performance, and Pydantic.
+3. **Encode settled taste.** Capture decisions you never want to debate.
+   - Tools: `uv` over `pip`, `ruff` over `black`, `basedpyright` over `pyright`.
+   - Style: `pytest -q` by default, file-level suppressions over global ignores.
 
 #### Skills Design Principles
 
-Skills are **loaded on-demand**. They can provide deep procedural steps, worked code examples, and trade-off analyses:
+1. **Non-obvious experiential knowledge.** Teach what the model might forget or execute poorly.
+2. **Patterns with code shapes.** Show concrete execution shapes, not abstract advice.
+3. **Framework gotchas and invariants.** Capture non-obvious failure modes.
+4. **Architectural seams.** Explain trade-offs and structural constraints.
 
-1. **Non-Obvious Experiential Knowledge:** Skills teach what the LLM might forget, misunderstand, or execute poorly.
-   - *Example:* Demonstrating why blocking I/O inside `async def` freezes the asyncio event loop.
-2. **Patterns with Code Shapes:** Skills show concrete execution shapes rather than abstract advice.
-   - *Example:* Auditing Django N+1 queries using `select_related` and `prefetch_related`.
-3. **Framework Gotchas & Invariants:** Skills capture non-obvious failure modes (e.g., PyTorch `optimizer.zero_grad()` placement).
-4. **Architectural Seams:** Skills explain trade-offs and structural constraints.
+The entrypoint holds the short comparison table. Keep the full design rationale here only.
 
-#### Boundary Identification Checklist
+### 2. Dual Taxonomy
 
-| Evaluation Question | Rule | Skill |
-|---|---|---|
-| Should this instruction apply to EVERY turn in every conversation? | Yes | No |
-| Is it a one-line tool or styling preference? | Yes | No |
-| Does the model already understand the concepts perfectly? | Yes | No |
-| Does the procedure require code examples, scripts, or templates? | No | Yes |
-| Is it framework-specific or domain-specific? | No | Yes |
-| Might the model make subtle, catastrophic assumptions without it? | No | Yes |
-
-#### The Expertise Routing Pattern
-
-Rules can delegate to skills for complex scenarios:
-
-```markdown
-## Expertise Routing
-
-For complex patterns and domain gotchas, invoke the expert skill:
-/python-expert [async|testing|django|pytorch]
-```
-
-This keeps rules lean while ensuring deep knowledge is available when needed.
-
----
-
-### 2. Dual Taxonomy of Skills
-
-All skills in LSZ belong to one of two structural categories. Classification determines execution shape and budget:
-
-```
-                  ┌───────────────────────────────┐
-                  │        SKILL TAXONOMY         │
-                  └───────────────┬───────────────┘
-                                  │
-         ┌────────────────────────┴────────────────────────┐
-         ▼                                                 ▼
-┌─────────────────────────────────┐       ┌─────────────────────────────────┐
-│     WORKFLOW SKILLS (Action)    │       │   KNOWLEDGE SKILLS (Reference)  │
-├─────────────────────────────────┤       ├─────────────────────────────────┤
-│ • Procedural execution steps    │       │ • Domain expertise & gotchas    │
-│ • State transitions & phases    │       │ • Methodology & best practices  │
-│ • Artifact generation contracts │       │ • No state machine transitions  │
-│ • Budget: ≤150 lines per phase  │       │ • Budget: ≤500 lines total      │
-└─────────────────────────────────┘       └─────────────────────────────────┘
-```
+Every skill is either a Workflow skill or a Knowledge skill. The class determines the body signature and the budget.
 
 #### Workflow Skills (Procedural)
 
-Use for multi-phase tasks with concrete input/output contracts.
-- **Structural Signature:** **Philosophy First, Then Workflow**. Anchor the mental model and invariants before describing state transitions and commands.
-- **1-Phase Workflow:** Focused, self-contained task with low ambiguity (e.g., `handoff`, `skill-stocktake`). Budget: ≤150 lines.
-- **N-Phase Workflow:** Manages state transitions, gates, and sequential execution (e.g., `tdd-cycle` with RED/GREEN/REFACTOR). Budget: ≤150 lines per phase, capped at 500 lines.
+Use for multi-phase tasks with concrete input and output contracts.
+
+- **Structural signature:** philosophy first, then workflow.
+- Anchor the mental model and invariants before state transitions and commands.
+- **1-phase workflow:** focused, self-contained task. Budget: ≤150 lines.
+- **N-phase workflow:** manages state transitions, gates, and sequence. Budget: ≤150 lines per phase, ≤500 lines total.
 
 #### Knowledge Skills (Reference)
 
 Use for guides, domain invariants, architectural patterns, and specialized constraints.
-- **Structural Signature:** **Mental Model & Invariants First, Then Reference Patterns & Gotchas**.
-- **No Artificial Workflows:** Never force a procedural workflow onto reference knowledge. Structure the body by domain topics, concrete code shapes, anti-patterns, and framework gotchas.
-- Loaded just-in-time when entering a specific domain.
+
+- **Structural signature:** mental model and invariants first, then reference patterns and gotchas.
+- **No artificial workflows.** Never force a procedure onto reference knowledge.
+- Structure by domain topics, code shapes, anti-patterns, and framework gotchas.
 - Examples: `ai-engineering-expert`, `python-expert`, `codebase-design`. Budget: ≤500 lines.
 
 #### Context Routers (`manage` / `managed-by`)
 
-Parent skill clusters (e.g., `write` managing `write-article` and `write-publish`, or `scaffold` managing its language subskills) are **information-architecture context routers**, not an intrinsic taxonomy type.
-- The parent acts as an index to avoid polluting the root catalog.
-- The parent dispatches subskills via `Read`, hiding subskills from root auto-discovery.
+Parent clusters are information-architecture routers, not a third taxonomy.
 
-#### When to Embed Logic Directly in an Agent Prompt
+- The parent indexes subskills to avoid polluting the root catalog.
+- The parent dispatches subskills by reading their `SKILL.md`.
+- Subskills use `metadata.managed-by: <parent>`.
+- Parents use `metadata.manage: [<subskill>, ...]`.
 
-Only embed workflow logic directly into an Agent's system prompt if the workflow is:
-1. **Atomic:** Does one specific task without loops or retries.
-2. **Universal:** Does not vary across languages or frameworks.
-3. **Short:** Under 300 words.
+### 3. Progressive Disclosure and Token Economics
 
-If a workflow violates any of these three constraints, author it as a skill.
+Skills share the context window with conversation history, system prompts, and tools.
 
----
-
-### 3. Progressive Disclosure & Token Economics
-
-Skills share the context window with conversation history, system prompts, and tools. Every token competes for attention:
-
-- **Level 1 (Metadata):** `name` and `description` are loaded on every turn (~100 words). Must stay concise.
-- **Level 2 (Skill Body):** `SKILL.md` is loaded only when triggered. Hard budget: ≤500 lines (5,000 tokens).
-- **Level 3 (Bundled Resources):** `references/` and `scripts/` are loaded only on demand (unlimited).
+- **Level 1 (Metadata):** `name` and `description` load on every turn. Keep them short.
+- **Level 2 (Skill Body):** `SKILL.md` loads when the skill triggers. Budget: ≤500 lines.
+- **Level 3 (Bundled Resources):** `references/` and `scripts/` load on demand.
 
 #### The 80/20 Pointer-First Rule
 
-Keep 20% of essential decision logic in `SKILL.md`. Place the remaining 80% of deep reference details behind markdown pointers in `references/`:
-- Keep file references **one level deep** from `SKILL.md`.
-- Never create nested reference chains (`SKILL.md` → `ref1.md` → `ref2.md`), as LLMs may fail to traverse secondary links.
+Keep 20% of essential decision logic in `SKILL.md`. Place the deep 80% behind markdown pointers.
 
----
+- Keep file references one level deep from `SKILL.md`.
+- Never create nested reference chains. Models may fail to traverse secondary links.
+- One concept, one canonical home. Cross-link instead of copying.
 
 ### 4. Calibration: Freedom vs Prescriptiveness
 
-Calibrate instruction specificity to task fragility:
+Match instruction specificity to task fragility.
 
-- **High Freedom (Text Guidelines):** Use when multiple valid approaches exist and contextual judgment is required (e.g., qualitative code review, architecture trade-offs).
-- **Low Freedom (Specific Scripts):** Use when operations are fragile, consistency is critical, or syntax errors cause cascading failures (e.g., database migrations, crypto operations, release tagging).
-- **Provide Defaults, Not Menus:** Never give the model an open-ended menu of equivalent choices. Recommend a concrete default with an option to diverge.
+- **High freedom (text guidelines):** multiple valid approaches and contextual judgment. Use for qualitative review and architecture trade-offs.
+- **Low freedom (specific scripts):** fragile operations, consistency demands, or cascading syntax failures. Use for migrations, crypto operations, and release tagging.
+- **Provide defaults, not menus.** Recommend one concrete default with an option to diverge.
 
----
+### 5. Content Integrity and Model Competence
 
-### 5. Content Integrity & Model Competence
-
-- **Assume Baseline Competence:** Do not explain basic programming concepts (e.g., "JSON is a key-value format" or "git commit saves changes"). Jump directly to project conventions, non-obvious gotchas, and procedural order.
-- **Avoid Time-Sensitive Sediment:** Avoid prose like "If before August 2025, use API v1". State the current standard directly, or place legacy migrations in collapsible HTML sections.
+- **Assume baseline competence.** Do not explain basic programming concepts.
+- Jump to project conventions, non-obvious gotchas, and procedural order.
+- **Avoid time-sensitive sediment.** State the current standard directly. Put legacy migrations in collapsible sections.
 
 ---
 
 ## Part II: Operational Authoring Workflow
 
-```
-┌─────────────────────────────────┐
-│ Phase 1: Intent Curation        │ Query design tree frontier with recommended defaults
-└────────────────┬────────────────┘
-                 ▼
-┌─────────────────────────────────┐
-│ Phase 2: Schema & Frontmatter   │ Apply tripartite formula, block scalars, ≤300 chars
-└────────────────┬────────────────┘
-                 ▼
-┌─────────────────────────────────┐
-│ Phase 3: Parent-Subskill Layout │ Configure manage/managed-by, dispatch via Read
-└────────────────┬────────────────┘
-                 ▼
-┌─────────────────────────────────┐
-│ Phase 4: Verification & Gates   │ Pass lint, context-check, STE-100, and pytest
-└─────────────────────────────────┘
-```
+The workflow has three phases. The entrypoint carries the same phases. Do not maintain a second phase model here.
 
----
+### Phase 1: Settle Intent Contract
 
-### Phase 1: Intent Curation (Grilling Pattern)
+Skills encode persistent behavior. Never assume requirements silently.
 
-Because skills encode persistent agent behaviors, agents must never assume requirements silently. We use the **Grilling Pattern**:
+1. **Discover facts first.** Inspect the workspace, existing skills, dependencies, and test commands.
+2. **Identify the decision frontier.** Map open choices as a tree. A choice is open only when its prerequisites are settled.
+3. **Ask in numbered rounds.** Recommend one default per question.
+4. **Lock the Intent Contract.** Require explicit user confirmation before creating files.
 
-1. **Discover Facts First:** Inspect the workspace, existing skills, dependencies, and test commands before asking questions.
-2. **Identify the Decision Frontier:** Map open architectural choices as a tree.
-3. **Ask in Numbered Rounds:** Query open choices with recommended defaults:
-   - **Scope & Non-Goals:** What problem does this solve? What is explicitly out of scope?
-   - **Classification:** Is this a procedural Workflow or reference Knowledge?
-   - **Verification Anchors:** Which outputs are verified deterministically, and which semantically?
-   - **Behavioral Scenarios:** What BDD cases must hold?
-4. **Lock Shared Understanding:** Secure user confirmation before creating files.
+The four contract fields:
 
-Interactive CLI generators use single-question dialogs instead. See `scaffold`.
+- **Problem:** concrete deficiency, friction, or regression.
+- **Proposed Outcome:** observable behavior, plus Given/When/Then cases and verification anchors.
+- **Affected Seams:** skill boundaries, trigger collisions, and parent-subskill wiring.
+- **Non-Negotiable Constraints:** taxonomy class, token budget, platform support, and explicit non-goals.
 
----
+Interactive CLI generators use single-question dialogs. See `scaffold`.
 
-### Phase 2: Schema & Frontmatter Mechanics
+### Phase 2: Draft and Structure Contract
 
-#### Naming Conventions
+Resolve the role before editing:
 
-The `name` field must satisfy these hard constraints:
-1. 1–64 characters, lowercase alphanumeric and hyphens only (`^[a-z0-9-]+$`).
-2. Must not start or end with a hyphen (`-`).
-3. Must not contain consecutive hyphens (`--`).
-4. Must match the skill's directory name exactly.
+- The orchestrator dispatches an implementer with the contract artifact path.
+- The implementer executes the steps below.
+- An implementer never dispatches another implementer.
+- Without a subagent facility, execute inline and record the deviation.
 
-**Taxonomy-Based Naming Patterns:**
-- **Knowledge (Methodology/Spine):** Standardize on `[topic]-expert` (e.g., `python-expert`, `tdd-expert`).
-- **Knowledge (Facts/Reference):** Use bare nouns or plural concepts (e.g., `adr`, `triage-labels`, `design-system`).
-- **Workflows:** Use action verbs or prepositional phrases (e.g., `handoff`, `update-docs`, `tdd-cycle`).
+Load `writing-for-agents` before drafting the body.
 
-#### Description Requirements (The Tripartite Formula)
+#### 2.1 Scaffold and Layout with `skill.py`
 
-The `description` field is mandatory and must satisfy the **Tripartite Formula**:
-1. **What it is (Anchor Noun):** Category noun defining nature and domain in the first 50 characters (e.g., *"Architecture decision record manager..."*, *"Adversarial code review gate..."*).
-2. **What it does (Active Capabilities):** Concrete third-person present tense action verbs (e.g., *"initiates, links, and supersedes ADRs"*).
-3. **When to use (Activation Trigger):** Explicit trigger condition starting with `Use when...`, embedded with concrete symptom keywords (e.g., *flaky tests*, *drift*, *errors*, *debugging*).
-4. **Negative Boundary (Optional Lever):** Add `Do not use for X; defer to Y` when adjacent skills collide.
+`skill.py` is the canonical lifecycle tool. It owns deterministic file moves and frontmatter wiring. The model supplies intent: names, relationships, and descriptions.
 
-**Frontmatter Scalar Convention:**
-- Always format `description` with YAML folded block scalar `>-` (strip trailing newlines).
-- Format `argument-hint` with literal block scalar `|-`.
-- Enforce the **≤ 300 characters** hard budget in the LSZ harness.
+```bash
+# Create a top-level skill
+uv run $SKILL_DIR/scripts/skill.py add <name> --description "<description>"
 
-**Worked Description Examples:**
+# Create a subskill under a parent
+uv run $SKILL_DIR/scripts/skill.py add <name> --parent <parent> --description "<description>"
 
-*Good Workflow Description (279 chars):*
-```yaml
-description: >-
-  ADR lifecycle manager via `adr` CLI. Initiates, links, supersedes, and verifies architecture decision records. Use when documenting architectural decisions, evaluating technical trade-offs, or diagnosing ADR drift. Defer to git for commit management.
+# Wire dependencies and hierarchy
+uv run $SKILL_DIR/scripts/skill.py depend <skill> <dependency>
+uv run $SKILL_DIR/scripts/skill.py manage <parent> <child>
+
+# Rename or remove with cascade
+uv run $SKILL_DIR/scripts/skill.py rename <old> <new> [--parent <parent>]
+uv run $SKILL_DIR/scripts/skill.py remove <name> [--parent <parent>]
 ```
 
-*Good Knowledge Description (288 chars):*
-```yaml
-description: >-
-  Adversarial crux code review gate auditing test refutability, domain state invariants, failure resiliency, and Clean Architecture boundaries. Evaluates semantic soundness beyond test passes. Use when reviewing code changes, auditing PRs, checking invariants, or verifying goal attainment.
-```
+Rules:
 
-#### Base Fields (Agent Skills Spec)
+- Use `skill.py` for scaffolding and wiring. Do not create directories by hand.
+- `validate-deps.py rename` duplicates this tool. Prefer `skill.py`.
+- `skill.py add` creates `skills/<name>/SKILL.md` for a top-level skill.
+- It creates `skills/<parent>/subskills/<name>/SKILL.md` for a subskill.
+- It wires `metadata.manage` on the parent and `managed-by` on a subskill.
+- The basic directory anatomy lives in [skill-structure.md](skill-structure.md).
 
-| Field | Required | Type | Purpose |
-|---|---|---|---|
-| `name` | **Required** | string | Skill identifier (1–64 chars, matches directory) |
-| `description` | **Required** | string | Tripartite routing text (≤300 chars, `>-` scalar) |
-| `compatibility` | Optional | string | Environment requirements (max 500 chars) |
-| `allowed-tools` | Optional | string or list | Pre-approved tools (e.g., `Bash(git:*) Read Write`) |
-| `metadata` | Optional | mapping | Structural declarations (see below) |
+#### 2.2 Parent-Subskill Architecture
 
-#### Metadata Conventions
-
-The `metadata` mapping supports structural relationships:
-
-```yaml
-metadata:
-  manage: [git, python, rust]        # Parent skill: managed subskill names
-  managed-by: scaffold               # Subskill: parent skill name
-  depends-on: [eval-gate, code-review] # Hard dependencies required for execution
-  credits:                           # Upstream provenance for ported skills
-    source: https://github.com/org/repo/blob/main/skills/upstream/SKILL.md
-    author: upstream-author
-    version: main
-    note: Adapted for LSZ harness
-```
-
-**`depends-on` Rules:**
-- List hard dependencies only: skills whose absence breaks execution.
-- Add `depends-on` when this skill invokes another skill, reads its scripts, or relies on its output contract.
-- Keep optional alternatives and reading references in markdown prose.
-- Run `uv run $SKILL_DIR/scripts/validate-deps.py related <skill-name>` before renaming or removing a skill.
-
-#### Platform Enhancement Fields
-
-Claude Code and Pi extend the base spec with enhancement attributes. Pi's semantics are the default:
-
-| Field | Platform | Type | Purpose |
-|---|---|---|---|
-| `disable-model-invocation` | Claude / Pi | boolean | When `true`, removes skill from model context entirely; callable only via user slash command |
-| `argument-hint` | Claude Code | string | Autocomplete syntax hint for arguments (`\|-` scalar) |
-| `arguments` | Claude Code | string or list | Named positional arguments substituted via `$name` |
-| `user-invocable` | Claude Code | boolean | Controls appearance in user slash menu (default: `true`) |
-| `model` | Claude Code | string | Override model (`opus`, `sonnet`, `haiku`, `inherit`) |
-| `effort` | Claude Code | string | Thinking effort level (`low`, `medium`, `high`, `xhigh`, `max`) |
-| `context` | Claude Code | string | Set to `fork` for subagent isolation |
-| `paths` | Claude Code | list | Glob patterns limiting activation |
-
-#### Path & Variable Substitutions
-
-Use `$SKILL_DIR` as the universal path anchor in **prose**:
-- Scripts: `uv run $SKILL_DIR/scripts/<name>.py`
-- References: `$SKILL_DIR/references/<name>.md`
-- Markdown Links: Use standard relative-to-file links: `[name](references/<name>.md)`.
-
----
-
-### Phase 3: Parent-Subskill Architecture
-
-When multiple related capabilities share a domain, organize them under a parent cluster to prevent root catalog bloat:
+Use a parent cluster when related capabilities share a domain. This prevents root catalog bloat.
 
 ```
 skills/<parent-name>/
@@ -310,38 +187,206 @@ skills/<parent-name>/
 │       └── SKILL.md
 ```
 
-#### Invariants
+Invariants:
 
-1. **Subskill Name Collision Rule:** A subskill name must NOT collide with any top-level skill name. Tooling indexes skills by name. Duplicates cause silent collision.
-2. **Dispatch via `Read`, Never `Skill` Tool:** Nested subskills under `subskills/` are deliberately hidden from model root discovery. The parent must dispatch them using `Read`:
+1. **Subskill name collision rule.** A subskill name must not collide with a top-level skill name. Tooling indexes skills by name. Duplicates cause silent collisions.
+2. **Dispatch via `Read`, not the `Skill` tool.** Nested subskills are hidden from root discovery. The parent must read the subskill file.
 
 ```markdown
 ## Dispatch Table
 
 | Subskill | Action |
-|---|---|
+| --- | --- |
 | `article` | Read `$SKILL_DIR/subskills/article/SKILL.md` and execute its instructions |
 | `publish` | Read `$SKILL_DIR/subskills/publish/SKILL.md` and execute its instructions |
 ```
 
----
+#### 2.3 Naming Conventions
 
-### Phase 4: Deterministic Verification & Static Gates
+The `name` field must satisfy these constraints:
 
-Before publishing or committing any skill, execute the 5 verification gates:
+1. 1–64 characters, lowercase alphanumeric and hyphens only (`^[a-z0-9-]+$`).
+2. Must not start or end with a hyphen.
+3. Must not contain consecutive hyphens.
+4. Must match the skill directory name exactly.
 
-```bash
-# Gate 1 & 2: Frontmatter syntax, scalar conventions, and name collisions
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
+No script enforces these rules today. Treat them as reviewer checks.
 
-# Gate 3: Description budget (≤300 chars) and tripartite formula
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
+Taxonomy-based naming patterns:
 
-# Gate 4: Plain English and STE-100 deterministic linting
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/<skill-name>/SKILL.md
+- **Knowledge (methodology or spine):** `[topic]-expert`, such as `python-expert`.
+- **Knowledge (facts or reference):** bare nouns or plural concepts, such as `adr` or `design-system`.
+- **Workflows:** action verbs or prepositional phrases, such as `handoff` or `update-docs`.
 
-# Gate 5: Unit test integrity
-uv run pytest tests/ai-engineering-expert
+#### 2.4 Description Requirements (Tripartite Formula)
+
+The `description` field is mandatory. It has three required parts and one optional lever.
+
+1. **What it is (anchor noun).** A category noun in the first 50 characters. Example: "Architecture decision record manager..."
+2. **What it does (active capabilities).** Concrete third-person present action verbs. Example: "initiates, links, and supersedes ADRs."
+3. **When to use (activation trigger).** An explicit `Use when...` clause with concrete symptom keywords.
+4. **Negative boundary (optional).** `Do not use for X. Defer to Y.` Use it when adjacent skills collide.
+
+Frontmatter scalar convention:
+
+- Use the folded block scalar `>-` for `description`.
+- Use the literal block scalar `|-` for `argument-hint`.
+- Enforce the 300-character budget.
+
+Worked examples:
+
+*Good workflow description (279 chars):*
+
+```yaml
+description: >-
+  ADR lifecycle manager via `adr` CLI. Initiates, links, supersedes, and verifies architecture decision records. Use when documenting architectural decisions, evaluating technical trade-offs, or diagnosing ADR drift. Defer to git for commit management.
 ```
 
-All 5 gates must return **PASS** with zero errors.
+*Good knowledge description (288 chars):*
+
+```yaml
+description: >-
+  Adversarial crux code review gate auditing test refutability, domain state invariants, failure resiliency, and Clean Architecture boundaries. Evaluates semantic soundness beyond test passes. Use when reviewing code changes, auditing PRs, checking invariants, or verifying goal attainment.
+```
+
+#### 2.5 Base Fields (Agent Skills Spec)
+
+| Field | Required | Type | Purpose |
+| --- | --- | --- | --- |
+| `name` | Required | string | Skill identifier. 1–64 chars. Must match the directory. |
+| `description` | Required | string | Tripartite routing text. ≤300 chars. Use `>-`. |
+| `compatibility` | Optional | string | Environment requirements. Max 500 chars. |
+| `allowed-tools` | Optional | string or list | Pre-approved tools, such as `Bash(git:*) Read Write`. |
+| `metadata` | Optional | mapping | Structural declarations. See below. |
+
+#### 2.6 Metadata Conventions
+
+```yaml
+metadata:
+  manage: [git, python, rust]           # Parent skill: managed subskill names
+  managed-by: scaffold                  # Subskill: parent skill name
+  depends-on: [eval-gate, code-review]  # Hard dependencies required for execution
+  credits:                              # Upstream provenance for ported skills
+    source: https://github.com/org/repo/blob/main/skills/upstream/SKILL.md
+    author: upstream-author
+    version: main
+    note: Adapted for LSZ harness
+```
+
+`depends-on` rules:
+
+- List hard dependencies only. Their absence breaks execution.
+- Add `depends-on` when this skill invokes another skill, reads its scripts, or relies on its output contract.
+- Keep optional alternatives and reading references in prose.
+- Run `uv run $SKILL_DIR/scripts/validate-deps.py related <skill-name>` before a rename or removal.
+
+`check` validates `depends-on` only. It does not validate `manage` or `managed-by` wiring. Use `skill.py manage` and `skill.py unmanage` for those changes.
+
+#### 2.7 Platform Enhancement Fields
+
+Claude Code and Pi extend the base spec. Pi's semantics are the default.
+
+| Field | Platform | Type | Purpose |
+| --- | --- | --- | --- |
+| `disable-model-invocation` | Claude / Pi | boolean | `true` removes the skill from model context. User-only invocation. |
+| `argument-hint` | Claude Code | string | Autocomplete hint for arguments. Use `\|-`. |
+| `arguments` | Claude Code | string or list | Named positional arguments substituted via `$name`. |
+| `user-invocable` | Claude Code | boolean | Controls appearance in the user slash menu. |
+| `model` | Claude Code | string | Overrides the model: `opus`, `sonnet`, `haiku`, or `inherit`. |
+| `effort` | Claude Code | string | Thinking effort: `low`, `medium`, `high`, `xhigh`, or `max`. |
+| `context` | Claude Code | string | Set to `fork` for subagent isolation. |
+| `paths` | Claude Code | list | Glob patterns that limit activation. |
+
+#### 2.8 Path and Variable Substitutions
+
+Use `$SKILL_DIR` as the path anchor in prose:
+
+- Scripts: `uv run $SKILL_DIR/scripts/<name>.py`
+- References: `$SKILL_DIR/references/<name>.md`
+- Markdown links: standard relative links, such as `[name](references/<name>.md)`.
+
+Use forward slashes in every path.
+
+#### 2.9 Body Signatures
+
+**Workflow skills:**
+
+1. *Philosophy and foundation:* mental model, invariants, design constraints, and non-goals.
+2. *Operational workflow:* ordered phases, deterministic commands, error handling, and completion criteria.
+3. *Execution contract:* invocation, arguments, and expected response format.
+
+**Knowledge skills:**
+
+1. *Core mental model:* architectural trade-offs, invariants, and domain rules.
+2. *Topical guidance and gotchas:* code shapes, anti-patterns, and failure modes.
+3. *Pointers to deep assets:* one-level-deep links. Never invent a workflow for reference material.
+
+Every procedural step ends with a checkable, falsifiable completion criterion. Prefer an exit code, an assertion, or a file existence test.
+
+### Phase 3: Verify and Gate Execution
+
+Run the native verification suite from the project root. These commands are repo-wide unless noted.
+
+```bash
+# Frontmatter syntax, scalar conventions, and name collisions
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
+
+# Description budget (≤300 chars)
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
+
+# Plain English and STE-100 linting (per file)
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/<skill-name>/SKILL.md
+```
+
+Conditional gates:
+
+```bash
+# After a dependency, move, or rename change. Validates depends-on only.
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
+
+# Only when targeted tests exist
+uv run pytest tests/ai-engineering-expert tests/test_validate_deps.py
+uv run pytest tests/<skill-name>
+```
+
+Full local gate:
+
+```bash
+bash scripts/check.sh
+```
+
+`scripts/check.sh` runs 8 gates: ruff check, ruff format, basedpyright, `lint`, `check`, `context-check`, STE-100 on 7 named files, and pytest.
+
+Gate facts:
+
+- `context-check` scans the whole tree. It has no working single-skill mode.
+- `context-check` hard-fails only on missing, empty, or over-budget descriptions. `Use when` and symptom checks are warnings. They are skipped for `managed-by` subskills.
+- `ste100.py` enforces 20 words for every sentence. It does not split procedural and descriptive limits.
+- CI STE-100 covers 7 named files, not every `SKILL.md` or reference.
+- No script validates markdown links or `$SKILL_DIR` usage. Mark those checks as reviewer-only.
+
+#### Semantic Verification Gate (Skeptic)
+
+Dispatch an adversarial Skeptic subagent. The Skeptic reads the diff only, with zero exploration.
+
+- **EDD anchors:** each deterministic goal has a script or test.
+- **Symptom grounding:** `Use when...` uses natural user problem terms.
+- **BDD coverage:** Given/When/Then covers the happy path, edge cases, and failure modes.
+- **Default selection:** one clear default, not an open menu.
+- **Context cleanliness:** no environment-specific paths or setup noise.
+- **Link integrity:** every markdown reference resolves.
+- **Path anchoring:** prose uses `$SKILL_DIR`.
+- **Taxonomy fit:** the body signature matches Workflow or Knowledge.
+
+A failure routes back to the implementer. The orchestrator keeps the verdict and the artifact pointers.
+
+---
+
+## Canonical Homes
+
+- **Layout and directory anatomy:** [skill-structure.md](skill-structure.md)
+- **Failure archetypes and diagnosis:** [skill-diagnosis.md](skill-diagnosis.md)
+- **Description budgets and invocation classes:** [context-load-policy.md](context-load-policy.md)
+- **Terminology:** [glossary.md](glossary.md)
+- **Agent-document craft:** [writing-for-agents](../../writing-for-agents/SKILL.md)
+- **STE-100 grammar:** [plain-language.md](../../../references/plain-language.md)

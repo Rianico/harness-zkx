@@ -25,12 +25,13 @@ Every skill declares one of two invocation classes via the canonical `disable-mo
 
 Codex budgets 8,000 characters for the global initial skill list. It shortens descriptions before omitting skills. At 300 characters per skill, ~25 skills fit without shortening.
 
-The 300-character limit is intentionally conservative — it forces description discipline and leaves headroom for skill growth. Grounded in empirical function-calling benchmarks, every description must fit the **Tripartite Formula**:
-1. **What it is:** Category noun / role anchor (identity in first 50 chars).
+The 300-character limit is intentionally conservative. It forces description discipline and leaves headroom for skill growth. Every description must fit the **Tripartite Formula**:
+1. **What it is:** Category noun or role anchor. Identity in the first 50 characters.
 2. **What it does:** Concrete third-person action verbs defining capabilities and outputs.
-3. **When to use:** **Required.** Explicit decision boundary with `Use when...` (or `when the user...`).
-4. **Symptom keywords:** **Fundamental standard.** Explicit failure states, error signs, or user pain phrases.
-5. **Negative boundary:** **Opt-in.** Exclusion clause (`Do not use for...`, `defer to...`) to prevent collisions.
+3. **When to use:** Required decision boundary with `Use when...` or `when the user...`. Embed symptom keywords here.
+4. **Negative boundary (optional):** Exclusion clause such as `Do not use for...` or `defer to...` to prevent collisions.
+
+Three parts are required. The negative boundary is an optional lever.
 
 ## Platform Sync Details
 
@@ -87,12 +88,11 @@ The following are enforced by `skill-authoring` methodology during authoring:
 ## Verification
 
 ```bash
-# Enforce policy on all skills
+# Enforce policy across the whole skill tree
 uv run $SKILL_DIR/scripts/validate-deps.py context-check
-
-# Single skill
-uv run $SKILL_DIR/scripts/validate-deps.py context-check <name>
 
 # JSON output for CI
 uv run $SKILL_DIR/scripts/validate-deps.py context-check --json
 ```
+
+`context-check` scans the whole tree. It has no working single-skill mode.
