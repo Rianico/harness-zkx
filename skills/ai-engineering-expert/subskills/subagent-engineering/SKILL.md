@@ -31,7 +31,7 @@ Distinguish peer agents from subagents before choosing an execution topology.
 A peer agent coordinates horizontal workflows across independent environments:
 - **Independent Lifecycle:** Operates as an independent, long-lived process or session (such as a PI agent, Codex agent, or Claude in Herdr panes).
 - **Autonomous Identity:** Maintains dedicated context, separate credentials, and direct user interface capability.
-- **Out-of-Band Coordination:** Coordinates asynchronously through IPC, dispatch tickets, or Herdr scripts (`skills/herdr/SKILL.md`).
+- **Out-of-Band Coordination:** Coordinates asynchronously through IPC, dispatch tickets, or the `herdr` skill's scripts. If the session runs under Herdr, then run those scripts. Otherwise use IPC or dispatch tickets.
 
 #### Subagent (Vertical Context Firewall)
 
