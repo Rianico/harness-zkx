@@ -78,7 +78,7 @@ A "type complete" library has all public symbols with known types.
 - `__init__` return type (always `None`)
 - Module-level dunder names (`__all__`, `__version__`, etc.)
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -93,7 +93,7 @@ basedpyright --verifytypes my_library --outputjson
 
 Outputs a "type completeness score" and lists symbols with ambiguous/unknown types.
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -104,7 +104,7 @@ Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/01
 3. **Prefix private symbols** with `_`
 4. **Work with dependency maintainers** for their type completeness
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -137,7 +137,7 @@ Prefer immutable containers for parameters:
 def process(items: Sequence[str | int]) -> None: ...
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -161,7 +161,7 @@ def complex_decorator(*, mode: str) -> Callable[[_F], _F]:
 
 Use `ParamSpec` and `Concatenate` (Python 3.10+). Complex mutations may require erasing the signature.
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -178,7 +178,7 @@ class Container(Generic[_T]):
         self.value = value
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -198,7 +198,7 @@ TreeNode = LeafNode | list["TreeNode"]
 StrOrInt: TypeAlias = str | int
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -214,7 +214,7 @@ class Hashable(ABC):
         raise NotImplementedError()
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -231,7 +231,7 @@ class Base:
     def cannot_override(self) -> None: ...
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -241,7 +241,7 @@ Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/01
 def process(mode: Literal["r", "w", "rw"]) -> None: ...
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -255,7 +255,7 @@ COLOR_FORMAT_RGB = "rgb"
 LATEST_VERSION: Final[tuple[int, int]] = (4, 5)
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -267,7 +267,7 @@ Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/01
 | `@dataclass` | Untyped dict |
 | `TypedDict` | Untyped dict |
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)
 
 ---
 
@@ -301,4 +301,4 @@ if TYPE_CHECKING:
     from expensive_module import ExpensiveType
 ```
 
-Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-exp-raw/016-typed-libraries.md)
+Source: [basedpyright-expert-raw/016-typed-libraries.md](basedpyright-expert-raw/016-typed-libraries.md)

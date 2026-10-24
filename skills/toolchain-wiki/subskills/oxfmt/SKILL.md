@@ -8,7 +8,7 @@ metadata:
 
 # Oxfmt
 
-Native Rust formatter — **30× Prettier, 100% conformance** on shared Oxc compiler stack. Scaffold formatter is **oxfmt ≥0.15** (see `$SKILL_DIR/../../scaffold/subskills/typescript-scaffolding/SKILL.md`).
+Native Rust formatter — **30× Prettier, 100% conformance** on shared Oxc compiler stack. Scaffold formatter is **oxfmt ≥0.15** (see the `typescript-scaffolding` skill, under `scaffold`).
 
 Pair with sibling `oxlint` (`$SKILL_DIR/../oxlint/SKILL.md`) for linting.
 
@@ -57,7 +57,7 @@ See `$SKILL_DIR/references/oxc-raw/010-cli.md` for full flags.
 | raw          | `$SKILL_DIR/references/oxc-raw/`            | 7-page formatter scrape `2026-09-08` via `scrape.py site` — self-contained                                           |
 | linter       | `$SKILL_DIR/../oxlint/SKILL.md`             | sibling — Oxlint (lint) lives separately                                                                             |
 
-For freshness, re-scrape via `uv run $SKILL_DIR/../../../docs-scraper/scripts/scrape.py site https://oxc.rs/docs/guide/usage/formatter.md https://oxc.rs/docs/guide/usage/formatter/config.md https://oxc.rs/docs/guide/usage/formatter/cli.md https://oxc.rs/docs/guide/usage/formatter/config-file-reference.md https://oxc.rs/docs/guide/usage/formatter/generated-config.md --output-dir .lsz/tmp/oxc-raw --force` — see `references/oxc-raw/README.md`.
+For freshness, re-scrape via `uv run skills/docs-scraper/scripts/scrape.py site https://oxc.rs/docs/guide/usage/formatter.md https://oxc.rs/docs/guide/usage/formatter/config.md https://oxc.rs/docs/guide/usage/formatter/cli.md https://oxc.rs/docs/guide/usage/formatter/config-file-reference.md https://oxc.rs/docs/guide/usage/formatter/generated-config.md --output-dir .lsz/tmp/oxc-raw --force` — see `references/oxc-raw/README.md`.
 
 ## When to Use Raw
 

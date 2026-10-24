@@ -125,7 +125,7 @@ ignore = ["D107", "D102"]
 
 ## Suppression Scope Hierarchy
 
-From [common development patterns](rules/common/development-patterns.md):
+From `rules/common/development-patterns.md`:
 
 1. **Fix the code** — Preferred, addresses the actual issue
 2. **Line-level suppression** — Single instance, document why

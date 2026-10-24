@@ -307,6 +307,20 @@ Use `$SKILL_DIR` as the path anchor in prose:
 
 Use forward slashes in every path.
 
+**Anchor:** `$SKILL_DIR` expands to the directory of the `SKILL.md` that owns the referencing document. The package root is the outermost `skills/<name>/` above it.
+
+**Scope:** a `$SKILL_DIR` path must resolve inside the package root. A path that escapes it is an Out-of-Package Reference.
+
+Three reference kinds:
+
+| Kind | Required form |
+| --- | --- |
+| Intra-package pointer | Relative link or `$SKILL_DIR` path. |
+| Cross-package pointer | Symbolic skill name plus a `metadata.depends-on` entry. Never a `$SKILL_DIR/../..` path. |
+| Exterior capability | Guarded Reference: front-loaded condition per `writing-for-agents` §1, plus the degraded branch. |
+
+**Guard trigger:** guard a target that is not co-distributed (a different repository or `skills-lock.json` source), or absent from the declared install set. A co-distributed sibling needs no guard.
+
 #### 2.9 Body Signatures
 
 **Workflow skills:**
@@ -363,7 +377,7 @@ Gate facts:
 - `context-check` hard-fails only on missing, empty, or over-budget descriptions. `Use when` and symptom checks are warnings. They are skipped for `managed-by` subskills.
 - `ste100.py` enforces 20 words for every sentence. It does not split procedural and descriptive limits.
 - CI STE-100 covers 7 named files, not every `SKILL.md` or reference.
-- No script validates markdown links or `$SKILL_DIR` usage. Mark those checks as reviewer-only.
+- `uv run $SKILL_DIR/scripts/validate-deps.py refs` resolves every Markdown link and `$SKILL_DIR` target. Gate 5 (`validate-deps.py check`) runs it too.
 
 #### Semantic Verification Gate (Skeptic)
 

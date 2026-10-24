@@ -19,13 +19,13 @@ Per `development-patterns.md` §3:
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`RUST_TOOLCHAIN_TOML`, `RUST_LIB_RS`, `CARGO_TOML_TMPL`) — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` to preview.
+Source of truth is `$SKILL_DIR/../../scripts/scaffold.py` (`RUST_TOOLCHAIN_TOML`, `RUST_LIB_RS`, `CARGO_TOML_TMPL`) — run `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor rust --dry-run` to preview.
 
 > Existing repo? `--update` refreshes generated files but preserves `Cargo.toml` (project manifest); work the printed NEXT list. Per-field edits (confirm value with user first): `scaffold.py ensure rust-dep --name <crate> [--version <req>]` — see `git-scaffolding/SKILL.md` § Update.
 
 ```bash
-uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --project-name <name>
-uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --project-name <name> --dry-run
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor rust --project-name <name>
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor rust --project-name <name> --dry-run
 ```
 
 Pure-deterministic: `rust-toolchain.toml` (`stable` + `rustfmt`/`clippy`), `src/lib.rs` (raw template — the crate target `cargo fmt`/`clippy`/`test` need; without it all three fail with `no targets specified in the manifest`), `.gitignore` dedup (`GITIGNORE_GIT` + `target/`).
@@ -34,14 +34,14 @@ Project-owned: `src/lib.rs` is the crate the project edits, so `--update` preser
 
 Mixed (script warns → proofread): `Cargo.toml` (`{{project_name}}` normalized to kebab-case, edition `2024`), `AGENTS.md` `### Runtime` pointer. Script warns if name normalized and on `AGENTS.md` 3-section preservation.
 
-Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` (tool owns bytes).
+Byte view: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor rust --dry-run` (tool owns bytes).
 
 ## Steps — Tool Owns Determinism
 
-1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --project-name <name>` (warns on kebab-case normalization).
+1. Generate: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor rust --project-name <name>` (warns on kebab-case normalization).
 2. Install: `cargo fetch`.
 3. Proofread mixed warnings: `Cargo.toml` name/edition, `AGENTS.md` pointer.
-4. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` + `cargo fmt --check && cargo clippy -- -D warnings && cargo test`
+4. Verify: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor rust --dry-run` + `cargo fmt --check && cargo clippy -- -D warnings && cargo test`
 
 > [!tip] Verification — before every push/PR
 >
@@ -50,9 +50,9 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --dry-run` (tool
 
 ## Grilling Selection
 
-If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>`. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor rust --with-coverage --coverage-threshold 80`. Without coverage, generator writes plain `Cargo.toml`/`cargo test` path and omits `llvm-cov` wiring — including its install steps: the coverage job installs `cargo-llvm-cov` (`taiki-e/install-action`, SHA-pinned) and the `llvm-tools-preview` component before the first call, because a bare runner has neither (`error: no such command: llvm-cov`). Gate is optional leaf — config stays byte-identical.
+If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>`. Example: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor rust --with-coverage --coverage-threshold 80`. Without coverage, generator writes plain `Cargo.toml`/`cargo test` path and omits `llvm-cov` wiring — including its install steps: the coverage job installs `cargo-llvm-cov` (`taiki-e/install-action`, SHA-pinned) and the `llvm-tools-preview` component before the first call, because a bare runner has neither (`error: no such command: llvm-cov`). Gate is optional leaf — config stays byte-identical.
 
 ## Relation to Other Subskills
 
-- Git contract stays canonical in `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`; Rust does not redeclare it.
-- CI wiring for Rust lives in `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md` — Rust CI job runs `cargo test` inside the shared verify gate.
+- Git contract stays canonical in `$SKILL_DIR/../git-scaffolding/SKILL.md`; Rust does not redeclare it.
+- CI wiring for Rust lives in `$SKILL_DIR/../ci-scaffolding/SKILL.md` — Rust CI job runs `cargo test` inside the shared verify gate.

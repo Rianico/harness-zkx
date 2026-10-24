@@ -87,7 +87,7 @@ range-wide. `--commit` narrows commit rows only.
   even when caps omit rows; `truncated.*` reports exactly those omissions.
 - **Remainder lines**: every capped text block prints its omitted count plus
   a ready-to-paste rerun quoting the same spec, e.g.
-  `uv run $SKILL_DIR/subskills/git-diff-digest/scripts/brief.py 'main...HEAD' --mode ... --max-lines 42`.
+  `uv run $SKILL_DIR/scripts/brief.py 'main...HEAD' --mode ... --max-lines 42`.
 - **Fingerprint**: `sha256(spec_in, mode, merge_base, ordered commit shas)`.
   Emitted in every readout (range, pr, verify); `resolved_from` is present in
   text and payload; `only_in_base` is present in the text brief.

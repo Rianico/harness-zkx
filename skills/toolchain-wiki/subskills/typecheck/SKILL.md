@@ -10,12 +10,12 @@ metadata:
 
 Proxy to canonical `programming-expert/subskills/basedpyright-expert`.
 
-- Canonical: `$SKILL_DIR/../../programming-expert/subskills/basedpyright-expert/SKILL.md`
-- References: `$SKILL_DIR/../../programming-expert/subskills/basedpyright-expert/references/` (curated `configuration.md`, `diagnostic-rules.md`, `type-basics.md` etc. + raw `basedpyright-expert-raw/`)
+- Canonical: the `basedpyright-expert` skill, under `programming-expert`
+- References: the `basedpyright-expert` skill's `references/` (curated `configuration.md`, `diagnostic-rules.md`, `type-basics.md` etc. + raw `basedpyright-expert-raw/`)
 
 Use the canonical skill for all work. This proxy exists only for `toolchain-wiki` dispatch:
 
 - `toolchain-wiki` → `typecheck` → Read canonical
-- Direct: `Read $SKILL_DIR/../../programming-expert/subskills/basedpyright-expert/SKILL.md` also works (subskill hidden vs top-level visibility)
+- Direct: `Read` the `basedpyright-expert` `SKILL.md`, under `programming-expert`, also works (subskill hidden vs top-level visibility)
 
 Do not duplicate content here — single source is `programming-expert`.

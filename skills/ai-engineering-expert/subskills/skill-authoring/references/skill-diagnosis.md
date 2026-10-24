@@ -228,7 +228,7 @@ Before pushing description changes, evaluate the candidate description against t
 **Problem:** An agent ran a test runner that dumped 300 lines of output. The terminal dump broke context and caused looping.
 - *Diagnosis:* Tier 1 (Mechanical Violation).
 - *Remediation:*
-  1. Add `--keep-head-tail` or `-q` flag in the script wrapper under `$SKILL_DIR/scripts/run-gate.sh`.
+  1. Add `--keep-head-tail` or `-q` flag in the script wrapper under `<skill-dir>/scripts/run-gate.sh`.
   2. Direct the agent to run the script instead of raw CLI commands.
   3. Keep output bounded to ≤ 20 lines.
 

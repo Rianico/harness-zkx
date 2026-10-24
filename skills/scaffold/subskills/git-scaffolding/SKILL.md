@@ -12,17 +12,17 @@ Migrated from `~/.pi/agent/prompts/scaffold-git.md`. Explicit human authority (`
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Byte source is `$SKILL_DIR/templates/<flavor>/<target path>`: raw templates ship verbatim (`templates/git/.githooks/pre-push` → `.githooks/pre-push`, `templates/shared/CONTRIBUTING.*.md.j2` → `CONTRIBUTING.md`), while a `.j2` suffix marks a template Jinja renders through one `Environment` (`render_template()`; `StrictUndefined` so a typo fails loud, `trim_blocks`/`lstrip_blocks` so tag-only lines vanish, `keep_trailing_newline` because the trailing newline is part of the contract). `scaffold.py` fails loud when a template is missing — never a silent fallback to embedded bytes. Still in code: `build_pyproject` / `build_package_json` / `build_tsconfig` (computed, not static). Every run then canonicalizes every file the pinned `oxfmt` (`OXFMT_VERSION`) can reach at the single write seam — whichever flavor wrote it, so the grouping of invocations cannot change the bytes — templates stay as written instead of hand-mirroring the formatter's spacing, and the generated CI gate (`oxfmt --check .`) is green on the first push; the seam is also what makes `--dry-run` preview the bytes that land. `--no-format` (or `SCAFFOLD_NO_FORMAT=1`) skips the pass and needs no Node, at the cost of a red format gate. Preview with `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run`; `tests/scaffold/test_templates.py` pins the layout, registry coherence, raw template SHA-256 and every rendered cell, so a formatter or editor rewrite fails there before it ships.
+Byte source is `$SKILL_DIR/../../templates/<flavor>/<target path>`: raw templates ship verbatim (`templates/git/.githooks/pre-push` → `.githooks/pre-push`, `templates/shared/CONTRIBUTING.*.md.j2` → `CONTRIBUTING.md`), while a `.j2` suffix marks a template Jinja renders through one `Environment` (`render_template()`; `StrictUndefined` so a typo fails loud, `trim_blocks`/`lstrip_blocks` so tag-only lines vanish, `keep_trailing_newline` because the trailing newline is part of the contract). `scaffold.py` fails loud when a template is missing — never a silent fallback to embedded bytes. Still in code: `build_pyproject` / `build_package_json` / `build_tsconfig` (computed, not static). Every run then canonicalizes every file the pinned `oxfmt` (`OXFMT_VERSION`) can reach at the single write seam — whichever flavor wrote it, so the grouping of invocations cannot change the bytes — templates stay as written instead of hand-mirroring the formatter's spacing, and the generated CI gate (`oxfmt --check .`) is green on the first push; the seam is also what makes `--dry-run` preview the bytes that land. `--no-format` (or `SCAFFOLD_NO_FORMAT=1`) skips the pass and needs no Node, at the cost of a red format gate. Preview with `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor git --dry-run`; `tests/scaffold/test_templates.py` pins the layout, registry coherence, raw template SHA-256 and every rendered cell, so a formatter or editor rewrite fails there before it ships.
 
 ```bash
-uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name>
-uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name> --dry-run  # diff without writing
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor git --project-name <name>
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor git --project-name <name> --dry-run  # diff without writing
 ```
 
 Pure-deterministic (no proofread, byte-identical):
 
 - `.releaserc.json` — conventional commits preset `conventionalcommits@8.0.0` (`writer@8.4.0`), `@semantic-release/npm` with `npmPublish: false` (publish disabled by default; enable per language — Node `private:false` + `NPM_TOKEN` to publish, Python/Rust omit `npm` and use language-native registry)
-- `.github/workflows/release.yml` — Node/pnpm variant: `checkout@3d3c42...` (v7.0.1) + `pnpm/action-setup@ea17c6...` (v6.1.0) + `setup-node@820762...` (v7.0.0) + `setup-python@5fda3b...` (v7.0.0) via `SHA_TABLE` (single source) + `setup-node` `zizmor: ignore[cache-poisoning]`, `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `verify` runs `pnpm install` (flag-free — pnpm's CI default refuses a stale `pnpm-lock.yaml`) + `pnpm run audit` + `pnpm run verify` (Node 26) — both are project scripts, so CI never respells the gate; `release` runs `pnpm exec semantic-release` (`HUSKY: "0"` so the changelog guard skips the release push), whose `scripts/release-changelog.mjs` plugin promotes the curated `## [Unreleased]` ledger into the versioned section and re-opens an empty one. Non-Node repos take this job from `--flavor ci --ci-variant python|rust` instead (see `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`)
+- `.github/workflows/release.yml` — Node/pnpm variant: `checkout@3d3c42...` (v7.0.1) + `pnpm/action-setup@ea17c6...` (v6.1.0) + `setup-node@820762...` (v7.0.0) + `setup-python@5fda3b...` (v7.0.0) via `SHA_TABLE` (single source) + `setup-node` `zizmor: ignore[cache-poisoning]`, `repository_dispatch` + `workflow_dispatch` only, `verify` (read) → `release` (write+id-token, `needs: verify`); `verify` runs `pnpm install` (flag-free — pnpm's CI default refuses a stale `pnpm-lock.yaml`) + `pnpm run audit` + `pnpm run verify` (Node 26) — both are project scripts, so CI never respells the gate; `release` runs `pnpm exec semantic-release` (`HUSKY: "0"` so the changelog guard skips the release push), whose `scripts/release-changelog.mjs` plugin promotes the curated `## [Unreleased]` ledger into the versioned section and re-opens an empty one. Non-Node repos take this job from `--flavor ci --ci-variant python|rust` instead (see `$SKILL_DIR/../ci-scaffolding/SKILL.md`)
 - **No skill is vendored** — the GitHub surface is the `gh-router` skill itself (harness tree, discovered by pi from `~/.agents/skills/`), never a copy under the target repo's `skills/`. Scaffold ships no `skills/` directory: a copy of another skill is a second source of truth that drifts from the original, and `--update` neither refreshes nor deletes one it finds — `--detect` reports it as a decision (`git rm -r skills/gh-router`, or keep it as project content)
 - `.github/workflows/changelog-check.yml` — on `pull_request` to `main` (required), runs `scripts/changelog-gate.py ledger`, `fail+comment` if floor not met — SHA pins from `SHA_TABLE` (`checkout v5`, `setup-python v6`, `github-script v8`). Draft-aware: `types: [opened, synchronize, reopened, ready_for_review]` and the job skips drafts, so a scaffolded PR stays silent while draft and runs once ready.
 - `changelog-check.yml` runs `scripts/changelog-gate.py` at both boundaries: a PR run reads the `Landing: squash|merge` declaration from the PR body and checks the ledger against the landing, and the `main` run is the durable one. The same body may carry a single-line `Ledger-Waiver: <reason>` trailer, which the step forwards as `--waiver` — the recorded escape the failure comment names, and the only one: the gate waives fixable findings and never a needs-human one. The `pre-push` guard is retired — a stale `## [Unreleased]` is no longer auto-amended, because curation replaced projection.
@@ -41,18 +41,18 @@ Mixed (script writes skeleton + warns on stderr → model must proofread):
 - `AGENTS.md` patch — appends `### Contribution` pointer + `Git hooks: git config core.hooksPath .githooks (or npm install with husky → .husky delegates)` , keeps existing 3 sections; script warns: verify pointer wording
 - `.config/wt.toml` — if present, patches `[post-start] setup-hooks = "git config core.hooksPath .githooks"` (idempotent, `wt switch --create` auto-activates guard)
 
-Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run` (tool owns bytes). Pin check: `conventional-changelog-conventionalcommits@9` — the newest major that renders, because v10 requires `conventional-changelog-writer@9+` while `@semantic-release/release-notes-generator@14` still loads `8.4.0` (`npm ls conventional-changelog-writer` → `8.4.0`).
+Byte view: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor git --dry-run` (tool owns bytes). Pin check: `conventional-changelog-conventionalcommits@9` — the newest major that renders, because v10 requires `conventional-changelog-writer@9+` while `@semantic-release/release-notes-generator@14` still loads `8.4.0` (`npm ls conventional-changelog-writer` → `8.4.0`).
 
 ## Update — Tool Replaces, Model Decides
 
 Updating an existing repo is one command. It replaces every generated file byte-identically, preserves what the project owns, and prints the leftover decisions:
 
 ```bash
-uv run $SKILL_DIR/scripts/scaffold.py --update --cwd .              # implies --flavor git
-uv run $SKILL_DIR/scripts/scaffold.py --update --flavor all --dry-run  # preview
-uv run $SKILL_DIR/scripts/scaffold.py --update --flavor python --with-coverage  # language files too
-uv run $SKILL_DIR/scripts/scaffold.py --check --cwd .                # verdict only: drift per file, exit 1 when not in sync
-uv run $SKILL_DIR/scripts/scaffold.py --update --merge-mixed         # also insert missing CONTRIBUTING.md sections
+uv run $SKILL_DIR/../../scripts/scaffold.py --update --cwd .              # implies --flavor git
+uv run $SKILL_DIR/../../scripts/scaffold.py --update --flavor all --dry-run  # preview
+uv run $SKILL_DIR/../../scripts/scaffold.py --update --flavor python --with-coverage  # language files too
+uv run $SKILL_DIR/../../scripts/scaffold.py --check --cwd .                # verdict only: drift per file, exit 1 when not in sync
+uv run $SKILL_DIR/../../scripts/scaffold.py --update --merge-mixed         # also insert missing CONTRIBUTING.md sections
 ```
 
 Ownership is declared in `scaffold.py` (`PROJECT_OWNED`, `SOURCE_OWNED`, `FLAVOR_FOREIGN`) — the tool replaces, the model never guesses:
@@ -72,7 +72,7 @@ The printed `NEXT` block _is_ the remaining task. Work it in this order:
 2. **`CONTRIBUTING.md`** — mixed file (project name + `## Before PR` toolchain line). The note names the template sections the file is **missing**; add them, or re-run with `--merge-mixed` to insert exactly those sections (existing lines are never rewritten). Merge prose from `templates/shared/CONTRIBUTING.{default,python,typescript}.md.j2`; never regenerate it from the git flavor (that writes the pnpm line into a uv/cargo repo).
 3. **`CHANGELOG.md`** — data, not projection. Nothing to do; `@semantic-release/changelog` owns versioned sections.
 4. **Manifests** (`pyproject.toml`, `Cargo.toml`, `package.json`) — regenerate only when the gate or deps changed, deliberately, with the language flavor + `--with-coverage`.
-5. **Language-variant files** — `--only`/`--without`/`--components` select git components only; language flavors write their whole file set. To refresh one language file, re-run that flavor deliberately, or edit its template under `$SKILL_DIR/templates/` — raw templates are pinned by file hash, `.j2` templates by rendered-output hash (both in `tests/scaffold/test_templates.py`); re-pin only when the byte change is intended.
+5. **Language-variant files** — `--only`/`--without`/`--components` select git components only; language flavors write their whole file set. To refresh one language file, re-run that flavor deliberately, or edit its template under `$SKILL_DIR/../../templates/` — raw templates are pinned by file hash, `.j2` templates by rendered-output hash (both in `tests/scaffold/test_templates.py`); re-pin only when the byte change is intended.
 
 > [!warning] `--update` is not `--flavor git`
 > A plain `--flavor git` run rewrites everything, including `CHANGELOG.md` (header only) and `release.yml` (Node variant). Existing repo → `--update`. Greenfield repo → plain flavor.
@@ -87,10 +87,10 @@ The printed `NEXT` block _is_ the remaining task. Work it in this order:
 
 Run the generator (tool owns bytes). Model proofreads only the mixed warnings on stderr.
 
-1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --project-name <name>` (or `--dry-run` to preview diff) — handles `--cwd` and `--project-name` inference via `git rev-parse`.
+1. Generate: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor git --project-name <name>` (or `--dry-run` to preview diff) — handles `--cwd` and `--project-name` inference via `git rev-parse`.
 2. Install wiring: `npm i -D conventional-changelog-conventionalcommits@9 @semantic-release/changelog @semantic-release/git @semantic-release/github semantic-release @commitlint/cli @commitlint/config-conventional` + wire `husky` pre-commit (`npx commitlint --from=origin/main --to=HEAD`). The script does not install deps — it owns file bytes only.
 3. Proofread mixed warnings (stderr): `CONTRIBUTING.md` project name + Before PR line; `AGENTS.md` 3-section preservation. Do not hand-edit deterministic files except `{{project_name}}` (already handled by script).
-4. Verify deterministic gate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor git --dry-run` shows `unchanged`; `uv run $SKILL_DIR/subskills/skill-authoring/scripts/validate-deps.py check` + `npm ls conventional-changelog-writer` shows `8.4.0`
+4. Verify deterministic gate: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor git --dry-run` shows `unchanged`; `uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check` + `npm ls conventional-changelog-writer` shows `8.4.0`
 
 > [!tip] Verification — run before every push/release
 >
@@ -105,7 +105,7 @@ Run the generator (tool owns bytes). Model proofreads only the mixed warnings on
 - `@semantic-release/git` bumps `package.json` + `CHANGELOG.md` + commits + tags atomically; no manual `git tag` or manifest bump.
 - `.releaserc.json` release assets follow the repo, not the flavor: `pnpm-lock.yaml` when the repo declares pnpm (`pnpm-lock.yaml`, `pnpm-workspace.yaml` or `packageManager: pnpm`), else the template's `package-lock.json`. The swap is resolved before the write, so `--check` stays clean on a pnpm repo.
 - `--check` is the CI-shaped projection of `--update` (`--update --dry-run --summary`, exit 1 on drift) and `--self-check` validates what a run wrote (syntax, parse, exec bit, `scripts/…` references) — it runs automatically after a real write, because a generated workflow or hook that does not parse is a defect worth failing on. A deliberate divergence is a first-class record, not permanent drift: list it in `.config/scaffold-divergence.txt` (`path:`/`reason:` stanzas; header carries authority + scope + owner + review trigger) and `--check` reports it as `recorded` instead of `stale`. Shrink-only — a stanza that covers nothing is itself a finding, and a real `--update` never overwrites a recorded path.
-- For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`.
+- For CI workflow detail and `zizmor: ignore[cache-poisoning]` justification see `$SKILL_DIR/../ci-scaffolding/SKILL.md`.
 
 ## References
 
@@ -124,7 +124,7 @@ Reference index (all under `references/`, raw scrape in `references/semantic-rel
 ## Reporting Issues — model/user prompt
 
 When helping file an issue, infer intent then use the matching YAML form (`.github/ISSUE_TEMPLATE/01-bug_report.yml` for `bug`, `02-feature_request.yml` for `feat`), then `gh issue create --template 01-bug_report.yml` / `--template 02-feature_request.yml`. The model must ask for any missing `body` required field of that form (bug: Summary/Environment/Repro/Expected/Actual required; feature: Problem/Proposal required) and render in form order. Prefer text over screenshots for code defects, and paste-complete input over a description of it. Blank issues are disabled via `config.yml`; Q&A goes to Discussions.
-Git flavor is spine — always present. Grilling `Project Shape` selects sibling flavors (python/rust/polyglot) to scaffold alongside git. Coverage/CI leaves affect those flavors, not `.releaserc.json` itself. Direct `uv run $SKILL_DIR/scripts/scaffold.py --flavor git` omits coverage (git has no coverage gate).
+Git flavor is spine — always present. Grilling `Project Shape` selects sibling flavors (python/rust/polyglot) to scaffold alongside git. Coverage/CI leaves affect those flavors, not `.releaserc.json` itself. Direct `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor git` omits coverage (git has no coverage gate).
 
 ## Arguments
 

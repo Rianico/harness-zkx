@@ -15,12 +15,14 @@ Supports:
 - rename: Rename a skill and cascade updates to all references
 - sync: Generate agents/openai.yaml from SKILL.md canonical metadata
 - context-check: Enforce context-load policy (hard gates + soft warnings)
+- refs: Resolve paths referenced from skill docs (anchors and Markdown links)
 """
 
 import argparse
 import json
 import re
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -166,6 +168,244 @@ def check_all_dependencies(root_dir: Path, skill_map: dict[str, Path]) -> bool:
     if not found_errors:
         print("All dependencies validated successfully.")
     return found_errors
+
+
+REF_PUNCTUATION = ".,;:)'\"`"
+"""Trailing characters stripped from an extracted reference target."""
+
+PLACEHOLDER_MARKERS = ("<", ">", "*", "${", "...", "…")
+"""Substrings marking a target as a template or a prose label, never a path."""
+
+EXCLUDED_REF_SEGMENTS = frozenset({"results", "reference"})
+"""Directories holding vendored doc dumps and captured evidence transcripts."""
+
+SKILL_DIR_PATTERN = re.compile(r"\$SKILL_DIR(/[^\s`'\"\])]*)?")
+"""`$SKILL_DIR` reference plus its optional path suffix."""
+
+LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]*)\)")
+"""Real Markdown link target, searched only after inline code spans are masked."""
+
+CODE_SPAN_PATTERN = re.compile(r"(`+)(.+?)\1")
+"""Inline code span, delimited by a backtick run of matching length."""
+
+FENCE_PATTERN = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})")
+"""Opening or closing code fence line, indentation tolerant."""
+
+BARE_SKILL_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_.-])skills/[A-Za-z0-9_.-]+(?:/[^\s`'\")\]>]*)?"
+)
+"""Bare `skills/<pkg>/…` token: a monorepo-relative path leaked into prose."""
+
+ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![\w.-])/(?:Users|home)/[^\s`'\")\]]*")
+"""Absolute host path, which resolves on no other machine."""
+
+SKILL_DIR_KIND = "skill-dir"
+LINK_KIND = "link"
+BARE_SKILL_PATH_KIND = "bare-skill-path"
+ABSOLUTE_PATH_KIND = "absolute-path"
+
+MISSING_TARGET = "missing target"
+ESCAPES_PACKAGE = "target escapes package root"
+BARE_SKILL_PATH_REASON = "bare skills/ path"
+ABSOLUTE_PATH_REASON = "absolute host path"
+
+
+@dataclass(frozen=True)
+class RefFinding:
+    """One reference site: where it is, what it points at, and why it matters."""
+
+    file: str
+    line: int
+    kind: str
+    target: str
+    reason: str
+
+
+def _finding_payload(finding: RefFinding) -> dict[str, str | int]:
+    """The JSON object for one finding: the four public keys, reason excluded."""
+    return {
+        "file": finding.file,
+        "line": finding.line,
+        "kind": finding.kind,
+        "target": finding.target,
+    }
+
+
+def _iter_unfenced_lines(content: str) -> Iterator[tuple[int, str]]:
+    """Yield (line number, text) for every line outside a fenced code block."""
+    fence: tuple[str, int] | None = None
+    for number, text in enumerate(content.splitlines(), start=1):
+        match = FENCE_PATTERN.match(text)
+        if fence is None:
+            if match:
+                marker = match.group("fence")
+                fence = (marker[0], len(marker))
+                continue
+            yield number, text
+        elif match:
+            marker = match.group("fence")
+            if marker[0] == fence[0] and len(marker) >= fence[1]:
+                fence = None
+
+
+def _mask_code_spans(text: str) -> str:
+    """Blank inline code spans so a link shown as an example is not resolved."""
+    return CODE_SPAN_PATTERN.sub(lambda match: " " * len(match.group(0)), text)
+
+
+def _clean_target(raw: str) -> str:
+    """Drop a #fragment, surrounding space, and trailing punctuation from a target."""
+    target = raw.split("#", 1)[0].strip()
+    while target and target[-1] in REF_PUNCTUATION:
+        target = target[:-1]
+    return target
+
+
+def _reference_target(raw: str) -> str | None:
+    """The resolvable target inside a raw match, or None for a placeholder.
+
+    Placeholders are judged on the raw text too: punctuation stripping would turn
+    an elision (`...`) into a directory path that then looks resolvable.
+    """
+    if _is_placeholder(_clean_target(raw)) or _is_placeholder(raw.strip().split("#", 1)[0]):
+        return None
+    return _clean_target(raw)
+
+
+def _is_placeholder(target: str) -> bool:
+    """True when a target is a template, an ellipsis, or a bare prose label."""
+    if not target or target.lower() == "url":
+        return True
+    if any(marker in target for marker in PLACEHOLDER_MARKERS):
+        return True
+    return "/" not in target and "." not in target
+
+
+def _is_excluded_ref_path(relative: Path) -> bool:
+    """True when a document sits in a vendored dump or a captured transcript."""
+    return any(part in EXCLUDED_REF_SEGMENTS or part.endswith("-raw") for part in relative.parts)
+
+
+def _iter_reference_docs(root_dir: Path, skill: str | None) -> list[Path]:
+    """In-scope documents: `skills/<pkg>/SKILL.md` and `skills/<pkg>/**/*.md`."""
+    skills_dir = root_dir / "skills"
+    base = skills_dir / skill if skill else skills_dir
+    if not base.is_dir():
+        return []
+    return sorted(
+        doc for doc in base.rglob("*.md") if not _is_excluded_ref_path(doc.relative_to(skills_dir))
+    )
+
+
+def _anchor_dir(doc: Path, root_dir: Path) -> Path:
+    """Directory of the nearest ancestor SKILL.md that owns this document."""
+    current = doc.parent
+    while current.is_relative_to(root_dir):
+        if (current / "SKILL.md").exists():
+            return current
+        current = current.parent
+    return doc.parent
+
+
+def _package_root(root_dir: Path, doc: Path) -> Path:
+    """`skills/<pkg>` for the first path component after `skills/`."""
+    parts = doc.relative_to(root_dir).parts
+    if "skills" not in parts:
+        return doc.parent
+    package_start = parts.index("skills") + 1
+    if package_start >= len(parts):
+        return doc.parent
+    return root_dir.joinpath(*parts[: package_start + 1])
+
+
+def _scan_references(root_dir: Path, doc: Path) -> tuple[list[RefFinding], list[RefFinding], int]:
+    """Collect hard failures, warnings, and the reference count for one document."""
+    relative = str(doc.relative_to(root_dir))
+    anchor = _anchor_dir(doc, root_dir).resolve()
+    package_root = _package_root(root_dir, doc).resolve()
+    failures: list[RefFinding] = []
+    warnings: list[RefFinding] = []
+    checked = 0
+
+    for number, text in _iter_unfenced_lines(doc.read_text(encoding="utf-8")):
+        for match in SKILL_DIR_PATTERN.finditer(text):
+            target = _reference_target(f"$SKILL_DIR{match.group(1) or ''}")
+            if target is None:
+                continue
+            checked += 1
+            suffix = target.removeprefix("$SKILL_DIR").lstrip("/")
+            resolved = (anchor / suffix).resolve()
+            if not resolved.is_relative_to(package_root):
+                failures.append(
+                    RefFinding(relative, number, SKILL_DIR_KIND, target, ESCAPES_PACKAGE)
+                )
+            elif not resolved.exists():
+                failures.append(
+                    RefFinding(relative, number, SKILL_DIR_KIND, target, MISSING_TARGET)
+                )
+
+        for match in LINK_PATTERN.finditer(_mask_code_spans(text)):
+            target = _reference_target(match.group(1))
+            if target is None or target.startswith(("http", "#", "mailto", "<")):
+                continue
+            checked += 1
+            if not (doc.parent / target).exists():
+                failures.append(RefFinding(relative, number, LINK_KIND, target, MISSING_TARGET))
+
+        for match in BARE_SKILL_PATH_PATTERN.finditer(text):
+            target = _reference_target(match.group(0))
+            if target is None:
+                continue
+            warnings.append(
+                RefFinding(relative, number, BARE_SKILL_PATH_KIND, target, BARE_SKILL_PATH_REASON)
+            )
+
+        for match in ABSOLUTE_PATH_PATTERN.finditer(text):
+            target = _reference_target(match.group(0))
+            if target is None:
+                continue
+            warnings.append(
+                RefFinding(relative, number, ABSOLUTE_PATH_KIND, target, ABSOLUTE_PATH_REASON)
+            )
+
+    return failures, warnings, checked
+
+
+def refs_check(root_dir: Path, skill: str | None = None, json_output: bool = False) -> bool:
+    """Resolve every reference under skills/. Return True when a hard failure exists.
+
+    `checked` counts resolved reference targets: every `$SKILL_DIR` path and every
+    Markdown link target, placeholders and skipped prefixes excluded. Warnings are
+    counted separately, so they never inflate the resolved total.
+    """
+    if skill is not None and not (root_dir / "skills" / skill).is_dir():
+        print(f"Error: Skill '{skill}' not found.", file=sys.stderr)
+        return True
+
+    failures: list[RefFinding] = []
+    warnings: list[RefFinding] = []
+    checked = 0
+    for doc in _iter_reference_docs(root_dir, skill):
+        doc_failures, doc_warnings, doc_checked = _scan_references(root_dir, doc)
+        failures.extend(doc_failures)
+        warnings.extend(doc_warnings)
+        checked += doc_checked
+
+    if json_output:
+        payload: dict[str, object] = {
+            "checked": checked,
+            "failures": [_finding_payload(finding) for finding in failures],
+            "warnings": [_finding_payload(warning) for warning in warnings],
+        }
+        print(json.dumps(payload, indent=2))
+        return bool(failures)
+
+    for failure in failures:
+        print(f"REF FAIL: {failure.file}:{failure.line} — {failure.reason}: {failure.target}")
+    for warning in warnings:
+        print(f"REF WARN: {warning.file}:{warning.line} — {warning.reason}: {warning.target}")
+    print(f"Reference check: {checked} checked, {len(failures)} failed, {len(warnings)} warnings.")
+    return bool(failures)
 
 
 def show_related(
@@ -936,6 +1176,18 @@ def main():
         help="Print full description text for skills exceeding budget",
     )
 
+    refs_parser = subparsers.add_parser("refs", help="Resolve paths referenced from skill docs")
+    _ = refs_parser.add_argument(
+        "skill",
+        nargs="?",
+        help="Target skill package (omit for all)",
+    )
+    _ = refs_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Machine-readable output",
+    )
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -947,7 +1199,9 @@ def main():
     dependency_graph = registry.dependency_graph
 
     if args.command == "check":
-        sys.exit(1 if check_all_dependencies(root, skill_map) else 0)
+        deps_failed = check_all_dependencies(root, skill_map)
+        refs_failed = refs_check(root)
+        sys.exit(1 if deps_failed or refs_failed else 0)
     elif args.command in ["related", "callers"]:
         show_related(args.skill, root, skill_map, dependency_graph)
     elif args.command == "lint":
@@ -971,6 +1225,9 @@ def main():
     elif args.command == "context-check":
         ok = context_check_all(root, json_output=args.json, show_over=args.show_over)
         sys.exit(0 if ok else 1)
+    elif args.command == "refs":
+        refs_failed = refs_check(root, skill=args.skill, json_output=args.json)
+        sys.exit(1 if refs_failed else 0)
 
 
 if __name__ == "__main__":

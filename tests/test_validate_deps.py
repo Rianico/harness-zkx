@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -647,3 +648,284 @@ def test_lint_fails_credit_unknown_key(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "LINT FAIL:" in result.stdout
     assert "unrecognized keys: repo" in result.stdout
+
+
+def write_package_file(root: Path, relative: str, body: str) -> None:
+    """Write a markdown file at skills/<relative>."""
+    path = root / "skills" / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(body, encoding="utf-8")
+
+
+def reference_skill(name: str, body: str) -> str:
+    """Valid SKILL.md frontmatter plus a body that carries reference targets."""
+    return (
+        f"---\nname: {name}\ndescription: >-\n  Test skill for reference validation.\n---\n\n{body}"
+    )
+
+
+def test_refs_passes_clean_package(tmp_path: Path) -> None:
+    """refs exits 0 for an intra-package relative link and a $SKILL_DIR path."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Read `$SKILL_DIR/references/basics.md` for details.\n"),
+    )
+    write_package_file(
+        tmp_path,
+        "alpha/references/basics.md",
+        "# Basics\n\nBack to [the skill](../SKILL.md).\n",
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 0, result.stdout
+    assert "REF FAIL" not in result.stdout
+    assert "Reference check: 2 checked, 0 failed, 0 warnings." in result.stdout
+
+
+def test_refs_allows_sibling_hop_within_package(tmp_path: Path) -> None:
+    """refs exits 0 for a subskill reaching a sibling via $SKILL_DIR/../."""
+    write_package_file(tmp_path, "toolchain/SKILL.md", reference_skill("toolchain", "Parent.\n"))
+    write_package_file(
+        tmp_path,
+        "toolchain/subskills/oxlint/SKILL.md",
+        reference_skill("oxlint", "Pair with `$SKILL_DIR/../oxfmt/SKILL.md`.\n"),
+    )
+    write_package_file(
+        tmp_path,
+        "toolchain/subskills/oxfmt/SKILL.md",
+        reference_skill("oxfmt", "Formatter.\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 0, result.stdout
+    assert "REF FAIL" not in result.stdout
+
+
+def test_refs_fails_on_cross_package_upward_hop(tmp_path: Path) -> None:
+    """refs exits 1 for the oxlint:11 shape: a hop out of the package's subskill tree."""
+    write_package_file(tmp_path, "scaffold/SKILL.md", reference_skill("scaffold", "Scaffold.\n"))
+    target = "$SKILL_DIR/../../scaffold/subskills/typescript-scaffolding/SKILL.md"
+    write_package_file(
+        tmp_path,
+        "toolchain/subskills/oxlint/SKILL.md",
+        reference_skill("oxlint", f"Scaffold linter (see `{target}`).\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 1
+    assert "REF FAIL: skills/toolchain/subskills/oxlint/SKILL.md:7" in result.stdout
+    assert f"missing target: {target}" in result.stdout
+
+
+def test_refs_fails_when_skill_dir_target_escapes_package(tmp_path: Path) -> None:
+    """refs exits 1 when a resolvable $SKILL_DIR target sits outside the package root."""
+    write_package_file(tmp_path, "other/SKILL.md", reference_skill("other", "Other.\n"))
+    target = "$SKILL_DIR/../../../other/SKILL.md"
+    write_package_file(
+        tmp_path,
+        "toolchain/subskills/demo/SKILL.md",
+        reference_skill("demo", f"See `{target}`.\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 1
+    assert f"target escapes package root: {target}" in result.stdout
+
+
+def test_refs_fails_on_missing_skill_dir_target(tmp_path: Path) -> None:
+    """refs exits 1 when a $SKILL_DIR target does not exist on disk."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Read `$SKILL_DIR/references/missing.md`.\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 1
+    assert "missing target: $SKILL_DIR/references/missing.md" in result.stdout
+
+
+def test_refs_fails_on_missing_link_target(tmp_path: Path) -> None:
+    """refs exits 1 when a real Markdown link points at a nonexistent file."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Read [the guide](references/guide.md).\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 1
+    assert "missing target: references/guide.md" in result.stdout
+
+
+def test_refs_ignores_fenced_code_blocks(tmp_path: Path) -> None:
+    """refs exits 0 for broken targets inside backtick and tilde fences, even indented."""
+    body = (
+        "Example:\n\n"
+        "```bash\n"
+        "cat $SKILL_DIR/references/missing.md\n"
+        "[the guide](references/guide.md)\n"
+        "```\n\n"
+        "  ~~~~markdown\n"
+        "  `$SKILL_DIR/../../elsewhere/SKILL.md`\n"
+        "  ~~~~\n"
+    )
+    write_package_file(tmp_path, "alpha/SKILL.md", reference_skill("alpha", body))
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 0, result.stdout
+    assert "REF FAIL" not in result.stdout
+    assert "Reference check: 0 checked, 0 failed, 0 warnings." in result.stdout
+
+
+def test_refs_ignores_links_inside_backticks(tmp_path: Path) -> None:
+    """refs exits 0 for a link shown as an inline-code example."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Write `[the guide](references/guide.md)` to link a doc.\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 0, result.stdout
+    assert "REF FAIL" not in result.stdout
+
+
+def test_refs_ignores_vendored_and_evidence_paths(tmp_path: Path) -> None:
+    """refs exits 0 for broken targets under -raw, results, and reference directories."""
+    write_package_file(
+        tmp_path,
+        "alpha/references/guides-raw/capture.md",
+        "Scraped `$SKILL_DIR/../../elsewhere/SKILL.md`.\n",
+    )
+    write_package_file(
+        tmp_path,
+        "alpha/results/transcript.md",
+        "Missed [the guide](references/guide.md).\n",
+    )
+    write_package_file(
+        tmp_path,
+        "alpha/reference/spec.md",
+        "See [the guide](references/guide.md).\n",
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 0, result.stdout
+    assert "REF FAIL" not in result.stdout
+
+
+def test_refs_warns_on_bare_skills_path(tmp_path: Path) -> None:
+    """refs warns, without failing, on a bare skills/<pkg>/ path in prose."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Coordinates through skills/herdr/SKILL.md when installed.\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 0, result.stdout
+    assert "REF WARN: skills/alpha/SKILL.md:7" in result.stdout
+    assert "bare skills/ path: skills/herdr/SKILL.md" in result.stdout
+    assert "Reference check: 0 checked, 0 failed, 1 warnings." in result.stdout
+
+
+def test_refs_ignores_placeholder_targets(tmp_path: Path) -> None:
+    """refs exits 0 and counts nothing for template or label targets."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill(
+            "alpha",
+            "Read `$SKILL_DIR/references/<module>.md` or `$SKILL_DIR/references/...`.\n"
+            "Mirror [docs](URL) and [raw-docs-path]() too.\n",
+        ),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert result.returncode == 0, result.stdout
+    assert "Reference check: 0 checked, 0 failed, 0 warnings." in result.stdout
+
+
+def test_check_fails_when_reference_is_broken(tmp_path: Path) -> None:
+    """check exits 1 when dependencies resolve but a reference is broken."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Read `$SKILL_DIR/references/missing.md`.\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "check")
+
+    assert result.returncode == 1
+    assert "All dependencies validated successfully." in result.stdout
+    assert "REF FAIL" in result.stdout
+    assert "Reference check: 1 checked, 1 failed, 0 warnings." in result.stdout
+
+
+def test_refs_scopes_to_one_package(tmp_path: Path) -> None:
+    """refs <skill> ignores broken references in other packages."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Read [basics](references/basics.md).\n"),
+    )
+    write_package_file(tmp_path, "alpha/references/basics.md", "# Basics\n")
+    write_package_file(
+        tmp_path,
+        "beta/SKILL.md",
+        reference_skill("beta", "Read `$SKILL_DIR/references/missing.md`.\n"),
+    )
+
+    scoped = run_validate_deps("--project-root", str(tmp_path), "refs", "alpha")
+    unscoped = run_validate_deps("--project-root", str(tmp_path), "refs")
+
+    assert scoped.returncode == 0, scoped.stdout
+    assert "REF FAIL" not in scoped.stdout
+    assert unscoped.returncode == 1
+    assert "skills/beta/SKILL.md" in unscoped.stdout
+
+
+def test_refs_unknown_scope_fails(tmp_path: Path) -> None:
+    """refs exits 1 when the named package does not exist."""
+    write_package_file(tmp_path, "alpha/SKILL.md", reference_skill("alpha", "Alpha.\n"))
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs", "nope")
+
+    assert result.returncode == 1
+    assert "nope" in result.stderr
+
+
+def test_refs_json_emits_findings(tmp_path: Path) -> None:
+    """refs --json emits checked, failures, and warnings with file, line, kind, target."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "Read [the guide](references/guide.md).\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs", "--json")
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["checked"] == 1
+    assert payload["failures"] == [
+        {
+            "file": "skills/alpha/SKILL.md",
+            "line": 7,
+            "kind": "link",
+            "target": "references/guide.md",
+        }
+    ]
+    assert payload["warnings"] == []

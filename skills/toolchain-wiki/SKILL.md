@@ -8,6 +8,7 @@ metadata:
     - typecheck
     - worktrunk
     - jinja
+  depends-on: [basedpyright-expert, docs-scraper, scaffold]
 name: toolchain-wiki
 ---
 
@@ -41,7 +42,7 @@ Omitted domain loads only the spine above.
 
 Tool owns bytes; model proofreads intent.
 
-- `uv run $SKILL_DIR/../scaffold/scripts/scaffold.py --flavor typescript --dry-run` — preview TS artifacts (canonical: `scaffold`)
+- `uv run skills/scaffold/scripts/scaffold.py --flavor typescript --dry-run` — preview TS artifacts (canonical: `scaffold`)
 - `pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test` — JS/TS gate (see `oxlint` + `oxfmt`)
 - `basedpyright --writebaseline && basedpyright --baselinemode=lock` — Python gate (see `typecheck`)
 - `wt switch --create <branch> && wt merge` — worktree gate (see `worktrunk`)

@@ -329,3 +329,21 @@ _Avoid_: Eval file, test cases.
 **Skill Snapshot**:
 The dual-layer provenance record (`Macro`: git commit & dirty state of skill directory; `Micro`: exact description text) preserved in a trigger eval record to distinguish prompt drift from model weight drift.
 _Avoid_: Skill version, commit tag.
+
+## Skill Packaging
+
+**Skill Package**:
+The outermost directory `skills/<name>/` that owns a skill, its subskills, references, and scripts. Reference resolution is bounded by this package root. `$SKILL_DIR` expands to the directory of the `SKILL.md` that owns the referencing document.
+_Avoid_: Skill directory, skill root, install path.
+
+**Out-of-Package Reference**:
+A structural path reference that resolves outside the skill package root. It is valid only under an authorized cross-package dependency contract.
+_Avoid_: Exterior link, deep relative path, `../..` hop.
+
+**Dangling Reference**:
+A link, path, or symbol reference that resolves to no entity on disk or in the registry.
+_Avoid_: Broken link, dead link, missing target.
+
+**Guarded Reference**:
+A reference to an exterior or non-co-distributed capability. It applies a front-loaded condition (`If <condition>, then <action>`) instead of a trailing parenthetical.
+_Avoid_: `(if installed)` parenthetical, optional dependency note.

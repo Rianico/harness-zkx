@@ -306,7 +306,7 @@ reveal_type(Parent.x)  # object
 reveal_type(Child.x)   # int
 ```
 
-Source: [basedpyright-expert-raw/013-type-concepts-advanced.md](basedpyright-exp-raw/013-type-concepts-advanced.md)
+Source: [basedpyright-expert-raw/013-type-concepts-advanced.md](basedpyright-expert-raw/013-type-concepts-advanced.md)
 
 ## Type Variable Scoping
 
@@ -332,7 +332,7 @@ def func2(a: T) -> Callable[[T], T]:  # T binds to func2
     ...
 ```
 
-Source: [basedpyright-expert-raw/013-type-concepts-advanced.md](basedpyright-expertraw/013-type-concepts-advanced.md)
+Source: [basedpyright-expert-raw/013-type-concepts-advanced.md](basedpyright-expert-raw/013-type-concepts-advanced.md)
 
 ## Literal Math Inference
 
@@ -361,7 +361,7 @@ Basedpyright statically evaluates:
 
 Code in always-false branches is not analyzed (except for syntax errors).
 
-Source: [basedpyright-expert-raw/013-type-concepts-advanced.md](basedpyright-exp-raw/013-type-concepts-advanced.md)
+Source: [basedpyright-expert-raw/013-type-concepts-advanced.md](basedpyright-expert-raw/013-type-concepts-advanced.md)
 
 ## Reachability Analysis
 

@@ -138,7 +138,7 @@ cast(str, foo)  # Error: int and str do not overlap
 
 **TypedDict Exception:** Casting between `dict` and `TypedDict` causes errors because `TypedDict` is not a subtype of `dict` in the type system.
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)
 
 ---
 
@@ -174,7 +174,7 @@ def print_value(value: str):  # Error: reportUnusedParameter (warning)
     print("something else")
 ```
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)
 
 ---
 
@@ -204,7 +204,7 @@ class FooImpl(AbstractFoo, ABC):  # OK: explicit ABC
         print("hi")
 ```
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)
 
 ---
 
@@ -224,7 +224,7 @@ class ConcreteFoo(Foo): ...
 bar = ConcreteFoo()  # OK: subclass may be intentionally concrete
 ```
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)
 
 ---
 
@@ -244,7 +244,7 @@ This rule reports the incompatibility.
 
 **Note:** Disabled by default in `recommended` mode due to potential performance impact. Enable `reportUnannotatedClassAttribute` as an alternative.
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)
 
 ---
 
@@ -265,7 +265,7 @@ Useful when:
 - Encountering performance issues with `reportIncompatibleUnannotatedOverride`
 - Preferring explicit annotations to prevent API breakage
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)
 
 ---
 
@@ -291,7 +291,7 @@ class Foo:
     def foo(self): ...  # Error: reportInvalidAbstractMethod
 ```
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)
 
 ---
 
@@ -304,4 +304,4 @@ class Foo:
     def foo(self=1): ...  # Error: reportSelfClsDefault
 ```
 
-Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-exp-raw/020-new-diagnostic-rules.md)
+Source: [basedpyright-expert-raw/020-new-diagnostic-rules.md](basedpyright-expert-raw/020-new-diagnostic-rules.md)

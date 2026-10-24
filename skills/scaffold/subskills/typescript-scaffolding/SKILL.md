@@ -20,15 +20,15 @@ Per `development-patterns.md` §3:
 
 ## Deterministic Artifacts — Tool Owns Bytes
 
-Source of truth is `$SKILL_DIR/scripts/scaffold.py` (`build_package_json`, `build_tsconfig` — computed) plus `$SKILL_DIR/templates/typescript/`: raw `.oxlintrc.json`, `.oxfmtrc.json`, `scripts/oxlint-plugin-comment-gate.js`, `tests/index.test.ts`, `src/cli.ts`; rendered `src/index.ts.j2`, `vitest.config.ts.j2` — run `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` to preview.
+Source of truth is `$SKILL_DIR/../../scripts/scaffold.py` (`build_package_json`, `build_tsconfig` — computed) plus `$SKILL_DIR/../../templates/typescript/`: raw `.oxlintrc.json`, `.oxfmtrc.json`, `scripts/oxlint-plugin-comment-gate.js`, `tests/index.test.ts`, `src/cli.ts`; rendered `src/index.ts.j2`, `vitest.config.ts.j2` — run `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --dry-run` to preview.
 
 > Existing repo? `--update` refreshes generated files but preserves `package.json` (project manifest) **and your source**. Per-field edits (confirm value with user first): `scaffold.py ensure ts-dep --name <pkg> [--version <range>] [--no-dev]` / `ensure ts-script --name <s> --cmd "<cmd>"` — `src/index.ts`, `src/cli.ts`, `tests/index.test.ts`, `vitest.config.ts` are project-owned: written only on a greenfield run, and never re-created afterwards, so a path that is absent because you renamed or replaced it (`test/` instead of `tests/`) reads `preserved`, not drift, and `--check` stays green on the fork. Work the printed NEXT list — see `git-scaffolding/SKILL.md` § Update.
 
 ```bash
-uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --project-name <name>
-uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant cli --project-name <name>
-uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant pi-extension --project-name <name>
-uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --dry-run
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --ts-variant lib --project-name <name>
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --ts-variant cli --project-name <name>
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --ts-variant pi-extension --project-name <name>
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --ts-variant lib --dry-run
 ```
 
 Variants (`--ts-variant`, default `lib`):
@@ -45,15 +45,15 @@ Pure-deterministic: `.nvmrc` (`26`), `pnpm-workspace.yaml` (`allowBuilds: {esbui
 
 Mixed (script warns → proofread): `package.json` (`{{project_name}}` normalized to lowercase kebab-case, description, `packageManager: pnpm@12.4.1`, deps `typescript^7` + `vite^8` + `oxlint^1`/`oxfmt` + `vitest^5` + `@types/node^26`, `verify` script holding the gate chain, `audit` script pinned to `https://registry.npmjs.org/` — a mirror may answer `ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`), `AGENTS.md` `### Runtime` pointer (keeps existing 3 sections). Script emits `WARNING: ... proofread package name` on stderr.
 
-Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` (tool owns bytes).
+Byte view: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --dry-run` (tool owns bytes).
 
 ## Steps — Tool Owns Determinism
 
-1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant <lib|cli|pi-extension> --project-name <name>` (handles `--cwd`, infers name, normalizes, warns on mixed).
+1. Generate: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --ts-variant <lib|cli|pi-extension> --project-name <name>` (handles `--cwd`, infers name, normalizes, warns on mixed).
 2. Install and commit the lockfile: `pnpm install` + `git add pnpm-lock.yaml` (corepack reads `packageManager: pnpm@12.4.1`). A greenfield install resolves without a lockfile, and pnpm's frozen default only bites once one exists — which is the point: a stale lockfile fails the generated job loudly instead of silently re-resolving a version nobody reviewed.
 3. Proofread mixed warnings: `package.json` name/description, `AGENTS.md` 3-section preservation.
 4. Wire verification: `pnpm run verify` chains `pnpm run lint` (`oxlint .` with `harness/no-comments` allowlist — intercepts mismatched comments and outputs requirements `SAFETY:/WHY:/Invariant:/See ADR-/via https:///TODO(#\\d+):/HACK:/GHERKIN`), `pnpm run format` (`oxfmt --check .`), `pnpm run typecheck` (`tsc --noEmit`), `pnpm test` (`vitest run`) — one command, one exit code, CI's order. `pnpm run audit` is the separate dependency gate (`--audit-level high`, public registry). An existing repo adds both with `ensure ts-script --name verify|audit --cmd "<command>"`, then regenerates the workflows and touches no generated YAML. Loop is `edit → typecheck → lint → format → test/build → fix` with native latency.
-5. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run` + `pnpm install && pnpm run verify`
+5. Verify: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --dry-run` + `pnpm install && pnpm run verify`
 
 > [!tip] Verification — before every push/PR
 >
@@ -68,10 +68,10 @@ Byte view: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --dry-run`
 
 ## Grilling Selection
 
-If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>` to the generator. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor typescript --ts-variant lib --with-coverage --coverage-threshold 80 --project-name <name>`. Without Tests or with No coverage, omit the flag — `package.json` omits the `coverage` script + `@vitest/coverage-v8`, no `vitest.config.ts`, and `verify` ends on `pnpm test`. With the flag, `verify` ends on the project's coverage script and CI runs `pnpm run verify`, so the coverage variant lives in the manifest, not the workflow (default `coverage`, `--coverage-script` overrides; thresholds owned by `vitest.config.ts`).
+If Dialog 2 selected Tests and Dialog 3 selected 80%/90%/Other, add `--with-coverage --coverage-threshold <80|90|custom>` to the generator. Example: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor typescript --ts-variant lib --with-coverage --coverage-threshold 80 --project-name <name>`. Without Tests or with No coverage, omit the flag — `package.json` omits the `coverage` script + `@vitest/coverage-v8`, no `vitest.config.ts`, and `verify` ends on `pnpm test`. With the flag, `verify` ends on the project's coverage script and CI runs `pnpm run verify`, so the coverage variant lives in the manifest, not the workflow (default `coverage`, `--coverage-script` overrides; thresholds owned by `vitest.config.ts`).
 
 ## Relation to Other Subskills
 
-- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`. The TS flavor patches `.releaserc.json` `assets` deterministically (`package-lock.json` → `pnpm-lock.yaml`) because `package.json` declares pnpm — no manual proofread-swap.
-- CI wiring belongs to `$SKILL_DIR/subskills/ci-scaffolding/SKILL.md`; the Node verify job and this flavor's PR workflow both run `pnpm install` + `pnpm run audit` + `pnpm run verify` on Node 26, so one script owns the gate order (native toolchain keeps per-step cost low).
+- Git contract stays canonical: do not duplicate `CONTRIBUTING.md` / `.releaserc.json` here; cross-reference `$SKILL_DIR/../git-scaffolding/SKILL.md`. The TS flavor patches `.releaserc.json` `assets` deterministically (`package-lock.json` → `pnpm-lock.yaml`) because `package.json` declares pnpm — no manual proofread-swap.
+- CI wiring belongs to `$SKILL_DIR/../ci-scaffolding/SKILL.md`; the Node verify job and this flavor's PR workflow both run `pnpm install` + `pnpm run audit` + `pnpm run verify` on Node 26, so one script owns the gate order (native toolchain keeps per-step cost low).
 - Vite/React apps: this flavor now includes `vite>=8` (Rolldown + Oxc) — for full React + Astryx/StyleX wiring, use `pnpm create vite` upstream then overlay `oxlint`/`oxfmt` from this scaffold; `Other` fallback remains.

@@ -41,6 +41,7 @@ A **context pointer** references external material and defines its activation tr
 - **One trigger per branch:** Collapse synonyms. List only distinct operational branches.
 - **Denotation sentence:** Add a concise description when the model cannot deduce artifact contents from context. Describe what the file contains.
 - **Zero technical duplication:** Point to artifacts by path. Never copy their contents into the pointer.
+- **Package-bounded pointers:** A pointer that leaves the skill package names the skill symbolically, never a relative path.
 
 ## 3. Information Hierarchy & Progressive Disclosure
 
@@ -71,7 +72,7 @@ Every procedural step must conclude with a checkable, falsifiable **completion c
 - **Single source of truth:** Define each rule in exactly one place.
 - **Environment as authority:** Never copy directory layouts, CLI help, or package scripts into prose. Prose is a cache. Cache only unwritten rationale or non-obvious invariants.
 - **Sentence-level no-op hunting:** Delete any instruction that the base model follows by default.
-- **Model gotchas & retirable constraints:** Isolate empirical model quirks under a dedicated gotcha block. Pair each gotcha with a positive recovery action. Delete entries as frontier models advance.
+- **Model gotchas & retirable constraints:** Isolate empirical model quirks under a dedicated gotcha block. Pair each gotcha with a positive recovery action. Delete entries as frontier models advance. Models emit authoring-time monorepo paths (`skills/<name>/…`, `$SKILL_DIR/../..`) when pointing at siblings, and they assume exterior tools exist. Recovery: name the skill symbolically, guard the exterior call, keep paths inside the package root.
 
 ## 7. Editing Existing Text: the state trap
 

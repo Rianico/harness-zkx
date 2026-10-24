@@ -198,7 +198,7 @@ def func2(val: Any):
     # pyright: float (supertype of int and float)
 ```
 
-Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-exp-raw/012-mypy-comparison.md)
+Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-expert-raw/012-mypy-comparison.md)
 
 ---
 
@@ -241,7 +241,7 @@ def func(a: Literal[1, 2], b: Literal[2, 3]):
     # pyright: Literal[3, 4, 5]
 ```
 
-Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-exp-raw/012-mypy-comparison.md)
+Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-expert-raw/012-mypy-comparison.md)
 
 ---
 
@@ -251,7 +251,7 @@ Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-exp-raw/01
 
 **Mypy:** Evaluates `__init__` first, ignores `__new__` return type
 
-Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-exp-raw/012-mypy-comparison.md)
+Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-expert-raw/012-mypy-comparison.md)
 
 ---
 
@@ -272,7 +272,7 @@ x = http.cookies  # Runtime error
 # pyright: error
 ```
 
-Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-exp-raw/012-mypy-comparison.md)
+Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-expert-raw/012-mypy-comparison.md)
 
 ---
 
@@ -284,7 +284,7 @@ Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-exp-raw/01
 
 Rationale: Plugins have downsides (discoverability, maintainability, security, performance). Instead, work with typing community to extend the type system (e.g., PEP 681 `dataclass_transform`).
 
-Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-exp-raw/012-mypy-comparison.md)
+Source: [basedpyright-expert-raw/012-mypy-comparison.md](basedpyright-expert-raw/012-mypy-comparison.md)
 
 ---
 

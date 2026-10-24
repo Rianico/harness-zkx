@@ -12,20 +12,20 @@ Owns the Git CI projection of the scaffold spine. Git owns the conventional-comm
 
 ## Deterministic Artifact — Tool Owns Bytes
 
-Source is `$SKILL_DIR/templates/ci/`: one base (`release.yml.j2`, `{% block verify required %}`) plus one fragment per runtime (`runtimes/<node|python|rust>.yml.j2`) rendered by `render_ci_release()`. Adding a runtime costs one fragment file plus one `CI_RUNTIMES` entry — the `--ci-variant` choices derive from that registry — and the coverage axis is a branch inside the python/rust fragments (the node fragment delegates it to the manifest's `verify` script), so it costs no file. Run `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant <node|python|rust> --dry-run` to preview.
+Source is `$SKILL_DIR/../../templates/ci/`: one base (`release.yml.j2`, `{% block verify required %}`) plus one fragment per runtime (`runtimes/<node|python|rust>.yml.j2`) rendered by `render_ci_release()`. Adding a runtime costs one fragment file plus one `CI_RUNTIMES` entry — the `--ci-variant` choices derive from that registry — and the coverage axis is a branch inside the python/rust fragments (the node fragment delegates it to the manifest's `verify` script), so it costs no file. Run `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --ci-variant <node|python|rust> --dry-run` to preview.
 
 ```bash
-uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant node     # Node verify (default, same as git)
-uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python   # Python verify (setup-uv + ruff check/format + basedpyright + pytest)
-uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant rust     # Rust verify (rust-toolchain + fmt/clippy/test)
-uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --dry-run
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --ci-variant node     # Node verify (default, same as git)
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --ci-variant python   # Python verify (setup-uv + ruff check/format + basedpyright + pytest)
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --ci-variant rust     # Rust verify (rust-toolchain + fmt/clippy/test)
+uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --ci-variant python --dry-run
 ```
 
 Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `checkout@3d3c42...` (v7.0.1) + `setup-node@820762...` (v7.0.0) + `setup-python@5fda3b...` (v7.0.0) + `setup-uv@bec219...` (v10.1.0) + `install-action@3f74d7...` (v2.87.12, composite — only the Rust coverage job uses it) — every pinned action runs on node24; bump `SHA_TABLE` and the callers together (`tests/scaffold/test_templates.py` fails otherwise), `zizmor: ignore` justified, `contents: read` → `release` escalates `write/id-token`, `needs: verify`).
 
 - On-demand dispatch is the default: `repository_dispatch` (`semantic-release`) + `workflow_dispatch` only — no `push: tags` auto-release.
 - PR-triggered gates are draft-aware: `types: [opened, synchronize, reopened, ready_for_review]` and jobs skip drafts — a scaffolded PR stays silent while draft, runs on ready.
-- Language-specific verify steps live in the variant; multi-runtime uses matrix (`needs: [verify-node, verify-python]`). See `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` for byte view.
+- Language-specific verify steps live in the variant; multi-runtime uses matrix (`needs: [verify-node, verify-python]`). See `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --dry-run` for byte view.
 - **Version sync is automatic, neural.** `semantic-release` `prepare` (`@semantic-release/npm` with `npmPublish: false` by default + `@semantic-release/git` `assets: ["CHANGELOG.md","package.json","package-lock.json"]` for Node, `"Cargo.toml"`/`"pyproject.toml"` for Rust/Python via the scaffold's `--ci-variant` projection — Node `private:false` + `NPM_TOKEN` to enable publish, Python/Rust use registry-native publish outside `npm`) bumps the deterministic artifact and pushes `vX.Y.Z`; no manual `npm version` / `cargo set-version` in the release prompt. `verify` is read-only — if `package.json:version` vs `git describe --tags` is behind, `BLOCK` and let the next `release` job fix it; don't hand-edit the version file in `Verification`.
 
 ### Language-Specific Verify Steps
@@ -35,14 +35,14 @@ Pure-deterministic: `.github/workflows/release.yml` per variant (pinned SHA `che
 - Rust projection: `cargo fmt --check && cargo clippy -- -D warnings && cargo test` inside `verify`.
 - Multi-runtime: `asdf install` + matrix, or split jobs `verify-node`/`verify-python`/`verify-rust` with `needs: [verify-node, verify-python]` on `release`.
 
-Matrix preview: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` (tool owns bytes).
+Matrix preview: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --dry-run` (tool owns bytes).
 
 ## Steps — Tool Owns Determinism
 
-1. Generate: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant <node|python|rust>` (or `--dry-run`), optionally `--cwd`.
+1. Generate: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --ci-variant <node|python|rust>` (or `--dry-run`), optionally `--cwd`.
 2. Ensure `verify` precedes `release` via `needs: verify`; `release` holds only `write`/`id-token` perms (enforced by script template).
-3. Wire pre-merge gate docs: `CONTRIBUTING.md` → `pnpm run verify` (the manifest's lint → format → typecheck → test chain; or `uv`/`cargo` equiv) — see `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`.
-4. Verify: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` + `yamllint .github/workflows/release.yml` and `zizmor .github/workflows/release.yml`
+3. Wire pre-merge gate docs: `CONTRIBUTING.md` → `pnpm run verify` (the manifest's lint → format → typecheck → test chain; or `uv`/`cargo` equiv) — see `$SKILL_DIR/../git-scaffolding/SKILL.md`.
+4. Verify: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --dry-run` + `yamllint .github/workflows/release.yml` and `zizmor .github/workflows/release.yml`
 
 > [!tip] Verification — before merging workflow changes
 >
@@ -51,11 +51,11 @@ Matrix preview: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --dry-run` (t
 
 ## Grilling Selection
 
-If Dialog 3 selected coverage, add `--with-coverage --coverage-threshold <n>` to the `ci` invocation. Example: `uv run $SKILL_DIR/scripts/scaffold.py --flavor ci --ci-variant python --with-coverage --coverage-threshold 80` (pytest --cov gate) or `--ci-variant rust --with-coverage` (llvm-cov). Without coverage, omit flag — verify runs without `fail_under`. Formatter/linter/type/test leaves do not change CI file bytes.
+If Dialog 3 selected coverage, add `--with-coverage --coverage-threshold <n>` to the `ci` invocation. Example: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor ci --ci-variant python --with-coverage --coverage-threshold 80` (pytest --cov gate) or `--ci-variant rust --with-coverage` (llvm-cov). Without coverage, omit flag — verify runs without `fail_under`. Formatter/linter/type/test leaves do not change CI file bytes.
 
 ## Relation to Other Subskills
 
-- Do not duplicate `.releaserc.json` / `CONTRIBUTING.md` / `commitlint.config.js` — canonical in `$SKILL_DIR/subskills/git-scaffolding/SKILL.md`.
+- Do not duplicate `.releaserc.json` / `CONTRIBUTING.md` / `commitlint.config.js` — canonical in `$SKILL_DIR/../git-scaffolding/SKILL.md`.
 - Runtime files (`pyproject.toml`, `rust-toolchain.toml`) stay canonical in their language subskills.
 
 ## Arguments

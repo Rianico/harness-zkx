@@ -514,7 +514,7 @@ jobs:
         run: twine upload dist/*
 ```
 
-For advanced patterns including data files, namespace packages, C extensions, version management, testing installation, documentation templates, and distribution workflows, see [references/advanced-patterns.md](references/advanced-patterns.md)
+For advanced patterns including data files, namespace packages, C extensions, version management, testing installation, documentation templates, and distribution workflows, see the upstream `python-packaging` skill's `references/advanced-patterns.md`
 
 ---
 

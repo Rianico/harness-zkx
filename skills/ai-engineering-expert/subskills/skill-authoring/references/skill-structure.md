@@ -131,7 +131,7 @@ skills/
 Run the helper script:
 
 ```bash
-uv run $SKILL_DIR/scripts/helper.py --input data.json
+uv run <skill-dir>/scripts/helper.py --input data.json
 ```
 
 Read the domain reference:
@@ -177,7 +177,7 @@ def process_file(path):
 
 **Direct execution from any directory:**
 ```bash
-uv run $SKILL_DIR/scripts/helper.py
+uv run <skill-dir>/scripts/helper.py
 ```
 
 **Never `cd` into the skill directory:**
@@ -186,7 +186,7 @@ uv run $SKILL_DIR/scripts/helper.py
 cd ~/.claude/skills/my-skill && uv run scripts/helper.py
 
 # GOOD: stateless invocation
-uv run $SKILL_DIR/scripts/helper.py
+uv run <skill-dir>/scripts/helper.py
 ```
 
 **Runtime artifacts location:**

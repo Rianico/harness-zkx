@@ -149,7 +149,7 @@ Missing: automation (`--no-hooks`, `--format`) and globals (`-C`, `--config`, `-
 | -h, --help          | Print help (`-h` summary, `--help` full)                                                                     |
 ```
 
-> Global options table: `worktrunk-guide` `references/basics.md` is the curated reference. Raw flags come from `$SKILL_DIR/worktrunk-guide-raw/004-merge.md` (`Global Options:` block from `wt merge --help`).
+> Global options table: `worktrunk-guide` `references/basics.md` is the curated reference. Raw flags come from `<skill-dir>/worktrunk-guide-raw/004-merge.md` (`Global Options:` block from `wt merge --help`).
 
 ## Canonical example — worktrunk-guide fix
 

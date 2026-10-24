@@ -20,6 +20,7 @@ argument-hint: |-
   omitted -- loads router spine and dispatch table only
 metadata:
   manage: [python-expert, typescript-expert, rust-expert, go-expert, lua-expert, cpp-expert, java-expert, kotlin-expert, swift-expert, php-expert, perl-expert, bash-expert, basedpyright-expert]
+  depends-on: [skill-authoring]
 ---
 
 # Programming Expert
@@ -110,4 +111,4 @@ See subskill for exact command.
 ## References
 
 - Sources: `skills/programming-expert/subskills/<language>-expert/` — each subskill is self-contained with its `references/` and `scripts/`
-- Authoring: `$SKILL_DIR/../ai-engineering-expert/subskills/skill-authoring/SKILL.md`
+- Authoring: the `skill-authoring` skill, under `ai-engineering-expert`
