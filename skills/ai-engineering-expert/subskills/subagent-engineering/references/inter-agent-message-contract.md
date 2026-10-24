@@ -1,8 +1,8 @@
-# Subagent Response Format
+# Inter-Agent Message Contract
 
-Canonical response contract for all subagents, skills, and dynamic workflow nodes.
+Canonical inline communication protocol and dual-mode return envelope for subagents, peer agents (e.g. `herdr_reply.py`), and workflow callbacks.
 
-Render output as Markdown text or pass JSON parameters to `structured_output`. Both modes convey identical structured information.
+Render output as Markdown text or pass JSON parameters to `structured_output`. Both modes convey identical structured information and state routing signals.
 
 ---
 

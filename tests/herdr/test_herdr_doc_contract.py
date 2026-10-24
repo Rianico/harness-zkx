@@ -415,7 +415,7 @@ def test_superset_merge_workaround_keeps_a_cited_sha_on_history(tmp_path: Path) 
 
 def test_skill_overview_qualifies_the_reply_template_pointer() -> None:
     """The overview cites the final-reply template by path, not as a bare basename."""
-    template = "resp-format.md"
+    template = "inter-agent-message-contract.md"
     guarded = [
         line
         for line in OVERVIEW_DOC.read_text(encoding="utf-8").splitlines()

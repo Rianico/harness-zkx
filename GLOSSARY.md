@@ -113,7 +113,7 @@ The trimmed echo a dispatch or reply prints on the **caller's** stdout: an ancho
 _Avoid_: message body echo, argv dump.
 
 **Reply**:
-The callee's completion callback: a status triad plus `resp-format.md` evidence, keyed by the envelope's `id` and `metadata.in_reply_to` (the Task-ID answered), which appends the mapped status event to the task trajectory and soft-completes the sender's lease (dropping the lock, keeping the record).
+The callee's completion callback: a status triad plus `inter-agent-message-contract.md` evidence, keyed by the envelope's `id` and `metadata.in_reply_to` (the Task-ID answered), which appends the mapped status event to the task trajectory and soft-completes the sender's lease (dropping the lock, keeping the record).
 _Avoid_: response, answer.
 
 **Scoped Runtime Name**:

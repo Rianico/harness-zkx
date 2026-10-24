@@ -116,9 +116,9 @@ Declare explicit tool boundaries for every subagent.
 - **Strip Interactive UI Tools:** If configuring subagents, mask out interactive user tools (`ask_question`). Subagents must never prompt the user directly.
 - **Return Structured Blockers:** If a subagent encounters an impasse, return a structured blocker to the orchestrator.
 
-## 6. Subagent Response Contract
+## 6. Inter-Agent Return Protocol
 
-Every subagent returns the canonical structured format defined in [resp-format.md](references/resp-format.md).
+Subagents, peer agents, and workflow callbacks use the canonical inter-agent return protocol defined in [inter-agent-message-contract.md](references/inter-agent-message-contract.md). This dual-mode envelope establishes the state routing contract across execution boundaries.
 
 - **BurntSushi-Style Summary:** Deliver technical approach and reasoning in <=100 words. Provide a reviewable position, never a mere status log.
 - **File Links for Artifacts:** Return absolute paths under `## Artifacts`. Never paste file contents into responses.
@@ -127,7 +127,7 @@ Every subagent returns the canonical structured format defined in [resp-format.m
 
 ## References
 
-- [resp-format.md](references/resp-format.md) -- Canonical dual-mode response schema, issue severities, and completion signals.
+- [inter-agent-message-contract.md](references/inter-agent-message-contract.md) -- Inter-agent return protocol, dual-mode envelope, and state routing contract.
 - [tool-design-contracts.md](../../references/tool-design-contracts.md) -- Tool action spaces, passive runtime truth, structured envelopes, and error recovery.
 - [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) -- Lost in the middle: how language models use long contexts.
 - [arXiv:2603.20324](https://arxiv.org/abs/2603.20324) -- The selection bottleneck in multi-agent LLM pipelines.

@@ -95,7 +95,7 @@ Score the submission on a 1–10 scale:
 
 ## Mandatory Response Contract
 
-Format output per `skills/ai-engineering-expert/subskills/subagent-engineering/references/resp-format.md`:
+Format output per `skills/ai-engineering-expert/subskills/subagent-engineering/references/inter-agent-message-contract.md`:
 
 ```markdown
 ## Summary

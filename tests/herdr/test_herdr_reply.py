@@ -44,7 +44,7 @@ RESP_FORMAT = (
     / "subskills"
     / "subagent-engineering"
     / "references"
-    / "resp-format.md"
+    / "inter-agent-message-contract.md"
 )
 SKILL_MD = REPO_ROOT / "skills" / "herdr" / "SKILL.md"
 
@@ -2411,7 +2411,7 @@ def test_response_format_section_headings_pass_the_floor() -> None:
     """Every Mode A heading in the canonical response format is evidence-shaped.
 
     Read from the repo's own fixture, so the check tracks the documented format: a reply
-    shaped by `resp-format.md` must never be recorded `incomplete` merely for its headings,
+    shaped by `inter-agent-message-contract.md` must never be recorded `incomplete` merely for its headings,
     and the format's `## Evidence` section is the one the record names.
     """
     block = next(

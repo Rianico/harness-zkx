@@ -12,4 +12,4 @@ Subagents, lane workers, and autonomous tasks must format output using standard 
 - **`## Issues`**: Report issues as `[P1|P2|P3] <file>:<line> — <Invariant>: <Defect>. Remediation: <Fix>`. State `None` if clean.
 - **`## Suggestions`**: Share optional non-blocking observations on tooling or environment friction (at most two items).
 
-Deep reference, JSON schema, and severity taxonomy: `skills/ai-engineering-expert/subskills/subagent-engineering/references/resp-format.md`.
+Deep reference, JSON schema, and severity taxonomy: `skills/ai-engineering-expert/subskills/subagent-engineering/references/inter-agent-message-contract.md`.
