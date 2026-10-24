@@ -2,7 +2,7 @@
 
 Canonical response contract for all subagents, skills, and dynamic workflow nodes.
 
-Regardless of whether output is rendered as Markdown text or passed as JSON parameters to `structured_output`, it must convey the identical structured information.
+Render output as Markdown text or pass JSON parameters to `structured_output`. Both modes convey identical structured information.
 
 ---
 

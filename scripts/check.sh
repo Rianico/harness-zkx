@@ -77,7 +77,7 @@ run_gate 3 uv run basedpyright --warnings
 run_gate 4 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
 run_gate 5 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
 run_gate 6 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
-run_gate 7 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/ai-engineering-expert/SKILL.md skills/ai-engineering-expert/subskills/skill-authoring/SKILL.md skills/ai-engineering-expert/subskills/subagent-engineering/SKILL.md skills/ai-engineering-expert/subskills/verification/SKILL.md skills/ai-engineering-expert/subskills/writing-for-agents/SKILL.md skills/ai-engineering-expert/subskills/writing-for-humans/SKILL.md skills/ai-engineering-expert/subskills/subagent-engineering/references/tool-design-contracts.md
+run_gate 7 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/ai-engineering-expert/SKILL.md skills/ai-engineering-expert/subskills/skill-authoring/SKILL.md skills/ai-engineering-expert/subskills/subagent-engineering/SKILL.md skills/ai-engineering-expert/subskills/verification/SKILL.md skills/ai-engineering-expert/subskills/writing-for-agents/SKILL.md skills/ai-engineering-expert/subskills/writing-for-humans/SKILL.md skills/ai-engineering-expert/references/tool-design-contracts.md
 
 if [ "$SKIP_TESTS" -eq 1 ]; then
   echo "==> [gate 8/8] SKIPPED: uv run --group dev pytest was skipped (--skip-tests)"

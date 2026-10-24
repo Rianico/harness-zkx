@@ -63,7 +63,8 @@ Every procedural step must conclude with a checkable, falsifiable **completion c
 ## 5. Leading Words & Positive Steering
 
 - **Recruit pretraining priors:** Use established, compact domain concepts (`tight`, `red`, `tracer bullets`, `idempotent`). Never coin custom jargon when standard software engineering terms already activate pre-trained behaviors.
-- **Prompt positive target behavior:** Negation ("Do not write multi-line comments") primes the forbidden tokens. Direct the positive action ("Write single-line comments").
+- **Prompt positive target behavior:** Negation ("Do not write multi-line comments") primes the forbidden tokens. State the action ("Write single-line comments").
+- **Keep only contract-boundary negations.** Delete one when the positive sentence already excludes the alternative. Example: "no footer" after "the header states the range". Keep it when the alternative is the choice the reader must not make. Examples are "never served" and "writes nothing". State the consequence. Test: delete the negation. If no instruction is lost, it was redundant.
 
 ## 6. Pruning Discipline
 
@@ -71,3 +72,12 @@ Every procedural step must conclude with a checkable, falsifiable **completion c
 - **Environment as authority:** Never copy directory layouts, CLI help, or package scripts into prose. Prose is a cache. Cache only unwritten rationale or non-obvious invariants.
 - **Sentence-level no-op hunting:** Delete any instruction that the base model follows by default.
 - **Model gotchas & retirable constraints:** Isolate empirical model quirks under a dedicated gotcha block. Pair each gotcha with a positive recovery action. Delete entries as frontier models advance.
+
+## 7. Editing Existing Text: the state trap
+
+A patch inherits its host. The context also holds the state being replaced: the old sentence, the old plan, the old counts. Generation blends them into the new artifact unless every edit starts from the current bytes.
+
+- **Re-read before editing.** The current artifact is the input. Your memory, an earlier print, and the ticket are stale. Any write invalidates a count, path, or line number quoted before it.
+- **Rewrite the sentence you touch.** Do not extend it. Extending a question or a 60-word run-on ships the defect under your name. Ask whether you would write this clause from scratch. If not, replace the whole sentence.
+- **Sweep derivative prose after a reversal.** The changelog, commit message, PR body, and brief describe the old decision. Diff their claims against the final artifact, not only the code.
+- **Give the reviewer the decisions.** Approval can bless a violation recorded in a decision record the reviewer never saw.

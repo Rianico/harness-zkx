@@ -1,116 +1,134 @@
 ---
 name: subagent-engineering
 description: >-
-  Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, model selection, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
+  Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, action space scoping, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
 metadata:
   managed-by: ai-engineering-expert
 ---
 
 # Subagent Engineering
 
-Subagent orchestration methodology, context isolation boundaries, and execution scope contracts.
+Subagent orchestration methodology, context isolation firewalls, and execution scope contracts.
 
-## Core Mental Model: Subagents as Context Firewalls
+## 1. Core Mental Model: Subagents as Context Firewalls
 
-Monolithic agents degrade over long horizons. High token churn, command logs, and large file reads dilute attention. This causes instruction drift and "Lost in the Middle" failure modes (Liu et al., 2023).
+Monolithic agents degrade over long horizons. Token churn, command logs, and large file reads dilute attention. This causes instruction drift and attention dilution (Liu et al., 2023).
 
-A subagent operates as an **ephemeral execution scope**. Its primary function is **Context Isolation**:
-- **Token Churn Absorption:** The subagent consumes high-volume exploration, file scanning, and research in an isolated window.
-- **Asymmetric Information Flow:** The subagent returns only distilled conclusions, structured schemas, or file pointers.
-- **Context Preservation:** The orchestrator maintains a lean, high-signal context across multi-phase missions.
+A subagent operates as an ephemeral execution scope. Its primary purpose is **Context Isolation**:
+- **Absorb Exploratory Token Churn:** The subagent consumes high-volume exploration, file scanning, and research in an isolated window.
+- **Quarantine Speculative Drafts:** Exploratory edits and syntax trials stay inside the subagent scratchpad. Discarded drafts leave zero debris in the orchestrator history.
+- **Eliminate Attention Dilution:** The orchestrator maintains a lean, focused context across multi-phase tasks.
 
-### Speculative Drafting as Context Isolation
+Its secondary purpose is **Parallelism**:
+- **Collapse Wall-Clock Latency:** Concurrent subagents execute independent subtasks in parallel.
 
-Drafting in a subagent provides speculative execution with automatic rollback protection:
-- **Scratchpad Quarantine:** Prototyping, exploratory edits, and syntax trials remain inside the subagent.
-- **Zero In-Band Pollution:** Discarded trials leave no debris in the primary conversation history.
-- **Stateless Revision:** Revise artifacts by spawning fresh subagents with file pointers rather than accumulating conversational scars.
+### Terminology Boundary: Peer Agent vs Subagent
 
-### Concurrency and Throughput
+Distinguish peer agents from subagents before choosing an execution topology.
 
-Parallelism is the secondary purpose of subagents. Concurrently dispatching independent subtasks collapses sequential wall-clock latency from linear wait times into constant time.
+#### Peer Agent (Horizontal Orchestration)
 
----
+A peer agent coordinates horizontal workflows across independent environments:
+- **Independent Lifecycle:** Operates as an independent, long-lived process or session (such as a PI agent, Codex agent, or Claude in Herdr panes).
+- **Autonomous Identity:** Maintains dedicated context, separate credentials, and direct user interface capability.
+- **Out-of-Band Coordination:** Coordinates asynchronously through IPC, dispatch tickets, or Herdr scripts (`skills/herdr/SKILL.md`).
 
-## Timing & Scenarios: When to Dispatch Subagents
+#### Subagent (Vertical Context Firewall)
 
-Knowing when to dispatch a subagent determines orchestration efficiency.
+A subagent enforces vertical context isolation under a single orchestrator:
+- **Ephemeral Scope:** Spawns as an internal tool call (`invoke_subagent`) to create a subordinate execution scope.
+- **Clean-Room Scratchpad:** Absorbs exploratory token churn and quarantines speculative drafts away from orchestrator context.
+- **Masked Authority:** Operates under strict depth = 1 and tool masking (no recursive delegation, no direct user dialog).
+- **In-Band Summaries:** Returns structured in-band summaries and file pointers to the parent orchestrator.
+
+#### Architectural Comparison
+
+| Dimension | Peer Agent | Subagent |
+| --- | --- | --- |
+| Topology | Horizontal peer network | Vertical context firewall |
+| Lifecycle | Long-lived process | Ephemeral execution scope |
+| Identity | Autonomous identity and user session | Ephemeral role scoped by parent brief |
+| User Interface | Direct user interaction permitted | Direct user interaction forbidden |
+| Communication | Asynchronous out-of-band IPC or tickets | Synchronous in-band tool call summaries |
+
+#### Operational Boundary Rules
+
+- **Local Scratchpad Isolation:** If isolating exploratory churn or speculative drafts, spawn a subagent. Do not use distributed peer-agent queues for local scratchpad work.
+- **Long-Lived Coordination:** If coordinating long-lived peer agents, dispatch out-of-band tickets or use IPC. Do not coordinate long-lived peer agents via fragile parent-child prompts.
+
+## 2. Dispatch Gates: When to Dispatch vs Keep In-Band
+
+Evaluate tasks against concrete dispatch gates before execution.
 
 ### When to Dispatch a Subagent
 
-- **High Token Churn Research:** Broad codebase searches, reading large documentation sets, or scanning multi-megabyte logs.
-- **Speculative Drafting & Prototyping:** Exploring candidate implementations or drafting complex proposals without risking the primary thread.
-- **Independent Verification:** Running security audits, architectural checks, or adversarial code reviews concurrently.
-- **Context Pressure Asymmetry:** Offloading high-pressure exploration from the low-pressure, strategic orchestrator.
+- **High-Churn Research:** If operations produce >3,000 raw output tokens, dispatch a subagent.
+- **Speculative Drafting:** If exploring candidate implementations or prototypes, quarantine scratchpad work inside a subagent.
+- **Context Pressure Asymmetry:** If executing adversarial review, dispatch a subagent with clean-room standards and diff-only context.
+- **Parallel Decomposed Tasks:** If independent tasks touch separate architectural seams, dispatch concurrent subagents.
+- **Least-Privilege Isolation:** If a task requires restricted permissions, dispatch a subagent with a scoped action space.
 
-### When NOT to Dispatch a Subagent
+### When to Keep In-Band
 
-- **Trivial In-Band Operations:** Single-file reads, quick inspection commands, or one-line edits where subagent setup overhead exceeds execution time.
-- **Interactive User Alignment:** Interactive grilling and parameter capture require direct human dialog. Subagents must never interrogate the user.
-- **Shared Mutable State Without Seams:** Concurrent tasks touching the same files risk merge conflicts and broken state invariants.
+- **Trivial Operations:** If tasks touch <100 lines or run single commands, execute in-band. Subagent setup overhead exceeds execution time.
+- **Direct User Alignment (IDD):** If probing user intent or clarifying requirements, keep execution in-band. Subagents must never interrogate the user.
+- **Shared Mutable State:** If tasks modify identical files without clean seams, keep execution in-band. Concurrent edits risk merge conflicts and broken state invariants.
+- **Nested Hierarchies:** If execution is already inside a subagent, keep execution in-band. Enforce a strict depth limit of 1.
 
----
+## 3. Context Topology: Fresh vs Inherited Context
 
-## Context Topology: Fresh Context vs Inherited Context
-
-Choosing context topology defines how information moves across agent boundaries.
+Choose context topology based on task isolation needs.
 
 ### Fresh Context (The Default)
 
 Fresh context provides a clean room:
 - **Pristine Window:** The subagent starts with only its system prompt, role definition, and target brief.
-- **Zero Baggage:** Eliminates prompt pollution, confirmation bias, and instruction drift from earlier conversational turns.
-- **Pointer-First Exchange:** Pass context via file paths (file links) and structured contracts. Never copy-paste conversation transcripts.
+- **Zero Baggage:** Fresh context eliminates prompt pollution, confirmation bias, and instruction drift.
+- **Stateless Iteration:** If revising an artifact, spawn a fresh subagent with the artifact pointer and critique notes. Never resume stale subagents to iterate on rejected work.
 
-### Inherited Context & Continuation Scopes
+### Inherited Context
 
 Inherited context passes prior session history into the subagent:
-- **Use Sparingly:** Use only when the subagent requires historical conversational nuances that cannot be captured in a pointer brief.
-- **The Context Rot Trap:** Resumed agents accumulate token debt rapidly.
-- **Stateless Iteration Rule:** Never resume old subagents via SendMessage to iterate on rejected artifacts. Spawn a fresh subagent with the artifact pointer and critique notes.
+- **Use Sparingly:** If a task requires conversational nuances that a brief cannot capture, use inherited context.
+- **Avoid Context Rot:** Resumed subagents accumulate token debt rapidly.
 
----
+## 4. Pointer-First State Passing
 
-## Model Selection & Tier Allocation
+Subagents exchange state through file paths, never through inlined text blobs.
 
-Matching model capability to subagent responsibility prevents toxic premise failures and syntax thrashing.
+- **Pass Pointers in Prompts:** If directing a subagent, pass absolute file paths to input specifications or plans.
+- **Quarantine Artifact Bodies:** Subagents write outputs directly to disk. The orchestrator reads summaries, never full artifacts.
+- **Use Topic Roots:** If coordinating multi-phase workflows, establish a shared topic root under `.lsz/` with phase subdirectories.
+- **Preserve Orchestrator Budget:** Downstream subagents inspect full artifacts on demand via file links.
 
-### The Selection Bottleneck
+## 5. Action Space Permissions & Scoping
 
-The orchestrator is the selector, and selection is the bottleneck. A weak orchestrator cannot exploit a strong candidate pool (Maryanskyy et al., 2026). Match orchestrator capability to or above its subagents.
+Declare explicit tool boundaries for every subagent.
 
-### The Toxic Premise Risk
+### Least-Privilege Scoping
 
-Smaller models suffer premature convergence during research. Hallucinated facts returned to the orchestrator corrupt downstream architecture. Keep subagents on the frontier model (inherit) for research, drafting, and adversarial review.
+- **Read-Only Scopes:** If dispatching researchers or reviewers, grant only read and search tools (`read_file`, `grep_search`). Strip all mutation tools.
+- **Implementer Scopes:** If dispatching implementers, grant edit and test execution tools.
 
-### Model Anonymity
+### Tool Masking
 
-Never prompt subagents with model names. Prompt strictly by task role and contract to avoid model factionalism (arXiv:2609.35928).
+- **Strip Recursive Delegation:** If configuring subagents, mask out dispatch tools (`invoke_subagent`, `Agent`). Enforce depth = 1.
+- **Strip Interactive UI Tools:** If configuring subagents, mask out interactive user tools (`ask_question`). Subagents must never prompt the user directly.
+- **Return Structured Blockers:** If a subagent encounters an impasse, return a structured blocker to the orchestrator.
 
-### The Three Guardrails for Lighter Subagents
+## 6. Subagent Response Contract
 
-For subagent dispatch, downgrade to lighter models (e.g. Flash or Haiku) only when all three conditions hold. In-band execution follows the parent Model Routing table:
-1. **Read-Only Action Space:** Grant only read tools. Smaller subagents must never hold mutation permissions.
-2. **Schema-First Contracts:** Force rigid JSON or YAML schemas. Never request free-form prose.
-3. **Deterministic Environmental Backstops:** Verify all outputs via compilers, linters, or regex gates rather than orchestrator trust.
+Every subagent returns the canonical structured format defined in [resp-format.md](references/resp-format.md).
 
----
-
-## Native Orchestration Constraints
-
-Subagents operate under strict structural boundaries:
-- **No Agent-ception:** Subagents cannot access the Agent tool (depth limit 1). The primary orchestrator coordinates all agents.
-- **No Subagent UI:** Subagents do not own user interaction. When blocked, the subagent returns a structured blocker to the orchestrator.
-- **Principle of Least Privilege:** Explicitly declare tool scope via the frontmatter tools array. Researchers receive read-only tools. Implementers receive edit tools.
-- **Passive Runtime Truth:** Capture runtime truth passively (`tee` logs, pipes) instead of polling with blind query loops. Rely on native execution truth (stdout, stderr, exit codes). Never force artificial JSON envelopes onto standard shell output. Reserve structured envelopes for specialized RPC or MCP agent endpoints.
-
----
+- **BurntSushi-Style Summary:** Deliver technical approach and reasoning in <=100 words. Provide a reviewable position, never a mere status log.
+- **File Links for Artifacts:** Return absolute paths under `## Artifacts`. Never paste file contents into responses.
+- **Pass Deterministic Evidence:** Return check names, exit status, and log tails under `## Evidence`.
+- **Structured Routing:** Signal next actions explicitly (`continue`, `remediate`, or `blocked`) under `## Route`.
 
 ## References
 
-- [tool-design-contracts.md](references/tool-design-contracts.md) -- Action space granularity, passive runtime truth, structured return contracts, and error recovery.
-- [subagent-first-execution.md](references/subagent-first-execution.md) -- Universal subagent-first execution mandate, dispatch patterns, topic roots, and anti-patterns.
-- [resp-format.md](references/resp-format.md) -- Dual-mode representation, response schemas, issue severities, and completion signals.
-- [arXiv:2609.35928](https://arxiv.org/abs/2609.35928) -- Prompted identity degrades cooperation in multi-agent LLM systems.
+- [resp-format.md](references/resp-format.md) -- Canonical dual-mode response schema, issue severities, and completion signals.
+- [tool-design-contracts.md](../../references/tool-design-contracts.md) -- Tool action spaces, passive runtime truth, structured envelopes, and error recovery.
 - [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) -- Lost in the middle: how language models use long contexts.
 - [arXiv:2603.20324](https://arxiv.org/abs/2603.20324) -- The selection bottleneck in multi-agent LLM pipelines.
+- [arXiv:2609.35928](https://arxiv.org/abs/2609.35928) -- Prompted identity degrades cooperation in multi-agent LLM systems.

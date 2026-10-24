@@ -57,7 +57,7 @@ GATE_COMMANDS = [
         " skills/ai-engineering-expert/subskills/verification/SKILL.md"
         " skills/ai-engineering-expert/subskills/writing-for-agents/SKILL.md"
         " skills/ai-engineering-expert/subskills/writing-for-humans/SKILL.md"
-        " skills/ai-engineering-expert/subskills/subagent-engineering/references/tool-design-contracts.md"
+        " skills/ai-engineering-expert/references/tool-design-contracts.md"
     ),
     "uv run --group dev pytest",
 ]

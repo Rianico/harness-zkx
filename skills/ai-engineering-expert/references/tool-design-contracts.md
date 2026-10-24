@@ -9,7 +9,7 @@ Agent output quality depends on four core properties:
 1. **Action space quality:** Can the agent express the intended operations unambiguously?
 2. **Observation quality:** Does the agent receive clean environmental truth to guide decisions?
 3. **Recovery quality:** Can the agent handle errors gracefully without human intervention?
-4. **Context budget quality:** Is guidance loaded when needed, not before? (governed by [context-load-policy.md](../../skill-authoring/references/context-load-policy.md)).
+4. **Context budget quality:** Is guidance loaded when needed, not before? (governed by [context-load-policy.md](../subskills/skill-authoring/references/context-load-policy.md)).
 
 ---
 

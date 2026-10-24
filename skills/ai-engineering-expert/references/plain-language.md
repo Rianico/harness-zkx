@@ -36,6 +36,7 @@ Adapted from `warpdotdev/common-skills@b811c24` (MIT, © Denver Technologies, In
 - Preserving test assertions: [Rewriting pinned text](#rewriting-pinned-text).
 - Tightening a vague draft: [A rewrite](#a-rewrite).
 - Cutting padding and fluff: [Words that add nothing](#words-that-add-nothing).
+- Removing redundant negation: [Redundant negation](#redundant-negation).
 
 ## Mode selection
 
@@ -63,6 +64,20 @@ Both flavors share one **lexical dial**. Rich CS vocabulary and verbatim code to
 | Vertical list at 3+ conditions or steps | Multi-condition prose hides failure branches |
 | Prefer the specific verb | `handles`, `manages`, `supports` conceal the actual operational mechanism |
 | Paragraph ≤ ~6 sentences | Dense walls of text get skimmed and critical warnings get skipped |
+
+
+## Redundant negation
+
+A negation names the alternative it forbids. That primes the alternative and spends words on a state the positive instruction already excludes. Test: delete the negative clause. If the remaining sentence still rules out the alternative, the clause was redundant.
+
+| Redundant | Positive form |
+| --- | --- |
+| `The header states the range. There is no footer.` | `The header states the range.` |
+| `file is the text file, never a directory.` | `file is the text file.` |
+| `Copy the 4 chars before the separator (never copy the separator).` | `Copy the 4 chars before the separator.` |
+| `The refusal is not a blind retry.` | `The refusal shows the current rows.` |
+
+Keep the negation that names a **contract boundary**. There, the forbidden alternative is the failure the reader must avoid. The positive form cannot imply it. Examples are `never served` (the on-demand rule), `writes nothing` (a no-op warning), `any failure writes nothing` (atomicity). Those are claims about the system, not restatements of the instruction.
 
 ## Active voice with named actors
 

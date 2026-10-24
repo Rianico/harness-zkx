@@ -5,7 +5,7 @@ description: >-
 arguments: domain
 argument-hint: |-
   skill-authoring -- loads skill design and diagnosis methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, trigger diagnosis, progressive disclosure, rules-vs-skills boundary, platform sync, and authoring checklists
-  subagent-engineering -- loads subagent methodology: action space design, observation formats, error recovery, parallel execution, orchestration constraints, and agent frontmatter
+  subagent-engineering -- loads subagent methodology: context isolation firewalls, speculative drafting, dispatch gates, fresh versus inherited context, action space scoping, and orchestration constraints
   verification -- loads verification methodology: EDD, deterministic vs semantic verification, AI regression patterns, runtime trace fixtures, and eval-first loops
   writing-for-agents -- loads agent-document writing: context pointers, hierarchy, disclosure, completion criteria, leading words, pruning; use when writing/editing SKILL.md, AGENTS.md, CLAUDE.md or any agent-consumed doc
   writing-for-humans -- loads human-facing proposal writing: problem-first framing, evidence grounding, scannability, explicit asks; use when drafting/reviewing GitHub issues, RFCs, or proposals
@@ -25,7 +25,9 @@ AI engineering turns human intent into verified artifacts. **IDD** owns intent. 
 - **Formal Substrate**: Compilers, linters, typecheckers, and tests return pass/fail. The substrate owns environmental truth and supplies verification data.
 - **Semantic Reasoner**: The model navigates ambiguity, resolves conflicts, and proposes integrations when the substrate reports an impasse.
 
-> Pointer: [Information boundary pattern](references/information-boundary.md). Use when you split a check between tool and model.
+> Pointers:
+> - [Information boundary pattern](references/information-boundary.md). Use when you split a check between tool and model.
+> - [Tool design contracts](references/tool-design-contracts.md). Use when you design tool schemas, CLI output streams, or error recovery.
 
 ### 1. IDD (Intent-Driven Development): Source of Authority
 
@@ -71,6 +73,7 @@ Build checks over writing rules. Classify each failure by cause:
 - **Semantic Ambiguity** (plausible but divergent reading) → Refine the prompt contract: tripartite formula, negative boundary, input/output specs, STE-100 terms.
 - **Semantic Disregard** (clear rule, ignored under pressure) → Enforce via Context Pressure Asymmetry, or a hard tool gate.
 - **Route Friction** (manual compliance) → Pack the steps into `scripts/<cmd>`. Make the governed path the cheapest.
+- **Stale-context carryover** (the draft inherits the state it was asked to replace) → Regenerate the sentence from the artifact. Re-derive every count at the moment of use. Then sweep the prose that described the old state (ledger, commit message, PR body, reviewer brief). A patch inherits its host's defects, and a claim written for the old state outlives the reversal.
 
 ## Context Architecture & Progressive Disclosure
 
