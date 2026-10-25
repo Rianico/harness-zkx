@@ -309,6 +309,8 @@ Use forward slashes in every path.
 
 **Anchor:** `$SKILL_DIR` expands to the directory of the `SKILL.md` that owns the referencing document. The package root is the outermost `skills/<name>/` above it.
 
+Every `references/*.md` file shares the same `$SKILL_DIR` anchor as its owning `SKILL.md`.
+
 **Scope:** a `$SKILL_DIR` path must resolve inside the package root. A path that escapes it is an Out-of-Package Reference.
 
 Three reference kinds:
@@ -343,20 +345,20 @@ Run the native verification suite from the project root. These commands are repo
 
 ```bash
 # Frontmatter syntax, scalar conventions, and name collisions
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
+uv run $SKILL_DIR/scripts/validate-deps.py lint
 
 # Description budget (≤300 chars)
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
+uv run $SKILL_DIR/scripts/validate-deps.py context-check
 
 # Plain English and STE-100 linting (per file)
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py skills/<skill-name>/SKILL.md
+uv run $SKILL_DIR/scripts/ste100.py skills/<skill-name>/SKILL.md
 ```
 
 Conditional gates:
 
 ```bash
 # After a dependency, move, or rename change. Validates depends-on only.
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py check
+uv run $SKILL_DIR/scripts/validate-deps.py check
 
 # Only when targeted tests exist
 uv run pytest tests/ai-engineering-expert tests/test_validate_deps.py

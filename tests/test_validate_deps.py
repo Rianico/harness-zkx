@@ -786,6 +786,36 @@ def test_refs_ignores_fenced_code_blocks(tmp_path: Path) -> None:
     assert "Reference check: 0 checked, 0 failed, 0 warnings." in result.stdout
 
 
+def test_refs_include_fences_reports_fenced_target(tmp_path: Path) -> None:
+    """refs --include-fences reports a broken $SKILL_DIR target inside a fence."""
+    body = "Example:\n\n```bash\ncat $SKILL_DIR/references/missing.md\n```\n"
+    write_package_file(tmp_path, "alpha/SKILL.md", reference_skill("alpha", body))
+
+    default = run_validate_deps("--project-root", str(tmp_path), "refs")
+    strict = run_validate_deps("--project-root", str(tmp_path), "refs", "--include-fences")
+
+    assert default.returncode == 0, default.stdout
+    assert "Reference check: 0 checked, 0 failed, 0 warnings." in default.stdout
+    assert strict.returncode == 1, strict.stdout
+    expected = (
+        "REF FAIL: skills/alpha/SKILL.md:10 — missing target: $SKILL_DIR/references/missing.md"
+    )
+    assert expected in strict.stdout
+    assert "Reference check: 1 checked, 1 failed, 0 warnings." in strict.stdout
+
+
+def test_check_stays_fence_blind(tmp_path: Path) -> None:
+    """check ignores fenced targets that refs --include-fences would report."""
+    body = "Example:\n\n```bash\ncat $SKILL_DIR/references/missing.md\n```\n"
+    write_package_file(tmp_path, "alpha/SKILL.md", reference_skill("alpha", body))
+
+    result = run_validate_deps("--project-root", str(tmp_path), "check")
+
+    assert result.returncode == 0, result.stdout
+    assert "REF FAIL" not in result.stdout
+    assert "Reference check: 0 checked, 0 failed, 0 warnings." in result.stdout
+
+
 def test_refs_ignores_links_inside_backticks(tmp_path: Path) -> None:
     """refs exits 0 for a link shown as an inline-code example."""
     write_package_file(

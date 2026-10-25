@@ -124,10 +124,10 @@ Run deterministic linters from project root:
 
 ```bash
 # Frontmatter syntax, fields, and name collisions
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
+uv run $SKILL_DIR/scripts/validate-deps.py lint
 
 # Description budget (≤300 chars). Trigger checks are warnings.
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
+uv run $SKILL_DIR/scripts/validate-deps.py context-check
 ```
 
 **Audit against the Static Gate Checklist:**
@@ -192,8 +192,8 @@ Before pushing description changes, evaluate the candidate description against t
    ```
 2. **Re-run harness lint and context checks:**
    ```bash
-   uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py lint
-   uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check
+   uv run $SKILL_DIR/scripts/validate-deps.py lint
+   uv run $SKILL_DIR/scripts/validate-deps.py context-check
    ```
 3. **Verify Recall and Precision:** Ensure the updated description triggers on all in_domain test cases in `$EVALS_DIR/<skill_name>.yaml` without firing on hard_negatives.
 

@@ -15,7 +15,8 @@ Supports:
 - rename: Rename a skill and cascade updates to all references
 - sync: Generate agents/openai.yaml from SKILL.md canonical metadata
 - context-check: Enforce context-load policy (hard gates + soft warnings)
-- refs: Resolve paths referenced from skill docs (anchors and Markdown links)
+- refs: Resolve paths referenced from skill docs (anchors and Markdown links);
+  --include-fences opts fenced code blocks in
 """
 
 import argparse
@@ -231,13 +232,13 @@ def _finding_payload(finding: RefFinding) -> dict[str, str | int]:
     }
 
 
-def _iter_unfenced_lines(content: str) -> Iterator[tuple[int, str]]:
-    """Yield (line number, text) for every line outside a fenced code block."""
+def _iter_lines(content: str, include_fences: bool) -> Iterator[tuple[int, str]]:
+    """Yield (line number, text) for prose lines, and for fenced lines on request."""
     fence: tuple[str, int] | None = None
     for number, text in enumerate(content.splitlines(), start=1):
         match = FENCE_PATTERN.match(text)
         if fence is None:
-            if match:
+            if match and not include_fences:
                 marker = match.group("fence")
                 fence = (marker[0], len(marker))
                 continue
@@ -318,7 +319,9 @@ def _package_root(root_dir: Path, doc: Path) -> Path:
     return root_dir.joinpath(*parts[: package_start + 1])
 
 
-def _scan_references(root_dir: Path, doc: Path) -> tuple[list[RefFinding], list[RefFinding], int]:
+def _scan_references(
+    root_dir: Path, doc: Path, include_fences: bool = False
+) -> tuple[list[RefFinding], list[RefFinding], int]:
     """Collect hard failures, warnings, and the reference count for one document."""
     relative = str(doc.relative_to(root_dir))
     anchor = _anchor_dir(doc, root_dir).resolve()
@@ -327,7 +330,7 @@ def _scan_references(root_dir: Path, doc: Path) -> tuple[list[RefFinding], list[
     warnings: list[RefFinding] = []
     checked = 0
 
-    for number, text in _iter_unfenced_lines(doc.read_text(encoding="utf-8")):
+    for number, text in _iter_lines(doc.read_text(encoding="utf-8"), include_fences):
         for match in SKILL_DIR_PATTERN.finditer(text):
             target = _reference_target(f"$SKILL_DIR{match.group(1) or ''}")
             if target is None:
@@ -371,12 +374,20 @@ def _scan_references(root_dir: Path, doc: Path) -> tuple[list[RefFinding], list[
     return failures, warnings, checked
 
 
-def refs_check(root_dir: Path, skill: str | None = None, json_output: bool = False) -> bool:
+def refs_check(
+    root_dir: Path,
+    skill: str | None = None,
+    json_output: bool = False,
+    include_fences: bool = False,
+) -> bool:
     """Resolve every reference under skills/. Return True when a hard failure exists.
 
     `checked` counts resolved reference targets: every `$SKILL_DIR` path and every
     Markdown link target, placeholders and skipped prefixes excluded. Warnings are
     counted separately, so they never inflate the resolved total.
+
+    `include_fences` scans fenced code blocks too. The `check` subcommand keeps the
+    fence-blind default.
     """
     if skill is not None and not (root_dir / "skills" / skill).is_dir():
         print(f"Error: Skill '{skill}' not found.", file=sys.stderr)
@@ -386,7 +397,9 @@ def refs_check(root_dir: Path, skill: str | None = None, json_output: bool = Fal
     warnings: list[RefFinding] = []
     checked = 0
     for doc in _iter_reference_docs(root_dir, skill):
-        doc_failures, doc_warnings, doc_checked = _scan_references(root_dir, doc)
+        doc_failures, doc_warnings, doc_checked = _scan_references(
+            root_dir, doc, include_fences=include_fences
+        )
         failures.extend(doc_failures)
         warnings.extend(doc_warnings)
         checked += doc_checked
@@ -1176,7 +1189,10 @@ def main():
         help="Print full description text for skills exceeding budget",
     )
 
-    refs_parser = subparsers.add_parser("refs", help="Resolve paths referenced from skill docs")
+    refs_parser = subparsers.add_parser(
+        "refs",
+        help="Resolve paths referenced from skill docs; --include-fences also scans fences",
+    )
     _ = refs_parser.add_argument(
         "skill",
         nargs="?",
@@ -1186,6 +1202,11 @@ def main():
         "--json",
         action="store_true",
         help="Machine-readable output",
+    )
+    _ = refs_parser.add_argument(
+        "--include-fences",
+        action="store_true",
+        help="Also scan fenced code blocks (default: skip them)",
     )
 
     args = parser.parse_args()
@@ -1226,7 +1247,12 @@ def main():
         ok = context_check_all(root, json_output=args.json, show_over=args.show_over)
         sys.exit(0 if ok else 1)
     elif args.command == "refs":
-        refs_failed = refs_check(root, skill=args.skill, json_output=args.json)
+        refs_failed = refs_check(
+            root,
+            skill=args.skill,
+            json_output=args.json,
+            include_fences=args.include_fences,
+        )
         sys.exit(1 if refs_failed else 0)
 
 

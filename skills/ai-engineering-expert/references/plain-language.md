@@ -162,7 +162,7 @@ A phrase pin is a prose constraint (e.g., a case-sensitive test assertion). An e
 Pass `--preserve <string>` to `ste100.py` to fail when a rewrite drops a pinned substring. Repeat the flag to check several pins.
 
 ```bash
-uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/ste100.py <path> --preserve <string>
+uv run $SKILL_DIR/subskills/skill-authoring/scripts/ste100.py <path> --preserve <string>
 ```
 
 ## A rewrite
