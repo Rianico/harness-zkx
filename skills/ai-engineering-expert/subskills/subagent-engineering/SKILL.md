@@ -36,9 +36,9 @@ A peer agent coordinates horizontal workflows across independent environments:
 #### Subagent (Vertical Context Firewall)
 
 A subagent enforces vertical context isolation under a single orchestrator:
-- **Ephemeral Scope:** Spawns as an internal tool call (`invoke_subagent`) to create a subordinate execution scope.
+- **Ephemeral Scope:** Spawns via an internal subagent dispatch tool call to create a subordinate execution scope.
 - **Clean-Room Scratchpad:** Absorbs exploratory token churn and quarantines speculative drafts away from orchestrator context.
-- **Masked Authority:** Operates under strict depth = 1 and tool masking (no recursive delegation, no direct user dialog).
+- **Masked Authority:** Operates under strict depth = 1 and tool masking (no recursive delegation).
 - **In-Band Summaries:** Returns structured in-band summaries and file pointers to the parent orchestrator.
 
 #### Architectural Comparison
@@ -103,17 +103,16 @@ Subagents exchange state through file paths, never through inlined text blobs.
 
 ## 5. Action Space Permissions & Scoping
 
-Declare explicit tool boundaries for every subagent.
+Declare explicit tool boundaries for every subagent. Define action spaces by functional capability classes: inspection, workspace mutation, verification, and delegation.
 
 ### Least-Privilege Scoping
 
-- **Read-Only Scopes:** If dispatching researchers or reviewers, grant only read and search tools (`read_file`, `grep_search`). Strip all mutation tools.
-- **Implementer Scopes:** If dispatching implementers, grant edit and test execution tools.
+- **Read-Only Scopes:** If dispatching researchers or reviewers, grant only inspection and search tools. Strip all workspace mutation and execution tools.
+- **Implementer Scopes:** If dispatching implementers, grant workspace mutation, patch, and verification tools. Strip subagent dispatch tools.
 
 ### Tool Masking
 
-- **Strip Recursive Delegation:** If configuring subagents, mask out dispatch tools (`invoke_subagent`, `Agent`). Enforce depth = 1.
-- **Strip Interactive UI Tools:** If configuring subagents, mask out interactive user tools (`ask_question`). Subagents must never prompt the user directly.
+- **Strip Recursive Delegation:** If configuring subagents, mask out subagent dispatch tools. Enforce depth = 1.
 - **Return Structured Blockers:** If a subagent encounters an impasse, return a structured blocker to the orchestrator.
 
 ## 6. Inter-Agent Return Protocol

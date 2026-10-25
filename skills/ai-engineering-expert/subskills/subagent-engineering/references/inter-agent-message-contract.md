@@ -2,7 +2,7 @@
 
 Canonical inline communication protocol and dual-mode return envelope for subagents, peer agents (e.g. `herdr_reply.py`), and workflow callbacks.
 
-Render output as Markdown text or pass JSON parameters to `structured_output`. Both modes convey identical structured information and state routing signals.
+Render output as Markdown text or pass structured parameters through a schema-validated tool envelope. Both modes convey identical structured information and state routing signals.
 
 ---
 
@@ -40,7 +40,7 @@ continue | remediate | blocked
 
 ### Mode B: Structured JSON Schema Format
 
-Used in structured output:
+Used in structured return envelopes or automated API payloads:
 
 ```json
 {
