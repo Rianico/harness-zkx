@@ -13,6 +13,12 @@
       "skillPath": "skills/keel/SKILL.md",
       "computedHash": "9449afa2595a83968dde0e0e9760008fdd7a1881ddef6446510c68bf949d6156"
     },
+    "retro": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/retro/SKILL.md",
+      "computedHash": "b8d55851a2909e26c2dbb2e8563719c87b3b700559f604e4df344f8c27e21047"
+    },
     "show-me": {
       "source": "humanlayer/skills",
       "sourceType": "github",
