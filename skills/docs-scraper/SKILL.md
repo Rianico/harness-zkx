@@ -1,19 +1,19 @@
 ---
 name: docs-scraper
 description: >-
-  Documentation scraper for LSP, PTX, CUDA, and Rust sites. Converts docs to markdown skills. Use when scraping docs, converting docs to skills, or composing layered skills.
+  Docs scraper and skill compiler for LSP, PTX, CUDA, Rust, sites, skill.sh, and local book files. Fetches unfamiliar documentation, converts it into two-layer skills, and gates quality deterministically. Use when scraping docs, converting docs into a skill, or composing skills from skill.sh.
 argument-hint: |-
-  [auto|lsp|ptx|runtime|driver|rust|site|skills|book|sanitize] [--output-dir <path>] [--force] [--base-url <url>] [--staging <path>] [--run <slug>]
-  to-skill: <doc-dir|url> [--name <skill>] [--supplementary <paths-or-urls>] [--output-dir <path>]
+  [auto|lsp|ptx|runtime|driver|rust|site|skills|book] [--output-dir <path>] [--force] [--base-url <url>] [--staging <path>] [--run <slug>]
+  to-skill <doc-dir|url> [--name <skill>] [--supplementary <paths-or-urls>] [--fold-into <skill-dir>] [--output-dir <path>]
 metadata:
   depends-on: [ai-engineering-expert]
 disable-model-invocation: true
 ---
 
-# Documentation Pipeline
+# Docs Scraper
 
 > [!tip] Router
-> Source-as-verb: `auto` dispatches by URL/content. Explicit `lsp|ptx|runtime|driver|rust|site|skills` overrides. Second route `to-skill` builds a layered skill. Human or `$skill` dispatch only (`disable-model-invocation:true`).
+> Routes name the source. `auto` dispatches by URL or content. Explicit `lsp|ptx|runtime|driver|rust|site|skills|book` overrides — `book` ingests local PDF/EPUB/DOCX/MD/TXT files. The `to-skill` route stages raw docs and emits the generation brief. Human or `$skill` dispatch only (`disable-model-invocation:true`).
 
 Core = script + converter. Per-source cleanup lives in `references/*` loaded on demand.
 
@@ -44,9 +44,9 @@ uv run $SKILL_DIR/scripts/scrape.py auto https://www.skills.sh/sickn33/agentic-a
 uv run $SKILL_DIR/scripts/scrape.py lsp --output-dir ./references/lsp-docs
 uv run $SKILL_DIR/scripts/scrape.py rust https://github.com/ratatui/ratatui
 
-# to-skill — thin bridge (fetch via auto, then delegate to ai-engineering-expert skill-authoring)
-uv run $SKILL_DIR/scripts/scrape.py auto https://example.com --output-dir .lsz/tmp/example-raw
-# then in subagent: load ai-engineering-expert skill-authoring + generate curated skill at skills/<name>/
+# to-skill — stage raw docs + emit the generation brief (convert pipeline entry)
+uv run $SKILL_DIR/scripts/scrape.py to-skill ./my-docs --name my-skill
+# then: follow <output>/<name>/GENERATION-BRIEF.md (LLM convert), run the compile.py gates it names
 ```
 
 ## Available Scrapers
@@ -64,27 +64,19 @@ uv run $SKILL_DIR/scripts/scrape.py auto https://example.com --output-dir .lsz/t
 
 Details per scraper → `references/*.md`.
 
-## LLMs.txt Support
-
-**Yes — first-class, with fallback.**
-
-`site` scraper discovers URLs via:
-1. `GET /llms.txt` — parses markdown links `[Title](URL)` + bare URLs, respects `## Optional` section (see `references/llms-txt-patterns.md`). Curated, high-signal. Preferred when present.
-2. `GET /sitemap.xml` — parses `<loc>` tags, recurses into sitemap indexes (depth ≤2), validates URLs. Exhaustive fallback.
-3. Deduplication: `llms.txt` wins on overlap. `sitemap.xml` adds only unseen URLs.
-4. Detection: `check_llms_txt()` now tries `HEAD /llms.txt` then falls back to `GET` (handles 405/403 on static/CDN hosts).
-
-`site --base-url https://example.com` emits `{urls, source, metrics: {total, llms_txt, sitemap_xml, deduplicated}}`. `fetch_urls()` also writes `metrics.json`. Non-site scrapers (lsp/ptx/cuda/rust/skills) do not use llms.txt — they hit fixed upstream URLs or cargo/docs.rs.
-
 ## Fetching Way
 
 ### Discovery (site only, `--base-url`)
+
+llms.txt is first-class with a fallback: `GET /llms.txt` is preferred when present (curated, high-signal). `sitemap.xml` is the exhaustive fallback. `llms.txt` wins on overlap.
 
 ```
 GET /llms.txt  → parse_llms_txt() → structured {url, title, section, optional}
 GET /sitemap.xml → parse_sitemap_xml() → <loc> URLs → child sitemaps if index
 merge + dedup → {urls, source: ["llms_txt", "sitemap_xml"], metrics}
 ```
+
+`check_llms_txt()` tries `HEAD /llms.txt`, then falls back to `GET` (handles 405/403 on static/CDN hosts). Fixed-source scrapers (`lsp|ptx|runtime|driver|rust|skills|book`) never use llms.txt — they hit fixed upstream URLs, cargo, or local files. See `references/llms-txt-patterns.md`.
 
 ### Fetch (site `urls...`, `site --base-url` with fetch, or any scraper page fetch)
 
@@ -97,15 +89,16 @@ merge + dedup → {urls, source: ["llms_txt", "sitemap_xml"], metrics}
 5. **HTML + html2text** — fallback `fetch_page()` → `convert_to_markdown()` (BeautifulSoup + html2text, `body_width=0`).
 6. **Cache reuse** — `.md` / `.html` cache hit short-circuits network unless `--force`.
 
-All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser`, fail-open), crawl-delay + `delay=1.0s` rate limiting, User-Agent rotation (5-browser pool), exponential backoff on 408/429/5xx (Retry-After honoured, capped 60s, `max_retries=3`).
+All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser`, fail-open), crawl-delay, and `delay=1.0s` rate limiting. It rotates a 5-browser User-Agent pool. It retries 408/429/5xx with exponential backoff, honouring Retry-After up to 60s (`max_retries=3`).
 
 ### Other scrapers
 
-- `lsp`/`ptx`/`cuda` — single/multi-page HTML via `_rate_limited_get()` + cached `.cache/<name>/` (e.g. `.cache/lsp/spec.html`).
+- `lsp`/`ptx`/`runtime`/`driver` — single/multi-page HTML via `_rate_limited_get()` + cached `.cache/<name>/` (e.g. `.cache/lsp/spec.html`).
 - `rust` — `cargo-docs-md` pipeline: clone → `cargo +nightly doc` (JSON) → `cargo docs-md --dir` → flatten `module/index.md→module.md` → rewrite links → verify.
 - `skills` — `npx -y skills add <repo> --list` + `npx add <repo> --skill` via `skills` CLI, staged to `.lsz/tmp/skill-compose/<run>/stage`.
-- `book` — monolithic file ingestion: extraction cascade `docling → pdftotext → pypdf` (PDF), zipfile+BS4 (EPUB), zipfile+XML (DOCX). Deterministic `clean_pdftotext()` strips running headers/footers (page-repetition >50%), edge page numbers (Arabic+Roman), joins hyphen-wraps. Sliced into heading-anchored chunks (`--max-tokens`). Output routed through `sanitize.py` (zero-width/bidi/Trojan Source + prompt injection scan).
-- `sanitize` — CLI `sanitize.py <file> [--check]` strips invisible/zero-width/bidi codepoints (34 total) and scans 4 injection patterns. It emits `{clean, removed, injections}` report.
+- `book` — monolithic local-file ingestion: extraction cascade `docling → pdftotext → pypdf` (PDF), zipfile+BS4 (EPUB), zipfile+XML (DOCX). Deterministic `clean_pdftotext()` strips running headers/footers (page-repetition >50%), edge page numbers (Arabic+Roman), joins hyphen-wraps. Sliced into heading-anchored chunks (`--max-tokens`). Output routed through `sanitize.py` (zero-width/bidi/Trojan Source + prompt injection scan).
+
+Sanitize is a utility, not a scraper route: `uv run $SKILL_DIR/scripts/sanitize.py <file> [--check]` strips invisible/zero-width/bidi codepoints and reports injection patterns.
 
 ## Metrics
 
@@ -115,19 +108,26 @@ All fetches go through `_rate_limited_get()`: robots.txt check (`RobotFileParser
 - **Rust metrics**: post-run `Generated N markdown files`, `verify_links` broken-link count, `flattened N files`.
 - **Skill quality metrics**: `references/quality-metrics.md` — 6 criteria (Trigger Coverage 20%, Pattern Usefulness 20%, Beginner Friendliness 15%, Documentation Completeness 15%, Navigation Clarity 15%, Graceful Degradation 15%) scored 0-1, compiled by `scripts/compile.py validate-skill/validate-triggers`.
 - **Sanitization & STE-100** (deterministic, no AI): `compile.py` runs `lint_injections()` + STE-100 checks (`lint_banned_words()`, `lint_phrasal_verbs()`, `lint_sentence_lengths()`, `lint_semicolons()`, `lint_nominalizations()`) on `SKILL.md` body and reference files. `sanitize.py` strips threat codepoints before compilation.
+
 ## References
 
 - `references/lsp-patterns.md` — emoji anchor cleanup
-- `references/cuda-patterns.md` — multi-page discovery
+- `references/cuda-patterns.md` — multi-page discovery (`runtime`/`driver`)
 - `references/rust-patterns.md` + `rust-compact-output.md` — cargo-docs-md
 - `references/llms-txt-patterns.md` + `tavily-vs-ours-comparison.md` — llms.txt / fetching
 - `references/cleanup-patterns.md` + `section-extraction.md` — generic cleanup/splitting
 - `references/cli-scrape-standards.md` — CLI globals extraction
 - `references/skillsh-compose.md` — skill.sh compose wiring
-- `references/module-detection.md` `trigger-extraction.md` `pattern-extraction.md` `extraction-rules.md` `skill-template.md` `quality-metrics.md` `compilation-contract.md` — to-skill pipeline (load only during `to-skill`. Extraction-rules and compilation-contract now include ASD-STE100 guidelines)
+- To-skill pipeline (load per phase): `module-detection.md`, `trigger-extraction.md`, `pattern-extraction.md`, `extraction-rules.md`, `skill-template.md`, `compilation-contract.md`, `quality-metrics.md`
 
 ## Docs-to-Skill Pipeline
 
-Two layers: curated `references/<module>.md` (80% queries) + raw `references/<skill>-raw/` (self-contained). No intermediate wiki.
+Three phases: fetch → convert → evaluate. docs-scraper owns the pipeline. The `ai-engineering-expert` `skill-authoring` subskill supplies the standards every result must pass.
 
-Phase 0 fetch via `scrape.py auto` to `.lsz/tmp` or `references/<name>-raw/`. Phases 1-4 delegate to `ai-engineering-expert` (`skill-authoring`) for module/trigger/pattern extraction and generation. Keep `to-skill` thin — do not duplicate `quality-metrics` here.
+1. **Fetch** — `to-skill <doc-dir|url> [--name <skill>] [--supplementary <paths-or-urls>]` stages raw material into `references/<name>-raw/`, sanitizes it, writes `structure-report.json`, and emits `GENERATION-BRIEF.md`.
+2. **Convert** — follow the brief: propose modules, extract triggers and patterns, generate per `skill-template.md`. Curated `references/<module>.md` answers 80% of queries. The raw layer keeps the skill self-contained.
+3. **Evaluate** — run the gates the brief names (`compile.py validate-skill` / `validate-triggers`), score against `quality-metrics.md`, then user review closes.
+
+Fold-in updates an existing skill. `to-skill <new-material> --fold-into <skill-dir>` stages new raw beside the old raw layer and emits `UPDATE-BRIEF.md` with merge rules. Curated files stay untouched until merge curation.
+
+Default staging root: `.lsz/tmp/to-skill/<name>/`. Pass `--output-dir skills` to build in place.

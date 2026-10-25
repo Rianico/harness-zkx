@@ -58,11 +58,17 @@ try:
     )
 except ImportError:
     repo_root = Path(__file__).resolve().parents[3]
-    ste100_dir = str(
+    ste100_dir = (
         repo_root / "skills" / "ai-engineering-expert" / "subskills" / "skill-authoring" / "scripts"
     )
-    if ste100_dir not in sys.path:
-        sys.path.insert(0, ste100_dir)
+    if not (ste100_dir / "ste100.py").exists():
+        raise SystemExit(
+            f"ste100.py not found at {ste100_dir}.\n"
+            "compile.py needs the ai-engineering-expert skill-authoring scripts.\n"
+            "Run it from the harness checkout, or copy ste100.py next to compile.py."
+        ) from None
+    if str(ste100_dir) not in sys.path:
+        sys.path.insert(0, str(ste100_dir))
     from ste100 import (
         STE100_BANNED_PHRASAL_VERBS,
         STE100_BANNED_WORDS,
@@ -392,6 +398,21 @@ def validate_skill_directory(skill_dir: Path) -> _ValidationResult:
         else:
             result["warnings"].append(
                 "No raw docs found (expected references/<skill-name>-raw/ or references/raw/)"
+            )
+
+        # Layer balance: the curated layer must stay lean against the raw layer.
+        curated_bytes = sum(f.stat().st_size for f in merged_refs)
+        raw_bytes = (
+            sum(f.stat().st_size for f in raw_dir.rglob("*") if f.is_file())
+            if raw_dir.exists()
+            else 0
+        )
+        result["stats"]["curated_bytes"] = curated_bytes
+        result["stats"]["raw_bytes"] = raw_bytes
+        if raw_bytes > 0 and curated_bytes > raw_bytes:
+            result["warnings"].append(
+                f"Curated layer ({curated_bytes} bytes) outgrows raw layer ({raw_bytes} bytes); "
+                "curate tighter or move detail into the raw layer"
             )
 
         # Check reference file metadata headers and quality

@@ -114,7 +114,8 @@ out/<new-skill>/
 
 - Body uses Obsidian-flavored markdown by default (wikilinks `[[Note]]`, callouts `> [!type]`, `==highlight==`).
 - SKILL.md frontmatter follows `skill-conventions.md` rules (no Obsidian properties there). Must include `meta.sources` list (see above) for attribution. Body callout supplements but frontmatter is source of truth.
-- Validate after write: `uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py context-check` (hard fail if description budget/trigger vocab missing).
+- Apply `meta.sources` deterministically: `uv run $SKILL_DIR/scripts/inject-sources.py --skill <new-skill>/SKILL.md --manifest <run>/manifest.json` (preserves block scalars; `--check` for dry-run).
+- Validate after write: run the `ai-engineering-expert` `skill-authoring` gate `validate-deps.py context-check` (hard fail if description budget/trigger vocab missing).
 
 ### 4. Verify
 
