@@ -117,12 +117,7 @@ Declare explicit tool boundaries for every subagent. Define action spaces by fun
 
 ## 6. Inter-Agent Return Protocol
 
-Subagents, peer agents, and workflow callbacks use the canonical inter-agent return protocol defined in [inter-agent-message-contract.md](references/inter-agent-message-contract.md). This dual-mode envelope establishes the state routing contract across execution boundaries.
-
-- **BurntSushi-Style Summary:** Deliver technical approach and reasoning in <=100 words. Provide a reviewable position, never a mere status log.
-- **File Links for Artifacts:** Return absolute paths under `## Artifacts`. Never paste file contents into responses.
-- **Pass Deterministic Evidence:** Return check names, exit status, and log tails under `## Evidence`.
-- **Structured Routing:** Signal next actions explicitly (`continue`, `remediate`, or `blocked`) under `## Route`.
+Subagents, peer agents, and workflow callbacks return through the canonical dual-mode envelope in [inter-agent-message-contract.md](references/inter-agent-message-contract.md). The reference carries the prose template, the JSON schema, the route decision matrix, and the severity taxonomy.
 
 ## References
 

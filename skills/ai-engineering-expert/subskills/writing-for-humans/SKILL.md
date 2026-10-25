@@ -60,7 +60,7 @@ Name the requested decision in one sentence before drafting. Delete every senten
 ## 3. Evidence and Honesty
 
 - **Observed versus conjectured:** Tag every claim. Back observed facts with run counts, logs, or links.
-- **One label per concept:** Tag unconfirmed assumptions `[UNVERIFIED]`. Do not also call them hypotheses.
+- **One label per concept:** Use `[UNVERIFIED]` as the only label for unconfirmed assumptions.
 - **Isolate root causes:** Split independent failure modes into separate proposals.
 - **Inflation costs the whole post:** One caught exaggeration discounts every other claim.
 

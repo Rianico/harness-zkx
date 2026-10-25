@@ -52,4 +52,4 @@ Blocking signals are hard gates. Never bypass verification. Fix failures at the 
 
 - **Taint:** Bypassing gates taints shell provenance as untrusted. This blocks future actions until terminal restart.
 - **Evidence:** Bypasses break the EDD evidence loop. Verification requires real tool output.
-- **Escalation:** Suppress false positives at the narrowest possible line or scope with a documented invariant. Never bypass gates.
+- **Escalation:** Suppress false positives per the §0 rule. Fix genuine failures at source.

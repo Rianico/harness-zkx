@@ -5,7 +5,7 @@ paths:
 
 # Markdown Flavour — Standard links, Obsidian where safe
 
-Use standard markdown links `[text](path)` for cross-references in repository documents. These include skill files, agent docs, ADRs, and changelogs. Avoid Obsidian wikilinks `[[Note]]` in repository documents. A wikilink targets a vault-relative note. A model or renderer without that vault cannot resolve the target. Resolve the real path first, then link it.
+Use standard markdown links `[text](path)` for cross-references in repository documents. These include skill files, agent docs, ADRs, and changelogs. A wikilink `[[Note]]` targets a vault-relative note. A model or renderer without that vault cannot resolve the target. Resolve the real path first, then link it.
 
 Use other Obsidian syntax when it stays readable outside a vault. Supported elements include callouts `> [!type]`, `==highlight==`, and tags `#tag` or `#nested/tag`. Use wikilinks only inside a true Obsidian vault with the `obsidian-markdown` skill.
 
