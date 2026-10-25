@@ -22,7 +22,7 @@ LLM Generation → Script Compiler → LLM Evaluator → User Review
 
 ## Official Skill Structure
 
-Generated skills must match the flat structure defined in SKILL.md's "Output Structure" section.
+Generated skills must match the flat structure defined in `skill-template.md`.
 
 ## Stage 1: LLM Generation
 

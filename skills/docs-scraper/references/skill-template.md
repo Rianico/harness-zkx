@@ -23,6 +23,7 @@ Layer 2: Raw Docs (complete API surface, self-contained)
 <skill-name>/
 ├── SKILL.md                  # Essential patterns, API tables, quick starts
 └── references/               # Layer 1 + Layer 2 combined
+    ├── cheatsheet.md         # Optional: decision tables, quick lookups (see below)
     ├── <module>.md           # Curated per schema (see extraction-rules.md)
     └── <skill-name>-raw/     # Complete raw docs (copied from source)
         └── <source-structure>/
@@ -210,6 +211,19 @@ wt switch [--create] [--base <ref>] <branch>
 - [[wt list]], [[wt remove]]
 
 ```
+
+## Cheatsheet (Optional Layer 1)
+
+Generate `references/cheatsheet.md` when the source has decision-shaped content:
+option tables, CLI flags, API differences, error-code lookups.
+
+Rules:
+
+- Start with the mandatory metadata header, like every reference file.
+- Decision tables and short lookups only. No prose, no tutorials.
+- Stay under 1,000 tokens. Every row answers a question an agent would ask.
+- Skip the file when the source has no decision tables. Do not invent them.
+- When generated, add a cheatsheet row to the SKILL.md References table.
 
 ## Template Variables
 

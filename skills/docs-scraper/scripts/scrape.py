@@ -390,6 +390,39 @@ For detailed help on a specific scraper:
                 help="Clear cache and re-fetch from network",
             )
 
+    # to-skill — deterministic front half of the docs-to-skill pipeline
+    toskill = subparsers.add_parser(
+        "to-skill",
+        help="Stage raw docs and emit the generation brief (convert pipeline entry)",
+    )
+    _ = toskill.add_argument(
+        "inputs",
+        nargs="+",
+        help="Doc dir, monolithic file, or URL (first input is primary)",
+    )
+    _ = toskill.add_argument(
+        "--name",
+        help="Skill name (default: derived from the primary input)",
+    )
+    _ = toskill.add_argument(
+        "--supplementary",
+        nargs="+",
+        default=[],
+        help="Extra paths or URLs staged as supplementary material",
+    )
+    _ = toskill.add_argument(
+        "--fold-into",
+        type=Path,
+        default=None,
+        help="Existing skill directory: stage updates beside its raw layer and emit UPDATE-BRIEF.md",
+    )
+    _ = toskill.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(".lsz/tmp/to-skill"),
+        help="Output root (default: .lsz/tmp/to-skill; skill lands in <root>/<name>/)",
+    )
+
     return parser
 
 
@@ -413,6 +446,20 @@ def main() -> None:
     if not args.doc_type:
         parser.print_help(sys.stderr)
         sys.exit(1)
+
+    # to-skill routes to its own pipeline; it is not a scraper kind
+    if args.doc_type == "to-skill":
+        from toskill import run_to_skill
+
+        sys.exit(
+            run_to_skill(
+                inputs=args.inputs,
+                name=args.name,
+                supplementary=args.supplementary,
+                output_dir=args.output_dir,
+                fold_into=args.fold_into,
+            )
+        )
 
     # Get scraper config
     config = SCRAPERS[args.doc_type]
